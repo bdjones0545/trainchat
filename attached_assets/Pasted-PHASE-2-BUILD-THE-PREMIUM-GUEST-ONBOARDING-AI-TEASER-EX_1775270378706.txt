@@ -1,0 +1,272 @@
+PHASE 2 — BUILD THE PREMIUM GUEST ONBOARDING + AI TEASER EXPERIENCE FOR TRAINCHAT
+
+We have already built Phase 1:
+- device ID system
+- guest session model
+- guest session initialization
+- frontend guest session state
+- backend guest session retrieval/creation
+
+In this phase, we are NOT building the paywall, signup conversion flow, or guest-to-user merge yet.
+Do NOT build payment gating in this phase.
+Do NOT require account creation in this phase.
+This phase is only about delivering real value through a premium onboarding + AI teaser experience for unauthenticated guest users.
+
+OBJECTIVE
+Create a premium no-signup teaser experience where a guest user can:
+1. enter TrainChat instantly
+2. go through a polished, fast onboarding flow
+3. receive a real personalized AI-generated training output
+4. experience one meaningful follow-up interaction
+
+The experience should feel intelligent, premium, coach-like, and highly personalized.
+
+CORE STRATEGY
+This is not a fake demo.
+This is a real guided first-use experience that makes the user think:
+“This AI actually understands me.”
+
+The teaser should feel like elite coaching, not like a generic chatbot.
+
+PHASE 2 SCOPE ONLY
+
+Build the following:
+
+1. GUEST ENTRY EXPERIENCE
+For unauthenticated users, create a clear “Start Free” or equivalent entry point that routes into guest onboarding using the Phase 1 guest session system.
+
+Requirements:
+- if device ID + guest session exist, use them
+- if not, initialize them first
+- guest users should enter smoothly without seeing signup friction
+- this should feel intentional and premium, not like a workaround
+
+Do not alter the authenticated user flow for logged-in users.
+
+2. PREMIUM ONBOARDING FLOW
+Build a short, high-value onboarding flow for guest users before AI generation.
+
+This onboarding should:
+- feel fast
+- feel premium
+- feel conversational
+- capture enough data for a highly personalized first program
+- avoid looking like a boring intake form
+- work beautifully on mobile
+
+Recommended onboarding questions:
+- primary goal
+- training experience
+- weekly training frequency
+- available equipment
+- injuries / limitations
+- preferred training style
+- desired outcome or timeline
+- optional sport/performance focus
+
+UI requirements:
+- one question at a time or very clean step-based progression
+- visible progress indicator
+- smooth transitions
+- premium typography/cards/buttons consistent with current TrainChat branding
+- allow back/next navigation without breaking state
+- save progress to guest session as the user moves through onboarding
+
+Important:
+Do not make this too long.
+The user should feel momentum, not friction.
+
+3. SAVE ONBOARDING TO GUEST SESSION
+Persist onboarding data using the guest session architecture from Phase 1.
+
+Requirements:
+- save answers incrementally or at logical checkpoints
+- store onboarding start and completion timestamps
+- associate onboarding data with guest session/device ID
+- ensure if the user refreshes, they can resume or retain context where appropriate
+
+Structure this cleanly so later phases can merge it into a full user account.
+
+4. AGENT PERSONA + RESPONSE QUALITY
+After onboarding, route the guest into a premium agent experience.
+
+The AI agent should feel like:
+- a PhD-level exercise science / performance expert
+- elite strength coach
+- highly confident and professional
+- warm but not cheesy
+- educational and premium
+- personalized to the onboarding answers
+
+The AI should not sound generic.
+It should speak like a real high-level coach who understands programming logic and explains why recommendations were chosen.
+
+5. FIRST PERSONALIZED OUTPUT
+Generate one real personalized training output for the guest user based on onboarding data.
+
+This output should be meaningful and useful enough that the user feels genuine value.
+
+The output can be a:
+- starter program
+- first training day
+- microcycle entry point
+- personalized plan overview with first session prescription
+
+Include:
+- personalized exercise selection based on equipment/limitations/goals
+- sets/reps/rest where appropriate
+- a brief explanation of why this plan fits the user
+- coaching rationale
+- clear structure and readability
+
+Important:
+Do not return placeholder content.
+Do not intentionally make it weak just because it is a teaser.
+The quality should feel strong enough to create desire for more.
+
+6. POLISHED OUTPUT PRESENTATION
+Present the generated output in a premium way.
+
+Requirements:
+- not just a raw text dump
+- use clean sections/cards/layout
+- make the program easy to scan
+- separate explanation from prescription
+- show the agent’s rationale clearly
+- keep it mobile-first and visually polished
+
+The first output should feel like:
+“I already got something valuable.”
+
+7. ONE FOLLOW-UP INTERACTION
+After the first program is generated, allow one meaningful follow-up interaction before future paywall logic is added in Phase 3.
+
+Examples:
+- one refinement request
+- one clarifying question
+- one adjustment like swapping around equipment or schedule
+- one “can you make this more beginner/intermediate/sport-specific?” type action
+
+Requirements:
+- the AI should still remember onboarding context and initial output
+- the follow-up should feel real and useful
+- increment teaser usage tracking appropriately using guest session fields
+- structure logic so Phase 3 can later trigger the paywall after this interaction
+
+Important:
+Do not implement the paywall yet.
+Just make the teaser capable of one meaningful continuation.
+
+8. TEASER USAGE STATE
+Use the Phase 1 guest session fields to track teaser progress.
+
+Track things like:
+- onboarding started
+- onboarding completed
+- first program generated
+- follow-up used
+- teaser usage count
+
+This should be wired into backend guest session updates cleanly.
+
+9. ERROR HANDLING + LOADING STATES
+The experience must feel premium even while loading.
+
+Implement:
+- polished loading states between onboarding and AI output
+- clear error handling if generation fails
+- retry behavior where appropriate
+- no broken blank screens
+- no awkward raw JSON or debug output
+
+The loading state should feel like:
+“Your coach is building your plan”
+
+10. AUTHENTICATED USER SAFETY
+Do not break the experience for logged-in users.
+
+Requirements:
+- guest teaser flow only applies to unauthenticated users
+- authenticated users should still use the normal logged-in TrainChat flow unless explicitly routed otherwise
+- preserve existing AI/chat/dashboard behavior
+
+11. DATA MODEL / API SUPPORT
+Add whatever backend support is needed for:
+- saving onboarding responses
+- generating the teaser output
+- storing teaser progress markers
+- supporting one follow-up interaction for guests
+
+Keep this clean and extensible.
+Do not build payment logic or conversion logic yet.
+
+12. PROMPTING QUALITY
+The AI generation prompt should be deliberately engineered for:
+- personalization
+- exercise science credibility
+- clear structure
+- premium coaching tone
+- alignment with user goal/equipment/limitations/training age
+
+Use the onboarding data meaningfully.
+Do not just mention it superficially.
+
+13. UX PRINCIPLES
+The entire guest teaser should feel:
+- premium
+- real
+- fast
+- polished
+- intelligent
+- high-trust
+- personalized
+
+It should NOT feel:
+- generic
+- robotic
+- fake
+- overcomplicated
+- like a watered-down free trial
+
+14. DO NOT BUILD IN THIS PHASE
+Do NOT build:
+- paywall modal/screen
+- pricing lock
+- signup requirement
+- checkout flow
+- guest-to-user merge
+- subscription enforcement
+- conversion gate after teaser
+
+Those belong in Phase 3.
+
+15. TESTING / VALIDATION
+After building, validate:
+- guest user can enter without signup
+- onboarding works end-to-end
+- onboarding data saves to guest session
+- program generation works from guest data
+- output is visually polished
+- one follow-up interaction works
+- teaser usage state updates correctly
+- authenticated flows are unaffected
+
+16. DELIVERABLES AFTER IMPLEMENTATION
+When complete, provide:
+1. summary of what was built
+2. frontend onboarding components/pages added
+3. backend endpoints/services added
+4. guest session fields used/updated
+5. where onboarding answers are stored
+6. where teaser AI generation logic lives
+7. where the one-follow-up interaction is controlled
+8. anything to clean up before Phase 3
+
+IMPORTANT REMINDERS
+This phase is about value delivery before signup.
+Do not add the paywall yet.
+Do not force account creation yet.
+Do not weaken the output quality just because it is a teaser.
+
+We are building the premium “wow” experience first.
+Phase 3 will monetize it.

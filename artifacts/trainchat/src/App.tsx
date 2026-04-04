@@ -7,6 +7,7 @@ import Login from "@/pages/login";
 import Register from "@/pages/register";
 import Onboarding from "@/pages/onboarding";
 import Chat from "@/pages/chat";
+import GuestStart from "@/pages/guest-start";
 import { useGetMe } from "@workspace/api-client-react";
 import { useGuestSession } from "@/hooks/useGuestSession";
 
@@ -33,12 +34,25 @@ function GuestSessionInit() {
   return null;
 }
 
+/**
+ * Smart root redirect:
+ * - Authenticated users → /chat
+ * - Unauthenticated users → /start (guest experience)
+ */
+function SmartRoot() {
+  const { data: me, isLoading } = useGetMe();
+
+  if (isLoading) return null;
+
+  if (me) return <Redirect to="/chat" />;
+  return <Redirect to="/start" />;
+}
+
 function Router() {
   return (
     <Switch>
-      <Route path="/">
-        <Redirect to="/chat" />
-      </Route>
+      <Route path="/" component={SmartRoot} />
+      <Route path="/start" component={GuestStart} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
       <Route path="/onboarding" component={Onboarding} />

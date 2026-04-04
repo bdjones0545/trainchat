@@ -144,6 +144,47 @@ id, device_id (unique), status (active/converted/expired/blocked), created_at, u
 - Does nothing when `isAuthenticated = true` — zero interference with logged-in users
 - Returns: `{ deviceId, guestSession, guestSessionStatus, loading, error, refresh }`
 
+## Guest Experience Phase 2 — Premium Onboarding + AI Teaser
+
+### New Files
+- `artifacts/api-server/src/lib/guestGenerate.ts` — AI generation + fallback service
+- `artifacts/trainchat/src/pages/guest-start.tsx` — Multi-step guest experience page
+
+### New API Endpoints
+- `POST /api/guest/onboarding` — Saves answers to guest session metadata, marks onboardingCompletedAt
+- `POST /api/guest/generate` — Generates personalized AI program from onboarding answers (GPT-4o w/ fallback)
+- `POST /api/guest/followup` — Processes one follow-up message with full coach context
+
+### guestGenerate.ts Service
+- `generateGuestProgram(deviceId, answers)` — deliberate prompt engineering → GPT-4o → or training-intelligence fallback
+- `generateGuestFollowup(deviceId, message)` — context-aware follow-up using stored program + onboarding answers
+- Fallback program builder: uses `selectExercises()` from training-intelligence with full/upper-lower split logic
+
+### Guest Onboarding Flow (/start page)
+- `idle` → entry hero screen → "Build My Program" CTA  
+- `onboarding` → 8 questions, one at a time:  
+  1. Primary goal (single-select, auto-advance)  
+  2. Experience level (single-select, auto-advance)  
+  3. Training frequency (single-select, auto-advance)  
+  4. Equipment (multi-select, Continue button)  
+  5. Injuries/limitations (text+presets, Continue button)  
+  6. Training style (single-select, auto-advance)  
+  7. Timeline (single-select, auto-advance)  
+  8. Sport/performance focus (single-select, auto-advance → triggers generate)  
+- `generating` → animated loading screen ("Your coach is building your plan")  
+- `output` → program display with Day 1 expanded + single follow-up input  
+
+### Routing Change (App.tsx)
+- Root `/` now uses `SmartRoot`: authenticated → `/chat`, unauthenticated → `/start`
+- New route: `/start` → GuestStart page
+
+### Guest Session Fields Used
+- `onboardingCompletedAt` — set on POST /api/guest/onboarding
+- `firstProgramGeneratedAt` — set on successful generate
+- `teaserUsesCount` — 1 after program, 2 after follow-up
+- `metadata.onboardingAnswers` — full answer object stored  
+- `metadata.firstProgramOutput` — generated GuestProgram stored  
+
 ### Phase 2+ Extension Points
 - `convertGuestSession(deviceId, userId)` — links guest session to real account post-signup
 - `teaserUsesCount` + `status` — ready for teaser/paywall gating logic
