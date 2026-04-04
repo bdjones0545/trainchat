@@ -1,0 +1,219 @@
+Build the TrainChat decision tree and reasoning layer so the agent behaves like an intelligent coach rather than a command parser.
+
+CURRENT PROBLEM:
+The system can generate and edit programs in narrow cases, but it lacks a true decision layer. As a result, it is too rigid, struggles with broader requests, asks for overly specific phrasing, or fails to choose the right action path.
+
+GOAL:
+Create a structured decision tree and reasoning layer that sits between user input and program mutation/response generation.
+
+The system must decide:
+- what kind of request the user is making
+- what program/session it applies to
+- whether to mutate, rebuild, adjust, ask, or answer conceptually
+- what to preserve
+- how to explain the result briefly and coach-like
+
+==================================================
+1. REQUEST CLASSIFICATION LAYER
+==================================================
+
+Classify incoming user requests into:
+- CREATE_PROGRAM
+- EDIT_PROGRAM_ATOMIC
+- EDIT_PROGRAM_STRUCTURAL
+- ADJUST_FOR_READINESS
+- ADJUST_FOR_PAIN
+- COACHING_GUIDANCE
+- RETRIEVE_PROGRAM
+- SAVE_PROGRAM
+- UNKNOWN
+
+Examples:
+- "add core" → EDIT_PROGRAM_ATOMIC
+- "swap incline press" → EDIT_PROGRAM_ATOMIC
+- "make this more full body" → EDIT_PROGRAM_STRUCTURAL
+- "make this more athletic" → EDIT_PROGRAM_STRUCTURAL
+- "I slept terribly" → ADJUST_FOR_READINESS
+- "my shoulder hurts this week" → ADJUST_FOR_PAIN
+- "what split would be best for me?" → COACHING_GUIDANCE
+
+==================================================
+2. TARGET RESOLUTION LAYER
+==================================================
+
+Resolve what the request is targeting.
+
+Priority:
+1. active draft program in current conversation
+2. current session opened in UI
+3. most recent active saved program
+4. no program found
+
+Log which target was selected and why.
+
+==================================================
+3. ACTION DECISION LAYER
+==================================================
+
+After classification and target resolution, choose one action type:
+- DIRECT_MUTATION
+- STRUCTURAL_REBUILD
+- SESSION_ADJUSTMENT
+- ASK_CLARIFYING_QUESTION
+- GUIDANCE_ONLY
+
+Rules:
+- atomic local changes → DIRECT_MUTATION
+- split/architecture changes → STRUCTURAL_REBUILD
+- recovery/pain/today changes → SESSION_ADJUSTMENT
+- true ambiguity → ASK_CLARIFYING_QUESTION
+- conceptual recommendations → GUIDANCE_ONLY
+
+==================================================
+4. PRESERVATION LOGIC
+==================================================
+
+Before applying changes, determine what to preserve vs replace.
+
+Preserve by default:
+- user goal
+- equipment constraints
+- pain limitations
+- session duration target
+- progression strategy
+- key exercises where possible
+- preference data
+
+Allow changes to:
+- split structure
+- weekly distribution
+- accessory selections
+- redundant or conflicting exercises
+
+Log preserved vs replaced elements.
+
+==================================================
+5. REASONING RULES FOR ATOMIC EDITS
+==================================================
+
+Implement reasoning handlers for:
+- add core
+- add calves
+- add hamstrings
+- swap exercise
+- shorten to X minutes
+- reduce fatigue on a day
+- remove aggravating movement
+
+Examples:
+- add core → add trunk work intelligently across week without bloating sessions
+- swap exercise → preserve movement purpose and classification
+- shorten session → preserve priorities, remove lowest-priority work first
+
+==================================================
+6. REASONING RULES FOR STRUCTURAL EDITS
+==================================================
+
+Implement reasoning handlers for:
+- make this more full body
+- convert to upper/lower
+- change this to 3 days
+- make this more athletic
+- make this less fatiguing overall
+- make this better for performance
+- make this better for fat loss
+
+Examples:
+- more full body → redistribute movement patterns across days while preserving key lifts
+- more athletic → add explosive work early, reduce nonessential accessory volume, preserve strength base
+- less fatiguing overall → lower accessory density and overlap before removing key lifts
+
+==================================================
+7. REASONING RULES FOR READINESS / PAIN
+==================================================
+
+Implement reasoning handlers for:
+- low sleep
+- high soreness
+- low motivation
+- knee pain
+- shoulder pain
+- low back irritation
+
+The system should preserve training intent when possible, modify intelligently, and avoid medical language.
+
+==================================================
+8. INFER VS ASK LOGIC
+==================================================
+
+Add explicit logic for when the agent should infer vs ask one concise question.
+
+Infer when:
+- user direction is clear enough
+- best coaching move is obvious
+- low risk of misunderstanding
+
+Ask one question when:
+- multiple materially different valid outcomes exist
+- user preference would strongly change structure
+
+Do not ask unnecessary questions for simple edits.
+
+==================================================
+9. RESPONSE GENERATION LAYER
+==================================================
+
+Build response templates based on the chosen action.
+
+If action executed:
+- acknowledge briefly
+- state what changed
+- explain why briefly if useful
+- confirm updated plan
+
+If clarification needed:
+- ask one concise high-value question
+
+Do not use rigid rejection language like:
+- "No specific edit identified"
+- "Try something more targeted"
+
+==================================================
+10. DEBUGGING / OBSERVABILITY
+==================================================
+
+Log for each request:
+- detected classification
+- resolved target
+- chosen action type
+- preservation decisions
+- whether mutation/rebuild succeeded
+- whether clarification was required
+
+This is critical for debugging and improving reliability.
+
+==================================================
+11. ARCHITECTURE REQUIREMENTS
+==================================================
+
+Implement this as a clean reusable decision layer separate from:
+- raw chat generation
+- mutation engine
+- exercise database
+- UI rendering
+
+The goal is to make TrainChat feel flexible, coach-like, and intelligent.
+
+==================================================
+DELIVERABLES
+==================================================
+
+At the end, provide:
+1. the implemented decision tree structure
+2. request classifications added
+3. action types added
+4. preservation logic implemented
+5. infer-vs-ask logic
+6. response generation behavior
+7. debugging visibility added
+8. examples of how the agent now handles broad vs narrow requests

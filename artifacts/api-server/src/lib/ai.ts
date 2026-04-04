@@ -16,6 +16,7 @@ import {
   type MovementPattern,
 } from "./training-intelligence";
 import { type IntentResult, buildIntentPromptHint } from "./intent";
+import { type ActionDecision, buildPreservationContext } from "./decision";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -595,6 +596,7 @@ export interface AIResponseOptions {
   conversionHint?: string;
   currentProgram?: ProgramStructure | null;
   intentResult?: IntentResult | null;
+  actionDecision?: ActionDecision | null;
 }
 
 // ─── Main entry point ────────────────────────────────────────────────────────
@@ -612,6 +614,7 @@ export async function generateAIResponse(
     conversionHint,
     currentProgram,
     intentResult,
+    actionDecision,
   } = options;
 
   const [profile] = await db
@@ -654,7 +657,12 @@ export async function generateAIResponse(
   // Build intent-specific prompt hint (pain, readiness, retrieve, etc.)
   const intentHint = intentResult ? buildIntentPromptHint(intentResult) : null;
 
-  const extras = [adaptationContext, memoryContext, insightHint, conversionHint, intentHint, editContext]
+  // Build preservation context from decision tree (injected after edit context)
+  const preservationContext = actionDecision
+    ? buildPreservationContext(actionDecision.preservationRules, actionDecision.actionType)
+    : null;
+
+  const extras = [adaptationContext, memoryContext, insightHint, conversionHint, intentHint, editContext, preservationContext]
     .filter(Boolean)
     .join("\n\n");
   const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;
@@ -673,9 +681,9 @@ export async function generateAIResponse(
       { role: "user" as const, content: userMessage },
     ];
 
-    // Edit and pain/readiness requests need more tokens
-    const isHeavyContext = editContext !== null || intentResult?.type === "ADJUST_FOR_PAIN" || intentResult?.type === "ADJUST_FOR_READINESS";
-    const maxTokens = isHeavyContext ? 4000 : 2800;
+    // Use decision-tree token budget if available, otherwise fall back to context-based heuristic
+    const maxTokens = actionDecision?.recommendedMaxTokens
+      ?? (editContext !== null || intentResult?.type === "ADJUST_FOR_PAIN" || intentResult?.type === "ADJUST_FOR_READINESS" ? 4000 : 2800);
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",

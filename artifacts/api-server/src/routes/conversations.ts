@@ -5,6 +5,7 @@ import { CreateConversationBody, GetConversationParams, DeleteConversationParams
 import { requireAuth } from "../middlewares/auth";
 import { generateAIResponse, type ProgramStructure } from "../lib/ai";
 import { classifyIntent, logIntentSummary } from "../lib/intent";
+import { resolveAction, logDecisionSummary } from "../lib/decision";
 import { buildAdaptationContext } from "../lib/adaptation";
 import { syncMemoriesFromData, listMemories, buildMemoryContext } from "../lib/memory";
 import { generateInsights, buildInsightPromptHint } from "../lib/insights";
@@ -305,6 +306,10 @@ Keep it helpful and intelligent, never promotional.`;
 
   logIntentSummary(parsed.data.content, intentResult, hasActiveProgram);
 
+  // ── Decision Tree: resolve action type, preservation rules, and infer-vs-ask ──
+  const actionDecision = resolveAction(intentResult, latestStructuredProgram, parsed.data.content);
+  logDecisionSummary(parsed.data.content, intentResult, actionDecision, hasActiveProgram);
+
   // ── Intent-specific routing ───────────────────────────────────────────────
 
   // RETRIEVE_CURRENT_PROGRAM — no AI call needed, return current program directly
@@ -345,6 +350,46 @@ Keep it helpful and intelligent, never promotional.`;
   // RETRIEVE_CURRENT_PROGRAM but no program exists — fall through to AI
   if (intentResult.type === "RETRIEVE_CURRENT_PROGRAM" && !latestStructuredProgram) {
     logger.info("[IntentRouter] RETRIEVE_CURRENT_PROGRAM but no program found — routing to AI to explain");
+  }
+
+  // ASK_CLARIFYING_QUESTION — decision tree determined the request is genuinely ambiguous.
+  // Skip AI call entirely; return the pre-formed question as the assistant response.
+  if (actionDecision.shouldAsk && actionDecision.clarifyingQuestion) {
+    logger.info(
+      { actionType: actionDecision.actionType, question: actionDecision.clarifyingQuestion },
+      "[DecisionTree] Returning clarifying question — skipping AI call"
+    );
+    const [assistantMessage] = await db.insert(messagesTable).values({
+      conversationId: params.data.id,
+      role: "assistant",
+      content: actionDecision.clarifyingQuestion,
+      structuredData: null,
+    }).returning();
+
+    await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+
+    res.json({
+      userMessage: {
+        id: userMessage.id,
+        conversationId: userMessage.conversationId,
+        role: userMessage.role,
+        content: userMessage.content,
+        createdAt: userMessage.createdAt.toISOString(),
+        structuredData: null,
+      },
+      assistantMessage: {
+        id: assistantMessage.id,
+        conversationId: assistantMessage.conversationId,
+        role: assistantMessage.role,
+        content: assistantMessage.content,
+        createdAt: assistantMessage.createdAt.toISOString(),
+        structuredData: null,
+      },
+      planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+      intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
+      actionDebug: { actionType: actionDecision.actionType, shouldAsk: true, inferenceRationale: actionDecision.inferenceRationale },
+    });
+    return;
   }
 
   // SAVE_PROGRAM — respond with save signal (frontend handles actual save)
@@ -402,6 +447,7 @@ Keep it helpful and intelligent, never promotional.`;
       conversionHint: conversionHint || undefined,
       currentProgram,
       intentResult,
+      actionDecision,
     }
   );
 
@@ -453,6 +499,12 @@ Keep it helpful and intelligent, never promotional.`;
       type: intentResult.type,
       confidence: intentResult.confidence,
       editSubtype: intentResult.editSubtype ?? null,
+    },
+    actionDebug: {
+      actionType: actionDecision.actionType,
+      shouldAsk: actionDecision.shouldAsk,
+      inferenceRationale: actionDecision.inferenceRationale,
+      recommendedMaxTokens: actionDecision.recommendedMaxTokens,
     },
   });
 });
