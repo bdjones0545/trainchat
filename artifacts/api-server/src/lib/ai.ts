@@ -1,6 +1,18 @@
 import { db, userProfilesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
+import {
+  buildIntelligenceContext,
+  buildTrainingSpec,
+  selectExercises,
+  normalizeGoal,
+  normalizeExperience,
+  normalizeEquipment,
+  detectInjuryFlags,
+  type UserProfile,
+  type GoalType,
+  type ExerciseEntry,
+} from "./training-intelligence";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -38,106 +50,88 @@ export interface Exercise {
   notes?: string;
 }
 
-type UserProfile = {
-  trainingGoal: string;
-  experienceLevel: string;
-  trainingStyle: string;
-  daysPerWeek: number;
-  sessionDuration: number;
-  equipmentAccess: string;
-  injuries: string | null;
-  sportFocus: string | null;
-  exercisePreferences: string | null;
-  exercisesToAvoid: string | null;
-};
-
 // ─── System Prompt ──────────────────────────────────────────────────────────
 
 function buildSystemPrompt(profile: UserProfile | null): string {
-  const corePrompt = `You are TrainChat — an elite AI performance architect. You guide users in co-creating world-class, personalized training systems through intelligent coaching dialogue.
+  const coreIdentity = `You are TrainChat — an elite AI performance architect. Your purpose is to guide users in co-creating world-class, personalized training systems through intelligent coaching dialogue.
 
 ## YOUR IDENTITY
-You operate at the intersection of:
-- Exercise physiology expertise (adaptation science, periodization, energy systems)
-- Division 1 Strength & Conditioning coaching (working with serious athletes)
-- Biomechanics and motor learning (how strength and skill develop over time)
-- Long-term performance planning (not just next week — next year)
+You think and communicate like someone at the intersection of:
+- Exercise physiology expertise (adaptation science, periodization, energy systems, biomechanics)
+- Division 1 Strength & Conditioning coaching (experience with high-performance athletes)
+- Motor learning science (how strength, skill, and movement quality develop over time)
+- Long-term performance planning — you think in training cycles, not single sessions
 
-## COMMUNICATION STYLE
-- Precise and direct. No fluff, no hype, no filler.
-- Concise: short exchanges get 2-4 sentences. No walls of text.
-- Educational when it matters — explain the *why* briefly when it helps the user understand.
-- Calm authority. You're confident, not cheerleader-like.
-- Never use generic motivation phrases ("Great question!", "Absolutely!", "Of course!").
+## COMMUNICATION STYLE — NON-NEGOTIABLE
+- Precise and direct. No fluff. No filler. No hype.
+- Concise: 2-5 sentences for conversational exchanges. No walls of text.
+- Educational when it adds value — explain the *why* briefly when it helps the user understand a decision.
+- Calm authority. You're confident, not motivational-poster-like.
+- Never use: "Great question!", "Absolutely!", "Of course!", "Sure!", or any generic praise filler.
 - Never repeat the user's input back to them verbatim.
-- Line breaks and spacing are your friend. Scannable > dense.
+- Line breaks and whitespace are your friend. Scannable > dense.
 
-## CO-CREATION BEHAVIOR MODEL
-Your job is NOT to immediately produce a finished program. Your purpose is to guide the user in building their own system through intelligent dialogue.
+## CO-CREATION BEHAVIOR MODEL — ALWAYS FOLLOW THIS
+Your job is NOT to immediately produce a finished program. Guide the user through a building process.
 
-Follow this sequence:
+Sequence:
 1. UNDERSTAND — What is the actual intent behind this request?
-2. CLARIFY — Ask 1-3 sharp, targeted coaching questions if critical information is missing.
+2. CLARIFY — Ask 1-3 sharp, targeted questions if critical information is missing.
 3. PROPOSE — Offer a framework or structure before committing to full detail.
-4. REFINE — Adjust based on feedback.
-5. OUTPUT — Deliver the full structured program when you have enough.
+4. REFINE — Adjust based on feedback before finalizing.
+5. OUTPUT — Deliver the full structured program when you have sufficient information.
 
 Move faster through these steps when the request is already specific.
 If you already have the user's profile, DO NOT ask for information you already know.
 
 ## INTELLIGENT PUSHBACK
-If a user suggests something suboptimal, do not blindly comply. Instead:
-1. Acknowledge their intent briefly
+Do not blindly comply with poor training decisions:
+1. Acknowledge the intent briefly
 2. Explain the issue in 1-2 sentences
-3. Propose a better direction
+3. Propose the better direction
 
-Push back confidently (not argumentatively) when users suggest:
+Push back when users suggest:
 - Training the same muscle to failure every session
-- Splits that don't match their recovery capacity or schedule
-- Volume loads that exceed what their experience level can absorb
+- Splits that don't match their recovery capacity
+- Volume beyond what their experience level can absorb
 - Exercise choices that conflict with stated injuries or limitations
-- Unrealistic frequency or time commitments
-- Maximalist approaches when they clearly need progressive foundations
+- Unrealistic volume or frequency for their schedule
 
 You are the expert. Act like one.
 
 ## RESPONSE MODES
-Use these three modes appropriately:
 
-**Mode A — Conversational Guidance:**
-Used during clarification and refinement phases.
-Format: Plain prose, 2-6 sentences. Ask focused questions.
+Mode A — Conversational Guidance (clarification phase):
+Plain prose, 2-6 sentences. Ask focused, sharp questions.
 
-**Mode B — Structure Preview:**
-Used when proposing a framework before full detail.
-Format: Clean text outline. No JSON yet.
+Mode B — Structure Preview (before full detail):
+Plain text outline. No JSON.
 Example:
   Proposed Split: Upper / Lower × 4 days
   Day 1: Upper Push — strength focus (4-6 rep range, compound first)
-  Day 2: Lower — squat pattern primary
-  Day 3: Upper Pull — volume focus (8-12 reps)
-  Day 4: Lower — hinge pattern primary
-  Progression: Linear load progression, deload every 4th week.
-  Does this direction work for you, or do you want to adjust the structure before I build it out?
+  Day 2: Lower — squat pattern primary (back squat + RDL + accessories)
+  Day 3: Upper Pull — volume focus (8-12 reps, back thickness + width)
+  Day 4: Lower — hinge pattern primary (deadlift + leg press + accessories)
+  Progression: Add reps first, then load. Deload every 4th week.
+  Does this direction work, or do you want to adjust before I build it?
 
-**Mode C — Full Structured Program:**
-Used when enough information is gathered. ALWAYS include the JSON block.
-Format: Brief coaching context (2-3 sentences), then the JSON block.
+Mode C — Full Program Output (when ready):
+Brief coaching rationale (2-3 sentences), then the JSON block.
 
-## STRUCTURED OUTPUT — PROGRAM JSON
-When delivering a full program, embed it in a JSON code block after your conversational response:
+## STRUCTURED OUTPUT — PROGRAM JSON FORMAT
+Only output this JSON when delivering a finalized program:
 
 \`\`\`json
 {
   "programName": "string",
   "description": "string",
-  "progressionStrategy": "string — how weight/volume/intensity increases over time",
-  "splitType": "string — e.g. Upper/Lower, Push/Pull/Legs, Full Body, etc.",
+  "progressionStrategy": "string — specific progression model, rate, and deload guidance",
+  "splitType": "string — e.g. Upper/Lower × 4, PPL, Full Body × 3",
   "days": [
     {
       "dayNumber": 1,
       "name": "string — e.g. Upper Body — Push",
-      "focus": "string — primary training focus for this day",
+      "focus": "string — primary training focus/purpose of this session",
       "exercises": [
         {
           "name": "string",
@@ -147,73 +141,62 @@ When delivering a full program, embed it in a JSON code block after your convers
           "notes": "optional technique or execution note"
         }
       ],
-      "notes": "optional day-level coaching note"
+      "notes": "optional coaching note for this day"
     }
   ]
 }
 \`\`\`
 
-ONLY output JSON when you are presenting a complete, finalized program.
-For proposals and previews, use Mode B plain text formatting.
+## EXERCISE ORDERING RULES (always follow)
+1. Power/explosive movements FIRST — CNS must be fresh
+2. Primary compound lift SECOND — highest-priority movement
+3. Secondary compound THIRD — supports the primary pattern
+4. Isolation/accessories LAST — can be done fatigued
+5. Core: end of session unless used as activation
 
 ## MODIFICATION HANDLING
 When a user asks to modify an existing program:
-- Preserve what is working
 - Change ONLY what was requested
-- Do not rebuild the entire program unnecessarily
-- Acknowledge what you changed and why
+- Preserve the rest of the structure
+- Do not rebuild from scratch
+- Briefly note what changed and why
 
 ## CONVERSATION MEMORY
-Track what has been established in this conversation:
-- Goals and constraints already stated
-- Split structure already agreed upon
-- Preferences already confirmed
-- Do NOT ask again for information already provided in this session`;
+This conversation's history is included. Track what has been decided:
+- Goals and constraints already stated — do not ask again
+- Split structure agreed upon — preserve it during modifications
+- Injuries mentioned — always apply them even if not re-stated`;
 
   if (!profile) {
-    return corePrompt + `
+    return coreIdentity + `
 
 ## USER CONTEXT
-This user has not completed their training profile yet. You can still help them, but if they ask for a personalized program, gather the essential information: goal, experience level, days per week, session duration, and equipment access.`;
+This user has not completed their training profile. If they ask for a personalized program, collect: goal, experience level, days per week, session duration, and equipment access.`;
   }
 
-  const injuryNote = profile.injuries
-    ? `- Active Injuries / Limitations: ${profile.injuries}
-  ⚠️ CRITICAL: Do not program exercises that load these areas. Always substitute or modify. Never ignore this.`
-    : "";
+  // Build rich intelligence context from the training engine
+  const intelligenceContext = buildIntelligenceContext(profile);
 
-  const sportNote = profile.sportFocus
-    ? `- Sport / Activity Focus: ${profile.sportFocus} — program should support athletic demands of this activity.`
-    : "";
-
-  const prefNote = profile.exercisePreferences
-    ? `- Exercise Preferences: ${profile.exercisePreferences}`
-    : "";
-
-  const avoidNote = profile.exercisesToAvoid
-    ? `- Exercises to Avoid: ${profile.exercisesToAvoid} — never include these in the program.`
-    : "";
-
-  return corePrompt + `
+  return coreIdentity + `
 
 ## USER TRAINING PROFILE
-Use this context naturally. Do not ask the user for any of this information — you already have it.
+(Provided by onboarding — do not ask for any of this information)
 
 - Primary Goal: ${profile.trainingGoal}
 - Experience Level: ${profile.experienceLevel}
 - Preferred Training Style: ${profile.trainingStyle}
-- Available Training Days: ${profile.daysPerWeek} days per week
-- Session Duration: ${profile.sessionDuration} minutes max
-- Equipment Access: ${profile.equipmentAccess}
-${injuryNote}
-${sportNote}
-${prefNote}
-${avoidNote}
+- Available Days: ${profile.daysPerWeek} days/week
+- Session Duration: ${profile.sessionDuration} minutes
+- Equipment: ${profile.equipmentAccess}
+${profile.injuries ? `- Injuries / Limitations: ${profile.injuries}` : ""}
+${profile.sportFocus ? `- Sport / Activity Focus: ${profile.sportFocus}` : ""}
+${profile.exercisePreferences ? `- Exercise Preferences: ${profile.exercisePreferences}` : ""}
+${profile.exercisesToAvoid ? `- Exercises to Avoid (NEVER program these): ${profile.exercisesToAvoid}` : ""}
 
-When building programs, work within ALL of these constraints simultaneously. If something in the user's request conflicts with their profile, flag it and reconcile it.`;
+${intelligenceContext}`;
 }
 
-// ─── Parser ─────────────────────────────────────────────────────────────────
+// ─── JSON extractor ──────────────────────────────────────────────────────────
 
 function extractStructuredData(content: string): {
   cleanContent: string;
@@ -229,7 +212,7 @@ function extractStructuredData(content: string): {
     const cleanContent = content.replace(/```json\n[\s\S]*?\n```/, "").trim();
     return { cleanContent, structuredData };
   } catch {
-    logger.warn("Failed to parse structured data from AI response");
+    logger.warn("Failed to parse structured program JSON from AI response");
     return { cleanContent: content, structuredData: null };
   }
 }
@@ -256,7 +239,6 @@ export async function generateAIResponse(
   try {
     const messages = [
       { role: "system" as const, content: systemPrompt },
-      // Include last 30 messages for conversation memory
       ...history.slice(-30).map((m) => ({ role: m.role, content: m.content })),
       { role: "user" as const, content: userMessage },
     ];
@@ -270,8 +252,8 @@ export async function generateAIResponse(
       body: JSON.stringify({
         model: "gpt-4o",
         messages,
-        max_tokens: 2500,
-        temperature: 0.65,
+        max_tokens: 2800,
+        temperature: 0.6,
       }),
     });
 
@@ -295,8 +277,9 @@ export async function generateAIResponse(
   }
 }
 
-// ─── Fallback responses (no API key / API error) ─────────────────────────────
-// These follow the same co-creation model as the real AI.
+// ─── Intelligent Fallback (no API key) ──────────────────────────────────────
+// Uses the training intelligence engine for exercise selection and program design.
+// Follows the same co-creation model as the real AI agent.
 
 function generateFallbackResponse(
   userMessage: string,
@@ -304,357 +287,475 @@ function generateFallbackResponse(
   profile: UserProfile | null
 ): AIResponse {
   const lower = userMessage.toLowerCase();
-  const messageCount = history.filter((m) => m.role === "user").length;
-  const hasHistory = messageCount > 0;
+  const userTurnCount = history.filter((m) => m.role === "user").length;
+  const isFirstMessage = userTurnCount === 0;
 
   // ── Greeting ──
-  if (!hasHistory && (lower.match(/^(hi|hey|hello|what's up|sup)\b/))) {
-    return {
-      content: profile
-        ? `Ready when you are, ${profile.trainingGoal ? "working toward " + profile.trainingGoal.toLowerCase() : "training"}. What are we building today — a new program, a split adjustment, or something else?`
-        : "Welcome to TrainChat. I'm your AI performance architect. What's your primary training goal right now?",
-      structuredData: null,
-    };
-  }
-
-  // ── Help / capabilities ──
-  if (lower.match(/what can you do|how does this work|help me|capabilities/)) {
-    return {
-      content: `Here's what I do:\n\n**Program Design** — I build complete training programs around your goal, schedule, and equipment. Not templates — actual personalized systems.\n\n**Intelligent Structure** — I don't hand you a workout blindly. We build the structure together before I fill in the detail.\n\n**Modifications** — Swap exercises, shorten sessions, adjust volume, shift focus. Tell me what to change and I'll do it surgically.\n\n**Coaching Context** — I'll explain the reasoning behind exercise choices, rep ranges, and progression logic.\n\nWhat do you want to build?`,
-      structuredData: null,
-    };
-  }
-
-  // ── Program request with sufficient profile ──
-  if (
-    lower.match(/build|create|design|make|give me|generate|program|plan|routine|split/)
-  ) {
+  if (isFirstMessage && lower.match(/^(hi|hey|hello|sup|what's up|yo)\b/)) {
     if (profile) {
-      // Check if the request is already specific enough or needs questions
-      const isSpecific =
-        lower.includes("upper") ||
-        lower.includes("lower") ||
-        lower.includes("push") ||
-        lower.includes("pull") ||
-        lower.includes("full body") ||
-        lower.includes("ppl") ||
-        lower.includes("legs");
-
-      if (!isSpecific && !hasHistory) {
-        // Co-creation step: propose before building
-        return {
-          content: `Based on your profile, I have a clear direction for your ${profile.trainingGoal.toLowerCase()} program. Before I build it out, let me confirm the structure:\n\nYou have **${profile.daysPerWeek} days** and **${profile.sessionDuration} minutes** per session, with ${profile.equipmentAccess}. Given your ${profile.experienceLevel} experience level, I'd lean toward a **${getSplitRecommendation(profile)}**.\n\nDoes this structure work for you, or would you like to adjust it before I build the full program?`,
-          structuredData: null,
-        };
-      }
-
-      // Build the full program
-      const program = buildProfiledProgram(profile);
+      const goal = normalizeGoal(profile.trainingGoal);
+      const goalLabel = profile.trainingGoal.toLowerCase();
       return {
-        content: `Here's your ${profile.trainingGoal.toLowerCase()} program — built around your ${profile.daysPerWeek} days, ${profile.sessionDuration}-minute sessions, and ${profile.equipmentAccess}.\n\nThis follows a ${program.splitType} structure. ${program.progressionStrategy} Tell me if you want to swap anything out or adjust the focus.`,
-        structuredData: program,
-      };
-    }
-
-    // No profile — gather info
-    return {
-      content: `To build you the right program, I need a few things:\n\n1. **Primary goal** — strength, hypertrophy, fat loss, athletic performance, or something else?\n2. **Days per week** available to train\n3. **Session length** (how many minutes you have)\n4. **Equipment** — full gym, home setup, dumbbells only, bodyweight?\n5. **Experience level** — beginner, intermediate, or advanced?\n\nGive me these and I'll build the structure.`,
-      structuredData: null,
-    };
-  }
-
-  // ── Modification request ──
-  if (
-    lower.match(/swap|change|replace|modify|adjust|shorter|longer|remove|add|less|more/)
-  ) {
-    return {
-      content: `Understood. To modify precisely, I need to know which program you're working with. If you've already built one here, paste the section you want changed and tell me the direction. I'll update only what's needed without disrupting the rest of the structure.`,
-      structuredData: null,
-    };
-  }
-
-  // ── Injury / limitation ──
-  if (lower.match(/pain|injury|hurt|injured|knee|shoulder|back|hip|avoid/)) {
-    if (profile?.injuries) {
-      return {
-        content: `You already flagged ${profile.injuries} in your profile, so I've been accounting for that. If something in our program is still aggravating it, tell me specifically which exercise or movement pattern and I'll substitute immediately.\n\nManaging around limitations isn't a setback — it's just smart programming.`,
+        content: `Ready when you are. You're working toward ${goalLabel} with ${profile.daysPerWeek} days and ${profile.sessionDuration}-minute sessions. What are we building today — a new program, a split adjustment, or something else?`,
         structuredData: null,
       };
     }
     return {
-      content: `Important to flag this early. Tell me:\n\n1. Which area or movement is affected?\n2. Is this acute (recent) or chronic (ongoing)?\n3. What movements specifically aggravate it?\n\nWith that, I'll program around it without compromising the rest of your training.`,
+      content: `Welcome to TrainChat. I'm your AI performance architect. What are you working toward — strength, muscle, athletic performance, or something else? Give me the context and we'll build from there.`,
+      structuredData: null,
+    };
+  }
+
+  // ── Capabilities ──
+  if (lower.match(/what can you do|how does this work|help me|what.*(are you|is this)|capabilities/)) {
+    return {
+      content: `Here's what I do:\n\n**Program Design** — I build complete training programs around your goal, schedule, and equipment. Not templates — structured systems with intelligent exercise selection and progression built in.\n\n**Co-Creation** — I don't just hand you a workout. We build the structure together before I fill in the detail, so the program reflects your actual situation.\n\n**Modifications** — Natural language edits: "swap X", "shorten sessions", "make this more athletic", "I have knee pain now". I'll update surgically, not rebuild unnecessarily.\n\n**Coaching Context** — I explain the reasoning behind structure choices, exercise order, rep ranges, and progression logic.\n\nWhat do you want to build?`,
+      structuredData: null,
+    };
+  }
+
+  // ── Program request ──
+  if (lower.match(/build|create|design|make|give me|generate|program|plan|routine|split|workout/)) {
+    if (!profile) {
+      return {
+        content: `To build you the right program, I need a few things:\n\n1. **Primary goal** — strength, hypertrophy, athletic performance, general fitness?\n2. **Days per week** available to train\n3. **Session length** in minutes\n4. **Equipment** — full gym, dumbbells only, home setup, bodyweight?\n5. **Experience level** — beginner, intermediate, or advanced?\n\nGive me these and I'll build the structure.`,
+        structuredData: null,
+      };
+    }
+
+    const spec = buildTrainingSpec(profile);
+    const isSpecificRequest =
+      lower.match(/upper|lower|push|pull|full body|ppl|legs|split|day|4-day|3-day|5-day/);
+
+    // If not yet specific — propose structure first (co-creation step 3)
+    if (!isSpecificRequest && isFirstMessage) {
+      return {
+        content: `Based on your profile, here's what makes sense before I build it out:\n\n**Proposed Split:** ${spec.splitType}\n**Structure:** ${spec.splitDescription}\n\n**Why this works for you:** ${spec.splitRationale}\n\nSessions will stay within ${profile.sessionDuration} minutes. Progression follows ${spec.progressionModel.toLowerCase()}.\n\nDoes this direction work, or do you want to adjust anything before I build the full program?`,
+        structuredData: null,
+      };
+    }
+
+    // Build the program using the intelligence engine
+    const program = buildIntelligentProgram(profile);
+    const goal = normalizeGoal(profile.trainingGoal);
+    const rationale = getGoalOpeningLine(goal, spec);
+
+    return {
+      content: `${rationale}\n\nBuilt around ${profile.daysPerWeek} days, ${profile.sessionDuration}-minute sessions, and ${profile.equipmentAccess}. ${spec.progressionModel} — details in the program. Tell me if you want to swap anything out or adjust the structure.`,
+      structuredData: program,
+    };
+  }
+
+  // ── Modification request ──
+  if (lower.match(/swap|change|replace|modify|adjust|shorter|longer|remove|add|less.*volume|more.*volume|make.*athletic|make.*shorter|shoulder|knee|back/)) {
+    if (profile?.injuries && lower.match(/shoulder|knee|back|hip|pain|hurt|injury/)) {
+      return {
+        content: `I already have your ${profile.injuries} noted, so those patterns are accounted for in any program I build. If something specific is aggravating it, tell me the exercise and I'll substitute immediately without touching the rest of the structure.`,
+        structuredData: null,
+      };
+    }
+    return {
+      content: `To modify precisely, tell me which part of the program to change and the direction you want to go. I'll update only what's needed — everything else stays intact.\n\nFor example: "swap incline press for cable fly", "shorten each session by 10 minutes", "make leg day less quad-dominant".`,
+      structuredData: null,
+    };
+  }
+
+  // ── Injury / limitation (new) ──
+  if (lower.match(/pain|injury|hurt|injured|irritated|tweak|sore|avoid/)) {
+    if (profile?.injuries) {
+      return {
+        content: `You flagged ${profile.injuries} in your profile — that's already factored into any program I generate. If something new is bothering you, tell me:\n\n1. Which area or movement is affected\n2. Acute (just happened) or chronic (ongoing)\n3. What specifically aggravates it\n\nI'll program around it. Managing limitations is part of smart long-term training, not a setback.`,
+        structuredData: null,
+      };
+    }
+    return {
+      content: `Important to flag this before we build. Tell me:\n\n1. Which area is affected?\n2. Is this acute (recent) or chronic (ongoing)?\n3. What movements specifically aggravate it?\n\nWith that context, I'll design around it — not just avoid the area, but use it to inform the entire structure.`,
       structuredData: null,
     };
   }
 
   // ── Progression / plateau ──
-  if (lower.match(/progress|plateau|stuck|not improving|stop(ped)? growing|stronger/)) {
+  if (lower.match(/plateau|stuck|not.*progress|stop.*growing|not.*getting stronger|not improving/)) {
     return {
-      content: `Plateaus usually come down to one of three things: insufficient progressive overload, inadequate recovery, or stale stimulus.\n\nBefore I diagnose, tell me: how long have you been running your current program, and what does your progression tracking look like? Are you adding load, reps, or volume week to week?`,
+      content: `Plateaus come from three places: insufficient overload, inadequate recovery, or a stale stimulus.\n\nBefore I diagnose, tell me: how long have you been on your current program, and what does your week-to-week progression look like? Are you adding load, reps, or nothing?`,
       structuredData: null,
     };
   }
 
-  // ── Generic fallback ──
+  // ── Generic fallback — keep it co-creation ──
+  if (profile) {
+    return {
+      content: `Understood. What specifically are you trying to build or resolve? The more precise you are, the more targeted I can be with the recommendation.`,
+      structuredData: null,
+    };
+  }
   return {
-    content: profile
-      ? `Understood. What specifically are you trying to resolve or build? The more precise you are, the more targeted I can be.`
-      : `Tell me more about what you're working toward. What's the primary outcome you want from your training?`,
+    content: `Tell me more about what you're working toward. What's the primary outcome you want from your training, and what does your current setup look like?`,
     structuredData: null,
   };
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Intelligence-powered program builder ────────────────────────────────────
 
-function getSplitRecommendation(profile: UserProfile): string {
-  const { daysPerWeek, experienceLevel, trainingStyle } = profile;
+function buildIntelligentProgram(profile: UserProfile): ProgramStructure {
+  const goal = normalizeGoal(profile.trainingGoal);
+  const experience = normalizeExperience(profile.experienceLevel);
+  const equipment = normalizeEquipment(profile.equipmentAccess);
+  const injuryFlags = detectInjuryFlags(profile.injuries);
+  const spec = buildTrainingSpec(profile);
 
-  if (daysPerWeek <= 3) {
-    return "Full Body split (3 days)";
-  } else if (daysPerWeek === 4) {
-    if (trainingStyle.toLowerCase().includes("strength")) {
-      return "Upper / Lower split (4 days)";
-    }
-    return "Upper / Lower or Push / Pull split (4 days)";
-  } else if (daysPerWeek === 5) {
-    if (experienceLevel.toLowerCase().includes("advanced")) {
-      return "Push / Pull / Legs split (5 days, 2 push + 2 pull + 1 leg, or 3+2 rotation)";
-    }
-    return "Upper / Lower / Full Body hybrid (5 days)";
-  } else {
-    return "Push / Pull / Legs with frequency variation (6 days)";
+  // Exclude user-specified exercises
+  const userExclusions = profile.exercisesToAvoid
+    ? profile.exercisesToAvoid.split(/,|;|\n/).map((s) => s.trim()).filter(Boolean)
+    : [];
+
+  const baseFilter = {
+    equipment,
+    experience,
+    injuryFlags,
+    goal,
+    excludeNames: userExclusions,
+    preferStressLevel: injuryFlags.length > 0 ? ("low" as const) : ("any" as const),
+  };
+
+  const days = buildDays(goal, experience, equipment, injuryFlags, userExclusions, spec, profile);
+
+  return {
+    programName: buildProgramName(profile),
+    description: buildProgramDescription(profile, spec),
+    progressionStrategy: `${spec.progressionModel}. Rate: ${spec.progressionRate}. ${spec.deloadFrequency} deload.`,
+    splitType: spec.splitType,
+    days,
+  };
+}
+
+function buildProgramName(profile: UserProfile): string {
+  const goal = normalizeGoal(profile.trainingGoal);
+  const labels: Record<GoalType, string> = {
+    hypertrophy: "Hypertrophy",
+    strength: "Strength",
+    athletic_performance: "Athletic Performance",
+    fat_loss: "Body Composition",
+    general_fitness: "General Fitness",
+    endurance: "Endurance",
+  };
+  const split = buildTrainingSpec(profile).splitType.split(" ")[0];
+  return `${labels[goal]} — ${split} ${profile.daysPerWeek}-Day Program`;
+}
+
+function buildProgramDescription(profile: UserProfile, spec: ReturnType<typeof buildTrainingSpec>): string {
+  const exp = normalizeExperience(profile.experienceLevel);
+  const expLabel = exp === "beginner" ? "beginner" : exp === "intermediate" ? "intermediate" : "advanced";
+  const injuryNote = spec.injuryFlags.length > 0 ? ` Programmed with ${spec.injuryFlags.map(f => f.replace("_", " ")).join(", ")} modifications.` : "";
+  return `A ${profile.daysPerWeek}-day ${spec.splitType} program for ${expLabel} athletes targeting ${profile.trainingGoal.toLowerCase()}. ${profile.sessionDuration}-minute sessions, built for ${profile.equipmentAccess}.${injuryNote}`;
+}
+
+function getGoalOpeningLine(goal: GoalType, spec: ReturnType<typeof buildTrainingSpec>): string {
+  switch (goal) {
+    case "strength":
+      return `Here's your strength program — structured around progressive loading on the primary compound lifts with intelligent fatigue management.`;
+    case "hypertrophy":
+      return `Here's your hypertrophy program — volume and mechanical tension are the drivers, with ${spec.primaryRepRange} reps on primary work and ${spec.secondaryRepRange} on accessories.`;
+    case "athletic_performance":
+      return `Here's your athletic performance program — explosive work comes first when the CNS is fresh, strength second, and conditioning integrated where appropriate.`;
+    case "fat_loss":
+      return `Here's your body composition program — resistance training takes priority to preserve muscle, structured with minimal rest to maximize session density.`;
+    default:
+      return `Here's your program — built around your goal, schedule, and constraints.`;
   }
 }
 
-function buildProfiledProgram(profile: UserProfile): ProgramStructure {
-  const { daysPerWeek, trainingGoal, experienceLevel, equipmentAccess, trainingStyle } = profile;
-  const isStrength = trainingGoal.toLowerCase().includes("strength") || trainingStyle.toLowerCase().includes("strength");
-  const isHypertrophy = trainingGoal.toLowerCase().includes("hypertrophy") || trainingGoal.toLowerCase().includes("muscle") || trainingStyle.toLowerCase().includes("hypertrophy");
-  const hasBarbells = !equipmentAccess.toLowerCase().includes("dumbbell only") && !equipmentAccess.toLowerCase().includes("bodyweight");
+// ─── Day builders ─────────────────────────────────────────────────────────────
 
-  const repRange = isStrength ? "4-6" : isHypertrophy ? "8-12" : "6-10";
-  const restPeriod = isStrength ? "2-3 min" : "90s";
-  const mainSets = isStrength ? 5 : 4;
+function buildDays(
+  goal: GoalType,
+  experience: ReturnType<typeof normalizeExperience>,
+  equipment: ReturnType<typeof normalizeEquipment>,
+  injuryFlags: ReturnType<typeof detectInjuryFlags>,
+  userExclusions: string[],
+  spec: ReturnType<typeof buildTrainingSpec>,
+  profile: UserProfile
+): ProgramDay[] {
+  const days = profile.daysPerWeek;
+  const baseFilter = {
+    equipment,
+    experience,
+    injuryFlags,
+    goal,
+    excludeNames: userExclusions,
+    preferStressLevel: injuryFlags.length > 0 ? ("low" as const) : ("any" as const),
+  };
 
-  const progressionStrategy = isStrength
-    ? "Add 2.5–5kg to compound lifts each week. When you fail to hit the top of the rep range for 2 consecutive sessions, hold weight and focus on volume. Deload every 4th week."
-    : "Add 1 rep per set per week until you hit the top of the range, then add 2.5–5% load and return to the bottom. Deload every 4–5 weeks.";
-
-  if (daysPerWeek <= 3) {
-    return buildFullBodyProgram(hasBarbells, repRange, restPeriod, mainSets, progressionStrategy, profile);
-  } else if (daysPerWeek === 4) {
-    return buildUpperLowerProgram(hasBarbells, repRange, restPeriod, mainSets, progressionStrategy, profile);
-  } else {
-    return buildPPLProgram(hasBarbells, repRange, restPeriod, mainSets, progressionStrategy, profile);
-  }
+  if (days <= 3) return buildFullBodyDays(goal, experience, spec, baseFilter, days);
+  if (days === 4) return buildUpperLowerDays(goal, experience, spec, baseFilter);
+  return buildPPLDays(goal, experience, spec, baseFilter, days);
 }
 
-function buildFullBodyProgram(
-  hasBarbells: boolean,
-  repRange: string,
-  restPeriod: string,
-  mainSets: number,
-  progressionStrategy: string,
-  profile: UserProfile
-): ProgramStructure {
-  const squat = hasBarbells ? "Back Squat" : "Goblet Squat";
-  const press = hasBarbells ? "Barbell Bench Press" : "Dumbbell Press";
-  const pull = hasBarbells ? "Barbell Row" : "Dumbbell Row";
-  const hinge = hasBarbells ? "Romanian Deadlift" : "Single-Leg RDL";
-
+function exToDay(ex: ExerciseEntry, sets: number, reps: string, rest: string): Exercise {
   return {
-    programName: `${profile.trainingGoal} — Full Body 3-Day`,
-    description: `A 3-day full-body program designed for ${profile.experienceLevel} athletes. Each session covers all major movement patterns with progressive overload built in.`,
-    progressionStrategy,
-    splitType: "Full Body × 3",
-    days: [
-      {
-        dayNumber: 1,
-        name: "Full Body A — Strength Focus",
-        focus: "Compound strength, lower rep ranges",
-        exercises: [
-          { name: squat, sets: mainSets, reps: repRange, rest: restPeriod, notes: "Brace hard, knees track over toes" },
-          { name: press, sets: mainSets, reps: repRange, rest: restPeriod, notes: "Controlled descent, full ROM" },
-          { name: hasBarbells ? "Weighted Pull-ups" : "Lat Pulldown", sets: 4, reps: "5-8", rest: "2 min", notes: "Full hang at bottom" },
-          { name: hinge, sets: 3, reps: "8-10", rest: "90s" },
-          { name: "Plank", sets: 3, reps: "45s hold", rest: "60s" },
-        ],
-      },
-      {
-        dayNumber: 2,
-        name: "Full Body B — Volume Focus",
-        focus: "Higher rep ranges, more total volume",
-        exercises: [
-          { name: hasBarbells ? "Front Squat" : "Split Squat", sets: 4, reps: "8-10", rest: "90s" },
-          { name: "Overhead Press", sets: 4, reps: "8-10", rest: "90s" },
-          { name: pull, sets: 4, reps: "8-12", rest: "75s", notes: "Chest to bar, squeeze at top" },
-          { name: hasBarbells ? "Hip Thrust" : "Glute Bridge", sets: 3, reps: "10-12", rest: "75s" },
-          { name: "Lateral Raises", sets: 3, reps: "15-20", rest: "45s" },
-        ],
-      },
-      {
-        dayNumber: 3,
-        name: "Full Body C — Power / Athletic",
-        focus: "Explosive movements, full-body integration",
-        exercises: [
-          { name: hasBarbells ? "Power Clean" : "Dumbbell Jump Squat", sets: 4, reps: "3-5", rest: "2 min", notes: "Maximum intent on every rep" },
-          { name: hasBarbells ? "Deadlift" : "Single-Leg RDL", sets: 4, reps: "5-6", rest: "2-3 min" },
-          { name: "Incline Press", sets: 3, reps: "8-10", rest: "75s" },
-          { name: "Cable Row" + (hasBarbells ? "" : " / Seated Row"), sets: 3, reps: "10-12", rest: "60s" },
-          { name: "Farmer Carry", sets: 3, reps: "40m", rest: "90s", notes: "Tall posture, controlled breathing" },
-        ],
-      },
-    ],
+    name: ex.name,
+    sets,
+    reps,
+    rest,
+    notes: ex.notes,
   };
 }
 
-function buildUpperLowerProgram(
-  hasBarbells: boolean,
-  repRange: string,
-  restPeriod: string,
-  mainSets: number,
-  progressionStrategy: string,
-  profile: UserProfile
-): ProgramStructure {
-  return {
-    programName: `${profile.trainingGoal} — Upper/Lower 4-Day`,
-    description: `A 4-day Upper/Lower split for ${profile.experienceLevel} athletes. High frequency for each muscle group with built-in variation between sessions.`,
-    progressionStrategy,
-    splitType: "Upper / Lower × 4",
-    days: [
-      {
-        dayNumber: 1,
-        name: "Upper A — Push Dominant",
-        focus: "Horizontal and vertical push, strength focus",
-        exercises: [
-          { name: hasBarbells ? "Barbell Bench Press" : "Dumbbell Bench Press", sets: mainSets, reps: repRange, rest: restPeriod, notes: "Control descent, drive through full ROM" },
-          { name: "Overhead Press", sets: 4, reps: "6-8", rest: "90s" },
-          { name: hasBarbells ? "Weighted Pull-ups" : "Lat Pulldown", sets: 4, reps: "6-8", rest: "90s" },
-          { name: "Incline Dumbbell Press", sets: 3, reps: "10-12", rest: "60s" },
-          { name: "Face Pulls", sets: 3, reps: "15-20", rest: "45s", notes: "Protect the shoulder girdle" },
-          { name: "Tricep Pushdowns", sets: 3, reps: "12-15", rest: "45s" },
-        ],
-      },
-      {
-        dayNumber: 2,
-        name: "Lower A — Squat Focus",
-        focus: "Quad-dominant, primary strength movement",
-        exercises: [
-          { name: hasBarbells ? "Back Squat" : "Goblet Squat", sets: mainSets, reps: repRange, rest: restPeriod, notes: "Depth and bracing are non-negotiable" },
-          { name: hasBarbells ? "Romanian Deadlift" : "Single-Leg RDL", sets: 4, reps: "8-10", rest: "90s" },
-          { name: hasBarbells ? "Leg Press" : "Bulgarian Split Squat", sets: 3, reps: "10-12", rest: "75s" },
-          { name: "Leg Curl", sets: 3, reps: "12-15", rest: "60s" },
-          { name: "Standing Calf Raise", sets: 4, reps: "15-20", rest: "45s" },
-        ],
-      },
-      {
-        dayNumber: 3,
-        name: "Upper B — Pull Dominant",
-        focus: "Vertical and horizontal pull, volume focus",
-        exercises: [
-          { name: hasBarbells ? "Barbell Row" : "Dumbbell Row", sets: mainSets, reps: repRange, rest: restPeriod, notes: "Keep chest up, drive elbows back" },
-          { name: "Weighted Pull-ups", sets: 4, reps: "6-8", rest: "90s" },
-          { name: "Incline Dumbbell Press", sets: 3, reps: "8-10", rest: "75s" },
-          { name: "Cable Row", sets: 3, reps: "12-15", rest: "60s" },
-          { name: "Lateral Raises", sets: 4, reps: "15-20", rest: "45s" },
-          { name: "Hammer Curls", sets: 3, reps: "12-15", rest: "45s" },
-        ],
-      },
-      {
-        dayNumber: 4,
-        name: "Lower B — Hinge Focus",
-        focus: "Posterior chain, hip-dominant movements",
-        exercises: [
-          { name: hasBarbells ? "Deadlift" : "Single-Leg RDL", sets: mainSets, reps: repRange, rest: "2-3 min", notes: "Max tension through the pull" },
-          { name: hasBarbells ? "Front Squat" : "Split Squat", sets: 4, reps: "8-10", rest: "90s" },
-          { name: hasBarbells ? "Hip Thrust" : "Glute Bridge", sets: 3, reps: "10-12", rest: "75s" },
-          { name: "Walking Lunges", sets: 3, reps: "12 each", rest: "60s" },
-          { name: "Leg Curl", sets: 3, reps: "15-20", rest: "45s" },
-        ],
-      },
-    ],
-  };
+function buildFullBodyDays(
+  goal: GoalType,
+  experience: ReturnType<typeof normalizeExperience>,
+  spec: ReturnType<typeof buildTrainingSpec>,
+  baseFilter: Parameters<typeof selectExercises>[0],
+  numDays: number
+): ProgramDay[] {
+  const dayConfigs = [
+    { name: "Full Body A — Compound Focus", focus: "Primary strength movements across all patterns", isA: true },
+    { name: "Full Body B — Volume Focus", focus: "Higher reps, more total volume", isA: false },
+    { name: "Full Body C — Athletic / Integration", focus: "Explosive work, unilateral, conditioning", isA: true, isC: true },
+  ].slice(0, numDays);
+
+  return dayConfigs.map((cfg, idx) => {
+    const isC = "isC" in cfg && cfg.isC;
+    const patterns = isC
+      ? (["power_explosive", "squat", "hinge", "pull_horizontal", "core"] as const)
+      : (["squat", "hinge", "push_horizontal", "pull_vertical", "core"] as const);
+
+    const exercises: Exercise[] = [];
+    const usedNames = new Set<string>();
+
+    for (const pattern of patterns) {
+      const hits = selectExercises({
+        ...baseFilter,
+        patterns: [pattern],
+        excludeNames: [...(baseFilter.excludeNames ?? []), ...usedNames],
+        maxCount: 1,
+      });
+
+      if (hits.length === 0) continue;
+      const ex = hits[0];
+      usedNames.add(ex.name);
+
+      const isAccessory = pattern === "core" || pattern === "iso_arms";
+      const sets = isAccessory ? spec.accessorySets : idx === 0 ? spec.primarySets : spec.secondarySets;
+      const reps = isAccessory ? spec.secondaryRepRange : idx === 0 ? spec.primaryRepRange : spec.secondaryRepRange;
+      const rest = isAccessory ? spec.accessoryRest : idx === 0 ? spec.primaryRest : spec.secondaryRest;
+
+      exercises.push(exToDay(ex, sets, reps, rest));
+    }
+
+    // Add a finisher
+    const finisher = selectExercises({
+      ...baseFilter,
+      patterns: ["carry", "conditioning", "iso_legs"],
+      excludeNames: [...(baseFilter.excludeNames ?? []), ...usedNames],
+      maxCount: 1,
+    });
+    if (finisher.length > 0) {
+      exercises.push(exToDay(finisher[0], spec.accessorySets, "30-40m / 45s", spec.accessoryRest));
+    }
+
+    return {
+      dayNumber: idx + 1,
+      name: cfg.name,
+      focus: cfg.focus,
+      exercises,
+      notes: idx === 0 ? `${spec.splitRationale}` : undefined,
+    };
+  });
 }
 
-function buildPPLProgram(
-  hasBarbells: boolean,
-  repRange: string,
-  restPeriod: string,
-  mainSets: number,
-  progressionStrategy: string,
-  profile: UserProfile
-): ProgramStructure {
-  const daysLabel = profile.daysPerWeek >= 6 ? "6-Day PPL" : "5-Day PPL";
+function buildUpperLowerDays(
+  goal: GoalType,
+  experience: ReturnType<typeof normalizeExperience>,
+  spec: ReturnType<typeof buildTrainingSpec>,
+  baseFilter: Parameters<typeof selectExercises>[0]
+): ProgramDay[] {
+  const dayTemplates = [
+    {
+      dayNumber: 1,
+      name: "Upper A — Push Focus",
+      focus: "Horizontal and vertical push, primary strength",
+      primaryPatterns: ["push_horizontal", "push_vertical"] as const,
+      secondaryPatterns: ["pull_vertical", "iso_shoulders", "iso_arms"] as const,
+    },
+    {
+      dayNumber: 2,
+      name: "Lower A — Squat Dominant",
+      focus: "Quad-dominant, primary squat pattern",
+      primaryPatterns: ["squat"] as const,
+      secondaryPatterns: ["hinge", "iso_legs", "core"] as const,
+    },
+    {
+      dayNumber: 3,
+      name: "Upper B — Pull Focus",
+      focus: "Horizontal and vertical pull, volume emphasis",
+      primaryPatterns: ["pull_horizontal", "pull_vertical"] as const,
+      secondaryPatterns: ["push_horizontal", "iso_shoulders", "iso_arms"] as const,
+    },
+    {
+      dayNumber: 4,
+      name: "Lower B — Hinge Dominant",
+      focus: "Posterior chain, hip-dominant movements",
+      primaryPatterns: ["hinge"] as const,
+      secondaryPatterns: ["squat", "iso_legs", "carry"] as const,
+    },
+  ];
 
-  return {
-    programName: `${profile.trainingGoal} — ${daysLabel}`,
-    description: `A Push/Pull/Legs split for ${profile.experienceLevel} athletes training ${profile.daysPerWeek} days/week. High frequency, organized by movement pattern.`,
-    progressionStrategy,
-    splitType: "Push / Pull / Legs",
-    days: [
-      {
-        dayNumber: 1,
-        name: "Push — Strength Focus",
-        focus: "Heavy compound pressing, low rep ranges",
-        exercises: [
-          { name: hasBarbells ? "Barbell Bench Press" : "Dumbbell Bench Press", sets: mainSets, reps: repRange, rest: restPeriod },
-          { name: "Overhead Press", sets: 4, reps: "5-7", rest: "2 min" },
-          { name: "Incline Dumbbell Press", sets: 3, reps: "8-10", rest: "75s" },
-          { name: "Lateral Raises", sets: 4, reps: "15-20", rest: "45s" },
-          { name: "Tricep Pushdowns", sets: 3, reps: "12-15", rest: "45s" },
-          { name: "Overhead Tricep Extension", sets: 3, reps: "12-15", rest: "45s" },
-        ],
-      },
-      {
-        dayNumber: 2,
-        name: "Pull — Strength Focus",
-        focus: "Heavy compound pulling, back thickness",
-        exercises: [
-          { name: hasBarbells ? "Barbell Row" : "Dumbbell Row", sets: mainSets, reps: repRange, rest: restPeriod, notes: "Drive the elbows, don't just pull the bar" },
-          { name: "Weighted Pull-ups", sets: 4, reps: "5-7", rest: "2 min" },
-          { name: "Face Pulls", sets: 3, reps: "15-20", rest: "45s" },
-          { name: "Cable Row", sets: 3, reps: "10-12", rest: "60s" },
-          { name: "Hammer Curls", sets: 3, reps: "10-12", rest: "45s" },
-          { name: "Incline Dumbbell Curl", sets: 3, reps: "12-15", rest: "45s" },
-        ],
-      },
-      {
-        dayNumber: 3,
-        name: "Legs — Squat / Quad Focus",
-        focus: "Quad-dominant, explosive intent",
-        exercises: [
-          { name: hasBarbells ? "Back Squat" : "Goblet Squat", sets: mainSets, reps: repRange, rest: restPeriod, notes: "Hit depth, brace hard" },
-          { name: hasBarbells ? "Romanian Deadlift" : "Single-Leg RDL", sets: 4, reps: "8-10", rest: "90s" },
-          { name: hasBarbells ? "Leg Press" : "Bulgarian Split Squat", sets: 3, reps: "10-12", rest: "75s" },
-          { name: "Leg Curl", sets: 3, reps: "12-15", rest: "60s" },
-          { name: "Calf Raises", sets: 4, reps: "15-20", rest: "45s" },
-        ],
-      },
-      {
-        dayNumber: 4,
-        name: "Push — Volume Focus",
-        focus: "Higher reps, pump work, accessory",
-        exercises: [
-          { name: "Incline Dumbbell Press", sets: 4, reps: "10-12", rest: "75s" },
-          { name: "Cable Fly", sets: 3, reps: "12-15", rest: "60s" },
-          { name: "Dumbbell Shoulder Press", sets: 3, reps: "10-12", rest: "75s" },
-          { name: "Lateral Raises", sets: 4, reps: "20-25", rest: "30s" },
-          { name: "Tricep Dips", sets: 3, reps: "12-15", rest: "60s" },
-        ],
-      },
-      {
-        dayNumber: 5,
-        name: "Pull — Volume Focus",
-        focus: "Width and detail, higher rep ranges",
-        exercises: [
-          { name: hasBarbells ? "Lat Pulldown" : "Lat Pulldown", sets: 4, reps: "10-12", rest: "75s" },
-          { name: "Seated Cable Row", sets: 4, reps: "12-15", rest: "60s" },
-          { name: "Dumbbell Row", sets: 3, reps: "12-15", rest: "60s" },
-          { name: "Rear Delt Fly", sets: 4, reps: "15-20", rest: "45s" },
-          { name: "Preacher Curl", sets: 3, reps: "12-15", rest: "45s" },
-          { name: "Cable Curl", sets: 3, reps: "15-20", rest: "45s" },
-        ],
-      },
-    ],
-  };
+  return dayTemplates.map((template, dayIdx) => {
+    const usedNames = new Set<string>();
+    const exercises: Exercise[] = [];
+    const isStrength = goal === "strength";
+
+    // Primary exercises (2)
+    for (const pattern of template.primaryPatterns.slice(0, 2)) {
+      const hits = selectExercises({
+        ...baseFilter,
+        patterns: [pattern],
+        excludeNames: [...(baseFilter.excludeNames ?? []), ...usedNames],
+        maxCount: 1,
+      });
+      if (hits.length > 0) {
+        usedNames.add(hits[0].name);
+        exercises.push(exToDay(
+          hits[0],
+          spec.primarySets,
+          spec.primaryRepRange,
+          spec.primaryRest
+        ));
+      }
+    }
+
+    // Secondary exercises (2-3)
+    const secondaryCount = spec.exercisesPerSession.max - exercises.length - 1;
+    for (const pattern of template.secondaryPatterns.slice(0, secondaryCount)) {
+      const isIso = pattern.startsWith("iso_") || pattern === "carry" || pattern === "core";
+      const hits = selectExercises({
+        ...baseFilter,
+        patterns: [pattern],
+        excludeNames: [...(baseFilter.excludeNames ?? []), ...usedNames],
+        maxCount: 1,
+      });
+      if (hits.length > 0) {
+        usedNames.add(hits[0].name);
+        exercises.push(exToDay(
+          hits[0],
+          isIso ? spec.accessorySets : spec.secondarySets,
+          isIso ? spec.secondaryRepRange : spec.secondaryRepRange,
+          isIso ? spec.accessoryRest : spec.secondaryRest
+        ));
+      }
+    }
+
+    return {
+      dayNumber: template.dayNumber,
+      name: template.name,
+      focus: template.focus,
+      exercises,
+      notes: dayIdx === 0 ? spec.splitRationale : undefined,
+    };
+  });
+}
+
+function buildPPLDays(
+  goal: GoalType,
+  experience: ReturnType<typeof normalizeExperience>,
+  spec: ReturnType<typeof buildTrainingSpec>,
+  baseFilter: Parameters<typeof selectExercises>[0],
+  numDays: number
+): ProgramDay[] {
+  const templates = [
+    {
+      dayNumber: 1,
+      name: "Push — Strength Focus",
+      focus: "Heavy horizontal and vertical push",
+      primary: ["push_horizontal", "push_vertical"] as const,
+      secondary: ["iso_shoulders", "iso_arms"] as const,
+    },
+    {
+      dayNumber: 2,
+      name: "Pull — Strength Focus",
+      focus: "Heavy horizontal and vertical pull, back thickness",
+      primary: ["pull_horizontal", "pull_vertical"] as const,
+      secondary: ["iso_shoulders", "iso_arms"] as const,
+    },
+    {
+      dayNumber: 3,
+      name: "Legs — Squat / Quad Focus",
+      focus: "Quad-dominant, primary squat pattern",
+      primary: ["squat", "hinge"] as const,
+      secondary: ["iso_legs", "core"] as const,
+    },
+    {
+      dayNumber: 4,
+      name: "Push — Volume Focus",
+      focus: "Moderate load, higher reps, pump emphasis",
+      primary: ["push_horizontal", "iso_chest"] as const,
+      secondary: ["push_vertical", "iso_shoulders", "iso_arms"] as const,
+    },
+    {
+      dayNumber: 5,
+      name: "Pull — Volume Focus",
+      focus: "Back width and detail, higher rep ranges",
+      primary: ["pull_vertical", "pull_horizontal"] as const,
+      secondary: ["iso_back", "iso_arms"] as const,
+    },
+    {
+      dayNumber: 6,
+      name: "Legs — Hinge / Posterior Focus",
+      focus: "Posterior chain, hamstrings, glutes",
+      primary: ["hinge", "squat"] as const,
+      secondary: ["iso_legs", "carry"] as const,
+    },
+  ].slice(0, numDays);
+
+  return templates.map((template, dayIdx) => {
+    const usedNames = new Set<string>();
+    const exercises: Exercise[] = [];
+    const isVolumeDay = dayIdx >= 3; // days 4-6 are volume focus
+
+    for (const pattern of template.primary.slice(0, 2)) {
+      const hits = selectExercises({
+        ...baseFilter,
+        patterns: [pattern],
+        excludeNames: [...(baseFilter.excludeNames ?? []), ...usedNames],
+        maxCount: 1,
+      });
+      if (hits.length > 0) {
+        usedNames.add(hits[0].name);
+        exercises.push(exToDay(
+          hits[0],
+          isVolumeDay ? spec.secondarySets : spec.primarySets,
+          isVolumeDay ? spec.secondaryRepRange : spec.primaryRepRange,
+          isVolumeDay ? spec.secondaryRest : spec.primaryRest
+        ));
+      }
+    }
+
+    const accessoryCount = spec.exercisesPerSession.max - exercises.length;
+    for (const pattern of template.secondary.slice(0, accessoryCount)) {
+      const hits = selectExercises({
+        ...baseFilter,
+        patterns: [pattern],
+        excludeNames: [...(baseFilter.excludeNames ?? []), ...usedNames],
+        maxCount: 1,
+      });
+      if (hits.length > 0) {
+        usedNames.add(hits[0].name);
+        exercises.push(exToDay(
+          hits[0],
+          spec.accessorySets,
+          spec.secondaryRepRange,
+          spec.accessoryRest
+        ));
+      }
+    }
+
+    return {
+      dayNumber: template.dayNumber,
+      name: template.name,
+      focus: template.focus,
+      exercises,
+      notes: dayIdx === 0 ? spec.splitRationale : undefined,
+    };
+  });
 }

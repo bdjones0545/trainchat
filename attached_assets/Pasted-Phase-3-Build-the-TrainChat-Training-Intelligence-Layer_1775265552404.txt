@@ -1,0 +1,382 @@
+Phase 3: Build the TrainChat Training Intelligence Layer
+
+We already have:
+- agent-first architecture
+- premium chat-centered interface
+- onboarding-based personalization
+- co-creation behavior
+- structured outputs
+- save/edit program flow
+
+Now implement the actual training intelligence layer that makes TrainChat feel like a truly elite performance system.
+
+This phase is about upgrading the quality of the agent’s training logic, recommendations, and structured program design.
+
+IMPORTANT:
+This is not just about generating workouts.
+This is about creating a rules-driven intelligence system for program design, adaptation, and progression.
+
+==================================================
+CORE INTELLIGENCE OBJECTIVE
+==================================================
+
+The TrainChat agent should now think like a high-level training architect that combines:
+
+- exercise physiology
+- strength and conditioning principles
+- movement quality awareness
+- fatigue management
+- progression strategy
+- pain-aware programming
+- goal-specific training logic
+
+The system should produce programs that feel:
+- intentional
+- coherent
+- progressive
+- sport-aware
+- realistic
+- premium
+
+The system should NOT produce:
+- random exercise lists
+- generic bro-splits with no logic
+- cookie-cutter workouts
+- unrealistic volume
+- reckless exercise choices for injured users
+- poor exercise ordering
+- structure without progression
+
+==================================================
+1. TRAINING INTELLIGENCE RULE ENGINE
+==================================================
+
+Build a clean rules-driven training logic layer that the AI uses when generating programs.
+
+This layer should influence program design based on:
+
+- primary goal
+- training age / experience
+- available days per week
+- session time
+- equipment access
+- sport or activity demands
+- injury / pain limitations
+- stated preferences
+- desired training style
+
+Implement clear internal logic for how programming changes depending on the goal.
+
+==================================================
+2. GOAL-SPECIFIC PROGRAMMING LOGIC
+==================================================
+
+Implement differentiated logic for at least these primary outcomes:
+
+A. Hypertrophy
+- moderate to high training volume
+- sensible exercise selection
+- rep ranges typically appropriate for hypertrophy
+- appropriate frequency per muscle group
+- reasonable rest periods
+- progression focused on volume, load, reps, or execution quality
+
+B. Strength
+- lower to moderate rep emphasis on key lifts
+- longer rest periods
+- more attention to compound lift order
+- intensity management
+- lower junk volume
+- progression centered around load, rep quality, and movement consistency
+
+C. Athletic Performance
+- explosive emphasis where appropriate
+- sprint / jump / power considerations where relevant
+- movement quality and fatigue balance
+- strength support for performance
+- avoid bodybuilding-only logic if the stated goal is performance
+
+D. General Fitness / Body Composition
+- balanced, sustainable structure
+- accessible programming
+- not overly complex
+- realistic recovery demands
+
+The system should meaningfully distinguish between these goals.
+
+==================================================
+3. PROGRAM STRUCTURE LOGIC
+==================================================
+
+Implement intelligent rules for split selection based on schedule and goal.
+
+Examples:
+- 2-3 days/week → full body or efficient upper/lower logic
+- 4 days/week → upper/lower or sensible split options
+- 5+ days/week → more specialization possible only when appropriate
+
+The system should not force high-frequency body-part splits on beginners with limited schedules.
+
+The agent should select or recommend splits intelligently based on:
+- days available
+- recovery capacity
+- goal
+- experience level
+
+==================================================
+4. EXERCISE SELECTION LOGIC
+==================================================
+
+Build exercise selection intelligence so exercise choices feel purposeful.
+
+Factors to consider:
+- goal
+- experience level
+- equipment
+- pain limitations
+- movement complexity
+- session efficiency
+- balance across movement patterns
+
+Implement rules such as:
+- compound lifts generally earlier in session
+- high-skill / explosive work earlier when used
+- accessories later
+- avoid redundant selections
+- avoid excessive overlap unless intentional
+- avoid poor exercise choices when equipment constraints make them unrealistic
+
+The system should be capable of choosing:
+- beginner-friendly options
+- performance-oriented options
+- hypertrophy-biased options
+- pain-conscious alternatives
+
+==================================================
+5. SETS / REPS / REST INTELLIGENCE
+==================================================
+
+Implement intelligent prescription logic for:
+- sets
+- reps
+- rest periods
+
+This should vary depending on:
+- goal
+- exercise type
+- user experience
+- available time
+- fatigue demands
+
+Examples:
+- heavy compound strength work should not get generic short rest
+- hypertrophy accessories should not all get powerlifting rest
+- athletic explosive work should be prescribed appropriately
+- beginner programs should not be excessively complex or fatiguing
+
+The output should feel like it was designed by someone who understands programming, not guessed by a chatbot.
+
+==================================================
+6. PROGRESSION ENGINE (INITIAL VERSION)
+==================================================
+
+Build an initial progression logic layer.
+
+Programs should include a progression strategy that aligns with the goal.
+
+Examples:
+- hypertrophy: add reps, load, or volume gradually
+- strength: add load carefully while preserving bar speed / form quality
+- performance: progress intensity and quality without crushing readiness
+- general fitness: simple sustainable progression
+
+The AI should include progression notes in generated programs.
+
+Also create data structures or logic hooks that prepare for future week-to-week evolution.
+
+The system should not act like a workout ends after one session.
+It should feel like a training process.
+
+==================================================
+7. FATIGUE MANAGEMENT / RECOVERY LOGIC
+==================================================
+
+Implement rules to prevent obviously poor programming decisions.
+
+The system should consider:
+- session density
+- weekly volume
+- back-to-back stress overlap
+- lower body fatigue stacking
+- pressing/pulling balance
+- overall realism for the user’s schedule
+
+Examples:
+- avoid crushing lower body days back to back without reason
+- avoid excessive high-intensity work across too many days
+- avoid programs that are too dense for the stated session duration
+- avoid giving advanced volume to novices
+
+This should not need perfect sports science calculation yet, but it must be meaningfully better than generic AI outputs.
+
+==================================================
+8. PAIN / LIMITATION AWARE PROGRAMMING
+==================================================
+
+Implement pain-aware and limitation-aware logic.
+
+If the user has pain, limitations, or movements they want to avoid:
+- avoid exercises likely to aggravate the issue
+- offer substitutes
+- bias toward tolerable patterns
+- use respectful language
+- do not present medical diagnosis
+- do not make reckless rehab claims
+
+Examples:
+- knee irritation → avoid automatically forcing high-volume deep knee-dominant work
+- shoulder irritation → offer pressing modifications and smarter exercise choices
+- low back sensitivity → adjust loading strategy and exercise selection
+
+The system should behave like an intelligent coach programming around limitations, not a medical professional diagnosing injury.
+
+==================================================
+9. SESSION EFFICIENCY LOGIC
+==================================================
+
+Use the user’s stated session duration to constrain programming.
+
+Examples:
+- 30-45 minute sessions should be tighter and more efficient
+- 60+ minute sessions can include more depth
+- avoid building long unrealistic sessions for users with short time windows
+
+If needed, reduce exercise count intelligently rather than cutting quality randomly.
+
+==================================================
+10. COACHING RATIONALE LAYER
+==================================================
+
+Add a premium explanation layer.
+
+The agent should be able to briefly explain WHY a structure was chosen.
+
+Examples:
+- “I chose full body because with 3 days per week it gives you better frequency and efficiency.”
+- “I kept explosive work early to preserve output quality.”
+- “I reduced knee-dominant volume because you noted irritation there.”
+
+This rationale should be brief and sharp, not long lectures.
+
+This greatly improves premium feel and trust.
+
+==================================================
+11. NATURAL LANGUAGE MODIFICATION RULES
+==================================================
+
+Improve modification logic so the agent can intelligently respond to:
+
+- “make this more athletic”
+- “make this less fatiguing”
+- “I want more chest volume”
+- “I only have dumbbells now”
+- “my shoulder is irritated this week”
+- “shorten this to 40 minutes”
+- “make this more advanced”
+
+These edits should trigger intelligent targeted changes to the existing program structure.
+
+Do not rebuild the entire program unnecessarily.
+Maintain continuity where possible.
+
+==================================================
+12. PROGRAM QUALITY GUARDRAILS
+==================================================
+
+Implement internal quality rules to reduce low-quality outputs.
+
+Guardrails should include:
+- no random exercise duplication
+- no nonsensical rep schemes
+- no poor ordering of explosive vs fatiguing work
+- no impossible session density
+- no generic filler just to hit exercise count
+- no blindly obeying poor user requests without coaching correction
+
+The system should be able to reject or intelligently reshape poor ideas.
+
+==================================================
+13. PREPARE FOR FUTURE READINESS / MEMORY LAYERS
+==================================================
+
+Create clean architecture hooks for future:
+- readiness adjustments
+- sleep/stress/energy inputs
+- long-term progression memory
+- prior session feedback
+- pain trend tracking
+- program evolution over time
+
+Do not fully build those systems yet unless easy to scaffold, but make the codebase ready for them.
+
+==================================================
+14. IMPLEMENTATION REQUIREMENTS
+==================================================
+
+Implement this cleanly in the codebase with:
+- a training intelligence module or service layer
+- reusable logic utilities
+- structured program generation rules
+- clean separation between:
+  - conversational agent behavior
+  - training logic
+  - persistence/storage
+- maintain readability and scalability
+
+If helpful, use rule-based helper functions that shape the prompt context before sending to OpenAI.
+
+The AI should feel guided by a real system, not raw prompting alone.
+
+==================================================
+15. UI / OUTPUT EXPECTATIONS
+==================================================
+
+Upgrade structured outputs in the chat/right panel to reflect more intelligent programming.
+
+Generated programs should now clearly show:
+- split
+- day purpose
+- exercises
+- sets/reps
+- rest periods
+- progression notes
+- brief rationale where appropriate
+
+Keep outputs clean, readable, and premium.
+
+==================================================
+IMPORTANT PRODUCT RULES
+==================================================
+
+- Do not turn this into a generic workout generator
+- Do not make every program look the same
+- Do not overcomplicate beginner programs
+- Do not act like all users are powerlifters or bodybuilders
+- Do not make medical claims
+- Keep everything aligned with a premium elite-coach feel
+
+The user should feel like the system understands training.
+
+==================================================
+DELIVERABLES
+==================================================
+
+At the end, provide:
+1. what training intelligence rules were implemented
+2. how goal-specific logic now differs
+3. how split selection works
+4. how exercise selection is influenced by constraints
+5. how sets/reps/rest are determined
+6. how progression logic works
+7. how pain-aware and fatigue-aware adjustments work
+8. what is scaffolded for Phase 4
