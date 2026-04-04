@@ -178,7 +178,6 @@ function AgentChatUI({
   showOptions: boolean;
 }) {
   const [inputText, setInputText] = useState("");
-  const [showCustomInput, setShowCustomInput] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -188,8 +187,7 @@ function AgentChatUI({
 
   const handleOptionClick = (option: typeof QUICK_START_OPTIONS[number]) => {
     if (option.isCustom) {
-      setShowCustomInput(true);
-      setTimeout(() => inputRef.current?.focus(), 100);
+      setTimeout(() => inputRef.current?.focus(), 50);
       return;
     }
     onFirstInput(option.label);
@@ -209,9 +207,122 @@ function AgentChatUI({
     }
   };
 
+  // Initial state: vertically centered layout with agent message + chips
+  if (showOptions) {
+    return (
+      <div className="flex flex-col h-full">
+        {/* Centered content area */}
+        <div className="flex-1 flex flex-col justify-center px-4 py-6 gap-5">
+          {/* Agent message bubble */}
+          <div className="flex items-start gap-3 animate-in fade-in slide-in-from-bottom-3 duration-400">
+            <div
+              className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{ background: "hsl(199 89% 48%)" }}
+            >
+              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <div
+              className="rounded-2xl rounded-tl-sm px-4 py-3.5 text-base leading-relaxed font-medium flex-1"
+              style={{ background: "hsl(222 47% 13%)", border: "1px solid hsl(222 47% 20%)", color: "#e4e4e7" }}
+            >
+              {messages[0]?.text}
+            </div>
+          </div>
+
+          {/* Quick-start option buttons — full width, stacked */}
+          <div
+            className="flex flex-col gap-2.5 animate-in fade-in slide-in-from-bottom-3 duration-500"
+            style={{ animationDelay: "100ms" }}
+          >
+            {QUICK_START_OPTIONS.filter((o) => !o.isCustom).map((opt) => (
+              <button
+                key={opt.label}
+                onClick={() => handleOptionClick(opt)}
+                className="flex items-center gap-3 px-4 py-3.5 rounded-2xl text-sm font-medium w-full text-left transition-all duration-150 active:scale-[0.98]"
+                style={{
+                  background: "hsl(222 47% 11%)",
+                  border: "1px solid hsl(222 47% 20%)",
+                  color: "#d4d4d8",
+                }}
+                onTouchStart={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = "hsl(199 89% 48% / 0.7)";
+                  (e.currentTarget as HTMLButtonElement).style.background = "hsl(199 89% 48% / 0.08)";
+                }}
+                onTouchEnd={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = "hsl(222 47% 20%)";
+                  (e.currentTarget as HTMLButtonElement).style.background = "hsl(222 47% 11%)";
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = "hsl(199 89% 48% / 0.6)";
+                  (e.currentTarget as HTMLButtonElement).style.background = "hsl(199 89% 48% / 0.06)";
+                  (e.currentTarget as HTMLButtonElement).style.color = "#f4f4f5";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = "hsl(222 47% 20%)";
+                  (e.currentTarget as HTMLButtonElement).style.background = "hsl(222 47% 11%)";
+                  (e.currentTarget as HTMLButtonElement).style.color = "#d4d4d8";
+                }}
+              >
+                <span className="text-lg w-7 text-center flex-shrink-0">{opt.icon}</span>
+                <span>{opt.label}</span>
+                <svg className="w-4 h-4 ml-auto flex-shrink-0 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Sticky bottom input */}
+        <div
+          className="flex-shrink-0 px-4 pb-6 pt-3"
+          style={{ borderTop: "1px solid hsl(222 47% 13%)" }}
+        >
+          <div
+            className="flex items-center gap-2 rounded-2xl transition-all duration-200"
+            style={{
+              background: "hsl(222 47% 11%)",
+              border: "1px solid hsl(222 47% 22%)",
+            }}
+            onFocusCapture={(e) => (e.currentTarget.style.borderColor = "hsl(199 89% 48% / 0.5)")}
+            onBlurCapture={(e) => (e.currentTarget.style.borderColor = "hsl(222 47% 22%)")}
+          >
+            <textarea
+              ref={inputRef}
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={1}
+              placeholder="Or describe your own goal..."
+              className="flex-1 resize-none bg-transparent px-4 py-3.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none leading-relaxed"
+              style={{ minHeight: "50px", maxHeight: "100px" }}
+              onInput={(e) => {
+                const t = e.target as HTMLTextAreaElement;
+                t.style.height = "auto";
+                t.style.height = Math.min(t.scrollHeight, 100) + "px";
+              }}
+            />
+            <button
+              onClick={handleSubmit}
+              disabled={!inputText.trim()}
+              className="m-2 p-2 rounded-xl text-white transition-all duration-150 active:scale-95 flex-shrink-0 disabled:opacity-25"
+              style={{ background: inputText.trim() ? "hsl(199 89% 48%)" : "hsl(222 47% 18%)" }}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // After first input: scrollable message thread
   return (
     <div className="flex flex-col h-full">
-      {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 pt-6 pb-4 space-y-4">
         {messages.map((msg, i) => (
           <div
@@ -219,7 +330,7 @@ function AgentChatUI({
             className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-300`}
           >
             {msg.role === "agent" && (
-              <div className="flex items-start gap-3 max-w-[85%]">
+              <div className="flex items-start gap-3 max-w-[88%]">
                 <div
                   className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
                   style={{ background: "hsl(199 89% 48%)" }}
@@ -238,7 +349,7 @@ function AgentChatUI({
             )}
             {msg.role === "user" && (
               <div
-                className="rounded-2xl rounded-tr-sm px-4 py-3 text-sm leading-relaxed max-w-[85%]"
+                className="rounded-2xl rounded-tr-sm px-4 py-3 text-sm leading-relaxed max-w-[88%]"
                 style={{ background: "hsl(199 89% 48%)", color: "#fff" }}
               >
                 {msg.text}
@@ -246,95 +357,48 @@ function AgentChatUI({
             )}
           </div>
         ))}
-
-        {/* Quick-start option chips — shown only before first input */}
-        {showOptions && (
-          <div className="flex flex-col gap-2 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-400">
-            <div className="flex flex-wrap gap-2 pl-11">
-              {QUICK_START_OPTIONS.map((opt) => (
-                <button
-                  key={opt.label}
-                  onClick={() => handleOptionClick(opt)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 hover:scale-[1.02] active:scale-[0.97]"
-                  style={{
-                    background: "hsl(222 47% 13%)",
-                    border: "1px solid hsl(222 47% 22%)",
-                    color: "#a1a1aa",
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = "hsl(199 89% 48% / 0.6)";
-                    (e.currentTarget as HTMLButtonElement).style.color = "#e4e4e7";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = "hsl(222 47% 22%)";
-                    (e.currentTarget as HTMLButtonElement).style.color = "#a1a1aa";
-                  }}
-                >
-                  <span>{opt.icon}</span>
-                  <span>{opt.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         <div ref={bottomRef} />
       </div>
 
-      {/* Input area */}
-      <div className="flex-shrink-0 px-4 pb-6 pt-3" style={{ borderTop: "1px solid hsl(222 47% 14%)" }}>
-        {showOptions && !showCustomInput ? (
-          <div className="text-center">
-            <button
-              onClick={() => {
-                setShowCustomInput(true);
-                setTimeout(() => inputRef.current?.focus(), 100);
-              }}
-              className="text-xs transition-colors"
-              style={{ color: "hsl(222 47% 40%)" }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.color = "hsl(199 89% 48%)")}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.color = "hsl(222 47% 40%)")}
-            >
-              Or type your own goal ↑
-            </button>
-          </div>
-        ) : (
-          <div
-            className="flex items-end gap-2 rounded-2xl focus-within:ring-1 transition-all duration-200"
-            style={{
-              background: "hsl(222 47% 11%)",
-              border: "1px solid hsl(222 47% 22%)",
+      <div
+        className="flex-shrink-0 px-4 pb-6 pt-3"
+        style={{ borderTop: "1px solid hsl(222 47% 13%)" }}
+      >
+        <div
+          className="flex items-end gap-2 rounded-2xl transition-all duration-200"
+          style={{
+            background: "hsl(222 47% 11%)",
+            border: "1px solid hsl(222 47% 22%)",
+          }}
+          onFocusCapture={(e) => (e.currentTarget.style.borderColor = "hsl(199 89% 48% / 0.5)")}
+          onBlurCapture={(e) => (e.currentTarget.style.borderColor = "hsl(222 47% 22%)")}
+        >
+          <textarea
+            ref={inputRef}
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            rows={1}
+            placeholder="Describe your goal..."
+            className="flex-1 resize-none bg-transparent px-4 py-3.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none leading-relaxed"
+            style={{ minHeight: "50px", maxHeight: "120px" }}
+            onInput={(e) => {
+              const t = e.target as HTMLTextAreaElement;
+              t.style.height = "auto";
+              t.style.height = Math.min(t.scrollHeight, 120) + "px";
             }}
-            onFocusCapture={(e) => (e.currentTarget.style.borderColor = "hsl(199 89% 48% / 0.5)")}
-            onBlurCapture={(e) => (e.currentTarget.style.borderColor = "hsl(222 47% 22%)")}
+          />
+          <button
+            onClick={handleSubmit}
+            disabled={!inputText.trim()}
+            className="m-2 p-2 rounded-xl text-white transition-all duration-150 active:scale-95 flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
+            style={{ background: "hsl(199 89% 48%)" }}
           >
-            <textarea
-              ref={inputRef}
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={handleKeyDown}
-              rows={1}
-              placeholder="Describe your goal..."
-              className="flex-1 resize-none bg-transparent px-4 py-3.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none leading-relaxed"
-              style={{ minHeight: "52px", maxHeight: "120px" }}
-              onInput={(e) => {
-                const t = e.target as HTMLTextAreaElement;
-                t.style.height = "auto";
-                t.style.height = Math.min(t.scrollHeight, 120) + "px";
-              }}
-            />
-            <button
-              onClick={handleSubmit}
-              disabled={!inputText.trim()}
-              className="m-2 p-2 rounded-xl text-white transition-all duration-150 active:scale-95 flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
-              style={{ background: "hsl(199 89% 48%)" }}
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-              </svg>
-            </button>
-          </div>
-        )}
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   );
