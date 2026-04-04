@@ -1,0 +1,257 @@
+Build a brand new web app called TrainChat from a completely blank slate.
+
+This is a premium AI-powered training platform centered entirely around ONE powerful AI agent.
+
+CORE PRODUCT PHILOSOPHY:
+
+TrainChat is NOT a traditional fitness app.
+It is NOT a dashboard of tools.
+It is NOT a multi-coach system.
+
+TrainChat is a single intelligent performance system where:
+- The AI agent is the product
+- The AI agent is the interface
+- The AI agent is how users do everything
+
+Users should feel like they are interacting with an elite performance architect that helps them build their own training system.
+
+---
+
+AGENT-FIRST ARCHITECTURE (CRITICAL REQUIREMENT):
+
+- The AI agent chat is the PRIMARY and CENTRAL interface
+- There must be NO traditional dashboard homepage
+- After onboarding, users are taken DIRECTLY into the agent chat
+- The chat screen is the home screen
+
+All functionality must be accessed THROUGH the agent.
+
+Examples:
+- Users do NOT click “Create Program”
+- Users type: “Build me a program”
+- The agent guides, builds, and structures it
+
+- Users do NOT navigate complex menus
+- The agent handles flow, structure, and output
+
+---
+
+UI STRUCTURE:
+
+Design a premium, minimal, high-end interface:
+
+CENTER:
+- Large, beautiful AI chat interface (primary focus)
+
+RIGHT PANEL (or dynamic bottom panel on mobile):
+- Live structured output area
+- This will display:
+  - program structure
+  - splits
+  - exercises
+  - sets/reps
+  - progression
+
+LEFT SIDEBAR (optional but clean):
+- conversation history
+- ability to start a new chat
+
+TOP NAV (minimal):
+- profile
+- settings
+- logout
+
+The UI should feel like a high-end AI system, not a cluttered SaaS dashboard.
+
+---
+
+TECH STACK:
+
+Frontend:
+- React + TypeScript + Vite
+
+UI:
+- Tailwind CSS + shadcn/ui
+- clean, premium, minimal styling
+- no childish UI or excessive colors
+
+Backend:
+- Node.js + Express + TypeScript
+
+Database:
+- PostgreSQL with Drizzle ORM
+
+State:
+- TanStack Query
+
+Forms:
+- React Hook Form + Zod
+
+AI:
+- OpenAI integration (prepare service layer for structured responses)
+
+---
+
+CORE SYSTEMS TO BUILD:
+
+1. AUTHENTICATION
+- sign up / sign in / sign out
+- protected routes
+- secure user sessions
+- clean auth UI consistent with premium branding
+
+---
+
+2. ONBOARDING (CRITICAL FOR PERSONALIZATION)
+
+After signup, create a premium multi-step onboarding flow.
+
+Collect:
+- training goal
+- experience level
+- preferred training style
+- days per week
+- session duration
+- equipment access
+- injury/pain limitations
+- sport/activity focus
+- exercise preferences
+- exercises to avoid
+
+Store in a structured user profile table.
+
+The onboarding should feel high-end:
+- step-based UI
+- progress indicator
+- clean card layout
+- smooth transitions
+
+---
+
+3. AGENT CHAT SYSTEM (CORE FEATURE)
+
+Build a premium chat interface:
+
+- user messages
+- AI responses
+- typing state / streaming support ready
+- persistent conversations
+- conversation history per user
+
+Database tables:
+- conversations
+- messages
+
+Each message should store:
+- role (user/assistant)
+- content
+- timestamps
+- conversation ID
+
+---
+
+4. PROGRAM STRUCTURE FOUNDATION
+
+Prepare backend + frontend for structured training programs.
+
+Create database schema for:
+- saved_programs
+- program_days
+- exercises
+- sets/reps
+- rest periods
+- progression notes
+
+Associate programs with user ID.
+
+In the UI:
+- do NOT create a separate “Programs page”
+- instead, allow the agent to generate structured outputs into the right panel
+- prepare the system so these outputs can later be saved
+
+---
+
+5. RIGHT PANEL (STRUCTURED OUTPUT VIEW)
+
+Create a dynamic panel that can display structured program data.
+
+This panel should:
+- update based on agent responses (placeholder for now)
+- show:
+  - split
+  - days
+  - exercises
+  - sets/reps
+  - rest
+  - notes
+
+Keep it clean and readable.
+
+---
+
+6. PREMIUM UX STANDARDS
+
+Throughout the app:
+
+- spacing should be clean and intentional
+- typography should feel professional and modern
+- avoid clutter
+- subtle animations only
+- loading states should feel smooth
+- empty states should be well designed
+
+This should feel like software for serious users, not a casual fitness app.
+
+---
+
+7. DATABASE SCHEMA
+
+Design clean, scalable schema for:
+
+- users
+- user_profiles
+- conversations
+- messages
+- saved_programs
+- program_days (normalized structure)
+
+Ensure scalability for future:
+- memory systems
+- wearable integrations
+- recovery tracking
+- analytics
+
+---
+
+8. CODE QUALITY
+
+- clean folder structure
+- reusable components
+- separate frontend/backend concerns
+- environment variables for API keys
+- create an AI service layer for future prompt logic
+- avoid hacks
+- production-minded architecture
+
+---
+
+IMPORTANT RULES:
+
+- DO NOT build a traditional dashboard
+- DO NOT create multiple coaches
+- DO NOT create feature-based navigation competing with the agent
+- EVERYTHING must revolve around the agent
+
+The agent is the product.
+
+---
+
+DELIVERABLES:
+
+At the end, provide:
+
+1. Summary of what was built
+2. Database tables created
+3. Routes/pages created
+4. Explanation of how the agent-centered architecture is implemented
+5. What is intentionally left for Phase 2 (agent intelligence and program logic)
