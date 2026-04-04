@@ -1,0 +1,183 @@
+UPGRADE TRAINCHAT PROGRAM GENERATION TO FOLLOW NSCA STRENGTH & CONDITIONING PRINCIPLES
+
+OBJECTIVE
+Ensure all generated training programs follow gold-standard NSCA guidelines for exercise order, volume, intensity, and structure.
+
+This must apply to:
+- initial program generation
+- all future edits
+- all AI-driven adjustments
+
+CORE RULES (MANDATORY)
+
+1. EXERCISE ORDER (STRICT HIERARCHY)
+
+All sessions must follow this order unless explicitly overridden:
+
+1. Plyometric / explosive movements
+2. Olympic lifts / high-skill power movements
+3. Primary strength lifts (compound)
+4. Secondary compound lifts
+5. Accessory / isolation work
+6. Conditioning / metabolic work
+
+Example:
+- Box jumps BEFORE squats
+- Power cleans BEFORE squats
+
+NEVER:
+- place high-skill or explosive lifts after fatigue-heavy work
+
+---
+
+2. REP & INTENSITY ZONES
+
+Follow NSCA guidelines:
+
+Strength:
+- 1–6 reps
+- 3–6 sets
+
+Power:
+- 1–5 reps
+- 3–5 sets
+- maximal speed intent
+
+Hypertrophy:
+- 6–12 reps
+- 2–4 sets
+
+Endurance:
+- 12+ reps
+
+Ensure:
+- primary lifts use strength or power ranges
+- accessory lifts use hypertrophy ranges
+
+---
+
+3. REST PERIODS
+
+Enforce:
+
+- Power / Olympic lifts: 2–5 minutes
+- Primary strength lifts: 2–5 minutes
+- Hypertrophy: 60–90 seconds
+- Conditioning: variable
+
+Never assign short rest to high-skill or power lifts.
+
+---
+
+4. MOVEMENT BALANCE
+
+Each session must include appropriate balance:
+
+Lower body day:
+- squat pattern
+- hinge pattern
+- posterior chain work
+
+Upper body day:
+- push (horizontal or vertical)
+- pull (horizontal or vertical)
+- shoulder stability work
+
+Avoid:
+- redundant loading without purpose
+
+---
+
+5. NEURAL / INTENT INSTRUCTIONS (CRITICAL)
+
+Each exercise must include intent:
+
+Examples:
+- “Explosive concentric”
+- “Max intent on every rep”
+- “Controlled eccentric (3 sec)”
+- “Stability focus”
+
+This aligns with high-level coaching standards.
+
+---
+
+6. FATIGUE MANAGEMENT
+
+Ensure:
+- high neural demand exercises come first
+- fatigue does not impair technique lifts
+
+Example:
+- do NOT place power cleans after squats
+
+---
+
+7. ADVANCED STRUCTURES (OPTIONAL BUT PREFERRED)
+
+Allow intelligent use of:
+
+- contrast training (strength + plyo pairing)
+- potentiation methods
+- progressive overload structures
+
+But maintain clarity and simplicity.
+
+---
+
+8. VALIDATION CHECK (REQUIRED BEFORE OUTPUT)
+
+Before returning any program, the system must check:
+
+- correct exercise order
+- correct rep ranges
+- correct rest periods
+- logical movement balance
+- no redundant fatigue stacking
+
+If violations exist:
+→ auto-correct before output
+
+---
+
+9. OUTPUT STRUCTURE
+
+Each session must clearly show:
+
+- exercise name
+- classification (primary, accessory, etc.)
+- sets
+- reps
+- rest
+- intent cue
+
+Example:
+
+Box Squat (Primary)
+Sets: 5
+Reps: 3
+Rest: 3 min
+Intent: Max explosive concentric, controlled eccentric
+
+---
+
+10. SYSTEM BEHAVIOR
+
+The AI must behave like:
+- an elite strength coach
+- not a random generator
+
+It must:
+- justify structure internally
+- maintain consistency across edits
+- preserve program integrity when modifying
+
+---
+
+OBJECTIVE RESULT
+
+All generated programs should:
+- follow NSCA standards
+- reflect high-level strength & conditioning logic
+- feel like they were built by an expert coach
+- remain structurally sound even after edits
