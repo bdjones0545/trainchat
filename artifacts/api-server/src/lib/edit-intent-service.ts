@@ -104,7 +104,12 @@ export function serializeSystemForPrompt(system: any): string {
 
 // ─── AI Edit Prompt Builder ──────────────────────────────────────────────────
 
-function buildEditSystemPrompt(systemContext: string, targetContext?: TargetContext, adaptationContext?: string): string {
+function buildEditSystemPrompt(
+  systemContext: string,
+  targetContext?: TargetContext,
+  adaptationContext?: string,
+  decisionMemoryContext?: string
+): string {
   const targetFocus = targetContext
     ? `\nEDIT FOCUS:\nThe user is specifically targeting: ${targetContext.type.toUpperCase()} [id:${targetContext.id}]${targetContext.label ? ` "${targetContext.label}"` : ""}${targetContext.parentLabel ? ` in ${targetContext.parentLabel}` : ""}.\nFocus ALL changes on this specific object. Only expand scope if the user's request explicitly requires broader changes. Prefer targeted, surgical edits to this one object.\n`
     : "";
@@ -113,7 +118,13 @@ function buildEditSystemPrompt(systemContext: string, targetContext?: TargetCont
     ? `\n${adaptationContext}\n\nIncorporate the above readiness and adaptation signals naturally when they are relevant to the edit being requested. A coach who knows the user's current state will make smarter, more contextual recommendations.\n`
     : "";
 
+  const decisionMemorySection = decisionMemoryContext
+    ? `\n${decisionMemoryContext}\n`
+    : "";
+
   return `You are an elite performance architect editing a user's structured training system.
+
+You know this athlete. You have worked with them before and remember the decisions you've made together.
 
 You will receive:
 1. The user's current structured training system (with IDs for every entity)
@@ -130,7 +141,10 @@ RULES:
 - If swapping an exercise, choose one that fits the same pattern and equipment.
 - If reducing volume, reduce accessory/finisher sets first (not primary lifts unless asked).
 - If changing a session to recovery/mobility, update type + replace exercises with light work.
-- Explain changes clearly in changeSummary — write like a coach, not a robot.
+- In the changeSummary, write like a coach who KNOWS this athlete. Reference past decisions when
+  directly relevant (e.g. "Building on the volume reduction we did last week..."). Use "we",
+  "let's". Never say "here is your new program". Be concise but human.
+- Reference injury flags or pain patterns from decision history when they are relevant.
 
 AVAILABLE CHANGE TYPES:
 - update_exercise: change sets, reps, rest, tempo, notes, name, category on an existing exercise
@@ -151,7 +165,7 @@ OUTPUT FORMAT — return ONLY valid JSON, no other text:
 {
   "intent": "string — brief label like reduce_volume, swap_exercise, change_session_type, etc.",
   "scope": "exercise|session|week|block|system",
-  "changeSummary": "string — 1-4 sentences, coach-like, explaining what changed and why",
+  "changeSummary": "string — 1-4 sentences, coach-like, explaining what changed and why. Reference past decisions when relevant.",
   "changes": [
     {
       "type": "update_exercise|replace_exercise|delete_exercise|update_session|update_week|update_phase",
@@ -164,7 +178,7 @@ OUTPUT FORMAT — return ONLY valid JSON, no other text:
 }
 
 CURRENT TRAINING SYSTEM:
-${systemContext}${adaptationSection}`;
+${systemContext}${adaptationSection}${decisionMemorySection}`;
 }
 
 // ─── AI Interpretation ───────────────────────────────────────────────────────
@@ -173,12 +187,13 @@ async function interpretWithAI(
   userRequest: string,
   systemContext: string,
   targetContext?: TargetContext,
-  adaptationContext?: string
+  adaptationContext?: string,
+  decisionMemoryContext?: string
 ): Promise<EditPlan | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
-  const systemPrompt = buildEditSystemPrompt(systemContext, targetContext, adaptationContext);
+  const systemPrompt = buildEditSystemPrompt(systemContext, targetContext, adaptationContext, decisionMemoryContext);
 
   try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -716,11 +731,12 @@ export async function interpretEditRequest(
   userRequest: string,
   system: any,
   targetContext?: TargetContext,
-  adaptationContext?: string
+  adaptationContext?: string,
+  decisionMemoryContext?: string
 ): Promise<EditPlan> {
   const systemContext = serializeSystemForPrompt(system);
 
-  const aiPlan = await interpretWithAI(userRequest, systemContext, targetContext, adaptationContext);
+  const aiPlan = await interpretWithAI(userRequest, systemContext, targetContext, adaptationContext, decisionMemoryContext);
 
   if (aiPlan && Array.isArray(aiPlan.changes)) {
     logger.info({ intent: aiPlan.intent, scope: aiPlan.scope, changes: aiPlan.changes.length }, "AI edit plan generated");

@@ -1,19 +1,21 @@
 /**
- * Training System Directions Route — Phase A: Collaborative Decision Layer
+ * Training System Directions Route — Phase A + Phase B
  *
  * POST /training-system/directions
  *   Interprets the user's edit intent and returns either:
  *   - 2-4 direction options for the user to choose from
  *   - A signal to skip directions (for highly specific requests)
  *
- * This is called BEFORE /training-system/edit.
- * The user selects a direction → frontend calls /edit with the chosen editRequest.
+ * Phase B: Loads long-term memories + decision history to produce memory-aware
+ * directions and a continuity prompt for the UI.
  */
 
 import { Router, type IRouter } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { generateDirections } from "../lib/directions-service";
 import { buildAdaptationContext } from "../lib/adaptation";
+import { listMemories } from "../lib/memory";
+import { buildDecisionMemory } from "../lib/decision-memory-service";
 import {
   getActiveTrainingSystem,
   getFullTrainingSystem,
@@ -53,9 +55,11 @@ router.post("/training-system/directions", requireAuth, async (req, res): Promis
       return;
     }
 
-    const [fullSystem, adaptationCtx] = await Promise.all([
+    // Load all context in parallel — adaptation, memories, decision history, full system
+    const [fullSystem, adaptationCtx, memories] = await Promise.all([
       getFullTrainingSystem(activeSystem.id),
       buildAdaptationContext(userId).catch(() => null),
+      listMemories(userId).catch(() => []),
     ]);
 
     if (!fullSystem) {
@@ -63,11 +67,20 @@ router.post("/training-system/directions", requireAuth, async (req, res): Promis
       return;
     }
 
+    // Build decision memory (needs active system ID)
+    const decisionMemory = await buildDecisionMemory(
+      userId,
+      activeSystem.id,
+      memories
+    ).catch(() => null);
+
     const result = await generateDirections(
       userRequest,
       fullSystem,
       targetContext as any,
-      adaptationCtx?.promptContext || undefined
+      adaptationCtx?.promptContext || undefined,
+      decisionMemory?.decisionMemoryContext || undefined,
+      decisionMemory?.continuityPrompt || null
     );
 
     logger.info(
@@ -75,6 +88,7 @@ router.post("/training-system/directions", requireAuth, async (req, res): Promis
         userId,
         shouldSkipDirections: result.shouldSkipDirections,
         directionsCount: result.directions?.length ?? 0,
+        hasContinuityPrompt: !!result.continuityPrompt,
         targetType: targetContext?.type,
       },
       "Directions generated"

@@ -25,6 +25,8 @@ import {
   Sparkles,
   ChevronRight,
   ArrowLeft,
+  Clock,
+  MessageCircle,
 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -456,9 +458,19 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
         {/* ── Phase: Directions ───────────────────────────────────── */}
         {phase === "directions" && directions && (
           <div className="flex-1 flex flex-col overflow-y-auto">
+            {/* Memory callout — subtle reference to past decisions */}
+            {directions.memoryCallout && (
+              <div className="mx-5 mt-4 mb-0 flex items-start gap-2.5 bg-primary/5 border border-primary/15 rounded-xl px-4 py-3">
+                <Clock className="w-3.5 h-3.5 text-primary/60 flex-shrink-0 mt-0.5" />
+                <p className="text-[12px] text-primary/80 leading-relaxed italic">
+                  {directions.memoryCallout}
+                </p>
+              </div>
+            )}
+
             {/* Coach message */}
             {directions.coachMessage && (
-              <div className="px-5 pt-5 pb-3 flex-shrink-0">
+              <div className="px-5 pt-4 pb-3 flex-shrink-0">
                 <p className="text-sm text-foreground/80 leading-relaxed font-medium">
                   {directions.coachMessage}
                 </p>
@@ -466,7 +478,7 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
             )}
 
             {/* Direction cards */}
-            <div className="px-5 pb-6 flex flex-col gap-3">
+            <div className="px-5 pb-4 flex flex-col gap-3">
               {(directions.directions ?? []).map((dir, i) => {
                 const colors = DIRECTION_COLORS[i % DIRECTION_COLORS.length];
                 return (
@@ -497,6 +509,18 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
                 );
               })}
             </div>
+
+            {/* Continuity prompt — coach check-in question */}
+            {directions.continuityPrompt && (
+              <div className="mx-5 mb-6 mt-1">
+                <div className="flex items-start gap-2.5 bg-muted/40 border border-border rounded-xl px-4 py-3">
+                  <MessageCircle className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                  <p className="text-[12px] text-muted-foreground leading-relaxed">
+                    {directions.continuityPrompt}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

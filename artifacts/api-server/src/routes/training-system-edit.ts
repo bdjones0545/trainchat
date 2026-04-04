@@ -17,6 +17,8 @@ import { interpretEditRequest } from "../lib/edit-intent-service";
 import { applyEditPlan } from "../lib/edit-engine";
 import { createChangeLogEntry } from "../lib/change-log-service";
 import { buildAdaptationContext } from "../lib/adaptation";
+import { listMemories } from "../lib/memory";
+import { buildDecisionMemory } from "../lib/decision-memory-service";
 import {
   getActiveTrainingSystem,
   getFullTrainingSystem,
@@ -63,22 +65,31 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
     }
 
     // 2. Load full system with hierarchy (needed for AI context)
-    // Also load adaptation context (Phase 5) — non-fatal, runs in parallel
-    const [fullSystem, adaptationCtx] = await Promise.all([
+    // Also load adaptation context, memories, and decision history in parallel
+    const [fullSystem, adaptationCtx, memories] = await Promise.all([
       getFullTrainingSystem(activeSystem.id),
       buildAdaptationContext(userId).catch(() => null),
+      listMemories(userId).catch(() => []),
     ]);
     if (!fullSystem) {
       res.status(500).json({ error: "Failed to load training system data." });
       return;
     }
 
-    // 3. Interpret the edit request into a structured plan (Phase 5: with adaptation context)
+    // Build decision memory context (Phase B)
+    const decisionMemory = await buildDecisionMemory(
+      userId,
+      activeSystem.id,
+      memories
+    ).catch(() => null);
+
+    // 3. Interpret the edit request into a structured plan
     const editPlan = await interpretEditRequest(
       userRequest,
       fullSystem,
       targetContext,
-      adaptationCtx?.promptContext || undefined
+      adaptationCtx?.promptContext || undefined,
+      decisionMemory?.decisionMemoryContext || undefined
     );
 
     logger.info(

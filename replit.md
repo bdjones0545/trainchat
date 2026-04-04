@@ -37,6 +37,15 @@ The UI features a dark theme with electric blue (HSL(199 89% 48%)) as the primar
   - **Adaptive AI Edit Context**: Every `POST /api/training-system/edit` call now runs `buildAdaptationContext(userId)` in parallel, injecting readiness trends, feedback patterns, and coaching memories into the AI system prompt so all edits are contextually aware.
   - **Insight-to-Edit Pipeline** (`POST /api/insights/apply`): Maps insight types to natural language edit instructions and runs them through the full edit engine. Logged as `auto_adjust` source in history.
   - **EditDrawer "system" type**: Added `type: "system"` to EditTargetType to support system-level edits from the InsightsPanel Modify flow.
+- **Phase A — Collaborative Decision Layer**:
+  - **Directions Service** (`directions-service.ts`): Intercepts edit requests before execution. Uses GPT-4o to interpret user intent and generate 2–4 direction options with label, whatWillChange, whyItMatters, and a concrete editRequest. Highly specific requests (detected via regex + AI) bypass directions and execute directly.
+  - **Directions Route** (`POST /api/training-system/directions`): New endpoint that loads system context + adaptation context and returns a `DirectionsResponse` with direction cards, a coach message, and optional continuity/memory callouts.
+  - **Multi-Phase EditDrawer**: Redesigned to a 4-phase flow — input → directions (card selection) → executing → success. Specific requests skip phase 2. Back navigation supported.
+- **Phase B — Memory-Driven Collaboration Layer**:
+  - **Decision Memory Service** (`decision-memory-service.ts`): Extracts structured decision history from the `system_change_log` (last 10 edits), detects patterns (volume trends, intensity escalations, injury flags, structural changes, consistency), generates `continuityPrompt` check-in questions, and builds a `decisionMemoryContext` block for AI injection.
+  - **Decision Memory in Directions**: Both the directions and edit routes now load long-term memories + decision history in parallel and inject `decisionMemoryContext` into AI prompts. AI generates memory-aware directions and a `memoryCallout` (e.g. "Earlier we reduced your lower body load — building off that here").
+  - **Decision Memory in Edit Engine**: `interpretEditRequest` now accepts `decisionMemoryContext` and injects it into the GPT-4o system prompt, enabling the `changeSummary` to reference past decisions naturally.
+  - **UI Memory Surfaces**: EditDrawer's directions phase renders a memory callout (subtle clock icon, italic) when past decisions are relevant, and a continuity prompt (chat bubble icon) at the bottom as a coach check-in question.
 
 ### System Design Choices
 - **Database Schema**: Includes comprehensive tables for users, profiles, conversations, messages, saved programs, readiness entries, session feedback, user memories, session logs, analytics, and Stripe-related data.
