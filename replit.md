@@ -20,16 +20,19 @@ Agent-first AI training platform. The AI chat is the entire interface. Users reg
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
+- `pnpm --filter @workspace/api-server run seed:products` — seed Stripe products & prices (run after connecting Stripe; idempotent)
 
 ## Database Schema
 
-- `users` — auth
+- `users` — auth + Stripe fields (stripeCustomerId, stripeSubscriptionId, plan, planStatus, messageCount, tenantId)
 - `user_profiles` — onboarding profile (10 fields: goal, experience, style, days, duration, equipment, injuries, sport, preferences, avoid)
 - `conversations` + `messages` — chat history (messages store structuredData as JSON string)
 - `saved_programs` + `program_days` + `exercises` — saved training programs (programs include weekNumber, blockLabel, parentProgramId, versionNotes for evolution)
 - `readiness_entries` — daily check-in (sleep/energy/soreness/stress/motivation/pain, 1-5)
 - `session_feedback` — post-session feedback (difficulty/pain_response/energy_response, 1-5)
 - `user_memories` — long-term coaching memories (type/subject/sentiment/confidence/source/detail)
+- `session_logs` — workout completion log (userId, savedProgramId, dayNumber, sessionType, completedAt, difficultyScore, painScore, energyScore, notes) — Phase 6
+- `stripe.*` — full Stripe sync schema (27 tables: accounts, customers, products, prices, subscriptions, etc.) managed by stripe-replit-sync
 
 ## Architecture
 
@@ -67,20 +70,48 @@ Agent-first AI training platform. The AI chat is the entire interface. Users reg
 - Falls back to rule-based program generator using training intelligence engine
 - Extracts structured JSON from AI response for right panel display
 
+### Plan Gating (`api-server/src/lib/planGating.ts`) — Phase 6
+- `getUserPlanInfo(userId)` — returns plan, planStatus, features, messagesRemaining
+- `getPlanFeatures(plan)` — returns feature flags per plan tier
+- Plan tiers: free (5 messages), starter (75 messages, no adaptation/memory), pro/elite (unlimited, full context)
+- `isPremium = plan === "pro" || plan === "elite"` — controls program day locking and context injection
+- Message count incremented per send; 402 returned at limit
+
+### Stripe Backend (`api-server/src/lib`) — Phase 6
+- `stripeClient.ts` — Replit connector API pattern (never caches client); falls back to `STRIPE_SECRET_KEY` env var
+- `stripeService.ts` — createCustomer, createCheckoutSession, createPortalSession
+- `stripeStorage.ts` — reads from `stripe.*` sync tables; getActiveSubscription, listProductsWithPrices, updateUserStripeInfo
+- `webhookHandlers.ts` — delegates to StripeSync.processWebhook; validates Buffer payload
+
 ### API Endpoints
 - `GET /memories` — list user's long-term memories
 - `POST /memories/sync` — trigger memory extraction
 - `GET /insights` — get proactive training insights
+- `GET /subscription` — current plan info + Stripe subscription
+- `GET /subscription/products` — list Stripe products with prices (fetched from sync tables)
+- `POST /subscription/checkout` — create Stripe checkout session
+- `POST /subscription/confirm` — confirm checkout after redirect
+- `POST /subscription/portal` — create Stripe billing portal session
+- `GET /session-logs` — list user's workout session logs
+- `POST /session-logs` — create a session log entry
+- `GET /streak` — get current consecutive session streak
+- `GET /admin/analytics` — admin metrics (gated by ADMIN_EMAILS env var)
+- `POST /stripe/webhook` — Stripe webhook (registered before json() middleware)
 
 ## UI Components
 
-- `chat.tsx` — 3-panel layout; wires memories, insights, readiness, feedback modals
-- `ChatOutput.tsx` — right panel: program display with save + feedback buttons (shown when program active)
+- `chat.tsx` — 3-panel layout; wires subscription, streak, paywall, pricing, session-log, readiness, feedback modals
+- `ChatOutput.tsx` — right panel: program display with save + feedback + "Log Session" buttons; day locking for free plan; program evolution badge (Week N / Block label)
 - `InsightsPanel.tsx` — right panel: insights cards + memory highlights + wearable placeholder (shown when no program)
 - `MessageBubble.tsx` — markdown-rendering bubbles
 - `ReadinessModal.tsx` — 6-metric daily check-in modal (1-5 score buttons)
 - `FeedbackModal.tsx` — post-session feedback modal (difficulty/pain/energy)
 - `ReadinessSummary.tsx` — compact readiness display at top of right panel
+- `PaywallModal.tsx` — full-screen paywall triggered at 5 messages; shows messages used + upgrade CTA — Phase 6
+- `PricingModal.tsx` — 3-tier plan selector (Starter/Pro/Elite) with monthly/yearly toggle; fetches real price IDs from /api/subscription/products — Phase 6
+- `StreakBadge.tsx` — consecutive session streak shown in TopNav extraContent slot — Phase 6
+- `SessionLogModal.tsx` — workout completion logger (difficulty/pain/energy 1-5 + notes) — Phase 6
+- `TopNav.tsx` — accepts `extraContent?: React.ReactNode` prop for streak badge
 
 ## Theme
 
