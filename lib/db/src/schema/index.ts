@@ -8,3 +8,4 @@ export * from "./session-logs";
 export * from "./guest-sessions";
 export * from "./analytics";
 export * from "./training-system";
+export * from "./exercises";

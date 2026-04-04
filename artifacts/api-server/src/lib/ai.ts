@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 import {
   buildIntelligenceContext,
+  buildDBExerciseContext,
   buildTrainingSpec,
   selectExercises,
   normalizeGoal,
@@ -52,7 +53,7 @@ export interface Exercise {
 
 // ─── System Prompt ──────────────────────────────────────────────────────────
 
-function buildSystemPrompt(profile: UserProfile | null): string {
+async function buildSystemPrompt(profile: UserProfile | null): Promise<string> {
   const coreIdentity = `You are TrainChat — an elite AI performance architect. Your purpose is to guide users in co-creating world-class, personalized training systems through intelligent coaching dialogue.
 
 ## YOUR IDENTITY
@@ -177,6 +178,9 @@ This user has not completed their training profile. If they ask for a personaliz
   // Build rich intelligence context from the training engine
   const intelligenceContext = buildIntelligenceContext(profile);
 
+  // Build DB-backed exercise library context (async — gracefully skips on error)
+  const exerciseLibraryContext = await buildDBExerciseContext(profile);
+
   return coreIdentity + `
 
 ## USER TRAINING PROFILE
@@ -193,7 +197,7 @@ ${profile.sportFocus ? `- Sport / Activity Focus: ${profile.sportFocus}` : ""}
 ${profile.exercisePreferences ? `- Exercise Preferences: ${profile.exercisePreferences}` : ""}
 ${profile.exercisesToAvoid ? `- Exercises to Avoid (NEVER program these): ${profile.exercisesToAvoid}` : ""}
 
-${intelligenceContext}`;
+${intelligenceContext}${exerciseLibraryContext}`;
 }
 
 // ─── JSON extractor ──────────────────────────────────────────────────────────
@@ -233,7 +237,7 @@ export async function generateAIResponse(
     .from(userProfilesTable)
     .where(eq(userProfilesTable.userId, userId));
 
-  const basePrompt = buildSystemPrompt(profile ?? null);
+  const basePrompt = await buildSystemPrompt(profile ?? null);
   const extras = [adaptationContext, memoryContext, insightHint, conversionHint].filter(Boolean).join("\n\n");
   const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;
   const apiKey = process.env.OPENAI_API_KEY;

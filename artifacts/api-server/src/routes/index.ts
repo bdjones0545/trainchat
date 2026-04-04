@@ -17,6 +17,7 @@ import trainingSystemRouter from "./training-system";
 import trainingSystemEditRouter from "./training-system-edit";
 import trainingSystemDirectionsRouter from "./training-system-directions";
 import trainingSystemHistoryRouter from "./training-system-history";
+import { exercisesRouter } from "./exercises";
 
 const router: IRouter = Router();
 
@@ -38,5 +39,6 @@ router.use(trainingSystemRouter);
 router.use(trainingSystemEditRouter);
 router.use(trainingSystemDirectionsRouter);
 router.use(trainingSystemHistoryRouter);
+router.use("/exercises", exercisesRouter);
 
 export default router;

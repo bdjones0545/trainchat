@@ -11,6 +11,7 @@
  */
 
 import { logger } from "./logger";
+import { buildSwapContext, getProgressions, findExerciseByName } from "./exercise-service";
 
 // ─── Edit Plan Types ─────────────────────────────────────────────────────────
 
@@ -108,7 +109,8 @@ function buildEditSystemPrompt(
   systemContext: string,
   targetContext?: TargetContext,
   adaptationContext?: string,
-  decisionMemoryContext?: string
+  decisionMemoryContext?: string,
+  exerciseSwapContext?: string
 ): string {
   const targetFocus = targetContext
     ? `\nEDIT FOCUS:\nThe user is specifically targeting: ${targetContext.type.toUpperCase()} [id:${targetContext.id}]${targetContext.label ? ` "${targetContext.label}"` : ""}${targetContext.parentLabel ? ` in ${targetContext.parentLabel}` : ""}.\nFocus ALL changes on this specific object. Only expand scope if the user's request explicitly requires broader changes. Prefer targeted, surgical edits to this one object.\n`
@@ -122,6 +124,10 @@ function buildEditSystemPrompt(
     ? `\n${decisionMemoryContext}\n`
     : "";
 
+  const swapSection = exerciseSwapContext
+    ? `\nEXERCISE SWAP INTELLIGENCE:\n${exerciseSwapContext}\nWhen performing a swap/replace, you MUST choose an exercise from the SWAP CANDIDATES list above. Use the exact name as shown. If no candidate perfectly fits, pick the closest one. Do not invent exercise names.\n`
+    : "";
+
   return `You are an elite performance architect editing a user's structured training system.
 
 You know this athlete. You have worked with them before and remember the decisions you've made together.
@@ -129,7 +135,7 @@ You know this athlete. You have worked with them before and remember the decisio
 You will receive:
 1. The user's current structured training system (with IDs for every entity)
 2. A natural language modification request
-${targetFocus}
+${targetFocus}${swapSection}
 Your job is to produce a structured JSON edit plan.
 
 RULES:
@@ -138,7 +144,7 @@ RULES:
 - Use exact IDs from the system context.
 - Prefer surgical changes (1-3 exercises, 1 session, or week-level notes) over broad rewrites.
 - Maintain programming logic: exercise order, balance between push/pull, stress/recovery.
-- If swapping an exercise, choose one that fits the same pattern and equipment.
+- If swapping an exercise, ALWAYS use a name from the SWAP CANDIDATES list if provided.
 - If reducing volume, reduce accessory/finisher sets first (not primary lifts unless asked).
 - If changing a session to recovery/mobility, update type + replace exercises with light work.
 - In the changeSummary, write like a coach who KNOWS this athlete. Reference past decisions when
@@ -188,12 +194,13 @@ async function interpretWithAI(
   systemContext: string,
   targetContext?: TargetContext,
   adaptationContext?: string,
-  decisionMemoryContext?: string
+  decisionMemoryContext?: string,
+  exerciseSwapContext?: string
 ): Promise<EditPlan | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
-  const systemPrompt = buildEditSystemPrompt(systemContext, targetContext, adaptationContext, decisionMemoryContext);
+  const systemPrompt = buildEditSystemPrompt(systemContext, targetContext, adaptationContext, decisionMemoryContext, exerciseSwapContext);
 
   try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -727,6 +734,16 @@ function findCurrentSession(system: any): any | null {
 
 // ─── Main Entry Point ────────────────────────────────────────────────────────
 
+// Detects swap/progression intent from user request keywords
+
+function detectSwapIntent(userRequest: string): "swap" | "easier" | "harder" | null {
+  const lower = userRequest.toLowerCase();
+  if (lower.match(/\bswap\b|\breplace\b|\bsubstitute\b|\bswitch\b|\balternative\b|\bother.*exercise\b|\bdifferent.*exercise\b/)) return "swap";
+  if (lower.match(/\beasier\b|\bsimpler\b|\bregress\b|\btoo hard\b|\btoo difficult\b/)) return "easier";
+  if (lower.match(/\bharder\b|\bprogress\b|\badvance\b|\bmore.*difficult\b|\btoo easy\b/)) return "harder";
+  return null;
+}
+
 export async function interpretEditRequest(
   userRequest: string,
   system: any,
@@ -736,7 +753,53 @@ export async function interpretEditRequest(
 ): Promise<EditPlan> {
   const systemContext = serializeSystemForPrompt(system);
 
-  const aiPlan = await interpretWithAI(userRequest, systemContext, targetContext, adaptationContext, decisionMemoryContext);
+  // ── Exercise Intelligence: inject swap candidates or progressions ──────────
+  let exerciseSwapContext: string | undefined;
+
+  const swapIntent = detectSwapIntent(userRequest);
+  if (swapIntent && targetContext?.type === "exercise" && targetContext.label) {
+    const exerciseName = targetContext.label;
+    const equipmentLevel = system.equipmentAccess
+      ? (system.equipmentAccess.toLowerCase().includes("dumbbell") && !system.equipmentAccess.toLowerCase().includes("barbell")
+          ? "dumbbells_only"
+          : system.equipmentAccess.toLowerCase().includes("bodyweight") || system.equipmentAccess.toLowerCase().includes("no equipment")
+          ? "bodyweight"
+          : "full_gym")
+      : "full_gym";
+
+    try {
+      if (swapIntent === "swap") {
+        exerciseSwapContext = await buildSwapContext({
+          exerciseName,
+          equipmentLevel,
+        });
+        logger.info({ exerciseName, equipmentLevel }, "Injecting swap context from exercise library");
+      } else {
+        // Easier or harder — use progressions
+        const progressions = await getProgressions(exerciseName);
+        const target = swapIntent === "easier" ? progressions.easier : progressions.harder;
+        if (target.length > 0) {
+          const label = swapIntent === "easier" ? "REGRESSION OPTIONS" : "PROGRESSION OPTIONS";
+          exerciseSwapContext = `${label} for "${exerciseName}" (prefer these):\n${target.map((ex) => `  - ${ex.name} (${(ex.equipment as string[]).join("/")}, ${ex.difficultyLevel})`).join("\n")}`;
+          logger.info({ exerciseName, swapIntent, count: target.length }, "Injecting progression context from exercise library");
+        } else {
+          // Fallback to cluster-based swap
+          exerciseSwapContext = await buildSwapContext({ exerciseName, equipmentLevel });
+        }
+      }
+    } catch (err) {
+      logger.warn({ err, exerciseName }, "Failed to load exercise swap context — proceeding without it");
+    }
+  }
+
+  const aiPlan = await interpretWithAI(
+    userRequest,
+    systemContext,
+    targetContext,
+    adaptationContext,
+    decisionMemoryContext,
+    exerciseSwapContext
+  );
 
   if (aiPlan && Array.isArray(aiPlan.changes)) {
     logger.info({ intent: aiPlan.intent, scope: aiPlan.scope, changes: aiPlan.changes.length }, "AI edit plan generated");

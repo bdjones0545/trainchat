@@ -832,6 +832,59 @@ ${sportContext}
 `.trim();
 }
 
+// ─── DB-Backed Exercise Library Context ──────────────────────────────────────
+// Augments the AI system prompt with a structured exercise list from the DB.
+// Use this instead of the hardcoded EXERCISE_LIBRARY for AI prompt injection.
+
+/**
+ * Builds a rich exercise library context from the DB for AI program generation.
+ * Called asynchronously before building AI prompts.
+ *
+ * Returns formatted text to be appended to buildIntelligenceContext output.
+ */
+export async function buildDBExerciseContext(profile: UserProfile): Promise<string> {
+  try {
+    const { buildExerciseContext } = await import("./exercise-service");
+    const spec = buildTrainingSpec(profile);
+    const equipment = spec.equipment;
+
+    // Map training patterns to DB movement patterns
+    const patterns = [
+      "squat", "hinge", "push_horizontal", "push_vertical",
+      "pull_horizontal", "pull_vertical", "core", "carry",
+    ];
+
+    // Add power if athletic
+    if (spec.goal === "athletic_performance") {
+      patterns.push("power_explosive");
+    }
+
+    // Add iso patterns for hypertrophy
+    if (spec.goal === "hypertrophy" || spec.goal === "general_fitness") {
+      patterns.push("iso_chest", "iso_shoulders", "iso_arms", "iso_legs");
+    }
+
+    // Add conditioning for fat loss / athletic
+    if (spec.goal === "fat_loss" || spec.goal === "athletic_performance") {
+      patterns.push("conditioning");
+    }
+
+    const context = await buildExerciseContext({
+      patterns,
+      equipmentLevel: equipment,
+      injuryFlags: spec.injuryFlags,
+      difficultyMax: spec.experience,
+      intentTags: [spec.goal],
+      perPatternMax: 10,
+    });
+
+    return `\n### EXERCISE LIBRARY\n${context}\n\nIMPORTANT: When selecting exercises, use ONLY names from the EXERCISE LIBRARY above. These are verified exercise names. Do not invent or modify names.`;
+  } catch (err) {
+    // If DB is unavailable, fall back gracefully (no crash)
+    return "";
+  }
+}
+
 // ─── Scaffold hooks for Phase 4 ──────────────────────────────────────────────
 // These are intentionally minimal now — type-safe scaffolding for future layers.
 
