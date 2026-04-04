@@ -39,6 +39,7 @@ import {
   Shuffle,
   TrendingDown,
   Flame,
+  Youtube,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useGetMe } from "@workspace/api-client-react";
@@ -149,6 +150,11 @@ function ExerciseCard({ exercise, index, sessionLabel, highlightedIds, onEdit, o
   const [showActions, setShowActions] = useState(false);
   const [activeChip, setActiveChip] = useState<string | null>(null);
 
+  // Swap picker state
+  const [swapOpen, setSwapOpen] = useState(false);
+  const [swapCandidates, setSwapCandidates] = useState<any[]>([]);
+  const [swapLoading, setSwapLoading] = useState(false);
+
   const categoryColors: Record<string, string> = {
     warmup: "bg-blue-500/10 text-blue-400 border-blue-500/20",
     primary: "bg-orange-500/10 text-orange-400 border-orange-500/20",
@@ -173,18 +179,48 @@ function ExerciseCard({ exercise, index, sessionLabel, highlightedIds, onEdit, o
     onSuccess: (data) => {
       setActiveChip(null);
       setShowActions(false);
+      setSwapOpen(false);
       onQuickEditComplete(data);
     },
     onError: () => setActiveChip(null),
   });
 
+  async function handleSwapOpen() {
+    setSwapOpen(true);
+    setSwapLoading(true);
+    setSwapCandidates([]);
+    try {
+      const result = await customFetch<any>(`/api/exercises/swap/${encodeURIComponent(exercise.name)}`);
+      setSwapCandidates(result.data ?? []);
+    } catch {
+      setSwapCandidates([]);
+    } finally {
+      setSwapLoading(false);
+    }
+  }
+
+  function handleSwapSelect(candidate: any) {
+    quickMutation.mutate({
+      req: `Swap ${exercise.name} with ${candidate.name} in ${sessionLabel}`,
+      chip: "Swap",
+    });
+  }
+
+  const youtubeUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.name + " exercise tutorial")}`;
+
   const QUICK_ACTIONS = [
     { label: "+Set", icon: Plus, req: `Add one set to ${exercise.name}` },
     { label: "-Set", icon: Minus, req: `Remove one set from ${exercise.name}` },
-    { label: "Swap", icon: Shuffle, req: `Swap ${exercise.name} for a suitable alternative in ${sessionLabel}` },
-    { label: "Easier", icon: TrendingDown, req: `Make ${exercise.name} an easier variation` },
-    { label: "Harder", icon: Flame, req: `Make ${exercise.name} a harder variation` },
+    { label: "Easier", icon: TrendingDown, req: `Replace ${exercise.name} with an easier variation` },
+    { label: "Harder", icon: Flame, req: `Replace ${exercise.name} with a harder variation` },
   ];
+
+  const difficultyColor: Record<string, string> = {
+    beginner: "text-green-400",
+    intermediate: "text-yellow-400",
+    advanced: "text-orange-400",
+    elite: "text-red-400",
+  };
 
   return (
     <div
@@ -196,7 +232,7 @@ function ExerciseCard({ exercise, index, sessionLabel, highlightedIds, onEdit, o
         </div>
         <div className="flex-1 min-w-0">
           <button
-            onClick={() => setShowActions((v) => !v)}
+            onClick={() => { setShowActions((v) => !v); setSwapOpen(false); }}
             className="w-full text-left"
           >
             <div className="flex items-center gap-2 flex-wrap mb-1.5">
@@ -243,48 +279,114 @@ function ExerciseCard({ exercise, index, sessionLabel, highlightedIds, onEdit, o
 
           {/* Inline quick actions — revealed on tap */}
           {showActions && (
-            <div className="flex items-center gap-1.5 flex-wrap mt-2.5 pt-2 border-t border-border/50">
-              {QUICK_ACTIONS.map(({ label, icon: Icon, req }) => (
+            <div className="mt-2.5 pt-2 border-t border-border/50 space-y-2.5">
+
+              {/* Swap picker */}
+              <div>
                 <button
-                  key={label}
-                  onClick={() => quickMutation.mutate({ req, chip: label })}
+                  onClick={swapOpen ? () => setSwapOpen(false) : handleSwapOpen}
                   disabled={quickMutation.isPending}
                   className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border transition-all duration-150 ${
-                    activeChip === label
+                    swapOpen || activeChip === "Swap"
                       ? "bg-primary/15 border-primary/40 text-primary"
                       : "bg-muted/50 border-border text-muted-foreground hover:bg-primary/8 hover:border-primary/30 hover:text-foreground"
                   } disabled:opacity-50`}
                 >
-                  {activeChip === label
+                  {activeChip === "Swap"
                     ? <RotateCcw className="w-3 h-3 animate-spin" />
-                    : <Icon className="w-3 h-3" />
+                    : <Shuffle className="w-3 h-3" />
                   }
-                  {label}
+                  Swap
                 </button>
-              ))}
-              <button
-                onClick={() => { setShowActions(false); onEdit(exercise, sessionLabel); }}
-                className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border border-border bg-muted/30 text-muted-foreground/70 hover:text-foreground transition-all"
-              >
-                <PenLine className="w-3 h-3" />
-                Full edit
-              </button>
+
+                {swapOpen && (
+                  <div className="mt-2 rounded-xl border border-border bg-muted/20 p-3">
+                    {swapLoading ? (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <RotateCcw className="w-3 h-3 animate-spin" />
+                        Finding alternatives…
+                      </div>
+                    ) : swapCandidates.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No cluster alternatives found. Use Full Edit to swap manually.</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
+                          Pick a replacement
+                        </p>
+                        {swapCandidates.map((c) => (
+                          <button
+                            key={c.name}
+                            onClick={() => handleSwapSelect(c)}
+                            disabled={quickMutation.isPending}
+                            className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-background/60 border border-border hover:border-primary/40 hover:bg-primary/5 transition-all text-left disabled:opacity-50"
+                          >
+                            <span className="text-xs font-semibold text-foreground">{c.name}</span>
+                            <span className={`text-[10px] font-bold capitalize flex-shrink-0 ${difficultyColor[c.difficultyLevel] ?? "text-muted-foreground"}`}>
+                              {c.difficultyLevel}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Other quick action chips */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {QUICK_ACTIONS.map(({ label, icon: Icon, req }) => (
+                  <button
+                    key={label}
+                    onClick={() => quickMutation.mutate({ req, chip: label })}
+                    disabled={quickMutation.isPending}
+                    className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border transition-all duration-150 ${
+                      activeChip === label
+                        ? "bg-primary/15 border-primary/40 text-primary"
+                        : "bg-muted/50 border-border text-muted-foreground hover:bg-primary/8 hover:border-primary/30 hover:text-foreground"
+                    } disabled:opacity-50`}
+                  >
+                    {activeChip === label
+                      ? <RotateCcw className="w-3 h-3 animate-spin" />
+                      : <Icon className="w-3 h-3" />
+                    }
+                    {label}
+                  </button>
+                ))}
+                <button
+                  onClick={() => { setShowActions(false); onEdit(exercise, sessionLabel); }}
+                  className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border border-border bg-muted/30 text-muted-foreground/70 hover:text-foreground transition-all"
+                >
+                  <PenLine className="w-3 h-3" />
+                  Full edit
+                </button>
+              </div>
             </div>
           )}
         </div>
 
-        {/* Expand/collapse toggle */}
-        <button
-          onClick={() => setShowActions((v) => !v)}
-          className={`flex-shrink-0 w-7 h-7 rounded-lg border flex items-center justify-center transition-all duration-150 mt-0.5 ${
-            showActions
-              ? "bg-primary/10 border-primary/30 text-primary"
-              : "bg-muted/40 border-border text-muted-foreground/60 hover:bg-muted/70 hover:text-muted-foreground"
-          }`}
-          title={showActions ? "Close actions" : `Quick actions for ${exercise.name}`}
-        >
-          {showActions ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-        </button>
+        {/* YouTube + Expand/collapse */}
+        <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
+          <a
+            href={youtubeUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`Watch ${exercise.name} on YouTube`}
+            className="w-7 h-7 rounded-lg border border-border bg-muted/40 flex items-center justify-center text-red-500/70 hover:text-red-500 hover:bg-red-500/10 hover:border-red-500/30 transition-all duration-150"
+          >
+            <Youtube className="w-3.5 h-3.5" />
+          </a>
+          <button
+            onClick={() => { setShowActions((v) => !v); setSwapOpen(false); }}
+            className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-all duration-150 ${
+              showActions
+                ? "bg-primary/10 border-primary/30 text-primary"
+                : "bg-muted/40 border-border text-muted-foreground/60 hover:bg-muted/70 hover:text-muted-foreground"
+            }`}
+            title={showActions ? "Close actions" : `Quick actions for ${exercise.name}`}
+          >
+            {showActions ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+          </button>
+        </div>
       </div>
     </div>
   );
