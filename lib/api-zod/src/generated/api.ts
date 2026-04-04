@@ -291,3 +291,100 @@ export const GetProgramResponse = zod.object({
 export const DeleteProgramParams = zod.object({
   id: zod.coerce.number(),
 });
+
+/**
+ * @summary Log a readiness check-in
+ */
+export const createReadinessEntryBodySleepScoreMax = 5;
+
+export const createReadinessEntryBodyEnergyScoreMax = 5;
+
+export const createReadinessEntryBodySorenessScoreMax = 5;
+
+export const createReadinessEntryBodyStressScoreMax = 5;
+
+export const createReadinessEntryBodyMotivationScoreMax = 5;
+
+export const createReadinessEntryBodyPainScoreMax = 5;
+
+export const CreateReadinessEntryBody = zod.object({
+  sleepScore: zod.number().min(1).max(createReadinessEntryBodySleepScoreMax),
+  energyScore: zod.number().min(1).max(createReadinessEntryBodyEnergyScoreMax),
+  sorenessScore: zod
+    .number()
+    .min(1)
+    .max(createReadinessEntryBodySorenessScoreMax),
+  stressScore: zod.number().min(1).max(createReadinessEntryBodyStressScoreMax),
+  motivationScore: zod
+    .number()
+    .min(1)
+    .max(createReadinessEntryBodyMotivationScoreMax),
+  painScore: zod.number().min(1).max(createReadinessEntryBodyPainScoreMax),
+  notes: zod.string().nullish(),
+});
+
+/**
+ * @summary Get recent readiness entries
+ */
+export const listReadinessQueryLimitDefault = 7;
+
+export const ListReadinessQueryParams = zod.object({
+  limit: zod.coerce.number().default(listReadinessQueryLimitDefault),
+});
+
+export const ListReadinessResponseItem = zod.object({
+  id: zod.number(),
+  userId: zod.number(),
+  sleepScore: zod.number(),
+  energyScore: zod.number(),
+  sorenessScore: zod.number(),
+  stressScore: zod.number(),
+  motivationScore: zod.number(),
+  painScore: zod.number(),
+  notes: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const ListReadinessResponse = zod.array(ListReadinessResponseItem);
+
+/**
+ * @summary Log post-session feedback
+ */
+export const createSessionFeedbackBodyDifficultyScoreMax = 5;
+
+export const createSessionFeedbackBodyPainResponseScoreMax = 5;
+
+export const createSessionFeedbackBodyEnergyResponseScoreMax = 5;
+
+export const CreateSessionFeedbackBody = zod.object({
+  savedProgramId: zod.number().nullish(),
+  difficultyScore: zod
+    .number()
+    .min(1)
+    .max(createSessionFeedbackBodyDifficultyScoreMax),
+  painResponseScore: zod
+    .number()
+    .min(1)
+    .max(createSessionFeedbackBodyPainResponseScoreMax),
+  energyResponseScore: zod
+    .number()
+    .min(1)
+    .max(createSessionFeedbackBodyEnergyResponseScoreMax),
+  notes: zod.string().nullish(),
+});
+
+/**
+ * @summary Get recent session feedback entries
+ */
+export const ListSessionFeedbackResponseItem = zod.object({
+  id: zod.number(),
+  userId: zod.number(),
+  savedProgramId: zod.number().nullish(),
+  difficultyScore: zod.number(),
+  painResponseScore: zod.number(),
+  energyResponseScore: zod.number(),
+  notes: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const ListSessionFeedbackResponse = zod.array(
+  ListSessionFeedbackResponseItem,
+);

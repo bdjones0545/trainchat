@@ -191,3 +191,91 @@ export interface ProgramDetail {
   updatedAt: string;
   days: ProgramDay[];
 }
+
+export interface CreateReadinessBody {
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  sleepScore: number;
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  energyScore: number;
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  sorenessScore: number;
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  stressScore: number;
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  motivationScore: number;
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  painScore: number;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface ReadinessEntry {
+  id: number;
+  userId: number;
+  sleepScore: number;
+  energyScore: number;
+  sorenessScore: number;
+  stressScore: number;
+  motivationScore: number;
+  painScore: number;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+}
+
+export interface CreateSessionFeedbackBody {
+  /** @nullable */
+  savedProgramId?: number | null;
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  difficultyScore: number;
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  painResponseScore: number;
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  energyResponseScore: number;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface SessionFeedback {
+  id: number;
+  userId: number;
+  /** @nullable */
+  savedProgramId?: number | null;
+  difficultyScore: number;
+  painResponseScore: number;
+  energyResponseScore: number;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+}
+
+export type ListReadinessParams = {
+  limit?: number;
+};

@@ -4,6 +4,7 @@ import { eq, desc, count, sql } from "drizzle-orm";
 import { CreateConversationBody, GetConversationParams, DeleteConversationParams, ListMessagesParams, SendMessageBody, SendMessageParams } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
 import { generateAIResponse } from "../lib/ai";
+import { buildAdaptationContext } from "../lib/adaptation";
 
 const router: IRouter = Router();
 
@@ -207,11 +208,15 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
     .where(eq(messagesTable.conversationId, params.data.id))
     .orderBy(messagesTable.createdAt);
 
-  // Generate AI response
+  // Build adaptation context from readiness + feedback (non-blocking — empty on first use)
+  const adaptation = await buildAdaptationContext(userId).catch(() => ({ promptContext: "" }));
+
+  // Generate AI response with adaptation context injected
   const { content: aiContent, structuredData } = await generateAIResponse(
     parsed.data.content,
     history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
-    userId
+    userId,
+    adaptation.promptContext || undefined
   );
 
   // Save AI message

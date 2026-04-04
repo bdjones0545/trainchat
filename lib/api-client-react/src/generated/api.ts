@@ -22,15 +22,20 @@ import type {
   CreateConversationBody,
   CreateProfileBody,
   CreateProgramBody,
+  CreateReadinessBody,
+  CreateSessionFeedbackBody,
   ErrorResponse,
   HealthStatus,
+  ListReadinessParams,
   LoginBody,
   Message,
   MessagePair,
   Program,
   ProgramDetail,
+  ReadinessEntry,
   RegisterBody,
   SendMessageBody,
+  SessionFeedback,
   SuccessResponse,
   User,
   UserProfile,
@@ -1435,3 +1440,345 @@ export const useDeleteProgram = <
 > => {
   return useMutation(getDeleteProgramMutationOptions(options));
 };
+
+/**
+ * @summary Log a readiness check-in
+ */
+export const getCreateReadinessEntryUrl = () => {
+  return `/api/readiness`;
+};
+
+export const createReadinessEntry = async (
+  createReadinessBody: CreateReadinessBody,
+  options?: RequestInit,
+): Promise<ReadinessEntry> => {
+  return customFetch<ReadinessEntry>(getCreateReadinessEntryUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createReadinessBody),
+  });
+};
+
+export const getCreateReadinessEntryMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createReadinessEntry>>,
+    TError,
+    { data: BodyType<CreateReadinessBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createReadinessEntry>>,
+  TError,
+  { data: BodyType<CreateReadinessBody> },
+  TContext
+> => {
+  const mutationKey = ["createReadinessEntry"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createReadinessEntry>>,
+    { data: BodyType<CreateReadinessBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createReadinessEntry(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateReadinessEntryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createReadinessEntry>>
+>;
+export type CreateReadinessEntryMutationBody = BodyType<CreateReadinessBody>;
+export type CreateReadinessEntryMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Log a readiness check-in
+ */
+export const useCreateReadinessEntry = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createReadinessEntry>>,
+    TError,
+    { data: BodyType<CreateReadinessBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createReadinessEntry>>,
+  TError,
+  { data: BodyType<CreateReadinessBody> },
+  TContext
+> => {
+  return useMutation(getCreateReadinessEntryMutationOptions(options));
+};
+
+/**
+ * @summary Get recent readiness entries
+ */
+export const getListReadinessUrl = (params?: ListReadinessParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/readiness?${stringifiedParams}`
+    : `/api/readiness`;
+};
+
+export const listReadiness = async (
+  params?: ListReadinessParams,
+  options?: RequestInit,
+): Promise<ReadinessEntry[]> => {
+  return customFetch<ReadinessEntry[]>(getListReadinessUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListReadinessQueryKey = (params?: ListReadinessParams) => {
+  return [`/api/readiness`, ...(params ? [params] : [])] as const;
+};
+
+export const getListReadinessQueryOptions = <
+  TData = Awaited<ReturnType<typeof listReadiness>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListReadinessParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listReadiness>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListReadinessQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listReadiness>>> = ({
+    signal,
+  }) => listReadiness(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listReadiness>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListReadinessQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listReadiness>>
+>;
+export type ListReadinessQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get recent readiness entries
+ */
+
+export function useListReadiness<
+  TData = Awaited<ReturnType<typeof listReadiness>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListReadinessParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listReadiness>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListReadinessQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Log post-session feedback
+ */
+export const getCreateSessionFeedbackUrl = () => {
+  return `/api/session-feedback`;
+};
+
+export const createSessionFeedback = async (
+  createSessionFeedbackBody: CreateSessionFeedbackBody,
+  options?: RequestInit,
+): Promise<SessionFeedback> => {
+  return customFetch<SessionFeedback>(getCreateSessionFeedbackUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createSessionFeedbackBody),
+  });
+};
+
+export const getCreateSessionFeedbackMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSessionFeedback>>,
+    TError,
+    { data: BodyType<CreateSessionFeedbackBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createSessionFeedback>>,
+  TError,
+  { data: BodyType<CreateSessionFeedbackBody> },
+  TContext
+> => {
+  const mutationKey = ["createSessionFeedback"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createSessionFeedback>>,
+    { data: BodyType<CreateSessionFeedbackBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createSessionFeedback(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateSessionFeedbackMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createSessionFeedback>>
+>;
+export type CreateSessionFeedbackMutationBody =
+  BodyType<CreateSessionFeedbackBody>;
+export type CreateSessionFeedbackMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Log post-session feedback
+ */
+export const useCreateSessionFeedback = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSessionFeedback>>,
+    TError,
+    { data: BodyType<CreateSessionFeedbackBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createSessionFeedback>>,
+  TError,
+  { data: BodyType<CreateSessionFeedbackBody> },
+  TContext
+> => {
+  return useMutation(getCreateSessionFeedbackMutationOptions(options));
+};
+
+/**
+ * @summary Get recent session feedback entries
+ */
+export const getListSessionFeedbackUrl = () => {
+  return `/api/session-feedback`;
+};
+
+export const listSessionFeedback = async (
+  options?: RequestInit,
+): Promise<SessionFeedback[]> => {
+  return customFetch<SessionFeedback[]>(getListSessionFeedbackUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSessionFeedbackQueryKey = () => {
+  return [`/api/session-feedback`] as const;
+};
+
+export const getListSessionFeedbackQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSessionFeedback>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listSessionFeedback>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListSessionFeedbackQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listSessionFeedback>>
+  > = ({ signal }) => listSessionFeedback({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSessionFeedback>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSessionFeedbackQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSessionFeedback>>
+>;
+export type ListSessionFeedbackQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get recent session feedback entries
+ */
+
+export function useListSessionFeedback<
+  TData = Awaited<ReturnType<typeof listSessionFeedback>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listSessionFeedback>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSessionFeedbackQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}

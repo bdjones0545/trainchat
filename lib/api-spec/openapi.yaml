@@ -20,6 +20,10 @@ tags:
     description: Message operations
   - name: programs
     description: Training program operations
+  - name: readiness
+    description: Readiness check-in operations
+  - name: sessionFeedback
+    description: Post-session feedback operations
 paths:
   /healthz:
     get:
@@ -354,6 +358,89 @@ paths:
       responses:
         "204":
           description: Deleted
+
+  /readiness:
+    post:
+      operationId: createReadinessEntry
+      tags: [readiness]
+      summary: Log a readiness check-in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReadinessBody"
+      responses:
+        "201":
+          description: Readiness entry saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessEntry"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      operationId: listReadiness
+      tags: [readiness]
+      summary: Get recent readiness entries
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 7
+      responses:
+        "200":
+          description: Recent readiness entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReadinessEntry"
+
+  /session-feedback:
+    post:
+      operationId: createSessionFeedback
+      tags: [sessionFeedback]
+      summary: Log post-session feedback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionFeedbackBody"
+      responses:
+        "201":
+          description: Feedback saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionFeedback"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      operationId: listSessionFeedback
+      tags: [sessionFeedback]
+      summary: Get recent session feedback entries
+      responses:
+        "200":
+          description: Recent session feedback
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SessionFeedback"
 
 components:
   schemas:
@@ -737,3 +824,125 @@ components:
         - createdAt
         - updatedAt
         - days
+
+    CreateReadinessBody:
+      type: object
+      properties:
+        sleepScore:
+          type: integer
+          minimum: 1
+          maximum: 5
+        energyScore:
+          type: integer
+          minimum: 1
+          maximum: 5
+        sorenessScore:
+          type: integer
+          minimum: 1
+          maximum: 5
+        stressScore:
+          type: integer
+          minimum: 1
+          maximum: 5
+        motivationScore:
+          type: integer
+          minimum: 1
+          maximum: 5
+        painScore:
+          type: integer
+          minimum: 1
+          maximum: 5
+        notes:
+          type: ["string", "null"]
+      required:
+        - sleepScore
+        - energyScore
+        - sorenessScore
+        - stressScore
+        - motivationScore
+        - painScore
+
+    ReadinessEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        sleepScore:
+          type: integer
+        energyScore:
+          type: integer
+        sorenessScore:
+          type: integer
+        stressScore:
+          type: integer
+        motivationScore:
+          type: integer
+        painScore:
+          type: integer
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - userId
+        - sleepScore
+        - energyScore
+        - sorenessScore
+        - stressScore
+        - motivationScore
+        - painScore
+        - createdAt
+
+    CreateSessionFeedbackBody:
+      type: object
+      properties:
+        savedProgramId:
+          type: ["integer", "null"]
+        difficultyScore:
+          type: integer
+          minimum: 1
+          maximum: 5
+        painResponseScore:
+          type: integer
+          minimum: 1
+          maximum: 5
+        energyResponseScore:
+          type: integer
+          minimum: 1
+          maximum: 5
+        notes:
+          type: ["string", "null"]
+      required:
+        - difficultyScore
+        - painResponseScore
+        - energyResponseScore
+
+    SessionFeedback:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        savedProgramId:
+          type: ["integer", "null"]
+        difficultyScore:
+          type: integer
+        painResponseScore:
+          type: integer
+        energyResponseScore:
+          type: integer
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - userId
+        - difficultyScore
+        - painResponseScore
+        - energyResponseScore
+        - createdAt

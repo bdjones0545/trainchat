@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
-import { SendHorizontal, Zap, PanelLeftClose, PanelLeft } from "lucide-react";
+import { SendHorizontal, Zap, PanelLeftClose, PanelLeft, Activity } from "lucide-react";
 import {
   useGetMe,
   useGetProfile,
@@ -18,6 +18,9 @@ import ChatSidebar from "@/components/chat/ChatSidebar";
 import MessageBubble from "@/components/chat/MessageBubble";
 import TypingIndicator from "@/components/chat/TypingIndicator";
 import ChatOutput, { type ProgramStructure } from "@/components/chat/ChatOutput";
+import ReadinessModal from "@/components/chat/ReadinessModal";
+import FeedbackModal from "@/components/chat/FeedbackModal";
+import ReadinessSummary from "@/components/chat/ReadinessSummary";
 
 const STARTER_PROMPTS = [
   "Build me a 4-day push/pull program",
@@ -38,6 +41,8 @@ export default function Chat() {
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [showReadiness, setShowReadiness] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -218,6 +223,20 @@ export default function Chat() {
     <div className="h-screen flex flex-col bg-background overflow-hidden">
       <TopNav userName={me?.name ?? "User"} />
 
+      {/* Modals */}
+      {showReadiness && (
+        <ReadinessModal
+          onClose={() => setShowReadiness(false)}
+          onSubmit={() => setShowReadiness(false)}
+        />
+      )}
+      {showFeedback && (
+        <FeedbackModal
+          onClose={() => setShowFeedback(false)}
+          onSubmit={() => setShowFeedback(false)}
+        />
+      )}
+
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
         {sidebarOpen && (
@@ -288,6 +307,16 @@ export default function Chat() {
           {/* Input */}
           <div className="flex-shrink-0 px-4 pb-5 pt-3 border-t border-border bg-background/80 backdrop-blur-sm">
             <div className="max-w-2xl mx-auto">
+              {/* Readiness button row */}
+              <div className="flex justify-end mb-2">
+                <button
+                  onClick={() => setShowReadiness(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold text-muted-foreground border border-border hover:text-foreground hover:border-primary/30 transition-all duration-150"
+                >
+                  <Activity className="w-3 h-3" />
+                  Check-In
+                </button>
+              </div>
               <div className="relative flex items-end gap-2 bg-card border border-border rounded-2xl focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 transition-all duration-200">
                 <textarea
                   ref={inputRef}
@@ -336,10 +365,13 @@ export default function Chat() {
                 Hide
               </button>
             </div>
+            {/* Readiness summary — shows above the program when available */}
+            <ReadinessSummary />
             <div className="flex-1 overflow-hidden">
               <ChatOutput
                 program={latestProgram}
                 onSave={latestProgram ? handleSaveProgram : undefined}
+                onFeedback={() => setShowFeedback(true)}
                 isSaving={isSaving}
                 isSaved={isSaved}
               />

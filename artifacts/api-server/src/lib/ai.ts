@@ -222,14 +222,18 @@ function extractStructuredData(content: string): {
 export async function generateAIResponse(
   userMessage: string,
   history: ChatMessage[],
-  userId: number
+  userId: number,
+  adaptationContext?: string
 ): Promise<AIResponse> {
   const [profile] = await db
     .select()
     .from(userProfilesTable)
     .where(eq(userProfilesTable.userId, userId));
 
-  const systemPrompt = buildSystemPrompt(profile ?? null);
+  const basePrompt = buildSystemPrompt(profile ?? null);
+  const systemPrompt = adaptationContext
+    ? `${basePrompt}\n\n${adaptationContext}`
+    : basePrompt;
   const apiKey = process.env.OPENAI_API_KEY;
 
   if (!apiKey) {

@@ -7,6 +7,7 @@ import {
   TrendingUp,
   LayoutGrid,
   Loader2,
+  MessageSquare,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -37,11 +38,12 @@ export interface ProgramStructure {
 interface Props {
   program: ProgramStructure | null;
   onSave?: () => void;
+  onFeedback?: () => void;
   isSaving?: boolean;
   isSaved?: boolean;
 }
 
-export default function ChatOutput({ program, onSave, isSaving, isSaved }: Props) {
+export default function ChatOutput({ program, onSave, onFeedback, isSaving, isSaved }: Props) {
   const [expandedDay, setExpandedDay] = useState<number | null>(0);
 
   if (!program) {
@@ -98,37 +100,49 @@ export default function ChatOutput({ program, onSave, isSaving, isSaved }: Props
           </p>
         )}
 
-        {/* Save button */}
-        {onSave && (
-          <button
-            onClick={onSave}
-            disabled={isSaving || isSaved}
-            className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-[11px] font-semibold transition-all duration-200 ${
-              isSaved
-                ? "bg-green-500/15 border border-green-500/30 text-green-400 cursor-default"
-                : isSaving
-                ? "bg-primary/10 border border-primary/20 text-primary/60 cursor-not-allowed"
-                : "bg-primary/15 border border-primary/30 text-primary hover:bg-primary/25 active:scale-[0.98]"
-            }`}
-          >
-            {isSaved ? (
-              <>
-                <CheckCircle className="w-3 h-3" />
-                Program saved
-              </>
-            ) : isSaving ? (
-              <>
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Saving…
-              </>
-            ) : (
-              <>
-                <Save className="w-3 h-3" />
-                Save program
-              </>
-            )}
-          </button>
-        )}
+        {/* Buttons row */}
+        <div className="flex gap-2">
+          {onSave && (
+            <button
+              onClick={onSave}
+              disabled={isSaving || isSaved}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-[11px] font-semibold transition-all duration-200 ${
+                isSaved
+                  ? "bg-green-500/15 border border-green-500/30 text-green-400 cursor-default"
+                  : isSaving
+                  ? "bg-primary/10 border border-primary/20 text-primary/60 cursor-not-allowed"
+                  : "bg-primary/15 border border-primary/30 text-primary hover:bg-primary/25 active:scale-[0.98]"
+              }`}
+            >
+              {isSaved ? (
+                <>
+                  <CheckCircle className="w-3 h-3" />
+                  Saved
+                </>
+              ) : isSaving ? (
+                <>
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                <>
+                  <Save className="w-3 h-3" />
+                  Save
+                </>
+              )}
+            </button>
+          )}
+          {onFeedback && isSaved && (
+            <button
+              onClick={onFeedback}
+              className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-[11px] font-semibold border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all duration-150"
+              title="Log post-session feedback"
+            >
+              <MessageSquare className="w-3 h-3" />
+              Feedback
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Progression strategy */}

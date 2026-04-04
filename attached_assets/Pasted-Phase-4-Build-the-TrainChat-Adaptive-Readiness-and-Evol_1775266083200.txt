@@ -1,0 +1,333 @@
+Phase 4: Build the TrainChat Adaptive Readiness and Evolution Layer
+
+We already have:
+- agent-first architecture
+- onboarding-based personalization
+- co-creation program building
+- structured outputs
+- save/edit program flow
+- goal-specific training intelligence
+- pain-aware and fatigue-aware programming rules
+
+Now build the adaptive layer that makes TrainChat feel like an evolving intelligent training system.
+
+IMPORTANT:
+This phase is about helping the agent adjust training over time based on user state, prior feedback, and current readiness.
+This should make the system feel alive, personalized, and premium.
+
+==================================================
+CORE OBJECTIVE
+==================================================
+
+TrainChat should no longer act like it only creates one program and stops there.
+
+It should now behave like a system that:
+- checks in on the user
+- understands how they are feeling
+- updates recommendations based on readiness
+- evolves sessions and programs over time
+- tracks pain and fatigue trends
+- preserves continuity between sessions
+
+This should feel like a premium human-coach-like adaptation layer.
+
+==================================================
+1. READINESS CHECK-IN SYSTEM
+==================================================
+
+Build a readiness input system that users can complete before training or when refining a session.
+
+Collect inputs such as:
+- sleep quality
+- energy
+- soreness
+- stress
+- motivation/readiness to train
+- pain level
+- optional notes
+
+Design this as a clean, premium UI that can be triggered:
+- before generating the day’s training
+- before modifying an existing plan
+- optionally from within the chat flow
+
+Store readiness entries in the database and associate them with user ID and timestamp.
+
+==================================================
+2. READINESS DATA MODEL
+==================================================
+
+Create scalable schema for readiness tracking.
+
+Suggested tables / structure:
+- readiness_entries
+  - id
+  - user_id
+  - sleep_score
+  - energy_score
+  - soreness_score
+  - stress_score
+  - motivation_score
+  - pain_score
+  - notes
+  - created_at
+
+Prepare for future extensibility so wearable data can later map into this system.
+
+==================================================
+3. READINESS-INFORMED ADJUSTMENT LOGIC
+==================================================
+
+Implement rules so the AI agent can adjust training recommendations based on readiness inputs.
+
+Examples:
+- low sleep + high soreness + high stress → reduce density/intensity
+- high pain score → modify aggravating patterns
+- high energy + low soreness → stay on plan or progress
+- low motivation but good physical readiness → keep session effective but streamlined
+
+The system should not overreact dramatically to every small input.
+It should make intelligent, measured modifications.
+
+Possible types of modifications:
+- reduce volume
+- reduce intensity
+- simplify exercise selection
+- remove highly fatiguing work
+- replace problematic exercises
+- convert session to lower-stress training
+- preserve intent while changing load
+
+==================================================
+4. DAILY SESSION EVOLUTION
+==================================================
+
+Enable the agent to adjust a specific day/session based on current readiness rather than regenerating the entire program.
+
+Examples:
+- “Today I slept badly and my knees are irritated”
+- “I’m sore from yesterday but still want to train”
+- “I only have 30 minutes today”
+- “My shoulder feels off this week”
+
+The agent should intelligently modify the current session while preserving the broader program structure where possible.
+
+Do not unnecessarily destroy continuity.
+The system should feel like a coach making smart adjustments in context.
+
+==================================================
+5. POST-SESSION FEEDBACK SYSTEM
+==================================================
+
+Build a post-session feedback mechanism.
+
+After completing a session, allow users to log simple feedback such as:
+- session difficulty
+- exercise tolerance
+- pain during session
+- energy during session
+- what felt good / bad
+- optional free-text notes
+
+Store this in the database.
+
+Suggested table:
+- session_feedback
+  - id
+  - user_id
+  - saved_program_id or session reference
+  - difficulty_score
+  - pain_response_score
+  - energy_response_score
+  - notes
+  - created_at
+
+This feedback should later influence future recommendations.
+
+==================================================
+6. FEEDBACK-INFORMED ADAPTATION
+==================================================
+
+Use recent session feedback to shape future training decisions.
+
+Examples:
+- repeated reports of excessive fatigue → slightly reduce overall density
+- repeated pain with a movement pattern → bias away from that pattern
+- repeated positive tolerance and easy difficulty → allow progression
+- repeated low energy + poor recovery → adjust intensity or weekly structure
+
+Do this conservatively and intelligently.
+This should feel like pattern recognition, not random over-adjustment.
+
+==================================================
+7. LIGHTWEIGHT TREND TRACKING
+==================================================
+
+Implement simple trend awareness over recent readiness and feedback data.
+
+Examples of trends the system should recognize:
+- pain has increased over the last few entries
+- sleep/recovery has been poor for several sessions
+- soreness has remained high across multiple days
+- user has been tolerating current training well
+
+The agent should be able to reference this briefly in a premium way, for example:
+- “Your recent recovery inputs have been low, so I’m keeping today efficient.”
+- “You’ve been tolerating upper body work well, so I’m progressing it slightly.”
+
+Keep this light, useful, and coach-like.
+
+==================================================
+8. NEXT-SESSION / NEXT-WEEK EVOLUTION LOGIC
+==================================================
+
+Build the first version of ongoing evolution logic.
+
+The system should be capable of:
+- updating a future session
+- modifying current week programming
+- suggesting a lighter day when needed
+- progressing when tolerance is strong
+- adjusting exercise choices when patterns of irritation appear
+
+This should create the sense that TrainChat is not just generating plans, but evolving them.
+
+Prepare the codebase so future weekly/block-based progression can build on this foundation.
+
+==================================================
+9. CURRENT CONTEXT MEMORY LAYER
+==================================================
+
+Improve continuity by making the agent aware of:
+- current saved program
+- most recent readiness entry
+- recent session feedback
+- recent pain notes
+- what was changed recently
+
+The agent should be able to continue naturally without needing the user to re-explain everything repeatedly.
+
+Examples:
+- if the agent already shortened sessions this week, it should know that
+- if the user reported shoulder irritation earlier, it should account for that
+- if the system already reduced lower body stress, it should preserve that continuity
+
+==================================================
+10. AGENT DECISION STYLE
+==================================================
+
+The adaptation logic should feel:
+- measured
+- intelligent
+- calm
+- coach-like
+- not alarmist
+- not overly medical
+
+The system should:
+- preserve training intent whenever possible
+- avoid unnecessary full rebuilds
+- explain adjustments briefly when helpful
+- not panic over one bad readiness day
+- not ignore repeated negative patterns
+
+==================================================
+11. PREMIUM CHAT INTEGRATION
+==================================================
+
+Keep everything centered around the agent.
+
+Users should be able to say things like:
+- “Adjust today based on how I feel”
+- “I slept terribly”
+- “My knees hurt this week”
+- “That last leg day was too much”
+- “Make this week easier”
+- “I feel great today, can we push a little?”
+
+The agent should interpret this in context and respond intelligently.
+
+The readiness and adaptation system should feel naturally integrated into the chat, not like a disconnected form system.
+
+==================================================
+12. UI / EXPERIENCE REQUIREMENTS
+==================================================
+
+Enhance the product UI to support this adaptive layer.
+
+Build:
+- clean readiness check-in component
+- recent readiness summary
+- post-session feedback modal or panel
+- visible agent-driven session adjustment state
+- optional small timeline/history of recent readiness or recovery entries
+
+Do not make the UI cluttered.
+The agent must remain the center of the experience.
+
+These supporting features should orbit the chat and help the agent feel more powerful.
+
+==================================================
+13. DATABASE / ARCHITECTURE REQUIREMENTS
+==================================================
+
+Implement clean schema and service architecture for:
+- readiness entries
+- session feedback
+- adaptation logic
+- recent trend retrieval
+- agent context assembly
+
+Create reusable backend utilities that can:
+- fetch recent readiness
+- fetch recent feedback
+- summarize recent status
+- assemble adaptive context for the AI
+
+Keep clean separation between:
+- training logic
+- adaptation logic
+- AI prompt/context building
+- persistence/storage
+
+==================================================
+14. WEARABLE INTEGRATION SCAFFOLDING
+==================================================
+
+Do NOT fully build wearable integrations yet unless simple to scaffold.
+
+But prepare the architecture for future integration with:
+- sleep data
+- HRV/recovery metrics
+- step/activity data
+- resting heart rate
+- training load metrics
+
+Create placeholder service hooks or interface contracts so these inputs can later feed into readiness logic cleanly.
+
+==================================================
+15. SAFETY / PRODUCT RULES
+==================================================
+
+Important:
+- do not make medical diagnoses
+- do not promise treatment outcomes
+- do not behave like a doctor
+- do not overreact to one symptom report
+- do not fully abandon training unless user state clearly suggests major modification is needed
+- preserve the premium training-system feel
+
+The system should act like a highly intelligent coach adapting training, not a rehab clinic or a medical app.
+
+==================================================
+16. DELIVERABLES
+==================================================
+
+At the end, provide:
+1. what adaptive systems were implemented
+2. database tables added
+3. how readiness affects training changes
+4. how post-session feedback affects future adjustments
+5. how trend awareness works
+6. how the agent preserves continuity across sessions
+7. what is scaffolded for Phase 5
