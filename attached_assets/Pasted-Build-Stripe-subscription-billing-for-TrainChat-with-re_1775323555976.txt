@@ -1,0 +1,248 @@
+Build Stripe subscription billing for TrainChat with recurring billing, webhook verification, and subscription-based access control.
+
+CONTEXT:
+TrainChat is a premium AI training platform. We need a production-minded Stripe integration for recurring monthly and yearly subscriptions.
+
+IMPLEMENTATION GOAL:
+Set up Stripe Checkout for subscription signup, a secure webhook endpoint for recurring billing events, and backend subscription state management so TrainChat can grant or revoke access based on real Stripe billing events.
+
+IMPORTANT:
+Do this in a clean, scalable way.
+Do not hack this together.
+Use Stripe best practices for recurring subscriptions, webhook verification, and subscription lifecycle handling.
+
+==================================================
+1. BILLING MODEL
+==================================================
+
+Implement subscription billing for these plans:
+
+- Starter Monthly
+- Pro Monthly
+- Elite Monthly
+- Starter Yearly
+- Pro Yearly
+- Elite Yearly
+
+Store Stripe product/price IDs in environment variables, not hardcoded in the frontend.
+
+Create a clear mapping between:
+- internal plan name
+- billing interval
+- Stripe price ID
+
+==================================================
+2. STRIPE CHECKOUT SUBSCRIPTION FLOW
+==================================================
+
+Build backend endpoints to create Stripe Checkout Sessions for subscription signup.
+
+Requirements:
+- mode = subscription
+- use the correct Stripe Price ID
+- attach existing authenticated user ID through metadata
+- include customer email when available
+- success URL and cancel URL
+- support monthly and yearly plans
+
+Frontend:
+- user selects plan
+- frontend requests checkout session from backend
+- redirect user to Stripe Checkout
+
+==================================================
+3. DATABASE CHANGES
+==================================================
+
+Add or update subscription-related tables/fields.
+
+Track at minimum:
+- user_id
+- stripe_customer_id
+- stripe_subscription_id
+- stripe_price_id
+- subscription_status
+- current_plan
+- billing_interval
+- current_period_end
+- cancel_at_period_end
+- trial_end if relevant
+- created_at
+- updated_at
+
+Keep the schema scalable for future upgrades/downgrades and white-label billing later.
+
+==================================================
+4. WEBHOOK ENDPOINT
+==================================================
+
+Create a secure Stripe webhook endpoint.
+
+Requirements:
+- verify webhook signature using Stripe webhook secret
+- use raw request body as required for signature verification
+- reject invalid signatures
+- log event type safely for debugging
+
+Handle at minimum these events:
+- checkout.session.completed
+- invoice.paid
+- invoice.payment_failed
+- customer.subscription.created
+- customer.subscription.updated
+- customer.subscription.deleted
+
+Build idempotent webhook handling so duplicate events do not corrupt state.
+
+==================================================
+5. ACCESS CONTROL / ENTITLEMENT LOGIC
+==================================================
+
+Implement subscription-based access logic for TrainChat.
+
+Rules:
+- active paid subscription = access granted
+- canceled but still in paid period = keep access until period end
+- unpaid / incomplete / past_due handling should be explicit
+- failed payments should not silently leave access in a bad state
+- when subscription is deleted or ends, revoke premium access appropriately
+
+Use webhook events as source of truth for subscription state.
+
+==================================================
+6. CHECKOUT SESSION COMPLETED HANDLING
+==================================================
+
+When checkout.session.completed is received:
+- identify the user from metadata or customer email
+- store stripe customer ID if missing
+- store checkout/subscription linkage cleanly
+- do not rely only on frontend redirect success page
+
+==================================================
+7. INVOICE / RENEWAL HANDLING
+==================================================
+
+When invoice.paid is received:
+- refresh subscription state
+- confirm active access
+- update billing period end if available
+
+When invoice.payment_failed is received:
+- mark account for billing attention
+- preserve state appropriately based on Stripe subscription status
+- prepare the system for future user notifications
+
+==================================================
+8. SUBSCRIPTION STATUS HANDLING
+==================================================
+
+When customer.subscription.created or updated is received:
+- update subscription record
+- sync status
+- sync plan / price
+- sync billing interval
+- sync current period end
+- sync cancel_at_period_end
+
+When customer.subscription.deleted is received:
+- revoke subscription access at the correct time
+- update database immediately
+
+==================================================
+9. BILLING PORTAL
+==================================================
+
+Create backend endpoint to generate a Stripe Billing Portal session.
+
+Frontend:
+- add “Manage Billing” button in settings/account area
+- redirect user to Stripe Billing Portal
+
+Users should be able to:
+- update payment method
+- cancel subscription
+- manage billing cleanly through Stripe
+
+==================================================
+10. FRONTEND ACCOUNT/BILLING UI
+==================================================
+
+Build a clean billing area showing:
+- current plan
+- subscription status
+- billing interval
+- renewal date / period end
+- cancel-at-period-end status
+- button to manage billing
+- upgrade/downgrade buttons or placeholders for next phase
+
+Keep the UI premium and simple.
+
+==================================================
+11. BACKEND ARCHITECTURE
+==================================================
+
+Implement clean separation for:
+- Stripe service layer
+- webhook handler
+- billing controller/routes
+- database persistence
+- access control logic
+
+Avoid putting Stripe logic directly inside UI routes or random components.
+
+==================================================
+12. ENVIRONMENT VARIABLES
+==================================================
+
+Use environment variables for:
+- STRIPE_SECRET_KEY
+- STRIPE_WEBHOOK_SECRET
+- STRIPE_PRICE_STARTER_MONTHLY
+- STRIPE_PRICE_PRO_MONTHLY
+- STRIPE_PRICE_ELITE_MONTHLY
+- STRIPE_PRICE_STARTER_YEARLY
+- STRIPE_PRICE_PRO_YEARLY
+- STRIPE_PRICE_ELITE_YEARLY
+- STRIPE_BILLING_PORTAL_RETURN_URL
+- STRIPE_CHECKOUT_SUCCESS_URL
+- STRIPE_CHECKOUT_CANCEL_URL
+
+==================================================
+13. TESTING / DEBUGGING
+==================================================
+
+Add useful debug logging for:
+- checkout session creation
+- webhook event receipt
+- webhook signature verification result
+- event type handled
+- subscription state updates
+- access granted/revoked
+
+Prepare this for local testing with Stripe CLI and test webhooks.
+
+==================================================
+14. PRODUCT RULES
+==================================================
+
+- Stripe webhooks are the source of truth for subscription status
+- do not rely only on frontend redirects for activation
+- do not hardcode price IDs in the frontend
+- do not skip webhook signature verification
+- do not make billing state depend on brittle client-only logic
+
+==================================================
+15. DELIVERABLES
+==================================================
+
+At the end, provide:
+1. backend routes created
+2. Stripe service functions created
+3. database fields/tables added
+4. webhook events handled
+5. how access control works
+6. how billing portal works
+7. what environment variables are required
+8. how to test locally with Stripe test mode and webhook forwarding

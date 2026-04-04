@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import type { PlanTier } from "@workspace/db";
 
 export const FREE_MESSAGE_LIMIT = 5;
+export const STARTER_MESSAGE_LIMIT = 75;
 
 export interface PlanFeatures {
   unlimitedMessages: boolean;
@@ -59,6 +60,63 @@ export function getPlanFeatures(plan: PlanTier): PlanFeatures {
   }
 }
 
+// ─── Subscription access check ────────────────────────────────────────────────
+//
+// Determines effective access from persisted subscription state.
+// Rules:
+//   active/trialing                           → full plan access
+//   canceled + currentPeriodEnd in future     → keep access until period ends
+//   past_due                                  → keep access (Stripe retry window)
+//   incomplete/restricted/no subscription     → free tier
+//   cancelAtPeriodEnd=true + within period    → full access until period ends
+
+export function checkSubscriptionAccess(user: {
+  plan: PlanTier;
+  planStatus: string;
+  currentPeriodEnd: Date | null;
+  cancelAtPeriodEnd: boolean;
+  stripeSubscriptionId: string | null;
+}): { effectivePlan: PlanTier; hasActiveAccess: boolean; accessReason: string } {
+  const now = new Date();
+
+  if (!user.stripeSubscriptionId) {
+    return { effectivePlan: "free", hasActiveAccess: false, accessReason: "no_subscription" };
+  }
+
+  const planStatus = user.planStatus;
+  const periodEnd = user.currentPeriodEnd;
+  const withinPeriod = periodEnd ? now < periodEnd : false;
+
+  if (planStatus === "active" || planStatus === "trialing") {
+    return {
+      effectivePlan: user.plan,
+      hasActiveAccess: true,
+      accessReason: planStatus,
+    };
+  }
+
+  if (planStatus === "past_due") {
+    // Grant access during Stripe's retry window — do not punish users for temporary failures
+    return {
+      effectivePlan: user.plan,
+      hasActiveAccess: true,
+      accessReason: "past_due_grace",
+    };
+  }
+
+  if (planStatus === "canceled" && withinPeriod) {
+    // User canceled but period hasn't ended — honor the paid access they already have
+    return {
+      effectivePlan: user.plan,
+      hasActiveAccess: true,
+      accessReason: "canceled_within_period",
+    };
+  }
+
+  // Everything else: revoke
+  return { effectivePlan: "free", hasActiveAccess: false, accessReason: planStatus };
+}
+
 export async function getUserPlanInfo(userId: number): Promise<{
   plan: PlanTier;
   planStatus: string;
@@ -66,28 +124,52 @@ export async function getUserPlanInfo(userId: number): Promise<{
   features: PlanFeatures;
   canSendMessage: boolean;
   messagesRemaining: number | null;
+  billingInterval: string | null;
+  currentPeriodEnd: Date | null;
+  cancelAtPeriodEnd: boolean;
+  trialEnd: Date | null;
+  hasActiveAccess: boolean;
 }> {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
   if (!user) throw new Error("User not found");
 
-  const plan = (user.plan ?? "free") as PlanTier;
-  const planStatus = user.planStatus ?? "active";
   const messageCount = user.messageCount ?? 0;
-  const features = getPlanFeatures(plan);
+
+  // Determine effective plan via access rules
+  const { effectivePlan, hasActiveAccess } = checkSubscriptionAccess({
+    plan: (user.plan ?? "free") as PlanTier,
+    planStatus: user.planStatus ?? "active",
+    currentPeriodEnd: user.currentPeriodEnd ?? null,
+    cancelAtPeriodEnd: user.cancelAtPeriodEnd ?? false,
+    stripeSubscriptionId: user.stripeSubscriptionId ?? null,
+  });
+
+  const features = getPlanFeatures(effectivePlan);
 
   let canSendMessage = true;
   let messagesRemaining: number | null = null;
 
-  if (plan === "free") {
+  if (effectivePlan === "free") {
     messagesRemaining = Math.max(0, FREE_MESSAGE_LIMIT - messageCount);
     canSendMessage = messageCount < FREE_MESSAGE_LIMIT;
-  } else if (plan === "starter") {
-    const STARTER_LIMIT = 75;
-    messagesRemaining = Math.max(0, STARTER_LIMIT - messageCount);
-    canSendMessage = messageCount < STARTER_LIMIT;
+  } else if (effectivePlan === "starter") {
+    messagesRemaining = Math.max(0, STARTER_MESSAGE_LIMIT - messageCount);
+    canSendMessage = messageCount < STARTER_MESSAGE_LIMIT;
   }
 
-  return { plan, planStatus, messageCount, features, canSendMessage, messagesRemaining };
+  return {
+    plan: effectivePlan,
+    planStatus: user.planStatus ?? "active",
+    messageCount,
+    features,
+    canSendMessage,
+    messagesRemaining,
+    billingInterval: user.billingInterval ?? null,
+    currentPeriodEnd: user.currentPeriodEnd ?? null,
+    cancelAtPeriodEnd: user.cancelAtPeriodEnd ?? false,
+    trialEnd: user.trialEnd ?? null,
+    hasActiveAccess,
+  };
 }
 
 export const PLAN_DISPLAY: Record<

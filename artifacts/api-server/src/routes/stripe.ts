@@ -1,49 +1,45 @@
 import { Router, type IRouter } from "express";
 import { requireAuth } from "../middlewares/auth";
-import { stripeService } from "../lib/stripeService";
+import { stripeService, getPlanPriceMap } from "../lib/stripeService";
 import { stripeStorage } from "../lib/stripeStorage";
 import { getUserPlanInfo, getPlanFeatures } from "../lib/planGating";
+import { detectPlanInterval } from "../lib/billingUtils";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
+
+// ─── GET /api/subscription ────────────────────────────────────────────────────
+//
+// Returns the full subscription state for the current user.
+// All fields are sourced from our users table (webhook-synced), not from Stripe
+// API calls on each request — this keeps latency low.
 
 router.get("/subscription", requireAuth, async (req: any, res): Promise<void> => {
   try {
     const userId = req.session.userId!;
-    const user = await stripeStorage.getUser(userId);
-    if (!user) {
-      res.status(404).json({ error: "User not found" });
-      return;
-    }
-
     const planInfo = await getUserPlanInfo(userId);
-
-    let subscription = null;
-    if (user.stripeSubscriptionId) {
-      subscription = await stripeStorage.getActiveSubscription(user.stripeSubscriptionId);
-
-      if (subscription) {
-        const plan = await stripeStorage.getSubscriptionPlan(user.stripeSubscriptionId);
-        if (plan !== user.plan) {
-          await stripeStorage.updateUserStripeInfo(userId, {
-            plan,
-            planStatus: String(subscription.status),
-          });
-          planInfo.plan = plan;
-        }
-      }
-    }
 
     res.json({
       plan: planInfo.plan,
       planStatus: planInfo.planStatus,
       features: planInfo.features,
       messagesRemaining: planInfo.messagesRemaining,
-      subscription,
+      billingInterval: planInfo.billingInterval,
+      currentPeriodEnd: planInfo.currentPeriodEnd,
+      cancelAtPeriodEnd: planInfo.cancelAtPeriodEnd,
+      trialEnd: planInfo.trialEnd,
+      hasActiveAccess: planInfo.hasActiveAccess,
     });
   } catch (err: any) {
+    logger.error({ err }, "[StripeRouter] /subscription error");
     res.status(500).json({ error: err.message });
   }
 });
+
+// ─── GET /api/subscription/products ──────────────────────────────────────────
+//
+// Returns active products with prices from the StripeSync tables.
+// Used by PricingModal to match plan names to live Stripe price IDs.
 
 router.get("/subscription/products", async (_req, res): Promise<void> => {
   try {
@@ -53,6 +49,21 @@ router.get("/subscription/products", async (_req, res): Promise<void> => {
     res.json({ products: [] });
   }
 });
+
+// ─── GET /api/subscription/plan-map ──────────────────────────────────────────
+//
+// Returns the environment-variable-backed plan → price ID mapping.
+// Frontend uses this to initiate checkout without hardcoding price IDs.
+// Safe to expose: price IDs are not secret.
+
+router.get("/subscription/plan-map", async (_req, res): Promise<void> => {
+  res.json({ planMap: getPlanPriceMap() });
+});
+
+// ─── POST /api/subscription/checkout ─────────────────────────────────────────
+//
+// Creates a Stripe Checkout Session for the given price ID.
+// Returns the session URL for frontend redirect.
 
 router.post("/subscription/checkout", requireAuth, async (req: any, res): Promise<void> => {
   try {
@@ -70,25 +81,43 @@ router.post("/subscription/checkout", requireAuth, async (req: any, res): Promis
       return;
     }
 
+    // Create Stripe customer if not yet on file
     let customerId = user.stripeCustomerId;
     if (!customerId) {
       customerId = await stripeService.createCustomer(user.email, userId);
-      await stripeStorage.updateUserStripeInfo(userId, { stripeCustomerId: customerId });
+      await stripeStorage.linkStripeCustomer(userId, customerId);
     }
 
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const baseUrl = process.env.STRIPE_CHECKOUT_SUCCESS_URL
+      ? process.env.STRIPE_CHECKOUT_SUCCESS_URL.replace("{CHECKOUT_SESSION_ID}", "{CHECKOUT_SESSION_ID}")
+      : `${req.protocol}://${req.get("host")}`;
+
+    const successUrl = process.env.STRIPE_CHECKOUT_SUCCESS_URL
+      ?? `${baseUrl}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = process.env.STRIPE_CHECKOUT_CANCEL_URL
+      ?? `${baseUrl}/?checkout=cancel`;
+
     const session = await stripeService.createCheckoutSession(
       customerId,
       priceId,
-      `${baseUrl}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-      `${baseUrl}/?checkout=cancel`
+      successUrl,
+      cancelUrl,
+      userId
     );
 
+    logger.info({ userId, priceId, sessionId: session.id }, "[StripeRouter] Checkout session created");
     res.json({ url: session.url });
   } catch (err: any) {
+    logger.error({ err }, "[StripeRouter] /subscription/checkout error");
     res.status(500).json({ error: err.message });
   }
 });
+
+// ─── POST /api/subscription/confirm ──────────────────────────────────────────
+//
+// Called from the checkout success page to verify and record the subscription.
+// This is a safety net — the primary source of truth is the webhook.
+// Idempotent: safe to call multiple times.
 
 router.post("/subscription/confirm", requireAuth, async (req: any, res): Promise<void> => {
   try {
@@ -105,13 +134,49 @@ router.post("/subscription/confirm", requireAuth, async (req: any, res): Promise
       return;
     }
 
+    const sub =
+      typeof checkoutSession.subscription === "string"
+        ? null
+        : (checkoutSession.subscription as any);
+
     const subscriptionId =
       typeof checkoutSession.subscription === "string"
         ? checkoutSession.subscription
         : checkoutSession.subscription.id;
 
-    const plan = await stripeStorage.getSubscriptionPlan(subscriptionId);
+    // If we got the expanded subscription object, sync immediately
+    if (sub && sub.id) {
+      const item = sub.items?.data?.[0];
+      const priceId: string = item?.price?.id ?? "";
+      const customerId: string =
+        typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? "";
 
+      if (priceId && customerId) {
+        const { plan, billingInterval } = detectPlanInterval(priceId);
+        const periodEnd = sub.current_period_end
+          ? new Date(sub.current_period_end * 1000)
+          : new Date();
+
+        await stripeStorage.syncUserSubscription(userId, {
+          stripeSubscriptionId: sub.id,
+          stripeCustomerId: customerId,
+          stripePriceId: priceId,
+          plan,
+          planStatus: sub.status === "active" ? "active" : sub.status,
+          billingInterval,
+          currentPeriodEnd: periodEnd,
+          cancelAtPeriodEnd: sub.cancel_at_period_end ?? false,
+          trialEnd: sub.trial_end ? new Date(sub.trial_end * 1000) : null,
+        });
+
+        const features = getPlanFeatures(plan);
+        res.json({ plan, features, subscriptionId });
+        return;
+      }
+    }
+
+    // Fallback: derive plan from StripeSync tables
+    const plan = await stripeStorage.getSubscriptionPlan(subscriptionId);
     await stripeStorage.updateUserStripeInfo(userId, {
       stripeSubscriptionId: subscriptionId,
       plan,
@@ -121,9 +186,15 @@ router.post("/subscription/confirm", requireAuth, async (req: any, res): Promise
     const features = getPlanFeatures(plan);
     res.json({ plan, features, subscriptionId });
   } catch (err: any) {
+    logger.error({ err }, "[StripeRouter] /subscription/confirm error");
     res.status(500).json({ error: err.message });
   }
 });
+
+// ─── POST /api/subscription/portal ───────────────────────────────────────────
+//
+// Creates a Stripe Billing Portal session.
+// Users can update payment method, cancel, or manage their subscription.
 
 router.post("/subscription/portal", requireAuth, async (req: any, res): Promise<void> => {
   try {
@@ -135,14 +206,18 @@ router.post("/subscription/portal", requireAuth, async (req: any, res): Promise<
       return;
     }
 
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const returnUrl = process.env.STRIPE_BILLING_PORTAL_RETURN_URL
+      ?? `${req.protocol}://${req.get("host")}/`;
+
     const portalSession = await stripeService.createPortalSession(
       user.stripeCustomerId,
-      `${baseUrl}/`
+      returnUrl
     );
 
+    logger.info({ userId }, "[StripeRouter] Portal session created");
     res.json({ url: portalSession.url });
   } catch (err: any) {
+    logger.error({ err }, "[StripeRouter] /subscription/portal error");
     res.status(500).json({ error: err.message });
   }
 });

@@ -5,6 +5,9 @@ import { z } from "zod/v4";
 export const PLAN_TIERS = ["free", "starter", "pro", "elite"] as const;
 export type PlanTier = (typeof PLAN_TIERS)[number];
 
+export const BILLING_INTERVALS = ["monthly", "yearly"] as const;
+export type BillingInterval = (typeof BILLING_INTERVALS)[number];
+
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
   email: text("email").notNull().unique(),
@@ -12,10 +15,18 @@ export const usersTable = pgTable("users", {
   name: text("name").notNull(),
   onboardingComplete: boolean("onboarding_complete").notNull().default(false),
 
+  // Stripe identifiers
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
+  stripePriceId: text("stripe_price_id"),
+
+  // Subscription state — source of truth is webhook events
   plan: text("plan", { enum: PLAN_TIERS }).notNull().default("free"),
   planStatus: text("plan_status").notNull().default("active"),
+  billingInterval: text("billing_interval", { enum: BILLING_INTERVALS }),
+  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  trialEnd: timestamp("trial_end", { withTimezone: true }),
 
   messageCount: integer("message_count").notNull().default(0),
 
