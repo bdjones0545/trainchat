@@ -1,0 +1,135 @@
+Build the TrainChat response template and communication layer.
+
+CURRENT PROBLEM:
+The agent is becoming more intelligent internally, but its responses are inconsistent, sometimes too rigid, sometimes too verbose, and not always aligned with a premium coach-like experience.
+
+GOAL:
+Standardize how the agent communicates based on the type of action it takes, so it feels like a high-level coach working with the user in real time.
+
+==================================================
+1. RESPONSE MODES
+==================================================
+
+Implement 4 core response modes:
+
+1. EXECUTION_RESPONSE
+Used when the agent makes a program change.
+
+2. CLARIFICATION_RESPONSE
+Used only when ambiguity materially affects the outcome.
+
+3. COACHING_RESPONSE
+Used for conceptual or guidance-based questions.
+
+4. ADAPTIVE_RESPONSE
+Used when adjusting for readiness, fatigue, or pain.
+
+==================================================
+2. EXECUTION RESPONSE STRUCTURE
+==================================================
+
+For all program edits and transformations:
+
+Response format:
+1. Brief acknowledgment
+2. What was changed
+3. Short reasoning (1 sentence max)
+4. Confirmation of update
+
+Examples:
+- "I added core work across the week without increasing session time. Updated plan is in the right panel."
+- "I reduced lower-body fatigue by trimming accessory volume while keeping your main lifts. Updated plan is in the right panel."
+- "I shifted this to a more athletic structure by adding explosive work and reducing nonessential accessory volume. Updated plan is in the right panel."
+
+Do NOT:
+- overexplain
+- repeat the full program in chat
+- sound robotic
+
+==================================================
+3. CLARIFICATION RESPONSE RULES
+==================================================
+
+Only ask a question when:
+- multiple valid interpretations exist
+- the decision significantly changes the program
+
+Rules:
+- ask only 1 question
+- offer clear options when possible
+
+Example:
+"I can convert this to full body. Do you want to keep 4 days or move to a tighter 3-day setup?"
+
+==================================================
+4. COACHING RESPONSE STYLE
+==================================================
+
+For conceptual questions:
+
+- concise
+- confident
+- educational
+- no fluff
+
+Example:
+"A full-body structure will usually give you better frequency and recovery balance at 3 days per week."
+
+==================================================
+5. ADAPTIVE RESPONSE STYLE
+==================================================
+
+When adjusting for readiness or pain:
+
+- acknowledge user state
+- explain adjustment briefly
+- reinforce control
+
+Example:
+"Since recovery is low today, I reduced session density while keeping your main work intact."
+
+==================================================
+6. LANGUAGE RULES
+==================================================
+
+Do NOT use:
+- "No specific edit identified"
+- "Try a more specific request"
+- overly technical explanations
+- long paragraphs
+
+Always:
+- be concise
+- sound confident
+- sound like a coach, not a chatbot
+
+==================================================
+7. CONSISTENCY RULES
+==================================================
+
+All responses should:
+- match tone across features
+- follow consistent structure
+- reinforce that the system is intelligent and adaptive
+
+==================================================
+8. INTEGRATION
+==================================================
+
+This layer must sit AFTER:
+- decision tree
+- mutation engine
+- transformation engine
+
+It should format the final response based on what action was taken.
+
+==================================================
+DELIVERABLES
+==================================================
+
+At the end, provide:
+1. response modes implemented
+2. templates used for each mode
+3. how responses are selected based on actions
+4. examples of before vs after responses
+5. improvements in consistency and clarity

@@ -18,6 +18,12 @@ import {
 import { type IntentResult, buildIntentPromptHint } from "./intent";
 import { type ActionDecision, buildPreservationContext } from "./decision";
 import {
+  type ResponseMode,
+  buildResponseModePrompt,
+  type ResponseModeContext,
+  logResponseMode,
+} from "./response-templates";
+import {
   transformProgram,
   resolveTransformType,
   buildTransformPromptHint,
@@ -605,6 +611,7 @@ export interface AIResponseOptions {
   intentResult?: IntentResult | null;
   actionDecision?: ActionDecision | null;
   transformHint?: string;
+  responseMode?: ResponseMode;
 }
 
 // ─── Main entry point ────────────────────────────────────────────────────────
@@ -624,6 +631,7 @@ export async function generateAIResponse(
     intentResult,
     actionDecision,
     transformHint,
+    responseMode,
   } = options;
 
   const [profile] = await db
@@ -671,7 +679,21 @@ export async function generateAIResponse(
     ? buildPreservationContext(actionDecision.preservationRules, actionDecision.actionType)
     : null;
 
-  const extras = [adaptationContext, memoryContext, insightHint, conversionHint, intentHint, editContext, preservationContext, transformHint]
+  // Build response mode formatting prompt — always injected last so it takes priority
+  let responseModePrompt: string | null = null;
+  if (responseMode && actionDecision) {
+    const rmCtx: ResponseModeContext = {
+      actionType: actionDecision.actionType,
+      mode: responseMode,
+      targetDescription: actionDecision.targetDescription,
+      inferenceRationale: actionDecision.inferenceRationale,
+      clarifyingQuestion: actionDecision.clarifyingQuestion,
+    };
+    responseModePrompt = buildResponseModePrompt(rmCtx);
+    logResponseMode(rmCtx);
+  }
+
+  const extras = [adaptationContext, memoryContext, insightHint, conversionHint, intentHint, editContext, preservationContext, transformHint, responseModePrompt]
     .filter(Boolean)
     .join("\n\n");
   const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;

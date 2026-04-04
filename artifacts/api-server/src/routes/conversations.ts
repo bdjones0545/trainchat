@@ -7,6 +7,10 @@ import { generateAIResponse, type ProgramStructure } from "../lib/ai";
 import { classifyIntent, logIntentSummary } from "../lib/intent";
 import { resolveAction, logDecisionSummary } from "../lib/decision";
 import {
+  selectResponseMode,
+  formatShortCircuitResponse,
+} from "../lib/response-templates";
+import {
   transformProgram,
   resolveTransformType,
   buildTransformPromptHint,
@@ -316,15 +320,22 @@ Keep it helpful and intelligent, never promotional.`;
   const actionDecision = resolveAction(intentResult, latestStructuredProgram, parsed.data.content);
   logDecisionSummary(parsed.data.content, intentResult, actionDecision, hasActiveProgram);
 
+  // ── Response Mode Selection — determines how this response will be formatted ──
+  const responseMode = selectResponseMode(actionDecision.actionType);
+
   // ── Intent-specific routing ───────────────────────────────────────────────
 
   // RETRIEVE_CURRENT_PROGRAM — no AI call needed, return current program directly
   if (intentResult.type === "RETRIEVE_CURRENT_PROGRAM" && latestStructuredProgram) {
     logger.info("[IntentRouter] Handling RETRIEVE_CURRENT_PROGRAM — returning current program without AI call");
+    const retrieveContent = formatShortCircuitResponse({
+      mode: "EXECUTION_RESPONSE",
+      hasActiveProgram: true,
+    });
     const [assistantMessage] = await db.insert(messagesTable).values({
       conversationId: params.data.id,
       role: "assistant",
-      content: "Here's your current program. Everything is in the right panel.",
+      content: retrieveContent,
       structuredData: JSON.stringify(latestStructuredProgram),
     }).returning();
 
@@ -365,10 +376,15 @@ Keep it helpful and intelligent, never promotional.`;
       { actionType: actionDecision.actionType, question: actionDecision.clarifyingQuestion },
       "[DecisionTree] Returning clarifying question — skipping AI call"
     );
+    const clarifyContent = formatShortCircuitResponse({
+      mode: "CLARIFICATION_RESPONSE",
+      hasActiveProgram,
+      clarifyingQuestion: actionDecision.clarifyingQuestion,
+    });
     const [assistantMessage] = await db.insert(messagesTable).values({
       conversationId: params.data.id,
       role: "assistant",
-      content: actionDecision.clarifyingQuestion,
+      content: clarifyContent,
       structuredData: null,
     }).returning();
 
@@ -401,12 +417,14 @@ Keep it helpful and intelligent, never promotional.`;
   // SAVE_PROGRAM — respond with save signal (frontend handles actual save)
   if (intentResult.type === "SAVE_PROGRAM") {
     logger.info("[IntentRouter] Handling SAVE_PROGRAM — responding with save confirmation");
+    const saveContent = formatShortCircuitResponse({
+      mode: "EXECUTION_RESPONSE",
+      hasActiveProgram: !!latestStructuredProgram,
+    });
     const [assistantMessage] = await db.insert(messagesTable).values({
       conversationId: params.data.id,
       role: "assistant",
-      content: latestStructuredProgram
-        ? "Done. Your program has been saved and is ready in the right panel whenever you need it."
-        : "There's no active program to save yet. Build one first and I'll lock it in for you.",
+      content: saveContent,
       structuredData: latestStructuredProgram ? JSON.stringify(latestStructuredProgram) : null,
     }).returning();
 
@@ -505,6 +523,7 @@ Keep it helpful and intelligent, never promotional.`;
       intentResult,
       actionDecision,
       transformHint: transformHint || undefined,
+      responseMode,
     }
   );
 
