@@ -15,6 +15,11 @@
 import { logger } from "./logger";
 import { ProgramStructure, ProgramDay, Exercise } from "./ai";
 import { UserProfile } from "./training-intelligence";
+import {
+  redistributeExercises,
+  buildRedistributionContext,
+  logRedistributionSummary,
+} from "./exercise-redistribution";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1009,7 +1014,57 @@ export function transformProgram(
   }
 
   log.resultingSplit = newSplitLabel;
-  log.validationResults = validateTransform(days, profile);
+
+  // ── Exercise Redistribution Quality Pass ─────────────────────────────────
+  // Applies exercise-level decisions (PRESERVE, MOVE, REPLACE, REMOVE, ADD)
+  // to the rough day structure produced by the transformation algorithm.
+  // This pass enforces session-purpose awareness, fatigue budgets, movement
+  // balance, redundancy removal, and NSCA ordering.
+  //
+  // Applied to all architecture-changing transformations. Skipped for no-op fallback.
+  let finalDays = days;
+  {
+    try {
+      const redistCtx = buildRedistributionContext(profile);
+      const redistResult = redistributeExercises(days, pool, redistCtx, request.type);
+      logRedistributionSummary(redistResult);
+
+      finalDays = redistResult.days;
+
+      // Merge redistribution decisions into the transformation log
+      const decisions = redistResult.decisionLog;
+      log.preservedExercises = decisions
+        .filter((d) => d.decision === "PRESERVE_IN_PLACE")
+        .map((d) => d.exerciseName);
+      log.removedExercises = decisions
+        .filter((d) => ["REMOVE_AS_REDUNDANT", "REMOVE_FOR_FATIGUE", "REMOVE_FOR_TIME", "REMOVE_FOR_CONFLICT"].includes(d.decision))
+        .map((d) => d.exerciseName);
+      log.replacedExercises = decisions
+        .filter((d) => d.decision === "REPLACE_WITH_SIMILAR")
+        .map((d) => `${d.exerciseName} → ${d.replacedBy ?? "similar"}`);
+      log.addedExercises = decisions
+        .filter((d) => d.decision === "ADD_NEW_EXERCISE")
+        .map((d) => d.exerciseName);
+
+      // Extend validation results with balance report
+      const balance = redistResult.weeklyBalanceReport;
+      for (const issue of balance.balanceIssues) {
+        log.validationResults.push({ check: "weekly balance", passed: false, note: issue });
+      }
+      if (balance.balanceIssues.length === 0) {
+        log.validationResults.push({
+          check: "weekly balance",
+          passed: true,
+          note: `push ${balance.pushCount} / pull ${balance.pullCount} / squat ${balance.squatCount} / hinge ${balance.hingeCount}`,
+        });
+      }
+    } catch (err) {
+      logger.error({ err }, "[SplitTransform] Redistribution pass failed — using rough transformation output");
+      finalDays = days;
+    }
+  }
+
+  log.validationResults.push(...validateTransform(finalDays, profile));
 
   const failedChecks = log.validationResults.filter((v) => !v.passed);
 
@@ -1017,11 +1072,12 @@ export function transformProgram(
     {
       resultingSplit: log.resultingSplit,
       targetDays,
-      preserved: log.preservedExercises,
-      removed: log.removedExercises,
-      added: log.addedExercises,
+      preserved: log.preservedExercises.length,
+      removed: log.removedExercises.length,
+      replaced: log.replacedExercises.length,
+      added: log.addedExercises.length,
       validationPassed: failedChecks.length === 0,
-      failedChecks: failedChecks.map((f) => f.check),
+      failedChecks: failedChecks.map((f) => f.note ?? f.check),
     },
     "[SplitTransform] Transformation complete"
   );
@@ -1029,7 +1085,7 @@ export function transformProgram(
   const transformedProgram: ProgramStructure = {
     ...program,
     splitType: newSplitType,
-    days,
+    days: finalDays,
   };
 
   const coachResponse = buildCoachResponse(request.type, log);

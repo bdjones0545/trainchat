@@ -1,0 +1,229 @@
+Build the TrainChat exercise redistribution quality layer.
+
+CURRENT PROBLEM:
+The agent is gaining the ability to restructure programs and transform splits, but the quality of those transformations depends heavily on how exercises are redistributed. Right now, there is a risk that transformed programs will feel mechanically rearranged rather than intelligently reprogrammed.
+
+GOAL:
+Create an exercise redistribution quality layer that decides exactly which exercises should stay, move, be replaced, or be removed when a program is transformed or structurally edited.
+
+This layer should work underneath the split transformation engine and ensure that structural edits feel like real coaching decisions rather than random reshuffling.
+
+==================================================
+1. CORE PURPOSE
+==================================================
+
+The exercise redistribution layer should:
+
+- evaluate the current exercise list inside a structured program
+- determine which exercises are highest priority
+- determine which exercises fit the new structure
+- decide which exercises to preserve, relocate, replace, or remove
+- maintain program quality, movement balance, and session realism
+
+The system should preserve the spirit of the program while improving fit to the new structure.
+
+==================================================
+2. EXERCISE DECISION TYPES
+==================================================
+
+For every exercise in the current program, assign one of these actions during a transformation:
+
+- PRESERVE_IN_PLACE
+- MOVE_TO_DIFFERENT_DAY
+- REPLACE_WITH_SIMILAR
+- REMOVE_AS_REDUNDANT
+- REMOVE_FOR_FATIGUE
+- REMOVE_FOR_TIME
+- REMOVE_FOR_CONFLICT
+- ADD_NEW_EXERCISE_IF_NEEDED
+
+Each exercise should be evaluated intentionally.
+
+==================================================
+3. PRIORITY LOGIC
+==================================================
+
+Build a quality hierarchy for deciding what to preserve first.
+
+Preserve first:
+- key compound lifts
+- goal-specific high-value exercises
+- exercises strongly aligned with the user’s constraints and preferences
+- pain-tolerable movements that are working well
+- exercises important for progression structure
+
+Lower priority:
+- redundant accessories
+- overlapping isolation work
+- low-value filler
+- exercises that no longer fit the split or session length
+- exercises that increase fatigue disproportionately
+
+The system should act like a coach deciding what is truly important.
+
+==================================================
+4. REDISTRIBUTION RULES
+==================================================
+
+When transforming a program:
+
+- move compatible exercises to better days when possible
+- group exercises by movement logic and session purpose
+- avoid overloading one day with too many compounds
+- avoid stacking too much fatigue in a single session
+- keep exercise order sensible
+- maintain realistic session length
+
+Examples:
+- if a lower accessory fits better on another full-body day, move it
+- if upper body accessory work is excessive, trim rather than blindly preserve
+- if an exercise conflicts with pain or equipment constraints, replace it rather than forcing it in
+
+==================================================
+5. REPLACEMENT LOGIC
+==================================================
+
+When an exercise should not remain in the transformed program, replace it with a similar exercise when appropriate.
+
+Replacement should preserve:
+- movement pattern
+- goal relevance
+- equipment reality
+- difficulty level when possible
+- pain tolerance when relevant
+
+Examples:
+- replace barbell movement with dumbbell or machine equivalent if needed
+- replace highly fatiguing accessory with more efficient alternative
+- replace less athletic isolation work with more transferable movement when shifting toward performance
+
+Do not use random replacements.
+
+==================================================
+6. REDUNDANCY DETECTION
+==================================================
+
+Implement logic to detect redundancy.
+
+Examples of redundancy:
+- too many similar chest accessories
+- repeated movement patterns with low marginal value
+- excessive overlap between compounds and accessories
+- unnecessary duplicate trunk work
+- too many exercises competing for the same adaptation in limited session time
+
+When redundancy exists, trim intelligently.
+
+==================================================
+7. SESSION PURPOSE AWARENESS
+==================================================
+
+Each day should have a purpose.
+
+The redistribution layer should understand whether a session is:
+- full-body strength biased
+- lower biased
+- upper biased
+- athletic/power focused
+- hypertrophy focused
+- recovery or lower-stress
+
+Exercises should be distributed according to the purpose of the day.
+
+Do not just spread exercises evenly without respecting session identity.
+
+==================================================
+8. FATIGUE / TIME AWARENESS
+==================================================
+
+Redistribution must account for:
+- total session time
+- exercise count
+- fatigue density
+- back-to-back session overlap
+- lower body stress accumulation
+- user recovery needs
+
+Examples:
+- if session length is short, remove low-value accessories first
+- if fatigue is already high, do not preserve every demanding movement
+- if a transformed day becomes too dense, simplify it intelligently
+
+==================================================
+9. MOVEMENT BALANCE RULES
+==================================================
+
+Ensure the final transformed program preserves healthy movement balance where relevant.
+
+Examples:
+- maintain push/pull balance
+- maintain squat/hinge presence when appropriate
+- maintain trunk work appropriately
+- preserve unilateral work if relevant
+- do not let the transformed program drift into imbalance due to poor redistribution
+
+==================================================
+10. EXERCISE ORDERING QUALITY
+==================================================
+
+After redistribution, ensure exercise order still makes sense.
+
+Ordering principles:
+- high-skill / explosive work early
+- main compounds before lower-value accessories
+- fatiguing work sequenced intelligently
+- trunk/accessory/finisher work later when appropriate
+
+If exercises move to new days, reorder them as needed rather than preserving bad original order.
+
+==================================================
+11. INTEGRATION WITH SPLIT TRANSFORMATION ENGINE
+==================================================
+
+This layer should work directly with structural transformations such as:
+- upper/lower to full body
+- 4 days to 3 days
+- more athletic
+- less fatiguing overall
+- more efficient structure
+
+The split transformation engine chooses the new architecture.
+The redistribution layer determines how exercises are intelligently carried into that new architecture.
+
+==================================================
+12. DEBUGGING / OBSERVABILITY
+==================================================
+
+For each transformation, log:
+- exercises preserved
+- exercises moved
+- exercises replaced
+- exercises removed
+- reason for each action
+- session time/fatigue adjustments
+
+This is critical for debugging and refinement.
+
+==================================================
+13. ARCHITECTURE REQUIREMENTS
+==================================================
+
+Implement this as a clean reusable module separate from:
+- raw LLM responses
+- split transformation logic
+- final UI rendering
+
+This should be a real decision system for exercise-level restructuring.
+
+==================================================
+14. DELIVERABLES
+==================================================
+
+At the end, provide:
+1. exercise decision types implemented
+2. preservation and replacement logic used
+3. redundancy detection rules
+4. session purpose logic
+5. fatigue/time awareness logic
+6. movement balance rules
+7. examples of transformed exercise redistribution before vs after
