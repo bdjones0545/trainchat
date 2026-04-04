@@ -40,11 +40,19 @@ import {
   TrendingDown,
   Flame,
   Youtube,
+  Menu,
+  MessageSquare,
+  Settings,
+  CreditCard,
+  LogOut,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useGetMe } from "@workspace/api-client-react";
+import { useLogout } from "@workspace/api-client-react";
 import { customFetch } from "@workspace/api-client-react";
+import { useLocation } from "wouter";
 import TopNav from "@/components/layout/TopNav";
+import MobileSlideLayout, { type SlidePanel } from "@/components/layout/MobileSlideLayout";
 import EditDrawer, {
   type EditTarget,
   type EditResult,
@@ -54,6 +62,7 @@ import ChangeDetailDrawer from "@/components/training/ChangeDetailDrawer";
 import ReadinessCheckIn from "@/components/training/ReadinessCheckIn";
 import SessionFeedback from "@/components/training/SessionFeedback";
 import InsightsPanel from "@/components/training/InsightsPanel";
+import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 
 // ─── API helpers ─────────────────────────────────────────────────────────────
 
@@ -1347,6 +1356,7 @@ export default function SystemPage() {
     weeks: new Set(),
     phases: new Set(),
   });
+  const [mobilePanel, setMobilePanel] = useState<SlidePanel>(null);
 
   // Phase 4: change log detail viewer
   const [changeDetailId, setChangeDetailId] = useState<number | null>(null);
@@ -1358,6 +1368,8 @@ export default function SystemPage() {
 
   const queryClient = useQueryClient();
   const { data: me } = useGetMe();
+  const [, setLocation] = useLocation();
+  const logout = useLogout();
 
   const { data: activeSystem, isLoading: systemLoading } = useQuery({
     queryKey: ["training-system-active"],
@@ -1509,13 +1521,208 @@ export default function SystemPage() {
 
   const hasSystem = !!activeSystem;
   const userName = me?.name ?? "Athlete";
+  const initials = userName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
+
+  function handleLogout() {
+    logout.mutate(undefined, {
+      onSuccess: () => {
+        queryClient.clear();
+        setLocation("/login");
+      },
+    });
+  }
+
+  const leftPanelContent = (
+    <div className="flex flex-col h-full">
+      {/* User identity */}
+      <div className="px-5 py-5 border-b border-border">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-sm font-bold text-primary flex-shrink-0">
+            {initials}
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground truncate">{userName}</p>
+            <p className="text-[11px] text-muted-foreground">Performance Athlete</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+        {/* App navigation */}
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-3">Navigate</p>
+        <button
+          onClick={() => { setLocation("/chat"); setMobilePanel(null); }}
+          className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+        >
+          <MessageSquare className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <span>Coach Chat</span>
+        </button>
+        <button
+          onClick={() => { setLocation("/system"); setMobilePanel(null); }}
+          className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-semibold bg-primary/10 text-primary transition-all text-left"
+        >
+          <Target className="w-4 h-4 flex-shrink-0" />
+          <span>Your System</span>
+        </button>
+
+        {/* System tabs */}
+        {hasSystem && (
+          <>
+            <div className="my-3 h-px bg-border" />
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-3">Your System</p>
+            {TABS.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => { setActiveTab(id); setMobilePanel(null); }}
+                className={`w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium transition-all text-left ${
+                  activeTab === id
+                    ? "bg-primary/10 text-primary"
+                    : "text-foreground hover:bg-muted/60 active:bg-muted/80"
+                }`}
+              >
+                <Icon className="w-4 h-4 flex-shrink-0" />
+                <span>{label}</span>
+              </button>
+            ))}
+          </>
+        )}
+
+        <div className="my-3 h-px bg-border" />
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-3">Account</p>
+        <button
+          onClick={() => setMobilePanel(null)}
+          className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+        >
+          <Settings className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <span>Settings</span>
+        </button>
+        <button
+          onClick={() => setMobilePanel(null)}
+          className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+        >
+          <CreditCard className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <span>Billing &amp; Plans</span>
+        </button>
+      </div>
+
+      {/* Logout */}
+      <div className="border-t border-border px-3 py-3">
+        <button
+          onClick={handleLogout}
+          disabled={logout.isPending}
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-muted-foreground hover:text-red-400 hover:bg-red-500/5 transition-all text-left"
+        >
+          <LogOut className="w-4 h-4 flex-shrink-0" />
+          <span>Sign Out</span>
+        </button>
+      </div>
+    </div>
+  );
+
+  const rightPanelContent = (
+    <div className="px-4 py-4 space-y-4">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-2">Coach Insights</p>
+      <InsightsPanel
+        onApplied={(result) => { handleInsightApplied(result); setMobilePanel(null); }}
+        onModify={(prefill) => { handleInsightModify(prefill); setMobilePanel(null); }}
+      />
+      <div className="h-px bg-border my-4" />
+      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-2">Quick Actions</p>
+      <div className="space-y-2">
+        <button
+          onClick={() => { setShowReadinessCheckIn(true); setMobilePanel(null); }}
+          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border border-border bg-card hover:border-primary/30 hover:bg-primary/5 transition-all text-left"
+        >
+          <Activity className="w-4 h-4 text-primary flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-foreground">Daily Check-In</p>
+            <p className="text-[11px] text-muted-foreground">Log how you're feeling today</p>
+          </div>
+        </button>
+        <button
+          onClick={() => { setFeedbackSessionLabel(undefined); setShowSessionFeedback(true); setMobilePanel(null); }}
+          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border border-border bg-card hover:border-primary/30 hover:bg-primary/5 transition-all text-left"
+        >
+          <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-foreground">Log Session</p>
+            <p className="text-[11px] text-muted-foreground">Mark today's workout complete</p>
+          </div>
+        </button>
+      </div>
+    </div>
+  );
+
+  const bottomPanelContent = hasSystem ? (
+    <div className="flex flex-col h-full">
+      <div className="px-4 py-3 flex-shrink-0">
+        <p className="text-[11px] text-muted-foreground text-center">Your AI coach is ready to adapt your plan</p>
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 pb-2">
+        <div className="space-y-2">
+          {[
+            { label: "More intense", req: "Increase the overall intensity for this session" },
+            { label: "Less volume", req: "Reduce the total volume this week" },
+            { label: "Rest day today", req: "Convert today into a full recovery day" },
+            { label: "Shorter session", req: "Shorten today's session — I'm pressed for time" },
+            { label: "Travel mode", req: "I only have dumbbells — adapt accordingly" },
+            { label: "More explosive", req: "Add explosive emphasis to today's training" },
+          ].map(({ label, req }) => (
+            <button
+              key={label}
+              className="w-full text-left px-4 py-3.5 rounded-xl border border-border bg-card hover:border-primary/30 hover:bg-primary/5 transition-all"
+              onClick={() => {
+                setMobilePanel(null);
+              }}
+            >
+              <p className="text-sm font-semibold text-foreground">{label}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex-shrink-0 border-t border-border bg-background/98">
+        <VibeBar
+          onEditComplete={(result) => { handleGlobalEditComplete(result); setMobilePanel(null); }}
+          onUndone={handleRestored}
+        />
+      </div>
+    </div>
+  ) : undefined;
 
   return (
-    <div className="flex flex-col h-screen bg-background overflow-hidden">
-      <TopNav userName={userName} />
+    <MobileSlideLayout
+      activePanel={mobilePanel}
+      onPanelClose={() => setMobilePanel(null)}
+      leftPanel={leftPanelContent}
+      rightPanel={rightPanelContent}
+      bottomPanel={bottomPanelContent}
+    >
+      {/* ─── Mobile header (mobile only) ─── */}
+      <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border bg-background/95 backdrop-blur-sm flex-shrink-0 z-10">
+        <button
+          onClick={() => setMobilePanel("left")}
+          className="w-10 h-10 flex items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all"
+          aria-label="Open menu"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+        <img src={trainChatLogo} alt="TrainChat" className="h-6 object-contain" />
+        <button
+          onClick={() => setMobilePanel("right")}
+          className="w-10 h-10 flex items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all"
+          aria-label="Advanced tools"
+        >
+          <SlidersHorizontal className="w-5 h-5" />
+        </button>
+      </div>
 
-      {/* Page header */}
-      <div className="px-4 pt-5 pb-4 border-b border-border bg-background flex-shrink-0">
+      {/* ─── Desktop TopNav (desktop only) ─── */}
+      <div className="hidden md:block">
+        <TopNav userName={userName} />
+      </div>
+
+      {/* ─── Desktop page header (desktop only) ─── */}
+      <div className="hidden md:block px-4 pt-5 pb-4 border-b border-border bg-background flex-shrink-0">
         <div className="max-w-2xl mx-auto">
           <div className="flex items-center gap-3 mb-1">
             <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
@@ -1531,9 +1738,31 @@ export default function SystemPage() {
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* ─── Mobile tab bar (mobile only, horizontal scroll) ─── */}
       {hasSystem && (
-        <div className="flex-shrink-0 border-b border-border bg-background/95 backdrop-blur-sm">
+        <div className="md:hidden flex-shrink-0 border-b border-border bg-background/95 backdrop-blur-sm overflow-x-auto" style={{ scrollbarWidth: "none", msOverflowStyle: "none" } as React.CSSProperties}>
+          <div className="flex px-2">
+            {TABS.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`flex items-center gap-1.5 px-4 py-3.5 text-xs font-semibold border-b-2 whitespace-nowrap flex-shrink-0 transition-all duration-150 ${
+                  activeTab === id
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground"
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ─── Desktop tabs (desktop only) ─── */}
+      {hasSystem && (
+        <div className="hidden md:block flex-shrink-0 border-b border-border bg-background/95 backdrop-blur-sm">
           <div className="max-w-2xl mx-auto px-4">
             <div className="flex gap-0">
               {TABS.map(({ id, label, icon: Icon }) => (
@@ -1555,12 +1784,12 @@ export default function SystemPage() {
         </div>
       )}
 
-      {/* Session edit history — hidden on History tab (redundant there) */}
+      {/* Session edit history — hidden on History tab */}
       {hasSystem && recentEdits.length > 0 && activeTab !== "history" && (
         <RecentEditsBar edits={recentEdits} />
       )}
 
-      {/* Content area */}
+      {/* ─── Content area ─── */}
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="max-w-2xl mx-auto px-4 py-5">
           {systemLoading ? (
@@ -1574,7 +1803,7 @@ export default function SystemPage() {
             <>
               {activeTab === "today" && (
                 <div className="space-y-5">
-                  {/* Phase 5: Readiness check-in prompt (if no entry today) */}
+                  {/* Readiness check-in prompt */}
                   {readinessToday === null && (
                     <button
                       onClick={() => setShowReadinessCheckIn(true)}
@@ -1593,7 +1822,7 @@ export default function SystemPage() {
                     </button>
                   )}
 
-                  {/* Phase 5: readiness status (if already checked in today) */}
+                  {/* Readiness logged today */}
                   {readinessToday && (
                     <div className="flex items-center gap-2 rounded-xl border border-green-500/20 bg-green-500/5 px-4 py-2.5">
                       <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
@@ -1607,11 +1836,13 @@ export default function SystemPage() {
                     </div>
                   )}
 
-                  {/* Phase 5: Coach Insights panel */}
-                  <InsightsPanel
-                    onApplied={handleInsightApplied}
-                    onModify={handleInsightModify}
-                  />
+                  {/* Coach Insights — desktop only (mobile: in right panel) */}
+                  <div className="hidden md:block">
+                    <InsightsPanel
+                      onApplied={handleInsightApplied}
+                      onModify={handleInsightModify}
+                    />
+                  </div>
 
                   {/* Today's session */}
                   <TodayView
@@ -1621,7 +1852,7 @@ export default function SystemPage() {
                     onQuickEditComplete={handleEditComplete}
                   />
 
-                  {/* Phase 5: Log session button */}
+                  {/* Log session button */}
                   <div className="flex justify-center pb-2">
                     <button
                       onClick={() => {
@@ -1662,15 +1893,31 @@ export default function SystemPage() {
         </div>
       </div>
 
-      {/* VibeBar — Phase C: always-on fast iteration panel */}
+      {/* ─── Desktop VibeBar (desktop only) ─── */}
       {hasSystem && activeTab !== "history" && (
-        <VibeBar
-          onEditComplete={handleGlobalEditComplete}
-          onUndone={handleRestored}
-        />
+        <div className="hidden md:block">
+          <VibeBar
+            onEditComplete={handleGlobalEditComplete}
+            onUndone={handleRestored}
+          />
+        </div>
       )}
 
-      {/* Contextual edit drawer */}
+      {/* ─── Mobile coach bar (mobile only) ─── */}
+      {hasSystem && activeTab !== "history" && (
+        <div className="md:hidden border-t border-border bg-background/98 backdrop-blur-sm flex-shrink-0 px-4 py-3 safe-area-bottom">
+          <button
+            onClick={() => setMobilePanel("bottom")}
+            className="w-full flex items-center gap-3 bg-card border border-border rounded-2xl px-4 py-3.5 hover:border-primary/40 active:scale-[0.98] transition-all duration-150"
+          >
+            <Sparkles className="w-4 h-4 text-primary/70 flex-shrink-0" />
+            <span className="flex-1 text-left text-sm text-muted-foreground/60">Ask your coach or give a command…</span>
+            <ChevronUp className="w-4 h-4 text-muted-foreground/40 flex-shrink-0" />
+          </button>
+        </div>
+      )}
+
+      {/* ─── Contextual edit drawer ─── */}
       {editTarget && (
         <EditDrawer
           target={editTarget}
@@ -1680,7 +1927,7 @@ export default function SystemPage() {
         />
       )}
 
-      {/* Phase 4: Change detail drawer (history before/after + restore) */}
+      {/* ─── Change detail drawer ─── */}
       {changeDetailId !== null && (
         <ChangeDetailDrawer
           changeId={changeDetailId}
@@ -1693,7 +1940,7 @@ export default function SystemPage() {
         />
       )}
 
-      {/* Phase 5: Daily readiness check-in modal */}
+      {/* ─── Daily readiness check-in modal ─── */}
       {showReadinessCheckIn && (
         <ReadinessCheckIn
           onClose={() => setShowReadinessCheckIn(false)}
@@ -1704,7 +1951,7 @@ export default function SystemPage() {
         />
       )}
 
-      {/* Phase 5: Post-session feedback modal */}
+      {/* ─── Post-session feedback modal ─── */}
       {showSessionFeedback && (
         <SessionFeedback
           sessionLabel={feedbackSessionLabel}
@@ -1714,6 +1961,6 @@ export default function SystemPage() {
           }}
         />
       )}
-    </div>
+    </MobileSlideLayout>
   );
 }

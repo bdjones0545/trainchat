@@ -1,6 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
-import { SendHorizontal, Zap, PanelLeftClose, PanelLeft, Activity } from "lucide-react";
+import {
+  SendHorizontal, Zap, PanelLeftClose, PanelLeft, Activity,
+  Menu, Target, Settings, CreditCard, LogOut, SlidersHorizontal,
+  MessageSquare, Plus,
+} from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useGetMe,
@@ -12,11 +16,13 @@ import {
   useCreateProgram,
   useListMemories,
   useListInsights,
+  useLogout,
   getListConversationsQueryKey,
   getListMessagesQueryKey,
 } from "@workspace/api-client-react";
 import { customFetch } from "@workspace/api-client-react";
 import TopNav from "@/components/layout/TopNav";
+import MobileSlideLayout, { type SlidePanel } from "@/components/layout/MobileSlideLayout";
 import ChatSidebar from "@/components/chat/ChatSidebar";
 import MessageBubble from "@/components/chat/MessageBubble";
 import TypingIndicator from "@/components/chat/TypingIndicator";
@@ -29,6 +35,7 @@ import StreakBadge from "@/components/chat/StreakBadge";
 import SessionLogModal from "@/components/chat/SessionLogModal";
 import PaywallModal from "@/components/PaywallModal";
 import PricingModal from "@/components/PricingModal";
+import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 
 const STARTER_PROMPTS = [
   "Build me a 4-day push/pull program",
@@ -86,6 +93,9 @@ export default function Chat() {
   const [showSessionLog, setShowSessionLog] = useState(false);
   const [sessionLogSubmitting, setSessionLogSubmitting] = useState(false);
   const [messagesUsed, setMessagesUsed] = useState(0);
+  const [mobilePanel, setMobilePanel] = useState<SlidePanel>(null);
+
+  const logout = useLogout();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -331,12 +341,152 @@ export default function Chat() {
   }
 
   const firstName = me?.name?.split(" ")[0] ?? "Athlete";
+  const userName = me?.name ?? "User";
+  const initials = userName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
+
+  function handleLogout() {
+    logout.mutate(undefined, {
+      onSuccess: () => {
+        queryClient.clear();
+        setLocation("/login");
+      },
+    });
+  }
+
+  const chatLeftPanel = (
+    <div className="flex flex-col h-full">
+      {/* User identity */}
+      <div className="px-5 py-5 border-b border-border">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-sm font-bold text-primary flex-shrink-0">
+            {initials}
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground truncate">{userName}</p>
+            <p className="text-[11px] text-muted-foreground">
+              {currentStreak > 0 ? `${currentStreak} day streak 🔥` : "Performance Athlete"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-3">Navigate</p>
+        <button
+          onClick={() => { setLocation("/chat"); setMobilePanel(null); }}
+          className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-semibold bg-primary/10 text-primary transition-all text-left"
+        >
+          <MessageSquare className="w-4 h-4 flex-shrink-0" />
+          <span>Coach Chat</span>
+        </button>
+        <button
+          onClick={() => { setLocation("/system"); setMobilePanel(null); }}
+          className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+        >
+          <Target className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <span>Your System</span>
+        </button>
+
+        {/* New conversation */}
+        <div className="my-3 h-px bg-border" />
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-3">Conversations</p>
+        <button
+          onClick={() => { handleNewConversation(); setMobilePanel(null); }}
+          className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+        >
+          <Plus className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <span>New Conversation</span>
+        </button>
+        {conversations.slice(0, 8).map((convo: any) => (
+          <button
+            key={convo.id}
+            onClick={() => { handleSelectConvo(convo.id); setMobilePanel(null); }}
+            className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm transition-all text-left ${
+              convo.id === activeConvoId
+                ? "bg-primary/10 text-primary font-semibold"
+                : "font-medium text-foreground hover:bg-muted/60 active:bg-muted/80"
+            }`}
+          >
+            <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 opacity-50" />
+            <span className="truncate">{convo.title ?? "Conversation"}</span>
+          </button>
+        ))}
+
+        <div className="my-3 h-px bg-border" />
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-3">Account</p>
+        <button
+          onClick={() => { setShowReadiness(true); setMobilePanel(null); }}
+          className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+        >
+          <Activity className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <span>Daily Check-In</span>
+        </button>
+        {!isPremium && (
+          <button
+            onClick={() => { setShowPricing(true); setMobilePanel(null); }}
+            className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium text-primary hover:bg-primary/5 active:bg-primary/10 transition-all text-left"
+          >
+            <Zap className="w-4 h-4 flex-shrink-0" />
+            <span>Upgrade to Pro</span>
+          </button>
+        )}
+        <button
+          onClick={() => setMobilePanel(null)}
+          className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+        >
+          <Settings className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <span>Settings</span>
+        </button>
+      </div>
+
+      {/* Logout */}
+      <div className="border-t border-border px-3 py-3">
+        <button
+          onClick={handleLogout}
+          disabled={logout.isPending}
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-muted-foreground hover:text-red-400 hover:bg-red-500/5 transition-all text-left"
+        >
+          <LogOut className="w-4 h-4 flex-shrink-0" />
+          <span>Sign Out</span>
+        </button>
+      </div>
+    </div>
+  );
+
+  const chatRightPanel = (
+    <div className="flex flex-col h-full">
+      <ReadinessSummary />
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {latestProgram ? (
+          <ChatOutput
+            program={latestProgram}
+            onSave={handleSaveProgram}
+            onFeedback={() => { setShowFeedback(true); setMobilePanel(null); }}
+            onLogSession={() => { setShowSessionLog(true); setMobilePanel(null); }}
+            onUpgrade={() => { setShowPricing(true); setMobilePanel(null); }}
+            isSaving={isSaving}
+            isSaved={isSaved}
+            isPremium={isPremium}
+          />
+        ) : (
+          <InsightsPanel
+            insights={insights}
+            memories={memories}
+            isLoading={insightsLoading || memoriesLoading}
+          />
+        )}
+      </div>
+    </div>
+  );
 
   return (
-    <div className="h-screen flex flex-col bg-background overflow-hidden">
-      <TopNav userName={me?.name ?? "User"} extraContent={<StreakBadge streak={currentStreak} />} />
-
-      {/* Modals */}
+    <MobileSlideLayout
+      activePanel={mobilePanel}
+      onPanelClose={() => setMobilePanel(null)}
+      leftPanel={chatLeftPanel}
+      rightPanel={chatRightPanel}
+    >
+      {/* ─── Modals (always rendered, portal-like) ─── */}
       {showReadiness && (
         <ReadinessModal
           onClose={() => setShowReadiness(false)}
@@ -377,23 +527,54 @@ export default function Chat() {
         />
       )}
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar */}
-        {sidebarOpen && (
-          <ChatSidebar
-            conversations={conversations}
-            activeId={activeConvoId}
-            onSelect={handleSelectConvo}
-            onNew={handleNewConversation}
-          />
-        )}
+      {/* ─── Mobile header (mobile only) ─── */}
+      <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border bg-background/95 backdrop-blur-sm flex-shrink-0 z-10">
+        <button
+          onClick={() => setMobilePanel("left")}
+          className="w-10 h-10 flex items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all"
+          aria-label="Open menu"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+        <img src={trainChatLogo} alt="TrainChat" className="h-6 object-contain" />
+        <button
+          onClick={() => setMobilePanel("right")}
+          className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${
+            latestProgram
+              ? "text-primary bg-primary/10 hover:bg-primary/20"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+          } active:bg-muted/80`}
+          aria-label="Training output"
+        >
+          <SlidersHorizontal className="w-5 h-5" />
+        </button>
+      </div>
 
-        {/* Center chat */}
+      {/* ─── Desktop TopNav (desktop only) ─── */}
+      <div className="hidden md:block">
+        <TopNav userName={userName} extraContent={<StreakBadge streak={currentStreak} />} />
+      </div>
+
+      {/* ─── Main chat area ─── */}
+      <div className="flex-1 flex overflow-hidden min-h-0">
+        {/* Desktop Sidebar (desktop only) */}
+        <div className="hidden md:block">
+          {sidebarOpen && (
+            <ChatSidebar
+              conversations={conversations}
+              activeId={activeConvoId}
+              onSelect={handleSelectConvo}
+              onNew={handleNewConversation}
+            />
+          )}
+        </div>
+
+        {/* Center chat column */}
         <div className="flex-1 flex flex-col min-w-0 relative">
-          {/* Sidebar toggle */}
+          {/* Desktop sidebar toggle */}
           <button
             onClick={() => setSidebarOpen((s) => !s)}
-            className="absolute top-3 left-3 z-10 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-all duration-150"
+            className="hidden md:flex absolute top-3 left-3 z-10 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-all duration-150"
             title={sidebarOpen ? "Close sidebar" : "Open sidebar"}
           >
             {sidebarOpen ? (
@@ -419,7 +600,7 @@ export default function Chat() {
           )}
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-4 pt-12 pb-4">
+          <div className="flex-1 overflow-y-auto px-4 pt-4 md:pt-12 pb-4">
             {messagesLoading ? (
               <div className="flex justify-center items-center h-32">
                 <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
@@ -458,7 +639,7 @@ export default function Chat() {
             )}
           </div>
 
-          {/* Input */}
+          {/* Input bar */}
           <div className="flex-shrink-0 px-4 pb-5 pt-3 border-t border-border bg-background/80 backdrop-blur-sm">
             <div className="max-w-2xl mx-auto">
               <div className="flex justify-end mb-2">
@@ -497,61 +678,63 @@ export default function Chat() {
                   <SendHorizontal className="w-4 h-4" />
                 </button>
               </div>
-              <p className="text-[10px] text-muted-foreground/40 text-center mt-2">
+              <p className="hidden md:block text-[10px] text-muted-foreground/40 text-center mt-2">
                 Enter to send · Shift+Enter for new line
               </p>
             </div>
           </div>
         </div>
 
-        {/* Right panel */}
-        {rightPanelOpen ? (
-          <div className="w-72 flex-shrink-0 border-l border-border flex flex-col bg-background overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                Training Output
+        {/* Desktop right panel (desktop only) */}
+        <div className="hidden md:flex">
+          {rightPanelOpen ? (
+            <div className="w-72 flex-shrink-0 border-l border-border flex flex-col bg-background overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                  Training Output
+                </span>
+                <button
+                  onClick={() => setRightPanelOpen(false)}
+                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Hide
+                </button>
+              </div>
+              <ReadinessSummary />
+              <div className="flex-1 overflow-hidden">
+                {latestProgram ? (
+                  <ChatOutput
+                    program={latestProgram}
+                    onSave={handleSaveProgram}
+                    onFeedback={() => setShowFeedback(true)}
+                    onLogSession={() => setShowSessionLog(true)}
+                    onUpgrade={() => setShowPricing(true)}
+                    isSaving={isSaving}
+                    isSaved={isSaved}
+                    isPremium={isPremium}
+                  />
+                ) : (
+                  <InsightsPanel
+                    insights={insights}
+                    memories={memories}
+                    isLoading={insightsLoading || memoriesLoading}
+                  />
+                )}
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setRightPanelOpen(true)}
+              className="flex-shrink-0 w-8 border-l border-border bg-background flex items-center justify-center hover:bg-accent transition-all duration-150 group"
+              title="Show training output"
+            >
+              <span className="text-[9px] text-muted-foreground group-hover:text-foreground font-semibold uppercase tracking-widest rotate-90 whitespace-nowrap transition-colors">
+                Output
               </span>
-              <button
-                onClick={() => setRightPanelOpen(false)}
-                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Hide
-              </button>
-            </div>
-            <ReadinessSummary />
-            <div className="flex-1 overflow-hidden">
-              {latestProgram ? (
-                <ChatOutput
-                  program={latestProgram}
-                  onSave={handleSaveProgram}
-                  onFeedback={() => setShowFeedback(true)}
-                  onLogSession={() => setShowSessionLog(true)}
-                  onUpgrade={() => setShowPricing(true)}
-                  isSaving={isSaving}
-                  isSaved={isSaved}
-                  isPremium={isPremium}
-                />
-              ) : (
-                <InsightsPanel
-                  insights={insights}
-                  memories={memories}
-                  isLoading={insightsLoading || memoriesLoading}
-                />
-              )}
-            </div>
-          </div>
-        ) : (
-          <button
-            onClick={() => setRightPanelOpen(true)}
-            className="flex-shrink-0 w-8 border-l border-border bg-background flex items-center justify-center hover:bg-accent transition-all duration-150 group"
-            title="Show training output"
-          >
-            <span className="text-[9px] text-muted-foreground group-hover:text-foreground font-semibold uppercase tracking-widest rotate-90 whitespace-nowrap transition-colors">
-              Output
-            </span>
-          </button>
-        )}
+            </button>
+          )}
+        </div>
       </div>
-    </div>
+    </MobileSlideLayout>
   );
 }
