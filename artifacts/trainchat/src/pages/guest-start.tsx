@@ -45,6 +45,11 @@ interface GuestProgram {
   progressionPrinciple: string;
 }
 
+interface ChatMessage {
+  role: "agent" | "user";
+  text: string;
+}
+
 type GuestStep = "idle" | "onboarding" | "generating" | "output" | "locked";
 
 // ─── Onboarding Questions ─────────────────────────────────────────────────────
@@ -151,70 +156,442 @@ const QUESTIONS = [
   },
 ] as const;
 
-// ─── Entry Screen ─────────────────────────────────────────────────────────────
+// ─── Quick-Start Options ───────────────────────────────────────────────────────
 
-function EntryScreen({ onStart }: { onStart: () => void }) {
+const QUICK_START_OPTIONS = [
+  { label: "Build muscle", icon: "💪" },
+  { label: "Lose fat", icon: "🔥" },
+  { label: "Athletic performance", icon: "⚡" },
+  { label: "Reduce pain", icon: "🩺" },
+  { label: "Custom goal", icon: "✏️", isCustom: true },
+];
+
+// ─── Agent Chat Interface ─────────────────────────────────────────────────────
+
+function AgentChatUI({
+  messages,
+  onFirstInput,
+  showOptions,
+}: {
+  messages: ChatMessage[];
+  onFirstInput: (goal: string) => void;
+  showOptions: boolean;
+}) {
+  const [inputText, setInputText] = useState("");
+  const [showCustomInput, setShowCustomInput] = useState(false);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleOptionClick = (option: typeof QUICK_START_OPTIONS[number]) => {
+    if (option.isCustom) {
+      setShowCustomInput(true);
+      setTimeout(() => inputRef.current?.focus(), 100);
+      return;
+    }
+    onFirstInput(option.label);
+  };
+
+  const handleSubmit = () => {
+    const text = inputText.trim();
+    if (!text) return;
+    onFirstInput(text);
+    setInputText("");
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen px-4 text-center">
-      <div className="w-full max-w-lg space-y-8">
-        <div className="space-y-4">
-          <img src={logoSrc} alt="TrainChat" className="h-12 mx-auto" />
-          <div className="space-y-2">
-            <h1 className="text-4xl font-bold text-white tracking-tight leading-tight">
-              Elite AI Training,<br />
-              <span style={{ color: "hsl(199 89% 48%)" }}>personalized to you.</span>
-            </h1>
-            <p className="text-zinc-400 text-lg max-w-md mx-auto leading-relaxed">
-              Answer 8 questions. Get a real program built by an AI performance coach with PhD-level exercise science expertise.
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <div className="flex items-center justify-center gap-6 text-sm text-zinc-500">
-            <span className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
-              No signup required
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
-              Real programming
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
-              2 minutes
-            </span>
-          </div>
-          <button
-            onClick={onStart}
-            className="w-full py-4 px-8 rounded-xl font-semibold text-white text-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-            style={{ background: "hsl(199 89% 48%)", boxShadow: "0 0 30px hsl(199 89% 48% / 0.3)" }}
+    <div className="flex flex-col h-full">
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto px-4 pt-6 pb-4 space-y-4">
+        {messages.map((msg, i) => (
+          <div
+            key={i}
+            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-300`}
           >
-            Build My Program →
-          </button>
-          <p className="text-zinc-600 text-xs">Already have an account?{" "}
-            <a href="/login" className="underline" style={{ color: "hsl(199 89% 48%)" }}>Sign in</a>
-          </p>
+            {msg.role === "agent" && (
+              <div className="flex items-start gap-3 max-w-[85%]">
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                  style={{ background: "hsl(199 89% 48%)" }}
+                >
+                  <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <div
+                  className="rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed"
+                  style={{ background: "hsl(222 47% 13%)", border: "1px solid hsl(222 47% 20%)", color: "#e4e4e7" }}
+                >
+                  {msg.text}
+                </div>
+              </div>
+            )}
+            {msg.role === "user" && (
+              <div
+                className="rounded-2xl rounded-tr-sm px-4 py-3 text-sm leading-relaxed max-w-[85%]"
+                style={{ background: "hsl(199 89% 48%)", color: "#fff" }}
+              >
+                {msg.text}
+              </div>
+            )}
+          </div>
+        ))}
+
+        {/* Quick-start option chips — shown only before first input */}
+        {showOptions && (
+          <div className="flex flex-col gap-2 mt-2 animate-in fade-in slide-in-from-bottom-2 duration-400">
+            <div className="flex flex-wrap gap-2 pl-11">
+              {QUICK_START_OPTIONS.map((opt) => (
+                <button
+                  key={opt.label}
+                  onClick={() => handleOptionClick(opt)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 hover:scale-[1.02] active:scale-[0.97]"
+                  style={{
+                    background: "hsl(222 47% 13%)",
+                    border: "1px solid hsl(222 47% 22%)",
+                    color: "#a1a1aa",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = "hsl(199 89% 48% / 0.6)";
+                    (e.currentTarget as HTMLButtonElement).style.color = "#e4e4e7";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = "hsl(222 47% 22%)";
+                    (e.currentTarget as HTMLButtonElement).style.color = "#a1a1aa";
+                  }}
+                >
+                  <span>{opt.icon}</span>
+                  <span>{opt.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Input area */}
+      <div className="flex-shrink-0 px-4 pb-6 pt-3" style={{ borderTop: "1px solid hsl(222 47% 14%)" }}>
+        {showOptions && !showCustomInput ? (
+          <div className="text-center">
+            <button
+              onClick={() => {
+                setShowCustomInput(true);
+                setTimeout(() => inputRef.current?.focus(), 100);
+              }}
+              className="text-xs transition-colors"
+              style={{ color: "hsl(222 47% 40%)" }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.color = "hsl(199 89% 48%)")}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.color = "hsl(222 47% 40%)")}
+            >
+              Or type your own goal ↑
+            </button>
+          </div>
+        ) : (
+          <div
+            className="flex items-end gap-2 rounded-2xl focus-within:ring-1 transition-all duration-200"
+            style={{
+              background: "hsl(222 47% 11%)",
+              border: "1px solid hsl(222 47% 22%)",
+            }}
+            onFocusCapture={(e) => (e.currentTarget.style.borderColor = "hsl(199 89% 48% / 0.5)")}
+            onBlurCapture={(e) => (e.currentTarget.style.borderColor = "hsl(222 47% 22%)")}
+          >
+            <textarea
+              ref={inputRef}
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={1}
+              placeholder="Describe your goal..."
+              className="flex-1 resize-none bg-transparent px-4 py-3.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none leading-relaxed"
+              style={{ minHeight: "52px", maxHeight: "120px" }}
+              onInput={(e) => {
+                const t = e.target as HTMLTextAreaElement;
+                t.style.height = "auto";
+                t.style.height = Math.min(t.scrollHeight, 120) + "px";
+              }}
+            />
+            <button
+              onClick={handleSubmit}
+              disabled={!inputText.trim()}
+              className="m-2 p-2 rounded-xl text-white transition-all duration-150 active:scale-95 flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
+              style={{ background: "hsl(199 89% 48%)" }}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Onboarding Modal ─────────────────────────────────────────────────────────
+
+function OnboardingModal({
+  questionIndex,
+  answers,
+  onAnswer,
+  onBack,
+  onNext,
+  genError,
+}: {
+  questionIndex: number;
+  answers: Partial<OnboardingAnswers>;
+  onAnswer: (key: string, value: any) => void;
+  onBack: () => void;
+  onNext: () => void;
+  genError: string | null;
+}) {
+  const q = QUESTIONS[questionIndex];
+  const currentValue = answers[q.key as keyof OnboardingAnswers];
+  const [textInput, setTextInput] = useState((currentValue as string) ?? "");
+  const isLast = questionIndex === QUESTIONS.length - 1;
+  const progress = ((questionIndex + 1) / QUESTIONS.length) * 100;
+
+  const canProceed =
+    q.type === "multi"
+      ? ((currentValue as string[]) ?? []).length > 0
+      : q.type === "text-with-presets"
+        ? textInput.trim().length > 0
+        : currentValue !== undefined;
+
+  const handleTextChange = (val: string) => {
+    setTextInput(val);
+    onAnswer(q.key, val);
+  };
+
+  const handlePreset = (preset: string) => {
+    setTextInput(preset);
+    onAnswer(q.key, preset);
+  };
+
+  const handleSingle = (val: any) => {
+    onAnswer(q.key, val);
+    setTimeout(onNext, 280);
+  };
+
+  const handleMultiToggle = (val: string) => {
+    const curr = ((currentValue as string[]) ?? []);
+    const updated = curr.includes(val)
+      ? curr.filter((v) => v !== val)
+      : [...curr, val];
+    onAnswer(q.key, updated);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+      style={{ background: "hsl(222 47% 4% / 0.85)", backdropFilter: "blur(6px)" }}
+    >
+      <div
+        className="w-full sm:max-w-lg sm:mx-4 sm:rounded-2xl rounded-t-2xl overflow-hidden flex flex-col"
+        style={{
+          background: "hsl(222 47% 8%)",
+          border: "1px solid hsl(222 47% 16%)",
+          maxHeight: "90vh",
+        }}
+      >
+        {/* Modal header */}
+        <div className="flex-shrink-0 px-5 pt-5 pb-4" style={{ borderBottom: "1px solid hsl(222 47% 14%)" }}>
+          {/* Agent context message — only on first question */}
+          {questionIndex === 0 && (
+            <div
+              className="flex items-start gap-3 rounded-xl p-3.5 mb-4"
+              style={{ background: "hsl(199 89% 48% / 0.08)", border: "1px solid hsl(199 89% 48% / 0.2)" }}
+            >
+              <div
+                className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                style={{ background: "hsl(199 89% 48%)" }}
+              >
+                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <p className="text-sm leading-relaxed" style={{ color: "hsl(199 89% 72%)" }}>
+                Perfect — I'll build this around you. I just need a few details.
+              </p>
+            </div>
+          )}
+
+          {/* Progress bar */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: "hsl(222 47% 18%)" }}>
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{ width: `${progress}%`, background: "hsl(199 89% 48%)" }}
+              />
+            </div>
+            <span className="text-xs flex-shrink-0" style={{ color: "hsl(222 47% 50%)" }}>
+              {questionIndex + 1} of {QUESTIONS.length}
+            </span>
+          </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 pt-4">
-          {[
-            { label: "Exercise Science", sub: "PhD-level expertise" },
-            { label: "Personalized", sub: "Built for your profile" },
-            { label: "Actionable", sub: "Start Day 1 today" },
-          ].map((item) => (
-            <div key={item.label} className="rounded-xl p-4 text-center" style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(222 47% 18%)" }}>
-              <div className="text-white font-semibold text-sm">{item.label}</div>
-              <div className="text-zinc-500 text-xs mt-0.5">{item.sub}</div>
+        {/* Modal body */}
+        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
+          {genError && (
+            <div className="p-3 rounded-xl text-red-400 text-sm" style={{ background: "hsl(0 50% 12%)", border: "1px solid hsl(0 50% 20%)" }}>
+              {genError} — Please try again.
             </div>
-          ))}
+          )}
+
+          <div
+            key={questionIndex}
+            className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300"
+          >
+            <div className="space-y-1">
+              <h2 className="text-lg font-bold text-white leading-snug">{q.headline}</h2>
+              <p className="text-sm" style={{ color: "hsl(222 47% 55%)" }}>{q.subheadline}</p>
+            </div>
+
+            {q.type === "single" && (
+              <div className="grid grid-cols-1 gap-2">
+                {"options" in q && q.options.map((opt: any) => {
+                  const isSelected = currentValue === opt.value;
+                  return (
+                    <button
+                      key={String(opt.value)}
+                      onClick={() => handleSingle(opt.value)}
+                      className="flex items-center gap-3.5 px-4 py-3 rounded-xl text-left transition-all duration-150 w-full"
+                      style={{
+                        background: isSelected ? "hsl(199 89% 48% / 0.12)" : "hsl(222 47% 11%)",
+                        border: `1px solid ${isSelected ? "hsl(199 89% 48%)" : "hsl(222 47% 18%)"}`,
+                      }}
+                    >
+                      <span className="text-lg w-6 text-center flex-shrink-0">{opt.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-white font-medium text-sm">{opt.label}</div>
+                        {"desc" in opt && <div className="text-xs mt-0.5" style={{ color: "hsl(222 47% 50%)" }}>{opt.desc}</div>}
+                      </div>
+                      {isSelected && (
+                        <span className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: "hsl(199 89% 48%)" }}>
+                          <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {q.type === "multi" && (
+              <div className="grid grid-cols-1 gap-2">
+                {"options" in q && q.options.map((opt: any) => {
+                  const sel = ((currentValue as string[]) ?? []).includes(opt.value);
+                  return (
+                    <button
+                      key={opt.value}
+                      onClick={() => handleMultiToggle(opt.value)}
+                      className="flex items-center gap-3.5 px-4 py-3 rounded-xl text-left transition-all duration-150 w-full"
+                      style={{
+                        background: sel ? "hsl(199 89% 48% / 0.12)" : "hsl(222 47% 11%)",
+                        border: `1px solid ${sel ? "hsl(199 89% 48%)" : "hsl(222 47% 18%)"}`,
+                      }}
+                    >
+                      <span className="text-lg w-6 text-center flex-shrink-0">{opt.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-white font-medium text-sm">{opt.label}</div>
+                        <div className="text-xs mt-0.5" style={{ color: "hsl(222 47% 50%)" }}>{opt.desc}</div>
+                      </div>
+                      <div
+                        className="w-4 h-4 rounded flex-shrink-0 flex items-center justify-center"
+                        style={{
+                          background: sel ? "hsl(199 89% 48%)" : "transparent",
+                          border: `1px solid ${sel ? "hsl(199 89% 48%)" : "hsl(222 47% 30%)"}`,
+                        }}
+                      >
+                        {sel && (
+                          <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {q.type === "text-with-presets" && (
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  {"presets" in q && q.presets.map((preset) => (
+                    <button
+                      key={preset}
+                      onClick={() => handlePreset(preset)}
+                      className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+                      style={{
+                        background: textInput === preset ? "hsl(199 89% 48% / 0.2)" : "hsl(222 47% 11%)",
+                        border: `1px solid ${textInput === preset ? "hsl(199 89% 48%)" : "hsl(222 47% 18%)"}`,
+                        color: textInput === preset ? "hsl(199 89% 68%)" : "#a1a1aa",
+                      }}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  value={textInput}
+                  onChange={(e) => handleTextChange(e.target.value)}
+                  placeholder={"placeholder" in q ? q.placeholder : ""}
+                  rows={2}
+                  className="w-full px-4 py-3 rounded-xl text-white text-sm resize-none outline-none transition-all"
+                  style={{
+                    background: "hsl(222 47% 11%)",
+                    border: "1px solid hsl(222 47% 25%)",
+                    caretColor: "hsl(199 89% 48%)",
+                  }}
+                  onFocus={(e) => (e.currentTarget.style.borderColor = "hsl(199 89% 48%)")}
+                  onBlur={(e) => (e.currentTarget.style.borderColor = "hsl(222 47% 25%)")}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Modal footer */}
+        <div className="flex-shrink-0 px-5 pb-5 pt-3 flex gap-3" style={{ borderTop: "1px solid hsl(222 47% 14%)" }}>
+          <button
+            onClick={onBack}
+            className="flex-shrink-0 px-4 py-3 rounded-xl font-medium text-sm transition-all"
+            style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(222 47% 18%)", color: "#71717a" }}
+          >
+            ← Back
+          </button>
+          {(q.type === "multi" || q.type === "text-with-presets") && (
+            <button
+              onClick={onNext}
+              disabled={!canProceed}
+              className="flex-1 py-3 rounded-xl font-semibold text-white text-sm transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ background: canProceed ? "hsl(199 89% 48%)" : "hsl(222 47% 18%)" }}
+            >
+              {isLast ? "Build My Program →" : "Continue →"}
+            </button>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-// ─── Locked Screen (returning guest whose teaser is exhausted + no program) ───
+// ─── Locked Screen ─────────────────────────────────────────────────────────────
 
 function LockedScreen({ onUnlock, onSignIn }: { onUnlock: () => void; onSignIn: () => void }) {
   return (
@@ -251,190 +628,6 @@ function LockedScreen({ onUnlock, onSignIn }: { onUnlock: () => void; onSignIn: 
             Already have an account? Sign in
           </button>
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Onboarding Step ──────────────────────────────────────────────────────────
-
-function OnboardingStep({
-  questionIndex,
-  answers,
-  onAnswer,
-  onBack,
-  onNext,
-}: {
-  questionIndex: number;
-  answers: Partial<OnboardingAnswers>;
-  onAnswer: (key: string, value: any) => void;
-  onBack: () => void;
-  onNext: () => void;
-}) {
-  const q = QUESTIONS[questionIndex];
-  const currentValue = answers[q.key as keyof OnboardingAnswers];
-  const [textInput, setTextInput] = useState((currentValue as string) ?? "");
-  const isLast = questionIndex === QUESTIONS.length - 1;
-
-  const canProceed =
-    q.type === "multi"
-      ? ((currentValue as string[]) ?? []).length > 0
-      : q.type === "text-with-presets"
-        ? textInput.trim().length > 0
-        : currentValue !== undefined;
-
-  const handleTextChange = (val: string) => {
-    setTextInput(val);
-    onAnswer(q.key, val);
-  };
-
-  const handlePreset = (preset: string) => {
-    setTextInput(preset);
-    onAnswer(q.key, preset);
-  };
-
-  const handleSingle = (val: any) => {
-    onAnswer(q.key, val);
-    setTimeout(onNext, 280);
-  };
-
-  const handleMultiToggle = (val: string) => {
-    const curr = ((currentValue as string[]) ?? []);
-    const updated = curr.includes(val)
-      ? curr.filter((v) => v !== val)
-      : [...curr, val];
-    onAnswer(q.key, updated);
-  };
-
-  return (
-    <div className="w-full max-w-xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <div className="space-y-1.5">
-        <h2 className="text-2xl font-bold text-white leading-snug">{q.headline}</h2>
-        <p className="text-zinc-400 text-sm">{q.subheadline}</p>
-      </div>
-
-      {(q.type === "single") && (
-        <div className="grid grid-cols-1 gap-2.5">
-          {"options" in q && q.options.map((opt: any) => {
-            const isSelected = currentValue === opt.value;
-            return (
-              <button
-                key={String(opt.value)}
-                onClick={() => handleSingle(opt.value)}
-                className="flex items-center gap-4 px-4 py-3.5 rounded-xl text-left transition-all duration-150 w-full group"
-                style={{
-                  background: isSelected ? "hsl(199 89% 48% / 0.15)" : "hsl(222 47% 11%)",
-                  border: `1px solid ${isSelected ? "hsl(199 89% 48%)" : "hsl(222 47% 18%)"}`,
-                }}
-              >
-                <span className="text-xl w-7 text-center flex-shrink-0">{opt.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-white font-medium text-sm">{opt.label}</div>
-                  {"desc" in opt && <div className="text-zinc-500 text-xs mt-0.5">{opt.desc}</div>}
-                </div>
-                {isSelected && (
-                  <span className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: "hsl(199 89% 48%)" }}>
-                    <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {q.type === "multi" && (
-        <div className="grid grid-cols-1 gap-2.5">
-          {"options" in q && q.options.map((opt: any) => {
-            const sel = ((currentValue as string[]) ?? []).includes(opt.value);
-            return (
-              <button
-                key={opt.value}
-                onClick={() => handleMultiToggle(opt.value)}
-                className="flex items-center gap-4 px-4 py-3.5 rounded-xl text-left transition-all duration-150 w-full"
-                style={{
-                  background: sel ? "hsl(199 89% 48% / 0.15)" : "hsl(222 47% 11%)",
-                  border: `1px solid ${sel ? "hsl(199 89% 48%)" : "hsl(222 47% 18%)"}`,
-                }}
-              >
-                <span className="text-xl w-7 text-center flex-shrink-0">{opt.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-white font-medium text-sm">{opt.label}</div>
-                  <div className="text-zinc-500 text-xs mt-0.5">{opt.desc}</div>
-                </div>
-                <div className="w-4 h-4 rounded flex-shrink-0 flex items-center justify-center transition-all"
-                  style={{ background: sel ? "hsl(199 89% 48%)" : "transparent", border: `1px solid ${sel ? "hsl(199 89% 48%)" : "hsl(222 47% 30%)"}` }}>
-                  {sel && (
-                    <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {q.type === "text-with-presets" && (
-        <div className="space-y-3">
-          <div className="flex flex-wrap gap-2">
-            {"presets" in q && q.presets.map((preset) => (
-              <button
-                key={preset}
-                onClick={() => handlePreset(preset)}
-                className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
-                style={{
-                  background: textInput === preset ? "hsl(199 89% 48% / 0.2)" : "hsl(222 47% 11%)",
-                  border: `1px solid ${textInput === preset ? "hsl(199 89% 48%)" : "hsl(222 47% 18%)"}`,
-                  color: textInput === preset ? "hsl(199 89% 68%)" : "#a1a1aa",
-                }}
-              >
-                {preset}
-              </button>
-            ))}
-          </div>
-          <textarea
-            value={textInput}
-            onChange={(e) => handleTextChange(e.target.value)}
-            placeholder={"placeholder" in q ? q.placeholder : ""}
-            rows={2}
-            className="w-full px-4 py-3 rounded-xl text-white text-sm resize-none outline-none transition-all"
-            style={{
-              background: "hsl(222 47% 11%)",
-              border: "1px solid hsl(222 47% 25%)",
-              caretColor: "hsl(199 89% 48%)",
-            }}
-            onFocus={(e) => (e.currentTarget.style.borderColor = "hsl(199 89% 48%)")}
-            onBlur={(e) => (e.currentTarget.style.borderColor = "hsl(222 47% 25%)")}
-          />
-        </div>
-      )}
-
-      <div className="flex gap-3 pt-2">
-        {questionIndex > 0 && (
-          <button
-            onClick={onBack}
-            className="flex-1 py-3 rounded-xl font-medium text-zinc-400 transition-all hover:text-white"
-            style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(222 47% 18%)" }}
-          >
-            ← Back
-          </button>
-        )}
-        {(q.type === "multi" || q.type === "text-with-presets") && (
-          <button
-            onClick={onNext}
-            disabled={!canProceed}
-            className="flex-1 py-3 rounded-xl font-semibold text-white transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{
-              background: canProceed ? "hsl(199 89% 48%)" : "hsl(222 47% 18%)",
-            }}
-          >
-            {isLast ? "Generate My Program →" : "Continue →"}
-          </button>
-        )}
       </div>
     </div>
   );
@@ -479,7 +672,7 @@ function GeneratingScreen() {
         </div>
 
         <div className="space-y-2">
-          <h2 className="text-2xl font-bold text-white">Your coach is building your plan</h2>
+          <h2 className="text-2xl font-bold text-white">Building your system</h2>
           <p key={lineIdx} className="text-zinc-400 text-sm animate-in fade-in duration-500">
             {LOADING_LINES[lineIdx]}
           </p>
@@ -592,7 +785,6 @@ function FollowupSection({
       setResponse(data.response ?? "");
       setUsed(true);
       trackFunnelEvent(deviceId, "followup_used");
-      // After user reads the response, surface the paywall
       setTimeout(onPaywallTrigger, 1200);
     } catch (err: any) {
       const isExhausted = (err as any)?.code === "TEASER_EXHAUSTED";
@@ -702,6 +894,16 @@ function ProgramOutput({
 }) {
   return (
     <div className="w-full max-w-2xl space-y-6 pb-16">
+      {/* "Your System" header badge */}
+      <div className="flex items-center gap-2">
+        <div
+          className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest"
+          style={{ background: "hsl(199 89% 48% / 0.12)", color: "hsl(199 89% 58%)", border: "1px solid hsl(199 89% 48% / 0.25)" }}
+        >
+          ⚡ Your System
+        </div>
+      </div>
+
       <div className="flex items-start gap-3 rounded-xl p-5"
         style={{ background: "hsl(199 89% 48% / 0.08)", border: "1px solid hsl(199 89% 48% / 0.25)" }}>
         <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
@@ -751,7 +953,7 @@ function ProgramOutput({
       <div className="rounded-xl p-5 text-center space-y-3"
         style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(222 47% 18%)" }}>
         <div>
-          <div className="text-white font-bold text-base">Like what you see?</div>
+          <div className="text-white font-bold text-base">Ready to take it further?</div>
           <div className="text-zinc-400 text-sm mt-1">
             Save this program, track sessions, and get a fully adaptive AI coach that evolves with you.
           </div>
@@ -769,7 +971,7 @@ function ProgramOutput({
   );
 }
 
-// ─── Funnel event helper (fire-and-forget, never throws) ─────────────────────
+// ─── Funnel event helper ──────────────────────────────────────────────────────
 
 async function trackFunnelEvent(deviceId: string, event: string, metadata?: Record<string, unknown>) {
   try {
@@ -791,11 +993,17 @@ export default function GuestStart() {
   const [program, setProgram] = useState<GuestProgram | null>(null);
   const [genError, setGenError] = useState<string | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
-  const hasInitialized = useRef(false);
 
+  // Chat messages for the direct-to-agent experience
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    { role: "agent", text: "Let's build your system. What are you trying to improve right now?" },
+  ]);
+  const [hasFirstInput, setHasFirstInput] = useState(false);
+
+  const hasInitialized = useRef(false);
   const { deviceId, guestSession } = useGuestSession(false);
 
-  // ── Landing page viewed (once per mount) ──────────────────────────────────
+  // ── Track landing page view ────────────────────────────────────────────────
   const landingTracked = useRef(false);
   useEffect(() => {
     if (landingTracked.current || !deviceId) return;
@@ -803,23 +1011,19 @@ export default function GuestStart() {
     trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.LANDING_PAGE_VIEWED);
   }, [deviceId]);
 
-  // ── Return visitor handling ────────────────────────────────────────────────
-  // Runs once after the guest session loads to restore the correct UI state.
+  // ── Return visitor restore ─────────────────────────────────────────────────
   useEffect(() => {
     if (hasInitialized.current || !guestSession) return;
     hasInitialized.current = true;
 
-    // Already converted → send to app
     if (guestSession.status === "converted") {
       navigate("/chat");
       return;
     }
 
-    // Teaser already exhausted
     if (guestSession.teaserUsesCount >= GUEST_CONFIG.TEASER_TOTAL_LIMIT) {
       const savedProgram = (guestSession.metadata as any)?.firstProgramOutput as GuestProgram | undefined;
       if (savedProgram) {
-        // Show program + paywall overlay (feels like continuation)
         setProgram(savedProgram);
         setStep("output");
         setShowPaywall(true);
@@ -828,14 +1032,12 @@ export default function GuestStart() {
           trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.PAYWALL_SHOWN, { reason: "return_visitor" });
         }
       } else {
-        // No program saved → show locked state
         if (deviceId) trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.GUEST_RETURNED, { reason: "locked" });
         setStep("locked");
       }
       return;
     }
 
-    // Program generated, teaser not yet exhausted → restore output
     if (guestSession.firstProgramGeneratedAt) {
       const savedProgram = (guestSession.metadata as any)?.firstProgramOutput as GuestProgram | undefined;
       if (savedProgram) {
@@ -845,7 +1047,6 @@ export default function GuestStart() {
       return;
     }
 
-    // Onboarding completed but no program → resume from last question
     if (guestSession.onboardingCompletedAt && !guestSession.firstProgramGeneratedAt) {
       const savedAnswers = (guestSession.metadata as any)?.onboardingAnswers as Partial<OnboardingAnswers> | undefined;
       if (savedAnswers) {
@@ -856,15 +1057,16 @@ export default function GuestStart() {
       return;
     }
 
-    // Onboarding started but not completed → resume from step 1
     if (guestSession.onboardingStartedAt && !guestSession.onboardingCompletedAt) {
       setStep("onboarding");
     }
-    // else: idle — no change needed
   }, [guestSession, deviceId, navigate]);
 
-  const handleStart = useCallback(async () => {
-    setStep("onboarding");
+  // ── First input handler — adds user message + triggers onboarding modal ────
+  const handleFirstInput = useCallback(async (goalText: string) => {
+    setHasFirstInput(true);
+    setChatMessages((prev) => [...prev, { role: "user", text: goalText }]);
+
     if (deviceId) {
       trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.START_FREE_CLICKED);
       trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.ONBOARDING_STARTED);
@@ -874,8 +1076,11 @@ export default function GuestStart() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ deviceId }),
         });
-      } catch { /* non-blocking — session may already exist */ }
+      } catch { /* non-blocking */ }
     }
+
+    // Small delay before showing the modal so user sees their message land
+    setTimeout(() => setStep("onboarding"), 400);
   }, [deviceId]);
 
   const handleAnswer = useCallback((key: string, value: any) => {
@@ -885,6 +1090,7 @@ export default function GuestStart() {
   const handleBack = useCallback(() => {
     if (questionIndex === 0) {
       setStep("idle");
+      setHasFirstInput(false);
     } else {
       setQuestionIndex((i) => i - 1);
     }
@@ -900,14 +1106,6 @@ export default function GuestStart() {
         });
       }
       setQuestionIndex((i) => i + 1);
-
-      if (questionIndex === 0 && deviceId) {
-        try {
-          await customFetch(`/api/guest/session/${deviceId}`, {
-            method: "GET",
-          });
-        } catch { /* non-blocking */ }
-      }
     } else {
       await handleGenerate();
     }
@@ -933,7 +1131,6 @@ export default function GuestStart() {
     const genStart = Date.now();
 
     try {
-      // Save onboarding answers (customFetch throws on non-2xx; returns parsed body on success)
       await customFetch<{ session: unknown }>("/api/guest/onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -945,7 +1142,6 @@ export default function GuestStart() {
         experience: finalAnswers.experience,
       });
 
-      // Generate program
       const genData = await customFetch<{ program: GuestProgram }>("/api/guest/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -974,7 +1170,6 @@ export default function GuestStart() {
     setShowPaywall(true);
     if (deviceId) {
       await trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.PAYWALL_SHOWN);
-      // Record paywallShownAt on the session
       try {
         await fetch(`/api/guest/session/${deviceId}`, {
           method: "PATCH",
@@ -995,80 +1190,111 @@ export default function GuestStart() {
     navigate("/login?from=teaser");
   }, [navigate, deviceId]);
 
-  return (
-    <div className="min-h-screen" style={{ background: "hsl(222 47% 7%)" }}>
-      {step !== "idle" && step !== "generating" && step !== "locked" && (
-        <div className="fixed top-0 left-0 right-0 z-10 px-4 py-3 flex items-center gap-3"
-          style={{ background: "hsl(222 47% 7% / 0.9)", backdropFilter: "blur(8px)", borderBottom: "1px solid hsl(222 47% 14%)" }}>
+  // ── Locked state ───────────────────────────────────────────────────────────
+  if (step === "locked") {
+    return (
+      <div className="min-h-screen" style={{ background: "hsl(222 47% 7%)" }}>
+        <LockedScreen onUnlock={handleRegister} onSignIn={handleSignIn} />
+      </div>
+    );
+  }
+
+  // ── Generating state ────────────────────────────────────────────────────────
+  if (step === "generating") {
+    return (
+      <div className="min-h-screen" style={{ background: "hsl(222 47% 7%)" }}>
+        <GeneratingScreen />
+      </div>
+    );
+  }
+
+  // ── Output state ────────────────────────────────────────────────────────────
+  if (step === "output" && program) {
+    return (
+      <div className="min-h-screen" style={{ background: "hsl(222 47% 7%)" }}>
+        {/* Minimal nav bar */}
+        <div
+          className="fixed top-0 left-0 right-0 z-10 px-4 py-3 flex items-center justify-between"
+          style={{ background: "hsl(222 47% 7% / 0.9)", backdropFilter: "blur(8px)", borderBottom: "1px solid hsl(222 47% 14%)" }}
+        >
           <img src={logoSrc} alt="TrainChat" className="h-6" />
-          {step === "onboarding" && (
-            <>
-              <div className="flex-1 flex items-center gap-2 ml-2">
-                <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: "hsl(222 47% 18%)" }}>
-                  <div
-                    className="h-full rounded-full transition-all duration-500"
-                    style={{
-                      width: `${((questionIndex + 1) / QUESTIONS.length) * 100}%`,
-                      background: "hsl(199 89% 48%)",
-                    }}
-                  />
-                </div>
-                <span className="text-zinc-500 text-xs whitespace-nowrap">{questionIndex + 1} / {QUESTIONS.length}</span>
-              </div>
-            </>
-          )}
-          {step === "output" && (
-            <div className="ml-auto">
-              <button onClick={handleRegister} className="px-4 py-1.5 rounded-lg text-sm font-medium text-white"
-                style={{ background: "hsl(199 89% 48%)" }}>
-                Save Program
-              </button>
-            </div>
-          )}
+          <button
+            onClick={handleRegister}
+            className="px-4 py-1.5 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90"
+            style={{ background: "hsl(199 89% 48%)" }}
+          >
+            Save Program
+          </button>
         </div>
-      )}
-
-      <div className={`flex justify-center px-4 ${step !== "idle" && step !== "generating" && step !== "locked" ? "pt-20 pb-8" : ""}`}>
-        {step === "idle" && <EntryScreen onStart={handleStart} />}
-
-        {step === "onboarding" && (
-          <div className="w-full max-w-xl pt-8">
-            {genError && (
-              <div className="mb-4 p-3 rounded-xl text-red-400 text-sm" style={{ background: "hsl(0 50% 12%)", border: "1px solid hsl(0 50% 20%)" }}>
-                {genError} — Please try again.
-              </div>
-            )}
-            <OnboardingStep
-              key={questionIndex}
-              questionIndex={questionIndex}
-              answers={answers}
-              onAnswer={handleAnswer}
-              onBack={handleBack}
-              onNext={handleNext}
-            />
-          </div>
-        )}
-
-        {step === "generating" && <GeneratingScreen />}
-
-        {step === "output" && program && (
+        <div className="flex justify-center px-4 pt-20 pb-8">
           <ProgramOutput
             program={program}
             deviceId={deviceId ?? ""}
             onRegister={handleRegister}
             onPaywallTrigger={handlePaywallTrigger}
           />
-        )}
-
-        {step === "locked" && (
-          <LockedScreen
-            onUnlock={handleRegister}
+        </div>
+        {showPaywall && (
+          <GuestPaywallModal
+            deviceId={deviceId}
+            onRegister={handleRegister}
             onSignIn={handleSignIn}
           />
         )}
       </div>
+    );
+  }
 
-      {/* Premium paywall overlay — shown after teaser is exhausted */}
+  // ── Default: direct-to-agent chat UI (idle + onboarding modal) ─────────────
+  return (
+    <div className="h-screen flex flex-col" style={{ background: "hsl(222 47% 7%)" }}>
+      {/* Top nav */}
+      <div
+        className="flex-shrink-0 flex items-center justify-between px-4 py-3"
+        style={{ borderBottom: "1px solid hsl(222 47% 12%)" }}
+      >
+        <img src={logoSrc} alt="TrainChat" className="h-6" />
+        <div className="flex items-center gap-3">
+          <a
+            href="/login"
+            className="text-xs font-medium transition-colors"
+            style={{ color: "hsl(222 47% 50%)" }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLAnchorElement).style.color = "#e4e4e7")}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLAnchorElement).style.color = "hsl(222 47% 50%)")}
+          >
+            Sign in
+          </a>
+          <a
+            href="/register"
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all"
+            style={{ background: "hsl(199 89% 48% / 0.15)", border: "1px solid hsl(199 89% 48% / 0.3)", color: "hsl(199 89% 68%)" }}
+          >
+            Get started free
+          </a>
+        </div>
+      </div>
+
+      {/* Agent chat interface */}
+      <div className="flex-1 overflow-hidden flex flex-col max-w-2xl w-full mx-auto">
+        <AgentChatUI
+          messages={chatMessages}
+          onFirstInput={handleFirstInput}
+          showOptions={!hasFirstInput}
+        />
+      </div>
+
+      {/* Onboarding modal — sits on top when active */}
+      {step === "onboarding" && (
+        <OnboardingModal
+          questionIndex={questionIndex}
+          answers={answers}
+          onAnswer={handleAnswer}
+          onBack={handleBack}
+          onNext={handleNext}
+          genError={genError}
+        />
+      )}
+
       {showPaywall && (
         <GuestPaywallModal
           deviceId={deviceId}
