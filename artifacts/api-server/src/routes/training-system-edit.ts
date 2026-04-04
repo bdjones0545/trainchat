@@ -16,6 +16,7 @@ import { requireAuth } from "../middlewares/auth";
 import { interpretEditRequest } from "../lib/edit-intent-service";
 import { applyEditPlan } from "../lib/edit-engine";
 import { createChangeLogEntry } from "../lib/change-log-service";
+import { buildAdaptationContext } from "../lib/adaptation";
 import {
   getActiveTrainingSystem,
   getFullTrainingSystem,
@@ -62,14 +63,23 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
     }
 
     // 2. Load full system with hierarchy (needed for AI context)
-    const fullSystem = await getFullTrainingSystem(activeSystem.id);
+    // Also load adaptation context (Phase 5) — non-fatal, runs in parallel
+    const [fullSystem, adaptationCtx] = await Promise.all([
+      getFullTrainingSystem(activeSystem.id),
+      buildAdaptationContext(userId).catch(() => null),
+    ]);
     if (!fullSystem) {
       res.status(500).json({ error: "Failed to load training system data." });
       return;
     }
 
-    // 3. Interpret the edit request into a structured plan
-    const editPlan = await interpretEditRequest(userRequest, fullSystem, targetContext);
+    // 3. Interpret the edit request into a structured plan (Phase 5: with adaptation context)
+    const editPlan = await interpretEditRequest(
+      userRequest,
+      fullSystem,
+      targetContext,
+      adaptationCtx?.promptContext || undefined
+    );
 
     logger.info(
       {

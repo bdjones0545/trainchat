@@ -43,6 +43,9 @@ import EditDrawer, {
   type ChangedIds,
 } from "@/components/training/EditDrawer";
 import ChangeDetailDrawer from "@/components/training/ChangeDetailDrawer";
+import ReadinessCheckIn from "@/components/training/ReadinessCheckIn";
+import SessionFeedback from "@/components/training/SessionFeedback";
+import InsightsPanel from "@/components/training/InsightsPanel";
 
 // ─── API helpers ─────────────────────────────────────────────────────────────
 
@@ -1118,12 +1121,33 @@ export default function SystemPage() {
   // Phase 4: change log detail viewer
   const [changeDetailId, setChangeDetailId] = useState<number | null>(null);
 
+  // Phase 5: readiness check-in + session feedback modals
+  const [showReadinessCheckIn, setShowReadinessCheckIn] = useState(false);
+  const [showSessionFeedback, setShowSessionFeedback] = useState(false);
+  const [feedbackSessionLabel, setFeedbackSessionLabel] = useState<string | undefined>(undefined);
+
   const queryClient = useQueryClient();
   const { data: me } = useGetMe();
 
   const { data: activeSystem, isLoading: systemLoading } = useQuery({
     queryKey: ["training-system-active"],
     queryFn: fetchActiveSystem,
+    retry: false,
+  });
+
+  // Phase 5: fetch today's readiness entry (to show check-in prompt if missing)
+  const { data: readinessToday, refetch: refetchReadiness } = useQuery({
+    queryKey: ["readiness-today"],
+    queryFn: async () => {
+      const entries = await customFetch<any[]>("/api/readiness?limit=1");
+      if (!entries || entries.length === 0) return null;
+      const latest = entries[0];
+      const latestDate = new Date(latest.createdAt);
+      const today = new Date();
+      const sameDay = latestDate.toDateString() === today.toDateString();
+      return sameDay ? latest : null;
+    },
+    enabled: !!activeSystem,
     retry: false,
   });
 
@@ -1235,6 +1259,43 @@ export default function SystemPage() {
     });
   }
 
+  // ── Phase 5: insight apply completion ──
+  function handleInsightApplied(result: any) {
+    const ids = result.changedIds ?? { exercises: [], sessions: [], weeks: [], phases: [] };
+    setHighlightedIds({
+      exercises: new Set(ids.exercises),
+      sessions: new Set(ids.sessions),
+      weeks: new Set(ids.weeks),
+      phases: new Set(ids.phases),
+    });
+    setTimeout(() => {
+      setHighlightedIds({ exercises: new Set(), sessions: new Set(), weeks: new Set(), phases: new Set() });
+    }, 5000);
+    setLastEditResult({
+      changeSummary: result.changeSummary,
+      scope: result.scope,
+      appliedCount: result.appliedCount,
+    });
+    setRecentEdits((prev) => [
+      {
+        id: `insight-${Date.now()}`,
+        timestamp: new Date(),
+        summary: result.changeSummary,
+        scope: result.scope,
+        targetLabel: "Coach Insight",
+        appliedCount: result.appliedCount,
+      },
+      ...prev,
+    ].slice(0, 8));
+    queryClient.invalidateQueries({ queryKey: ["insights"] });
+  }
+
+  // ── Phase 5: open EditDrawer from InsightsPanel "Modify" action ──
+  function handleInsightModify(prefill: string) {
+    setEditTarget({ type: "system", id: 0, label: "Training System" });
+    setEditPrefill(prefill);
+  }
+
   const hasSystem = !!activeSystem;
   const userName = me?.name ?? "Athlete";
 
@@ -1309,11 +1370,67 @@ export default function SystemPage() {
           ) : (
             <>
               {activeTab === "today" && (
-                <TodayView
-                  highlightedIds={highlightedIds}
-                  onEditExercise={openExerciseEdit}
-                  onEditSession={openSessionEdit}
-                />
+                <div className="space-y-5">
+                  {/* Phase 5: Readiness check-in prompt (if no entry today) */}
+                  {readinessToday === null && (
+                    <button
+                      onClick={() => setShowReadinessCheckIn(true)}
+                      className="w-full flex items-center gap-3 rounded-xl border border-dashed border-primary/30 bg-primary/5 hover:bg-primary/8 px-4 py-3 transition-colors text-left"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
+                        <Activity className="w-4 h-4 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-primary">How are you feeling today?</p>
+                        <p className="text-[11px] text-muted-foreground">Quick check-in helps your coach adapt your plan</p>
+                      </div>
+                      <span className="text-[11px] font-semibold text-primary border border-primary/30 bg-primary/10 rounded-lg px-3 py-1.5 flex-shrink-0">
+                        Check in →
+                      </span>
+                    </button>
+                  )}
+
+                  {/* Phase 5: readiness status (if already checked in today) */}
+                  {readinessToday && (
+                    <div className="flex items-center gap-2 rounded-xl border border-green-500/20 bg-green-500/5 px-4 py-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                      <p className="text-xs text-green-400 font-semibold flex-1">Check-in logged today</p>
+                      <button
+                        onClick={() => setShowReadinessCheckIn(true)}
+                        className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        Update
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Phase 5: Coach Insights panel */}
+                  <InsightsPanel
+                    onApplied={handleInsightApplied}
+                    onModify={handleInsightModify}
+                  />
+
+                  {/* Today's session */}
+                  <TodayView
+                    highlightedIds={highlightedIds}
+                    onEditExercise={openExerciseEdit}
+                    onEditSession={openSessionEdit}
+                  />
+
+                  {/* Phase 5: Log session button */}
+                  <div className="flex justify-center pb-2">
+                    <button
+                      onClick={() => {
+                        setFeedbackSessionLabel(undefined);
+                        setShowSessionFeedback(true);
+                      }}
+                      className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground border border-border rounded-xl px-4 py-2.5 hover:bg-muted/40 transition-all"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Log completed session
+                    </button>
+                  </div>
+                </div>
               )}
               {activeTab === "week" && (
                 <WeekView
@@ -1365,6 +1482,28 @@ export default function SystemPage() {
             handleRestored(changedIds);
             setChangeDetailId(null);
             setActiveTab("today");
+          }}
+        />
+      )}
+
+      {/* Phase 5: Daily readiness check-in modal */}
+      {showReadinessCheckIn && (
+        <ReadinessCheckIn
+          onClose={() => setShowReadinessCheckIn(false)}
+          onSubmitted={() => {
+            refetchReadiness();
+            queryClient.invalidateQueries({ queryKey: ["insights"] });
+          }}
+        />
+      )}
+
+      {/* Phase 5: Post-session feedback modal */}
+      {showSessionFeedback && (
+        <SessionFeedback
+          sessionLabel={feedbackSessionLabel}
+          onClose={() => setShowSessionFeedback(false)}
+          onSubmitted={() => {
+            queryClient.invalidateQueries({ queryKey: ["insights"] });
           }}
         />
       )}

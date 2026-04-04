@@ -104,9 +104,13 @@ export function serializeSystemForPrompt(system: any): string {
 
 // ─── AI Edit Prompt Builder ──────────────────────────────────────────────────
 
-function buildEditSystemPrompt(systemContext: string, targetContext?: TargetContext): string {
+function buildEditSystemPrompt(systemContext: string, targetContext?: TargetContext, adaptationContext?: string): string {
   const targetFocus = targetContext
     ? `\nEDIT FOCUS:\nThe user is specifically targeting: ${targetContext.type.toUpperCase()} [id:${targetContext.id}]${targetContext.label ? ` "${targetContext.label}"` : ""}${targetContext.parentLabel ? ` in ${targetContext.parentLabel}` : ""}.\nFocus ALL changes on this specific object. Only expand scope if the user's request explicitly requires broader changes. Prefer targeted, surgical edits to this one object.\n`
+    : "";
+
+  const adaptationSection = adaptationContext
+    ? `\n${adaptationContext}\n\nIncorporate the above readiness and adaptation signals naturally when they are relevant to the edit being requested. A coach who knows the user's current state will make smarter, more contextual recommendations.\n`
     : "";
 
   return `You are an elite performance architect editing a user's structured training system.
@@ -160,7 +164,7 @@ OUTPUT FORMAT — return ONLY valid JSON, no other text:
 }
 
 CURRENT TRAINING SYSTEM:
-${systemContext}`;
+${systemContext}${adaptationSection}`;
 }
 
 // ─── AI Interpretation ───────────────────────────────────────────────────────
@@ -168,12 +172,13 @@ ${systemContext}`;
 async function interpretWithAI(
   userRequest: string,
   systemContext: string,
-  targetContext?: TargetContext
+  targetContext?: TargetContext,
+  adaptationContext?: string
 ): Promise<EditPlan | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
-  const systemPrompt = buildEditSystemPrompt(systemContext, targetContext);
+  const systemPrompt = buildEditSystemPrompt(systemContext, targetContext, adaptationContext);
 
   try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -710,11 +715,12 @@ function findCurrentSession(system: any): any | null {
 export async function interpretEditRequest(
   userRequest: string,
   system: any,
-  targetContext?: TargetContext
+  targetContext?: TargetContext,
+  adaptationContext?: string
 ): Promise<EditPlan> {
   const systemContext = serializeSystemForPrompt(system);
 
-  const aiPlan = await interpretWithAI(userRequest, systemContext, targetContext);
+  const aiPlan = await interpretWithAI(userRequest, systemContext, targetContext, adaptationContext);
 
   if (aiPlan && Array.isArray(aiPlan.changes)) {
     logger.info({ intent: aiPlan.intent, scope: aiPlan.scope, changes: aiPlan.changes.length }, "AI edit plan generated");

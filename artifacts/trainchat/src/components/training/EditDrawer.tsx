@@ -24,7 +24,7 @@ import { customFetch } from "@workspace/api-client-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type EditTargetType = "exercise" | "session" | "week" | "phase";
+export type EditTargetType = "exercise" | "session" | "week" | "phase" | "system";
 
 export interface EditTarget {
   type: EditTargetType;
@@ -95,6 +95,14 @@ const SUGGESTIONS: Record<EditTargetType, string[]> = {
     "More variety",
     "Shorter block",
   ],
+  system: [
+    "Reduce overall volume",
+    "Increase training intensity",
+    "Make it a deload week",
+    "Modify for injury",
+    "Swap all heavy compound lifts",
+    "Simplify the schedule",
+  ],
 };
 
 // ─── Target header config ─────────────────────────────────────────────────────
@@ -130,6 +138,13 @@ const TARGET_CONFIG: Record<
     color: "text-purple-400",
     bg: "bg-purple-400/10",
     border: "border-purple-400/20",
+  },
+  system: {
+    icon: Sparkles,
+    label: "System",
+    color: "text-primary",
+    bg: "bg-primary/10",
+    border: "border-primary/20",
   },
 };
 

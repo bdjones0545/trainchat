@@ -1,0 +1,282 @@
+PHASE 5 — BUILD THE INTELLIGENCE LAYER (ADAPTIVE, PROACTIVE PERFORMANCE SYSTEM) FOR TRAINCHAT
+
+We have already built:
+- Phase 1: structured persistent training system
+- Phase 2: agent editing engine (natural language → structured edits)
+- Phase 3: Replit-style interaction layer (inline editing + live updates)
+- Phase 4: versioning + history + revert system
+
+Now we are building the intelligence layer that elevates TrainChat from:
+“editable system”
+
+to:
+
+“adaptive performance operating system”
+
+IMPORTANT:
+This phase is NOT about fully autonomous control.
+The user must remain in control.
+The AI should suggest, guide, and optionally apply changes — not override the user blindly.
+
+OBJECTIVE
+Enable TrainChat to:
+- understand user state (fatigue, readiness, consistency, pain, etc.)
+- detect patterns
+- suggest intelligent adjustments
+- optionally apply changes with user approval
+- continuously optimize the training system
+
+This is where TrainChat becomes a true performance coach, not just a reactive editor.
+
+CORE PRODUCT BEHAVIOR
+The system should evolve from:
+
+User → requests change → AI edits
+
+Into:
+
+System observes → detects signal → suggests optimization → user approves → system updates
+
+PHASE 5 SCOPE ONLY
+
+Build the following:
+
+1. USER STATE INPUT SYSTEM (FOUNDATION OF INTELLIGENCE)
+Create a system for capturing daily/weekly readiness signals.
+
+At minimum, support:
+- fatigue level (low / moderate / high)
+- soreness / pain flags (location + severity)
+- sleep quality
+- energy level
+- motivation
+- session completion (completed / partial / skipped)
+- optional notes
+
+This can be:
+- quick daily check-in
+- post-session feedback
+- lightweight UI (sliders, toggles, quick taps)
+
+Requirements:
+- fast to complete (under 10 seconds)
+- mobile-first
+- not annoying or intrusive
+- stored in structured format tied to user + date
+
+2. READINESS / SIGNAL PROCESSING LAYER
+Build logic to interpret user input signals.
+
+Examples:
+- repeated high fatigue → recovery risk
+- frequent skipped sessions → adherence issue
+- recurring knee pain → movement problem
+- high readiness + consistency → progression opportunity
+
+Create a lightweight rules engine that:
+- processes recent inputs (last 3–7 days, rolling)
+- detects patterns
+- outputs internal “signals” like:
+  - fatigue_high
+  - adherence_low
+  - pain_flag_knee
+  - readiness_high
+
+Do NOT overcomplicate with heavy ML yet.
+Use structured logic + thresholds.
+
+3. INTELLIGENT SUGGESTION ENGINE
+Based on detected signals, generate suggestions.
+
+Examples:
+- “You’ve reported high fatigue for 3 days — I recommend reducing volume this week.”
+- “You’ve completed all sessions and feel strong — we can increase intensity slightly.”
+- “You flagged knee discomfort — let’s modify lower body movements.”
+
+Suggestions should:
+- be contextual to the current system
+- reference real data
+- feel coach-like
+- be specific, not generic
+
+4. SUGGESTION PRESENTATION UI
+Introduce a new layer in “Your System”:
+
+Possible names:
+- Coach Insights
+- System Suggestions
+- Performance Signals
+- Smart Adjustments
+
+Requirements:
+- non-intrusive
+- visible but not annoying
+- clearly actionable
+
+Each suggestion should show:
+- what was detected
+- what is recommended
+- why
+- a clear action:
+  - Apply
+  - Modify
+  - Dismiss
+
+5. USER-CONTROLLED APPLICATION OF CHANGES
+When a suggestion is presented:
+
+User options:
+- Apply change (auto-execute through edit engine)
+- Modify with AI (opens edit interface with suggestion pre-filled)
+- Ignore/dismiss
+
+IMPORTANT:
+- do NOT auto-apply changes without user consent (yet)
+- preserve user agency
+
+6. AUTOMATED EDIT EXECUTION (WITH APPROVAL)
+When user clicks “Apply”:
+
+- route through existing Phase 2 editing engine
+- generate structured edit plan
+- apply changes
+- create version entry (Phase 4)
+- show change summary (Phase 3)
+
+This connects all prior systems together.
+
+7. CONTEXTUAL INTELLIGENCE IN AGENT
+Upgrade the agent so it is aware of:
+
+- recent readiness signals
+- recent adherence patterns
+- pain/injury flags
+- progression trends
+- recent edits and system changes
+
+Now when user says:
+“Adjust my week”
+
+The agent should incorporate:
+- fatigue
+- missed sessions
+- soreness
+- progression phase
+
+This makes responses feel dramatically smarter.
+
+8. LIGHTWEIGHT TREND TRACKING
+Track simple trends over time:
+
+- consistency (% sessions completed)
+- fatigue trend
+- pain frequency by location
+- progression markers (basic)
+
+Display minimally:
+- simple indicators
+- not a full analytics dashboard yet
+
+9. NON-INTRUSIVE NOTIFICATION SYSTEM
+Introduce subtle prompts such as:
+
+- “You’ve been skipping sessions this week — want me to adjust your plan?”
+- “Your fatigue is trending up — consider a deload”
+
+Requirements:
+- do NOT spam the user
+- prioritize high-signal moments only
+- allow dismissal
+
+10. DATA MODEL EXTENSIONS
+Extend database to support:
+
+- daily readiness logs
+- signal outputs
+- suggestion records
+- suggestion status (pending, applied, dismissed)
+
+Ensure clean relationships with:
+- user
+- training system
+- version history
+
+11. INTELLIGENCE RULE CONFIGURATION
+Create a central config for rules such as:
+
+- fatigue thresholds
+- adherence thresholds
+- pain trigger rules
+- progression triggers
+
+So you can easily tune later.
+
+12. UX PRINCIPLES
+The intelligence layer should feel:
+
+- helpful
+- subtle
+- coach-like
+- data-driven
+- non-invasive
+- trustworthy
+
+It should NOT feel:
+
+- robotic
+- nagging
+- overwhelming
+- controlling
+
+13. DO NOT BUILD IN THIS PHASE
+Do NOT build:
+
+- full wearable integrations (just prepare)
+- fully autonomous system edits
+- complex ML models
+- full analytics dashboards
+- social features
+
+Keep it lean but powerful.
+
+14. TESTING / VALIDATION
+Validate scenarios:
+
+- user logs high fatigue for 3 days → suggestion appears
+- user skips sessions → adjustment suggestion appears
+- user applies suggestion → system updates correctly
+- version history logs the change
+- agent responses reflect new context
+
+15. DELIVERABLES AFTER IMPLEMENTATION
+Provide:
+
+1. summary of what was built  
+2. readiness input system design  
+3. signal detection logic  
+4. suggestion engine structure  
+5. where rules are configured  
+6. how suggestions trigger edits  
+7. database changes  
+8. how this prepares for wearable integration  
+9. recommendations for Phase 6  
+
+IMPORTANT REMINDERS
+
+This phase turns TrainChat into:
+- adaptive
+- intelligent
+- performance-aware
+
+We are building:
+- signal detection
+- suggestion system
+- controlled automation
+- context-aware AI
+
+We are NOT building:
+- full autonomy
+- heavy ML systems
+- wearable integrations (yet)
+
+The goal is to make the system feel like a real coach that watches, learns, and guides — not just responds.
