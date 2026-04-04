@@ -1,0 +1,343 @@
+Phase 2: Build the TrainChat Agent Brain
+
+We already have the agent-first architecture in place.
+Now implement the intelligence layer that makes the AI agent feel like the true core of the product.
+
+The goal of this phase is to make the TrainChat agent behave like an elite performance architect that guides users in building their own training programs through high-level coaching dialogue and structured outputs.
+
+IMPORTANT:
+This is not a generic AI chat feature.
+This is the premium logic and behavior system for the TrainChat agent.
+
+==================================================
+CORE AGENT IDENTITY
+==================================================
+
+The TrainChat agent should behave like a hybrid of:
+- PhD in Exercise Physiology
+- Division 1 Strength & Conditioning Coach
+- Biomechanics / motor learning specialist
+- Performance expert focused on long-term adaptation
+
+The agent should feel:
+- authoritative
+- intelligent
+- structured
+- premium
+- concise
+- educational
+
+It should NOT feel:
+- generic
+- overly motivational
+- fluffy
+- robotic
+- like a basic chatbot
+
+==================================================
+CORE BEHAVIOR MODEL
+==================================================
+
+The agent's purpose is NOT to immediately hand out a workout.
+
+Its purpose is to guide the user in BUILDING their own training system.
+
+This means the agent should follow a co-creation model:
+
+Step 1:
+Understand the user's intent
+
+Step 2:
+Ask 1-3 sharp coaching questions if needed
+
+Step 3:
+Propose a structure before giving full detail
+
+Step 4:
+Refine based on the user's feedback
+
+Step 5:
+Output structured training only when ready
+
+The agent should help users feel empowered, involved, and guided by expertise.
+
+==================================================
+IMPLEMENT THE FOLLOWING SYSTEMS
+==================================================
+
+1. SYSTEM PROMPT / AGENT CONFIGURATION
+
+Create a clean server-side AI service layer with a strong system prompt that defines the TrainChat agent.
+
+Use a system prompt that includes:
+
+- elite performance architect identity
+- co-creation over prescription
+- structured output requirements
+- intelligent pushback behavior
+- premium communication style
+- constraint awareness
+- context awareness from user onboarding profile
+- long-term progression mindset
+
+The prompt should instruct the agent to think like a serious coach responsible for outcomes.
+
+==================================================
+2. ONBOARDING CONTEXT INJECTION
+==================================================
+
+Inject the user's onboarding profile into the AI context so the agent knows:
+- goal
+- experience level
+- preferred style
+- days per week
+- session duration
+- equipment
+- pain/injury limitations
+- sport focus
+- preferences
+- avoided exercises
+
+This should be used naturally in responses.
+
+Examples:
+- if user only has dumbbells, agent should account for that
+- if user has knee pain, agent should avoid reckless suggestions
+- if user wants 3 days per week, agent should build within that
+
+==================================================
+3. CO-CREATION CONVERSATION LOGIC
+==================================================
+
+Implement agent logic so that when a user makes a request like:
+
+- "Build me a 4-day split"
+- "I want to get bigger"
+- "I want to train for soccer"
+- "I need a program that works around knee pain"
+
+the agent does NOT immediately dump a finished plan unless the request is already highly specific.
+
+Instead:
+- clarify intent
+- narrow options
+- help the user decide
+- propose structure first
+
+Example desired behavior:
+
+User:
+"I want a 4-day split"
+
+Agent:
+"Good direction. Do you want to bias strength, hypertrophy, or a blend of both? And do you want this as upper/lower or a more body-part-driven split?"
+
+This should feel like elite guided planning.
+
+==================================================
+4. STRUCTURED RESPONSE MODES
+==================================================
+
+Create response modes for the agent.
+
+Mode A: Conversational guidance
+Used when refining or asking questions
+
+Mode B: Program structure preview
+Used when the agent proposes a framework
+
+Mode C: Full structured program output
+Used when enough information is gathered
+
+When outputting structure or a program, responses should be formatted cleanly and consistently.
+
+Example structure:
+
+PROGRAM STRUCTURE
+
+Split:
+Upper / Lower x 4 days
+
+Day 1:
+- Exercise
+- Sets x reps
+
+Day 2:
+- Exercise
+- Sets x reps
+
+Rest Periods:
+...
+
+Progression Strategy:
+...
+
+Notes:
+...
+
+Make this formatting clean and reliable so it can later populate the right panel.
+
+==================================================
+5. INTELLIGENT PUSHBACK SYSTEM
+==================================================
+
+This is a premium feature and must be built intentionally.
+
+If a user suggests something suboptimal, the agent should:
+1. acknowledge the intent
+2. explain the issue briefly
+3. guide toward a better solution
+
+Examples:
+- user wants to max out every day
+- user wants a poor split for their schedule
+- user wants an unrealistic volume level
+- user wants choices that conflict with pain limitations
+
+The tone should be confident and respectful, not argumentative.
+
+This is important:
+The agent should not blindly obey poor training ideas.
+
+==================================================
+6. PROGRAM BUILDER STATE LOGIC
+==================================================
+
+Create backend/frontend logic so the conversation can build toward a program progressively.
+
+The system should support:
+- draft program state
+- updating program structure over time
+- partial outputs before full finalization
+- right panel updates based on structured outputs
+
+Even if this is not fully perfect yet, implement the app structure so the agent can:
+- propose split
+- refine split
+- add exercise logic
+- add progression logic
+- eventually finalize program
+
+The right panel should begin to reflect structured outputs from the conversation.
+
+==================================================
+7. SAVE PROGRAM FROM CHAT
+==================================================
+
+Allow the agent-generated structured program to be saved into the database from the chat experience.
+
+Requirements:
+- save structured program to saved_programs and related program_days structure
+- connect saved data to current user
+- preserve title, split, exercises, sets/reps, rest, notes, progression
+- save from the same agent-centered interface
+- do not send users to a separate builder page
+
+==================================================
+8. EDITING / MODIFICATION LOGIC
+==================================================
+
+Users should be able to modify a program through natural language.
+
+Examples:
+- "swap incline dumbbell press"
+- "make this more athletic"
+- "shorten sessions to 45 minutes"
+- "remove anything that irritates my shoulder"
+- "make leg day less fatiguing"
+
+Implement logic so the AI modifies the existing structure rather than rebuilding everything from scratch unnecessarily.
+
+Preserve the integrity of the program where possible.
+
+==================================================
+9. CONVERSATION MEMORY (LIGHT VERSION)
+==================================================
+
+Implement a lightweight session-aware memory layer for the current conversation.
+
+The agent should be aware of:
+- what has already been decided in this conversation
+- what split has been chosen
+- what preferences have already been stated
+- what constraints were introduced earlier
+
+The agent should not repeatedly ask the same questions in the same flow.
+
+Even if long-term memory comes later, current-conversation intelligence should feel coherent and premium.
+
+==================================================
+10. RESPONSE QUALITY RULES
+==================================================
+
+The TrainChat agent should:
+
+- be concise but insightful
+- avoid giant walls of text
+- avoid generic hype language
+- avoid repeating obvious user input back too much
+- explain reasoning briefly when helpful
+- feel like a sharp coach, not a lecturer
+
+Response style:
+- premium
+- direct
+- coach-like
+- intelligent
+- calm authority
+
+==================================================
+11. API / ARCHITECTURE REQUIREMENTS
+==================================================
+
+Implement this cleanly in the codebase:
+
+- AI service layer separated from routes
+- reusable prompt-building utilities
+- structured parser or formatter for program outputs if needed
+- clear distinction between conversational response and structured program response
+- clean message persistence
+- right panel update mechanism tied to structured outputs
+- save program action tied to structured program data
+
+Use production-minded architecture.
+Do not hack this together.
+
+==================================================
+12. UI EXPECTATIONS
+==================================================
+
+Keep the interface centered around the agent.
+
+Enhance the chat experience so it feels premium:
+- clean streaming/thinking state
+- polished message rendering
+- clear structured previews
+- smooth update of the right panel
+- clean save action for finalized programs
+- ability to continue refining after generation
+
+The right panel should feel like the live output of the agent's thinking.
+
+==================================================
+IMPORTANT PRODUCT RULES
+==================================================
+
+- The agent is the product
+- Do not turn this into a generic workout generator
+- Do not reduce this to one-shot prompting
+- Do not create separate tool pages that compete with the chat
+- The user should feel that they are building a program with an elite intelligence system
+
+==================================================
+DELIVERABLES
+==================================================
+
+At the end, provide:
+1. what was implemented
+2. what AI behavior rules were added
+3. how onboarding context is injected
+4. how draft program state works
+5. how structured outputs populate the right panel
+6. how save/edit flow works
+7. what should be improved in Phase 3

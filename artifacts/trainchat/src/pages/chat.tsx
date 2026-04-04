@@ -8,6 +8,7 @@ import {
   useCreateConversation,
   useListMessages,
   useSendMessage,
+  useCreateProgram,
   getListConversationsQueryKey,
   getListMessagesQueryKey,
 } from "@workspace/api-client-react";
@@ -16,29 +17,12 @@ import TopNav from "@/components/layout/TopNav";
 import ChatSidebar from "@/components/chat/ChatSidebar";
 import MessageBubble from "@/components/chat/MessageBubble";
 import TypingIndicator from "@/components/chat/TypingIndicator";
-import ChatOutput from "@/components/chat/ChatOutput";
+import ChatOutput, { type ProgramStructure } from "@/components/chat/ChatOutput";
 
-interface ProgramStructure {
-  programName: string;
-  description: string;
-  days: {
-    dayNumber: number;
-    name: string;
-    exercises: {
-      name: string;
-      sets: number;
-      reps: string;
-      rest: string;
-      notes?: string;
-    }[];
-    notes?: string;
-  }[];
-}
-
-const WELCOME_MESSAGES = [
+const STARTER_PROMPTS = [
   "Build me a 4-day push/pull program",
-  "I want to get stronger. Where do I start?",
-  "Design a program for someone training 5 days a week",
+  "I want to get stronger — where do I start?",
+  "Design a program for 5 days a week",
   "What's the best split for muscle gain?",
 ];
 
@@ -52,31 +36,28 @@ export default function Chat() {
   const [latestProgram, setLatestProgram] = useState<ProgramStructure | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auth check
+  // Auth + data
   const { data: me, isError: meError, isLoading: meLoading } = useGetMe();
   const { data: profile, isError: profileError, isLoading: profileLoading } = useGetProfile({
     query: { enabled: !!me },
   });
-
   const { data: conversations = [], isLoading: convosLoading } = useListConversations({
     query: { enabled: !!me },
   });
-
   const { data: messages = [], isLoading: messagesLoading } = useListMessages(
     activeConvoId!,
-    {
-      query: {
-        enabled: !!activeConvoId,
-        queryKey: getListMessagesQueryKey(activeConvoId!),
-      },
-    }
+    { query: { enabled: !!activeConvoId } }
   );
 
   const createConvo = useCreateConversation();
   const sendMessage = useSendMessage();
+  const createProgram = useCreateProgram();
 
   // Auth redirects
   useEffect(() => {
@@ -87,14 +68,14 @@ export default function Chat() {
     if (profileError && !profileLoading) setLocation("/onboarding");
   }, [profileError, profileLoading, setLocation]);
 
-  // Auto-select or create conversation
+  // Auto-select or create first conversation
   useEffect(() => {
     if (!me || convosLoading) return;
     if (conversations.length > 0 && !activeConvoId) {
       setActiveConvoId(conversations[0].id);
     } else if (conversations.length === 0 && !convosLoading && !createConvo.isPending) {
       createConvo.mutate(
-        { data: { title: "New Conversation" } },
+        { data: { title: "New Session" } },
         {
           onSuccess: (convo) => {
             queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
@@ -110,30 +91,35 @@ export default function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  // Extract structured program data from the latest AI message
+  // Extract the latest structured program from AI messages
   useEffect(() => {
     const aiMessages = messages.filter((m) => m.role === "assistant" && m.structuredData);
     if (aiMessages.length > 0) {
-      const lastAiMsg = aiMessages[aiMessages.length - 1];
-      if (lastAiMsg.structuredData) {
+      const last = aiMessages[aiMessages.length - 1];
+      if (last.structuredData) {
         try {
-          const parsed = JSON.parse(lastAiMsg.structuredData) as ProgramStructure;
+          const parsed = JSON.parse(last.structuredData) as ProgramStructure;
           setLatestProgram(parsed);
+          setIsSaved(false); // new program = not yet saved
         } catch {
           // ignore parse errors
         }
       }
+    } else {
+      // clear program when switching to an empty convo
+      if (messages.length === 0) setLatestProgram(null);
     }
   }, [messages]);
 
   function handleNewConversation() {
     createConvo.mutate(
-      { data: { title: "New Conversation" } },
+      { data: { title: "New Session" } },
       {
         onSuccess: (convo) => {
           queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
           setActiveConvoId(convo.id);
           setLatestProgram(null);
+          setIsSaved(false);
         },
       }
     );
@@ -141,8 +127,13 @@ export default function Chat() {
 
   async function handleSend(text?: string) {
     const content = (text ?? inputText).trim();
-    if (!content || !activeConvoId) return;
+    if (!content || !activeConvoId || sendMessage.isPending) return;
+
     setInputText("");
+    // Reset textarea height
+    if (inputRef.current) {
+      inputRef.current.style.height = "auto";
+    }
     setIsTyping(true);
 
     sendMessage.mutate(
@@ -160,11 +151,54 @@ export default function Chat() {
     );
   }
 
+  async function handleSaveProgram() {
+    if (!latestProgram || !activeConvoId || isSaving || isSaved) return;
+    setIsSaving(true);
+
+    createProgram.mutate(
+      {
+        data: {
+          name: latestProgram.programName,
+          description: latestProgram.description ?? "",
+          conversationId: activeConvoId,
+          days: latestProgram.days.map((day) => ({
+            dayNumber: day.dayNumber,
+            name: day.name,
+            notes: day.notes ?? undefined,
+            exercises: day.exercises.map((ex, idx) => ({
+              name: ex.name,
+              sets: ex.sets,
+              reps: ex.reps,
+              rest: ex.rest,
+              notes: ex.notes ?? undefined,
+              orderIndex: idx,
+            })),
+          })),
+        },
+      },
+      {
+        onSuccess: () => {
+          setIsSaving(false);
+          setIsSaved(true);
+        },
+        onError: () => {
+          setIsSaving(false);
+        },
+      }
+    );
+  }
+
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
+  }
+
+  function handleSelectConvo(id: number) {
+    setActiveConvoId(id);
+    setLatestProgram(null);
+    setIsSaved(false);
   }
 
   if (meLoading || profileLoading) {
@@ -178,24 +212,24 @@ export default function Chat() {
     );
   }
 
+  const firstName = me?.name?.split(" ")[0] ?? "Athlete";
+
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
-      {/* Top Nav */}
       <TopNav userName={me?.name ?? "User"} />
 
-      {/* Main layout */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left sidebar */}
+        {/* Sidebar */}
         {sidebarOpen && (
           <ChatSidebar
             conversations={conversations}
             activeId={activeConvoId}
-            onSelect={(id) => { setActiveConvoId(id); setLatestProgram(null); }}
+            onSelect={handleSelectConvo}
             onNew={handleNewConversation}
           />
         )}
 
-        {/* Center — Chat */}
+        {/* Center chat */}
         <div className="flex-1 flex flex-col min-w-0 relative">
           {/* Sidebar toggle */}
           <button
@@ -210,7 +244,7 @@ export default function Chat() {
             )}
           </button>
 
-          {/* Messages area */}
+          {/* Messages */}
           <div className="flex-1 overflow-y-auto px-4 pt-12 pb-4">
             {messagesLoading ? (
               <div className="flex justify-center items-center h-32">
@@ -219,17 +253,17 @@ export default function Chat() {
             ) : messages.length === 0 ? (
               /* Empty state */
               <div className="flex flex-col items-center justify-center h-full py-12 text-center">
-                <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-5">
-                  <Zap className="w-6 h-6 text-primary" />
+                <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-5">
+                  <Zap className="w-5 h-5 text-primary" />
                 </div>
-                <h2 className="text-lg font-semibold text-foreground mb-2">
-                  {me?.name ? `Ready when you are, ${me.name.split(" ")[0]}.` : "Your training architect is ready."}
+                <h2 className="text-base font-semibold text-foreground mb-2">
+                  Ready, {firstName}.
                 </h2>
-                <p className="text-sm text-muted-foreground max-w-sm leading-relaxed mb-8">
-                  Tell me your goal and I'll build your program. Everything you need, through the conversation.
+                <p className="text-sm text-muted-foreground max-w-xs leading-relaxed mb-8">
+                  Tell me what you're working toward and we'll build your program together.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-sm">
-                  {WELCOME_MESSAGES.map((msg) => (
+                  {STARTER_PROMPTS.map((msg) => (
                     <button
                       key={msg}
                       onClick={() => handleSend(msg)}
@@ -243,10 +277,7 @@ export default function Chat() {
             ) : (
               <div className="max-w-2xl mx-auto">
                 {messages.map((msg) => (
-                  <MessageBubble
-                    key={msg.id}
-                    message={msg}
-                  />
+                  <MessageBubble key={msg.id} message={msg} />
                 ))}
                 {isTyping && <TypingIndicator />}
                 <div ref={messagesEndRef} />
@@ -254,7 +285,7 @@ export default function Chat() {
             )}
           </div>
 
-          {/* Input area */}
+          {/* Input */}
           <div className="flex-shrink-0 px-4 pb-5 pt-3 border-t border-border bg-background/80 backdrop-blur-sm">
             <div className="max-w-2xl mx-auto">
               <div className="relative flex items-end gap-2 bg-card border border-border rounded-2xl focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 transition-all duration-200">
@@ -265,36 +296,37 @@ export default function Chat() {
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleKeyDown}
                   rows={1}
-                  placeholder="Message your training architect..."
-                  className="flex-1 resize-none bg-transparent px-4 py-3.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none leading-relaxed max-h-40 overflow-y-auto"
+                  placeholder="Message your performance architect..."
+                  disabled={isTyping || sendMessage.isPending}
+                  className="flex-1 resize-none bg-transparent px-4 py-3.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none leading-relaxed max-h-40 overflow-y-auto disabled:opacity-60"
                   style={{ minHeight: "52px" }}
                   onInput={(e) => {
-                    const target = e.target as HTMLTextAreaElement;
-                    target.style.height = "auto";
-                    target.style.height = Math.min(target.scrollHeight, 160) + "px";
+                    const t = e.target as HTMLTextAreaElement;
+                    t.style.height = "auto";
+                    t.style.height = Math.min(t.scrollHeight, 160) + "px";
                   }}
                 />
                 <button
                   data-testid="button-send"
                   onClick={() => handleSend()}
-                  disabled={!inputText.trim() || sendMessage.isPending || !activeConvoId}
+                  disabled={!inputText.trim() || sendMessage.isPending || isTyping || !activeConvoId}
                   className="m-2 p-2 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 active:scale-95 flex-shrink-0"
                 >
                   <SendHorizontal className="w-4 h-4" />
                 </button>
               </div>
-              <p className="text-[10px] text-muted-foreground/50 text-center mt-2">
-                Press Enter to send, Shift+Enter for a new line
+              <p className="text-[10px] text-muted-foreground/40 text-center mt-2">
+                Enter to send · Shift+Enter for new line
               </p>
             </div>
           </div>
         </div>
 
-        {/* Right panel — Training Output */}
-        {rightPanelOpen && (
+        {/* Right panel */}
+        {rightPanelOpen ? (
           <div className="w-72 flex-shrink-0 border-l border-border flex flex-col bg-background overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
                 Training Output
               </span>
               <button
@@ -305,19 +337,21 @@ export default function Chat() {
               </button>
             </div>
             <div className="flex-1 overflow-hidden">
-              <ChatOutput program={latestProgram} />
+              <ChatOutput
+                program={latestProgram}
+                onSave={latestProgram ? handleSaveProgram : undefined}
+                isSaving={isSaving}
+                isSaved={isSaved}
+              />
             </div>
           </div>
-        )}
-
-        {/* Show output panel button when hidden */}
-        {!rightPanelOpen && (
+        ) : (
           <button
             onClick={() => setRightPanelOpen(true)}
-            className="flex-shrink-0 w-8 border-l border-border bg-background flex items-center justify-center hover:bg-accent transition-all duration-150"
+            className="flex-shrink-0 w-8 border-l border-border bg-background flex items-center justify-center hover:bg-accent transition-all duration-150 group"
             title="Show training output"
           >
-            <span className="text-[10px] text-muted-foreground font-medium vertical-text rotate-90 whitespace-nowrap">
+            <span className="text-[9px] text-muted-foreground group-hover:text-foreground font-semibold uppercase tracking-widest rotate-90 whitespace-nowrap transition-colors">
               Output
             </span>
           </button>

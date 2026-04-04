@@ -187,6 +187,19 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
     content: parsed.data.content,
   }).returning();
 
+  // Auto-title the conversation from the first user message (trim to 60 chars)
+  const existingMessages = await db
+    .select({ id: messagesTable.id })
+    .from(messagesTable)
+    .where(eq(messagesTable.conversationId, params.data.id));
+
+  if (existingMessages.length === 1) {
+    const autoTitle = parsed.data.content.slice(0, 60).trim() + (parsed.data.content.length > 60 ? "…" : "");
+    await db.update(conversationsTable)
+      .set({ title: autoTitle, updatedAt: new Date() })
+      .where(eq(conversationsTable.id, params.data.id));
+  }
+
   // Get conversation history for context
   const history = await db
     .select()
