@@ -7,3 +7,4 @@ export * from "./memory";
 export * from "./session-logs";
 export * from "./guest-sessions";
 export * from "./analytics";
+export * from "./training-system";

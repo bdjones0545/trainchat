@@ -2,243 +2,67 @@
 
 ## Overview
 
-Agent-first AI training platform. The AI chat is the entire interface. Users register, complete a 10-step onboarding, then interact with an AI performance architect in a 3-panel chat layout (sidebar, chat, training output/intelligence panel).
+TrainChat is an agent-first AI training platform where the AI chat serves as the primary user interface. It guides users through a 10-step onboarding process and then connects them with an AI performance architect. The platform aims to provide personalized training programs, adapt to user performance, and offer proactive insights to optimize fitness journeys. Key capabilities include generating customized workout plans, tracking user progress and readiness, and integrating with external services like Stripe for subscription management. The project vision is to revolutionize personalized fitness coaching through AI, making expert guidance accessible and adaptable to individual needs, with significant market potential in the health and fitness technology sector.
 
-## Stack
+## User Preferences
 
-- **Monorepo**: pnpm workspaces
-- **Node.js**: 24 | **TypeScript**: 5.9 | **Package manager**: pnpm
-- **API**: Express 5 (`artifacts/api-server`)
-- **Frontend**: React + Vite + Tailwind v4 (`artifacts/trainchat`)
-- **Database**: PostgreSQL + Drizzle ORM (`lib/db`)
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from `lib/api-spec/openapi.yaml`)
-- **AI**: OpenAI gpt-4o (optional) with intelligent fallback
+- I prefer a 3-panel chat layout (sidebar, chat, training output/intelligence panel).
+- I like to see detailed training output and intelligence in the right panel.
+- I expect a clear onboarding process.
 
-## Key Commands
+## System Architecture
 
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- `pnpm --filter @workspace/scripts run seed-products` — seed Stripe products & prices (run after connecting Stripe; idempotent, uses `trainchat_plan` metadata key)
+The project utilizes a monorepo structure managed by `pnpm workspaces`, with Node.js 24 and TypeScript 5.9. The backend API is built with Express 5, and the frontend uses React, Vite, and Tailwind v4. PostgreSQL with Drizzle ORM handles database operations, and Zod is used for validation. API codegen is managed by Orval from an OpenAPI specification. The AI core leverages OpenAI's GPT-4o with an intelligent fallback mechanism.
 
-## Database Schema
+### UI/UX Decisions
+The UI features a consistent dark theme with electric blue (HSL(199 89% 48%)) as the primary color and Inter as the font. The main interface is a 3-panel chat layout. Key UI components include:
+- `chat.tsx`: Main layout integrating various modals for subscription, streak, paywall, pricing, session logging, readiness, and feedback.
+- `ChatOutput.tsx`: Displays the generated program with options to save, provide feedback, and log sessions.
+- `InsightsPanel.tsx`: Shows proactive insights, memory highlights, and a wearable integration placeholder.
+- `MessageBubble.tsx`: Renders markdown-formatted chat messages.
+- Modals for `Readiness`, `Feedback`, `Paywall`, `Pricing`, and `SessionLog` provide structured user input and information.
 
-- `users` — auth + Stripe fields (stripeCustomerId, stripeSubscriptionId, plan, planStatus, messageCount, tenantId)
-- `user_profiles` — onboarding profile (10 fields: goal, experience, style, days, duration, equipment, injuries, sport, preferences, avoid)
-- `conversations` + `messages` — chat history (messages store structuredData as JSON string)
-- `saved_programs` + `program_days` + `exercises` — saved training programs (programs include weekNumber, blockLabel, parentProgramId, versionNotes for evolution)
-- `readiness_entries` — daily check-in (sleep/energy/soreness/stress/motivation/pain, 1-5)
-- `session_feedback` — post-session feedback (difficulty/pain_response/energy_response, 1-5)
-- `user_memories` — long-term coaching memories (type/subject/sentiment/confidence/source/detail)
-- `session_logs` — workout completion log (userId, savedProgramId, dayNumber, sessionType, completedAt, difficultyScore, painScore, energyScore, notes) — Phase 6
-- `analytics_events` — structured funnel event store (event, deviceId, guestSessionId, userId, properties, createdAt) — Phase 4
-- `guest_sessions.abVariant` — A/B variant assignment ("control" | "variant_a", 50/50 random on session creation) — Phase 4
-- `stripe.*` — full Stripe sync schema (27 tables: accounts, customers, products, prices, subscriptions, etc.) managed by stripe-replit-sync
+### Technical Implementations
+- **Training Intelligence Engine**: Converts user profiles into detailed training specifications, generates AI prompt contexts, and selects exercises based on filters like injury safety, equipment availability, and goal bias. It also manages volume, prescription, progression, and fatigue based on goal tiers.
+- **Adaptation Service**: Reads recent user readiness and feedback to compute trend signals (e.g., overall readiness, recovery trend) and generate adaptive directives (reduce/maintain/progress) for AI messages.
+- **Memory Service**: Extracts and stores long-term coaching memories from user interactions (profile, readiness, feedback) to enrich AI context. Memories are protected against weakening established confidence levels.
+- **Insights Service**: Generates proactive, high-priority suggestions based on user memories, such as deload suggestions, progression readiness, or pain warnings.
+- **AI Service**: Orchestrates AI responses by combining user messages with system prompts, user profiles, intelligence context, adaptation context, long-term memory, and insight hints. It can fall back to a rule-based program generator and extracts structured JSON for UI display.
+- **Plan Gating**: Manages feature access and message limits based on user subscription plans (free, starter, pro/elite).
+- **Guest Session System**: Provides a foundation for unauthenticated users, managing guest sessions, device IDs, and tracking onboarding progress and interactions.
+- **Guest Experience (Premium Onboarding + AI Teaser)**: Enables guest users to experience personalized program generation and a single AI follow-up, with mechanisms for saving onboarding answers and generated programs.
+- **Guest Experience (Paywall + Signup/Conversion)**: Implements paywall triggers, user signup/login flows with guest-to-user merge functionality, and funnel analytics to track guest conversion.
+- **Stripe Integration**: Handles subscription management, customer creation, checkout sessions, and billing portal access, syncing data to the local PostgreSQL database.
 
-## Architecture
+### System Design Choices
+- **Database Schema**: Comprehensive schema including `users`, `user_profiles`, `conversations`, `messages`, `saved_programs`, `readiness_entries`, `session_feedback`, `user_memories`, `session_logs`, and `analytics_events`. Stripe-related tables are also managed.
+  - **Phase 1 Training System Tables**: `training_systems`, `training_phases`, `training_weeks`, `training_sessions`, `session_exercises` — a full normalized hierarchy supporting the "Your System" persistent training program concept.
+- **Auth**: Session-based authentication using `express-session`.
+- **Modularity**: Services like `Training Intelligence`, `Adaptation`, `Memory`, `Insights`, and `AI` are designed as distinct modules within the API server.
+  - **Training System Service** (`training-system-service.ts`): Generates and retrieves a structured, persistent training system from user profile data. Supports goal-specific (strength, hypertrophy, fat loss, athletic, endurance, general fitness) exercise libraries for multiple equipment types (full gym, dumbbells, bodyweight, minimal).
+- **Extensibility**: The guest session system and wearable integration include clear extension points for future features and data types.
 
-### Training Intelligence Engine (`api-server/src/lib/training-intelligence.ts`)
-- 75-exercise library organized by movement pattern, equipment, difficulty, joint stress, goal bias
-- `buildTrainingSpec(profile)` — converts profile to detailed training spec
-- `buildIntelligenceContext(profile)` — generates rich prompt context for AI injection
-- `selectExercises(filter)` — injury-safe, equipment-aware, goal-biased exercise selection
-- Split selector: 2-6+ day schedules with goal/experience logic
-- Volume, prescription (sets/reps/rest), progression, fatigue management per goal tier
+### Phase 1 — "Your System" Training System Foundation (April 2026)
+- New concept: persistent, structured training system as an "operating system" for the user's training.
+- **Database**: 5 new tables (`training_systems`, `training_phases`, `training_weeks`, `training_sessions`, `session_exercises`) with full foreign key relationships and ordering/status fields.
+- **API Routes** (all require auth):
+  - `GET /api/training-system/active` — shallow active system
+  - `GET /api/training-system/full` — full nested system
+  - `GET /api/training-system/today` — today's session + exercises
+  - `GET /api/training-system/week` — current week + sessions + exercises
+  - `GET /api/training-system/block` — current block/phase summary and roadmap
+  - `POST /api/training-system/initialize` — idempotent system creation from profile data
+- **Frontend**: `/system` page with Today / This Week / Block tabs. Premium card-based layout. Accessible from the TopNav "Your System" button.
+- **Navigation**: TopNav updated with persistent Coach | Your System pill navigation (always visible).
+- **Phase 2 Readiness**: Each entity has its own ID and status — individual exercise, session, week, and phase objects are addressable for future AI-driven edits. Schema supports partial updates without full regeneration.
 
-### Adaptation Service (`api-server/src/lib/adaptation.ts`)
-- `buildAdaptationContext(userId)` — reads recent readiness + feedback, computes trend signals
-- Trend signals: overallReadiness, sleepTrend, recoveryTrend, painTrend, fatigueAccumulation, trainingTolerance
-- Adaptive directive: reduce / maintain / progress — injected into every AI message
-- Wearable integration scaffold: `WearableData` interface + `ingestWearableData()` hook (Phase 6 ready)
+## External Dependencies
 
-### Memory Service (`api-server/src/lib/memory.ts`) — Phase 5
-- `syncMemoriesFromData(userId)` — extracts memories from profile, readiness, feedback; called on every message (non-blocking)
-- `upsertMemory(userId, candidate)` — insert or update by userId+type+subject; confidence-protected (never weakens established memories)
-- `listMemories(userId)` — list all memories ordered by updatedAt
-- `buildMemoryContext(memories)` — builds `## LONG-TERM MEMORY` prompt block for AI injection
-- Memory types: exercise_preference, pain_pattern, session_preference, volume_response, split_preference, recovery_pattern, adherence_pattern
-- Extraction sources: onboarding profile, readiness entries (≥3), session feedback (≥3)
-
-### Insights Service (`api-server/src/lib/insights.ts`) — Phase 5
-- `generateInsights(userId, memories)` — produces up to 4 high-priority proactive suggestions
-- Insight types: deload_suggestion, progression_ready, pain_warning, consistency_positive, schedule_review, sleep_impact, recovery_strength, tolerance_building, program_evolution
-- Deduplication + priority sort — only the most relevant insights surface
-- `buildInsightPromptHint(insights)` — compact hint injected into AI system prompt
-
-### AI Service (`api-server/src/lib/ai.ts`)
-- `generateAIResponse(userMessage, history, userId, adaptationContext?, memoryContext?, insightHint?)`
-- System prompt = core identity + user profile + intelligence context + adaptation context + long-term memory + insight hints
-- Falls back to rule-based program generator using training intelligence engine
-- Extracts structured JSON from AI response for right panel display
-
-### Plan Gating (`api-server/src/lib/planGating.ts`) — Phase 6
-- `getUserPlanInfo(userId)` — returns plan, planStatus, features, messagesRemaining
-- `getPlanFeatures(plan)` — returns feature flags per plan tier
-- Plan tiers: free (5 messages), starter (75 messages, no adaptation/memory), pro/elite (unlimited, full context)
-- `isPremium = plan === "pro" || plan === "elite"` — controls program day locking and context injection
-- Message count incremented per send; 402 returned at limit
-
-### Stripe Backend (`api-server/src/lib`) — Phase 6
-- `stripeClient.ts` — Replit connector API pattern (never caches client); falls back to `STRIPE_SECRET_KEY` env var
-- `stripeService.ts` — createCustomer, createCheckoutSession, createPortalSession
-- `stripeStorage.ts` — reads from `stripe.*` sync tables; getActiveSubscription, listProductsWithPrices, updateUserStripeInfo
-- `webhookHandlers.ts` — delegates to StripeSync.processWebhook; validates Buffer payload
-
-### API Endpoints
-- `GET /memories` — list user's long-term memories
-- `POST /memories/sync` — trigger memory extraction
-- `GET /insights` — get proactive training insights
-- `GET /subscription` — current plan info + Stripe subscription
-- `GET /subscription/products` — list Stripe products with prices (fetched from sync tables)
-- `POST /subscription/checkout` — create Stripe checkout session
-- `POST /subscription/confirm` — confirm checkout after redirect
-- `POST /subscription/portal` — create Stripe billing portal session
-- `GET /session-logs` — list user's workout session logs
-- `POST /session-logs` — create a session log entry
-- `GET /streak` — get current consecutive session streak
-- `GET /admin/analytics` — admin metrics (gated by ADMIN_EMAILS env var)
-- `POST /stripe/webhook` — Stripe webhook (registered before json() middleware)
-
-## UI Components
-
-- `chat.tsx` — 3-panel layout; wires subscription, streak, paywall, pricing, session-log, readiness, feedback modals
-- `ChatOutput.tsx` — right panel: program display with save + feedback + "Log Session" buttons; day locking for free plan; program evolution badge (Week N / Block label)
-- `InsightsPanel.tsx` — right panel: insights cards + memory highlights + wearable placeholder (shown when no program)
-- `MessageBubble.tsx` — markdown-rendering bubbles
-- `ReadinessModal.tsx` — 6-metric daily check-in modal (1-5 score buttons)
-- `FeedbackModal.tsx` — post-session feedback modal (difficulty/pain/energy)
-- `ReadinessSummary.tsx` — compact readiness display at top of right panel
-- `PaywallModal.tsx` — full-screen paywall triggered at 5 messages; shows messages used + upgrade CTA — Phase 6
-- `PricingModal.tsx` — 3-tier plan selector (Starter/Pro/Elite) with monthly/yearly toggle; fetches real price IDs from /api/subscription/products — Phase 6
-- `StreakBadge.tsx` — consecutive session streak shown in TopNav extraContent slot — Phase 6
-- `SessionLogModal.tsx` — workout completion logger (difficulty/pain/energy 1-5 + notes) — Phase 6
-- `TopNav.tsx` — accepts `extraContent?: React.ReactNode` prop for streak badge
-
-## Theme
-
-Always dark (no `.dark` toggle — CSS vars in `:root` only). Electric blue primary HSL(199 89% 48%). Inter font. Navy background.
-
-## Auth
-
-Session-based (`express-session`). `SESSION_SECRET` env var required. `credentials: "include"` in `custom-fetch.ts`.
-
-## Guest Session System (Phase 1 Foundation)
-
-### Architecture
-- `lib/db/src/schema/guest-sessions.ts` — `guest_sessions` table
-- `artifacts/api-server/src/lib/guestService.ts` — service layer (init, get, update, convert)
-- `artifacts/api-server/src/routes/guest.ts` — REST endpoints
-- `artifacts/trainchat/src/hooks/useGuestSession.ts` — frontend hook
-- `GuestSessionInit` component in `App.tsx` — silent initialization on app load
-
-### guest_sessions Table Fields
-id, device_id (unique), status (active/converted/expired/blocked), created_at, updated_at, last_active_at, teaser_uses_count, onboarding_started_at, onboarding_completed_at, first_program_generated_at, paywall_shown_at, converted_at, linked_user_id (FK→users), metadata (jsonb)
-
-### API Endpoints
-- `POST /api/guest/session` — init or resume guest session (idempotent; updates lastActiveAt on resume)
-- `GET /api/guest/session/:deviceId` — read-only fetch
-- `PATCH /api/guest/session/:deviceId` — update markers (for future phases)
-
-### Frontend Hook: useGuestSession(isAuthenticated)
-- Generates 32-char hex deviceId via `crypto.getRandomValues()` → stored in `localStorage["trainchat_device_id"]`
-- Calls POST /api/guest/session and caches result in `sessionStorage["trainchat_guest_session"]`
-- Does nothing when `isAuthenticated = true` — zero interference with logged-in users
-- Returns: `{ deviceId, guestSession, guestSessionStatus, loading, error, refresh }`
-
-## Guest Experience Phase 2 — Premium Onboarding + AI Teaser
-
-### New Files
-- `artifacts/api-server/src/lib/guestGenerate.ts` — AI generation + fallback service
-- `artifacts/trainchat/src/pages/guest-start.tsx` — Multi-step guest experience page
-
-### New API Endpoints
-- `POST /api/guest/onboarding` — Saves answers to guest session metadata, marks onboardingCompletedAt
-- `POST /api/guest/generate` — Generates personalized AI program from onboarding answers (GPT-4o w/ fallback)
-- `POST /api/guest/followup` — Processes one follow-up message with full coach context
-
-### guestGenerate.ts Service
-- `generateGuestProgram(deviceId, answers)` — deliberate prompt engineering → GPT-4o → or training-intelligence fallback
-- `generateGuestFollowup(deviceId, message)` — context-aware follow-up using stored program + onboarding answers
-- Fallback program builder: uses `selectExercises()` from training-intelligence with full/upper-lower split logic
-
-### Guest Onboarding Flow (/start page)
-- `idle` → entry hero screen → "Build My Program" CTA  
-- `onboarding` → 8 questions, one at a time:  
-  1. Primary goal (single-select, auto-advance)  
-  2. Experience level (single-select, auto-advance)  
-  3. Training frequency (single-select, auto-advance)  
-  4. Equipment (multi-select, Continue button)  
-  5. Injuries/limitations (text+presets, Continue button)  
-  6. Training style (single-select, auto-advance)  
-  7. Timeline (single-select, auto-advance)  
-  8. Sport/performance focus (single-select, auto-advance → triggers generate)  
-- `generating` → animated loading screen ("Your coach is building your plan")  
-- `output` → program display with Day 1 expanded + single follow-up input  
-
-### Routing Change (App.tsx)
-- Root `/` now uses `SmartRoot`: authenticated → `/chat`, unauthenticated → `/start`
-- New route: `/start` → GuestStart page
-
-### Guest Session Fields Used
-- `onboardingCompletedAt` — set on POST /api/guest/onboarding
-- `firstProgramGeneratedAt` — set on successful generate
-- `teaserUsesCount` — 1 after program, 2 after follow-up
-- `metadata.onboardingAnswers` — full answer object stored  
-- `metadata.firstProgramOutput` — generated GuestProgram stored  
-
-### Phase 2+ Extension Points
-- `convertGuestSession(deviceId, userId)` — links guest session to real account post-signup
-- `teaserUsesCount` + `status` — ready for teaser/paywall gating logic
-- `metadata` (jsonb) — extensible for onboarding answers, analytics markers
-
-## Guest Experience Phase 3 — Paywall + Signup/Conversion + Guest-to-User Merge
-
-### New Backend Files
-- `artifacts/api-server/src/lib/guestMerge.ts` — Core merge service: populates user_profile, creates starter conversation, sets onboardingComplete, converts guest session
-
-### New Frontend Files
-- `artifacts/trainchat/src/lib/guestConfig.ts` — Centralized config: teaser limits, paywall copy, feature bullets, CTAs, funnel event names (edit here to change everything)
-- `artifacts/trainchat/src/components/GuestPaywallModal.tsx` — Premium full-screen paywall overlay component (copy driven by guestConfig.ts)
-
-### New API Endpoints
-- `POST /api/guest/convert` — Requires auth; merges guest session into authenticated user (populates profile, creates conversation, marks onboardingComplete = true)
-- `POST /api/guest/track` — Fire-and-forget funnel event logging into guest session metadata
-
-### Backend Limit Enforcement
-- `/api/guest/generate` blocked when `teaserUsesCount >= TEASER_GENERATE_LIMIT` (default: 1)
-- `/api/guest/followup` blocked when `teaserUsesCount >= TEASER_TOTAL_LIMIT` (default: 2)
-- Both return `{ code: "TEASER_EXHAUSTED" }` for frontend detection
-- Limits defined at top of `guestMerge.ts` — single source of truth for backend
-
-### Paywall Trigger Logic (guest-start.tsx)
-- After follow-up response received → 1200ms delay → `GuestPaywallModal` appears as overlay
-- Return visitor with `teaserUsesCount >= 2` → program restored from metadata + paywall shown immediately
-- Return visitor with `teaserUsesCount >= 2` + no saved program → `LockedScreen` component shown
-- Return visitor with `status === "converted"` → redirect to `/chat`
-- Return visitor with partial onboarding → resumes from last step
-
-### Guest-to-User Merge (mergeGuestToUser)
-When called after registration or login:
-1. Loads guest session by deviceId
-2. Creates `user_profile` from `metadata.onboardingAnswers` if user has none
-3. Creates starter conversation with formatted program text if user has none
-4. Sets `users.onboardingComplete = true` (skips in-app onboarding)
-5. Marks guest session: `status = "converted"`, `linkedUserId`, `convertedAt`
-Idempotent — safe to call multiple times for the same device/user pair.
-
-### Auth Page Changes
-- `register.tsx` — `?from=teaser` mode: custom headline/subheadline, "Continue My Journey" CTA, "No credit card required" note, calls `POST /api/guest/convert` after registration, routes to `/chat` on success
-- `login.tsx` — `?from=teaser` mode: custom headline, calls `POST /api/guest/convert` after login if deviceId in localStorage, routes to `/chat` on merge success
-
-### Funnel Analytics
-Stored in `guest_sessions.metadata.funnelEvents` as timestamped array. Events: `paywall_shown`, `paywall_cta_clicked`, `paywall_signin_clicked`, `signup_started`, `signup_completed`, `payment_started`, `payment_completed`, `guest_converted`. All event names configurable in `guestConfig.ts`.
-
-### Config (artifacts/trainchat/src/lib/guestConfig.ts)
-Single file to change: teaser limits, paywall headline/subheadline/badge, feature bullets, CTA text, locked-state messaging, signup page messaging, funnel event names.
-
-## Wearable Integration (Phase 6 ready)
-
-- `WearableData` interface with HRV/restingHR/sleep/readinessScore/trainingLoad/steps
-- `ingestWearableData(userId, data)` stub in adaptation.ts
-- "Connect wearable" placeholder button in InsightsPanel
+- **OpenAI**: Utilized for the core AI performance architect (GPT-4o model).
+- **PostgreSQL**: Primary database for all application data.
+- **Stripe**: Payment gateway for subscription management, billing, and customer information.
+- **Drizzle ORM**: Used for interacting with the PostgreSQL database.
+- **Zod**: Schema validation library.
+- **Vite**: Frontend build tool.
+- **Tailwind CSS**: Frontend styling framework.
+- **Orval**: API client and Zod schema generator from OpenAPI specifications.
