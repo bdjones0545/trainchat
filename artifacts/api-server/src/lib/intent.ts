@@ -257,10 +257,14 @@ function matchesStructuralEdit(lower: string): {
   };
 
   // ── Split type conversion ──────────────────────────────────────────────────
-  const fullBodyPattern = /\b(more full.?body|make.{0,20}full.?body|convert.{0,20}(to|into).{0,20}full.?body|full.?body (split|structure|approach|program|style)|full.?body it|go full.?body|switch.{0,20}full.?body)\b/i;
+  const fullBodyPattern = /\b(more full.?body|make.{0,20}full.?body|convert.{0,20}(to|into).{0,20}full.?body|full.?body (split|structure|approach|program|style)|full.?body it|go full.?body|switch.{0,20}full.?body|prefer.{0,20}full.?body|rather.{0,30}full.?body|want.{0,20}full.?body)\b/i;
   const upperLowerPattern = /\b(upper.lower|upper\/lower|convert.{0,20}(to|into).{0,20}upper.lower|make.{0,20}upper.lower|upper lower split)\b/i;
   const pplPattern = /\b(push.pull.legs?|ppl.split|ppl.program|convert.{0,20}(to|into).{0,20}(ppl|push.pull))\b/i;
   const pushPullPattern = /\b(push.pull (split|program|style)|convert.{0,20}(to|into).{0,20}push.pull(?!.legs))\b/i;
+
+  // ── Implicit full-body intent — natural language expressions ─────────────
+  // These don't use "full body" explicitly but clearly mean more integration
+  const implicitFullBodyPattern = /\b(hit.{0,20}everything.{0,20}(more often|each (day|session|workout)|every (day|session))|train.{0,20}everything.{0,20}(more|each|every)|feels?.{0,20}too (split|isolated|separated|broken up|chopped up)|too (isolated|split|separated|siloed)|want.{0,30}(more integrated|more balanced|hit more muscle)|more.{0,20}(integrated|balanced).{0,20}(approach|sessions?|structure)|each (session|day).{0,20}(more|full|complete|comprehensive))\b/i;
 
   // ── Goal/orientation shift ─────────────────────────────────────────────────
   const fatLossPattern = /\b(more.{0,20}(fat.loss|fat burning|weight.loss|cutting|calorie burning)|better for (fat.loss|cutting|losing weight|burning fat)|fat.loss (focus|oriented|style|version))\b/i;
@@ -278,7 +282,7 @@ function matchesStructuralEdit(lower: string): {
   let targetDays: number | null = null;
   let targetGoalShift: StructuralEditMetadata["targetGoalShift"] = null;
 
-  if (fullBodyPattern.test(lower)) targetSplit = "full_body";
+  if (fullBodyPattern.test(lower) || implicitFullBodyPattern.test(lower)) targetSplit = "full_body";
   else if (upperLowerPattern.test(lower)) targetSplit = "upper_lower";
   else if (pplPattern.test(lower)) targetSplit = "ppl";
   else if (pushPullPattern.test(lower)) targetSplit = "push_pull";
@@ -364,6 +368,13 @@ function matchesEditProgram(lower: string, hasActiveProgram: boolean): {
       { pattern: /\b(can you|could you|please).{0,30}\b(add|swap|remove|change|fix|adjust|shorten|update)\b/i, subtype: "general_modification" },
       { pattern: /\bthis (needs?|should have|is missing|doesn.t have|lacks?)\b/i, subtype: "general_modification" },
       { pattern: /\b(the program|my program|this plan|my plan).{0,40}\b(needs?|should|has no|lacks?|doesn.t)\b/i, subtype: "general_modification" },
+      // Natural feedback language — user expressing dissatisfaction or wanting change
+      { pattern: /\b(not (loving|feeling|vibing with)|don.t love|don.t like|not (great|ideal|sure about)|feels?.{0,20}(off|wrong|weird|awkward|heavy|too much|not right)|something feels)\b/i, subtype: "general_modification" },
+      { pattern: /\b(want.{0,20}(something|it).{0,20}(different|changed|adjusted|tweaked|better|easier|lighter)|make.{0,20}it.{0,20}(feel|work|be).{0,20}(better|different|easier|lighter|harder))\b/i, subtype: "general_modification" },
+      { pattern: /\b(sessions? (feel|are).{0,30}(too|very|really).{0,20}(long|hard|heavy|much|intense|fatiguing|exhausting|short|easy|light))\b/i, subtype: "general_modification" },
+      { pattern: /\b(i.m (always|usually|often|getting|feeling)).{0,30}(sore|tired|beat up|exhausted|drained|fatigued|smashed)\b/i, subtype: "reduce_fatigue" },
+      { pattern: /\b(not enough|need more).{0,40}(recovery|rest|time off|days off)\b/i, subtype: "reduce_fatigue" },
+      { pattern: /\b(can.t|don.t have).{0,20}(enough time|that long|that much time|90 min|an hour|the time)\b/i, subtype: "shorten_sessions" },
     ];
     for (const { pattern, subtype } of mediumConfidencePatterns) {
       if (pattern.test(lower)) {

@@ -1,0 +1,120 @@
+Upgrade the TrainChat agent to feel less rigid and more coach-like in how it interprets and responds to user requests.
+
+CURRENT ISSUE:
+The agent feels too rigid because it depends too heavily on exact edit patterns and narrow command matching. When the user makes broader or more natural requests, the system often rejects them, asks for overly specific phrasing, or fails to act.
+
+GOAL:
+Make the agent behave more like a high-level coach who interprets the user's intent, makes intelligent inferences, and acts confidently when the direction is clear.
+
+==================================================
+CORE BEHAVIOR CHANGES
+==================================================
+
+1. INTENT OVER WORDING
+The agent should interpret the meaning of the user's request, not just exact keywords.
+
+Examples that should map to similar intent:
+- "I want a more full body program"
+- "can you make this more full body?"
+- "I want to hit everything more often"
+- "this feels too split up"
+
+These should be understood as a structural shift toward fuller-body distribution.
+
+2. ALLOW COACH-LIKE INFERENCE
+If the user's request is clear enough, the agent should make the best coaching decision and act.
+
+It should not require overly specific phrasing for every edit.
+
+Only ask clarifying questions when the ambiguity would meaningfully change the program.
+
+3. SUPPORT THREE LEVELS OF REQUESTS
+The agent must handle:
+
+A. Atomic edits
+- add calves
+- swap incline press
+- shorten to 45 minutes
+
+B. Structural edits
+- make this more full body
+- make this more athletic
+- make this less fatiguing overall
+- change this to 3 days
+
+C. Coaching guidance
+- what structure would be better for me?
+- should I do upper/lower or full body?
+- what would you recommend?
+
+Do not force everything into atomic edit logic.
+
+4. EXECUTION-FIRST COMMUNICATION
+When the agent understands the request, it should act first and explain briefly after.
+
+Response format:
+- brief acknowledgment
+- what change was made
+- short reason if helpful
+- confirm updated plan
+
+Examples:
+- "Got it — I redistributed this into a fuller-body structure and kept your main lifts. Updated plan is in the right panel."
+- "I made this more athletic by adding explosive work early and reducing some non-essential accessory volume. Updated plan is in the right panel."
+
+5. REMOVE RIGID REJECTION LANGUAGE
+Do not use phrases like:
+- "No specific edit identified"
+- "Try something more targeted"
+- "Unsupported request"
+
+Replace with:
+- intelligent inference
+- one sharp clarifying question if needed
+- or a best-effort structural change
+
+==================================================
+FALLBACK RULES
+==================================================
+
+If the request is broad but still interpretable, act.
+
+If the request is truly ambiguous, ask one concise question.
+
+Example:
+"I can shift this toward full body. Do you want to keep 4 days or make it a more efficient 3-day version?"
+
+Do not ask multiple questions unless necessary.
+
+==================================================
+IMPLEMENTATION REQUIREMENTS
+==================================================
+
+Update:
+- intent detection
+- structural edit handling
+- fallback messaging
+- assistant response templates
+
+The agent should feel collaborative, adaptive, and confident.
+
+==================================================
+TARGET EXPERIENCE
+==================================================
+
+The user should feel like:
+- the agent understands what they mean
+- the agent can work with natural language
+- the agent behaves like a real coach, not a command parser
+- the system is flexible without becoming vague
+
+==================================================
+DELIVERABLES
+==================================================
+
+At the end, provide:
+1. how intent interpretation was made more flexible
+2. how the agent now handles broader requests
+3. what rejection language was removed
+4. when the agent now acts vs asks a question
+5. examples of more coach-like responses
