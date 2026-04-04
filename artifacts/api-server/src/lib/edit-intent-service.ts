@@ -1,12 +1,13 @@
 /**
- * Edit Intent Service — Phase 2
+ * Edit Intent Service — Phase 2 + Phase 3
  *
  * Interprets natural language modification requests and produces
  * a machine-readable edit plan that the EditEngine can apply to
  * the structured training system.
  *
- * Flow:
- *   User request → AI interpretation → EditPlan JSON → EditEngine applies → change summary
+ * Phase 3 addition: TargetContext allows the caller to pass explicit
+ * object IDs into the interpretation flow, focusing the AI on a specific
+ * exercise, session, week, or phase.
  */
 
 import { logger } from "./logger";
@@ -44,6 +45,15 @@ export interface EditPlan {
   scope: EditScope;
   changeSummary: string;
   changes: EditChange[];
+}
+
+// ─── Target Context (Phase 3) ─────────────────────────────────────────────────
+
+export interface TargetContext {
+  type: "exercise" | "session" | "week" | "phase";
+  id: number;
+  label?: string;
+  parentLabel?: string;
 }
 
 // ─── System Context Serializer ───────────────────────────────────────────────
@@ -94,13 +104,17 @@ export function serializeSystemForPrompt(system: any): string {
 
 // ─── AI Edit Prompt Builder ──────────────────────────────────────────────────
 
-function buildEditSystemPrompt(systemContext: string): string {
+function buildEditSystemPrompt(systemContext: string, targetContext?: TargetContext): string {
+  const targetFocus = targetContext
+    ? `\nEDIT FOCUS:\nThe user is specifically targeting: ${targetContext.type.toUpperCase()} [id:${targetContext.id}]${targetContext.label ? ` "${targetContext.label}"` : ""}${targetContext.parentLabel ? ` in ${targetContext.parentLabel}` : ""}.\nFocus ALL changes on this specific object. Only expand scope if the user's request explicitly requires broader changes. Prefer targeted, surgical edits to this one object.\n`
+    : "";
+
   return `You are an elite performance architect editing a user's structured training system.
 
 You will receive:
 1. The user's current structured training system (with IDs for every entity)
 2. A natural language modification request
-
+${targetFocus}
 Your job is to produce a structured JSON edit plan.
 
 RULES:
@@ -153,12 +167,13 @@ ${systemContext}`;
 
 async function interpretWithAI(
   userRequest: string,
-  systemContext: string
+  systemContext: string,
+  targetContext?: TargetContext
 ): Promise<EditPlan | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
-  const systemPrompt = buildEditSystemPrompt(systemContext);
+  const systemPrompt = buildEditSystemPrompt(systemContext, targetContext);
 
   try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -204,13 +219,244 @@ async function interpretWithAI(
 
 // ─── Rule-Based Fallback Interpreter ────────────────────────────────────────
 
-function interpretWithRules(userRequest: string, system: any): EditPlan {
+function interpretWithRules(userRequest: string, system: any, targetContext?: TargetContext): EditPlan {
   const lower = userRequest.toLowerCase();
 
   const currentWeek = findCurrentWeek(system);
   const currentSession = findCurrentSession(system);
 
-  // ── Reduce volume (week-level) ──
+  // ── Targeted: swap/replace a specific exercise ──
+  if (targetContext?.type === "exercise") {
+    const exerciseId = targetContext.id;
+    const label = targetContext.label ?? "the exercise";
+
+    const swapTo = lower.match(/(?:swap|replace|change|switch)\s+(?:this\s+)?(?:for|with|to)\s+(.+)/i)?.[1]?.trim();
+    const wantsEasier = lower.match(/easier|simpler|lighter|beginner|reduce/);
+    const wantsHarder = lower.match(/harder|heavier|advanced|progress/);
+    const wantsExplosive = lower.match(/explosive|power|speed|fast/);
+    const wantsShoulder = lower.match(/shoulder|rotator|shoulder.friendly/);
+    const wantsMoreSets = lower.match(/add.*set|more.*set|\+1 set|one more set/);
+    const wantsLessSets = lower.match(/remove.*set|less.*set|fewer.*set|drop.*set/);
+    const wantsReps = lower.match(/change.*rep|rep.*range|reps/);
+
+    if (swapTo) {
+      return {
+        intent: "swap_exercise",
+        scope: "exercise",
+        changeSummary: `${label} has been swapped for ${swapTo}. Sets, reps, and rest prescription carried over from the original slot.`,
+        changes: [{
+          type: "replace_exercise",
+          id: exerciseId,
+          replacement: { name: swapTo, notes: `Substituted for ${label}` },
+          reason: `User requested swap to ${swapTo}`,
+        }],
+      };
+    }
+
+    if (wantsShoulder) {
+      return {
+        intent: "injury_modification",
+        scope: "exercise",
+        changeSummary: `${label} modified for shoulder health. Notes added to cue pain-free range of motion and appropriate load selection.`,
+        changes: [{ type: "update_exercise", id: exerciseId, updates: { notes: "Shoulder modification: keep elbows tucked, use pain-free ROM only. If discomfort persists, use neutral-grip or machine variation." }, reason: "Shoulder-friendly modification" }],
+      };
+    }
+
+    if (wantsExplosive) {
+      return {
+        intent: "add_explosive_emphasis",
+        scope: "exercise",
+        changeSummary: `${label} updated with explosive execution cues. Use 60-75% of your max and focus on bar speed through the concentric.`,
+        changes: [{ type: "update_exercise", id: exerciseId, updates: { tempo: "X10X", notes: "Explosive concentric — control down, accelerate up. Move the bar with intent." }, reason: "Adding explosive cue" }],
+      };
+    }
+
+    if (wantsMoreSets) {
+      return {
+        intent: "increase_sets",
+        scope: "exercise",
+        changeSummary: `Added a set to ${label}. Monitor recovery — if accumulative fatigue rises, pull back to original prescription.`,
+        changes: [{ type: "update_exercise", id: exerciseId, updates: { sets: "INCREMENT" as any }, reason: "User requested additional set" }],
+      };
+    }
+
+    if (wantsLessSets) {
+      return {
+        intent: "reduce_sets",
+        scope: "exercise",
+        changeSummary: `Removed a set from ${label} to reduce local fatigue at this movement pattern.`,
+        changes: [{ type: "update_exercise", id: exerciseId, updates: { sets: "DECREMENT" as any }, reason: "User requested set reduction" }],
+      };
+    }
+
+    if (wantsReps) {
+      const higherReps = lower.match(/higher|more|increase|up/);
+      const lowerReps = lower.match(/lower|less|decrease|down/);
+      const newReps = higherReps ? "10-15" : lowerReps ? "4-6" : "8-12";
+      return {
+        intent: "change_rep_range",
+        scope: "exercise",
+        changeSummary: `Rep range on ${label} adjusted to ${newReps}. Load accordingly — target 2-3 RIR on working sets.`,
+        changes: [{ type: "update_exercise", id: exerciseId, updates: { reps: newReps }, reason: "User requested rep range change" }],
+      };
+    }
+
+    if (wantsEasier) {
+      return {
+        intent: "easier_variation",
+        scope: "exercise",
+        changeSummary: `${label} adjusted to a less demanding prescription. Use this opportunity to build movement quality and accumulate clean volume.`,
+        changes: [{ type: "update_exercise", id: exerciseId, updates: { notes: "Regressed: use lighter load, higher reps, shorter ROM or machine variation as needed. Prioritize quality over intensity." }, reason: "User requested easier variation" }],
+      };
+    }
+
+    if (wantsHarder) {
+      return {
+        intent: "harder_variation",
+        scope: "exercise",
+        changeSummary: `${label} progression cue added. Increase load or shift to a more demanding variation when your current prescription feels submaximal.`,
+        changes: [{ type: "update_exercise", id: exerciseId, updates: { notes: "Progression: load is ready to increase when you can hit the top of the rep range at 2+ RIR for 2 consecutive sessions." }, reason: "User requested harder progression cue" }],
+      };
+    }
+
+    return {
+      intent: "exercise_note",
+      scope: "exercise",
+      changeSummary: `Notes updated on ${label} based on your request.`,
+      changes: [{ type: "update_exercise", id: exerciseId, updates: { notes: userRequest }, reason: "User modification note" }],
+    };
+  }
+
+  // ── Targeted: session-level edit ──
+  if (targetContext?.type === "session") {
+    const sessionId = targetContext.id;
+    const label = targetContext.label ?? "this session";
+
+    if (lower.match(/recover|rest|easy|light|active/)) {
+      return {
+        intent: "change_session_type",
+        scope: "session",
+        changeSummary: `${label} has been converted to an active recovery session. Training stimulus is set to minimal — priority is movement quality and tissue prep.`,
+        changes: [{
+          type: "update_session",
+          id: sessionId,
+          updates: { sessionType: "recovery", emphasis: "Active recovery and tissue work", coachingNotes: "Recovery day: move well, not hard. Foam roll, light work, nothing that creates significant fatigue." },
+          reason: "User requested recovery emphasis",
+        }],
+      };
+    }
+
+    if (lower.match(/shorten|shorter|quick|fast|30 min|less time/)) {
+      return {
+        intent: "shorten_session",
+        scope: "session",
+        changeSummary: `${label} shortened. Finishers and lower-priority accessories trimmed. Primary work remains intact.`,
+        changes: [{ type: "update_session", id: sessionId, updates: { coachingNotes: "Time-compressed session: skip finishers if time is short. Primary and main accessories take priority." }, reason: "User requested shorter session" }],
+      };
+    }
+
+    if (lower.match(/athletic|explosive|sport|power|dynamic/)) {
+      return {
+        intent: "athletic_emphasis",
+        scope: "session",
+        changeSummary: `${label} refocused toward athletic and explosive qualities. Primaries updated with speed cues; conditioning emphasis added.`,
+        changes: [{ type: "update_session", id: sessionId, updates: { emphasis: "Athletic performance — explosive and dynamic emphasis", coachingNotes: "Athletic day: primaries should feel powerful, not heavy. Move bar with intent." }, reason: "User requested athletic emphasis" }],
+      };
+    }
+
+    if (lower.match(/equipment|dumbbell|hotel|travel|minimal/)) {
+      return {
+        intent: "equipment_constraint",
+        scope: "session",
+        changeSummary: `${label} updated for limited equipment. Note added to guide appropriate substitutions on the day.`,
+        changes: [{ type: "update_session", id: sessionId, updates: { coachingNotes: "Equipment-limited session: substitute barbell movements for dumbbell equivalents. Goblet squat, DB press, DB row, DB hinge work well here." }, reason: "Equipment constraint modification" }],
+      };
+    }
+
+    if (lower.match(/volume|reduce.*volume|less.*volume/)) {
+      return {
+        intent: "reduce_session_volume",
+        scope: "session",
+        changeSummary: `${label} volume trimmed. Accessories reduced; primary work preserved. Session density is lower than planned.`,
+        changes: [{ type: "update_session", id: sessionId, updates: { emphasis: "Reduced volume day — primaries only", coachingNotes: "Pulled back to primary work this session. Skip accessories if fatigue is high." }, reason: "Volume reduction on session" }],
+      };
+    }
+  }
+
+  // ── Targeted: week-level edit ──
+  if (targetContext?.type === "week") {
+    const weekId = targetContext.id;
+    if (lower.match(/deload|easier|back off|recover/)) {
+      return {
+        intent: "deload_week",
+        scope: "week",
+        changeSummary: "Week converted to a deload. Volume and intensity targets reduced to allow full systemic recovery before returning to progressive work.",
+        changes: [{ type: "update_week", id: weekId, updates: { volumeLevel: "deload", focus: "Deload week — recovery priority", notes: "This week is a planned deload. Reduce loads by 40-50%, cut volume by ~40%, train for quality not accumulation." }, reason: "User requested deload week" }],
+      };
+    }
+
+    if (lower.match(/travel|hotel|minimal|dumbbell|equipment/)) {
+      return {
+        intent: "travel_mode",
+        scope: "week",
+        changeSummary: "Week updated for travel/limited equipment. Note added to guide modifications throughout the week.",
+        changes: [{ type: "update_week", id: weekId, updates: { focus: "Travel week — equipment-adapted", notes: "Limited equipment this week: substitute barbell movements for dumbbell or bodyweight equivalents throughout." }, reason: "Travel equipment constraint" }],
+      };
+    }
+
+    if (lower.match(/increase intensity|push harder|heavier|more intensity/)) {
+      return {
+        intent: "increase_intensity",
+        scope: "week",
+        changeSummary: "Week intensity target elevated. Progress loads on primary movements, target 1-2 RIR on top sets.",
+        changes: [{ type: "update_week", id: weekId, updates: { volumeLevel: "high", focus: "High intensity accumulation", notes: "Push loads this week. Target 1-2 RIR on primaries. Keep accessories conservative if needed." }, reason: "Intensity escalation requested" }],
+      };
+    }
+
+    if (lower.match(/reduce|less|lower.*volume|fatigue/)) {
+      return {
+        intent: "reduce_weekly_volume",
+        scope: "week",
+        changeSummary: "Week volume pulled back. Accessory work reduced; primary structure retained. Allows fatigue to dissipate without losing training frequency.",
+        changes: [{ type: "update_week", id: weekId, updates: { volumeLevel: "low", focus: "Reduced volume — fatigue management", notes: "Lower volume week: cut accessories by 1-2 sets each. Primary movements unchanged." }, reason: "Weekly volume reduction" }],
+      };
+    }
+  }
+
+  // ── Targeted: phase-level edit ──
+  if (targetContext?.type === "phase") {
+    const phaseId = targetContext.id;
+    const label = targetContext.label ?? "this block";
+
+    if (lower.match(/power|explosive|speed|athletic/)) {
+      return {
+        intent: "refocus_block_power",
+        scope: "block",
+        changeSummary: `${label} refocused toward power and explosive development. Primary movements will emphasize bar speed and neural output over mechanical hypertrophy.`,
+        changes: [{ type: "update_phase", id: phaseId, updates: { emphasis: "Power and explosive development — bar speed, neural output, dynamic effort emphasis", goal: "Develop explosive strength and power output across primary patterns" }, reason: "Power emphasis refocus" }],
+      };
+    }
+
+    if (lower.match(/hypertrophy|muscle|size|volume|mass/)) {
+      return {
+        intent: "refocus_block_hypertrophy",
+        scope: "block",
+        changeSummary: `${label} shifted toward hypertrophy emphasis. Mechanical tension and metabolic stress are the primary training drivers for this block.`,
+        changes: [{ type: "update_phase", id: phaseId, updates: { emphasis: "Hypertrophy — mechanical tension and metabolic stress primary drivers", goal: "Maximize muscle development through progressive volume and mechanical load" }, reason: "Hypertrophy emphasis refocus" }],
+      };
+    }
+
+    if (lower.match(/field|sport|athletic|performance|speed/)) {
+      return {
+        intent: "refocus_block_athletic",
+        scope: "block",
+        changeSummary: `${label} reoriented toward field-sport and athletic performance. Strength work serves power and speed transfer rather than peak force production alone.`,
+        changes: [{ type: "update_phase", id: phaseId, updates: { emphasis: "Field-sport athletic development — strength, speed, and movement quality integrated", goal: "Develop athletic performance qualities transferable to sport" }, reason: "Athletic/field-sport refocus" }],
+      };
+    }
+  }
+
+  // ── Reduce volume (week-level, no specific target) ──
   if (lower.match(/lower.*volume|reduce.*volume|less.*volume|cut.*volume|back.*off|beat up|fatigued|deload/)) {
     const changes: EditChange[] = [];
 
@@ -236,7 +482,7 @@ function interpretWithRules(userRequest: string, system: any): EditPlan {
     return {
       intent: "reduce_volume",
       scope: "week",
-      changeSummary: "I've reduced accessory and finisher sets by one across the current week and marked the week as lower volume. Primary lifts remain intact — recovery is the priority right now.",
+      changeSummary: "Accessory and finisher sets reduced by one across the current week. Primary lifts remain intact — recovery is the priority right now.",
       changes,
     };
   }
@@ -260,7 +506,7 @@ function interpretWithRules(userRequest: string, system: any): EditPlan {
     return {
       intent: "increase_volume",
       scope: "week",
-      changeSummary: "I've added one set to accessory work across the current week and marked it as a high-volume week. Primary lifts are unchanged — the added volume comes from accessory accumulation.",
+      changeSummary: "Added one set to accessory work across the current week. Primary lifts unchanged — added volume comes from accessory accumulation.",
       changes,
     };
   }
@@ -272,12 +518,7 @@ function interpretWithRules(userRequest: string, system: any): EditPlan {
       changes.push({
         type: "update_session",
         id: currentSession.id,
-        updates: {
-          sessionType: "recovery",
-          emphasis: "Active recovery and mobility",
-          coachingNotes: "Light session today — focus on movement quality and tissue work. Keep intensity low.",
-          warmupNotes: "10 min: foam rolling, hip circles, thoracic rotation, shoulder CARs",
-        },
+        updates: { sessionType: "recovery", emphasis: "Active recovery and mobility", coachingNotes: "Light session today — focus on movement quality and tissue work. Keep intensity low.", warmupNotes: "10 min: foam rolling, hip circles, thoracic rotation, shoulder CARs" },
         reason: "Converting session to recovery emphasis",
       });
       for (const ex of currentSession.exercises ?? []) {
@@ -289,37 +530,28 @@ function interpretWithRules(userRequest: string, system: any): EditPlan {
     return {
       intent: "change_session_type",
       scope: "session",
-      changeSummary: `I've converted today's session to an active recovery focus. Exercise prescriptions have been lightened significantly — this is a movement-quality day, not a training stimulus day.`,
+      changeSummary: "Today's session converted to active recovery focus. Exercise prescriptions lightened significantly — movement quality day, not a stimulus day.",
       changes,
     };
   }
 
-  // ── Swap exercise (basic rule-based) ──
+  // ── Swap exercise ──
   const swapMatch = lower.match(/swap|replace|change|switch/);
   if (swapMatch) {
     const forMatch = userRequest.match(/(?:swap|replace|change|switch)\s+(.+?)\s+(?:for|with|to)\s+(.+)/i);
     if (forMatch && currentSession) {
       const fromName = forMatch[1].trim();
       const toName = forMatch[2].trim();
-      const targetEx = currentSession.exercises?.find((e: any) =>
-        e.name.toLowerCase().includes(fromName.toLowerCase())
-      );
+      const targetEx = currentSession.exercises?.find((e: any) => e.name.toLowerCase().includes(fromName.toLowerCase()));
       if (targetEx) {
         return {
           intent: "swap_exercise",
           scope: "exercise",
-          changeSummary: `I've replaced ${targetEx.name} with ${toName}, preserving the same sets, reps, and rest prescription. The movement pattern emphasis for this slot remains unchanged.`,
+          changeSummary: `${targetEx.name} replaced with ${toName}. Same sets, reps, and rest prescription preserved — only the implement changes.`,
           changes: [{
             type: "replace_exercise",
             id: targetEx.id,
-            replacement: {
-              name: toName,
-              category: targetEx.category,
-              sets: targetEx.sets,
-              reps: targetEx.reps,
-              rest: targetEx.rest,
-              notes: `Substituted in for ${targetEx.name}`,
-            },
+            replacement: { name: toName, category: targetEx.category, sets: targetEx.sets, reps: targetEx.reps, rest: targetEx.rest, notes: `Substituted in for ${targetEx.name}` },
             reason: `User requested swap: ${fromName} → ${toName}`,
           }],
         };
@@ -327,7 +559,7 @@ function interpretWithRules(userRequest: string, system: any): EditPlan {
     }
   }
 
-  // ── Equipment constraint (dumbbells only, hotel gym, etc.) ──
+  // ── Equipment constraint ──
   if (lower.match(/dumbbell|hotel gym|home gym|no barbell|only have|limited equipment|travel/)) {
     const changes: EditChange[] = [];
     const barbellToDb: Record<string, string> = {
@@ -347,12 +579,7 @@ function interpretWithRules(userRequest: string, system: any): EditPlan {
         for (const ex of session.exercises ?? []) {
           const replacement = barbellToDb[ex.name];
           if (replacement) {
-            changes.push({
-              type: "replace_exercise",
-              id: ex.id,
-              replacement: { name: replacement, category: ex.category, sets: ex.sets, reps: ex.reps, rest: ex.rest },
-              reason: `Replaced barbell movement with dumbbell equivalent for equipment constraint`,
-            });
+            changes.push({ type: "replace_exercise", id: ex.id, replacement: { name: replacement, category: ex.category, sets: ex.sets, reps: ex.reps, rest: ex.rest }, reason: "Barbell → dumbbell swap for equipment constraint" });
           }
         }
       }
@@ -362,13 +589,13 @@ function interpretWithRules(userRequest: string, system: any): EditPlan {
       intent: "equipment_constraint",
       scope: "week",
       changeSummary: changes.length > 0
-        ? `I've swapped ${changes.length} barbell-dependent exercises across the current week for dumbbell equivalents. Set/rep prescriptions are preserved — only the implement changes.`
-        : `Equipment noted. Your current week's exercises are already compatible with limited equipment.`,
+        ? `${changes.length} barbell-dependent exercises swapped for dumbbell equivalents across the current week. Set/rep prescriptions preserved.`
+        : "Equipment noted. Current week's exercises are already compatible with limited equipment.",
       changes,
     };
   }
 
-  // ── Adjust intensity (reduce) ──
+  // ── Adjust intensity down ──
   if (lower.match(/easier|too hard|back off intensity|reduce intensity|tone.*down|scale.*back/)) {
     const changes: EditChange[] = [];
     for (const phase of system.phases ?? []) {
@@ -391,23 +618,23 @@ function interpretWithRules(userRequest: string, system: any): EditPlan {
     return {
       intent: "reduce_intensity",
       scope: "week",
-      changeSummary: "I've shifted primary lifts to higher rep ranges across the current week, which reduces neural demand while maintaining training stimulus. This is a sustainable way to back off without cutting volume entirely.",
+      changeSummary: "Primary lifts shifted to higher rep ranges across the current week. Neural demand reduced while maintaining training stimulus. Sustainable way to back off without cutting volume.",
       changes,
     };
   }
 
-  // ── Explosive / power emphasis ──
+  // ── Explosive/power emphasis ──
   if (lower.match(/explosive|power|speed|fast.*twitch|athletic|sport/)) {
     const changes: EditChange[] = [];
     for (const phase of system.phases ?? []) {
       if (phase.status !== "current") continue;
-      changes.push({ type: "update_phase", id: phase.id, updates: { emphasis: "Power and explosive development — speed work prioritized", notes: "Adjusted for explosive/power emphasis at user request" }, reason: "User requested more explosive training" });
+      changes.push({ type: "update_phase", id: phase.id, updates: { emphasis: "Power and explosive development — speed work prioritized", notes: "Adjusted for explosive/power emphasis at user request" }, reason: "Power emphasis" });
       for (const week of phase.weeks ?? []) {
         if (week.status !== "current") continue;
         for (const session of week.sessions ?? []) {
           for (const ex of session.exercises ?? []) {
             if (ex.category === "primary") {
-              changes.push({ type: "update_exercise", id: ex.id, updates: { notes: "Explosive concentric. If using submaximal load (60-75%), move bar fast." }, reason: "Adding explosive execution cue" });
+              changes.push({ type: "update_exercise", id: ex.id, updates: { notes: "Explosive concentric. Use submaximal load (60-75%), move bar fast." }, reason: "Adding explosive execution cue" });
             }
           }
         }
@@ -416,12 +643,12 @@ function interpretWithRules(userRequest: string, system: any): EditPlan {
     return {
       intent: "add_explosive_emphasis",
       scope: "block",
-      changeSummary: "I've updated the current block emphasis toward power and explosive development. Primary exercises now include bar-speed cues — use submaximal loads (60-75% of your max) and focus on moving the weight as fast as possible through the concentric.",
+      changeSummary: "Current block updated for power and explosive development. Primary exercises carry bar-speed cues — use submaximal loads (60-75%) and accelerate through the concentric.",
       changes,
     };
   }
 
-  // ── Injury / pain adjustment ──
+  // ── Injury ──
   if (lower.match(/knee|shoulder|back|hip|pain|hurt|injured|sore|irritated/)) {
     const injuredPart = lower.match(/knee|shoulder|back|hip/)?.[0] ?? "joint";
     const avoidPatterns: Record<string, string[]> = {
@@ -438,12 +665,7 @@ function interpretWithRules(userRequest: string, system: any): EditPlan {
       for (const ex of currentSession.exercises ?? []) {
         const matches = patterns.some((p) => ex.name.toLowerCase().includes(p));
         if (matches) {
-          changes.push({
-            type: "update_exercise",
-            id: ex.id,
-            updates: { notes: `Modified for ${injuredPart} irritation — reduce range of motion and use pain-free load only. Consider subbing with a unilateral or machine variation if discomfort persists.` },
-            reason: `Injury modification for ${injuredPart}`,
-          });
+          changes.push({ type: "update_exercise", id: ex.id, updates: { notes: `Modified for ${injuredPart} irritation — reduce range of motion and use pain-free load only. Consider subbing with unilateral or machine variation if discomfort persists.` }, reason: `Injury modification for ${injuredPart}` });
         }
       }
     }
@@ -451,7 +673,7 @@ function interpretWithRules(userRequest: string, system: any): EditPlan {
     return {
       intent: "injury_modification",
       scope: "session",
-      changeSummary: `I've flagged exercises that load the ${injuredPart} in today's session with modification notes. Train pain-free range of motion and consider substituting affected movements with machine or unilateral versions until it settles. If pain persists beyond 72 hours, pause loading that pattern.`,
+      changeSummary: `Exercises that load the ${injuredPart} flagged with modification notes in today's session. Train pain-free ROM. Consider machine or unilateral substitutions. If pain persists past 72 hours, pause loading that pattern.`,
       changes,
     };
   }
@@ -460,12 +682,12 @@ function interpretWithRules(userRequest: string, system: any): EditPlan {
   return {
     intent: "general_modification",
     scope: "system",
-    changeSummary: "I couldn't identify a specific structured edit for this request. Try being more specific — for example: 'swap barbell bench for dumbbell bench', 'reduce volume this week', or 'make Friday a recovery day'.",
+    changeSummary: "No specific edit identified for that request. Try something more targeted — 'swap barbell bench for dumbbell bench', 'reduce volume this week', or 'make Friday a recovery day'.",
     changes: [],
   };
 }
 
-// ─── Helper: Find current week and session ────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function findCurrentWeek(system: any): any | null {
   for (const phase of system.phases ?? []) {
@@ -487,17 +709,18 @@ function findCurrentSession(system: any): any | null {
 
 export async function interpretEditRequest(
   userRequest: string,
-  system: any
+  system: any,
+  targetContext?: TargetContext
 ): Promise<EditPlan> {
   const systemContext = serializeSystemForPrompt(system);
 
-  const aiPlan = await interpretWithAI(userRequest, systemContext);
+  const aiPlan = await interpretWithAI(userRequest, systemContext, targetContext);
 
-  if (aiPlan && aiPlan.changes.length >= 0) {
+  if (aiPlan && Array.isArray(aiPlan.changes)) {
     logger.info({ intent: aiPlan.intent, scope: aiPlan.scope, changes: aiPlan.changes.length }, "AI edit plan generated");
     return aiPlan;
   }
 
   logger.info("Falling back to rule-based edit interpretation");
-  return interpretWithRules(userRequest, system);
+  return interpretWithRules(userRequest, system, targetContext);
 }

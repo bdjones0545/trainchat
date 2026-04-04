@@ -1,0 +1,355 @@
+PHASE 3 — BUILD THE REPLIT-STYLE INTERACTION LAYER FOR “YOUR SYSTEM” IN TRAINCHAT
+
+We have already built:
+- Phase 1: persistent structured training system + read-only “Your System”
+- Phase 2: agent editing engine that can interpret natural language and apply structured partial updates
+
+Now we are building the interaction layer that makes TrainChat feel like “vibe coding for training.”
+
+IMPORTANT:
+This phase is about user interaction and UI/UX behavior.
+Do NOT build version history yet.
+Do NOT build revert/rollback yet.
+Do NOT build wearable integrations yet.
+Do NOT build proactive automatic adjustments yet.
+
+This phase should make the system feel interactive, intuitive, premium, and addictive — like the user is co-building their training system with an AI performance architect.
+
+OBJECTIVE
+Transform the user experience from:
+“I can ask the AI to edit my program”
+
+Into:
+“I can directly work inside my training system and edit it with AI wherever I want”
+
+The user should feel like the program is a live workspace.
+
+CORE PRODUCT BEHAVIOR
+The training system should now feel like an editable environment, not just a read-only view with a chat box attached.
+
+The user should be able to:
+- click into a day
+- click an exercise
+- click a week
+- click a block
+- request targeted changes in context
+- see the updated system reflected immediately
+- understand what changed
+
+This should feel like:
+Replit for training programs
+
+PHASE 3 SCOPE ONLY
+
+Build the following:
+
+1. CONTEXTUAL “EDIT WITH AI” INTERACTIONS
+Add contextual edit entry points throughout “Your System.”
+
+At minimum, allow the user to trigger AI-assisted edits from:
+- exercise item level
+- session/day level
+- week level
+- block/phase level
+
+Examples:
+- click an exercise → “Edit with AI”
+- click a day/session → “Adjust this day”
+- click a week → “Modify this week”
+- click a block → “Refocus this block”
+
+These entry points should clearly pass context into the editing engine from Phase 2.
+
+2. TARGETED EDIT PANELS / MODALS / DRAWERS
+When the user selects an edit target, open a premium editing interface.
+
+This can be a modal, side panel, or drawer depending on the layout.
+
+Requirements:
+- clearly show what object is being edited
+- provide a text field for natural language requests
+- optionally provide smart prompt suggestions relevant to the selected context
+- maintain a premium mobile-first experience
+- feel like a purposeful system editor, not a generic chatbot popup
+
+Examples of smart suggestions:
+For an exercise:
+- swap this exercise
+- make this easier on my shoulder
+- change the rep range
+- make this more explosive
+
+For a session:
+- reduce fatigue on this day
+- make this more athletic
+- shorten this workout
+- convert this to recovery emphasis
+
+For a week:
+- lower weekly volume
+- make this week a deload
+- adjust for travel equipment
+- increase intensity slightly
+
+For a block:
+- make this block more power-focused
+- shift toward hypertrophy
+- make this more field-sport specific
+
+3. CONTEXT-PASSING INTO THE EDIT ENGINE
+Connect the Phase 2 editing engine to specific selected objects in the UI.
+
+Requirements:
+- when the user edits an exercise, the engine knows exactly which exercise item is targeted
+- when editing a session, the engine knows which session/day is targeted
+- when editing a week, the engine knows the exact active week
+- when editing a block, the engine knows the exact phase/block
+
+Do not rely only on vague natural language.
+Pass explicit structured object context into the backend editing flow.
+
+4. INLINE QUICK ACTIONS
+Add lightweight quick actions for common edit behaviors.
+
+Examples:
+Exercise-level quick actions:
+- swap
+- easier variation
+- harder variation
+- change reps
+- change sets
+
+Session-level quick actions:
+- shorten workout
+- lower volume
+- recovery emphasis
+- equipment-friendly
+
+Week-level quick actions:
+- deload week
+- increase intensity
+- reduce overall fatigue
+- travel mode
+
+These can either:
+- trigger pre-filled edit prompts
+- or call structured edit actions through the same engine
+
+The goal is to make common edits feel fast and satisfying.
+
+5. LIVE SYSTEM UPDATE EXPERIENCE
+After an edit is submitted:
+- show a polished loading state
+- process the change through the structured edit engine
+- refresh the relevant part of “Your System”
+- display the updated content in place
+
+The user should feel:
+“I changed the system and it updated immediately.”
+
+This should not feel like navigating away and refreshing a separate page.
+
+6. CHANGE HIGHLIGHTING
+When updates are applied, visually highlight what changed.
+
+Examples:
+- updated exercise card briefly highlighted
+- changed sets/reps visually emphasized
+- modified session header tagged as updated
+- changed week/block summary marked with a subtle “Updated” indicator
+
+This is critical.
+The user should never wonder:
+“What actually changed?”
+
+Make the highlight premium and clean, not flashy.
+
+7. BEFORE/AFTER CHANGE SUMMARY
+Alongside the updated system, show a concise change summary.
+
+Requirements:
+- explain what changed
+- explain why it changed
+- tie the explanation to the selected object/context
+- keep it easy to scan
+
+Example:
+- “Dumbbell bench replaced barbell bench on Monday to match your equipment constraint while preserving upper-body pressing emphasis.”
+- “Week 3 accessory volume was reduced to manage fatigue while keeping your primary lifts intact.”
+
+This summary should appear naturally within the editing interaction, not buried in a generic message feed.
+
+8. “WORK WITH YOUR COACH” INTERACTION SURFACE
+Create a dedicated interaction layer inside “Your System” so the user feels they are consulting with their agent inside the program workspace.
+
+This can include:
+- a contextual assistant panel
+- editing drawer
+- floating AI action bar
+- targeted AI edit button in multiple views
+
+The agent should feel embedded in the workspace.
+
+The user should not feel like:
+“Now I leave the program and go chat somewhere else”
+
+Instead:
+“I’m inside my system, and my coach is helping me shape it.”
+
+9. MULTI-VIEW CONSISTENCY
+Ensure the interaction layer works across:
+- Today view
+- Week view
+- Block view
+
+When something changes in one level, the relevant other views should reflect it where appropriate.
+
+Examples:
+- changing an exercise updates the session and today view
+- changing a week affects week summary and affected days
+- changing a block updates block summary and future organization where applicable
+
+10. NO FULL REGENERATION UX
+Do not present edits as if the entire program was regenerated every time.
+
+The UX should emphasize:
+- targeted changes
+- preserved structure
+- continuity
+- intelligent editing
+
+Language should reinforce:
+- updated
+- adjusted
+- refined
+- modified
+
+Not:
+- regenerated from scratch
+
+11. EDIT REQUEST HISTORY WITHIN SESSION CONTEXT
+Do not build full version history yet, but within the active UI session show recent edit actions in a lightweight way.
+
+Examples:
+- “Recent changes”
+- “Last adjustment”
+- “Edited today”
+
+This should help the user keep track of what was just changed without building a full Git-style system yet.
+
+Keep this lightweight and clearly distinct from Phase 4 versioning.
+
+12. MOBILE-FIRST UX QUALITY
+This interaction layer must work well on mobile.
+
+Requirements:
+- tap-friendly edit entry points
+- drawers/modals sized well for small screens
+- no cluttered dense controls
+- clear hierarchy between system view and edit interface
+- smooth transitions
+
+Also ensure desktop feels premium and spacious.
+
+13. DESIGN PRINCIPLES
+The UI should feel:
+- premium
+- modern
+- structured
+- interactive
+- intelligent
+- calm and high-trust
+
+It should NOT feel:
+- chaotic
+- like a generic chat overlay
+- like a clunky admin panel
+- overcomplicated
+- too technical for the user
+
+Think:
+elite performance workspace
+
+14. BACKEND / FRONTEND INTEGRATION REQUIREMENTS
+Use the structured editing engine already built in Phase 2.
+
+Requirements:
+- do not duplicate editing logic in frontend
+- frontend passes object context + user request
+- backend returns updated structured data + change summary
+- frontend re-renders the impacted parts of the system cleanly
+
+Keep separation of concerns clean.
+
+15. READINESS FOR PHASE 4 VERSIONING
+Do NOT build full version history yet.
+But structure this phase so Phase 4 can later add:
+- before/after snapshots
+- change timeline
+- revert controls
+- audit trail per edit
+
+This means edits and UI updates should be recorded in a consistent way and object targeting should remain explicit.
+
+16. READINESS FOR FUTURE INTELLIGENCE LAYER
+Also prepare for later phases where the system may suggest edits proactively based on:
+- readiness
+- travel
+- pain/injury feedback
+- performance trends
+- wearable data
+
+Do not implement that yet, but keep the UI and interaction architecture extensible.
+
+17. DO NOT BUILD IN THIS PHASE
+Do NOT build:
+- full version control UI
+- revert/rollback
+- wearable integrations
+- automatic readiness-based modifications
+- autonomous proactive edits without user request
+- full performance analytics layer
+
+Those belong in later phases.
+
+18. TESTING / VALIDATION
+After building, validate:
+- user can trigger edit from exercise, session, week, and block levels
+- correct object context is passed into editing engine
+- common quick actions work
+- change summaries appear clearly
+- updated system re-renders correctly
+- changed items are visually highlighted
+- mobile UX remains strong
+- existing TrainChat flows remain unaffected
+
+19. DELIVERABLES AFTER IMPLEMENTATION
+When complete, provide:
+1. summary of what was built
+2. what contextual edit entry points were added
+3. how object context is passed to the edit engine
+4. what quick actions were implemented
+5. how change highlighting works
+6. how the “Work With Your Coach” interaction layer is structured
+7. what frontend components/pages were added or modified
+8. how this is prepared for Phase 4 versioning
+9. any cleanup recommendations before moving to Phase 4
+
+IMPORTANT REMINDERS
+This phase is about making the system feel interactive and alive.
+
+We are building:
+- contextual edit triggers
+- targeted edit UI
+- quick actions
+- live updates
+- change highlighting
+- embedded agent interaction inside the workspace
+
+We are NOT building:
+- version history
+- revert controls
+- auto-adjustment intelligence
+- wearable integrations
+
+The goal is to make TrainChat feel like a real editable performance workspace — the Replit experience for training systems.

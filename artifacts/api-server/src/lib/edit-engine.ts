@@ -1,9 +1,10 @@
 /**
- * Edit Engine — Phase 2
+ * Edit Engine — Phase 2 + Phase 3
  *
  * Applies a structured EditPlan to the training system database.
  * Operations are targeted: only the specified IDs and fields are modified.
- * All other parts of the program remain untouched.
+ *
+ * Phase 3: Returns changedIds for frontend change highlighting.
  */
 
 import { db } from "@workspace/db";
@@ -53,7 +54,20 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; deta
         if (!change.updates || Object.keys(change.updates).length === 0) {
           return { applied: false, detail: `No updates for exercise ${change.id}` };
         }
-        const safeUpdates = filterFields(change.updates, EXERCISE_ALLOWED_FIELDS);
+
+        // Handle INCREMENT/DECREMENT sentinels for sets
+        const updatesWithSentinel = { ...change.updates };
+        if (updatesWithSentinel.sets === "INCREMENT" || updatesWithSentinel.sets === "DECREMENT") {
+          const [existing] = await db.select().from(sessionExercises).where(eq(sessionExercises.id, change.id));
+          if (existing) {
+            const currentSets = existing.sets ?? 3;
+            updatesWithSentinel.sets = updatesWithSentinel.sets === "INCREMENT"
+              ? Math.min(currentSets + 1, 6)
+              : Math.max(currentSets - 1, 1);
+          }
+        }
+
+        const safeUpdates = filterFields(updatesWithSentinel, EXERCISE_ALLOWED_FIELDS);
         if (Object.keys(safeUpdates).length === 0) {
           return { applied: false, detail: `No allowed fields in exercise update for ${change.id}` };
         }
@@ -69,7 +83,6 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; deta
           return { applied: false, detail: `No replacement data for exercise ${change.id}` };
         }
 
-        // Fetch existing exercise to preserve session linkage and order
         const [existing] = await db
           .select()
           .from(sessionExercises)
@@ -156,6 +169,43 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; deta
   }
 }
 
+// ─── Changed IDs Extraction ───────────────────────────────────────────────────
+
+export interface ChangedIds {
+  exercises: number[];
+  sessions: number[];
+  weeks: number[];
+  phases: number[];
+}
+
+function extractChangedIds(plan: EditPlan): ChangedIds {
+  const exercises: number[] = [];
+  const sessions: number[] = [];
+  const weeks: number[] = [];
+  const phases: number[] = [];
+
+  for (const change of plan.changes) {
+    switch (change.type) {
+      case "update_exercise":
+      case "replace_exercise":
+      case "delete_exercise":
+        exercises.push(change.id);
+        break;
+      case "update_session":
+        sessions.push(change.id);
+        break;
+      case "update_week":
+        weeks.push(change.id);
+        break;
+      case "update_phase":
+        phases.push(change.id);
+        break;
+    }
+  }
+
+  return { exercises, sessions, weeks, phases };
+}
+
 // ─── Main Entry Point ────────────────────────────────────────────────────────
 
 export interface EditResult {
@@ -163,6 +213,7 @@ export interface EditResult {
   skippedCount: number;
   changeSummary: string;
   details: string[];
+  changedIds: ChangedIds;
 }
 
 export async function applyEditPlan(plan: EditPlan): Promise<EditResult> {
@@ -176,11 +227,13 @@ export async function applyEditPlan(plan: EditPlan): Promise<EditResult> {
 
   const appliedCount = results.filter((r) => r.applied).length;
   const skippedCount = results.filter((r) => !r.applied).length;
+  const changedIds = extractChangedIds(plan);
 
   return {
     appliedCount,
     skippedCount,
     changeSummary: plan.changeSummary,
     details: results.map((r) => r.detail),
+    changedIds,
   };
 }

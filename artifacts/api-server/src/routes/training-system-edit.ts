@@ -1,9 +1,11 @@
 /**
- * Training System Edit Routes — Phase 2
+ * Training System Edit Routes — Phase 2 + Phase 3
  *
  * POST /training-system/edit
- *   Accepts a natural language modification request.
- *   Orchestrates: interpret → plan → apply → respond with updated data.
+ *   Accepts a natural language modification request with optional target context.
+ *   Orchestrates: interpret → plan → apply → respond with updated data + changedIds.
+ *
+ * Phase 3: targetContext enables focused, object-level edits from the UI.
  */
 
 import { Router, type IRouter } from "express";
@@ -22,8 +24,16 @@ import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
+const TargetContextSchema = z.object({
+  type: z.enum(["exercise", "session", "week", "phase"]),
+  id: z.number().int().positive(),
+  label: z.string().optional(),
+  parentLabel: z.string().optional(),
+});
+
 const EditRequestBody = z.object({
-  request: z.string().min(1).max(1000),
+  request: z.string().min(1).max(2000),
+  targetContext: TargetContextSchema.optional(),
 });
 
 // ─── POST /training-system/edit ───────────────────────────────────────────────
@@ -35,7 +45,7 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
   }
 
   const userId = req.session.userId!;
-  const userRequest = parsed.data.request;
+  const { request: userRequest, targetContext } = parsed.data;
 
   try {
     // 1. Load active training system
@@ -53,10 +63,11 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
     }
 
     // 3. Interpret the edit request into a structured plan
-    const editPlan = await interpretEditRequest(userRequest, fullSystem);
+    //    targetContext focuses the AI on a specific exercise/session/week/phase
+    const editPlan = await interpretEditRequest(userRequest, fullSystem, targetContext);
 
     logger.info(
-      { userId, intent: editPlan.intent, scope: editPlan.scope, changesCount: editPlan.changes.length },
+      { userId, intent: editPlan.intent, scope: editPlan.scope, changesCount: editPlan.changes.length, targetType: targetContext?.type, targetId: targetContext?.id },
       "Edit plan ready — applying"
     );
 
@@ -76,6 +87,7 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       changeSummary: editResult.changeSummary,
       appliedCount: editResult.appliedCount,
       skippedCount: editResult.skippedCount,
+      changedIds: editResult.changedIds,
       updatedData: { today, week, block },
     });
   } catch (err) {

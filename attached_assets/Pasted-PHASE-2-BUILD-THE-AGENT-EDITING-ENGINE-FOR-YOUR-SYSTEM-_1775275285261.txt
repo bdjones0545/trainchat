@@ -1,0 +1,323 @@
+PHASE 2 — BUILD THE AGENT EDITING ENGINE FOR “YOUR SYSTEM” IN TRAINCHAT
+
+We have already built Phase 1:
+- persistent structured training system
+- database/schema for program → block → week → session → exercise hierarchy
+- read-only “Your System” interface
+- backend services/endpoints for retrieving the active training system
+
+Now we are building the intelligence layer that makes the system feel like “vibe coding for training.”
+
+IMPORTANT:
+This phase is NOT about full inline UI polish yet.
+This phase is NOT about version history yet.
+This phase is NOT about wearables or auto-adjustment yet.
+
+This phase is specifically about enabling the AI agent to interpret natural language requests and make structured updates to the user’s existing training system without regenerating everything from scratch.
+
+OBJECTIVE
+Transform TrainChat from:
+“Generate me a workout”
+
+Into:
+“Help me modify and evolve my training system”
+
+The AI should act like a performance architect editing a living system, not a chatbot spitting out disconnected plans.
+
+CORE PRODUCT BEHAVIOR
+A user should be able to say things like:
+- “Make this week lower volume”
+- “Swap barbell bench for dumbbell bench”
+- “Turn Friday into a recovery day”
+- “Make this block more explosive”
+- “I only have dumbbells this week”
+- “My knee is irritated, adjust lower body work”
+
+And the AI should:
+1. understand the request
+2. identify what part of the structured training system is being targeted
+3. apply the correct structured edit
+4. preserve the rest of the program
+5. explain what changed and why
+
+PHASE 2 SCOPE ONLY
+
+Build the following:
+
+1. NATURAL LANGUAGE EDITING ENTRY POINT
+Create a dedicated agent editing pathway for authenticated users with an existing active training system.
+
+Requirements:
+- the agent must be aware of the user’s current active training system
+- editing requests should target the existing structured system, not create a brand new one unless explicitly required
+- the editing flow should be clearly separated from generic chat behavior in the backend logic
+- this can still use chat-like UI entry points, but the logic must be system-edit aware
+
+Important:
+The system should know when the user is asking to edit their current program versus asking a general fitness question.
+
+2. EDIT INTENT INTERPRETATION LAYER
+Build an interpretation layer that classifies user requests into structured edit intents.
+
+Examples of edit categories:
+- swap exercise
+- adjust sets/reps/rest/tempo
+- reduce or increase volume
+- reduce or increase intensity
+- change exercise selection due to equipment
+- modify a single session
+- modify current week
+- modify a block/phase emphasis
+- add recovery/mobility focus
+- shift training split or day type
+- progress to next week
+- deload request
+- sport-specific emphasis adjustment
+
+The system should identify:
+- the requested change
+- the scope of the change
+- the target object(s) in the training system
+- any constraints implied by the user
+
+Example:
+User says “Make this week lower volume because I’m beat up”
+System should infer:
+- intent = reduce volume
+- scope = current week
+- target = current active week
+- context = fatigue/recovery concern
+
+3. STRUCTURED EDIT PLANNING
+Before making changes, create an internal structured edit plan.
+
+The edit plan should define:
+- what object(s) are being changed
+- what fields are changing
+- what must remain unchanged
+- why the change is being made
+- whether the request affects one exercise, one session, a week, or a whole block
+
+Do NOT just let the LLM rewrite the whole program as raw text.
+
+The system should produce machine-readable planned edits that can then be applied to the structured training system.
+
+4. PARTIAL UPDATE ENGINE
+Build logic that can update only the relevant part of the training system.
+
+Examples:
+- swap one exercise in one session
+- reduce all accessory sets across current week
+- convert a session into recovery emphasis
+- modify block notes and progression emphasis
+
+Requirements:
+- preserve unaffected parts of the program
+- maintain relationships/order in the system
+- avoid full regeneration unless absolutely necessary
+- support updates at multiple levels:
+  - exercise-level
+  - session-level
+  - week-level
+  - block-level
+  - program-level summary if needed
+
+This is critical:
+TrainChat should behave like an editor of a living system, not a generator that blows away prior work.
+
+5. PROGRAMMING INTEGRITY RULES
+The editing engine must preserve programming logic.
+
+Requirements:
+- maintain sensible exercise flow
+- avoid chaotic or contradictory changes
+- preserve balance between stress and recovery
+- avoid duplicating incompatible movement patterns excessively
+- preserve the integrity of the split unless the request intentionally changes it
+- keep set/rep/loading logic coherent
+- respect known constraints such as equipment, injuries, and current goal
+
+The system should follow high-level strength and conditioning logic and avoid silly or random edits.
+
+6. EDIT-SAFE AGENT PROMPTING
+Create deliberate backend prompting for the AI agent so it edits intelligently.
+
+The prompt should instruct the model to:
+- analyze the current structured system
+- identify the exact target of the requested change
+- preserve as much useful structure as possible
+- modify only what is necessary
+- explain changes clearly
+- avoid full program rewrites unless explicitly justified
+
+Use the actual structured system data meaningfully.
+Do not just dump raw text and hope for the best.
+
+7. CHANGE SUMMARY OUTPUT
+After edits are applied, return a clean summary of what changed.
+
+The response should include:
+- what was changed
+- where it was changed
+- why it was changed
+- any notable downstream effect on the system
+
+Examples:
+- “I reduced accessory volume across Week 2 by removing one set from the final two exercises in each session.”
+- “I replaced barbell bench press with dumbbell bench press on Monday to fit your equipment constraint while preserving the horizontal press emphasis.”
+
+This explanation layer is important because it makes the agent feel intelligent and coach-like.
+
+8. SYSTEM-AWARE CONTEXT MEMORY
+The editing engine should always use:
+- current active training system
+- current block
+- current week
+- current day/session when relevant
+- user goal
+- equipment constraints
+- known injuries or limitations
+- previously applied edits if relevant in the current state
+
+The AI should feel like it understands the system in front of it, not like it is answering in a vacuum.
+
+9. EDIT SCOPING RULES
+Create clear rules for scope.
+
+Examples:
+- “Swap this exercise” = likely exercise-level
+- “Make this day easier” = session-level
+- “Lower the volume this week” = week-level
+- “Make this block more explosive” = block-level
+- “I only have hotel gym equipment for the next month” = multi-week/block-level
+
+The engine should not over-edit.
+If the user asks for a local change, do not unnecessarily rewrite broader structures.
+
+10. FALLBACK / SAFETY HANDLING
+Handle ambiguous or risky edit requests gracefully.
+
+Examples:
+- if request is vague, make the most reasonable structured interpretation
+- if a requested change would create major system instability, preserve logic and explain the more stable modification chosen
+- if the system lacks enough context, apply the most conservative edit that fits the request
+
+Do NOT ask unnecessary clarifying questions if a reasonable safe interpretation is possible.
+Make best-effort intelligent edits.
+
+11. BACKEND SERVICES / API SUPPORT
+Add backend services/endpoints for:
+- submitting an edit request against the active training system
+- generating a structured edit plan
+- applying the structured edit
+- returning updated relevant system data plus change summary
+
+Keep service boundaries clean:
+- interpretation
+- planning
+- update execution
+- response formatting
+
+12. FRONTEND PHASE 2 UI SUPPORT
+Do not build full inline editing UX yet, but create the minimum frontend support needed so a user can:
+- submit a natural language modification request
+- see loading state
+- receive the change summary
+- see the updated program reflected in “Your System”
+
+This can be a clean agent interaction panel associated with “Your System.”
+It should feel purposeful, not like a generic global chatbot.
+
+13. CHANGE REFLECTION IN THE UI
+After an edit is applied:
+- refresh the relevant views of “Your System”
+- show updated session/week/block content
+- present the change summary in a clean readable way
+
+The user should clearly feel:
+“I asked for a change and my system was updated.”
+
+14. READINESS FOR PHASE 3 INLINE INTERACTION
+Do not build full click-to-edit interactions yet, but structure this phase so Phase 3 can later add:
+- click exercise → edit with AI
+- click session → modify with AI
+- quick action buttons
+- targeted edit prompts
+
+This means your editing engine should already support object-specific targeting even if Phase 2 UI is more general.
+
+15. READINESS FOR PHASE 4 VERSIONING
+Do NOT build version history yet.
+But prepare for it by structuring edits in a way that later phases can record:
+- what changed
+- previous values
+- updated values
+- timestamp
+- actor/source (AI edit)
+
+Avoid black-box destructive overwrites where possible.
+
+16. CODE QUALITY REQUIREMENTS
+Important:
+- do not bury this in random chat handlers
+- separate edit interpretation from update execution
+- separate AI prompting from database writes
+- keep program data machine-readable
+- make the system maintainable and extensible
+- follow current architecture/coding conventions
+
+17. DO NOT BUILD IN THIS PHASE
+Do NOT build:
+- full inline edit UI everywhere
+- version history UI
+- revert functionality
+- before/after timeline viewer
+- wearable integration
+- auto-adjustments from readiness data
+- proactive AI suggestions
+
+Those belong in later phases.
+
+18. TESTING / VALIDATION
+After building, validate at minimum these examples:
+- swap one exercise in a session
+- reduce weekly volume without rewriting entire program
+- modify one day into a recovery emphasis day
+- adjust for equipment constraint
+- update block emphasis while preserving structure
+
+Also validate:
+- unaffected portions of the training system remain unchanged
+- the user sees the updated system in the UI
+- change summaries are correct and readable
+- existing TrainChat flows remain unaffected
+
+19. DELIVERABLES AFTER IMPLEMENTATION
+When complete, provide:
+1. summary of what was built
+2. how edit intent interpretation works
+3. how structured edit plans are represented
+4. what backend services/endpoints were added
+5. how partial updates are applied
+6. how programming integrity is preserved
+7. what frontend interaction surface was added for edits
+8. how this is prepared for Phase 3 inline editing
+9. any cleanup recommendations before moving to Phase 3
+
+IMPORTANT REMINDERS
+This phase is about building the agent editing engine.
+
+We are building:
+- natural language program modification
+- structured edit interpretation
+- partial update logic
+- change summaries
+- system-aware AI editing
+
+We are NOT building:
+- full inline editing UX
+- version control
+- revert history
+- proactive adaptation
+
+The goal is to make TrainChat feel like a performance operating system that can be intelligently edited through natural language.
