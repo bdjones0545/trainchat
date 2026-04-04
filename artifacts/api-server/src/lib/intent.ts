@@ -51,7 +51,15 @@ export type EditSubtype =
   | "make_more_hypertrophy"
   | "reduce_frequency"
   | "increase_frequency"
+  | "structural_edit"
   | "general_modification";
+
+export interface StructuralEditMetadata {
+  targetSplit: "full_body" | "upper_lower" | "ppl" | "push_pull" | "unknown";
+  targetDays: number | null;
+  targetGoalShift: "athletic" | "fat_loss" | "strength" | "hypertrophy" | "conditioning" | null;
+  preserveExercises: boolean;
+}
 
 // ─── Main Classifier ────────────────────────────────────────────────────────
 
@@ -101,7 +109,29 @@ export function classifyIntent(
     };
   }
 
-  // ── Priority 6: EDIT_PROGRAM ─────────────────────────────────────────────
+  // ── Priority 6a: EDIT_PROGRAM (structural) ───────────────────────────────
+  // Run structural detection first — it's more specific and higher stakes
+  if (context.hasActiveProgram) {
+    const structuralResult = matchesStructuralEdit(lower);
+    if (structuralResult.matched) {
+      logger.info(
+        {
+          targetSplit: structuralResult.meta.targetSplit,
+          targetDays: structuralResult.meta.targetDays,
+          targetGoalShift: structuralResult.meta.targetGoalShift,
+        },
+        "[IntentRouter] → EDIT_PROGRAM (structural_edit)"
+      );
+      return {
+        type: "EDIT_PROGRAM",
+        confidence: structuralResult.confidence,
+        editSubtype: "structural_edit",
+        metadata: structuralResult.meta as unknown as Record<string, unknown>,
+      };
+    }
+  }
+
+  // ── Priority 6b: EDIT_PROGRAM (atomic) ───────────────────────────────────
   const editResult = matchesEditProgram(lower, context.hasActiveProgram);
   if (editResult.matched) {
     logger.debug({ editSubtype: editResult.subtype, confidence: editResult.confidence }, "[IntentRouter] → EDIT_PROGRAM");
@@ -206,6 +236,86 @@ function matchesReadinessAdjustment(lower: string): {
   }
 
   return { matched: false };
+}
+
+// ─── Structural Edit Detection ───────────────────────────────────────────────
+//
+// Handles high-level program restructuring requests:
+//   "make this full body", "convert to upper/lower", "change to 3 days", etc.
+// These are detected BEFORE atomic edit patterns because they require a full
+// program redesign rather than a surgical modification.
+
+function matchesStructuralEdit(lower: string): {
+  matched: boolean;
+  confidence: "high" | "medium" | "low";
+  meta: StructuralEditMetadata;
+} {
+  const noMatch = {
+    matched: false,
+    confidence: "low" as const,
+    meta: { targetSplit: "unknown" as const, targetDays: null, targetGoalShift: null, preserveExercises: true },
+  };
+
+  // ── Split type conversion ──────────────────────────────────────────────────
+  const fullBodyPattern = /\b(more full.?body|make.{0,20}full.?body|convert.{0,20}(to|into).{0,20}full.?body|full.?body (split|structure|approach|program|style)|full.?body it|go full.?body|switch.{0,20}full.?body)\b/i;
+  const upperLowerPattern = /\b(upper.lower|upper\/lower|convert.{0,20}(to|into).{0,20}upper.lower|make.{0,20}upper.lower|upper lower split)\b/i;
+  const pplPattern = /\b(push.pull.legs?|ppl.split|ppl.program|convert.{0,20}(to|into).{0,20}(ppl|push.pull))\b/i;
+  const pushPullPattern = /\b(push.pull (split|program|style)|convert.{0,20}(to|into).{0,20}push.pull(?!.legs))\b/i;
+
+  // ── Goal/orientation shift ─────────────────────────────────────────────────
+  const fatLossPattern = /\b(more.{0,20}(fat.loss|fat burning|weight.loss|cutting|calorie burning)|better for (fat.loss|cutting|losing weight|burning fat)|fat.loss (focus|oriented|style|version))\b/i;
+  const conditioningPattern = /\b(more conditioning focused|conditioning.first|more.{0,20}conditioning|conditioning.heavy|prioritize conditioning|sport.specific conditioning)\b/i;
+  const performancePattern = /\b(better for performance|performance.focused|performance.based|more performance|athletic performance|sport performance)\b/i;
+  const hypertrophyShiftPattern = /\b(less bodybuilding|more bodybuilding|more.{0,20}muscle building|muscle.building focus|hypertrophy.first|bodybuilding style program)\b/i;
+  const strengthShiftPattern = /\b(more powerlifting|powerlifting.style|strength.first|strength.focused program|strength.only|pure strength)\b/i;
+
+  // ── Structural ambiguity (medium confidence only if has active program) ────
+  const structuralVagueness = /\b(restructure|reorganize|redesign|rebalance|rethink|completely change.{0,20}structure|change.{0,20}structure|different structure|different split|different layout|different setup)\b/i;
+
+  // ─────────────────────────────────────────────────────────────────────────
+
+  let targetSplit: StructuralEditMetadata["targetSplit"] = "unknown";
+  let targetDays: number | null = null;
+  let targetGoalShift: StructuralEditMetadata["targetGoalShift"] = null;
+
+  if (fullBodyPattern.test(lower)) targetSplit = "full_body";
+  else if (upperLowerPattern.test(lower)) targetSplit = "upper_lower";
+  else if (pplPattern.test(lower)) targetSplit = "ppl";
+  else if (pushPullPattern.test(lower)) targetSplit = "push_pull";
+
+  const dayMatch = lower.match(/\b(\d)\s*[\-–]?\s*day\b|\b(\d)\s*days?\s*(a|per)\s*week\b/i);
+  if (dayMatch) {
+    const raw = parseInt(dayMatch[1] ?? dayMatch[2] ?? "", 10);
+    if (raw >= 2 && raw <= 7) targetDays = raw;
+  }
+
+  if (fatLossPattern.test(lower)) targetGoalShift = "fat_loss";
+  else if (conditioningPattern.test(lower) || performancePattern.test(lower)) targetGoalShift = "conditioning";
+  else if (hypertrophyShiftPattern.test(lower)) targetGoalShift = "hypertrophy";
+  else if (strengthShiftPattern.test(lower)) targetGoalShift = "strength";
+
+  const hasSplitChange = targetSplit !== "unknown";
+  const hasDayChange = targetDays !== null;
+  const hasGoalShift = targetGoalShift !== null;
+  const hasVagueStructural = structuralVagueness.test(lower);
+
+  if (hasSplitChange || hasDayChange) {
+    return {
+      matched: true,
+      confidence: "high",
+      meta: { targetSplit, targetDays, targetGoalShift, preserveExercises: true },
+    };
+  }
+
+  if (hasGoalShift || hasVagueStructural) {
+    return {
+      matched: true,
+      confidence: "medium",
+      meta: { targetSplit, targetDays, targetGoalShift, preserveExercises: true },
+    };
+  }
+
+  return noMatch;
 }
 
 function matchesEditProgram(lower: string, hasActiveProgram: boolean): {

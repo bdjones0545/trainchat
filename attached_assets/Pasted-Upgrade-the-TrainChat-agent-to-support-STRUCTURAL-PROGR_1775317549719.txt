@@ -1,0 +1,141 @@
+Upgrade the TrainChat agent to support STRUCTURAL PROGRAM EDITS.
+
+CURRENT PROBLEM:
+The system only supports specific atomic edits (add, swap, reduce volume, etc.).
+When a user makes a higher-level request like:
+
+- "I want a more full body program"
+- "make this upper/lower"
+- "change this to 3 days"
+- "make this more athletic"
+- "make this better for fat loss"
+
+the system fails to identify a specific edit and returns:
+"No specific edit identified..."
+
+This is incorrect behavior.
+
+==================================================
+GOAL
+==================================================
+
+Add a new edit type:
+
+STRUCTURAL_EDIT
+
+This allows the system to:
+- reinterpret the entire program structure
+- rebuild intelligently using constraints
+- preserve as much of the original program as possible
+
+==================================================
+1. STRUCTURAL EDIT DETECTION
+==================================================
+
+Update intent detection to classify these as STRUCTURAL_EDIT:
+
+Examples:
+- "more full body"
+- "make this full body"
+- "convert this to upper lower"
+- "make this 3 days"
+- "more athletic"
+- "less bodybuilding"
+- "better for performance"
+- "more conditioning focused"
+
+These should NOT be rejected.
+
+==================================================
+2. STRUCTURAL EDIT ENGINE
+==================================================
+
+When STRUCTURAL_EDIT is detected:
+
+1. Load current program structure
+2. Extract constraints:
+   - user goal
+   - training days
+   - session length
+   - equipment
+   - pain limitations
+   - current exercises (reuse where possible)
+
+3. Rebuild program with new structure
+
+Example:
+User: "I want a more full body program"
+
+System should:
+- convert split into full-body distribution
+- redistribute exercises across days
+- maintain total volume balance
+- preserve key exercises when possible
+- ensure recovery is respected
+
+==================================================
+3. PRESERVATION RULES
+==================================================
+
+Do NOT fully discard the program unless necessary.
+
+Preserve:
+- main compound lifts where possible
+- user preferences
+- movement balance
+- progression structure
+
+Only restructure distribution and organization.
+
+==================================================
+4. OUTPUT REQUIREMENTS
+==================================================
+
+Return:
+- full updated structured program JSON
+- updated split
+- updated day structure
+- updated exercise placement
+
+Update the right panel immediately.
+
+==================================================
+5. CHAT RESPONSE STYLE
+==================================================
+
+Respond like:
+
+"Got it. I converted your program into a full-body structure while keeping your main lifts and overall volume balanced. The updated plan is in the right panel."
+
+Do NOT:
+- reject the request
+- ask unnecessary clarification if intent is clear
+
+==================================================
+6. FALLBACK
+==================================================
+
+Only ask clarification if truly ambiguous.
+
+Example:
+"I can make this full body — do you want to keep it at 4 days or reduce to 3?"
+
+==================================================
+7. DEBUGGING
+==================================================
+
+Log:
+- STRUCTURAL_EDIT detected
+- original split
+- new split
+- preserved vs replaced exercises
+
+==================================================
+DELIVERABLES
+==================================================
+
+1. new STRUCTURAL_EDIT intent added
+2. structural mutation engine implemented
+3. preservation logic defined
+4. successful transformation of split types
+5. right panel updates correctly

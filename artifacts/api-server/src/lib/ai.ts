@@ -362,6 +362,39 @@ export function detectEditIntent(message: string): EditIntent {
 function buildEditContext(currentProgram: ProgramStructure, userMessage: string, editIntent: EditIntent): string {
   const programJson = JSON.stringify(currentProgram, null, 2);
   const editTypeGuidance = getEditTypeGuidance(editIntent.editType, currentProgram);
+  const isStructural = editIntent.editType === "structural_edit";
+
+  if (isStructural) {
+    return `
+## STRUCTURAL PROGRAM REDESIGN — MANDATORY INSTRUCTIONS
+
+The user is requesting a HIGH-LEVEL STRUCTURAL CHANGE to their current program. This is NOT a surgical edit — you are rebuilding the program's architecture while preserving the user's established exercises and preferences wherever possible.
+
+**Current program (reference this — reuse exercises where appropriate):**
+\`\`\`json
+${programJson}
+\`\`\`
+
+**Requested structural change:** "${userMessage}"
+
+${editTypeGuidance}
+
+**CRITICAL RULES FOR STRUCTURAL EDITS:**
+1. Rebuild the day structure and split to match the request (e.g., convert to full body, upper/lower, 3-day, etc.)
+2. PRESERVE compound lifts and key exercises from the current program — redistribute them intelligently into the new structure
+3. Maintain NSCA exercise order within each session (explosive → primary → secondary → accessory → conditioning)
+4. Balance volume across the new day structure — total weekly sets should be comparable to the original
+5. Do NOT ask clarifying questions if the structural intent is clear — execute the restructure
+6. You MUST return the complete updated program as a JSON block — this is required to refresh the user's training panel
+7. Confirm what structural change was made in 2-3 sentences (mention what was preserved)
+
+Return format:
+[2-3 sentence confirmation: what structure changed, what was preserved, where to find it]
+
+\`\`\`json
+{ complete restructured program object }
+\`\`\``;
+  }
 
   return `
 ## ACTIVE PROGRAM EDIT — MANDATORY INSTRUCTIONS
@@ -466,6 +499,33 @@ function getEditTypeGuidance(editType: string, program: ProgramStructure): strin
 - Replace with appropriate alternatives that maintain movement balance
 - Consider pain-free range adjustments (e.g., partial ROM, incline bench for shoulder issues)
 - Apply the modification consistently across ALL days in the program`;
+
+    case "structural_edit":
+      return `**STRUCTURAL REDESIGN GUIDANCE:**
+
+You are restructuring the program's architecture. Reference the current program above and determine:
+
+**Step 1 — Identify the target structure from the user's request:**
+- "full body" → every session trains full body (quads, hinge, horizontal push/pull, vertical push/pull, core each day)
+- "upper/lower" → alternate upper body days and lower body days
+- "PPL / push-pull-legs" → push day (chest/shoulder/triceps), pull day (back/biceps), leg day
+- "3 days" / "4 days" / "5 days" → rebuild with the specified number of training days
+
+**Step 2 — Preserve from the current program:**
+- All primary compound lifts (squat, deadlift, bench, press, row patterns)
+- User's established exercise preferences (if any are repeated, keep them)
+- Current goal (hypertrophy, strength, athletic) — just redistribute it
+
+**Step 3 — Redistribute intelligently:**
+- Spread preserved exercises across the new day structure
+- Fill gaps with appropriate exercises for the new structure's movement requirements
+- Balance volume: each day should have roughly equal total work unless the split dictates otherwise (e.g., pull day is often slightly higher volume)
+- NSCA order within each session: explosive → primary → secondary → accessory → conditioning
+
+**Step 4 — Update program metadata:**
+- Update \`splitType\` to reflect the new structure (e.g., "Full Body × 3", "Upper/Lower × 4")
+- Update \`programName\` if the split type changed significantly
+- Update \`days[].name\` to reflect new session focus (e.g., "Full Body A", "Upper Body — Push Focus")`;
 
     default:
       return `**GENERAL MODIFICATION GUIDANCE:**
@@ -668,6 +728,7 @@ function generateFallbackResponse(
         make_more_athletic: "Added explosive work to session openings and enhanced conditioning integration. Updated structure is in the right panel.",
         reduce_fatigue: "Reduced accessory volume on high-demand days. Primary compound work preserved. Updated structure is in the right panel.",
         injury_modification: "Removed exercises that conflict with the stated limitation and replaced where needed. Updated structure is in the right panel.",
+        structural_edit: "Converted the program to the new structure while preserving your main compound lifts and overall training volume. The updated plan is in the right panel.",
         general_modification: "Modification applied. Updated structure is in the right panel.",
       };
       return {
@@ -1207,6 +1268,19 @@ function buildPPLDays(
 // ─── Fallback Program Mutation Engine ────────────────────────────────────────
 // Applied when OpenAI is unavailable. Performs deterministic surgical edits.
 
+function getMovementPattern(exerciseName: string): string {
+  const name = exerciseName.toLowerCase();
+  if (/(squat|front squat|goblet|hack squat|leg press|lunge|split squat|bulgarian)/.test(name)) return "squat";
+  if (/(deadlift|rdl|romanian|stiff.leg|rack pull|sumo|trap.bar)/.test(name)) return "hinge";
+  if (/(bench|push.up|dip|incline|decline|fly|chest press)/.test(name)) return "horizontal_push";
+  if (/(overhead press|military press|shoulder press|ohp|arnold|z press)/.test(name)) return "vertical_push";
+  if (/(row|cable row|t.bar|chest.supported|seal row|pendlay)/.test(name)) return "horizontal_pull";
+  if (/(pull.up|chin.up|lat pulldown|pulldown|pull down)/.test(name)) return "vertical_pull";
+  if (/(carry|farmer|suitcase|yoke|loaded carry)/.test(name)) return "carry";
+  if (/(clean|snatch|jerk|med ball|box jump|broad jump|power)/.test(name)) return "explosive";
+  return "accessory";
+}
+
 function applyFallbackMutation(
   program: ProgramStructure,
   editType: string,
@@ -1337,6 +1411,72 @@ function applyFallbackMutation(
         }
       }
       return mutated;
+    }
+
+    case "structural_edit": {
+      // For structural edits in fallback mode, extract compound lifts from the
+      // current program and rebuild around them using the training intelligence engine.
+      if (!_profile) return null;
+
+      // Collect all primary/secondary compound lifts worth preserving
+      const primaryLifts: Exercise[] = [];
+      for (const day of program.days) {
+        for (const ex of day.exercises) {
+          const isPrimary = /primary|secondary/i.test(ex.classification ?? "");
+          const isCompound = /(squat|deadlift|bench|press|row|pull.up|chin.up|lunge|hinge|clean|snatch)/i.test(ex.name);
+          if (isPrimary || isCompound) {
+            primaryLifts.push({ ...ex });
+          }
+        }
+      }
+
+      // Build fresh program from profile (structural base)
+      const freshProgram = buildIntelligentProgram(_profile);
+
+      // Inject preserved compound lifts into the fresh program
+      // Replace matching primary slots to maintain NSCA order
+      const usedLifts = new Set<string>();
+      for (const day of freshProgram.days) {
+        for (let i = 0; i < day.exercises.length; i++) {
+          const ex = day.exercises[i];
+          if (/primary|secondary/i.test(ex.classification ?? "")) {
+            const preserved = primaryLifts.find(p =>
+              !usedLifts.has(p.name) &&
+              getMovementPattern(p.name) === getMovementPattern(ex.name)
+            );
+            if (preserved) {
+              day.exercises[i] = { ...preserved };
+              usedLifts.add(preserved.name);
+            }
+          }
+        }
+      }
+
+      // Update split label based on target structure detected in message
+      const lower2 = _lowerMessage;
+      if (/full.?body/i.test(lower2)) {
+        freshProgram.splitType = `Full Body × ${freshProgram.days.length}`;
+        freshProgram.days.forEach((d, i) => { d.name = `Full Body ${String.fromCharCode(65 + i)}`; });
+      } else if (/upper.lower/i.test(lower2)) {
+        freshProgram.splitType = `Upper/Lower × ${freshProgram.days.length}`;
+        freshProgram.days.forEach((d, i) => { d.name = i % 2 === 0 ? `Upper Body ${String.fromCharCode(65 + Math.floor(i / 2))}` : `Lower Body ${String.fromCharCode(65 + Math.floor(i / 2))}`; });
+      } else if (/push.pull.legs?|ppl/i.test(lower2)) {
+        freshProgram.splitType = `Push/Pull/Legs × ${Math.ceil(freshProgram.days.length / 3)}`;
+        const pplLabels = ["Push", "Pull", "Legs"];
+        freshProgram.days.forEach((d, i) => { d.name = `${pplLabels[i % 3]} ${Math.floor(i / 3) > 0 ? Math.floor(i / 3) + 1 : ""}`.trim(); });
+      }
+
+      logger.info(
+        {
+          originalSplit: program.splitType,
+          newSplit: freshProgram.splitType,
+          preservedLifts: primaryLifts.map(l => l.name),
+          preservedCount: usedLifts.size,
+        },
+        "[StructuralEditFallback] Rebuilt program with preserved compound lifts"
+      );
+
+      return freshProgram;
     }
 
     default:
