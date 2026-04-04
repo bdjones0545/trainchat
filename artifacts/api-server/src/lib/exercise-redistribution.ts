@@ -17,7 +17,15 @@
 
 import { logger } from "./logger";
 import { ProgramDay, Exercise } from "./ai";
-import { UserProfile } from "./training-intelligence";
+import {
+  UserProfile,
+  MovementPattern,
+  JointStress,
+  normalizeGoal,
+  normalizeExperience,
+  normalizeEquipment,
+  detectInjuryFlags,
+} from "./training-intelligence";
 import {
   CategorizedExercise,
   MovementCategory,
@@ -25,6 +33,14 @@ import {
   TransformationType,
   categorizeExercise,
 } from "./split-transform";
+import {
+  findSubstitute,
+  findAdditions,
+  getPrescription,
+  lookupExercise,
+  EXERCISE_INTELLIGENCE,
+  SessionRole,
+} from "./exercise-intelligence";
 
 // ─── Decision Types ───────────────────────────────────────────────────────────
 
@@ -87,13 +103,15 @@ export interface ScoredExercise extends CategorizedExercise {
 }
 
 export interface RedistributionContext {
-  goal: string;
+  goal: import("./training-intelligence").GoalType;
   sessionDurationMinutes: number;
-  painFlags: string[];
+  painFlags: import("./training-intelligence").JointStress[];
   preferredExercises: string[];
   avoidedExercises: string[];
-  experienceLevel: string;
-  equipment: string;
+  experience: import("./training-intelligence").ExperienceTier;
+  equipment: import("./training-intelligence").EquipmentLevel;
+  // Legacy aliases kept for backward compat
+  experienceLevel?: string;
 }
 
 export interface RedistributionResult {
@@ -499,90 +517,88 @@ function checkWeeklyBalance(
   return { pushCount, pullCount, squatCount, hingeCount, coreCount, explosiveCount, balanceIssues: issues };
 }
 
-// ─── Replacement Library ──────────────────────────────────────────────────────
+// ─── Replacement Engine (via Exercise Intelligence Layer) ─────────────────────
 //
-// When an exercise must be removed for conflict/fatigue/time, offer a
-// same-pattern replacement that is lower fatigue or equipment-agnostic.
-
-interface ReplacementCandidate {
-  name: string;
-  pattern: MovementCategory;
-  sets: number;
-  reps: string;
-  rest: string;
-  classification: string;
-  intent: string;
-  fatigueLevel: "high" | "medium" | "low";
-  equipment: string[]; // equipment tags this works with
-}
-
-const REPLACEMENT_LIBRARY: ReplacementCandidate[] = [
-  // Push horizontal
-  { name: "Dumbbell Bench Press", pattern: "push_horizontal", sets: 3, reps: "10-12", rest: "90 sec", classification: "Primary", intent: "Horizontal push — controlled eccentric, full range.", fatigueLevel: "medium", equipment: ["dumbbell", "full_gym"] },
-  { name: "Push-Up (weighted)", pattern: "push_horizontal", sets: 3, reps: "12-15", rest: "60 sec", classification: "Secondary", intent: "Horizontal push — bodyweight with load progression.", fatigueLevel: "low", equipment: ["bodyweight", "dumbbell"] },
-  { name: "Landmine Press", pattern: "push_horizontal", sets: 3, reps: "10 each side", rest: "75 sec", classification: "Secondary", intent: "Shoulder-safe horizontal push variation.", fatigueLevel: "low", equipment: ["barbell", "full_gym"] },
-  // Push vertical
-  { name: "Dumbbell Shoulder Press", pattern: "push_vertical", sets: 3, reps: "10-12", rest: "75 sec", classification: "Secondary", intent: "Vertical push — neutral grip, shoulder-friendly.", fatigueLevel: "medium", equipment: ["dumbbell", "full_gym"] },
-  { name: "Machine Shoulder Press", pattern: "push_vertical", sets: 3, reps: "12-15", rest: "60 sec", classification: "Secondary", intent: "Vertical push — controlled path, low joint stress.", fatigueLevel: "low", equipment: ["machine", "full_gym"] },
-  // Pull horizontal
-  { name: "Dumbbell Row", pattern: "pull_horizontal", sets: 3, reps: "10-12 each side", rest: "75 sec", classification: "Secondary", intent: "Horizontal pull — maintain flat back, drive elbow to hip.", fatigueLevel: "medium", equipment: ["dumbbell", "full_gym"] },
-  { name: "Cable Seated Row", pattern: "pull_horizontal", sets: 3, reps: "12-15", rest: "75 sec", classification: "Secondary", intent: "Horizontal pull — constant tension through full ROM.", fatigueLevel: "low", equipment: ["cable", "full_gym"] },
-  // Pull vertical
-  { name: "Lat Pulldown", pattern: "pull_vertical", sets: 3, reps: "10-12", rest: "75 sec", classification: "Secondary", intent: "Vertical pull — depress scapula before initiating.", fatigueLevel: "low", equipment: ["cable", "machine", "full_gym"] },
-  { name: "Assisted Pull-Up", pattern: "pull_vertical", sets: 3, reps: "8-10", rest: "90 sec", classification: "Secondary", intent: "Vertical pull — use just enough assistance to maintain control.", fatigueLevel: "medium", equipment: ["machine", "full_gym"] },
-  // Squat
-  { name: "Goblet Squat", pattern: "squat", sets: 3, reps: "12-15", rest: "75 sec", classification: "Secondary", intent: "Squat pattern — counterbalanced for upright torso.", fatigueLevel: "low", equipment: ["dumbbell", "kettlebell", "bodyweight"] },
-  { name: "Leg Press", pattern: "squat", sets: 3, reps: "12-15", rest: "90 sec", classification: "Secondary", intent: "Quad-dominant push — full range with controlled descent.", fatigueLevel: "medium", equipment: ["machine", "full_gym"] },
-  { name: "Bulgarian Split Squat", pattern: "squat", sets: 3, reps: "10 each side", rest: "90 sec", classification: "Secondary", intent: "Unilateral squat — drive front heel, control descent.", fatigueLevel: "high", equipment: ["dumbbell", "barbell", "bodyweight"] },
-  // Hinge
-  { name: "Romanian Deadlift", pattern: "hinge", sets: 3, reps: "10-12", rest: "90 sec", classification: "Secondary", intent: "Hip hinge — feel hamstring load at bottom, drive hips at top.", fatigueLevel: "medium", equipment: ["barbell", "dumbbell", "full_gym"] },
-  { name: "Kettlebell Swing", pattern: "hinge", sets: 3, reps: "15-20", rest: "60 sec", classification: "Secondary", intent: "Hip hinge power — drive with hips, let bell float.", fatigueLevel: "medium", equipment: ["kettlebell"] },
-  { name: "Trap Bar Deadlift", pattern: "hinge", sets: 3, reps: "5-8", rest: "2 min", classification: "Primary", intent: "Lower back-friendly hinge — maintain neutral spine throughout.", fatigueLevel: "high", equipment: ["trap_bar", "full_gym"] },
-  // Core
-  { name: "Dead Bug", pattern: "core", sets: 3, reps: "8 each side", rest: "60 sec", classification: "Accessory", intent: "Anti-extension — press lower back into floor throughout.", fatigueLevel: "low", equipment: ["bodyweight"] },
-  { name: "Pallof Press", pattern: "core", sets: 3, reps: "10-12 each side", rest: "60 sec", classification: "Accessory", intent: "Anti-rotation — resist trunk rotation completely.", fatigueLevel: "low", equipment: ["cable", "band", "full_gym"] },
-  { name: "Ab Wheel Rollout", pattern: "core", sets: 3, reps: "8-10", rest: "75 sec", classification: "Accessory", intent: "Full anti-extension — brace before initiating.", fatigueLevel: "medium", equipment: ["bodyweight"] },
-  // Conditioning
-  { name: "Assault Bike Intervals", pattern: "conditioning", sets: 5, reps: "30 sec on / 30 sec off", rest: "30 sec", classification: "Conditioning", intent: "Max effort intervals — total output focus.", fatigueLevel: "high", equipment: ["machine", "full_gym"] },
-  { name: "Rowing Machine — Intervals", pattern: "conditioning", sets: 4, reps: "500m", rest: "90 sec", classification: "Conditioning", intent: "Aerobic power — consistent pacing each interval.", fatigueLevel: "medium", equipment: ["machine", "full_gym"] },
-  // Explosive
-  { name: "Box Jump", pattern: "power_explosive", sets: 4, reps: "4-5", rest: "2-3 min", classification: "Explosive", intent: "Lower body power — full reset between reps.", fatigueLevel: "medium", equipment: ["bodyweight"] },
-  { name: "Med Ball Slam", pattern: "power_explosive", sets: 3, reps: "8-10", rest: "90 sec", classification: "Explosive", intent: "Total-body power — max intent every rep.", fatigueLevel: "medium", equipment: ["bodyweight"] },
-  // Carries
-  { name: "Farmer's Carry", pattern: "carry", sets: 3, reps: "30-40m", rest: "90 sec", classification: "Accessory", intent: "Loaded carry — grip, core, and upper trap stability.", fatigueLevel: "medium", equipment: ["dumbbell", "kettlebell", "full_gym"] },
-];
+// Delegates to exercise-intelligence.ts findSubstitute() and findAdditions()
+// instead of a static list. Applies full goal/equipment/pain/fatigue awareness.
 
 function findReplacement(
   original: CategorizedExercise,
   context: RedistributionContext,
-): ReplacementCandidate | null {
-  const candidates = REPLACEMENT_LIBRARY.filter((r) => r.pattern === original.pattern);
-  if (candidates.length === 0) return null;
+): Exercise | null {
+  const sessionRole = inferSessionRole(original);
+  const result = findSubstitute({
+    originalName: original.exercise.name,
+    reason: context.painFlags.length > 0 ? "pain" : "swap",
+    goal: context.goal,
+    equipment: context.equipment,
+    experience: context.experience,
+    injuryFlags: context.painFlags as JointStress[],
+    sessionRole,
+    excludeNames: context.avoidedExercises,
+  });
 
-  const avoidLower = context.avoidedExercises.map((a) => a.toLowerCase());
-  const valid = candidates.filter((c) => !avoidLower.some((a) => c.name.toLowerCase().includes(a)));
-  if (valid.length === 0) return candidates[0]; // fallback even if avoided
+  if (!result.chosen) return null;
 
-  // Prefer lower fatigue if pain flags present
-  if (context.painFlags.length > 0) {
-    const lowFatigue = valid.filter((c) => c.fatigueLevel === "low");
-    if (lowFatigue.length > 0) return lowFatigue[0];
-  }
+  const prescription = result.prescription ?? {
+    sets: original.exercise.sets,
+    reps: original.exercise.reps,
+    rest: original.exercise.rest,
+    intent: original.exercise.intent ?? "",
+  };
 
-  // Prefer same fatigue level as original
-  const originalFatigue = estimateFatigueScore(original) > 6 ? "high" : estimateFatigueScore(original) > 3 ? "medium" : "low";
-  const sameLevel = valid.filter((c) => c.fatigueLevel === originalFatigue);
-  return sameLevel[0] ?? valid[0];
+  logger.info(
+    {
+      original: original.exercise.name,
+      replacement: result.chosen.name,
+      rationale: result.rationale,
+      alternatives: result.alternativesConsidered,
+    },
+    "[ExerciseIntelligence] Replacement selected via intelligence layer"
+  );
+
+  return {
+    name: result.chosen.name,
+    classification: roleToClassification(result.chosen.sessionRole),
+    sets: prescription.sets,
+    reps: prescription.reps,
+    rest: prescription.rest,
+    intent: prescription.intent,
+  };
 }
 
-function replacementToExercise(candidate: ReplacementCandidate): Exercise {
+function inferSessionRole(ex: CategorizedExercise): SessionRole {
+  if (ex.priorityTier === 1) return "main_lift";
+  if (ex.priorityTier === 2) return "secondary_compound";
+  if (ex.pattern === "core" || ex.pattern === "carry") return "trunk_work";
+  if (ex.pattern === "power_explosive") return "power_work";
+  if (ex.pattern === "conditioning") return "finisher";
+  return "hypertrophy_accessory";
+}
+
+function roleToClassification(role: SessionRole): string {
+  const map: Record<SessionRole, string> = {
+    main_lift: "Primary",
+    secondary_compound: "Secondary",
+    hypertrophy_accessory: "Accessory",
+    power_work: "Explosive",
+    trunk_work: "Accessory",
+    mobility_reset: "Accessory",
+    finisher: "Conditioning",
+  };
+  return map[role] ?? "Accessory";
+}
+
+function intelligenceExerciseToExercise(
+  intel: ReturnType<typeof findAdditions>["additions"][0],
+): Exercise {
   return {
-    name: candidate.name,
-    classification: candidate.classification,
-    sets: candidate.sets,
-    reps: candidate.reps,
-    rest: candidate.rest,
-    intent: candidate.intent,
+    name: intel.exercise.name,
+    classification: roleToClassification(intel.exercise.sessionRole),
+    sets: intel.prescription.sets,
+    reps: intel.prescription.reps,
+    rest: intel.prescription.rest,
+    intent: intel.prescription.intent,
   };
 }
 
@@ -710,16 +726,16 @@ export function redistributeExercises(
   const tier3 = activePool.filter((ex) => ex.priorityTier === 3).sort((a, b) => b.priorityScore - a.priorityScore);
   for (const ex of tier3) {
     if (ex.decision === "REPLACE_WITH_SIMILAR") {
-      // Find replacement and place it
-      const replacement = findReplacement(ex, context);
-      if (replacement) {
-        const replacementCat = categorizeExercise(replacementToExercise(replacement), 0);
+      // Find replacement via intelligence layer — returns Exercise | null directly
+      const replacementExercise = findReplacement(ex, context);
+      if (replacementExercise) {
+        const replacementCat = categorizeExercise(replacementExercise, 0);
         const bestDay = findBestDay(replacementCat, dayTemplates, dayAssignments, context, maxPerDay);
         if (bestDay !== null) {
           const replacedEx: CategorizedExercise = { ...replacementCat, sourceDay: bestDay };
           dayAssignments.get(bestDay)!.push(replacedEx);
           ex.targetDay = bestDay;
-          ex.replacedBy = replacement.name;
+          ex.replacedBy = replacementExercise.name;
         } else {
           ex.decision = "REMOVE_FOR_CONFLICT";
           ex.decisionReason = "Replacement needed but no compatible slot available";
@@ -757,27 +773,86 @@ export function redistributeExercises(
     }
   }
 
-  // ── Step 5: Fill required-pattern gaps ────────────────────────────────────
+  // ── Step 5: Fill required-pattern gaps via intelligence layer ─────────────
+  // Maps movement patterns to addition categories so findAdditions() can
+  // perform goal/equipment/pain-aware selection rather than pulling from a
+  // static list.
+  const patternToAdditionCategory: Partial<Record<MovementCategory, import("./exercise-intelligence").AdditionCategory>> = {
+    core: "core",
+    carry: "carries",
+    conditioning: "conditioning",
+    power_explosive: "power",
+    iso_legs: "calves",
+    iso_shoulders: "shoulders_lateral",
+    iso_back: "upper_back",
+  };
+
   for (const tmpl of dayTemplates) {
     const assigned = dayAssignments.get(tmpl.dayNumber) ?? [];
     const assignedPatterns = new Set(assigned.map((e) => e.pattern));
+    const existingNames = assigned.map((e) => e.exercise.name);
 
     for (const requiredPattern of tmpl.requiredPatterns) {
-      if (!assignedPatterns.has(requiredPattern) && assigned.length < tmpl.maxExercises) {
-        const candidate = REPLACEMENT_LIBRARY.find((r) =>
-          r.pattern === requiredPattern &&
-          !assigned.some((a) => a.exercise.name === r.name)
+      if (assignedPatterns.has(requiredPattern) || assigned.length >= tmpl.maxExercises) continue;
+
+      // Try the intelligence layer first (goal/equipment/pain-aware)
+      const additionCategory = patternToAdditionCategory[requiredPattern];
+      let addedFromIntelligence = false;
+
+      if (additionCategory) {
+        const addResult = findAdditions({
+          category: additionCategory,
+          goal: context.goal,
+          equipment: context.equipment,
+          experience: context.experience,
+          injuryFlags: context.painFlags as JointStress[],
+          sessionDurationMinutes: context.sessionDurationMinutes,
+          currentExerciseNames: existingNames,
+          limit: 1,
+        });
+
+        if (addResult.additions.length > 0) {
+          const addition = addResult.additions[0];
+          const ex = categorizeExercise(intelligenceExerciseToExercise(addition), tmpl.dayNumber);
+          assigned.push(ex);
+          assignedPatterns.add(requiredPattern);
+          existingNames.push(addition.exercise.name);
+          decisionLog.push({
+            exerciseName: addition.exercise.name,
+            decision: "ADD_NEW_EXERCISE",
+            reason: `Required ${requiredPattern.replace(/_/g, " ")} missing on ${tmpl.name} — ${addition.rationale}. ${addition.placementNote}`,
+            targetDay: tmpl.dayNumber,
+            priorityScore: 50,
+          });
+          addedFromIntelligence = true;
+        }
+      }
+
+      // Fallback: raw pattern search through EXERCISE_INTELLIGENCE
+      if (!addedFromIntelligence) {
+        const fallback = EXERCISE_INTELLIGENCE.find(
+          (e) => e.pattern === requiredPattern &&
+          !existingNames.some((n) => n.toLowerCase() === e.name.toLowerCase())
         );
-        if (candidate) {
-          const ex = categorizeExercise(replacementToExercise(candidate), tmpl.dayNumber);
+        if (fallback) {
+          const pres = getPrescription(fallback, context.goal, context.experience);
+          const fallbackExercise: Exercise = {
+            name: fallback.name,
+            classification: roleToClassification(fallback.sessionRole),
+            sets: pres.sets,
+            reps: pres.reps,
+            rest: pres.rest,
+            intent: pres.intent,
+          };
+          const ex = categorizeExercise(fallbackExercise, tmpl.dayNumber);
           assigned.push(ex);
           assignedPatterns.add(requiredPattern);
           decisionLog.push({
-            exerciseName: candidate.name,
+            exerciseName: fallback.name,
             decision: "ADD_NEW_EXERCISE",
-            reason: `Required ${requiredPattern.replace(/_/g, " ")} pattern missing on ${tmpl.name} — added to maintain session purpose`,
+            reason: `Required ${requiredPattern.replace(/_/g, " ")} pattern missing on ${tmpl.name} — added from exercise library fallback`,
             targetDay: tmpl.dayNumber,
-            priorityScore: 50,
+            priorityScore: 45,
           });
         }
       }
@@ -950,18 +1025,10 @@ export function buildRedistributionContext(profile: UserProfile | null): Redistr
       painFlags: [],
       preferredExercises: [],
       avoidedExercises: [],
-      experienceLevel: "intermediate",
+      experience: "intermediate",
       equipment: "full_gym",
     };
   }
-
-  const painFlags: string[] = [];
-  const injuries = (profile.injuries ?? "").toLowerCase();
-  if (/knee/i.test(injuries)) painFlags.push("knee_dominant");
-  if (/shoulder/i.test(injuries)) painFlags.push("shoulder_dominant");
-  if (/back|spine/i.test(injuries)) painFlags.push("spine_load");
-  if (/hip/i.test(injuries)) painFlags.push("hip_stress");
-  if (/elbow|wrist/i.test(injuries)) painFlags.push("elbow_stress");
 
   const preferredExercises = profile.exercisePreferences
     ? profile.exercisePreferences.split(/,|;|\n/).map((s) => s.trim()).filter(Boolean)
@@ -972,12 +1039,12 @@ export function buildRedistributionContext(profile: UserProfile | null): Redistr
     : [];
 
   return {
-    goal: profile.trainingGoal,
+    goal: normalizeGoal(profile.trainingGoal),
     sessionDurationMinutes: profile.sessionDuration,
-    painFlags,
+    painFlags: detectInjuryFlags(profile.injuries),
     preferredExercises,
     avoidedExercises,
-    experienceLevel: profile.experienceLevel,
-    equipment: profile.equipmentAccess,
+    experience: normalizeExperience(profile.experienceLevel),
+    equipment: normalizeEquipment(profile.equipmentAccess),
   };
 }

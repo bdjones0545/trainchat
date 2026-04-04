@@ -1,0 +1,235 @@
+Build the TrainChat exercise intelligence expansion layer.
+
+CURRENT PROBLEM:
+The agent is improving at decision-making, split transformation, and exercise redistribution, but exercise substitutions and additions still risk feeling too shallow, generic, or inconsistent if the exercise library is treated like a flat list.
+
+GOAL:
+Create an exercise intelligence layer that makes exercise selection, replacement, addition, and progression/regression feel intelligent, structured, and coaching-quality.
+
+This layer should support:
+- exercise swaps
+- structural edits
+- pain-aware modifications
+- fatigue-aware substitutions
+- equipment-aware substitutions
+- athletic vs hypertrophy vs strength exercise bias
+- adding missing exercise categories like core, calves, hamstrings, power work, mobility, etc.
+
+==================================================
+1. CORE PURPOSE
+==================================================
+
+The exercise intelligence layer should:
+
+- turn the exercise library into a structured decision system
+- allow the agent to query for the best-fit exercise rather than random matches
+- support high-quality substitutions and additions
+- preserve program intent while improving fit to constraints
+
+This should make TrainChat feel like it truly understands exercise selection.
+
+==================================================
+2. EXPANDED EXERCISE SCHEMA
+==================================================
+
+Expand the exercise model/schema so each exercise can include structured metadata such as:
+
+- name
+- category
+- movement pattern
+- primary muscle group
+- secondary muscles
+- equipment type
+- difficulty level
+- training goal relevance
+- fatigue cost
+- skill requirement
+- joint stress tags
+- pain sensitivity tags
+- regression options
+- progression options
+- unilateral or bilateral
+- athletic/power tag
+- core/trunk tag
+- tempo/control bias if relevant
+- session role (main lift, accessory, finisher, power, trunk, mobility)
+
+Use a schema that is scalable for future expansion toward a much larger exercise library.
+
+==================================================
+3. EXERCISE QUERY LOGIC
+==================================================
+
+Create query logic so the agent can search for exercises based on multiple constraints at once.
+
+Examples:
+- dumbbell-only horizontal press for hypertrophy
+- knee-friendly quad exercise
+- lower-fatigue hinge movement
+- more athletic lower-body power movement
+- trunk exercise that fits a short hypertrophy session
+- shoulder-friendly press substitute
+- hamstring exercise that fits limited equipment
+
+The system should support intelligent multi-factor matching.
+
+==================================================
+4. SUBSTITUTION LOGIC
+==================================================
+
+Implement a high-quality substitution system.
+
+When the user says:
+- "swap this exercise"
+- "replace this with something better"
+- "my shoulder doesn't like this"
+- "I only have dumbbells now"
+- "make this less fatiguing"
+
+the system should choose a replacement based on:
+- movement pattern preservation
+- goal relevance
+- equipment constraints
+- fatigue profile
+- pain tolerance
+- session role
+
+Do not replace exercises with random same-muscle options if the movement purpose is different.
+
+==================================================
+5. ADDITION LOGIC
+==================================================
+
+When the user asks to add something, such as:
+- core
+- calves
+- hamstrings
+- more athletic work
+- mobility
+- power
+- conditioning
+
+the system should choose additions intelligently based on:
+- current split
+- current session density
+- goal
+- available time
+- missing movement categories
+- fatigue balance
+
+Do not just insert random exercises.
+
+==================================================
+6. PROGRESSION / REGRESSION RELATIONSHIPS
+==================================================
+
+Build explicit progression and regression relationships between exercises.
+
+Examples:
+- goblet squat ↔ front squat ↔ back squat
+- push-up ↔ dumbbell bench ↔ barbell bench
+- trap bar hinge ↔ Romanian deadlift ↔ conventional deadlift
+- dead bug ↔ hollow body hold ↔ more advanced trunk variation
+
+This should help with:
+- scaling difficulty
+- adapting to experience level
+- pain-aware modifications
+- smoother replacements
+
+==================================================
+7. GOAL BIAS LOGIC
+==================================================
+
+Exercise selection should differ based on the goal.
+
+Examples:
+- hypertrophy → more stable loading options, tissue-targeted accessories, moderate fatigue balance
+- strength → more compound emphasis, lower junk volume, higher role for specific heavy lifts
+- athletic performance → more explosive and transferable movements, less unnecessary isolation, better fatigue management
+- general fitness → accessible, efficient, balanced
+
+The same muscle group should not always lead to the same exercise choices across all goals.
+
+==================================================
+8. FATIGUE / PAIN / EQUIPMENT FILTERING
+==================================================
+
+Build filters so the system can intelligently exclude exercises that conflict with:
+
+- fatigue reduction requests
+- shoulder pain
+- knee irritation
+- low back sensitivity
+- limited equipment
+- short session length
+
+The system should know when a movement fits on paper but is a poor practical fit.
+
+==================================================
+9. SESSION ROLE AWARENESS
+==================================================
+
+Exercises should be selected with awareness of their role in the session.
+
+Examples:
+- main lift
+- secondary compound
+- hypertrophy accessory
+- trunk work
+- power work
+- mobility/reset
+- finisher
+
+Do not substitute a main compound with a finisher-level exercise unless the program context truly requires it.
+
+==================================================
+10. INTEGRATION WITH AGENT SYSTEM
+==================================================
+
+This layer should support:
+- atomic edits
+- structural edits
+- split transformations
+- exercise redistribution
+- readiness modifications
+- pain-aware modifications
+
+The agent should use this as the exercise decision engine rather than guessing through generic prompt text alone.
+
+==================================================
+11. DEBUGGING / OBSERVABILITY
+==================================================
+
+For every intelligent exercise selection or substitution, log:
+- why the exercise was chosen
+- what alternatives were considered if helpful
+- what constraints were applied
+- what role the chosen exercise fills
+
+This is important for tuning and reliability.
+
+==================================================
+12. ARCHITECTURE REQUIREMENTS
+==================================================
+
+Implement this as a clean reusable exercise intelligence module separated from:
+- raw chat generation
+- split transformation engine
+- right panel rendering
+
+This should act like a queryable exercise decision system.
+
+==================================================
+13. DELIVERABLES
+==================================================
+
+At the end, provide:
+1. updated exercise schema
+2. query logic supported
+3. substitution logic implemented
+4. addition logic implemented
+5. progression/regression relationships added
+6. goal bias rules added
+7. fatigue/pain/equipment filtering added
+8. examples of better intelligent substitutions
