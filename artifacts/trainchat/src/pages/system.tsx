@@ -1,10 +1,11 @@
 /**
- * Your System — Phase 3
+ * Your System — Phase 3 + Phase 4
  *
  * Full interactive training workspace. Every entity (exercise, session, week,
  * phase) has contextual "Edit with AI" entry points that pass explicit object
- * context to the Phase 2 editing engine. Changes are highlighted in-place and
- * a lightweight session edit history is maintained.
+ * context to the editing engine. Changes are highlighted in-place, recorded in
+ * the persistent change log (Phase 4), and viewable in the History tab with
+ * full before/after detail and restore capability.
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -28,6 +29,9 @@ import {
   PenLine,
   SlidersHorizontal,
   History,
+  GitBranch,
+  Milestone,
+  AlertCircle,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useGetMe } from "@workspace/api-client-react";
@@ -38,6 +42,7 @@ import EditDrawer, {
   type EditResult,
   type ChangedIds,
 } from "@/components/training/EditDrawer";
+import ChangeDetailDrawer from "@/components/training/ChangeDetailDrawer";
 
 // ─── API helpers ─────────────────────────────────────────────────────────────
 
@@ -61,6 +66,9 @@ async function submitGlobalEdit(request: string) {
     method: "POST",
     body: JSON.stringify({ request }),
   });
+}
+async function fetchHistory() {
+  return customFetch<{ history: any[]; trainingSystemId: number }>("/api/training-system/history");
 }
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
@@ -878,12 +886,217 @@ function EmptySystemState({ onInitialize, isLoading }: { onInitialize: () => voi
   );
 }
 
+// ─── History View — Phase 4 ───────────────────────────────────────────────────
+
+interface HistoryViewProps {
+  onOpenDetail: (changeId: number) => void;
+  onRestored: (changedIds: any) => void;
+}
+
+const SOURCE_LABELS: Record<string, string> = {
+  ai_edit: "AI Coach", quick_action: "Quick Action",
+  restore: "Restore", initialize: "Program Init", auto_adjust: "Auto Adjust",
+};
+const SOURCE_COLORS: Record<string, string> = {
+  ai_edit: "text-primary bg-primary/10 border-primary/20",
+  quick_action: "text-orange-400 bg-orange-400/10 border-orange-400/20",
+  restore: "text-purple-400 bg-purple-400/10 border-purple-400/20",
+  initialize: "text-green-400 bg-green-400/10 border-green-400/20",
+  auto_adjust: "text-blue-400 bg-blue-400/10 border-blue-400/20",
+};
+const SCOPE_LABELS: Record<string, string> = {
+  exercise: "Exercise", session: "Session", week: "Week", block: "Block", system: "Program",
+};
+
+function formatRelativeTime(dateStr: string): string {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function HistoryView({ onOpenDetail, onRestored }: HistoryViewProps) {
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ["training-system-history"],
+    queryFn: fetchHistory,
+    retry: false,
+    staleTime: 10000,
+  });
+
+  if (isLoading) return <ViewSkeleton />;
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
+        <AlertCircle className="w-10 h-10 text-muted-foreground/40" />
+        <p className="text-sm text-muted-foreground">Failed to load history.</p>
+        <button onClick={() => refetch()} className="text-xs text-primary hover:underline">Retry</button>
+      </div>
+    );
+  }
+
+  const history = data?.history ?? [];
+
+  if (history.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
+        <div className="w-16 h-16 rounded-2xl bg-muted/40 border border-border flex items-center justify-center">
+          <History className="w-8 h-8 text-muted-foreground/40" />
+        </div>
+        <div>
+          <p className="font-semibold text-foreground mb-1">No history yet</p>
+          <p className="text-sm text-muted-foreground max-w-xs leading-relaxed">
+            Every AI edit, quick action, and system change will appear here with full before/after detail and restore capability.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Group by date
+  const grouped: { date: string; entries: any[] }[] = [];
+  for (const entry of history) {
+    const dateLabel = new Date(entry.createdAt).toLocaleDateString("en-US", {
+      weekday: "long", month: "long", day: "numeric",
+    });
+    const existing = grouped.find((g) => g.date === dateLabel);
+    if (existing) existing.entries.push(entry);
+    else grouped.push({ date: dateLabel, entries: [entry] });
+  }
+
+  return (
+    <div className="space-y-6">
+      {grouped.map(({ date, entries }) => (
+        <div key={date}>
+          {/* Date separator */}
+          <div className="flex items-center gap-3 mb-3">
+            <div className="flex-1 h-px bg-border" />
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex-shrink-0">{date}</span>
+            <div className="flex-1 h-px bg-border" />
+          </div>
+
+          <div className="space-y-2">
+            {entries.map((entry: any) => {
+              const isMajor = entry.isMajorVersion;
+              const sourceColor = SOURCE_COLORS[entry.source] ?? SOURCE_COLORS.ai_edit;
+
+              return (
+                <button
+                  key={entry.id}
+                  onClick={() => onOpenDetail(entry.id)}
+                  className={`w-full text-left rounded-xl border overflow-hidden transition-all duration-150 hover:border-primary/30 hover:shadow-sm ${isMajor ? "border-amber-400/25 bg-amber-400/3" : "border-border bg-card"}`}
+                >
+                  <div className="px-4 py-3.5">
+                    <div className="flex items-start gap-3">
+                      {/* Timeline dot */}
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-2 ${isMajor ? "bg-amber-400" : "bg-muted-foreground/40"}`} />
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${sourceColor}`}>
+                            {SOURCE_LABELS[entry.source] ?? entry.source}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-full border border-border">
+                            {SCOPE_LABELS[entry.scope] ?? entry.scope}
+                          </span>
+                          {isMajor && (
+                            <span className="text-[10px] font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/20 flex items-center gap-1">
+                              <Milestone className="w-2.5 h-2.5" /> Milestone
+                            </span>
+                          )}
+                          {entry.restoredFromId && (
+                            <span className="text-[10px] text-purple-400 bg-purple-400/10 px-2 py-0.5 rounded-full border border-purple-400/20">
+                              ↩ Restored
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="text-sm font-semibold text-foreground leading-tight mb-1">
+                          {entry.versionLabel ?? intentToHistoryLabel(entry.intent)}
+                        </p>
+                        <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
+                          {entry.changeSummary}
+                        </p>
+
+                        <div className="flex items-center gap-3 mt-2">
+                          <span className="text-[10px] text-muted-foreground/60">{formatRelativeTime(entry.createdAt)}</span>
+                          {entry.appliedCount > 0 && (
+                            <>
+                              <span className="text-muted-foreground/30">·</span>
+                              <span className="text-[10px] text-muted-foreground/60">{entry.appliedCount} change{entry.appliedCount !== 1 ? "s" : ""}</span>
+                            </>
+                          )}
+                          {entry.targetLabel && (
+                            <>
+                              <span className="text-muted-foreground/30">·</span>
+                              <span className="text-[10px] text-muted-foreground/60 truncate">"{entry.targetLabel}"</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="text-[10px] text-primary/60 font-semibold flex-shrink-0 mt-1">Details →</div>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function intentToHistoryLabel(intent: string): string {
+  const map: Record<string, string> = {
+    swap_exercise: "Exercise Swap",
+    replace_exercise: "Exercise Replacement",
+    update_exercise: "Exercise Update",
+    easier_variation: "Easier Variation",
+    harder_variation: "Harder Variation",
+    increase_sets: "Set Added",
+    reduce_sets: "Set Removed",
+    change_rep_range: "Rep Range Change",
+    injury_modification: "Injury Modification",
+    add_explosive_emphasis: "Explosive Emphasis Added",
+    change_session_type: "Session Type Change",
+    shorten_session: "Session Shortened",
+    athletic_emphasis: "Athletic Emphasis",
+    equipment_constraint: "Equipment Adaptation",
+    reduce_session_volume: "Session Volume Reduced",
+    deload_week: "Deload Week",
+    travel_mode: "Travel Mode",
+    increase_intensity: "Intensity Increase",
+    reduce_weekly_volume: "Weekly Volume Reduced",
+    increase_weekly_volume: "Volume Accumulation",
+    refocus_block_power: "Power Block Refocus",
+    refocus_block_hypertrophy: "Hypertrophy Block Refocus",
+    refocus_block_athletic: "Athletic Block Refocus",
+    reduce_volume: "Volume Reduced",
+    restore: "State Restored",
+    initialize: "Program Initialized",
+    exercise_note: "Exercise Note",
+    session_note: "Session Note",
+  };
+  return map[intent] ?? intent.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
 const TABS = [
   { id: "today", label: "Today", icon: Zap },
   { id: "week", label: "This Week", icon: Calendar },
   { id: "block", label: "Block", icon: BarChart3 },
+  { id: "history", label: "History", icon: History },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -901,6 +1114,9 @@ export default function SystemPage() {
     weeks: new Set(),
     phases: new Set(),
   });
+
+  // Phase 4: change log detail viewer
+  const [changeDetailId, setChangeDetailId] = useState<number | null>(null);
 
   const queryClient = useQueryClient();
   const { data: me } = useGetMe();
@@ -980,6 +1196,8 @@ export default function SystemPage() {
     queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
     queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
     queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
+    // Phase 4: also refresh history so the new entry appears
+    queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
 
     // 6. Switch to most relevant tab
     const scope = result.scope;
@@ -991,6 +1209,30 @@ export default function SystemPage() {
   // ── Global edit panel completion ──
   function handleGlobalEditComplete(result: EditResult) {
     handleEditComplete(result);
+  }
+
+  // ── Phase 4: restore completion (from ChangeDetailDrawer) ──
+  function handleRestored(changedIds: any) {
+    // Apply highlights for restored entities
+    const ids = changedIds ?? { exercises: [], sessions: [], weeks: [], phases: [] };
+    setHighlightedIds({
+      exercises: new Set(ids.exercises),
+      sessions: new Set(ids.sessions),
+      weeks: new Set(ids.weeks),
+      phases: new Set(ids.phases),
+    });
+    setTimeout(() => {
+      setHighlightedIds({ exercises: new Set(), sessions: new Set(), weeks: new Set(), phases: new Set() });
+    }, 5000);
+    queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+    queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+    queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
+    queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
+    setLastEditResult({
+      changeSummary: "Prior state restored successfully.",
+      scope: "system",
+      appliedCount: ids.exercises.length + ids.sessions.length + ids.weeks.length + ids.phases.length,
+    });
   }
 
   const hasSystem = !!activeSystem;
@@ -1049,8 +1291,8 @@ export default function SystemPage() {
         </div>
       )}
 
-      {/* Session edit history */}
-      {hasSystem && recentEdits.length > 0 && (
+      {/* Session edit history — hidden on History tab (redundant there) */}
+      {hasSystem && recentEdits.length > 0 && activeTab !== "history" && (
         <RecentEditsBar edits={recentEdits} />
       )}
 
@@ -1088,13 +1330,19 @@ export default function SystemPage() {
                   onEditWeek={openWeekEdit}
                 />
               )}
+              {activeTab === "history" && (
+                <HistoryView
+                  onOpenDetail={setChangeDetailId}
+                  onRestored={handleRestored}
+                />
+              )}
             </>
           )}
         </div>
       </div>
 
-      {/* Global edit panel */}
-      {hasSystem && (
+      {/* Global edit panel — hidden on History tab (read-only view) */}
+      {hasSystem && activeTab !== "history" && (
         <GlobalEditPanel onEditComplete={handleGlobalEditComplete} />
       )}
 
@@ -1105,6 +1353,19 @@ export default function SystemPage() {
           prefillRequest={editPrefill}
           onClose={() => setEditTarget(null)}
           onEditComplete={handleEditComplete}
+        />
+      )}
+
+      {/* Phase 4: Change detail drawer (history before/after + restore) */}
+      {changeDetailId !== null && (
+        <ChangeDetailDrawer
+          changeId={changeDetailId}
+          onClose={() => setChangeDetailId(null)}
+          onRestored={(changedIds) => {
+            handleRestored(changedIds);
+            setChangeDetailId(null);
+            setActiveTab("today");
+          }}
         />
       )}
     </div>

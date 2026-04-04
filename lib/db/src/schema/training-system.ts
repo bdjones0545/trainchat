@@ -210,3 +210,76 @@ export const insertSessionExerciseSchema = createInsertSchema(
 ).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertSessionExercise = z.infer<typeof insertSessionExerciseSchema>;
 export type SessionExercise = typeof sessionExercises.$inferSelect;
+
+// ─── System Change Log — Phase 4 ─────────────────────────────────────────────
+// One record per edit operation (an operation can touch 1-N entities).
+// Stores before/after snapshots for full restore capability.
+
+export const systemChangeLog = pgTable("system_change_log", {
+  id: serial("id").primaryKey(),
+
+  userId: integer("user_id")
+    .notNull()
+    .references(() => usersTable.id, { onDelete: "cascade" }),
+
+  trainingSystemId: integer("training_system_id")
+    .notNull()
+    .references(() => trainingSystems.id, { onDelete: "cascade" }),
+
+  // Who / what made this change
+  source: text("source", {
+    enum: ["ai_edit", "quick_action", "initialize", "restore", "auto_adjust"],
+  })
+    .notNull()
+    .default("ai_edit"),
+
+  // What kind of change
+  intent: text("intent").notNull(),
+  scope: text("scope", {
+    enum: ["exercise", "session", "week", "block", "system"],
+  }).notNull(),
+
+  // Human-readable coach explanation
+  changeSummary: text("change_summary").notNull(),
+
+  // Original user request text (from the edit drawer / global panel)
+  requestText: text("request_text"),
+
+  // Versioning classification
+  // true = structural milestone (deload, block refocus, session type change, etc.)
+  // false = routine micro-edit (reps, swap exercise, notes)
+  isMajorVersion: boolean("is_major_version").notNull().default(false),
+
+  // Optional human label for major milestones, e.g. "Deload Week 2", "Power Block Refocus"
+  versionLabel: text("version_label"),
+
+  // Contextual edit target (from Phase 3 EditDrawer — which entity the user tapped)
+  targetType: text("target_type"),   // 'exercise' | 'session' | 'week' | 'phase'
+  targetId: integer("target_id"),
+  targetLabel: text("target_label"),
+
+  // Snapshot maps: { exercises: { "<id>": { name, sets, reps, ... } }, sessions: { ... }, ... }
+  // Allows us to restore any combination of affected entities without losing audit trail
+  beforeSnapshot: jsonb("before_snapshot"),
+  afterSnapshot: jsonb("after_snapshot"),
+
+  // Apply stats
+  appliedCount: integer("applied_count").notNull().default(0),
+  skippedCount: integer("skipped_count").notNull().default(0),
+
+  // For restore entries: points to the change log entry that this restore reverses
+  restoredFromId: integer("restored_from_id"),
+
+  // Extensible: for future wearable/readiness/proactive source metadata
+  decisionMetadata: jsonb("decision_metadata"),
+
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const insertSystemChangeLogSchema = createInsertSchema(
+  systemChangeLog
+).omit({ id: true, createdAt: true });
+export type InsertSystemChangeLog = z.infer<typeof insertSystemChangeLogSchema>;
+export type SystemChangeLog = typeof systemChangeLog.$inferSelect;

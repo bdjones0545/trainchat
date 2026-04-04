@@ -1,0 +1,345 @@
+PHASE 4 — BUILD VERSIONING, CHANGE HISTORY, AND REVERSIBILITY FOR “YOUR SYSTEM” IN TRAINCHAT
+
+We have already built:
+- Phase 1: persistent structured training system + read-only “Your System”
+- Phase 2: agent editing engine for structured natural language program updates
+- Phase 3: Replit-style interaction layer with contextual editing, quick actions, live updates, and change highlighting
+
+Now we are building the versioning layer that makes the system feel truly elite.
+
+IMPORTANT:
+This phase is NOT about wearables yet.
+This phase is NOT about proactive auto-adjustments yet.
+This phase is NOT about autonomous coaching suggestions yet.
+
+This phase is specifically about making the user’s training system behave more like a real evolving workspace with:
+- change history
+- before/after visibility
+- version snapshots
+- ability to restore/revert intelligently
+
+OBJECTIVE
+Turn “Your System” into something that feels like Git for training.
+
+The user should feel:
+- my system evolves over time
+- I can see what changed
+- I can understand why it changed
+- I can go back if needed
+- my coach and I are building this intelligently, not chaotically
+
+CORE PRODUCT BEHAVIOR
+When the user or agent modifies the training system, TrainChat should:
+1. record the change
+2. preserve the previous state appropriately
+3. create a readable history trail
+4. let the user review prior versions
+5. support reverting or restoring safely
+
+This should make the system feel trustworthy, premium, and powerful.
+
+PHASE 4 SCOPE ONLY
+
+Build the following:
+
+1. VERSIONING ARCHITECTURE
+Create a formal versioning model for the training system.
+
+At minimum, support:
+- full training system snapshot references
+- version id
+- user id
+- active training system id
+- source of change (AI edit, quick action, manual system action, future auto-adjustment)
+- timestamp
+- change summary
+- optional reason/context
+- affected scope (exercise, session, week, block, system)
+- pointer to previous version
+- metadata for extensibility
+
+The architecture should support both:
+- lightweight version records for routine edits
+- restorable snapshots for meaningful structural changes
+
+Design this cleanly and intentionally.
+
+2. PRE-EDIT SNAPSHOT + POST-EDIT VERSION FLOW
+Before applying a meaningful edit, preserve the prior state appropriately.
+
+Requirements:
+- capture the relevant previous system state before destructive changes
+- create a new version record after the edit is successfully applied
+- tie the version record to the change summary already generated in prior phases
+- avoid fragile overwrite-only behavior
+
+The system should be able to answer:
+- what changed
+- what it was before
+- what it became after
+- when it changed
+- why it changed
+
+3. CHANGE LOG / HISTORY MODEL
+Create a structured change history log.
+
+Each history entry should support:
+- change id
+- user id
+- training system id
+- version id
+- timestamp
+- source of edit
+- object type changed (exercise, session, week, block, program)
+- object id changed
+- before summary
+- after summary
+- human-readable explanation
+- technical diff metadata if useful
+
+This should be machine-readable and also easy to render in the UI.
+
+4. DIFFERENTIATE MICRO-EDITS VS MAJOR-VERSIONS
+Not every tiny change needs to feel like a massive new branch.
+Design sensible versioning rules.
+
+Examples:
+Micro-edits:
+- changing reps
+- swapping one exercise
+- reducing one session’s volume
+
+Major changes:
+- changing week structure
+- converting week to deload
+- changing block emphasis
+- changing split structure
+- large-scale equipment adaptation
+- progressing to a new block
+
+Requirements:
+- preserve history for all edits
+- but allow the system to distinguish between small changes and major version milestones
+- prepare the UI to reflect that hierarchy cleanly
+
+5. VERSION HISTORY USER INTERFACE
+Add a dedicated history area inside “Your System.”
+
+This can be called:
+- History
+- Change Log
+- Program History
+- System Timeline
+
+The user should be able to view:
+- recent changes
+- version milestones
+- date/time of edits
+- what scope changed
+- why the change was made
+
+UI principles:
+- clear
+- premium
+- not overly technical
+- easy to scan
+- mobile-friendly
+- timeline-like or list-like if appropriate
+
+6. BEFORE / AFTER VISIBILITY
+For meaningful edits, let the user inspect what changed.
+
+At minimum, support:
+- before summary
+- after summary
+- readable change explanation
+- affected object context
+
+Examples:
+- old exercise → new exercise
+- old rep scheme → new rep scheme
+- previous week emphasis → updated week emphasis
+- previous block goal → new block goal
+
+This does NOT need to be a code diff view.
+It should feel readable and coach-oriented.
+
+7. REVERT / RESTORE FUNCTIONALITY
+Allow safe restoration of prior versions or change states.
+
+Requirements:
+- user can restore a prior version or prior state intentionally
+- restoration should create a new version record instead of silently overwriting history
+- preserve full audit trail
+- make it clear what will be restored
+- avoid destructive confusing rollback behavior
+
+Examples:
+- restore prior exercise setup
+- restore prior session structure
+- restore previous week version
+- restore a previous block direction if applicable
+
+Important:
+Revert should feel safe and premium, not dangerous.
+
+8. SCOPED RESTORE LOGIC
+Where possible, support restoring based on scope.
+
+Examples:
+- restore just one changed session
+- restore a week-level state
+- restore a prior block version
+- optionally restore full system version when appropriate
+
+Do not force everything to be all-or-nothing if the architecture allows scoped restoration cleanly.
+
+9. VERSION CREATION RULES
+Create centralized rules for when version records are made.
+
+Examples:
+- AI edit creates change history entry always
+- major structural edits create version milestone
+- batch quick actions can create grouped history entry
+- restore actions create a new version entry
+- future auto-adjustments can plug into same system
+
+Keep this configurable and easy to tune later.
+
+10. “WHY THIS CHANGED” TRUST LAYER
+A key part of this phase is user trust.
+
+When rendering history/version entries, include:
+- what changed
+- why it changed
+- source of decision
+- affected scope
+
+Examples:
+- “Week 2 volume was reduced to better manage fatigue while preserving your primary strength work.”
+- “Friday session was converted to recovery emphasis because you requested lower lower-body stress.”
+
+This makes the system feel like an intelligent coaching process, not random AI edits.
+
+11. UI INTEGRATION WITH PHASE 3 WORKSPACE
+Integrate version/history into the existing workspace cleanly.
+
+Possible integration points:
+- History tab in “Your System”
+- Recent changes drawer
+- Version timeline area
+- Restore action inside change detail view
+
+Do not clutter the main program workspace.
+History should be available and clear, but not overwhelming.
+
+12. BACKEND / FRONTEND SEPARATION
+Keep implementation clean.
+
+Requirements:
+- backend owns snapshot/version/history creation
+- frontend requests history/version data and renders it
+- revert/restore actions go through backend services
+- do not duplicate versioning logic in the frontend
+
+Structure services clearly:
+- snapshot service
+- version creation service
+- change log service
+- restore service
+
+13. READINESS FOR FUTURE INTELLIGENCE LAYER
+Prepare this versioning system for future phases where changes may come from:
+- readiness data
+- wearable data
+- pain feedback
+- proactive AI suggestions
+- automated deload recommendations
+
+This means each history/version entry should include a change source field and optional decision metadata.
+
+14. READINESS FOR COLLABORATIVE / COACH MODES
+Also prepare the data model for a future where edits may come from:
+- AI coach
+- user quick action
+- human coach/admin
+- automated system logic
+
+This should not be hardcoded as only one actor forever.
+
+15. DO NOT BUILD IN THIS PHASE
+Do NOT build:
+- wearable integrations
+- auto-readiness adaptations
+- proactive unsolicited edit suggestions
+- full analytics/performance layer
+- social/collaborative sharing
+- coach marketplace features
+
+Those belong later.
+
+16. DESIGN PRINCIPLES
+The versioning experience should feel:
+- trustworthy
+- premium
+- calm
+- clear
+- intelligent
+- systemized
+
+It should NOT feel:
+- overly technical
+- confusing
+- cluttered
+- like a developer tool pasted into a fitness app
+- risky or destructive
+
+Think:
+high-end training operating system with elite change visibility
+
+17. TESTING / VALIDATION
+After building, validate:
+- meaningful edits create history correctly
+- major edits create version milestones appropriately
+- before/after details are accurate
+- restore actions work safely
+- restoring creates a new history/version entry
+- UI clearly shows what changed and why
+- mobile UX remains strong
+- existing TrainChat flows remain unaffected
+
+Test specific examples:
+- swap one exercise and review history
+- convert a day to recovery and inspect before/after
+- deload a week and confirm major version entry
+- restore a prior week version safely
+- restore prior session structure without corrupting the rest of the program
+
+18. DELIVERABLES AFTER IMPLEMENTATION
+When complete, provide:
+1. summary of what was built
+2. versioning data model/schema changes
+3. what counts as a change log entry vs version milestone
+4. where snapshot logic lives
+5. how restore/revert works
+6. where history UI lives in “Your System”
+7. how before/after differences are rendered
+8. how this is prepared for future wearable/proactive intelligence
+9. any cleanup recommendations before moving to the next phase
+
+IMPORTANT REMINDERS
+This phase is about making TrainChat feel trustworthy and truly system-based.
+
+We are building:
+- versioning
+- change history
+- before/after visibility
+- restore/revert capability
+- trust and transparency
+
+We are NOT building:
+- wearable intelligence
+- proactive auto-adjustment
+- autonomous coaching suggestions
+
+The goal is to make “Your System” feel like a real evolving performance workspace with memory, structure, and reversibility.

@@ -1,10 +1,12 @@
 /**
- * Edit Engine — Phase 2 + Phase 3
+ * Edit Engine — Phase 2 + Phase 3 + Phase 4
  *
  * Applies a structured EditPlan to the training system database.
  * Operations are targeted: only the specified IDs and fields are modified.
  *
  * Phase 3: Returns changedIds for frontend change highlighting.
+ * Phase 4: Captures before/after snapshots for every change — used by
+ *          change-log-service to enable full restore capability.
  */
 
 import { db } from "@workspace/db";
@@ -17,6 +19,7 @@ import {
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 import type { EditPlan, EditChange } from "./edit-intent-service";
+import type { SystemSnapshot } from "./change-log-service";
 
 // ─── Allowed field allowlists (safety guard) ─────────────────────────────────
 
@@ -43,6 +46,42 @@ function filterFields(updates: Record<string, unknown>, allowed: Set<string>): R
     if (allowed.has(key)) filtered[key] = value;
   }
   return filtered;
+}
+
+// ─── Snapshot capture helpers ─────────────────────────────────────────────────
+
+async function snapshotExercise(id: number): Promise<Record<string, unknown> | null> {
+  const [row] = await db.select().from(sessionExercises).where(eq(sessionExercises.id, id)).limit(1);
+  if (!row) return null;
+  return {
+    name: row.name, category: row.category, sets: row.sets, reps: row.reps,
+    tempo: row.tempo, rest: row.rest, rpe: row.rpe, notes: row.notes, orderIndex: row.orderIndex,
+  };
+}
+
+async function snapshotSession(id: number): Promise<Record<string, unknown> | null> {
+  const [row] = await db.select().from(trainingSessions).where(eq(trainingSessions.id, id)).limit(1);
+  if (!row) return null;
+  return {
+    label: row.label, sessionType: row.sessionType, emphasis: row.emphasis,
+    warmupNotes: row.warmupNotes, coachingNotes: row.coachingNotes, isRestDay: row.isRestDay, dayOfWeek: row.dayOfWeek,
+  };
+}
+
+async function snapshotWeek(id: number): Promise<Record<string, unknown> | null> {
+  const [row] = await db.select().from(trainingWeeks).where(eq(trainingWeeks.id, id)).limit(1);
+  if (!row) return null;
+  return {
+    label: row.label, focus: row.focus, volumeLevel: row.volumeLevel, notes: row.notes, status: row.status,
+  };
+}
+
+async function snapshotPhase(id: number): Promise<Record<string, unknown> | null> {
+  const [row] = await db.select().from(trainingPhases).where(eq(trainingPhases.id, id)).limit(1);
+  if (!row) return null;
+  return {
+    name: row.name, goal: row.goal, emphasis: row.emphasis, notes: row.notes, status: row.status,
+  };
 }
 
 // ─── Apply a single change ────────────────────────────────────────────────────
@@ -206,6 +245,64 @@ function extractChangedIds(plan: EditPlan): ChangedIds {
   return { exercises, sessions, weeks, phases };
 }
 
+// ─── Snapshot capture for entire plan ────────────────────────────────────────
+
+async function captureBeforeSnapshot(plan: EditPlan): Promise<SystemSnapshot> {
+  const snapshot: SystemSnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
+
+  for (const change of plan.changes) {
+    switch (change.type) {
+      case "update_exercise":
+      case "replace_exercise":
+      case "delete_exercise": {
+        const s = await snapshotExercise(change.id);
+        if (s) snapshot.exercises[String(change.id)] = s;
+        break;
+      }
+      case "update_session": {
+        const s = await snapshotSession(change.id);
+        if (s) snapshot.sessions[String(change.id)] = s;
+        break;
+      }
+      case "update_week": {
+        const s = await snapshotWeek(change.id);
+        if (s) snapshot.weeks[String(change.id)] = s;
+        break;
+      }
+      case "update_phase": {
+        const s = await snapshotPhase(change.id);
+        if (s) snapshot.phases[String(change.id)] = s;
+        break;
+      }
+    }
+  }
+
+  return snapshot;
+}
+
+async function captureAfterSnapshot(changedIds: ChangedIds): Promise<SystemSnapshot> {
+  const snapshot: SystemSnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
+
+  for (const id of changedIds.exercises) {
+    const s = await snapshotExercise(id);
+    if (s) snapshot.exercises[String(id)] = s;
+  }
+  for (const id of changedIds.sessions) {
+    const s = await snapshotSession(id);
+    if (s) snapshot.sessions[String(id)] = s;
+  }
+  for (const id of changedIds.weeks) {
+    const s = await snapshotWeek(id);
+    if (s) snapshot.weeks[String(id)] = s;
+  }
+  for (const id of changedIds.phases) {
+    const s = await snapshotPhase(id);
+    if (s) snapshot.phases[String(id)] = s;
+  }
+
+  return snapshot;
+}
+
 // ─── Main Entry Point ────────────────────────────────────────────────────────
 
 export interface EditResult {
@@ -214,11 +311,15 @@ export interface EditResult {
   changeSummary: string;
   details: string[];
   changedIds: ChangedIds;
+  beforeSnapshot: SystemSnapshot;
+  afterSnapshot: SystemSnapshot;
 }
 
 export async function applyEditPlan(plan: EditPlan): Promise<EditResult> {
-  const results: { applied: boolean; detail: string }[] = [];
+  // Phase 4: Capture state BEFORE applying changes
+  const beforeSnapshot = await captureBeforeSnapshot(plan);
 
+  const results: { applied: boolean; detail: string }[] = [];
   for (const change of plan.changes) {
     const result = await applyChange(change);
     results.push(result);
@@ -229,11 +330,16 @@ export async function applyEditPlan(plan: EditPlan): Promise<EditResult> {
   const skippedCount = results.filter((r) => !r.applied).length;
   const changedIds = extractChangedIds(plan);
 
+  // Phase 4: Capture state AFTER applying changes
+  const afterSnapshot = await captureAfterSnapshot(changedIds);
+
   return {
     appliedCount,
     skippedCount,
     changeSummary: plan.changeSummary,
     details: results.map((r) => r.detail),
     changedIds,
+    beforeSnapshot,
+    afterSnapshot,
   };
 }

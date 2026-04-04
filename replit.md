@@ -73,6 +73,54 @@ The UI features a consistent dark theme with electric blue (HSL(199 89% 48%)) as
 - **Backend INCREMENT/DECREMENT sentinels**: Edit engine handles `sets: "INCREMENT"` and `sets: "DECREMENT"` from the rule-based fallback for "Add a set" / "Remove a set" targeted exercise edits.
 - **Phase 4 readiness**: All edit operations are object-targeted with explicit IDs, edit records have timestamps and scope, `changedIds` structure is ready for before/after snapshots. Extending to a full change log only requires persisting the `EditRecord` array to the DB.
 
+### Phase 4 — Versioning, Change History, and Reversibility (April 2026)
+
+**Schema addition** — `system_change_log` table:
+- One record per edit operation (regardless of how many entities it touched)
+- `source` field: `ai_edit | quick_action | initialize | restore | auto_adjust` — extensible for future wearable/autonomous sources
+- `isMajorVersion` (bool) + `versionLabel` (text): structural milestones vs. routine micro-edits
+- `beforeSnapshot` + `afterSnapshot` (jsonb): `{ exercises: {id: {...}}, sessions: {...}, weeks: {...}, phases: {...} }` — complete entity state before/after each edit
+- `restoredFromId`: points back to the change entry that a restore reversal originated from
+- `decisionMetadata` (jsonb): extensible for future wearable, readiness, or AI-proactive context
+- `targetType/targetId/targetLabel`: carries Phase 3 contextual edit info into the permanent record
+
+**Backend services**:
+- `change-log-service.ts`: `createChangeLogEntry()`, `getChangeHistory()` (paginated, newest-first), `getChangeDetail()` (with snapshots). `classifyEdit()` determines `isMajorVersion` + `versionLabel` based on intent and scope.
+- `restore-service.ts`: `restoreFromChange()` — reads `beforeSnapshot`, re-applies each entity field set to the DB, captures current state as the restore entry's own `beforeSnapshot`, creates a new `change_log` entry with `source: "restore"`. Safe audit trail: restoring a restore is equally possible.
+- `edit-engine.ts` (Phase 4 addition): Now calls `captureBeforeSnapshot()` before applying changes and `captureAfterSnapshot()` after — both returned in `EditResult.beforeSnapshot` / `EditResult.afterSnapshot`.
+- `training-system-edit.ts` (Phase 4 addition): Calls `createChangeLogEntry()` after every successful edit. Non-fatal — edit succeeds even if logging fails.
+
+**Major-version classification rules**:
+- `deload_week`, `travel_mode`, `change_session_type`, `athletic_emphasis`, `refocus_block_*`, `increase_intensity`, `increase_weekly_volume`, `restore`, `initialize` → `isMajorVersion: true`
+- Scope of `block` or `system` → always major
+- Everything else (exercise swap, rep range change, notes, shorter session, etc.) → micro-edit
+
+**API routes** (`training-system-history.ts`):
+- `GET /api/training-system/history` — returns up to 30 entries newest-first for the active system (no snapshots for efficiency)
+- `GET /api/training-system/history/:id` — full detail including `beforeSnapshot`/`afterSnapshot` for the change detail drawer
+- `POST /api/training-system/restore/:id` — executes scoped restore from the entry's `beforeSnapshot`, returns `changedIds` + fresh system data
+
+**History tab UI** (`HistoryView` in `system.tsx`):
+- 4th tab alongside Today / This Week / Block — "History"
+- Grouped by calendar date with date dividers
+- Each entry: colored dot (amber=major, gray=micro), source badge, scope badge, amber "Milestone" badge if major, purple "↩ Restored" tag for restore entries, intent label or `versionLabel` as title, 2-line summary preview, relative timestamp, applied count, target label, "Details →"
+- History tab hides both the `RecentEditsBar` and `GlobalEditPanel` (read-only view — no editing from History)
+
+**ChangeDetailDrawer** (`components/training/ChangeDetailDrawer.tsx`):
+- Bottom sheet same pattern as `EditDrawer`
+- Header: source icon/badge, "Version Milestone" amber badge if major, intent/version label, timestamp + change count
+- "What Changed": `changeSummary` text (coach-oriented)
+- "Original Request": shows user's raw request text (hidden for restore entries)
+- "Applied to:": targetType + targetLabel from Phase 3 context
+- "Before → After" section: per entity type (exercises, sessions, weeks, phases), per entity ID — `EntityDiff` component (collapsible) with Field/Before/After columns; changed fields: red strikethrough before, green bold after
+- "Restore Prior State" button → single-step confirmation (`Confirm Restore` with explanation) → `POST /api/training-system/restore/:id` → on success closes drawer, updates highlights, refreshes all views including History
+
+**Phase 5 readiness**:
+- `source` field is open: `auto_adjust` is already in the enum for proactive/wearable-triggered changes
+- `decisionMetadata` is a jsonb blob: future wearable data (HRV, sleep, load), readiness score, or proactive AI reasoning can go here per entry
+- `restoredFromId` makes the audit trail fully navigable regardless of depth
+- History tab and `ChangeDetailDrawer` are already wired for `auto_adjust` source badge rendering
+
 ## External Dependencies
 
 - **OpenAI**: Utilized for the core AI performance architect (GPT-4o model).
