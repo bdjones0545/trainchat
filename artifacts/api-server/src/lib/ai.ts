@@ -17,6 +17,13 @@ import {
 } from "./training-intelligence";
 import { type IntentResult, buildIntentPromptHint } from "./intent";
 import { type ActionDecision, buildPreservationContext } from "./decision";
+import {
+  transformProgram,
+  resolveTransformType,
+  buildTransformPromptHint,
+  detectCurrentSplit,
+  type TransformRequest,
+} from "./split-transform";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -597,6 +604,7 @@ export interface AIResponseOptions {
   currentProgram?: ProgramStructure | null;
   intentResult?: IntentResult | null;
   actionDecision?: ActionDecision | null;
+  transformHint?: string;
 }
 
 // ─── Main entry point ────────────────────────────────────────────────────────
@@ -615,6 +623,7 @@ export async function generateAIResponse(
     currentProgram,
     intentResult,
     actionDecision,
+    transformHint,
   } = options;
 
   const [profile] = await db
@@ -662,7 +671,7 @@ export async function generateAIResponse(
     ? buildPreservationContext(actionDecision.preservationRules, actionDecision.actionType)
     : null;
 
-  const extras = [adaptationContext, memoryContext, insightHint, conversionHint, intentHint, editContext, preservationContext]
+  const extras = [adaptationContext, memoryContext, insightHint, conversionHint, intentHint, editContext, preservationContext, transformHint]
     .filter(Boolean)
     .join("\n\n");
   const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;
@@ -1495,69 +1504,37 @@ function applyFallbackMutation(
     }
 
     case "structural_edit": {
-      // For structural edits in fallback mode, extract compound lifts from the
-      // current program and rebuild around them using the training intelligence engine.
-      if (!_profile) return null;
+      // Delegate to the split transformation engine — it handles all structural
+      // rebuilds with proper exercise redistribution, validation, and logging.
+      const msg = _lowerMessage;
+      const currentSplit = detectCurrentSplit(program);
+      const currentDays = program.days.length;
 
-      // Collect all primary/secondary compound lifts worth preserving
-      const primaryLifts: Exercise[] = [];
-      for (const day of program.days) {
-        for (const ex of day.exercises) {
-          const isPrimary = /primary|secondary/i.test(ex.classification ?? "");
-          const isCompound = /(squat|deadlift|bench|press|row|pull.up|chin.up|lunge|hinge|clean|snatch)/i.test(ex.name);
-          if (isPrimary || isCompound) {
-            primaryLifts.push({ ...ex });
-          }
-        }
-      }
+      // Infer target structure from the raw message
+      let targetSplit = "unknown";
+      let targetDays: number | null = null;
+      let targetGoalShift: string | null = null;
 
-      // Build fresh program from profile (structural base)
-      const freshProgram = buildIntelligentProgram(_profile);
+      if (/full.?body/i.test(msg)) targetSplit = "full_body";
+      else if (/upper.?lower/i.test(msg)) targetSplit = "upper_lower";
+      else if (/push.pull.legs?|ppl/i.test(msg)) targetSplit = "ppl";
 
-      // Inject preserved compound lifts into the fresh program
-      // Replace matching primary slots to maintain NSCA order
-      const usedLifts = new Set<string>();
-      for (const day of freshProgram.days) {
-        for (let i = 0; i < day.exercises.length; i++) {
-          const ex = day.exercises[i];
-          if (/primary|secondary/i.test(ex.classification ?? "")) {
-            const preserved = primaryLifts.find(p =>
-              !usedLifts.has(p.name) &&
-              getMovementPattern(p.name) === getMovementPattern(ex.name)
-            );
-            if (preserved) {
-              day.exercises[i] = { ...preserved };
-              usedLifts.add(preserved.name);
-            }
-          }
-        }
-      }
+      const dayMatch = msg.match(/(\d)\s*-?\s*day/);
+      if (dayMatch) targetDays = parseInt(dayMatch[1], 10);
 
-      // Update split label based on target structure detected in message
-      const lower2 = _lowerMessage;
-      if (/full.?body/i.test(lower2)) {
-        freshProgram.splitType = `Full Body × ${freshProgram.days.length}`;
-        freshProgram.days.forEach((d, i) => { d.name = `Full Body ${String.fromCharCode(65 + i)}`; });
-      } else if (/upper.lower/i.test(lower2)) {
-        freshProgram.splitType = `Upper/Lower × ${freshProgram.days.length}`;
-        freshProgram.days.forEach((d, i) => { d.name = i % 2 === 0 ? `Upper Body ${String.fromCharCode(65 + Math.floor(i / 2))}` : `Lower Body ${String.fromCharCode(65 + Math.floor(i / 2))}`; });
-      } else if (/push.pull.legs?|ppl/i.test(lower2)) {
-        freshProgram.splitType = `Push/Pull/Legs × ${Math.ceil(freshProgram.days.length / 3)}`;
-        const pplLabels = ["Push", "Pull", "Legs"];
-        freshProgram.days.forEach((d, i) => { d.name = `${pplLabels[i % 3]} ${Math.floor(i / 3) > 0 ? Math.floor(i / 3) + 1 : ""}`.trim(); });
-      }
+      if (/athletic/i.test(msg)) targetGoalShift = "athletic";
+      else if (/fat.loss|conditioning|cardio/i.test(msg)) targetGoalShift = "fat_loss";
 
-      logger.info(
-        {
-          originalSplit: program.splitType,
-          newSplit: freshProgram.splitType,
-          preservedLifts: primaryLifts.map(l => l.name),
-          preservedCount: usedLifts.size,
-        },
-        "[StructuralEditFallback] Rebuilt program with preserved compound lifts"
-      );
+      const transformType = resolveTransformType(targetSplit, targetDays, targetGoalShift, currentDays);
+      const transformRequest: TransformRequest = {
+        type: transformType,
+        targetDays: targetDays ?? currentDays,
+        userProfile: _profile,
+        rawRequest: _lowerMessage,
+      };
 
-      return freshProgram;
+      const result = transformProgram(program, transformRequest);
+      return result.program;
     }
 
     default:

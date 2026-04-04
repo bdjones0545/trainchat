@@ -6,6 +6,12 @@ import { requireAuth } from "../middlewares/auth";
 import { generateAIResponse, type ProgramStructure } from "../lib/ai";
 import { classifyIntent, logIntentSummary } from "../lib/intent";
 import { resolveAction, logDecisionSummary } from "../lib/decision";
+import {
+  transformProgram,
+  resolveTransformType,
+  buildTransformPromptHint,
+  type TransformRequest,
+} from "../lib/split-transform";
 import { buildAdaptationContext } from "../lib/adaptation";
 import { syncMemoriesFromData, listMemories, buildMemoryContext } from "../lib/memory";
 import { generateInsights, buildInsightPromptHint } from "../lib/insights";
@@ -436,6 +442,56 @@ Keep it helpful and intelligent, never promotional.`;
     ? latestStructuredProgram
     : null;
 
+  // ── STRUCTURAL_REBUILD pre-transform ──────────────────────────────────────
+  // When the decision tree resolves a STRUCTURAL_REBUILD, run the transformation
+  // engine before calling the AI. The AI then gets the already-transformed program
+  // and just writes the coach confirmation — no structural guesswork needed.
+  let preTransformedProgram: ProgramStructure | null = currentProgram;
+  let transformHint: string | null = null;
+
+  if (actionDecision.actionType === "STRUCTURAL_REBUILD" && currentProgram) {
+    const meta = intentResult.metadata as {
+      targetSplit?: string;
+      targetDays?: number | null;
+      targetGoalShift?: string | null;
+    } | undefined;
+
+    const targetSplit = meta?.targetSplit ?? "unknown";
+    const targetDays = meta?.targetDays ?? null;
+    const targetGoalShift = meta?.targetGoalShift ?? null;
+
+    const transformType = resolveTransformType(
+      targetSplit,
+      targetDays,
+      targetGoalShift,
+      currentProgram.days.length,
+    );
+
+    const transformRequest: TransformRequest = {
+      type: transformType,
+      targetDays: targetDays ?? currentProgram.days.length,
+      rawRequest: parsed.data.content,
+    };
+
+    try {
+      const result = transformProgram(currentProgram, transformRequest);
+      preTransformedProgram = result.program;
+      transformHint = buildTransformPromptHint(result.log);
+      logger.info(
+        {
+          transformType,
+          resultingSplit: result.log.resultingSplit,
+          preserved: result.log.preservedExercises.length,
+          removed: result.log.removedExercises.length,
+        },
+        "[ConversationRouter] Pre-transform complete — passing to AI for confirmation"
+      );
+    } catch (err) {
+      logger.error({ err }, "[ConversationRouter] Split transform failed — falling back to AI-only structural edit");
+      // preTransformedProgram stays as currentProgram; AI handles it
+    }
+  }
+
   const { content: aiContent, structuredData } = await generateAIResponse(
     parsed.data.content,
     history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
@@ -445,9 +501,10 @@ Keep it helpful and intelligent, never promotional.`;
       memoryContext: (hasMemory && memoryCtx) ? memoryCtx : undefined,
       insightHint: insightHint || undefined,
       conversionHint: conversionHint || undefined,
-      currentProgram,
+      currentProgram: preTransformedProgram,
       intentResult,
       actionDecision,
+      transformHint: transformHint || undefined,
     }
   );
 

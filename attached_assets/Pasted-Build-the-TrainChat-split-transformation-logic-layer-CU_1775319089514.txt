@@ -1,0 +1,214 @@
+Build the TrainChat split transformation logic layer.
+
+CURRENT PROBLEM:
+The agent is improving at understanding broad structural requests, but it still needs a stronger internal system for how to intelligently transform one program structure into another.
+
+GOAL:
+Create a split transformation engine that allows TrainChat to restructure programs intelligently and consistently when the user requests major changes such as:
+
+- make this more full body
+- convert this to upper/lower
+- change this to 3 days
+- make this more athletic
+- make this less fatiguing overall
+
+This layer should sit underneath the decision tree/reasoning layer and define HOW structural program changes are carried out.
+
+==================================================
+1. CORE PURPOSE
+==================================================
+
+The split transformation engine should:
+
+- take the current structured program as input
+- identify the current split and weekly structure
+- determine the requested new structure
+- preserve as much high-value programming as possible
+- redistribute exercises intelligently
+- maintain coherence, recovery balance, and session realism
+
+The output should be a transformed structured program, not a random rebuild.
+
+==================================================
+2. SUPPORTED TRANSFORMATIONS
+==================================================
+
+Support transformations such as:
+
+- upper/lower → full body
+- full body → upper/lower
+- 4 days → 3 days
+- 3 days → 4 days
+- hypertrophy-biased split → more athletic structure
+- high-fatigue structure → lower-fatigue structure
+- accessory-heavy structure → more efficient structure
+
+Build this cleanly so more transformations can be added later.
+
+==================================================
+3. TRANSFORMATION INPUTS
+==================================================
+
+Every transformation should consider:
+
+- user goal
+- days per week
+- session duration
+- equipment access
+- pain limitations
+- movement balance
+- current key exercises
+- current progression structure
+- current fatigue load
+
+Do not transform split structure in isolation.
+Always account for the user context.
+
+==================================================
+4. PRESERVATION RULES
+==================================================
+
+Preserve by default where possible:
+
+- key compound lifts
+- movement pattern balance
+- user equipment constraints
+- pain-aware exercise choices
+- progression notes/strategy
+- preferred exercise styles
+- important volume priorities
+
+Allow changes to:
+
+- day distribution
+- accessory placement
+- redundant exercises
+- excessive overlap
+- exercises that conflict with the new structure
+
+Log what was preserved vs replaced.
+
+==================================================
+5. SPECIFIC TRANSFORMATION LOGIC
+==================================================
+
+A. UPPER/LOWER TO FULL BODY
+- redistribute upper and lower movement patterns across all training days
+- preserve key compounds if possible
+- reduce clustered accessory volume
+- avoid overloading sessions
+- ensure each day has sensible movement balance
+
+B. FULL BODY TO UPPER/LOWER
+- consolidate exercise emphasis by day
+- maintain sensible frequency
+- preserve progression structure
+- avoid excessive specialization unless goal requires it
+
+C. 4 DAYS TO 3 DAYS
+- preserve priorities first
+- reduce lowest-priority accessory volume
+- combine movement patterns intelligently
+- avoid creating bloated 90-minute sessions if user has shorter session limits
+
+D. MORE ATHLETIC
+- add explosive or power-oriented work early in sessions where appropriate
+- reduce nonessential bodybuilding accessory volume
+- preserve useful strength movements
+- bias toward force production, movement quality, and lower fatigue overlap
+
+E. LESS FATIGUING OVERALL
+- reduce overlap and density
+- lower accessory volume first
+- preserve main lifts where possible
+- keep sessions more recoverable without destroying training intent
+
+==================================================
+6. TRANSFORMATION DECISION LOGIC
+==================================================
+
+Implement logic for selecting the best resulting structure.
+
+Examples:
+- if user has 3 days available and wants “more full body,” choose a full body structure
+- if user has 4 days and wants more full body, either create 4 full-body biased days or upper/lower with higher frequency depending on context
+- if user wants more athletic programming, reduce excessive hypertrophy bias and rebalance weekly structure
+
+The engine should make strong coaching decisions, not random transformations.
+
+==================================================
+7. EXERCISE REDISTRIBUTION LOGIC
+==================================================
+
+When transforming a split:
+- reuse compatible exercises where possible
+- move exercises to better locations in the week
+- remove redundancy when necessary
+- add missing movement categories only if needed
+- preserve session flow and exercise ordering logic
+
+Do not just copy/paste all old exercises into a new split format.
+
+==================================================
+8. SESSION REALISM / VALIDATION
+==================================================
+
+Every transformed split must be checked for:
+- realistic session length
+- balanced fatigue distribution
+- sane exercise ordering
+- reasonable weekly volume
+- no broken progression structure
+- no duplicate clutter unless intentional
+
+If needed, simplify during transformation.
+
+==================================================
+9. RESPONSE INTEGRATION
+==================================================
+
+After a transformation succeeds:
+- update the structured program state
+- refresh the right panel
+- return a short coach-like explanation
+
+Examples:
+- “I converted this to a fuller-body structure and spread your main work across the week for better frequency.”
+- “I shifted this toward a more athletic setup by keeping your key strength lifts and reducing nonessential accessory volume.”
+
+==================================================
+10. DEBUGGING / OBSERVABILITY
+==================================================
+
+Log:
+- original split
+- requested transformation
+- selected resulting split
+- preserved exercises
+- replaced or removed exercises
+- validation results
+
+==================================================
+11. ARCHITECTURE REQUIREMENTS
+==================================================
+
+Implement this as a clean transformation module that works with:
+- decision tree / reasoning layer
+- mutation engine
+- exercise intelligence layer
+- right panel rendering
+
+Do not bury this inside generic prompt text.
+This should be a real program-structure transformation system.
+
+==================================================
+DELIVERABLES
+==================================================
+
+At the end, provide:
+1. supported split transformations
+2. transformation rules implemented
+3. preservation rules used
+4. redistribution logic used
+5. validation checks added
+6. examples of how major structural edits now work
