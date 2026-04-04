@@ -1,0 +1,222 @@
+Fix the TrainChat program editing pipeline so user modification requests actually update the current program structure and right panel output.
+
+CURRENT ISSUE:
+When the user sends a message like:
+- "I just got my program and noticed there are no core exercises"
+- "add more hamstrings"
+- "swap incline dumbbell press"
+- "make this more athletic"
+- "shorten this to 45 minutes"
+
+the chat currently responds conversationally, but does NOT actually modify the current program state or refresh the structured program in the right panel.
+
+This is a critical product issue.
+
+==================================================
+GOAL
+==================================================
+
+TrainChat must treat these inputs as program edit commands, not just normal chat replies.
+
+When the user references their current/generated program and asks for a change, the system should:
+
+1. detect this as an edit request
+2. load the current active program or draft program state
+3. apply the requested modification intelligently
+4. regenerate the structured program data
+5. update the right panel immediately
+6. optionally explain the change briefly in chat
+
+The product should feel like the agent is actually editing the program live.
+
+==================================================
+REQUIRED FIXES
+==================================================
+
+1. EDIT INTENT DETECTION
+
+Implement logic that detects when a user message is a modification request for the current program.
+
+Examples:
+- "there are no core exercises"
+- "add core"
+- "add calves"
+- "swap Romanian deadlifts"
+- "make leg day less fatiguing"
+- "make this better for shoulder pain"
+- "shorten this"
+- "add more athletic work"
+
+These should be classified as:
+PROGRAM_EDIT_REQUEST
+
+This should NOT be treated like generic chat only.
+
+==================================================
+2. CURRENT PROGRAM CONTEXT RESOLUTION
+==================================================
+
+When an edit request is detected, the system must determine the current target program.
+
+Priority:
+- active draft program in current conversation
+- latest generated structured program
+- latest saved program if needed
+
+The agent must know exactly which program is being edited.
+
+==================================================
+3. STRUCTURED PROGRAM MUTATION
+==================================================
+
+Implement actual modification logic for the structured program object.
+
+For the specific case:
+"I just got my program and noticed there are no core exercises"
+
+the system should:
+- detect missing core work
+- intelligently add core exercises into the current program
+- place them where appropriate
+- maintain program integrity
+- not rebuild the whole program unnecessarily unless needed
+
+Core should be added intelligently based on program structure, for example:
+- add 2-3 core exercises across the week
+- or add short core finishers on selected days
+- maintain session length and recovery balance
+
+This should result in a modified structured program object, not just a text explanation.
+
+==================================================
+4. RIGHT PANEL REFRESH
+==================================================
+
+After modification, update the right panel immediately with the revised program.
+
+The right panel should reflect:
+- updated exercises
+- updated day structure
+- any new core block or finishers
+- preserved rest/progression structure where appropriate
+
+Do not require the user to regenerate from scratch.
+
+==================================================
+5. CHAT RESPONSE BEHAVIOR
+==================================================
+
+After updating the program, the chat should respond briefly and clearly, for example:
+
+"Good catch. I added core work across the week without overloading session length. The updated structure is now in the right panel."
+
+or if one clarification is truly needed:
+
+"Do you want core integrated into your main lifting days or added as a separate 2-3 day block?"
+
+But if the request is simple enough, the system should make the change directly.
+
+==================================================
+6. PROGRAM EDIT COMMAND ARCHITECTURE
+==================================================
+
+Implement a clean edit pipeline:
+
+- detect edit intent
+- fetch current structured program
+- run edit function
+- persist updated draft/saved program
+- re-render right panel
+- send short assistant confirmation
+
+Create reusable edit handlers for cases like:
+- add exercise category
+- remove exercise
+- swap exercise
+- shorten session
+- reduce fatigue
+- make more athletic
+- adjust for pain
+- add missing movement/core/accessory work
+
+==================================================
+7. SPECIFIC LOGIC FOR “ADD CORE”
+==================================================
+
+Implement explicit handling for missing core requests.
+
+If the user says:
+- no core
+- add core
+- need abs
+- include trunk work
+
+the system should intelligently insert core/trunk work based on:
+- current split
+- session duration
+- training goal
+- fatigue load
+- movement balance
+
+Examples:
+- hypertrophy program → add brief trunk finishers 2-3x/week
+- performance program → add anti-rotation, anti-extension, carries, or integrated trunk work
+- shorter sessions → keep core minimal and efficient
+
+Do not randomly add junk ab circuits.
+Keep it premium and intentional.
+
+==================================================
+8. DATABASE / STATE REQUIREMENTS
+==================================================
+
+Ensure that updated program state is saved correctly.
+
+If editing a draft:
+- update draft structured data
+
+If editing a saved generated program:
+- either update in place or create a new version cleanly
+
+The current conversation should remain linked to the revised program state.
+
+==================================================
+9. DEBUGGING / FALLBACKS
+==================================================
+
+Add logging/debug visibility so we can verify:
+- edit intent detected
+- target program found
+- mutation succeeded
+- right panel update triggered
+
+If the system fails to mutate the program, it should not silently pretend the edit happened.
+
+Instead it should surface a controlled fallback:
+"I understood the requested change, but I couldn't apply it to the current program state. Regenerating the updated structure now."
+
+==================================================
+10. UX STANDARD
+==================================================
+
+This must feel live, premium, and agent-centered.
+
+The user should feel:
+- the agent understood the issue
+- the agent changed the program
+- the updated plan is immediately visible
+
+Do not leave the user with only a conversational acknowledgment.
+
+==================================================
+DELIVERABLES
+==================================================
+
+At the end, provide:
+1. what was broken
+2. how edit intent detection now works
+3. how current program state is resolved
+4. how structured program mutation works
+5. how right panel refresh now works
+6. what specific logic was added for missing core requests
+7. what other edit types are now supported
