@@ -3,12 +3,13 @@ import { db, conversationsTable, messagesTable } from "@workspace/db";
 import { eq, desc, count } from "drizzle-orm";
 import { CreateConversationBody, GetConversationParams, DeleteConversationParams, ListMessagesParams, SendMessageBody, SendMessageParams } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
-import { generateAIResponse } from "../lib/ai";
+import { generateAIResponse, detectEditIntent, type ProgramStructure } from "../lib/ai";
 import { buildAdaptationContext } from "../lib/adaptation";
 import { syncMemoriesFromData, listMemories, buildMemoryContext } from "../lib/memory";
 import { generateInsights, buildInsightPromptHint } from "../lib/insights";
 import { getUserPlanInfo } from "../lib/planGating";
 import { stripeStorage } from "../lib/stripeStorage";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
@@ -260,6 +261,41 @@ When it feels natural — especially when discussing program details, progress t
 Keep it helpful and intelligent, never promotional.`;
   }
 
+  // ── Edit intent detection & current program resolution ──────────────────
+  const editIntent = detectEditIntent(parsed.data.content);
+  let currentProgram: ProgramStructure | null = null;
+
+  if (editIntent.isEdit) {
+    // Find the most recent assistant message in the conversation that has structured program data
+    const assistantMessages = history
+      .filter((m) => m.role === "assistant" && m.structuredData)
+      .reverse();
+
+    for (const msg of assistantMessages) {
+      const rawData = msg.structuredData;
+      if (rawData) {
+        try {
+          const programData = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
+          if (programData?.days && Array.isArray(programData.days) && programData.days.length > 0) {
+            currentProgram = programData as ProgramStructure;
+            break;
+          }
+        } catch {
+          // ignore malformed JSON
+        }
+      }
+    }
+
+    logger.info(
+      { editType: editIntent.editType, confidence: editIntent.confidence, hasProgramContext: !!currentProgram },
+      "[EditPipeline] Processing edit request"
+    );
+
+    if (!currentProgram) {
+      logger.warn("[EditPipeline] Edit intent detected but no structured program found in history");
+    }
+  }
+
   const { content: aiContent, structuredData } = await generateAIResponse(
     parsed.data.content,
     history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
@@ -267,8 +303,14 @@ Keep it helpful and intelligent, never promotional.`;
     adaptationCtx || undefined,
     (hasMemory && memoryCtx) ? memoryCtx : undefined,
     insightHint || undefined,
-    conversionHint || undefined
+    conversionHint || undefined,
+    currentProgram
   );
+
+  // Fallback warning if edit was detected but no structured data came back
+  if (editIntent.isEdit && currentProgram && !structuredData) {
+    logger.warn("[EditPipeline] Edit intent detected and program was available, but AI did not return updated JSON. Right panel will not update.");
+  }
 
   const [assistantMessage] = await db.insert(messagesTable).values({
     conversationId: params.data.id,

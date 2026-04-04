@@ -294,6 +294,186 @@ function extractStructuredData(content: string): {
   }
 }
 
+// ─── Edit Intent Detection ───────────────────────────────────────────────────
+
+export interface EditIntent {
+  isEdit: boolean;
+  editType: string;
+  confidence: "high" | "medium" | "low";
+}
+
+export function detectEditIntent(message: string): EditIntent {
+  const lower = message.toLowerCase();
+
+  // High-confidence edit signals — explicit program modification language
+  const highConfidence = [
+    /\b(add|include|insert|put in|incorporate)\b.{0,40}\b(core|abs|abdominal|trunk|hamstring|calves?|glutes?|shoulders?|chest|back|arms?|legs?|cardio|conditioning|finisher|exercise|movement|work)\b/i,
+    /\b(swap|replace|substitute|change|switch)\b.{0,50}\b(with|for|to)\b/i,
+    /\b(remove|drop|take out|get rid of|cut|eliminate)\b.{0,40}\b(exercise|movement|day|the)\b/i,
+    /\b(shorten|lengthen|make.{0,20}shorter|make.{0,20}longer|reduce.{0,20}time|less.{0,20}time)\b/i,
+    /\b(no|missing|lack|don.t have|without)\b.{0,40}\b(core|abs|abdominal|trunk|hamstring|calves?|glutes?|cardio|conditioning|exercise)\b/i,
+    /\bmore\b.{0,30}\b(hamstring|calves?|glutes?|core|abs|chest|back|shoulder|volume|frequency|sets?)\b/i,
+    /\bless\b.{0,30}\b(volume|frequency|sets?|fatigue|quad|chest|intensity)\b/i,
+    /\b(make|adjust|modify|update).{0,40}\b(more|less|better|athletic|aggressive|easier|harder|shorter|longer|focused|balanced)\b/i,
+    /\b(shoulder|knee|hip|back|wrist|ankle).{0,30}\b(pain|issue|problem|limit|hurt|injury|avoid)\b/i,
+    /\bi (just got|got|received|have|looking at)\b.{0,40}\b(my|the|this).{0,20}\b(program|plan|routine|workout)\b/i,
+    /\bthis program\b.{0,60}\b(needs?|should|doesn.t|does not|is|has no|lacks?)\b/i,
+    /\b(noticed|see|saw|found|realized).{0,40}\b(no|missing|lack|without|not enough)\b/i,
+    /\b(swap|switch|change)\b.{0,30}\b(incline|bench|squat|deadlift|press|row|curl|extension|fly|raise)\b/i,
+  ];
+
+  for (const pattern of highConfidence) {
+    if (pattern.test(lower)) {
+      let editType = "general_modification";
+      if (/add|include|insert|missing|no\b/.test(lower) && /core|abs|abdominal|trunk/.test(lower)) editType = "add_core";
+      else if (/add|include|more/.test(lower) && /hamstring/.test(lower)) editType = "add_hamstrings";
+      else if (/add|include|more/.test(lower) && /calv/.test(lower)) editType = "add_calves";
+      else if (/swap|replace|substitute|switch/.test(lower)) editType = "swap_exercise";
+      else if (/remove|drop|take out|eliminate/.test(lower)) editType = "remove_exercise";
+      else if (/shorten|shorter|less time/.test(lower)) editType = "shorten_sessions";
+      else if (/athletic/.test(lower)) editType = "make_more_athletic";
+      else if (/less.{0,20}fatigue|less.*volume|reduce.*fatigue/.test(lower)) editType = "reduce_fatigue";
+      else if (/shoulder|knee|hip|back|wrist|ankle/.test(lower) && /pain|issue|hurt|injury|limit/.test(lower)) editType = "injury_modification";
+      return { isEdit: true, editType, confidence: "high" };
+    }
+  }
+
+  // Medium-confidence — contextual edit signals
+  const mediumConfidence = [
+    /\b(fix|tweak|rework|redo|update|revise|edit)\b.{0,40}\b(program|plan|routine|workout|session|day)\b/i,
+    /\b(can you|could you|please)\b.{0,30}\b(add|swap|remove|change|fix|adjust|shorten|update)\b/i,
+    /\bthis (needs?|should have|is missing|doesn.t have|lacks?)\b/i,
+    /\b(the program|my program|this plan|my plan)\b.{0,40}\b(needs?|should|has no|lacks?|doesn.t)\b/i,
+    /\b(add)\b.{0,50}\b(to|into|on|across)\b.{0,30}\b(the|my|each|every|day|session|week)\b/i,
+  ];
+
+  for (const pattern of mediumConfidence) {
+    if (pattern.test(lower)) {
+      return { isEdit: true, editType: "general_modification", confidence: "medium" };
+    }
+  }
+
+  return { isEdit: false, editType: "none", confidence: "low" };
+}
+
+// ─── Edit Context Builder ─────────────────────────────────────────────────────
+
+function buildEditContext(currentProgram: ProgramStructure, userMessage: string, editIntent: EditIntent): string {
+  const programJson = JSON.stringify(currentProgram, null, 2);
+  const editTypeGuidance = getEditTypeGuidance(editIntent.editType, currentProgram);
+
+  return `
+## ACTIVE PROGRAM EDIT — MANDATORY INSTRUCTIONS
+
+The user is requesting a modification to their CURRENT program. You MUST treat this as a surgical edit request.
+
+**Current program (modify this — do NOT rebuild from scratch):**
+\`\`\`json
+${programJson}
+\`\`\`
+
+**Requested change:** "${userMessage}"
+
+**Edit type detected:** ${editIntent.editType}
+
+${editTypeGuidance}
+
+**CRITICAL RULES FOR THIS RESPONSE:**
+1. Make ONLY the requested changes — preserve everything else
+2. Maintain NSCA exercise order within each session (explosive → primary → secondary → accessory → conditioning)
+3. Keep rest periods, sets, and reps consistent with the existing program's structure
+4. Do NOT ask clarifying questions unless the request is genuinely ambiguous
+5. You MUST return the complete updated program as a JSON block — this is required to refresh the user's training panel
+6. Briefly confirm what changed (2-3 sentences MAX) before the JSON block
+7. If you cannot make the change safely, explain why briefly and make the best alternative modification
+
+Return format:
+[2-3 sentence confirmation of what changed and why]
+
+\`\`\`json
+{ complete updated program object }
+\`\`\``;
+}
+
+function getEditTypeGuidance(editType: string, program: ProgramStructure): string {
+  switch (editType) {
+    case "add_core":
+      return `**CORE ADDITION GUIDANCE:**
+- Identify which days currently lack core/trunk work
+- Add 2-3 core exercises distributed intelligently across the week
+- Place core exercises at the END of sessions (after primary and secondary compound work)
+- Choose exercises appropriate to the program's goal:
+  • Hypertrophy → cable crunches, hanging leg raises, weighted sit-ups (3×12-15, 60 sec rest)
+  • Strength → planks, ab wheel rollouts, dead bugs (3-4×8-10, 90 sec rest)
+  • Athletic performance → anti-rotation press, pallof press, suitcase carries, Copenhagen planks (3-4×8-12 each side)
+- Do NOT add 5+ ab exercises to one day — spread them efficiently
+- Maintain existing session structure — core is a finisher, not a focus`;
+
+    case "add_hamstrings":
+      return `**HAMSTRING ADDITION GUIDANCE:**
+- Add 1-2 hamstring-focused exercises to the most appropriate lower body days
+- Prioritize: Romanian deadlift, Nordic curl, lying leg curl, glute-ham raise, seated leg curl
+- Place after primary hinge/squat movements
+- Hypertrophy prescription: 3×10-12, 75-90 sec rest
+- Avoid redundancy if the program already has RDL or stiff-leg deadlifts`;
+
+    case "add_calves":
+      return `**CALF ADDITION GUIDANCE:**
+- Add 2-3 sets of calf work to 2-3 sessions across the week
+- Standing calf raises, seated calf raises, single-leg calf raises
+- Place at the END of lower body sessions or as filler between sets
+- Hypertrophy prescription: 3×12-20, 45-60 sec rest`;
+
+    case "swap_exercise":
+      return `**EXERCISE SWAP GUIDANCE:**
+- Identify the exact exercise being swapped
+- Replace with a movement of similar classification (primary for primary, accessory for accessory)
+- Match the movement pattern (e.g., horizontal push for horizontal push)
+- Maintain the same sets/reps/rest prescription
+- Preserve NSCA position order`;
+
+    case "remove_exercise":
+      return `**EXERCISE REMOVAL GUIDANCE:**
+- Remove the specified exercise
+- Do NOT replace it with something else unless the session is clearly under-volume
+- Adjust session structure to remain balanced`;
+
+    case "shorten_sessions":
+      return `**SESSION SHORTENING GUIDANCE:**
+- Remove the lowest-priority accessory exercises first
+- Reduce set counts before removing entire exercises
+- Keep all primary compound work intact
+- Target the conditioning/finisher block first if time is the concern`;
+
+    case "make_more_athletic":
+      return `**ATHLETIC ENHANCEMENT GUIDANCE:**
+- Add or enhance explosive/power work at the START of sessions (med ball throws, box jumps, power cleans, hang cleans)
+- Include more unilateral work (single-leg deadlifts, Bulgarian split squats, single-arm rows)
+- Add carries or anti-rotation core work
+- Increase conditioning density on appropriate days`;
+
+    case "reduce_fatigue":
+      return `**FATIGUE REDUCTION GUIDANCE:**
+- Reduce total sets by 20-30% on the highest-volume days
+- Lower rep ranges slightly on accessory work
+- Add rest days between demanding sessions if the split allows
+- Remove or reduce conditioning volume`;
+
+    case "injury_modification":
+      return `**INJURY MODIFICATION GUIDANCE:**
+- Identify and remove all exercises that load the affected area
+- Replace with appropriate alternatives that maintain movement balance
+- Consider pain-free range adjustments (e.g., partial ROM, incline bench for shoulder issues)
+- Apply the modification consistently across ALL days in the program`;
+
+    default:
+      return `**GENERAL MODIFICATION GUIDANCE:**
+- Apply the requested change intelligently
+- Maintain program integrity and NSCA standards
+- Preserve all unaffected structure`;
+  }
+}
+
 // ─── Main entry point ────────────────────────────────────────────────────────
 
 export async function generateAIResponse(
@@ -303,7 +483,8 @@ export async function generateAIResponse(
   adaptationContext?: string,
   memoryContext?: string,
   insightHint?: string,
-  conversionHint?: string
+  conversionHint?: string,
+  currentProgram?: ProgramStructure | null
 ): Promise<AIResponse> {
   const [profile] = await db
     .select()
@@ -311,12 +492,25 @@ export async function generateAIResponse(
     .where(eq(userProfilesTable.userId, userId));
 
   const basePrompt = await buildSystemPrompt(profile ?? null);
-  const extras = [adaptationContext, memoryContext, insightHint, conversionHint].filter(Boolean).join("\n\n");
+
+  // Detect edit intent and build edit context if a program exists
+  const editIntent = detectEditIntent(userMessage);
+  const editContext = (editIntent.isEdit && currentProgram)
+    ? buildEditContext(currentProgram, userMessage, editIntent)
+    : null;
+
+  if (editIntent.isEdit && currentProgram) {
+    logger.info({ editType: editIntent.editType, confidence: editIntent.confidence }, "[EditPipeline] Edit intent detected — injecting current program for mutation");
+  } else if (editIntent.isEdit && !currentProgram) {
+    logger.warn("[EditPipeline] Edit intent detected but no current program found in conversation — treating as new request");
+  }
+
+  const extras = [adaptationContext, memoryContext, insightHint, conversionHint, editContext].filter(Boolean).join("\n\n");
   const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;
   const apiKey = process.env.OPENAI_API_KEY;
 
   if (!apiKey) {
-    return generateFallbackResponse(userMessage, history, profile ?? null);
+    return generateFallbackResponse(userMessage, history, profile ?? null, currentProgram ?? null, editIntent);
   }
 
   try {
@@ -325,6 +519,9 @@ export async function generateAIResponse(
       ...history.slice(-30).map((m) => ({ role: m.role, content: m.content })),
       { role: "user" as const, content: userMessage },
     ];
+
+    // Edit requests need more tokens to return the full modified program JSON
+    const maxTokens = editContext ? 4000 : 2800;
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -335,7 +532,7 @@ export async function generateAIResponse(
       body: JSON.stringify({
         model: "gpt-4o",
         messages,
-        max_tokens: 2800,
+        max_tokens: maxTokens,
         temperature: 0.6,
       }),
     });
@@ -356,7 +553,7 @@ export async function generateAIResponse(
     return { content: cleanContent, structuredData };
   } catch (error) {
     logger.error({ error }, "OpenAI API call failed — using fallback");
-    return generateFallbackResponse(userMessage, history, profile ?? null);
+    return generateFallbackResponse(userMessage, history, profile ?? null, currentProgram ?? null, editIntent);
   }
 }
 
@@ -367,11 +564,41 @@ export async function generateAIResponse(
 function generateFallbackResponse(
   userMessage: string,
   history: ChatMessage[],
-  profile: UserProfile | null
+  profile: UserProfile | null,
+  currentProgram?: ProgramStructure | null,
+  editIntent?: EditIntent
 ): AIResponse {
   const lower = userMessage.toLowerCase();
   const userTurnCount = history.filter((m) => m.role === "user").length;
   const isFirstMessage = userTurnCount === 0;
+
+  // ── Edit request with current program (fallback mutation engine) ──
+  if (editIntent?.isEdit && currentProgram) {
+    logger.info({ editType: editIntent.editType }, "[FallbackEditPipeline] Applying fallback program mutation");
+    const mutated = applyFallbackMutation(currentProgram, editIntent.editType, lower, profile);
+    if (mutated) {
+      const confirmations: Record<string, string> = {
+        add_core: "Added core work across the program. Core exercises are placed at the end of appropriate sessions to preserve NSCA exercise order and avoid competing with primary lifts. Updated structure is in the right panel.",
+        add_hamstrings: "Added hamstring-focused accessory work to lower body days. Placed after primary hinge movements to maintain NSCA order. Updated structure is in the right panel.",
+        add_calves: "Added calf work to lower body sessions as end-of-session accessories. Updated structure is in the right panel.",
+        swap_exercise: "Exercise swap applied. Movement pattern and NSCA classification preserved. Updated structure is in the right panel.",
+        remove_exercise: "Exercise removed. Remaining structure is intact. Updated structure is in the right panel.",
+        shorten_sessions: "Lowest-priority accessory work trimmed to shorten sessions. Primary compound structure preserved. Updated structure is in the right panel.",
+        make_more_athletic: "Added explosive work to session openings and enhanced conditioning integration. Updated structure is in the right panel.",
+        reduce_fatigue: "Reduced accessory volume on high-demand days. Primary compound work preserved. Updated structure is in the right panel.",
+        injury_modification: "Removed exercises that conflict with the stated limitation and replaced where needed. Updated structure is in the right panel.",
+        general_modification: "Modification applied. Updated structure is in the right panel.",
+      };
+      return {
+        content: confirmations[editIntent.editType] ?? "Modification applied. Updated structure is in the right panel.",
+        structuredData: mutated,
+      };
+    }
+    return {
+      content: "I understood the requested change, but couldn't apply it to the current program state. Regenerating the updated structure now.",
+      structuredData: profile ? buildIntelligentProgram(profile) : null,
+    };
+  }
 
   // ── Greeting ──
   if (isFirstMessage && lower.match(/^(hi|hey|hello|sup|what's up|yo)\b/)) {
@@ -894,4 +1121,144 @@ function buildPPLDays(
       notes: dayIdx === 0 ? spec.splitRationale : undefined,
     };
   });
+}
+
+// ─── Fallback Program Mutation Engine ────────────────────────────────────────
+// Applied when OpenAI is unavailable. Performs deterministic surgical edits.
+
+function applyFallbackMutation(
+  program: ProgramStructure,
+  editType: string,
+  _lowerMessage: string,
+  _profile: UserProfile | null
+): ProgramStructure | null {
+  const mutated: ProgramStructure = JSON.parse(JSON.stringify(program));
+
+  switch (editType) {
+    case "add_core": {
+      const coreExercises: Exercise[] = [
+        { name: "Dead Bug", classification: "Accessory", sets: 3, reps: "8 each side", rest: "60 sec", intent: "Anti-extension focus — press lower back into floor throughout. Quality over speed." },
+        { name: "Pallof Press", classification: "Accessory", sets: 3, reps: "10 each side", rest: "60 sec", intent: "Anti-rotation focus — resist trunk rotation completely. Keep hips square." },
+        { name: "Ab Wheel Rollout", classification: "Accessory", sets: 3, reps: "8-10", rest: "75 sec", intent: "Full anti-extension load — brace hard before initiating, maintain neutral spine throughout." },
+        { name: "Copenhagen Plank", classification: "Accessory", sets: 3, reps: "20-30 sec each side", rest: "60 sec", intent: "Adductor and lateral core — maintain rigid position from head to heel." },
+        { name: "Hanging Knee Raise", classification: "Accessory", sets: 3, reps: "12-15", rest: "60 sec", intent: "Posterior pelvic tilt at the top — avoid swinging. Controlled descent." },
+      ];
+      let coreAdded = 0;
+      const coreIdx = [0];
+      for (const day of mutated.days) {
+        if (coreAdded >= 3) break;
+        const hasCore = day.exercises.some(ex =>
+          /(core|plank|crunch|ab |abs|trunk|pallof|dead bug|hollow|rollout|leg raise|sit.?up)/i.test(ex.name)
+        );
+        if (!hasCore) {
+          const coreEx = coreExercises[coreIdx[0] % coreExercises.length];
+          coreIdx[0]++;
+          day.exercises.push({ ...coreEx });
+          coreAdded++;
+        }
+      }
+      if (coreAdded === 0) {
+        for (let i = 0; i < Math.min(2, mutated.days.length); i++) {
+          mutated.days[i].exercises.push({ ...coreExercises[i % coreExercises.length] });
+        }
+      }
+      return mutated;
+    }
+
+    case "add_hamstrings": {
+      const hamExercises: Exercise[] = [
+        { name: "Romanian Deadlift", classification: "Secondary Compound", sets: 3, reps: "10-12", rest: "90 sec", intent: "Controlled eccentric — feel the hamstring stretch at the bottom. Drive hips forward at the top." },
+        { name: "Seated Leg Curl", classification: "Accessory", sets: 3, reps: "12-15", rest: "60 sec", intent: "Full range — feel the contraction at peak, slow eccentric." },
+        { name: "Nordic Curl", classification: "Accessory", sets: 3, reps: "5-8", rest: "90 sec", intent: "Eccentric focus — lower as slowly as possible. Pull back up with hip extension." },
+      ];
+      let added = 0;
+      for (const day of mutated.days) {
+        if (added >= 2) break;
+        const isLower = /(leg|lower|squat|hinge|hamstring|glute)/i.test(day.name + (day.focus ?? ""));
+        if (isLower) {
+          const alreadyHas = day.exercises.some(ex => /(hamstring|leg curl|nordic|glute.ham|rdl|romanian)/i.test(ex.name));
+          if (!alreadyHas) {
+            day.exercises.push({ ...hamExercises[added % hamExercises.length] });
+            added++;
+          }
+        }
+      }
+      return mutated;
+    }
+
+    case "add_calves": {
+      const calfEx: Exercise = {
+        name: "Standing Calf Raise",
+        classification: "Accessory",
+        sets: 3,
+        reps: "15-20",
+        rest: "45 sec",
+        intent: "Full range — pause at the bottom for a stretch, squeeze hard at the top.",
+      };
+      let added = 0;
+      for (const day of mutated.days) {
+        if (added >= 3) break;
+        const isLower = /(leg|lower|squat|hinge|calv)/i.test(day.name + (day.focus ?? ""));
+        if (isLower) {
+          const alreadyHas = day.exercises.some(ex => /calf|calves/i.test(ex.name));
+          if (!alreadyHas) {
+            day.exercises.push({ ...calfEx });
+            added++;
+          }
+        }
+      }
+      return mutated;
+    }
+
+    case "shorten_sessions": {
+      for (const day of mutated.days) {
+        const accessoryIndices = day.exercises
+          .map((ex, i) => ({ ex, i }))
+          .filter(({ ex }) => ex.classification === "Accessory" || ex.classification === "Conditioning")
+          .map(({ i }) => i);
+        if (accessoryIndices.length > 0) {
+          const removeIdx = accessoryIndices[accessoryIndices.length - 1];
+          day.exercises.splice(removeIdx, 1);
+        }
+      }
+      return mutated;
+    }
+
+    case "reduce_fatigue": {
+      for (const day of mutated.days) {
+        for (const ex of day.exercises) {
+          if ((ex.classification === "Accessory" || ex.classification === "Conditioning") && ex.sets > 2) {
+            ex.sets = ex.sets - 1;
+          }
+        }
+      }
+      return mutated;
+    }
+
+    case "make_more_athletic": {
+      const explosiveEx: Exercise = {
+        name: "Box Jump",
+        classification: "Plyometric/Explosive",
+        sets: 4,
+        reps: "4-5",
+        rest: "2 min",
+        intent: "Explosive concentric — max intent on every rep. Land softly with knees tracking toes. CNS must be completely fresh.",
+      };
+      let added = 0;
+      for (const day of mutated.days) {
+        if (added >= 2) break;
+        const alreadyExplosive = day.exercises.some(ex =>
+          /(box jump|power clean|hang clean|snatch|med ball|plyometric)/i.test(ex.name)
+        );
+        if (!alreadyExplosive) {
+          day.exercises.unshift({ ...explosiveEx });
+          added++;
+        }
+      }
+      return mutated;
+    }
+
+    default:
+      return null;
+  }
 }
