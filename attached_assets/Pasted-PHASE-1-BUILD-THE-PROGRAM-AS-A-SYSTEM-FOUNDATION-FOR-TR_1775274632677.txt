@@ -1,0 +1,318 @@
+PHASE 1 — BUILD THE “PROGRAM AS A SYSTEM” FOUNDATION FOR TRAINCHAT
+
+We are building the foundation for a new TrainChat architecture where the user’s training is not treated like a one-time generated workout, but as a persistent, editable system.
+
+This should feel like “vibe coding for training.”
+The user is not just asking for workouts.
+They are building and evolving their full training system with an elite AI performance coach.
+
+IMPORTANT:
+This phase is ONLY the foundation.
+Do NOT build AI editing yet.
+Do NOT build inline editing yet.
+Do NOT build version history yet.
+Do NOT build wearable integrations yet.
+Do NOT build proactive auto-adjustments yet.
+
+This phase is about creating the core program architecture, database structure, persistence layer, and a clean read-only “Your System” interface.
+
+OBJECTIVE
+Create the core structured program system that can support:
+- daily programs
+- weekly structure
+- monthly progression
+- long-term roadmap
+- future AI-guided edits
+
+The program must persist in the database and be viewable in the UI as a living structured system.
+
+CORE PRODUCT PHILOSOPHY
+TrainChat should move away from:
+“Generate me a workout”
+
+And toward:
+“This is my training system. I can view it, understand it, and later evolve it with my AI coach.”
+
+PHASE 1 SCOPE ONLY
+
+Build the following:
+
+1. CREATE A PERSISTENT PROGRAM SYSTEM DATA MODEL
+Design and implement a structured program model that supports multiple layers of training organization.
+
+At minimum, the system should support:
+
+- Program
+- Program Phase / Block
+- Week
+- Day / Session
+- Exercises / Movements
+- Sets / reps / rest / tempo / notes
+- Goal focus
+- Constraints / equipment / limitations
+- Progression metadata
+- Program status
+
+The structure should be organized so that one user has one primary active training system, with room for future archived systems.
+
+Recommended model hierarchy:
+- user
+  - trainingSystem
+    - phases or blocks
+      - weeks
+        - sessions/days
+          - exercise items
+
+Each layer should be clearly related in the database.
+
+2. PROGRAM OBJECT REQUIREMENTS
+The training system must be able to represent:
+
+A. DAILY VIEW
+- the exact workout/session for today
+- warm-up / prep if applicable
+- primary lifts or movement categories
+- accessory work
+- conditioning / recovery if applicable
+- notes and coaching guidance
+
+B. WEEKLY VIEW
+- how the week is organized
+- session names / day types
+- split structure
+- training emphasis for each day
+
+C. MONTHLY / BLOCK VIEW
+- how weeks fit into a progression block
+- the current training phase
+- block goal or adaptation focus
+- progression or emphasis notes
+
+D. LONG-TERM ROADMAP VIEW
+- current overarching goal
+- current block name
+- future intended direction
+- target training outcome
+
+Even if some areas are simple in Phase 1, structure the system now so all of these views can exist later without major refactoring.
+
+3. DATABASE / SCHEMA IMPLEMENTATION
+Create or update the database schema to support this system cleanly.
+
+Requirements:
+- normalized enough to stay maintainable
+- structured enough to support precise edits later
+- flexible enough for different training styles
+- extensible for future readiness/wearables/performance integrations
+
+Include appropriate fields such as:
+- ids
+- foreign keys / relationships
+- ordering/index fields
+- status fields
+- createdAt / updatedAt
+- optional metadata JSON where flexibility is useful
+
+Think carefully about future AI editing:
+The schema should support modifying one exercise, one day, one week, or one block without regenerating the whole system.
+
+4. PROGRAM CREATION SERVICE
+Build a backend service layer that can create and save a structured training system.
+
+For Phase 1, this can be initialized from:
+- existing onboarding data
+- user profile/training data if already available
+- a simple internal generation process if needed
+
+Important:
+This phase does NOT need a highly advanced editing engine.
+But it should be able to create an initial structured training system and persist it cleanly.
+
+The output should not just be a blob of chat text.
+It should be stored as structured program data.
+
+5. “YOUR SYSTEM” READ-ONLY USER INTERFACE
+Create a new primary area in the app called something like:
+- Your System
+- Your Program
+- Your Training System
+
+This is the new concept the user sees.
+
+In Phase 1, this interface is read-only.
+The user should be able to view their system, but not edit it yet.
+
+The interface should include:
+
+A. TODAY VIEW
+- show today’s session clearly
+- clean exercise card layout
+- readable sets/reps/rest/notes
+- premium mobile-first layout
+
+B. WEEK VIEW
+- show the current week structure
+- display each training day/session title
+- let the user understand the weekly split at a glance
+
+C. BLOCK / MONTH VIEW
+- show current phase/block name
+- show overall emphasis or objective
+- show where the user is in the cycle
+
+D. TOP-LEVEL PROGRAM SUMMARY
+- overarching goal
+- current phase
+- weekly frequency
+- training style / structure summary
+
+This should feel premium and highly organized.
+Do not make it look like a random dashboard or plain text dump.
+
+6. NAVIGATION / INFORMATION ARCHITECTURE
+Introduce the concept of “Your System” into the app architecture in a clean way.
+
+Requirements:
+- make it discoverable and central
+- do not bury it
+- do not disrupt existing core navigation too aggressively
+- if current dashboard exists, integrate this thoughtfully
+
+The user should begin to feel that their training lives inside a structured system, not just in chat threads.
+
+7. STRUCTURAL INTEGRITY RULES
+Even though editing is not built yet, start designing the system with integrity in mind.
+
+The program architecture should support:
+- ordered exercise flow
+- ordered session flow
+- ordered week flow
+- clear phase/block containment
+- clear distinction between program logic and display logic
+
+Do not store everything as unstructured rich text.
+Keep the system machine-readable and editable.
+
+8. READINESS FOR FUTURE AGENT EDITING
+This phase must be designed so Phase 2 can later add natural language edits such as:
+- “Make this week lower volume”
+- “Swap this exercise”
+- “Change Friday into a recovery day”
+- “Make this block more explosive”
+
+That means:
+- each piece of the program must be addressable
+- the backend must know what object is being changed
+- the schema must support partial updates
+- the frontend must be able to render updated structures later
+
+9. READINESS FOR FUTURE VERSIONING
+Do NOT build version history in this phase.
+But prepare for it.
+
+Structure the system so that in the future we can track:
+- changes over time
+- previous program versions
+- before/after comparisons
+- revert history
+
+This means avoiding a design that overwrites everything in a fragile way.
+
+10. AUTHENTICATED USER SAFETY
+Do not break current authenticated user flows.
+
+Requirements:
+- integrate this into TrainChat cleanly
+- preserve existing login/auth/user state behavior
+- do not break current coaching/chat features
+- do not break payments, dashboards, or onboarding logic
+- if needed, add this as a new structured layer parallel to current chat outputs
+
+11. API / BACKEND SUPPORT
+Create the backend endpoints/services needed for Phase 1.
+
+Examples may include:
+- get active training system
+- create active training system
+- get today session
+- get current week
+- get current block summary
+
+Keep the API clean and organized.
+Do not overbuild yet.
+
+12. UI / DESIGN PRINCIPLES
+The system should feel:
+- premium
+- organized
+- intelligent
+- coach-built
+- structured
+- easy to scan
+
+It should NOT feel:
+- like a chatbot transcript
+- like a PDF pasted into a dashboard
+- cluttered
+- confusing
+- overly technical for the user
+
+Think: elite performance operating system.
+
+13. CODE QUALITY REQUIREMENTS
+Important:
+- use clean separation between data model, service layer, API routes, and UI
+- do not hack this into existing chat code
+- build it as a real structured subsystem
+- follow current app architecture and coding conventions
+- name things clearly and consistently
+
+14. DO NOT BUILD IN THIS PHASE
+Do NOT build:
+- AI natural language editing
+- inline “edit with AI”
+- version history
+- revert functionality
+- change highlighting
+- wearable integration
+- readiness-based auto-adjustments
+- proactive suggestions
+- full agent modification engine
+
+Those belong in later phases.
+
+15. TESTING / VALIDATION
+After building, validate:
+- a structured training system can be created and saved
+- the system persists correctly in the database
+- the user can view today, week, and block summary
+- the UI renders clearly on mobile and desktop
+- data relationships are stable and clean
+- existing TrainChat flows are unaffected
+
+16. DELIVERABLES AFTER IMPLEMENTATION
+When complete, provide:
+1. summary of what was built
+2. database/schema changes made
+3. program object/data model structure
+4. backend services/endpoints added
+5. frontend pages/components added
+6. where “Your System” lives in navigation
+7. how this is prepared for Phase 2 editing
+8. any cleanup recommendations before moving to Phase 2
+
+IMPORTANT REMINDERS
+This phase is the foundation only.
+
+We are building:
+- the structured training system
+- the persistent data model
+- the read-only system UI
+
+We are NOT building:
+- editing intelligence
+- version control
+- inline agent interaction
+- automatic adaptation
+
+The goal is to create the operating system layer first so later phases can make it intelligent.

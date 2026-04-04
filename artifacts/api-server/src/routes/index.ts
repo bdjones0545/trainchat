@@ -14,6 +14,7 @@ import streakRouter from "./streak";
 import adminRouter from "./admin";
 import guestRouter from "./guest";
 import trainingSystemRouter from "./training-system";
+import trainingSystemEditRouter from "./training-system-edit";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use(streakRouter);
 router.use(adminRouter);
 router.use(guestRouter);
 router.use(trainingSystemRouter);
+router.use(trainingSystemEditRouter);
 
 export default router;

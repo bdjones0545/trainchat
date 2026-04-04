@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import {
   Target,
@@ -13,6 +13,11 @@ import {
   Activity,
   RotateCcw,
   Info,
+  Send,
+  Sparkles,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useGetMe } from "@workspace/api-client-react";
@@ -24,24 +29,26 @@ import TopNav from "@/components/layout/TopNav";
 async function fetchActiveSystem() {
   return customFetch<any>("/api/training-system/active");
 }
-
 async function fetchBlockSummary() {
   return customFetch<any>("/api/training-system/block");
 }
-
 async function fetchCurrentWeek() {
   return customFetch<any>("/api/training-system/week");
 }
-
 async function fetchToday() {
   return customFetch<any>("/api/training-system/today");
 }
-
 async function initializeSystem() {
   return customFetch<any>("/api/training-system/initialize", { method: "POST" });
 }
+async function submitEdit(request: string) {
+  return customFetch<any>("/api/training-system/edit", {
+    method: "POST",
+    body: JSON.stringify({ request }),
+  });
+}
 
-// ─── Sub-components ──────────────────────────────────────────────────────────
+// ─── Exercise Card ───────────────────────────────────────────────────────────
 
 function ExerciseCard({ exercise, index }: { exercise: any; index: number }) {
   const categoryColors: Record<string, string> = {
@@ -51,7 +58,6 @@ function ExerciseCard({ exercise, index }: { exercise: any; index: number }) {
     conditioning: "bg-green-500/10 text-green-400 border-green-500/20",
     finisher: "bg-red-500/10 text-red-400 border-red-500/20",
   };
-
   const categoryLabel: Record<string, string> = {
     warmup: "Warm-up",
     primary: "Primary",
@@ -59,9 +65,7 @@ function ExerciseCard({ exercise, index }: { exercise: any; index: number }) {
     conditioning: "Conditioning",
     finisher: "Finisher",
   };
-
   const colorClass = categoryColors[exercise.category] ?? categoryColors.primary;
-
   return (
     <div className="flex items-start gap-4 py-4 border-b border-border last:border-0">
       <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground flex-shrink-0 mt-0.5">
@@ -108,48 +112,56 @@ function ExerciseCard({ exercise, index }: { exercise: any; index: number }) {
   );
 }
 
-function TodayView() {
-  const { data: today, isLoading, error } = useQuery({
+// ─── View skeleton ───────────────────────────────────────────────────────────
+
+function ViewSkeleton() {
+  return (
+    <div className="space-y-4 animate-pulse">
+      <div className="h-32 rounded-2xl bg-muted/50" />
+      <div className="h-24 rounded-xl bg-muted/40" />
+      <div className="h-40 rounded-xl bg-muted/30" />
+      <div className="h-24 rounded-xl bg-muted/20" />
+    </div>
+  );
+}
+
+// ─── Today View ──────────────────────────────────────────────────────────────
+
+function TodayView({ injectedData }: { injectedData?: any }) {
+  const { data: fetched, isLoading, error } = useQuery({
     queryKey: ["training-system-today"],
     queryFn: fetchToday,
     retry: false,
+    enabled: !injectedData,
   });
+  const today = injectedData ?? fetched;
 
-  if (isLoading) {
-    return <ViewSkeleton />;
-  }
-
-  if (error || !today) {
+  if (isLoading && !injectedData) return <ViewSkeleton />;
+  if ((error || !today) && !injectedData) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center px-4">
         <Activity className="w-12 h-12 text-muted-foreground/40 mb-4" />
         <p className="text-muted-foreground text-sm">No session data available for today.</p>
-        <p className="text-muted-foreground/60 text-xs mt-1">Initialize your system to get started.</p>
       </div>
     );
   }
+  if (!today) return <ViewSkeleton />;
 
-  const dayOfWeekLabel = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][new Date().getDay()];
-  const primaryExercises = today.exercises?.filter((e: any) => e.category === "primary") ?? [];
-  const otherExercises = today.exercises?.filter((e: any) => e.category !== "primary") ?? [];
+  const dayOfWeekLabel = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date().getDay()];
 
   return (
     <div className="space-y-5">
-      {/* Session Header */}
       <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/20 p-5">
         <div className="flex items-start justify-between gap-3 mb-3">
           <div>
             <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">{dayOfWeekLabel}'s Session</p>
             <h2 className="text-xl font-bold text-foreground leading-tight">{today.label}</h2>
-            {today.emphasis && (
-              <p className="text-sm text-muted-foreground mt-1">{today.emphasis}</p>
-            )}
+            {today.emphasis && <p className="text-sm text-muted-foreground mt-1">{today.emphasis}</p>}
           </div>
           <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
             <Dumbbell className="w-5 h-5 text-primary" />
           </div>
         </div>
-
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-1.5 bg-background/60 rounded-lg px-3 py-1.5 border border-border">
             <Layers className="w-3.5 h-3.5 text-muted-foreground" />
@@ -170,7 +182,6 @@ function TodayView() {
         </div>
       </div>
 
-      {/* Warm-up */}
       {today.warmupNotes && (
         <div className="rounded-xl bg-blue-500/5 border border-blue-500/15 p-4">
           <div className="flex items-center gap-2 mb-2">
@@ -183,7 +194,6 @@ function TodayView() {
         </div>
       )}
 
-      {/* Exercises */}
       {today.exercises?.length > 0 && (
         <div className="rounded-xl bg-card border border-border overflow-hidden">
           <div className="px-5 py-3.5 border-b border-border bg-muted/30">
@@ -197,7 +207,6 @@ function TodayView() {
         </div>
       )}
 
-      {/* Coaching notes */}
       {today.coachingNotes && (
         <div className="rounded-xl bg-amber-500/5 border border-amber-500/15 p-4">
           <div className="flex items-center gap-2 mb-2">
@@ -213,16 +222,19 @@ function TodayView() {
   );
 }
 
-function WeekView() {
-  const { data: week, isLoading, error } = useQuery({
+// ─── Week View ───────────────────────────────────────────────────────────────
+
+function WeekView({ injectedData }: { injectedData?: any }) {
+  const { data: fetched, isLoading, error } = useQuery({
     queryKey: ["training-system-week"],
     queryFn: fetchCurrentWeek,
     retry: false,
+    enabled: !injectedData,
   });
+  const week = injectedData ?? fetched;
 
-  if (isLoading) return <ViewSkeleton />;
-
-  if (error || !week) {
+  if (isLoading && !injectedData) return <ViewSkeleton />;
+  if ((error || !week) && !injectedData) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center px-4">
         <Calendar className="w-12 h-12 text-muted-foreground/40 mb-4" />
@@ -230,6 +242,7 @@ function WeekView() {
       </div>
     );
   }
+  if (!week) return <ViewSkeleton />;
 
   const volumeColors: Record<string, string> = {
     low: "text-blue-400 bg-blue-400/10 border-blue-400/20",
@@ -243,7 +256,6 @@ function WeekView() {
 
   return (
     <div className="space-y-5">
-      {/* Week header */}
       <div className="rounded-2xl bg-gradient-to-br from-card to-muted/30 border border-border p-5">
         <div className="flex items-start justify-between gap-3 mb-3">
           <div>
@@ -257,7 +269,6 @@ function WeekView() {
             {week.volumeLevel}
           </span>
         </div>
-
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 bg-background/60 rounded-lg px-3 py-1.5 border border-border">
             <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
@@ -272,24 +283,14 @@ function WeekView() {
         </div>
       </div>
 
-      {/* Session cards */}
       <div className="space-y-3">
         {week.sessions?.map((session: any, idx: number) => {
           const isToday = session.dayOfWeek === todayDow;
           return (
-            <div
-              key={session.id}
-              className={`rounded-xl border overflow-hidden transition-all ${
-                isToday
-                  ? "border-primary/40 bg-primary/5 shadow-sm shadow-primary/10"
-                  : "border-border bg-card"
-              }`}
-            >
+            <div key={session.id} className={`rounded-xl border overflow-hidden transition-all ${isToday ? "border-primary/40 bg-primary/5 shadow-sm shadow-primary/10" : "border-border bg-card"}`}>
               <div className="px-4 py-3.5 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className={`w-9 h-9 rounded-lg flex flex-col items-center justify-center flex-shrink-0 ${
-                    isToday ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                  }`}>
+                  <div className={`w-9 h-9 rounded-lg flex flex-col items-center justify-center flex-shrink-0 ${isToday ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
                     <span className="text-[9px] font-bold uppercase leading-none">
                       {session.dayOfWeek != null ? dayNames[session.dayOfWeek] : `D${idx + 1}`}
                     </span>
@@ -298,37 +299,25 @@ function WeekView() {
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-sm text-foreground truncate">{session.label}</span>
                       {isToday && (
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20 flex-shrink-0">
-                          Today
-                        </span>
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20 flex-shrink-0">Today</span>
                       )}
                     </div>
-                    {session.emphasis && (
-                      <p className="text-xs text-muted-foreground truncate mt-0.5">{session.emphasis}</p>
-                    )}
+                    {session.emphasis && <p className="text-xs text-muted-foreground truncate mt-0.5">{session.emphasis}</p>}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  {session.exercises?.length > 0 && (
-                    <span className="text-xs text-muted-foreground">{session.exercises.length} ex</span>
-                  )}
+                  {session.exercises?.length > 0 && <span className="text-xs text-muted-foreground">{session.exercises.length} ex</span>}
                   <ChevronRight className="w-4 h-4 text-muted-foreground/50" />
                 </div>
               </div>
-
-              {/* Exercise preview */}
               {session.exercises?.length > 0 && (
                 <div className="border-t border-border px-4 pb-4 pt-3">
                   <div className="space-y-2">
                     {session.exercises.slice(0, 3).map((ex: any, exIdx: number) => (
                       <div key={ex.id} className="flex items-center gap-3">
-                        <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground flex-shrink-0">
-                          {exIdx + 1}
-                        </div>
+                        <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground flex-shrink-0">{exIdx + 1}</div>
                         <span className="text-xs text-foreground/80 flex-1 truncate">{ex.name}</span>
-                        <span className="text-xs text-muted-foreground flex-shrink-0">
-                          {ex.sets && ex.reps ? `${ex.sets}×${ex.reps}` : ex.reps ?? ""}
-                        </span>
+                        <span className="text-xs text-muted-foreground flex-shrink-0">{ex.sets && ex.reps ? `${ex.sets}×${ex.reps}` : ex.reps ?? ""}</span>
                       </div>
                     ))}
                     {session.exercises.length > 3 && (
@@ -345,16 +334,19 @@ function WeekView() {
   );
 }
 
-function BlockView() {
-  const { data: block, isLoading, error } = useQuery({
+// ─── Block View ──────────────────────────────────────────────────────────────
+
+function BlockView({ injectedData }: { injectedData?: any }) {
+  const { data: fetched, isLoading, error } = useQuery({
     queryKey: ["training-system-block"],
     queryFn: fetchBlockSummary,
     retry: false,
+    enabled: !injectedData,
   });
+  const block = injectedData ?? fetched;
 
-  if (isLoading) return <ViewSkeleton />;
-
-  if (error || !block) {
+  if (isLoading && !injectedData) return <ViewSkeleton />;
+  if ((error || !block) && !injectedData) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center px-4">
         <BarChart3 className="w-12 h-12 text-muted-foreground/40 mb-4" />
@@ -362,42 +354,30 @@ function BlockView() {
       </div>
     );
   }
+  if (!block) return <ViewSkeleton />;
 
   const { system, phases, currentPhase, currentWeekNumber } = block;
 
-  const totalWeeks = phases.reduce((sum: number, p: any) => sum + p.weekCount, 0);
-  const completedWeeks = phases
-    .filter((p: any) => p.status === "completed")
-    .reduce((sum: number, p: any) => sum + p.weekCount, 0)
-    + (currentPhase?.status === "current" ? currentWeekNumber - 1 : 0);
-
-  const progressPercent = totalWeeks > 0 ? Math.round((completedWeeks / totalWeeks) * 100) : 0;
-
   return (
     <div className="space-y-5">
-      {/* Current block card */}
       {currentPhase && (
         <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/20 p-5">
           <div className="flex items-start justify-between gap-3 mb-4">
             <div>
               <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">Current Block</p>
               <h2 className="text-lg font-bold text-foreground leading-tight">{currentPhase.name}</h2>
-              {currentPhase.goal && (
-                <p className="text-sm text-muted-foreground mt-1">{currentPhase.goal}</p>
-              )}
+              {currentPhase.goal && <p className="text-sm text-muted-foreground mt-1">{currentPhase.goal}</p>}
             </div>
             <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
               <TrendingUp className="w-5 h-5 text-primary" />
             </div>
           </div>
-
           {currentPhase.emphasis && (
             <div className="bg-background/60 rounded-lg px-4 py-3 border border-border mb-4">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Emphasis</p>
               <p className="text-sm text-foreground">{currentPhase.emphasis}</p>
             </div>
           )}
-
           <div className="flex items-center gap-4 mb-3">
             <div>
               <p className="text-xs text-muted-foreground">Week</p>
@@ -408,17 +388,12 @@ function BlockView() {
               <p className="text-lg font-bold text-foreground">{Math.round(((currentWeekNumber - 1) / currentPhase.weekCount) * 100)}%</p>
             </div>
           </div>
-
           <div className="h-2 bg-background/60 rounded-full overflow-hidden border border-border">
-            <div
-              className="h-full bg-primary rounded-full transition-all duration-500"
-              style={{ width: `${Math.round(((currentWeekNumber - 1) / currentPhase.weekCount) * 100)}%` }}
-            />
+            <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${Math.round(((currentWeekNumber - 1) / currentPhase.weekCount) * 100)}%` }} />
           </div>
         </div>
       )}
 
-      {/* All phases */}
       <div className="rounded-xl bg-card border border-border overflow-hidden">
         <div className="px-5 py-3.5 border-b border-border bg-muted/30">
           <h3 className="text-sm font-bold text-foreground">Program Roadmap</h3>
@@ -430,25 +405,13 @@ function BlockView() {
             return (
               <div key={phase.id} className={`px-5 py-4 ${isCurrent ? "bg-primary/3" : ""}`}>
                 <div className="flex items-start gap-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5 border ${
-                    isCurrent
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : isCompleted
-                        ? "bg-green-500/10 text-green-400 border-green-500/20"
-                        : "bg-muted text-muted-foreground border-border"
-                  }`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5 border ${isCurrent ? "bg-primary text-primary-foreground border-primary" : isCompleted ? "bg-green-500/10 text-green-400 border-green-500/20" : "bg-muted text-muted-foreground border-border"}`}>
                     {isCompleted ? "✓" : idx + 1}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                      <span className={`font-semibold text-sm ${isCurrent ? "text-foreground" : "text-muted-foreground"}`}>
-                        {phase.name}
-                      </span>
-                      {isCurrent && (
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
-                          Active
-                        </span>
-                      )}
+                      <span className={`font-semibold text-sm ${isCurrent ? "text-foreground" : "text-muted-foreground"}`}>{phase.name}</span>
+                      {isCurrent && <span className="text-[9px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">Active</span>}
                     </div>
                     <p className="text-xs text-muted-foreground">{phase.weekCount} weeks — {phase.goal}</p>
                   </div>
@@ -459,7 +422,6 @@ function BlockView() {
         </div>
       </div>
 
-      {/* System summary */}
       <div className="rounded-xl bg-card border border-border p-5">
         <h3 className="text-sm font-bold text-foreground mb-4">System Overview</h3>
         <div className="grid grid-cols-2 gap-3">
@@ -491,13 +453,185 @@ function BlockView() {
   );
 }
 
-function ViewSkeleton() {
+// ─── Edit Panel ───────────────────────────────────────────────────────────────
+
+interface EditResult {
+  changeSummary: string;
+  appliedCount: number;
+  intent: string;
+  scope: string;
+  updatedData: {
+    today: any;
+    week: any;
+    block: any;
+  };
+}
+
+interface EditPanelProps {
+  onEditComplete: (result: EditResult) => void;
+}
+
+const EDIT_SUGGESTIONS = [
+  "Reduce volume this week — I'm feeling beat up",
+  "Swap barbell bench for dumbbell bench",
+  "Make today's session a recovery day",
+  "I only have dumbbells this week",
+  "Make this block more explosive",
+  "Lower the intensity — too heavy right now",
+];
+
+function EditPanel({ onEditComplete }: EditPanelProps) {
+  const [input, setInput] = useState("");
+  const [isExpanded, setIsExpanded] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const editMutation = useMutation({
+    mutationFn: (request: string) => submitEdit(request),
+    onSuccess: (data) => {
+      onEditComplete(data);
+      setInput("");
+      setIsExpanded(false);
+    },
+  });
+
+  function handleSubmit() {
+    const trimmed = input.trim();
+    if (!trimmed || editMutation.isPending) return;
+    editMutation.mutate(trimmed);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  }
+
+  function handleSuggestion(text: string) {
+    setInput(text);
+    setIsExpanded(true);
+    setTimeout(() => textareaRef.current?.focus(), 50);
+  }
+
   return (
-    <div className="space-y-4 animate-pulse">
-      <div className="h-32 rounded-2xl bg-muted/50" />
-      <div className="h-24 rounded-xl bg-muted/40" />
-      <div className="h-40 rounded-xl bg-muted/30" />
-      <div className="h-24 rounded-xl bg-muted/20" />
+    <div className="border-t border-border bg-background/95 backdrop-blur-sm flex-shrink-0">
+      <div className="max-w-2xl mx-auto px-4 py-3">
+        {/* Header toggle */}
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex items-center gap-2 w-full text-left mb-2"
+        >
+          <div className="w-6 h-6 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
+            <Sparkles className="w-3.5 h-3.5 text-primary" />
+          </div>
+          <span className="text-xs font-semibold text-muted-foreground flex-1">
+            Ask your coach to edit your system
+          </span>
+          {isExpanded
+            ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+            : <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
+          }
+        </button>
+
+        {isExpanded && (
+          <div className="space-y-3">
+            {/* Suggestions */}
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+              {EDIT_SUGGESTIONS.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => handleSuggestion(s)}
+                  className="flex-shrink-0 text-xs bg-muted/60 text-muted-foreground border border-border rounded-lg px-3 py-1.5 hover:text-foreground hover:border-primary/40 transition-all duration-150"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+
+            {/* Input area */}
+            <div className="flex gap-2">
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder='e.g. "Swap barbell bench for dumbbell bench" or "Reduce volume this week"'
+                rows={2}
+                disabled={editMutation.isPending}
+                className="flex-1 bg-muted/40 border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 resize-none focus:outline-none focus:border-primary/50 focus:bg-muted/60 transition-all duration-150 disabled:opacity-50"
+              />
+              <button
+                onClick={handleSubmit}
+                disabled={!input.trim() || editMutation.isPending}
+                className="w-11 h-11 rounded-xl bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 hover:bg-primary/90 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed self-end"
+              >
+                {editMutation.isPending
+                  ? <RotateCcw className="w-4 h-4 animate-spin" />
+                  : <Send className="w-4 h-4" />
+                }
+              </button>
+            </div>
+
+            {editMutation.isError && (
+              <p className="text-xs text-red-400">Something went wrong. Please try again.</p>
+            )}
+          </div>
+        )}
+
+        {!isExpanded && (
+          <div
+            className="flex items-center gap-2 cursor-text"
+            onClick={() => setIsExpanded(true)}
+          >
+            <div className="flex-1 bg-muted/30 border border-border rounded-xl px-4 py-2.5 text-xs text-muted-foreground/50">
+              e.g. "Reduce volume this week" or "Swap barbell bench for dumbbells"…
+            </div>
+            <div className="w-9 h-9 rounded-xl bg-muted/40 border border-border flex items-center justify-center flex-shrink-0">
+              <Send className="w-3.5 h-3.5 text-muted-foreground/50" />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Change Summary Banner ────────────────────────────────────────────────────
+
+function ChangeSummaryBanner({ result, onDismiss }: { result: EditResult; onDismiss: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onDismiss, 12000);
+    return () => clearTimeout(timer);
+  }, [onDismiss]);
+
+  const scopeLabel: Record<string, string> = {
+    exercise: "Exercise",
+    session: "Session",
+    week: "This Week",
+    block: "Block",
+    system: "Program",
+  };
+
+  return (
+    <div className="flex-shrink-0 border-b border-green-500/20 bg-green-500/5 px-4 py-3">
+      <div className="max-w-2xl mx-auto">
+        <div className="flex items-start gap-3">
+          <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-bold text-green-400 uppercase tracking-wider">System Updated</span>
+              <span className="text-[10px] font-semibold text-green-400/60 bg-green-400/10 px-2 py-0.5 rounded-full border border-green-400/20">
+                {scopeLabel[result.scope] ?? result.scope}
+              </span>
+              {result.appliedCount > 0 && (
+                <span className="text-[10px] text-green-400/60">{result.appliedCount} change{result.appliedCount !== 1 ? "s" : ""} applied</span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">{result.changeSummary}</p>
+          </div>
+          <button onClick={onDismiss} className="text-muted-foreground/40 hover:text-muted-foreground text-xs flex-shrink-0 ml-2">✕</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -520,41 +654,34 @@ function EmptySystemState({ onInitialize, isLoading }: { onInitialize: () => voi
         className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-xl font-semibold text-sm hover:bg-primary/90 transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-primary/20"
       >
         {isLoading ? (
-          <>
-            <RotateCcw className="w-4 h-4 animate-spin" />
-            Building your system...
-          </>
+          <><RotateCcw className="w-4 h-4 animate-spin" />Building your system...</>
         ) : (
-          <>
-            <Zap className="w-4 h-4" />
-            Build My Training System
-          </>
+          <><Zap className="w-4 h-4" />Build My Training System</>
         )}
       </button>
     </div>
   );
 }
 
-// ─── Tab config ──────────────────────────────────────────────────────────────
+// ─── Tabs ─────────────────────────────────────────────────────────────────────
 
 const TABS = [
   { id: "today", label: "Today", icon: Zap },
   { id: "week", label: "This Week", icon: Calendar },
   { id: "block", label: "Block", icon: BarChart3 },
 ] as const;
-
 type TabId = (typeof TABS)[number]["id"];
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function SystemPage() {
-  const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<TabId>("today");
+  const [lastEditResult, setLastEditResult] = useState<EditResult | null>(null);
   const queryClient = useQueryClient();
 
   const { data: me } = useGetMe();
 
-  const { data: activeSystem, isLoading: systemLoading, error: systemError } = useQuery({
+  const { data: activeSystem, isLoading: systemLoading } = useQuery({
     queryKey: ["training-system-active"],
     queryFn: fetchActiveSystem,
     retry: false,
@@ -569,6 +696,20 @@ export default function SystemPage() {
       queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
     },
   });
+
+  function handleEditComplete(result: EditResult) {
+    setLastEditResult(result);
+    // Refresh all relevant data from server
+    queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+    queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+    queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
+
+    // Scroll to top of content area for visibility
+    const scope = result.scope;
+    if (scope === "exercise" || scope === "session") setActiveTab("today");
+    else if (scope === "week") setActiveTab("week");
+    else if (scope === "block") setActiveTab("block");
+  }
 
   const hasSystem = !!activeSystem;
   const userName = me?.name ?? "Athlete";
@@ -593,6 +734,14 @@ export default function SystemPage() {
           </p>
         </div>
       </div>
+
+      {/* Change summary banner */}
+      {lastEditResult && (
+        <ChangeSummaryBanner
+          result={lastEditResult}
+          onDismiss={() => setLastEditResult(null)}
+        />
+      )}
 
       {/* Tabs */}
       {hasSystem && (
@@ -619,7 +768,7 @@ export default function SystemPage() {
       )}
 
       {/* Content area */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto min-h-0">
         <div className="max-w-2xl mx-auto px-4 py-5">
           {systemLoading ? (
             <ViewSkeleton />
@@ -637,6 +786,11 @@ export default function SystemPage() {
           )}
         </div>
       </div>
+
+      {/* Edit Panel — only shown when system exists */}
+      {hasSystem && (
+        <EditPanel onEditComplete={handleEditComplete} />
+      )}
     </div>
   );
 }

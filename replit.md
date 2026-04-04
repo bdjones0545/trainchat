@@ -56,6 +56,12 @@ The UI features a consistent dark theme with electric blue (HSL(199 89% 48%)) as
 - **Navigation**: TopNav updated with persistent Coach | Your System pill navigation (always visible).
 - **Phase 2 Readiness**: Each entity has its own ID and status — individual exercise, session, week, and phase objects are addressable for future AI-driven edits. Schema supports partial updates without full regeneration.
 
+### Phase 2 — Natural Language Editing Engine (April 2026)
+- **Edit Intent Service** (`edit-intent-service.ts`): Interprets natural language modification requests using GPT-4o (with structured JSON output via `response_format: json_object`). Falls back to a rule-based interpreter when no API key is available. Covers: reduce volume, increase volume, recovery day conversion, exercise swaps, equipment constraints, injury modifications, explosive emphasis, and intensity adjustments. Serializes the full training system hierarchy into a compact context prompt for the AI.
+- **Edit Engine** (`edit-engine.ts`): Applies structured `EditPlan` JSON to the database with field allowlists as a safety guard. Supports: `update_exercise`, `replace_exercise`, `delete_exercise`, `update_session`, `update_week`, `update_phase`. Returns applied/skipped counts and change details.
+- **Edit API Route**: `POST /api/training-system/edit` — accepts `{ request: string }`, orchestrates interpret → plan → apply → respond with change summary and refreshed data.
+- **Frontend Edit Panel**: Collapsible panel at the bottom of the `/system` page. Quick-action suggestion chips + custom textarea input. Shows loading spinner while processing. On success, displays a green `ChangeSummaryBanner` with scope badge and applied count, then auto-dismisses after 12 seconds. Automatically invalidates and refreshes the relevant tab view (Today/Week/Block) based on edit scope.
+
 ## External Dependencies
 
 - **OpenAI**: Utilized for the core AI performance architect (GPT-4o model).
