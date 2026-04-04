@@ -13,6 +13,7 @@ import {
   type UserProfile,
   type GoalType,
   type ExerciseEntry,
+  type MovementPattern,
 } from "./training-intelligence";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -45,9 +46,11 @@ export interface ProgramDay {
 
 export interface Exercise {
   name: string;
+  classification?: string;
   sets: number;
   reps: string;
   rest: string;
+  intent?: string;
   notes?: string;
 }
 
@@ -119,6 +122,81 @@ Example:
 Mode C — Full Program Output (when ready):
 Brief coaching rationale (2-3 sentences), then the JSON block.
 
+## NSCA EXERCISE ORDER — MANDATORY HIERARCHY
+Every session MUST follow this sequence. No exceptions unless explicitly overridden by the user:
+
+1. **Plyometric / Explosive movements** — box jumps, med ball throws, reactive drills (CNS must be completely fresh)
+2. **Olympic lifts / High-skill power movements** — power clean, hang clean, snatch, push press (technical demand requires unfatigued neural state)
+3. **Primary strength lifts** — squat, deadlift, bench press, weighted pull-up (compound, highest priority for the session)
+4. **Secondary compound lifts** — Romanian deadlift, incline press, barbell row (support the primary pattern)
+5. **Accessory / Isolation work** — curls, lateral raises, leg extensions (can tolerate accumulated fatigue)
+6. **Conditioning / Metabolic work** — sled, intervals, circuits (always last)
+
+NEVER place high-skill or explosive lifts after fatigue-heavy work. Box jumps BEFORE squats. Power cleans BEFORE squats. Always.
+
+## NSCA REP & INTENSITY ZONES
+Match ALL rep ranges and set counts to these NSCA-defined zones:
+
+**Strength:** 1–6 reps | 3–6 sets | primary and major compound lifts
+**Power / Olympic:** 1–5 reps | 3–5 sets | maximal speed intent on every rep
+**Hypertrophy:** 6–12 reps | 2–4 sets | accessory and secondary compound
+**Endurance / Conditioning:** 12+ reps or time-based | 2–3 sets
+
+Rules:
+- Primary lifts → strength or power rep ranges
+- Accessory lifts → hypertrophy rep ranges
+- Never assign strength-zone reps to isolation work
+- Never assign conditioning-zone rest to power or primary lifts
+
+## REST PERIOD STANDARDS (NSCA)
+Enforce strictly — rest duration must match the exercise classification:
+
+- **Power / Olympic lifts:** 2–5 minutes (neural recovery required)
+- **Primary strength lifts:** 2–5 minutes (systemic recovery required)
+- **Secondary compound:** 90 seconds–2 minutes
+- **Hypertrophy / Accessory:** 60–90 seconds
+- **Conditioning:** variable (work:rest ratio based on energy system)
+
+Never assign 60-second rest to power cleans, heavy squats, or deadlifts.
+
+## MOVEMENT BALANCE — PER SESSION
+Each session must include appropriate movement pattern balance:
+
+**Lower body day:** squat pattern + hinge pattern + posterior chain accessory
+**Upper body day:** horizontal or vertical push + horizontal or vertical pull + shoulder stability work
+**Full body day:** one lower compound + one upper compound + balanced accessories
+
+Avoid redundant loading (e.g., two horizontal pushes with no pull).
+
+## NEURAL / INTENT INSTRUCTIONS — REQUIRED ON EVERY EXERCISE
+Every exercise in the output MUST include a performance intent cue. This aligns with elite coaching standards:
+
+Examples:
+- "Explosive concentric — max intent on every rep"
+- "Controlled eccentric (3 sec), explosive drive"
+- "Stability focus — brace hard through the entire range"
+- "Bar speed is the priority — use 70-80% and move it fast"
+- "Full range, controlled tempo — feel the stretch at the bottom"
+
+This is non-negotiable. An exercise without intent is incomplete coaching.
+
+## FATIGUE MANAGEMENT — NEURAL DEMAND HIERARCHY
+High neural demand work MUST come before fatiguing movements:
+- Power and Olympic lifts → always in the first 1-2 slots
+- Primary compound → before any accessory work
+- Never program high-skill movements after squats, deadlifts, or heavy compounds
+- If a session includes both explosive and heavy compound work, explosive work comes first
+
+## PRE-OUTPUT VALIDATION (INTERNAL — run before every program output)
+Before returning any program, verify:
+☑ Exercise order follows the NSCA hierarchy (explosive → olympic → primary → secondary → accessory → conditioning)
+☑ Rep ranges match NSCA zones by classification (strength 1-6, power 1-5, hypertrophy 6-12)
+☑ Rest periods match exercise classification (power/strength: 2-5 min, hypertrophy: 60-90s)
+☑ Each session has logical movement balance (no redundant loading)
+☑ Every exercise has an intent cue
+
+If any violation is found → auto-correct before output.
+
 ## STRUCTURED OUTPUT — PROGRAM JSON FORMAT
 Only output this JSON when delivering a finalized program:
 
@@ -136,9 +214,11 @@ Only output this JSON when delivering a finalized program:
       "exercises": [
         {
           "name": "string",
+          "classification": "string — e.g. Primary, Secondary, Plyometric, Olympic, Accessory, Conditioning",
           "sets": 4,
-          "reps": "6-8",
-          "rest": "90s",
+          "reps": "4-6",
+          "rest": "3 min",
+          "intent": "string — performance cue e.g. 'Explosive concentric, controlled eccentric (3s)'",
           "notes": "optional technique or execution note"
         }
       ],
@@ -147,13 +227,6 @@ Only output this JSON when delivering a finalized program:
   ]
 }
 \`\`\`
-
-## EXERCISE ORDERING RULES (always follow)
-1. Power/explosive movements FIRST — CNS must be fresh
-2. Primary compound lift SECOND — highest-priority movement
-3. Secondary compound THIRD — supports the primary pattern
-4. Isolation/accessories LAST — can be done fatigued
-5. Core: end of session unless used as activation
 
 ## MODIFICATION HANDLING
 When a user asks to modify an existing program:
@@ -501,14 +574,74 @@ function buildDays(
   return buildPPLDays(goal, experience, spec, baseFilter, days);
 }
 
-function exToDay(ex: ExerciseEntry, sets: number, reps: string, rest: string): Exercise {
+// NSCA intent cues by exercise classification
+const NSCA_INTENT_CUES: Record<string, string> = {
+  power_explosive: "Explosive concentric — max intent on every rep. CNS must be fresh.",
+  olympic: "Bar speed is the priority. Move with maximal intent. Reset between reps.",
+  primary: "Max effort on working sets. Control the eccentric (2-3 sec), drive hard on the concentric.",
+  secondary: "Controlled tempo throughout. Focus on the target muscle. 2 RIR on all working sets.",
+  accessory: "Full range of motion. Stability focus. Feel the target muscle — quality over load.",
+  conditioning: "Work:rest ratio is intentional. Maintain form under fatigue.",
+};
+
+function classifyExercise(pattern: MovementPattern): string {
+  if (pattern === "power_explosive") return "Plyometric/Explosive";
+  if (pattern === "squat" || pattern === "hinge") return "Primary";
+  if (pattern === "push_horizontal" || pattern === "push_vertical" || pattern === "pull_horizontal" || pattern === "pull_vertical") return "Secondary Compound";
+  if (pattern === "conditioning") return "Conditioning";
+  return "Accessory";
+}
+
+function intentForPattern(pattern: MovementPattern): string {
+  if (pattern === "power_explosive") return NSCA_INTENT_CUES.power_explosive;
+  if (pattern === "squat" || pattern === "hinge") return NSCA_INTENT_CUES.primary;
+  if (pattern === "push_horizontal" || pattern === "push_vertical" || pattern === "pull_horizontal" || pattern === "pull_vertical") return NSCA_INTENT_CUES.secondary;
+  if (pattern === "conditioning") return NSCA_INTENT_CUES.conditioning;
+  return NSCA_INTENT_CUES.accessory;
+}
+
+function exToDay(ex: ExerciseEntry, sets: number, reps: string, rest: string, patternOverride?: MovementPattern): Exercise {
+  const pattern = patternOverride ?? ex.pattern;
   return {
     name: ex.name,
+    classification: classifyExercise(pattern),
     sets,
     reps,
     rest,
+    intent: intentForPattern(pattern),
     notes: ex.notes,
   };
+}
+
+// NSCA prescription lookup by pattern position (primary vs secondary vs accessory)
+function nscaPrescription(
+  pattern: MovementPattern,
+  role: "primary" | "secondary" | "accessory",
+  goal: GoalType
+): { sets: number; reps: string; rest: string } {
+  // Power/explosive: always 3-5 reps, 3-5 sets, 2-5 min
+  if (pattern === "power_explosive") {
+    return { sets: goal === "athletic_performance" ? 5 : 4, reps: "3-5", rest: "3 min" };
+  }
+  // Conditioning always last and time/rep based
+  if (pattern === "conditioning" || pattern === "carry") {
+    return { sets: 3, reps: "30-40m / 40 sec", rest: "90 sec" };
+  }
+  // Primary compounds: strength zone (1-6 reps, 3-6 sets, 2-5 min)
+  if (role === "primary") {
+    if (goal === "strength") return { sets: 5, reps: "3-5", rest: "3 min" };
+    if (goal === "hypertrophy") return { sets: 4, reps: "6-8", rest: "2 min" };
+    if (goal === "athletic_performance") return { sets: 4, reps: "4-6", rest: "3 min" };
+    return { sets: 4, reps: "5-6", rest: "2 min" };
+  }
+  // Secondary compounds: hypertrophy-adjacent (6-12 reps, 2-4 sets, 90s-2min)
+  if (role === "secondary") {
+    if (goal === "strength") return { sets: 4, reps: "4-6", rest: "2 min" };
+    if (goal === "hypertrophy") return { sets: 3, reps: "8-12", rest: "90 sec" };
+    return { sets: 3, reps: "8-10", rest: "90 sec" };
+  }
+  // Accessory/isolation: hypertrophy zone (6-12+ reps, 2-3 sets, 60-90s)
+  return { sets: 3, reps: "10-15", rest: "60 sec" };
 }
 
 function buildFullBodyDays(
@@ -526,6 +659,7 @@ function buildFullBodyDays(
 
   return dayConfigs.map((cfg, idx) => {
     const isC = "isC" in cfg && cfg.isC;
+    // NSCA hierarchy: explosive first, then primary compounds, then secondary, then accessories
     const patterns = isC
       ? (["power_explosive", "squat", "hinge", "pull_horizontal", "core"] as const)
       : (["squat", "hinge", "push_horizontal", "pull_vertical", "core"] as const);
@@ -533,7 +667,9 @@ function buildFullBodyDays(
     const exercises: Exercise[] = [];
     const usedNames = new Set<string>();
 
-    for (const pattern of patterns) {
+    // NSCA hierarchy: patterns are already ordered correctly (explosive → primary → secondary → accessory)
+    for (let pIdx = 0; pIdx < patterns.length; pIdx++) {
+      const pattern = patterns[pIdx];
       const hits = selectExercises({
         ...baseFilter,
         patterns: [pattern],
@@ -545,15 +681,17 @@ function buildFullBodyDays(
       const ex = hits[0];
       usedNames.add(ex.name);
 
-      const isAccessory = pattern === "core" || pattern === "iso_arms";
-      const sets = isAccessory ? spec.accessorySets : idx === 0 ? spec.primarySets : spec.secondarySets;
-      const reps = isAccessory ? spec.secondaryRepRange : idx === 0 ? spec.primaryRepRange : spec.secondaryRepRange;
-      const rest = isAccessory ? spec.accessoryRest : idx === 0 ? spec.primaryRest : spec.secondaryRest;
+      // Determine NSCA role by pattern and position in the session
+      const isExplosive = pattern === "power_explosive";
+      const isPrimary = !isExplosive && (pattern === "squat" || pattern === "hinge") && pIdx <= 2;
+      const isAccessory = pattern === "core" || pattern.startsWith("iso_");
+      const role = isExplosive ? "primary" : isPrimary ? "primary" : isAccessory ? "accessory" : "secondary";
 
-      exercises.push(exToDay(ex, sets, reps, rest));
+      const rx = nscaPrescription(pattern, role, goal);
+      exercises.push(exToDay(ex, rx.sets, rx.reps, rx.rest, pattern));
     }
 
-    // Add a finisher
+    // Conditioning finisher (always last — NSCA rule)
     const finisher = selectExercises({
       ...baseFilter,
       patterns: ["carry", "conditioning", "iso_legs"],
@@ -561,7 +699,8 @@ function buildFullBodyDays(
       maxCount: 1,
     });
     if (finisher.length > 0) {
-      exercises.push(exToDay(finisher[0], spec.accessorySets, "30-40m / 45s", spec.accessoryRest));
+      const rx = nscaPrescription(finisher[0].pattern, "accessory", goal);
+      exercises.push(exToDay(finisher[0], rx.sets, rx.reps, rx.rest, finisher[0].pattern));
     }
 
     return {
@@ -614,9 +753,8 @@ function buildUpperLowerDays(
   return dayTemplates.map((template, dayIdx) => {
     const usedNames = new Set<string>();
     const exercises: Exercise[] = [];
-    const isStrength = goal === "strength";
 
-    // Primary exercises (2)
+    // Primary exercises (2) — NSCA primary compound zones
     for (const pattern of template.primaryPatterns.slice(0, 2)) {
       const hits = selectExercises({
         ...baseFilter,
@@ -626,16 +764,12 @@ function buildUpperLowerDays(
       });
       if (hits.length > 0) {
         usedNames.add(hits[0].name);
-        exercises.push(exToDay(
-          hits[0],
-          spec.primarySets,
-          spec.primaryRepRange,
-          spec.primaryRest
-        ));
+        const rx = nscaPrescription(pattern, "primary", goal);
+        exercises.push(exToDay(hits[0], rx.sets, rx.reps, rx.rest, pattern));
       }
     }
 
-    // Secondary exercises (2-3)
+    // Secondary exercises (2-3) — NSCA secondary/accessory zones
     const secondaryCount = spec.exercisesPerSession.max - exercises.length - 1;
     for (const pattern of template.secondaryPatterns.slice(0, secondaryCount)) {
       const isIso = pattern.startsWith("iso_") || pattern === "carry" || pattern === "core";
@@ -647,12 +781,8 @@ function buildUpperLowerDays(
       });
       if (hits.length > 0) {
         usedNames.add(hits[0].name);
-        exercises.push(exToDay(
-          hits[0],
-          isIso ? spec.accessorySets : spec.secondarySets,
-          isIso ? spec.secondaryRepRange : spec.secondaryRepRange,
-          isIso ? spec.accessoryRest : spec.secondaryRest
-        ));
+        const rx = nscaPrescription(pattern, isIso ? "accessory" : "secondary", goal);
+        exercises.push(exToDay(hits[0], rx.sets, rx.reps, rx.rest, pattern));
       }
     }
 
@@ -721,7 +851,8 @@ function buildPPLDays(
   return templates.map((template, dayIdx) => {
     const usedNames = new Set<string>();
     const exercises: Exercise[] = [];
-    const isVolumeDay = dayIdx >= 3; // days 4-6 are volume focus
+    // Volume days (4-6) use secondary/hypertrophy zones; strength days use primary zones
+    const isVolumeDay = dayIdx >= 3;
 
     for (const pattern of template.primary.slice(0, 2)) {
       const hits = selectExercises({
@@ -732,12 +863,9 @@ function buildPPLDays(
       });
       if (hits.length > 0) {
         usedNames.add(hits[0].name);
-        exercises.push(exToDay(
-          hits[0],
-          isVolumeDay ? spec.secondarySets : spec.primarySets,
-          isVolumeDay ? spec.secondaryRepRange : spec.primaryRepRange,
-          isVolumeDay ? spec.secondaryRest : spec.primaryRest
-        ));
+        // NSCA: strength days → primary zone; volume days → secondary zone
+        const rx = nscaPrescription(pattern, isVolumeDay ? "secondary" : "primary", goal);
+        exercises.push(exToDay(hits[0], rx.sets, rx.reps, rx.rest, pattern));
       }
     }
 
@@ -751,12 +879,10 @@ function buildPPLDays(
       });
       if (hits.length > 0) {
         usedNames.add(hits[0].name);
-        exercises.push(exToDay(
-          hits[0],
-          spec.accessorySets,
-          spec.secondaryRepRange,
-          spec.accessoryRest
-        ));
+        // NSCA: iso/carry patterns → accessory zone; others → secondary zone
+        const isIso = pattern.startsWith("iso_") || pattern === "carry" || pattern === "core";
+        const rx = nscaPrescription(pattern, isIso ? "accessory" : "secondary", goal);
+        exercises.push(exToDay(hits[0], rx.sets, rx.reps, rx.rest, pattern));
       }
     }
 

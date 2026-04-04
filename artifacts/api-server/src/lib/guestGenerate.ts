@@ -23,6 +23,7 @@ export interface GuestOnboardingAnswers {
 
 export interface GuestProgramExercise {
   name: string;
+  classification?: string;
   sets: number;
   reps: string;
   rest: string;
@@ -56,7 +57,7 @@ function buildGuestSystemPrompt(): string {
 You operate at the intersection of:
 - PhD-level exercise science (adaptation biology, biomechanics, energy systems)
 - Elite strength & conditioning experience (professional athletes, Olympic competitors)
-- Precision programming logic (periodization, supercompensation, fatigue management)
+- NSCA-certified programming logic (periodization, supercompensation, fatigue management)
 
 ## COMMUNICATION STYLE
 - Authoritative, precise, zero fluff
@@ -64,13 +65,58 @@ You operate at the intersection of:
 - Warm confidence — you're a trusted coach, not a robot
 - Never generic. Every recommendation must reflect the athlete's specific profile
 
+## NSCA EXERCISE ORDER — MANDATORY IN EVERY SESSION
+Follow this hierarchy strictly in every training day. No exceptions:
+
+1. Plyometric / Explosive movements (box jumps, med ball throws) — CNS must be fresh
+2. Olympic lifts / High-skill power movements (power clean, hang clean) — before any compound work
+3. Primary strength lifts (squat, deadlift, bench press) — highest priority compound
+4. Secondary compound lifts (RDL, incline press, barbell row) — support the primary
+5. Accessory / Isolation work (curls, lateral raises, leg press) — tolerate fatigue
+6. Conditioning / Metabolic work (sled, circuits) — always last
+
+NEVER: place explosive or high-skill lifts after heavy compound work.
+
+## NSCA REP & INTENSITY ZONES — MANDATORY
+Match prescriptions to these zones:
+
+- Strength: 1–6 reps | 3–6 sets | primary and major compound lifts | 2–5 min rest
+- Power / Olympic: 1–5 reps | 3–5 sets | max speed intent | 2–5 min rest
+- Hypertrophy: 6–12 reps | 2–4 sets | secondary and accessory | 60–90 sec rest
+- Endurance: 12+ reps | 2–3 sets | metabolic accessory work | 30–60 sec rest
+
+Rules:
+- Primary lifts always use strength or power zones
+- Accessories always use hypertrophy zones
+- Never assign 60-second rest to power cleans or heavy squats
+- Never assign strength-zone reps to isolation exercises
+
+## MOVEMENT BALANCE — PER SESSION
+- Lower body day: squat pattern + hinge pattern + posterior chain accessory
+- Upper body day: horizontal or vertical push + horizontal or vertical pull + shoulder stability
+- No redundant loading (two horizontal pushes with no pull = violation)
+
+## INTENT INSTRUCTIONS — REQUIRED ON EVERY EXERCISE
+Every exercise MUST include a performance intent cue in the "notes" field and a "classification" field:
+- Classification options: "Plyometric/Explosive", "Olympic", "Primary", "Secondary Compound", "Accessory", "Conditioning"
+- Intent examples: "Explosive concentric — max intent", "Controlled eccentric (3s), explosive drive", "Stability focus, full ROM"
+
+## PRE-OUTPUT VALIDATION (run internally before outputting)
+Verify before output:
+☑ Exercise order follows NSCA hierarchy (explosive → olympic → primary → secondary → accessory → conditioning)
+☑ Rep ranges match NSCA zones by classification
+☑ Rest periods match exercise classification (power/primary: 2-5 min; accessory: 60-90s)
+☑ Every session has movement balance (push + pull or squat + hinge)
+☑ Every exercise has a classification and intent cue
+Auto-correct any violations before output.
+
 ## OUTPUT REQUIREMENT
 You MUST return a JSON object in this exact format — no markdown, no preamble, just valid JSON:
 {
   "programName": "string — specific and personalized (not generic)",
   "weeklyStructure": "string — e.g. '4-day Upper/Lower Split'",
   "coachIntro": "string — 2-3 sentences of personalized insight that shows you deeply understood their profile",
-  "rationale": "string — 3-4 sentences explaining the programming logic and why it fits their specific goal/experience/equipment/limitations",
+  "rationale": "string — 3-4 sentences explaining the NSCA programming logic and why it fits their specific goal/experience/equipment/limitations",
   "days": [
     {
       "dayNumber": 1,
@@ -79,10 +125,11 @@ You MUST return a JSON object in this exact format — no markdown, no preamble,
       "exercises": [
         {
           "name": "string",
+          "classification": "string — e.g. 'Primary', 'Secondary Compound', 'Accessory', 'Plyometric/Explosive'",
           "sets": number,
-          "reps": "string — e.g. '5' or '8-10' or '12-15'",
-          "rest": "string — e.g. '3 min' or '90 sec'",
-          "notes": "string — brief coaching cue or rationale"
+          "reps": "string — NSCA zone appropriate e.g. '3-5' for primary strength, '8-12' for accessory",
+          "rest": "string — NSCA zone appropriate e.g. '3 min' for primary, '60 sec' for accessory",
+          "notes": "string — performance intent cue e.g. 'Explosive concentric — max intent on every rep'"
         }
       ],
       "dayNotes": "string — brief session intent or warm-up/cool-down note"
@@ -92,7 +139,7 @@ You MUST return a JSON object in this exact format — no markdown, no preamble,
   "progressionPrinciple": "string — 1-2 sentences on the core progression model"
 }
 
-Include all training days. Exercises must be specific and appropriate for the stated equipment. Never include equipment the user doesn't have.`;
+Include all training days. Exercises must be specific and appropriate for the stated equipment. Never include equipment the user doesn't have. Exercises must appear in NSCA order within each day.`;
 }
 
 function buildGuestUserPrompt(answers: GuestOnboardingAnswers): string {
@@ -119,13 +166,17 @@ ${injuryNote}
 **Timeline/Commitment:** ${answers.timeline}
 ${sportNote}
 
-Engineering requirements:
+Engineering requirements (NSCA-standard):
 1. Select exercises ONLY from available equipment — never assume equipment not listed
-2. ${answers.experience.toLowerCase().includes("beginner") ? "Prioritize technique-friendly movements. Limit complexity. Build movement patterns before adding load." : answers.experience.toLowerCase().includes("advanced") ? "Include periodization sophistication. Advanced loading patterns are appropriate." : "Balance variety with progressive overload. Moderate technique complexity."}
+2. ${answers.experience.toLowerCase().includes("beginner") ? "Prioritize technique-friendly movements. Limit complexity. Build movement patterns before adding load." : answers.experience.toLowerCase().includes("advanced") ? "Include periodization sophistication. Advanced loading patterns appropriate." : "Balance variety with progressive overload. Moderate technique complexity."}
 3. ${answers.injuries && answers.injuries.toLowerCase() !== "none" ? `Strictly route around ${answers.injuries}. Zero direct loading of affected area.` : "Full range of movement patterns available."}
-4. Match rep ranges and rest periods precisely to stated goal
-5. Day structure must fit ${answers.frequency} days/week without overlap
-6. Make the program feel like it was designed specifically for this person — not a template
+4. NSCA exercise order within each day: explosive/plyometric → olympic → primary compound → secondary compound → accessory → conditioning. This order is mandatory.
+5. NSCA rep zones: primary lifts = 1-6 reps (strength) or 1-5 reps (power); accessory = 6-12 reps (hypertrophy). Rest: primary/power = 2-5 min; accessory = 60-90 sec.
+6. Every exercise must include: classification (Primary/Plyometric/Olympic/Secondary Compound/Accessory/Conditioning) and a performance intent cue in the notes field.
+7. Each session must have movement balance: lower days = squat + hinge + posterior chain; upper days = push + pull + shoulder stability.
+8. Day structure must fit ${answers.frequency} days/week without overlap
+9. Run internal validation before output: correct order ✓ correct rep zones ✓ correct rest ✓ movement balance ✓ intent cues ✓. Auto-correct any violations.
+10. Make the program feel like it was designed by an elite strength coach — not a template
 
 Return only valid JSON. No markdown.`;
 }
@@ -189,32 +240,59 @@ function buildFallbackProgram(answers: GuestOnboardingAnswers): GuestProgram {
   // Build days using existing exercise selector
   const days: GuestProgramDay[] = [];
 
+  // NSCA prescription helper for fallback builder
+  function guestNscaRx(pattern: string, role: "primary" | "secondary" | "accessory"): { classification: string; sets: number; reps: string; rest: string; notes: string } {
+    if (pattern === "power_explosive") {
+      return { classification: "Plyometric/Explosive", sets: 4, reps: "3-5", rest: "3 min", notes: "Explosive concentric — max intent on every rep. CNS must be fresh." };
+    }
+    if (role === "primary") {
+      if (goal === "strength") return { classification: "Primary", sets: 5, reps: "3-5", rest: "3 min", notes: "Max effort on working sets. Control the eccentric (2-3 sec), drive hard on the concentric." };
+      if (goal === "hypertrophy") return { classification: "Primary", sets: 4, reps: "6-8", rest: "2 min", notes: "Max effort on working sets. Control the eccentric (2-3 sec), drive hard on the concentric." };
+      if (goal === "athletic_performance") return { classification: "Primary", sets: 4, reps: "4-6", rest: "3 min", notes: "Move with intent — bar speed matters. Strength is the foundation of athletic power." };
+      return { classification: "Primary", sets: 4, reps: "5-6", rest: "2 min", notes: "Control the eccentric, drive on the concentric. Earn each rep." };
+    }
+    if (role === "secondary") {
+      if (goal === "strength") return { classification: "Secondary Compound", sets: 4, reps: "4-6", rest: "2 min", notes: "Controlled tempo throughout. Support the primary pattern. 2 RIR on all working sets." };
+      return { classification: "Secondary Compound", sets: 3, reps: "8-12", rest: "90 sec", notes: "Controlled tempo throughout. Focus on the target muscle. 2 RIR on all working sets." };
+    }
+    // accessory
+    return { classification: "Accessory", sets: 3, reps: "10-15", rest: "60 sec", notes: "Full range of motion. Stability focus — feel the target muscle. Quality over load." };
+  }
+
   if (freq <= 3) {
-    // Full body
+    // Full body — NSCA hierarchy: primary compounds first, then secondary/push-pull, then accessories
     for (let d = 1; d <= freq; d++) {
-      const dayExercises = [
-        ...selectExercises({ patterns: ["squat", "hinge"], goal, experience, equipment, injuryFlags, maxCount: 1 }),
+      const primaryExs = selectExercises({ patterns: ["squat", "hinge"], goal, experience, equipment, injuryFlags, maxCount: 1 });
+      const secondaryExs = [
         ...selectExercises({ patterns: ["push_horizontal", "push_vertical"], goal, experience, equipment, injuryFlags, maxCount: 1 }),
         ...selectExercises({ patterns: ["pull_horizontal", "pull_vertical"], goal, experience, equipment, injuryFlags, maxCount: 1 }),
-        ...selectExercises({ patterns: ["iso_legs", "core"], goal, experience, equipment, injuryFlags, maxCount: 2 }),
       ];
+      const accessoryExs = selectExercises({ patterns: ["iso_legs", "core"], goal, experience, equipment, injuryFlags, maxCount: 2 });
+
+      // NSCA order: primary → secondary → accessory
+      const allExs = [...primaryExs, ...secondaryExs, ...accessoryExs];
 
       days.push({
         dayNumber: d,
         name: `Day ${d} — Full Body`,
-        focus: "Balanced full-body stimulus",
-        exercises: dayExercises.map((ex) => ({
-          name: ex.name,
-          sets: goal === "strength" ? 4 : goal === "hypertrophy" ? 3 : 3,
-          reps: goal === "strength" ? "5" : goal === "hypertrophy" ? "8-12" : "12-15",
-          rest: goal === "strength" ? "3 min" : "90 sec",
-          notes: ex.notes ?? undefined,
-        })),
-        dayNotes: "Rest at least one day between sessions.",
+        focus: "Balanced full-body stimulus — compound strength, push/pull balance, accessory work",
+        exercises: allExs.map((ex, i) => {
+          const role = i === 0 ? "primary" : i <= 2 ? "secondary" : "accessory";
+          const rx = guestNscaRx(ex.pattern, role);
+          return {
+            name: ex.name,
+            classification: rx.classification,
+            sets: rx.sets,
+            reps: rx.reps,
+            rest: rx.rest,
+            notes: rx.notes,
+          };
+        }),
+        dayNotes: "Rest at least one day between sessions. Primary compounds first — never skip the hierarchy.",
       });
     }
   } else {
-    // Upper/Lower split for 4+
+    // Upper/Lower split for 4+ — NSCA pattern ordering within each day
     const splits = freq === 4
       ? ["Upper A", "Lower A", "Upper B", "Lower B"]
       : freq === 5
@@ -226,40 +304,51 @@ function buildFallbackProgram(answers: GuestOnboardingAnswers): GuestProgram {
       const isUpper = splitName.includes("Upper");
       const isLower = splitName.includes("Lower");
 
-      let patterns: string[];
+      // NSCA-ordered pattern lists per split type
+      let primaryPatterns: string[];
+      let secondaryPatterns: string[];
+      let accessoryPatterns: string[];
       let focus: string;
 
       if (isUpper) {
-        patterns = ["push_horizontal", "push_vertical", "pull_horizontal", "pull_vertical", "iso_arms", "iso_shoulders"];
-        focus = "Upper body push/pull balance";
+        primaryPatterns = ["push_horizontal"];
+        secondaryPatterns = ["push_vertical", "pull_horizontal", "pull_vertical"];
+        accessoryPatterns = ["iso_arms", "iso_shoulders"];
+        focus = "Upper body push/pull — compound strength then balanced accessories";
       } else if (isLower) {
-        patterns = ["squat", "hinge", "iso_legs", "carry", "core"];
-        focus = "Lower body strength and posterior chain";
+        primaryPatterns = ["squat"];
+        secondaryPatterns = ["hinge", "iso_legs"];
+        accessoryPatterns = ["carry", "core"];
+        focus = "Lower body — squat pattern primary, hinge secondary, posterior chain accessories";
       } else {
-        patterns = ["squat", "push_horizontal", "pull_horizontal", "core", "conditioning"];
-        focus = "Full body integration";
+        primaryPatterns = ["squat"];
+        secondaryPatterns = ["push_horizontal", "pull_horizontal"];
+        accessoryPatterns = ["core", "conditioning"];
+        focus = "Full body integration — strength foundation with balanced push/pull";
       }
 
-      const exs = selectExercises({
-        patterns: patterns as any,
-        goal,
-        experience,
-        equipment,
-        injuryFlags,
-        maxCount: 5,
-      });
+      // Select exercises per tier (NSCA hierarchy respected by selection order)
+      const primaryExs = selectExercises({ patterns: primaryPatterns as any, goal, experience, equipment, injuryFlags, maxCount: 1 });
+      const secondaryExs = selectExercises({ patterns: secondaryPatterns as any, goal, experience, equipment, injuryFlags, maxCount: 3 });
+      const accessoryExs = selectExercises({ patterns: accessoryPatterns as any, goal, experience, equipment, injuryFlags, maxCount: 2 });
+      const orderedExs = [...primaryExs, ...secondaryExs, ...accessoryExs].slice(0, 5);
 
       days.push({
         dayNumber: d + 1,
         name: `Day ${d + 1} — ${splitName}`,
         focus,
-        exercises: exs.map((ex) => ({
-          name: ex.name,
-          sets: goal === "strength" ? 4 : 3,
-          reps: goal === "strength" ? "5" : goal === "hypertrophy" ? "8-12" : "10-15",
-          rest: goal === "strength" ? "3 min" : "90 sec",
-          notes: ex.notes ?? undefined,
-        })),
+        exercises: orderedExs.map((ex, i) => {
+          const role = i === 0 ? "primary" : i <= primaryExs.length ? "secondary" : "accessory";
+          const rx = guestNscaRx(ex.pattern, role);
+          return {
+            name: ex.name,
+            classification: rx.classification,
+            sets: rx.sets,
+            reps: rx.reps,
+            rest: rx.rest,
+            notes: rx.notes,
+          };
+        }),
       });
     }
   }
