@@ -225,7 +225,8 @@ export async function generateAIResponse(
   userId: number,
   adaptationContext?: string,
   memoryContext?: string,
-  insightHint?: string
+  insightHint?: string,
+  conversionHint?: string
 ): Promise<AIResponse> {
   const [profile] = await db
     .select()
@@ -233,7 +234,7 @@ export async function generateAIResponse(
     .where(eq(userProfilesTable.userId, userId));
 
   const basePrompt = buildSystemPrompt(profile ?? null);
-  const extras = [adaptationContext, memoryContext, insightHint].filter(Boolean).join("\n\n");
+  const extras = [adaptationContext, memoryContext, insightHint, conversionHint].filter(Boolean).join("\n\n");
   const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;
   const apiKey = process.env.OPENAI_API_KEY;
 

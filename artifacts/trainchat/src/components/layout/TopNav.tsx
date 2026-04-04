@@ -1,3 +1,4 @@
+import type React from "react";
 import { LogOut, Settings } from "lucide-react";
 import { useLogout } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -7,9 +8,10 @@ import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_17752640
 
 interface Props {
   userName: string;
+  extraContent?: React.ReactNode;
 }
 
-export default function TopNav({ userName }: Props) {
+export default function TopNav({ userName, extraContent }: Props) {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const logout = useLogout();
@@ -39,6 +41,11 @@ export default function TopNav({ userName }: Props) {
         className="h-7 object-contain"
         data-testid="img-logo"
       />
+
+      {/* Center — extra content (e.g. streak badge) */}
+      {extraContent && (
+        <div className="absolute left-1/2 -translate-x-1/2">{extraContent}</div>
+      )}
 
       {/* Right side */}
       <div className="flex items-center gap-2">

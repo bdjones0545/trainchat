@@ -1,0 +1,22 @@
+import { pgTable, serial, integer, timestamp, text, real } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod/v4";
+import { usersTable } from "./users";
+
+export const sessionLogsTable = pgTable("session_logs", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  savedProgramId: integer("saved_program_id"),
+  dayNumber: integer("day_number"),
+  sessionType: text("session_type").notNull().default("workout"),
+  completedAt: timestamp("completed_at", { withTimezone: true }).notNull().defaultNow(),
+  difficultyScore: real("difficulty_score"),
+  painScore: real("pain_score"),
+  energyScore: real("energy_score"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const insertSessionLogSchema = createInsertSchema(sessionLogsTable).omit({ id: true, createdAt: true });
+export type InsertSessionLog = z.infer<typeof insertSessionLogSchema>;
+export type SessionLog = typeof sessionLogsTable.$inferSelect;

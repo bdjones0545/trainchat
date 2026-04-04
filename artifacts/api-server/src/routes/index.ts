@@ -8,6 +8,10 @@ import readinessRouter from "./readiness";
 import sessionFeedbackRouter from "./session-feedback";
 import memoriesRouter from "./memories";
 import insightsRouter from "./insights";
+import stripeRouter from "./stripe";
+import sessionLogsRouter from "./session-logs";
+import streakRouter from "./streak";
+import adminRouter from "./admin";
 
 const router: IRouter = Router();
 
@@ -20,5 +24,9 @@ router.use(readinessRouter);
 router.use(sessionFeedbackRouter);
 router.use(memoriesRouter);
 router.use(insightsRouter);
+router.use(stripeRouter);
+router.use(sessionLogsRouter);
+router.use(streakRouter);
+router.use(adminRouter);
 
 export default router;

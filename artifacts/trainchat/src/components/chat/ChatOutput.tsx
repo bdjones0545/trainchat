@@ -8,6 +8,10 @@ import {
   LayoutGrid,
   Loader2,
   MessageSquare,
+  Lock,
+  Zap,
+  PlayCircle,
+  Calendar,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -32,6 +36,8 @@ export interface ProgramStructure {
   description: string;
   progressionStrategy?: string;
   splitType?: string;
+  weekNumber?: number;
+  blockLabel?: string;
   days: ProgramDay[];
 }
 
@@ -39,11 +45,23 @@ interface Props {
   program: ProgramStructure | null;
   onSave?: () => void;
   onFeedback?: () => void;
+  onLogSession?: () => void;
+  onUpgrade?: () => void;
   isSaving?: boolean;
   isSaved?: boolean;
+  isPremium?: boolean;
 }
 
-export default function ChatOutput({ program, onSave, onFeedback, isSaving, isSaved }: Props) {
+export default function ChatOutput({
+  program,
+  onSave,
+  onFeedback,
+  onLogSession,
+  onUpgrade,
+  isSaving,
+  isSaved,
+  isPremium = false,
+}: Props) {
   const [expandedDay, setExpandedDay] = useState<number | null>(0);
 
   if (!program) {
@@ -60,10 +78,25 @@ export default function ChatOutput({ program, onSave, onFeedback, isSaving, isSa
     );
   }
 
+  const lockedDayCount = isPremium ? 0 : Math.max(0, program.days.length - 1);
+  const showPaywall = !isPremium && program.days.length > 1;
+
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b border-border flex-shrink-0">
+        {/* Program Evolution Badge */}
+        {(program.weekNumber || program.blockLabel) && (
+          <div className="flex items-center gap-1.5 mb-2">
+            <Calendar className="w-3 h-3 text-primary/60" />
+            <span className="text-[10px] text-primary/70 font-medium">
+              {program.weekNumber && `Week ${program.weekNumber}`}
+              {program.weekNumber && program.blockLabel && " · "}
+              {program.blockLabel && program.blockLabel}
+            </span>
+          </div>
+        )}
+
         {/* Program label */}
         <div className="flex items-center gap-1.5 mb-2">
           <div className="w-1.5 h-1.5 rounded-full bg-primary" />
@@ -90,6 +123,12 @@ export default function ChatOutput({ program, onSave, onFeedback, isSaving, isSa
               <Dumbbell className="w-3 h-3 text-muted-foreground" />
               <span className="text-[10px] text-muted-foreground">{program.days.length} days</span>
             </div>
+            {!isPremium && (
+              <div className="flex items-center gap-1 ml-auto">
+                <Lock className="w-3 h-3 text-amber-400/70" />
+                <span className="text-[10px] text-amber-400/70">Preview</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -132,6 +171,16 @@ export default function ChatOutput({ program, onSave, onFeedback, isSaving, isSa
               )}
             </button>
           )}
+          {onLogSession && isSaved && isPremium && (
+            <button
+              onClick={onLogSession}
+              className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-[11px] font-semibold border border-green-500/30 text-green-400 hover:bg-green-500/10 transition-all duration-150"
+              title="Log completed session"
+            >
+              <PlayCircle className="w-3 h-3" />
+              Log
+            </button>
+          )}
           {onFeedback && isSaved && (
             <button
               onClick={onFeedback}
@@ -139,7 +188,6 @@ export default function ChatOutput({ program, onSave, onFeedback, isSaving, isSa
               title="Log post-session feedback"
             >
               <MessageSquare className="w-3 h-3" />
-              Feedback
             </button>
           )}
         </div>
@@ -163,91 +211,134 @@ export default function ChatOutput({ program, onSave, onFeedback, isSaving, isSa
       )}
 
       {/* Days */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
-        {program.days.map((day, idx) => (
-          <div
-            key={idx}
-            className={`bg-card border rounded-xl overflow-hidden transition-colors duration-150 ${
-              expandedDay === idx ? "border-primary/30" : "border-border"
-            }`}
-          >
-            {/* Day header */}
-            <button
-              onClick={() => setExpandedDay(expandedDay === idx ? null : idx)}
-              className="w-full flex items-center justify-between p-3 text-left hover:bg-accent/40 transition-colors"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span
-                    className={`text-[9px] font-bold px-1.5 py-0.5 rounded transition-colors ${
-                      expandedDay === idx
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-primary/15 text-primary"
-                    }`}
-                  >
-                    Day {day.dayNumber}
-                  </span>
-                </div>
-                <p className="text-[11px] font-semibold text-foreground truncate">{day.name}</p>
-                {day.focus && (
-                  <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{day.focus}</p>
-                )}
-                {!day.focus && (
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                    {day.exercises.length} exercises
-                  </p>
-                )}
-              </div>
-              <div className="flex-shrink-0 ml-2">
-                {expandedDay === idx ? (
-                  <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
-                ) : (
-                  <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
-                )}
-              </div>
-            </button>
+      <div className="flex-1 overflow-y-auto p-3 space-y-2 relative">
+        {program.days.map((day, idx) => {
+          const isLocked = !isPremium && idx > 0;
 
-            {/* Exercises */}
-            {expandedDay === idx && (
-              <div className="border-t border-border divide-y divide-border/60">
-                {day.exercises.map((ex, exIdx) => (
-                  <div key={exIdx} className="px-3 py-2.5">
-                    <p className="text-[11px] font-medium text-foreground leading-snug">{ex.name}</p>
-                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1.5">
-                      {ex.sets > 0 && (
-                        <span className="text-[10px] text-muted-foreground">
-                          <span className="font-semibold text-foreground">{ex.sets}</span> sets
-                        </span>
-                      )}
-                      {ex.reps && (
-                        <span className="text-[10px] text-muted-foreground">
-                          <span className="font-semibold text-foreground">{ex.reps}</span> reps
-                        </span>
-                      )}
-                      {ex.rest && (
-                        <span className="text-[10px] bg-accent/60 px-1.5 py-0.5 rounded text-muted-foreground">
-                          {ex.rest}
-                        </span>
+          return (
+            <div
+              key={idx}
+              className={`bg-card border rounded-xl overflow-hidden transition-colors duration-150 ${
+                isLocked ? "border-border/40 opacity-70" : expandedDay === idx ? "border-primary/30" : "border-border"
+              }`}
+            >
+              {/* Day header */}
+              <button
+                onClick={() => !isLocked && setExpandedDay(expandedDay === idx ? null : idx)}
+                className={`w-full flex items-center justify-between p-3 text-left transition-colors ${
+                  isLocked ? "cursor-not-allowed" : "hover:bg-accent/40"
+                }`}
+                disabled={isLocked}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span
+                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded transition-colors ${
+                        isLocked
+                          ? "bg-accent/40 text-muted-foreground/60"
+                          : expandedDay === idx
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-primary/15 text-primary"
+                      }`}
+                    >
+                      Day {day.dayNumber}
+                    </span>
+                    {isLocked && <Lock className="w-3 h-3 text-muted-foreground/50" />}
+                  </div>
+                  <p className={`text-[11px] font-semibold truncate ${isLocked ? "text-muted-foreground/50" : "text-foreground"}`}>
+                    {day.name}
+                  </p>
+                  {day.focus && (
+                    <p className={`text-[10px] mt-0.5 truncate ${isLocked ? "text-muted-foreground/40" : "text-muted-foreground"}`}>
+                      {day.focus}
+                    </p>
+                  )}
+                  {!day.focus && (
+                    <p className={`text-[10px] mt-0.5 ${isLocked ? "text-muted-foreground/40" : "text-muted-foreground"}`}>
+                      {isLocked ? "Locked" : `${day.exercises.length} exercises`}
+                    </p>
+                  )}
+                </div>
+                <div className="flex-shrink-0 ml-2">
+                  {isLocked ? (
+                    <Lock className="w-3.5 h-3.5 text-muted-foreground/40" />
+                  ) : expandedDay === idx ? (
+                    <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                  )}
+                </div>
+              </button>
+
+              {/* Exercises */}
+              {!isLocked && expandedDay === idx && (
+                <div className="border-t border-border divide-y divide-border/60">
+                  {day.exercises.map((ex, exIdx) => (
+                    <div key={exIdx} className="px-3 py-2.5">
+                      <p className="text-[11px] font-medium text-foreground leading-snug">{ex.name}</p>
+                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1.5">
+                        {ex.sets > 0 && (
+                          <span className="text-[10px] text-muted-foreground">
+                            <span className="font-semibold text-foreground">{ex.sets}</span> sets
+                          </span>
+                        )}
+                        {ex.reps && (
+                          <span className="text-[10px] text-muted-foreground">
+                            <span className="font-semibold text-foreground">{ex.reps}</span> reps
+                          </span>
+                        )}
+                        {ex.rest && (
+                          <span className="text-[10px] bg-accent/60 px-1.5 py-0.5 rounded text-muted-foreground">
+                            {ex.rest}
+                          </span>
+                        )}
+                      </div>
+                      {ex.notes && (
+                        <p className="text-[10px] text-muted-foreground/70 mt-1.5 italic leading-relaxed">
+                          {ex.notes}
+                        </p>
                       )}
                     </div>
-                    {ex.notes && (
-                      <p className="text-[10px] text-muted-foreground/70 mt-1.5 italic leading-relaxed">
-                        {ex.notes}
+                  ))}
+                  {day.notes && (
+                    <div className="px-3 py-2.5 bg-accent/20">
+                      <p className="text-[10px] text-muted-foreground italic leading-relaxed">
+                        {day.notes}
                       </p>
-                    )}
-                  </div>
-                ))}
-                {day.notes && (
-                  <div className="px-3 py-2.5 bg-accent/20">
-                    <p className="text-[10px] text-muted-foreground italic leading-relaxed">
-                      {day.notes}
-                    </p>
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Paywall overlay for locked programs */}
+        {showPaywall && (
+          <div className="absolute inset-x-3 bottom-3 rounded-xl overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-t from-[#080e18] via-[#080e18]/90 to-transparent pointer-events-none" />
+            <div className="relative bg-[#0c1220]/95 border border-primary/20 rounded-xl p-5 text-center backdrop-blur-sm">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-3 mx-auto">
+                <Lock className="w-4 h-4 text-primary" />
               </div>
-            )}
+              <h4 className="text-sm font-bold text-foreground mb-1">
+                {lockedDayCount} more day{lockedDayCount === 1 ? "" : "s"} in your program
+              </h4>
+              <p className="text-[11px] text-muted-foreground mb-4 leading-relaxed">
+                Unlock your complete training program and all future evolutions.
+              </p>
+              {onUpgrade && (
+                <button
+                  onClick={onUpgrade}
+                  className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-primary text-primary-foreground text-[12px] font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  Unlock Full Program
+                </button>
+              )}
+            </div>
           </div>
-        ))}
+        )}
       </div>
     </div>
   );

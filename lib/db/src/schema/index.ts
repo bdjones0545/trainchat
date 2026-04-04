@@ -4,3 +4,4 @@ export * from "./conversations";
 export * from "./programs";
 export * from "./readiness";
 export * from "./memory";
+export * from "./session-logs";

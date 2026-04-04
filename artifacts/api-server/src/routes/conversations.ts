@@ -1,12 +1,14 @@
 import { Router, type IRouter } from "express";
 import { db, conversationsTable, messagesTable } from "@workspace/db";
-import { eq, desc, count, sql } from "drizzle-orm";
+import { eq, desc, count } from "drizzle-orm";
 import { CreateConversationBody, GetConversationParams, DeleteConversationParams, ListMessagesParams, SendMessageBody, SendMessageParams } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
 import { generateAIResponse } from "../lib/ai";
 import { buildAdaptationContext } from "../lib/adaptation";
 import { syncMemoriesFromData, listMemories, buildMemoryContext } from "../lib/memory";
 import { generateInsights, buildInsightPromptHint } from "../lib/insights";
+import { getUserPlanInfo } from "../lib/planGating";
+import { stripeStorage } from "../lib/stripeStorage";
 
 const router: IRouter = Router();
 
@@ -176,6 +178,23 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
   }
 
   const userId = req.session.userId!;
+
+  // --- Plan gating ---
+  let planInfo = await getUserPlanInfo(userId).catch(() => null);
+  if (planInfo && !planInfo.canSendMessage) {
+    res.status(402).json({
+      error: "MESSAGE_LIMIT_REACHED",
+      message:
+        planInfo.plan === "free"
+          ? `You've used your 5 free interactions. Upgrade to keep training with your AI coach.`
+          : `You've reached your monthly message limit. Upgrade to Pro for unlimited access.`,
+      plan: planInfo.plan,
+      messageCount: planInfo.messageCount,
+      messagesRemaining: 0,
+    });
+    return;
+  }
+
   const [convo] = await db.select().from(conversationsTable).where(eq(conversationsTable.id, params.data.id));
 
   if (!convo || convo.userId !== userId) {
@@ -190,7 +209,7 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
     content: parsed.data.content,
   }).returning();
 
-  // Auto-title the conversation from the first user message (trim to 60 chars)
+  // Auto-title from first message
   const existingMessages = await db
     .select({ id: messagesTable.id })
     .from(messagesTable)
@@ -203,38 +222,54 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
       .where(eq(conversationsTable.id, params.data.id));
   }
 
-  // Get conversation history for context
+  // Get history
   const history = await db
     .select()
     .from(messagesTable)
     .where(eq(messagesTable.conversationId, params.data.id))
     .orderBy(messagesTable.createdAt);
 
-  // Build all context layers in parallel — non-blocking, empty on first use
-  const [adaptation, memories] = await Promise.all([
-    buildAdaptationContext(userId).catch(() => ({ promptContext: "" })),
-    listMemories(userId).catch(() => []),
-  ]);
+  const isPro = planInfo?.features.adaptationContext ?? false;
+  const hasMemory = planInfo?.features.memoryContext ?? false;
 
-  // Sync memories from latest data (fire-and-forget — doesn't block response)
-  syncMemoriesFromData(userId).catch(() => {});
+  let adaptationCtx = "";
+  let memoryCtx = "";
+  let insightHint = "";
 
-  // Build memory + insight context for AI injection
-  const memoryCtx = buildMemoryContext(memories);
-  const insights = await generateInsights(userId, memories).catch(() => []);
-  const insightHint = buildInsightPromptHint(insights);
+  if (isPro) {
+    const [adaptation, memories] = await Promise.all([
+      buildAdaptationContext(userId).catch(() => ({ promptContext: "" })),
+      listMemories(userId).catch(() => []),
+    ]);
+    adaptationCtx = adaptation.promptContext;
+    memoryCtx = buildMemoryContext(memories);
+    const insights = await generateInsights(userId, memories).catch(() => []);
+    insightHint = buildInsightPromptHint(insights);
 
-  // Generate AI response with all context layers injected
+    syncMemoriesFromData(userId).catch(() => {});
+  }
+
+  // Agent-driven conversion hint for free/starter users
+  let conversionHint = "";
+  if (planInfo?.plan === "free") {
+    const remaining = planInfo.messagesRemaining ?? 0;
+    conversionHint = `
+## COACHING CONTEXT (internal)
+This athlete is on the free access tier with ${remaining} interaction${remaining === 1 ? "" : "s"} remaining.
+When it feels natural — especially when discussing program details, progress tracking, or long-term planning — mention capabilities like adaptive training, session memory, and program evolution that you can offer them as they progress.
+Keep it helpful and intelligent, never promotional.`;
+  }
+
   const { content: aiContent, structuredData } = await generateAIResponse(
     parsed.data.content,
     history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
     userId,
-    adaptation.promptContext || undefined,
-    memoryCtx || undefined,
-    insightHint || undefined
+    adaptationCtx || undefined,
+    (hasMemory && memoryCtx) ? memoryCtx : undefined,
+    insightHint || undefined,
+    conversionHint || undefined
   );
 
-  // Save AI message
   const [assistantMessage] = await db.insert(messagesTable).values({
     conversationId: params.data.id,
     role: "assistant",
@@ -242,10 +277,14 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
     structuredData: structuredData ? JSON.stringify(structuredData) : null,
   }).returning();
 
-  // Update conversation updatedAt
   await db.update(conversationsTable)
     .set({ updatedAt: new Date() })
     .where(eq(conversationsTable.id, params.data.id));
+
+  // Increment message count for free/starter users
+  if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+    stripeStorage.incrementMessageCount(userId).catch(() => {});
+  }
 
   res.json({
     userMessage: {
@@ -264,6 +303,12 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
       createdAt: assistantMessage.createdAt.toISOString(),
       structuredData: assistantMessage.structuredData ?? null,
     },
+    planInfo: planInfo
+      ? {
+          plan: planInfo.plan,
+          messagesRemaining: planInfo.messagesRemaining,
+        }
+      : null,
   });
 });
 
