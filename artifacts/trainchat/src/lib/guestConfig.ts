@@ -11,6 +11,11 @@ export const GUEST_CONFIG = {
   // 1 = program generated, 2 = one follow-up interaction.
   TEASER_TOTAL_LIMIT: 2,
 
+  // ─── Onboarding ──────────────────────────────────────────────────────────
+  // Number of onboarding questions shown to the guest user.
+  // Match this to the QUESTIONS array length in guest-start.tsx.
+  ONBOARDING_QUESTION_COUNT: 8,
+
   // ─── Paywall Headline & Body ──────────────────────────────────────────────
   PAYWALL_BADGE: "Your Free Preview Has Ended",
   PAYWALL_HEADLINE: "Your Plan Is Ready — Unlock Full Access",
@@ -62,7 +67,24 @@ export const GUEST_CONFIG = {
     "Your personalized plan is ready. Create your account and pick up exactly where you left off.",
 
   // ─── Funnel Event Names ───────────────────────────────────────────────────
+  // These must match the FunnelEventName union in analyticsService.ts on the backend.
   EVENTS: {
+    // Entry
+    LANDING_PAGE_VIEWED: "landing_page_viewed",
+    START_FREE_CLICKED: "start_free_clicked",
+    GUEST_SESSION_CREATED: "guest_session_created",
+
+    // Onboarding
+    ONBOARDING_STARTED: "onboarding_started",
+    ONBOARDING_STEP_COMPLETED: "onboarding_step_completed",
+    ONBOARDING_COMPLETED: "onboarding_completed",
+
+    // AI Experience
+    PROGRAM_GENERATED: "program_generated",
+    FOLLOWUP_USED: "followup_used",
+    AI_GENERATION_FAILED: "ai_generation_failed",
+
+    // Monetization
     PAYWALL_SHOWN: "paywall_shown",
     PAYWALL_CTA_CLICKED: "paywall_cta_clicked",
     PAYWALL_SIGNIN_CLICKED: "paywall_signin_clicked",
@@ -72,5 +94,9 @@ export const GUEST_CONFIG = {
     PAYMENT_STARTED: "payment_started",
     PAYMENT_COMPLETED: "payment_completed",
     GUEST_CONVERTED: "guest_converted",
+
+    // Retention
+    GUEST_RETURNED: "guest_returned",
+    USER_RETURNED_POST_CONVERSION: "user_returned_post_conversion",
   },
 } as const;

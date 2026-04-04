@@ -591,6 +591,7 @@ function FollowupSection({
       });
       setResponse(data.response ?? "");
       setUsed(true);
+      trackFunnelEvent(deviceId, "followup_used");
       // After user reads the response, surface the paywall
       setTimeout(onPaywallTrigger, 1200);
     } catch (err: any) {
@@ -794,6 +795,14 @@ export default function GuestStart() {
 
   const { deviceId, guestSession } = useGuestSession(false);
 
+  // ── Landing page viewed (once per mount) ──────────────────────────────────
+  const landingTracked = useRef(false);
+  useEffect(() => {
+    if (landingTracked.current || !deviceId) return;
+    landingTracked.current = true;
+    trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.LANDING_PAGE_VIEWED);
+  }, [deviceId]);
+
   // ── Return visitor handling ────────────────────────────────────────────────
   // Runs once after the guest session loads to restore the correct UI state.
   useEffect(() => {
@@ -814,9 +823,13 @@ export default function GuestStart() {
         setProgram(savedProgram);
         setStep("output");
         setShowPaywall(true);
-        if (deviceId) trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.PAYWALL_SHOWN, { reason: "return_visitor" });
+        if (deviceId) {
+          trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.GUEST_RETURNED, { reason: "paywall_shown" });
+          trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.PAYWALL_SHOWN, { reason: "return_visitor" });
+        }
       } else {
         // No program saved → show locked state
+        if (deviceId) trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.GUEST_RETURNED, { reason: "locked" });
         setStep("locked");
       }
       return;
@@ -853,6 +866,8 @@ export default function GuestStart() {
   const handleStart = useCallback(async () => {
     setStep("onboarding");
     if (deviceId) {
+      trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.START_FREE_CLICKED);
+      trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.ONBOARDING_STARTED);
       try {
         await customFetch(`/api/guest/session`, {
           method: "POST",
@@ -877,6 +892,13 @@ export default function GuestStart() {
 
   const handleNext = useCallback(async () => {
     if (questionIndex < QUESTIONS.length - 1) {
+      const q = QUESTIONS[questionIndex];
+      if (deviceId) {
+        trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.ONBOARDING_STEP_COMPLETED, {
+          stepIndex: questionIndex,
+          stepName: q?.key,
+        });
+      }
       setQuestionIndex((i) => i + 1);
 
       if (questionIndex === 0 && deviceId) {
@@ -908,12 +930,19 @@ export default function GuestStart() {
     setStep("generating");
     setGenError(null);
 
+    const genStart = Date.now();
+
     try {
       // Save onboarding answers (customFetch throws on non-2xx; returns parsed body on success)
       await customFetch<{ session: unknown }>("/api/guest/onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deviceId, answers: finalAnswers }),
+      });
+
+      trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.ONBOARDING_COMPLETED, {
+        goal: finalAnswers.goal,
+        experience: finalAnswers.experience,
       });
 
       // Generate program
@@ -926,7 +955,15 @@ export default function GuestStart() {
       if (!genData.program) throw new Error("No program returned");
       setProgram(genData.program);
       setStep("output");
+      trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.PROGRAM_GENERATED, {
+        programName: genData.program.programName,
+        generationMs: Date.now() - genStart,
+      });
     } catch (err: any) {
+      trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.AI_GENERATION_FAILED, {
+        error: err.message ?? "unknown",
+        generationMs: Date.now() - genStart,
+      });
       setGenError(err.message ?? "Something went wrong");
       setStep("onboarding");
       setQuestionIndex(QUESTIONS.length - 1);

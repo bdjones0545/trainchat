@@ -61,12 +61,15 @@ export async function initGuestSession(deviceId: string) {
     return normalizeGuestSession(updated);
   }
 
+  // Assign A/B variant randomly on creation (50/50 split)
+  const abVariant = Math.random() < 0.5 ? "control" : "variant_a";
+
   const [created] = await db
     .insert(guestSessionsTable)
-    .values({ deviceId: sanitizedId })
+    .values({ deviceId: sanitizedId, abVariant })
     .returning();
 
-  logger.info({ deviceId: sanitizedId, id: created.id }, "Guest session created");
+  logger.info({ deviceId: sanitizedId, id: created.id, abVariant }, "Guest session created");
   return normalizeGuestSession(created);
 }
 

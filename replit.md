@@ -32,6 +32,8 @@ Agent-first AI training platform. The AI chat is the entire interface. Users reg
 - `session_feedback` — post-session feedback (difficulty/pain_response/energy_response, 1-5)
 - `user_memories` — long-term coaching memories (type/subject/sentiment/confidence/source/detail)
 - `session_logs` — workout completion log (userId, savedProgramId, dayNumber, sessionType, completedAt, difficultyScore, painScore, energyScore, notes) — Phase 6
+- `analytics_events` — structured funnel event store (event, deviceId, guestSessionId, userId, properties, createdAt) — Phase 4
+- `guest_sessions.abVariant` — A/B variant assignment ("control" | "variant_a", 50/50 random on session creation) — Phase 4
 - `stripe.*` — full Stripe sync schema (27 tables: accounts, customers, products, prices, subscriptions, etc.) managed by stripe-replit-sync
 
 ## Architecture

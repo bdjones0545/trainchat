@@ -37,6 +37,8 @@ export const guestSessionsTable = pgTable("guest_sessions", {
   }),
 
   metadata: jsonb("metadata"),
+
+  abVariant: text("ab_variant").default("control"),
 });
 
 export type GuestSession = typeof guestSessionsTable.$inferSelect;

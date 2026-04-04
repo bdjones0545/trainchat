@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -54,6 +54,13 @@ export default function Register() {
   const search = useSearch();
   const params = new URLSearchParams(search);
   const fromTeaser = params.get("from") === "teaser";
+
+  // Track signup_started when arriving from paywall flow
+  useEffect(() => {
+    if (!fromTeaser) return;
+    const deviceId = (() => { try { return localStorage.getItem(DEVICE_ID_KEY); } catch { return null; } })();
+    if (deviceId) trackGuestEvent(deviceId, GUEST_CONFIG.EVENTS.SIGNUP_STARTED);
+  }, [fromTeaser]);
 
   const [error, setError] = useState<string | null>(null);
   const [converting, setConverting] = useState(false);

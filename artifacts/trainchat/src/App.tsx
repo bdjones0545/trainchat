@@ -8,6 +8,7 @@ import Register from "@/pages/register";
 import Onboarding from "@/pages/onboarding";
 import Chat from "@/pages/chat";
 import GuestStart from "@/pages/guest-start";
+import AdminDashboard from "@/pages/admin";
 import { useGetMe } from "@workspace/api-client-react";
 import { useGuestSession } from "@/hooks/useGuestSession";
 
@@ -57,6 +58,7 @@ function Router() {
       <Route path="/register" component={Register} />
       <Route path="/onboarding" component={Onboarding} />
       <Route path="/chat" component={Chat} />
+      <Route path="/admin" component={AdminDashboard} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -11,6 +11,7 @@ import {
 } from "../lib/guestGenerate";
 import { mergeGuestToUser, TEASER_GENERATE_LIMIT, TEASER_TOTAL_LIMIT } from "../lib/guestMerge";
 import { requireAuth } from "../middlewares/auth";
+import { trackEvent } from "../lib/analyticsService";
 
 const router: IRouter = Router();
 
@@ -327,10 +328,20 @@ router.post("/guest/track", async (req, res): Promise<void> => {
   try {
     const session = await getGuestSession(deviceId);
     if (!session) {
+      // Still write to analytics even if session doesn't exist yet
+      await trackEvent(event, { deviceId, properties: metadata ?? undefined });
       res.json({ ok: true });
       return;
     }
 
+    // Write to structured analytics_events table (primary store)
+    await trackEvent(event, {
+      deviceId,
+      guestSessionId: session.id,
+      properties: metadata ?? undefined,
+    });
+
+    // Also maintain the metadata.funnelEvents array for backward compatibility
     const existingMeta = (session.metadata ?? {}) as Record<string, unknown>;
     const existingEvents = Array.isArray(existingMeta.funnelEvents)
       ? (existingMeta.funnelEvents as unknown[])

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -35,11 +35,28 @@ async function tryConvertGuestSession(deviceId: string): Promise<boolean> {
   }
 }
 
+async function trackGuestEvent(deviceId: string, event: string) {
+  try {
+    await fetch("/api/guest/track", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceId, event }),
+    });
+  } catch { /* silent */ }
+}
+
 export default function Login() {
   const [, setLocation] = useLocation();
   const search = useSearch();
   const params = new URLSearchParams(search);
   const fromTeaser = params.get("from") === "teaser";
+
+  // Track return user signin when arriving from paywall flow
+  useEffect(() => {
+    if (!fromTeaser) return;
+    const deviceId = (() => { try { return localStorage.getItem(DEVICE_ID_KEY); } catch { return null; } })();
+    if (deviceId) trackGuestEvent(deviceId, "user_returned_post_conversion");
+  }, [fromTeaser]);
 
   const [error, setError] = useState<string | null>(null);
   const [converting, setConverting] = useState(false);
