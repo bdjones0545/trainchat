@@ -32,6 +32,13 @@ import {
   GitBranch,
   Milestone,
   AlertCircle,
+  X,
+  ChevronRight,
+  Minus,
+  Plus,
+  Shuffle,
+  TrendingDown,
+  Flame,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useGetMe } from "@workspace/api-client-react";
@@ -69,6 +76,18 @@ async function submitGlobalEdit(request: string) {
     method: "POST",
     body: JSON.stringify({ request }),
   });
+}
+async function submitQuickEdit(
+  request: string,
+  targetContext?: { type: string; id: number; label: string; parentLabel?: string }
+) {
+  return customFetch<EditResult>("/api/training-system/edit", {
+    method: "POST",
+    body: JSON.stringify({ request, targetContext }),
+  });
+}
+async function restoreChange(changeLogId: number) {
+  return customFetch<any>(`/api/training-system/restore/${changeLogId}`, { method: "POST" });
 }
 async function fetchHistory() {
   return customFetch<{ history: any[]; trainingSystemId: number }>("/api/training-system/history");
@@ -122,10 +141,14 @@ interface ExerciseCardProps {
   sessionLabel: string;
   highlightedIds: Set<number>;
   onEdit: (exercise: any, sessionLabel: string) => void;
+  onQuickEditComplete: (result: EditResult) => void;
 }
 
-function ExerciseCard({ exercise, index, sessionLabel, highlightedIds, onEdit }: ExerciseCardProps) {
+function ExerciseCard({ exercise, index, sessionLabel, highlightedIds, onEdit, onQuickEditComplete }: ExerciseCardProps) {
   const highlight = useHighlightClass(exercise.id, highlightedIds);
+  const [showActions, setShowActions] = useState(false);
+  const [activeChip, setActiveChip] = useState<string | null>(null);
+
   const categoryColors: Record<string, string> = {
     warmup: "bg-blue-500/10 text-blue-400 border-blue-500/20",
     primary: "bg-orange-500/10 text-orange-400 border-orange-500/20",
@@ -142,63 +165,127 @@ function ExerciseCard({ exercise, index, sessionLabel, highlightedIds, onEdit }:
   };
   const colorClass = categoryColors[exercise.category] ?? categoryColors.primary;
 
+  const quickMutation = useMutation({
+    mutationFn: ({ req, chip }: { req: string; chip: string }) => {
+      setActiveChip(chip);
+      return submitQuickEdit(req, { type: "exercise", id: exercise.id, label: exercise.name, parentLabel: sessionLabel });
+    },
+    onSuccess: (data) => {
+      setActiveChip(null);
+      setShowActions(false);
+      onQuickEditComplete(data);
+    },
+    onError: () => setActiveChip(null),
+  });
+
+  const QUICK_ACTIONS = [
+    { label: "+Set", icon: Plus, req: `Add one set to ${exercise.name}` },
+    { label: "-Set", icon: Minus, req: `Remove one set from ${exercise.name}` },
+    { label: "Swap", icon: Shuffle, req: `Swap ${exercise.name} for a suitable alternative in ${sessionLabel}` },
+    { label: "Easier", icon: TrendingDown, req: `Make ${exercise.name} an easier variation` },
+    { label: "Harder", icon: Flame, req: `Make ${exercise.name} a harder variation` },
+  ];
+
   return (
     <div
-      className={`group flex items-start gap-4 py-4 border-b border-border last:border-0 rounded-lg transition-all duration-500 ${highlight}`}
+      className={`py-4 border-b border-border last:border-0 rounded-lg transition-all duration-500 ${highlight}`}
     >
-      <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground flex-shrink-0 mt-0.5">
-        {index + 1}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap mb-1.5">
-          <span className="font-semibold text-sm text-foreground">{exercise.name}</span>
-          <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border ${colorClass}`}>
-            {categoryLabel[exercise.category] ?? exercise.category}
-          </span>
-          {highlightedIds.has(exercise.id) && (
-            <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20 flex-shrink-0 animate-pulse">
-              Updated
-            </span>
+      <div className="flex items-start gap-4">
+        <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground flex-shrink-0 mt-0.5">
+          {index + 1}
+        </div>
+        <div className="flex-1 min-w-0">
+          <button
+            onClick={() => setShowActions((v) => !v)}
+            className="w-full text-left"
+          >
+            <div className="flex items-center gap-2 flex-wrap mb-1.5">
+              <span className="font-semibold text-sm text-foreground">{exercise.name}</span>
+              <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border ${colorClass}`}>
+                {categoryLabel[exercise.category] ?? exercise.category}
+              </span>
+              {highlightedIds.has(exercise.id) && (
+                <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20 flex-shrink-0 animate-pulse">
+                  Updated
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-4 flex-wrap">
+              {exercise.sets && (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-muted-foreground">Sets</span>
+                  <span className="text-xs font-bold text-foreground">{exercise.sets}</span>
+                </div>
+              )}
+              {exercise.reps && (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-muted-foreground">Reps</span>
+                  <span className="text-xs font-bold text-foreground">{exercise.reps}</span>
+                </div>
+              )}
+              {exercise.rest && (
+                <div className="flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-muted-foreground" />
+                  <span className="text-xs font-bold text-foreground">{exercise.rest}</span>
+                </div>
+              )}
+              {exercise.tempo && (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-muted-foreground">Tempo</span>
+                  <span className="text-xs font-bold text-foreground">{exercise.tempo}</span>
+                </div>
+              )}
+            </div>
+            {exercise.notes && (
+              <p className="text-xs text-muted-foreground mt-1.5 italic leading-relaxed">{exercise.notes}</p>
+            )}
+          </button>
+
+          {/* Inline quick actions — revealed on tap */}
+          {showActions && (
+            <div className="flex items-center gap-1.5 flex-wrap mt-2.5 pt-2 border-t border-border/50">
+              {QUICK_ACTIONS.map(({ label, icon: Icon, req }) => (
+                <button
+                  key={label}
+                  onClick={() => quickMutation.mutate({ req, chip: label })}
+                  disabled={quickMutation.isPending}
+                  className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border transition-all duration-150 ${
+                    activeChip === label
+                      ? "bg-primary/15 border-primary/40 text-primary"
+                      : "bg-muted/50 border-border text-muted-foreground hover:bg-primary/8 hover:border-primary/30 hover:text-foreground"
+                  } disabled:opacity-50`}
+                >
+                  {activeChip === label
+                    ? <RotateCcw className="w-3 h-3 animate-spin" />
+                    : <Icon className="w-3 h-3" />
+                  }
+                  {label}
+                </button>
+              ))}
+              <button
+                onClick={() => { setShowActions(false); onEdit(exercise, sessionLabel); }}
+                className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border border-border bg-muted/30 text-muted-foreground/70 hover:text-foreground transition-all"
+              >
+                <PenLine className="w-3 h-3" />
+                Full edit
+              </button>
+            </div>
           )}
         </div>
-        <div className="flex items-center gap-4 flex-wrap">
-          {exercise.sets && (
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-muted-foreground">Sets</span>
-              <span className="text-xs font-bold text-foreground">{exercise.sets}</span>
-            </div>
-          )}
-          {exercise.reps && (
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-muted-foreground">Reps</span>
-              <span className="text-xs font-bold text-foreground">{exercise.reps}</span>
-            </div>
-          )}
-          {exercise.rest && (
-            <div className="flex items-center gap-1">
-              <Clock className="w-3 h-3 text-muted-foreground" />
-              <span className="text-xs font-bold text-foreground">{exercise.rest}</span>
-            </div>
-          )}
-          {exercise.tempo && (
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-muted-foreground">Tempo</span>
-              <span className="text-xs font-bold text-foreground">{exercise.tempo}</span>
-            </div>
-          )}
-        </div>
-        {exercise.notes && (
-          <p className="text-xs text-muted-foreground mt-1.5 italic leading-relaxed">{exercise.notes}</p>
-        )}
+
+        {/* Expand/collapse toggle */}
+        <button
+          onClick={() => setShowActions((v) => !v)}
+          className={`flex-shrink-0 w-7 h-7 rounded-lg border flex items-center justify-center transition-all duration-150 mt-0.5 ${
+            showActions
+              ? "bg-primary/10 border-primary/30 text-primary"
+              : "bg-muted/40 border-border text-muted-foreground/60 hover:bg-muted/70 hover:text-muted-foreground"
+          }`}
+          title={showActions ? "Close actions" : `Quick actions for ${exercise.name}`}
+        >
+          {showActions ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+        </button>
       </div>
-      {/* Edit button */}
-      <button
-        onClick={() => onEdit(exercise, sessionLabel)}
-        className="opacity-0 group-hover:opacity-100 focus:opacity-100 flex-shrink-0 w-8 h-8 rounded-lg bg-muted/60 border border-border flex items-center justify-center hover:bg-primary/10 hover:border-primary/30 hover:text-primary text-muted-foreground transition-all duration-150 mt-0.5"
-        title={`Edit ${exercise.name} with AI`}
-      >
-        <PenLine className="w-3.5 h-3.5" />
-      </button>
     </div>
   );
 }
@@ -209,9 +296,10 @@ interface TodayViewProps {
   highlightedIds: HighlightedIds;
   onEditExercise: (exercise: any, sessionLabel: string) => void;
   onEditSession: (session: any, weekLabel?: string) => void;
+  onQuickEditComplete: (result: EditResult) => void;
 }
 
-function TodayView({ highlightedIds, onEditExercise, onEditSession }: TodayViewProps) {
+function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditComplete }: TodayViewProps) {
   const { data: today, isLoading, error } = useQuery({
     queryKey: ["training-system-today"],
     queryFn: fetchToday,
@@ -297,7 +385,7 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession }: TodayViewP
         <div className="rounded-xl bg-card border border-border overflow-hidden">
           <div className="px-5 py-3.5 border-b border-border bg-muted/30 flex items-center justify-between">
             <h3 className="text-sm font-bold text-foreground">Exercise Plan</h3>
-            <span className="text-xs text-muted-foreground">Tap pencil to edit any exercise</span>
+            <span className="text-xs text-muted-foreground">Tap any exercise for quick actions</span>
           </div>
           <div className="px-5">
             {today.exercises.map((exercise: any, index: number) => (
@@ -308,6 +396,7 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession }: TodayViewP
                 sessionLabel={today.label}
                 highlightedIds={highlightedIds.exercises}
                 onEdit={onEditExercise}
+                onQuickEditComplete={onQuickEditComplete}
               />
             ))}
           </div>
@@ -712,150 +801,190 @@ function RecentEditsBar({ edits }: { edits: EditRecord[] }) {
   );
 }
 
-// ─── Change Summary Banner ────────────────────────────────────────────────────
+// ─── VibeBar — Phase C: Fast Iteration Loop ───────────────────────────────────
 
-interface ChangeSummaryBannerProps {
-  result: { changeSummary: string; scope: string; appliedCount: number };
-  onDismiss: () => void;
-}
+type VibeState = "idle" | "submitting" | "result";
 
-function ChangeSummaryBanner({ result, onDismiss }: ChangeSummaryBannerProps) {
-  useEffect(() => {
-    const timer = setTimeout(onDismiss, 10000);
-    return () => clearTimeout(timer);
-  }, [onDismiss]);
-
-  const scopeLabel: Record<string, string> = {
-    exercise: "Exercise", session: "Session", week: "This Week", block: "Block", system: "Program",
-  };
-
-  return (
-    <div className="flex-shrink-0 border-b border-green-500/20 bg-green-500/5 px-4 py-3">
-      <div className="max-w-2xl mx-auto">
-        <div className="flex items-start gap-3">
-          <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1 flex-wrap">
-              <span className="text-xs font-bold text-green-400 uppercase tracking-wider">System Updated</span>
-              <span className="text-[10px] font-semibold text-green-400/70 bg-green-400/10 px-2 py-0.5 rounded-full border border-green-400/20">
-                {scopeLabel[result.scope] ?? result.scope}
-              </span>
-              {result.appliedCount > 0 && (
-                <span className="text-[10px] text-green-400/60">{result.appliedCount} change{result.appliedCount !== 1 ? "s" : ""} applied</span>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">{result.changeSummary}</p>
-          </div>
-          <button onClick={onDismiss} className="text-muted-foreground/40 hover:text-muted-foreground text-xs flex-shrink-0 ml-1">✕</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Global Edit Panel ────────────────────────────────────────────────────────
-
-const GLOBAL_SUGGESTIONS = [
-  "Reduce volume this week — I'm beat up",
-  "Swap barbell bench for dumbbell bench",
-  "Make today a recovery day",
-  "I only have dumbbells this week",
-  "Make this block more explosive",
-  "Lower the intensity overall",
+const VIBE_CHIPS = [
+  { label: "More intense", req: "Increase the overall intensity for this session" },
+  { label: "Less volume", req: "Reduce the total volume this week" },
+  { label: "Rest day", req: "Convert today into a full recovery day" },
+  { label: "Shorter session", req: "Shorten today's session — I'm pressed for time" },
+  { label: "Travel mode", req: "I only have dumbbells — adapt accordingly" },
+  { label: "More explosive", req: "Add explosive emphasis to today's training" },
 ];
 
-interface GlobalEditPanelProps {
-  onEditComplete: (result: EditResult) => void;
+interface VibeMutation {
+  req: string;
+  kind?: "chip" | "typed" | "refine";
 }
 
-function GlobalEditPanel({ onEditComplete }: GlobalEditPanelProps) {
+interface VibeBarProps {
+  onEditComplete: (result: EditResult) => void;
+  onUndone?: (changedIds: any) => void;
+}
+
+function VibeBar({ onEditComplete, onUndone }: VibeBarProps) {
   const [input, setInput] = useState("");
-  const [isExpanded, setIsExpanded] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [vibeState, setVibeState] = useState<VibeState>("idle");
+  const [lastResult, setLastResult] = useState<EditResult | null>(null);
+  const [submitError, setSubmitError] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const editMutation = useMutation({
-    mutationFn: (req: string) => submitGlobalEdit(req),
+    mutationFn: ({ req }: VibeMutation) => submitGlobalEdit(req),
     onSuccess: (data) => {
+      setLastResult(data);
+      setVibeState("result");
+      setSubmitError(false);
       onEditComplete(data);
-      setInput("");
-      setIsExpanded(false);
+    },
+    onError: () => {
+      setVibeState("idle");
+      setSubmitError(true);
     },
   });
 
+  const undoMutation = useMutation({
+    mutationFn: (changeLogId: number) => restoreChange(changeLogId),
+    onSuccess: (data) => {
+      setVibeState("idle");
+      setLastResult(null);
+      onUndone?.(data.changedIds ?? { exercises: [], sessions: [], weeks: [], phases: [] });
+    },
+    onError: () => setVibeState("result"),
+  });
+
+  function fire(req: string) {
+    if (editMutation.isPending || undoMutation.isPending) return;
+    setInput("");
+    setSubmitError(false);
+    setVibeState("submitting");
+    editMutation.mutate({ req });
+  }
+
   function handleSubmit() {
     const trimmed = input.trim();
-    if (!trimmed || editMutation.isPending) return;
-    editMutation.mutate(trimmed);
+    if (!trimmed) return;
+    fire(trimmed);
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); }
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") handleSubmit();
   }
+
+  function handleInputChange(val: string) {
+    setInput(val);
+    // Typing resets result state so they can immediately iterate
+    if (vibeState === "result") setVibeState("idle");
+    setSubmitError(false);
+  }
+
+  const isWorking = vibeState === "submitting" || undoMutation.isPending;
+  const firstSentence = lastResult
+    ? lastResult.changeSummary.split(/\.\s/)[0].trim().replace(/\.$/, "")
+    : "";
 
   return (
-    <div className="border-t border-border bg-background/95 backdrop-blur-sm flex-shrink-0">
-      <div className="max-w-2xl mx-auto px-4 py-3">
-        <button
-          onClick={() => { setIsExpanded(!isExpanded); setTimeout(() => textareaRef.current?.focus(), 100); }}
-          className="flex items-center gap-2 w-full text-left mb-2"
-        >
-          <div className="w-6 h-6 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
-            <Sparkles className="w-3.5 h-3.5 text-primary" />
-          </div>
-          <span className="text-xs font-semibold text-muted-foreground flex-1">
-            Ask your coach to edit your system
-          </span>
-          {isExpanded
-            ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
-            : <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
-          }
-        </button>
+    <div className="border-t border-border bg-background/98 backdrop-blur-sm flex-shrink-0">
+      <div className="max-w-2xl mx-auto px-4 pt-2.5 pb-3 space-y-2">
 
-        {isExpanded && (
-          <div className="space-y-3">
-            <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
-              {GLOBAL_SUGGESTIONS.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => { setInput(s); setTimeout(() => textareaRef.current?.focus(), 50); }}
-                  className="flex-shrink-0 text-xs bg-muted/60 text-muted-foreground border border-border rounded-lg px-3 py-1.5 hover:text-foreground hover:border-primary/40 transition-all duration-150"
-                >
-                  {s}
-                </button>
-              ))}
+        {/* Quick-fire chips */}
+        <div className="flex gap-2 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+          {VIBE_CHIPS.map(({ label, req }) => (
+            <button
+              key={label}
+              onClick={() => fire(req)}
+              disabled={isWorking}
+              className="flex-shrink-0 text-[11px] font-semibold bg-muted/50 text-muted-foreground border border-border rounded-full px-3 py-1 hover:text-foreground hover:border-primary/40 hover:bg-primary/5 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Input row — idle / submitting */}
+        {vibeState !== "result" && (
+          <div className="flex items-center gap-2.5 rounded-xl bg-muted/30 border border-border px-3.5 py-2.5 focus-within:border-primary/40 focus-within:bg-muted/50 transition-all duration-150">
+            <div className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
+              {isWorking
+                ? <RotateCcw className="w-3.5 h-3.5 text-primary animate-spin" />
+                : <Sparkles className="w-3.5 h-3.5 text-primary/70" />
+              }
             </div>
-            <div className="flex gap-2">
-              <textarea
-                ref={textareaRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder='e.g. "Swap barbell bench for dumbbell bench" or "Reduce volume this week"'
-                rows={2}
-                disabled={editMutation.isPending}
-                className="flex-1 bg-muted/40 border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 resize-none focus:outline-none focus:border-primary/50 focus:bg-muted/60 transition-all duration-150 disabled:opacity-50"
-              />
-              <button
-                onClick={handleSubmit}
-                disabled={!input.trim() || editMutation.isPending}
-                className="w-11 h-11 rounded-xl bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 hover:bg-primary/90 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed self-end"
-              >
-                {editMutation.isPending ? <RotateCcw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              </button>
-            </div>
-            {editMutation.isError && <p className="text-xs text-red-400">Something went wrong. Please try again.</p>}
+            <input
+              ref={inputRef}
+              value={input}
+              onChange={(e) => handleInputChange(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={isWorking ? "Applying…" : 'Quick command… e.g. "swap bench" or "more sets"'}
+              disabled={isWorking}
+              className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/50 outline-none disabled:opacity-60 min-w-0"
+            />
+            <button
+              onClick={handleSubmit}
+              disabled={!input.trim() || isWorking}
+              className="flex-shrink-0 w-7 h-7 rounded-lg bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <Send className="w-3 h-3" />
+            </button>
           </div>
         )}
 
-        {!isExpanded && (
-          <div className="flex items-center gap-2 cursor-text" onClick={() => setIsExpanded(true)}>
-            <div className="flex-1 bg-muted/30 border border-border rounded-xl px-4 py-2.5 text-xs text-muted-foreground/50">
-              e.g. "Reduce volume this week" or "Swap bench for dumbbells"…
-            </div>
-            <div className="w-9 h-9 rounded-xl bg-muted/40 border border-border flex items-center justify-center flex-shrink-0">
-              <Send className="w-3.5 h-3.5 text-muted-foreground/50" />
+        {/* Result rail — inline after edit */}
+        {vibeState === "result" && lastResult && (
+          <div className="flex items-center gap-2 rounded-xl bg-green-500/5 border border-green-500/20 px-3.5 py-2.5">
+            <CheckCircle2 className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
+            <p className="text-xs text-foreground/80 flex-1 truncate min-w-0">
+              {firstSentence || lastResult.changeSummary}
+            </p>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {/* Refinement chips */}
+              <button
+                onClick={() => fire("That was too much — pull it back a little")}
+                disabled={isWorking}
+                className="text-[11px] font-medium text-muted-foreground border border-border rounded-full px-2.5 py-0.5 hover:bg-muted/60 hover:text-foreground transition-colors disabled:opacity-40"
+              >
+                Too much
+              </button>
+              <button
+                onClick={() => fire("Good direction — push it a bit further")}
+                disabled={isWorking}
+                className="text-[11px] font-medium text-muted-foreground border border-border rounded-full px-2.5 py-0.5 hover:bg-muted/60 hover:text-foreground transition-colors disabled:opacity-40"
+              >
+                More
+              </button>
+              {lastResult.changeLogId && (
+                <button
+                  onClick={() => {
+                    setVibeState("submitting");
+                    undoMutation.mutate(lastResult.changeLogId!);
+                  }}
+                  disabled={isWorking}
+                  className="text-[11px] font-medium text-muted-foreground border border-border rounded-full px-2.5 py-0.5 hover:bg-muted/60 hover:text-foreground transition-colors disabled:opacity-40"
+                >
+                  {undoMutation.isPending ? <RotateCcw className="w-3 h-3 animate-spin inline" /> : "Undo"}
+                </button>
+              )}
+              {/* Type to refine (reset to idle) */}
+              <button
+                onClick={() => { setVibeState("idle"); setTimeout(() => inputRef.current?.focus(), 50); }}
+                className="text-[11px] font-semibold text-primary border border-primary/30 bg-primary/5 rounded-full px-2.5 py-0.5 hover:bg-primary/10 transition-colors"
+              >
+                Refine ↩
+              </button>
+              <button
+                onClick={() => { setVibeState("idle"); setLastResult(null); }}
+                className="w-5 h-5 flex items-center justify-center text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+              >
+                <X className="w-3 h-3" />
+              </button>
             </div>
           </div>
+        )}
+
+        {submitError && (
+          <p className="text-[11px] text-red-400 pl-1">Something went wrong — try again.</p>
         )}
       </div>
     </div>
@@ -1110,7 +1239,6 @@ export default function SystemPage() {
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const [editPrefill, setEditPrefill] = useState<string | undefined>(undefined);
   const [recentEdits, setRecentEdits] = useState<EditRecord[]>([]);
-  const [lastEditResult, setLastEditResult] = useState<{ changeSummary: string; scope: string; appliedCount: number } | null>(null);
   const [highlightedIds, setHighlightedIds] = useState<HighlightedIds>({
     exercises: new Set(),
     sessions: new Set(),
@@ -1195,14 +1323,7 @@ export default function SystemPage() {
     };
     setRecentEdits((prev) => [record, ...prev].slice(0, 8));
 
-    // 2. Set change summary banner
-    setLastEditResult({
-      changeSummary: result.changeSummary,
-      scope: result.scope,
-      appliedCount: result.appliedCount,
-    });
-
-    // 3. Apply highlights for changed entities
+    // 2. Apply highlights for changed entities
     const ids = result.changedIds ?? { exercises: [], sessions: [], weeks: [], phases: [] };
     setHighlightedIds({
       exercises: new Set(ids.exercises),
@@ -1211,19 +1332,18 @@ export default function SystemPage() {
       phases: new Set(ids.phases),
     });
 
-    // 4. Clear highlights after 5 seconds
+    // 3. Clear highlights after 8 seconds
     setTimeout(() => {
       setHighlightedIds({ exercises: new Set(), sessions: new Set(), weeks: new Set(), phases: new Set() });
-    }, 5000);
+    }, 8000);
 
-    // 5. Refresh data
+    // 4. Refresh data
     queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
     queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
     queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
-    // Phase 4: also refresh history so the new entry appears
     queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
 
-    // 6. Switch to most relevant tab
+    // 5. Switch to most relevant tab
     const scope = result.scope;
     if (scope === "exercise" || scope === "session") setActiveTab("today");
     else if (scope === "week") setActiveTab("week");
@@ -1235,9 +1355,8 @@ export default function SystemPage() {
     handleEditComplete(result);
   }
 
-  // ── Phase 4: restore completion (from ChangeDetailDrawer) ──
+  // ── Phase 4: restore completion (from ChangeDetailDrawer or VibeBar undo) ──
   function handleRestored(changedIds: any) {
-    // Apply highlights for restored entities
     const ids = changedIds ?? { exercises: [], sessions: [], weeks: [], phases: [] };
     setHighlightedIds({
       exercises: new Set(ids.exercises),
@@ -1247,16 +1366,11 @@ export default function SystemPage() {
     });
     setTimeout(() => {
       setHighlightedIds({ exercises: new Set(), sessions: new Set(), weeks: new Set(), phases: new Set() });
-    }, 5000);
+    }, 8000);
     queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
     queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
     queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
     queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
-    setLastEditResult({
-      changeSummary: "Prior state restored successfully.",
-      scope: "system",
-      appliedCount: ids.exercises.length + ids.sessions.length + ids.weeks.length + ids.phases.length,
-    });
   }
 
   // ── Phase 5: insight apply completion ──
@@ -1270,12 +1384,7 @@ export default function SystemPage() {
     });
     setTimeout(() => {
       setHighlightedIds({ exercises: new Set(), sessions: new Set(), weeks: new Set(), phases: new Set() });
-    }, 5000);
-    setLastEditResult({
-      changeSummary: result.changeSummary,
-      scope: result.scope,
-      appliedCount: result.appliedCount,
-    });
+    }, 8000);
     setRecentEdits((prev) => [
       {
         id: `insight-${Date.now()}`,
@@ -1319,14 +1428,6 @@ export default function SystemPage() {
           </p>
         </div>
       </div>
-
-      {/* Change summary banner */}
-      {lastEditResult && (
-        <ChangeSummaryBanner
-          result={lastEditResult}
-          onDismiss={() => setLastEditResult(null)}
-        />
-      )}
 
       {/* Tabs */}
       {hasSystem && (
@@ -1415,6 +1516,7 @@ export default function SystemPage() {
                     highlightedIds={highlightedIds}
                     onEditExercise={openExerciseEdit}
                     onEditSession={openSessionEdit}
+                    onQuickEditComplete={handleEditComplete}
                   />
 
                   {/* Phase 5: Log session button */}
@@ -1458,9 +1560,12 @@ export default function SystemPage() {
         </div>
       </div>
 
-      {/* Global edit panel — hidden on History tab (read-only view) */}
+      {/* VibeBar — Phase C: always-on fast iteration panel */}
       {hasSystem && activeTab !== "history" && (
-        <GlobalEditPanel onEditComplete={handleGlobalEditComplete} />
+        <VibeBar
+          onEditComplete={handleGlobalEditComplete}
+          onUndone={handleRestored}
+        />
       )}
 
       {/* Contextual edit drawer */}

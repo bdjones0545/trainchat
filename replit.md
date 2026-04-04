@@ -47,6 +47,14 @@ The UI features a dark theme with electric blue (HSL(199 89% 48%)) as the primar
   - **Decision Memory in Edit Engine**: `interpretEditRequest` now accepts `decisionMemoryContext` and injects it into the GPT-4o system prompt, enabling the `changeSummary` to reference past decisions naturally.
   - **UI Memory Surfaces**: EditDrawer's directions phase renders a memory callout (subtle clock icon, italic) when past decisions are relevant, and a continuity prompt (chat bubble icon) at the bottom as a coach check-in question.
 
+- **Phase C — Fast Iteration Loop (Vibe Coding Flow)**:
+  - **VibeBar** (`system.tsx`): Replaces the collapsed GlobalEditPanel with an always-visible, always-expanded command strip at the bottom of the system page. Three-state machine: `idle → submitting → result`. Idle shows a single-line input + quick-fire chips. Submitting shows a spinner. Result shows the first sentence of the changeSummary with inline refinement chips ("Too much", "More", "Undo", "Refine ↩"). Clicking any refinement chip immediately submits a follow-up edit. "Refine ↩" resets to idle and focuses the input. "Undo" calls the restore API with the `changeLogId` from the last edit result.
+  - **Quick-Fire Chips** (VibeBar): Six predefined one-tap commands — "More intense", "Less volume", "Rest day", "Shorter session", "Travel mode", "More explosive" — each wired directly to a full edit request. No drawer, no confirmation. Executes instantly.
+  - **Exercise Inline Quick Actions** (`ExerciseCard`): Each exercise card now expands on tap to reveal five action chips: `+Set`, `-Set`, `Swap`, `Easier`, `Harder`. Each chip calls the edit API directly with a targeted request and shows a loading spinner on the active chip. Collapses on completion, highlights the exercise in-place. "Full edit" chip opens the standard EditDrawer for complex requests.
+  - **Highlight duration extended** from 5s to 8s to give more time to see what changed.
+  - **`changeLogId` added to `EditResult`** type — the backend already returned it, now the frontend uses it for one-click undo in the VibeBar.
+  - **`submitQuickEdit` + `restoreChange`** API helpers added to system.tsx for direct exercise quick actions and undo support.
+
 ### System Design Choices
 - **Database Schema**: Includes comprehensive tables for users, profiles, conversations, messages, saved programs, readiness entries, session feedback, user memories, session logs, analytics, and Stripe-related data.
 - **Auth**: Session-based authentication using `express-session`.

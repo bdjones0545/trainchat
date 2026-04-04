@@ -57,6 +57,7 @@ export interface EditResult {
   skippedCount: number;
   changedIds: ChangedIds;
   updatedData: { today: any; week: any; block: any };
+  changeLogId?: number;
 }
 
 export interface DirectionOption {
