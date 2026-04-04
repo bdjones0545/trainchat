@@ -276,6 +276,31 @@ export interface SessionFeedback {
   createdAt: string;
 }
 
+export interface UserMemory {
+  id: number;
+  userId: number;
+  type: string;
+  subject: string;
+  sentiment: string;
+  confidence: number;
+  source: string;
+  detail: string;
+  updatedAt: string;
+  createdAt: string;
+}
+
+export interface MemorySyncResponse {
+  synced: number;
+}
+
+export interface TrainingInsight {
+  type: string;
+  title: string;
+  body: string;
+  priority: number;
+  triggerSource: string;
+}
+
 export type ListReadinessParams = {
   limit?: number;
 };

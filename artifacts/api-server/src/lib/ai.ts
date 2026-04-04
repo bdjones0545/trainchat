@@ -223,7 +223,9 @@ export async function generateAIResponse(
   userMessage: string,
   history: ChatMessage[],
   userId: number,
-  adaptationContext?: string
+  adaptationContext?: string,
+  memoryContext?: string,
+  insightHint?: string
 ): Promise<AIResponse> {
   const [profile] = await db
     .select()
@@ -231,9 +233,8 @@ export async function generateAIResponse(
     .where(eq(userProfilesTable.userId, userId));
 
   const basePrompt = buildSystemPrompt(profile ?? null);
-  const systemPrompt = adaptationContext
-    ? `${basePrompt}\n\n${adaptationContext}`
-    : basePrompt;
+  const extras = [adaptationContext, memoryContext, insightHint].filter(Boolean).join("\n\n");
+  const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;
   const apiKey = process.env.OPENAI_API_KEY;
 
   if (!apiKey) {

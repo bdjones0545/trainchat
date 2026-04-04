@@ -6,6 +6,8 @@ import conversationsRouter from "./conversations";
 import programsRouter from "./programs";
 import readinessRouter from "./readiness";
 import sessionFeedbackRouter from "./session-feedback";
+import memoriesRouter from "./memories";
+import insightsRouter from "./insights";
 
 const router: IRouter = Router();
 
@@ -16,5 +18,7 @@ router.use(conversationsRouter);
 router.use(programsRouter);
 router.use(readinessRouter);
 router.use(sessionFeedbackRouter);
+router.use(memoriesRouter);
+router.use(insightsRouter);
 
 export default router;

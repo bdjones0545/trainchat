@@ -1,0 +1,354 @@
+Phase 5: Build the TrainChat Long-Term Memory, Insights, and Performance OS Layer
+
+We already have:
+- agent-first architecture
+- onboarding personalization
+- co-creation chat behavior
+- structured program generation
+- save/edit flow
+- training intelligence rules
+- readiness check-ins
+- post-session feedback
+- adaptive session adjustments
+- lightweight continuity across recent sessions
+
+Now build the premium long-term intelligence layer that makes TrainChat feel like a true AI performance operating system.
+
+IMPORTANT:
+This phase is about creating persistent memory, long-term program evolution, proactive insights, and wearable-ready intelligence.
+
+The goal is for users to feel that the TrainChat agent:
+- knows their history
+- understands their tendencies
+- notices patterns
+- evolves their training over time
+- proactively helps them improve
+
+==================================================
+CORE OBJECTIVE
+==================================================
+
+TrainChat should now behave like a persistent, evolving intelligence system rather than a single-session agent.
+
+The system should:
+- remember important user preferences and patterns over time
+- maintain continuity across weeks
+- evolve training blocks intelligently
+- surface useful insights from recent data
+- support future wearable integrations cleanly
+- proactively guide the user when beneficial
+
+This should feel premium, intelligent, and difficult to replicate.
+
+==================================================
+1. LONG-TERM USER MEMORY SYSTEM
+==================================================
+
+Build a structured long-term memory layer for the agent.
+
+This memory should store important durable training-relevant information such as:
+- preferred training style
+- preferred session length
+- exercises the user consistently likes
+- exercises the user consistently dislikes
+- recurring pain/irritation patterns
+- common schedule constraints
+- preferred split tendencies
+- response patterns to volume/intensity
+- sport/performance focus
+- consistency patterns
+
+Do NOT store irrelevant clutter.
+Memory should be selective, high-value, and training-relevant.
+
+Create schema and service logic for:
+- memory entries
+- memory type/category
+- importance or confidence
+- source (onboarding, chat inference, readiness, feedback)
+- timestamps
+- ability to update or overwrite stale memory
+
+==================================================
+2. MEMORY EXTRACTION / MEMORY UPDATE LOGIC
+==================================================
+
+Build logic that determines when something should become long-term memory.
+
+Examples of what SHOULD be remembered:
+- user repeatedly prefers shorter sessions
+- user repeatedly reports shoulder irritation with pressing
+- user strongly prefers dumbbells over barbell lifts
+- user repeatedly asks for more athletic programming
+- user consistently tolerates higher volume well
+
+Examples of what should NOT be remembered:
+- one-off temporary comments unless highly important
+- trivial short-lived details
+- random conversational filler
+
+Implement clean logic so important patterns can be promoted into long-term memory over time.
+
+==================================================
+3. MEMORY CONTEXT INJECTION
+==================================================
+
+Improve the AI context builder so the agent can use:
+- onboarding profile
+- current conversation history
+- recent readiness/feedback
+- long-term memory summaries
+
+The agent should naturally reference long-term memory when useful.
+
+Examples:
+- “You usually prefer shorter sessions, so I kept this efficient.”
+- “You’ve repeatedly tolerated upper body volume well, so I progressed it.”
+- “You’ve reported knee irritation before, so I avoided aggressive knee-dominant loading.”
+
+This should feel seamless and premium, not repetitive.
+
+==================================================
+4. LONG-TERM PROGRAM EVOLUTION
+==================================================
+
+Build the first version of week-to-week / block-to-block program evolution.
+
+The system should now be able to:
+- evolve a saved program across weeks
+- preserve continuity across training blocks
+- progress when tolerance and readiness support it
+- reduce load/density when feedback suggests it
+- rotate or substitute exercises when trends suggest it
+- avoid feeling like every week is a random reset
+
+Examples:
+- week 2 progresses from week 1
+- block 2 changes emphasis intentionally
+- exercise selection rotates when needed without losing structure
+- volume/intensity changes are purposeful
+
+Prepare data structures for:
+- program versions
+- week numbers
+- block labels/phases
+- progression notes over time
+
+==================================================
+5. PROACTIVE AGENT SUGGESTIONS
+==================================================
+
+This is a premium differentiator.
+
+Build logic so the agent can proactively surface useful suggestions based on recent data.
+
+Examples:
+- suggest a lighter session after several poor readiness entries
+- suggest progression after repeated strong tolerance
+- suggest replacing a recurring aggravating movement
+- suggest adjusting split if adherence is poor
+- suggest shorter sessions if completion patterns are weak
+
+The agent should NOT become spammy or annoying.
+Suggestions should be intelligent, occasional, and valuable.
+
+Design this so proactive suggestions can appear:
+- in chat
+- in subtle cards near the chat
+- when opening the app
+- after feedback patterns are detected
+
+==================================================
+6. INSIGHTS / ANALYTICS LAYER
+==================================================
+
+Build a premium lightweight insights layer around the agent.
+
+Focus on useful, coach-like insights rather than generic dashboards.
+
+Examples of insight categories:
+- consistency trends
+- readiness trends
+- pain trend summaries
+- session completion trends
+- exercise tolerance patterns
+- progression trend summaries
+- recovery quality patterns
+
+Create a clean UI that can display:
+- recent trends
+- summary insights
+- simple visual indicators
+- premium concise explanations
+
+Do NOT let analytics overpower the agent-first experience.
+These insights should support the agent, not compete with it.
+
+==================================================
+7. PERFORMANCE OS HOME EXPERIENCE
+==================================================
+
+Enhance the post-login experience while keeping it agent-centered.
+
+The app should still open into the agent environment, but it can now include premium surrounding intelligence such as:
+- current focus / active program state
+- recent readiness summary
+- latest agent insight
+- suggested next action
+- current week/block status
+- subtle proactive guidance
+
+This should still feel like the agent is the operating system of the platform.
+
+Do NOT revert into a traditional dashboard of disconnected widgets.
+
+==================================================
+8. WEARABLE INTEGRATION FOUNDATION
+==================================================
+
+Now strengthen the architecture for future wearable data integration.
+
+Prepare clean service interfaces and data structures for:
+- sleep data
+- HRV
+- resting heart rate
+- daily activity / steps
+- training load
+- recovery metrics
+- body weight / body composition trends if relevant
+
+If feasible, scaffold mock data ingestion and placeholder UI states.
+
+Do NOT overbuild actual third-party integrations yet unless clean and easy.
+The main goal is to make the system wearable-ready.
+
+==================================================
+9. ADHERENCE / CONSISTENCY INTELLIGENCE
+==================================================
+
+Build logic that tracks whether the user is actually following the plan.
+
+Examples:
+- skipped sessions
+- repeated schedule mismatch
+- incomplete workouts
+- strong adherence streaks
+
+The agent should use this intelligently.
+
+Examples:
+- if adherence is low, simplify structure
+- if adherence is strong, progress more confidently
+- if the user keeps missing long sessions, recommend a more realistic format
+
+This is critical for premium personalization.
+
+==================================================
+10. RECURRING PAIN / TOLERANCE PATTERN INTELLIGENCE
+==================================================
+
+Strengthen trend intelligence around pain and tolerance.
+
+The system should be able to recognize:
+- recurring issues with certain movement patterns
+- improved tolerance over time
+- repeated negative responses to certain exercises or session types
+- which programming styles seem to work best for the user
+
+This should feed into:
+- memory
+- future exercise selection
+- proactive suggestions
+- progression decisions
+
+Again, keep this coaching-focused, not medical.
+
+==================================================
+11. AGENT EXPLANATION / TRUST LAYER
+==================================================
+
+Improve the premium feel by making the agent able to explain long-term changes briefly and intelligently.
+
+Examples:
+- “You’ve handled the last two weeks well, so I progressed your lower body work slightly.”
+- “You’ve had repeated low recovery inputs, so I’m keeping this week tighter.”
+- “You consistently finish shorter sessions, so I streamlined the structure.”
+
+Explanations should be brief, sharp, and confidence-building.
+
+==================================================
+12. BACKEND / ARCHITECTURE REQUIREMENTS
+==================================================
+
+Implement this cleanly with:
+- long-term memory service
+- memory extraction/update logic
+- trend summarization service
+- program evolution/versioning logic
+- insight generation layer
+- wearable-ready service interfaces
+- adherence tracking logic
+
+Maintain clean separation between:
+- AI behavior/prompting
+- long-term memory
+- readiness/recovery data
+- training logic
+- persistence
+- insight generation
+
+This must remain scalable and production-minded.
+
+==================================================
+13. UI / UX REQUIREMENTS
+==================================================
+
+Enhance the UI in a premium way while staying agent-first.
+
+Support:
+- memory-informed continuity
+- insight cards or subtle panels
+- active block/week status
+- proactive agent suggestions
+- trend summaries
+- adherence indicators
+- wearable placeholder states
+
+Keep the interface:
+- minimal
+- elegant
+- high-end
+- serious
+- not cluttered
+
+The user should feel surrounded by intelligence, not buried in widgets.
+
+==================================================
+14. PRODUCT RULES
+==================================================
+
+- The agent remains the center of the product
+- Do not turn this into a generic analytics dashboard
+- Do not let insights overpower the chat experience
+- Do not store low-value memory clutter
+- Do not make spammy recommendations
+- Do not make medical claims
+- Keep the experience premium and intentional
+
+TrainChat should feel like a personal performance intelligence system.
+
+==================================================
+15. DELIVERABLES
+==================================================
+
+At the end, provide:
+1. what long-term memory systems were implemented
+2. what now gets remembered and how
+3. how long-term memory is injected into agent context
+4. how week-to-week / block evolution works
+5. how proactive suggestions are triggered
+6. what insights/analytics were added
+7. how adherence intelligence works
+8. how pain/tolerance pattern recognition works
+9. what wearable foundations were scaffolded
+10. what should be built in Phase 6

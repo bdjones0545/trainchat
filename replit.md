@@ -2,7 +2,7 @@
 
 ## Overview
 
-Agent-first AI training platform. The AI chat is the entire interface. Users register, complete a 10-step onboarding, then interact with an AI performance architect in a 3-panel chat layout (sidebar, chat, training output panel).
+Agent-first AI training platform. The AI chat is the entire interface. Users register, complete a 10-step onboarding, then interact with an AI performance architect in a 3-panel chat layout (sidebar, chat, training output/intelligence panel).
 
 ## Stack
 
@@ -24,11 +24,12 @@ Agent-first AI training platform. The AI chat is the entire interface. Users reg
 ## Database Schema
 
 - `users` — auth
-- `user_profiles` — onboarding profile (10 fields including injuries, sport focus, equipment)
+- `user_profiles` — onboarding profile (10 fields: goal, experience, style, days, duration, equipment, injuries, sport, preferences, avoid)
 - `conversations` + `messages` — chat history (messages store structuredData as JSON string)
-- `saved_programs` + `program_days` + `exercises` — saved training programs
+- `saved_programs` + `program_days` + `exercises` — saved training programs (programs include weekNumber, blockLabel, parentProgramId, versionNotes for evolution)
 - `readiness_entries` — daily check-in (sleep/energy/soreness/stress/motivation/pain, 1-5)
 - `session_feedback` — post-session feedback (difficulty/pain_response/energy_response, 1-5)
+- `user_memories` — long-term coaching memories (type/subject/sentiment/confidence/source/detail)
 
 ## Architecture
 
@@ -43,24 +44,43 @@ Agent-first AI training platform. The AI chat is the entire interface. Users reg
 ### Adaptation Service (`api-server/src/lib/adaptation.ts`)
 - `buildAdaptationContext(userId)` — reads recent readiness + feedback, computes trend signals
 - Trend signals: overallReadiness, sleepTrend, recoveryTrend, painTrend, fatigueAccumulation, trainingTolerance
-- Adaptive directive: reduce / maintain / progress
-- Injected into AI system prompt alongside training intelligence context
-- Wearable integration scaffold: `WearableData` interface + `ingestWearableData()` hook
+- Adaptive directive: reduce / maintain / progress — injected into every AI message
+- Wearable integration scaffold: `WearableData` interface + `ingestWearableData()` hook (Phase 6 ready)
+
+### Memory Service (`api-server/src/lib/memory.ts`) — Phase 5
+- `syncMemoriesFromData(userId)` — extracts memories from profile, readiness, feedback; called on every message (non-blocking)
+- `upsertMemory(userId, candidate)` — insert or update by userId+type+subject; confidence-protected (never weakens established memories)
+- `listMemories(userId)` — list all memories ordered by updatedAt
+- `buildMemoryContext(memories)` — builds `## LONG-TERM MEMORY` prompt block for AI injection
+- Memory types: exercise_preference, pain_pattern, session_preference, volume_response, split_preference, recovery_pattern, adherence_pattern
+- Extraction sources: onboarding profile, readiness entries (≥3), session feedback (≥3)
+
+### Insights Service (`api-server/src/lib/insights.ts`) — Phase 5
+- `generateInsights(userId, memories)` — produces up to 4 high-priority proactive suggestions
+- Insight types: deload_suggestion, progression_ready, pain_warning, consistency_positive, schedule_review, sleep_impact, recovery_strength, tolerance_building, program_evolution
+- Deduplication + priority sort — only the most relevant insights surface
+- `buildInsightPromptHint(insights)` — compact hint injected into AI system prompt
 
 ### AI Service (`api-server/src/lib/ai.ts`)
-- `generateAIResponse(userMessage, history, userId, adaptationContext?)` 
-- Builds system prompt = core identity + user profile + intelligence context + adaptation context
+- `generateAIResponse(userMessage, history, userId, adaptationContext?, memoryContext?, insightHint?)`
+- System prompt = core identity + user profile + intelligence context + adaptation context + long-term memory + insight hints
 - Falls back to rule-based program generator using training intelligence engine
 - Extracts structured JSON from AI response for right panel display
 
+### API Endpoints
+- `GET /memories` — list user's long-term memories
+- `POST /memories/sync` — trigger memory extraction
+- `GET /insights` — get proactive training insights
+
 ## UI Components
 
-- `chat.tsx` — 3-panel layout, readiness check-in button, wires all modals
-- `ChatOutput.tsx` — right panel: program display with save + feedback buttons
+- `chat.tsx` — 3-panel layout; wires memories, insights, readiness, feedback modals
+- `ChatOutput.tsx` — right panel: program display with save + feedback buttons (shown when program active)
+- `InsightsPanel.tsx` — right panel: insights cards + memory highlights + wearable placeholder (shown when no program)
 - `MessageBubble.tsx` — markdown-rendering bubbles
 - `ReadinessModal.tsx` — 6-metric daily check-in modal (1-5 score buttons)
 - `FeedbackModal.tsx` — post-session feedback modal (difficulty/pain/energy)
-- `ReadinessSummary.tsx` — compact readiness display in right panel
+- `ReadinessSummary.tsx` — compact readiness display at top of right panel
 
 ## Theme
 
@@ -70,8 +90,8 @@ Always dark (no `.dark` toggle — CSS vars in `:root` only). Electric blue prim
 
 Session-based (`express-session`). `SESSION_SECRET` env var required. `credentials: "include"` in `custom-fetch.ts`.
 
-## Phase Scaffold Hooks (Phase 5 ready)
+## Wearable Integration (Phase 6 ready)
 
-- `ReadinessInput`, `PriorSessionFeedback`, `ProgressionMemory` types in training-intelligence.ts
-- `applyReadinessModulation()`, `processSessionFeedback()` stubs
-- `WearableData` interface + `ingestWearableData()` stub in adaptation.ts
+- `WearableData` interface with HRV/restingHR/sleep/readinessScore/trainingLoad/steps
+- `ingestWearableData(userId, data)` stub in adaptation.ts
+- "Connect wearable" placeholder button in InsightsPanel

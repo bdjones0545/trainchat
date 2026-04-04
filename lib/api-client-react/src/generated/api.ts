@@ -28,6 +28,7 @@ import type {
   HealthStatus,
   ListReadinessParams,
   LoginBody,
+  MemorySyncResponse,
   Message,
   MessagePair,
   Program,
@@ -37,7 +38,9 @@ import type {
   SendMessageBody,
   SessionFeedback,
   SuccessResponse,
+  TrainingInsight,
   User,
+  UserMemory,
   UserProfile,
 } from "./api.schemas";
 
@@ -1775,6 +1778,237 @@ export function useListSessionFeedback<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListSessionFeedbackQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List user's long-term training memories
+ */
+export const getListMemoriesUrl = () => {
+  return `/api/memories`;
+};
+
+export const listMemories = async (
+  options?: RequestInit,
+): Promise<UserMemory[]> => {
+  return customFetch<UserMemory[]>(getListMemoriesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListMemoriesQueryKey = () => {
+  return [`/api/memories`] as const;
+};
+
+export const getListMemoriesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listMemories>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listMemories>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListMemoriesQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listMemories>>> = ({
+    signal,
+  }) => listMemories({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listMemories>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListMemoriesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listMemories>>
+>;
+export type ListMemoriesQueryError = ErrorType<void>;
+
+/**
+ * @summary List user's long-term training memories
+ */
+
+export function useListMemories<
+  TData = Awaited<ReturnType<typeof listMemories>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listMemories>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListMemoriesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Trigger memory extraction from profile and recent training data
+ */
+export const getSyncMemoriesUrl = () => {
+  return `/api/memories/sync`;
+};
+
+export const syncMemories = async (
+  options?: RequestInit,
+): Promise<MemorySyncResponse> => {
+  return customFetch<MemorySyncResponse>(getSyncMemoriesUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getSyncMemoriesMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof syncMemories>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof syncMemories>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["syncMemories"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof syncMemories>>,
+    void
+  > = () => {
+    return syncMemories(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SyncMemoriesMutationResult = NonNullable<
+  Awaited<ReturnType<typeof syncMemories>>
+>;
+
+export type SyncMemoriesMutationError = ErrorType<void>;
+
+/**
+ * @summary Trigger memory extraction from profile and recent training data
+ */
+export const useSyncMemories = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof syncMemories>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof syncMemories>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getSyncMemoriesMutationOptions(options));
+};
+
+/**
+ * @summary Get proactive training insights based on current data
+ */
+export const getListInsightsUrl = () => {
+  return `/api/insights`;
+};
+
+export const listInsights = async (
+  options?: RequestInit,
+): Promise<TrainingInsight[]> => {
+  return customFetch<TrainingInsight[]>(getListInsightsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListInsightsQueryKey = () => {
+  return [`/api/insights`] as const;
+};
+
+export const getListInsightsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listInsights>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listInsights>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListInsightsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listInsights>>> = ({
+    signal,
+  }) => listInsights({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listInsights>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListInsightsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listInsights>>
+>;
+export type ListInsightsQueryError = ErrorType<void>;
+
+/**
+ * @summary Get proactive training insights based on current data
+ */
+
+export function useListInsights<
+  TData = Awaited<ReturnType<typeof listInsights>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listInsights>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListInsightsQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

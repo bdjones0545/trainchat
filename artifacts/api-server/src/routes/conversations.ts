@@ -5,6 +5,8 @@ import { CreateConversationBody, GetConversationParams, DeleteConversationParams
 import { requireAuth } from "../middlewares/auth";
 import { generateAIResponse } from "../lib/ai";
 import { buildAdaptationContext } from "../lib/adaptation";
+import { syncMemoriesFromData, listMemories, buildMemoryContext } from "../lib/memory";
+import { generateInsights, buildInsightPromptHint } from "../lib/insights";
 
 const router: IRouter = Router();
 
@@ -208,15 +210,28 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
     .where(eq(messagesTable.conversationId, params.data.id))
     .orderBy(messagesTable.createdAt);
 
-  // Build adaptation context from readiness + feedback (non-blocking — empty on first use)
-  const adaptation = await buildAdaptationContext(userId).catch(() => ({ promptContext: "" }));
+  // Build all context layers in parallel — non-blocking, empty on first use
+  const [adaptation, memories] = await Promise.all([
+    buildAdaptationContext(userId).catch(() => ({ promptContext: "" })),
+    listMemories(userId).catch(() => []),
+  ]);
 
-  // Generate AI response with adaptation context injected
+  // Sync memories from latest data (fire-and-forget — doesn't block response)
+  syncMemoriesFromData(userId).catch(() => {});
+
+  // Build memory + insight context for AI injection
+  const memoryCtx = buildMemoryContext(memories);
+  const insights = await generateInsights(userId, memories).catch(() => []);
+  const insightHint = buildInsightPromptHint(insights);
+
+  // Generate AI response with all context layers injected
   const { content: aiContent, structuredData } = await generateAIResponse(
     parsed.data.content,
     history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
     userId,
-    adaptation.promptContext || undefined
+    adaptation.promptContext || undefined,
+    memoryCtx || undefined,
+    insightHint || undefined
   );
 
   // Save AI message

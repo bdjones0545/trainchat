@@ -9,6 +9,8 @@ import {
   useListMessages,
   useSendMessage,
   useCreateProgram,
+  useListMemories,
+  useListInsights,
   getListConversationsQueryKey,
   getListMessagesQueryKey,
 } from "@workspace/api-client-react";
@@ -21,6 +23,7 @@ import ChatOutput, { type ProgramStructure } from "@/components/chat/ChatOutput"
 import ReadinessModal from "@/components/chat/ReadinessModal";
 import FeedbackModal from "@/components/chat/FeedbackModal";
 import ReadinessSummary from "@/components/chat/ReadinessSummary";
+import InsightsPanel from "@/components/chat/InsightsPanel";
 
 const STARTER_PROMPTS = [
   "Build me a 4-day push/pull program",
@@ -59,6 +62,13 @@ export default function Chat() {
     activeConvoId!,
     { query: { enabled: !!activeConvoId } }
   );
+
+  const { data: memories = [], isLoading: memoriesLoading } = useListMemories({
+    query: { enabled: !!me },
+  });
+  const { data: insights = [], isLoading: insightsLoading } = useListInsights({
+    query: { enabled: !!me },
+  });
 
   const createConvo = useCreateConversation();
   const sendMessage = useSendMessage();
@@ -368,13 +378,21 @@ export default function Chat() {
             {/* Readiness summary — shows above the program when available */}
             <ReadinessSummary />
             <div className="flex-1 overflow-hidden">
-              <ChatOutput
-                program={latestProgram}
-                onSave={latestProgram ? handleSaveProgram : undefined}
-                onFeedback={() => setShowFeedback(true)}
-                isSaving={isSaving}
-                isSaved={isSaved}
-              />
+              {latestProgram ? (
+                <ChatOutput
+                  program={latestProgram}
+                  onSave={handleSaveProgram}
+                  onFeedback={() => setShowFeedback(true)}
+                  isSaving={isSaving}
+                  isSaved={isSaved}
+                />
+              ) : (
+                <InsightsPanel
+                  insights={insights}
+                  memories={memories}
+                  isLoading={insightsLoading || memoriesLoading}
+                />
+              )}
             </div>
           </div>
         ) : (

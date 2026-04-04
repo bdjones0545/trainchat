@@ -24,6 +24,10 @@ tags:
     description: Readiness check-in operations
   - name: sessionFeedback
     description: Post-session feedback operations
+  - name: memory
+    description: Long-term user training memory operations
+  - name: insights
+    description: Proactive training insight operations
 paths:
   /healthz:
     get:
@@ -441,6 +445,55 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/SessionFeedback"
+
+  /memories:
+    get:
+      operationId: listMemories
+      tags: [memory]
+      summary: List user's long-term training memories
+      responses:
+        "200":
+          description: List of training memories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserMemory"
+        "401":
+          description: Unauthorized
+
+  /memories/sync:
+    post:
+      operationId: syncMemories
+      tags: [memory]
+      summary: Trigger memory extraction from profile and recent training data
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemorySyncResponse"
+        "401":
+          description: Unauthorized
+
+  /insights:
+    get:
+      operationId: listInsights
+      tags: [insights]
+      summary: Get proactive training insights based on current data
+      responses:
+        "200":
+          description: List of training insights
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TrainingInsight"
+        "401":
+          description: Unauthorized
 
 components:
   schemas:
@@ -946,3 +999,66 @@ components:
         - painResponseScore
         - energyResponseScore
         - createdAt
+
+    UserMemory:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        type:
+          type: string
+        subject:
+          type: string
+        sentiment:
+          type: string
+        confidence:
+          type: integer
+        source:
+          type: string
+        detail:
+          type: string
+        updatedAt:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - userId
+        - type
+        - subject
+        - sentiment
+        - confidence
+        - source
+        - detail
+        - updatedAt
+        - createdAt
+
+    MemorySyncResponse:
+      type: object
+      properties:
+        synced:
+          type: integer
+      required:
+        - synced
+
+    TrainingInsight:
+      type: object
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        body:
+          type: string
+        priority:
+          type: integer
+        triggerSource:
+          type: string
+      required:
+        - type
+        - title
+        - body
+        - priority
+        - triggerSource

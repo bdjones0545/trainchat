@@ -10,6 +10,13 @@ export const savedProgramsTable = pgTable("saved_programs", {
   conversationId: integer("conversation_id").references(() => conversationsTable.id, { onDelete: "set null" }),
   name: text("name").notNull(),
   description: text("description"),
+
+  // Phase 5 — Program evolution / versioning
+  weekNumber: integer("week_number").default(1),
+  blockLabel: text("block_label"),                                              // "Base Building" | "Accumulation" | "Intensification" | "Deload"
+  parentProgramId: integer("parent_program_id"),                                // links to previous program version
+  versionNotes: text("version_notes"),                                          // coach notes on what changed and why
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

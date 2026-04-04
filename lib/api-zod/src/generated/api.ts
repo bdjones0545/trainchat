@@ -388,3 +388,39 @@ export const ListSessionFeedbackResponseItem = zod.object({
 export const ListSessionFeedbackResponse = zod.array(
   ListSessionFeedbackResponseItem,
 );
+
+/**
+ * @summary List user's long-term training memories
+ */
+export const ListMemoriesResponseItem = zod.object({
+  id: zod.number(),
+  userId: zod.number(),
+  type: zod.string(),
+  subject: zod.string(),
+  sentiment: zod.string(),
+  confidence: zod.number(),
+  source: zod.string(),
+  detail: zod.string(),
+  updatedAt: zod.string(),
+  createdAt: zod.string(),
+});
+export const ListMemoriesResponse = zod.array(ListMemoriesResponseItem);
+
+/**
+ * @summary Trigger memory extraction from profile and recent training data
+ */
+export const SyncMemoriesResponse = zod.object({
+  synced: zod.number(),
+});
+
+/**
+ * @summary Get proactive training insights based on current data
+ */
+export const ListInsightsResponseItem = zod.object({
+  type: zod.string(),
+  title: zod.string(),
+  body: zod.string(),
+  priority: zod.number(),
+  triggerSource: zod.string(),
+});
+export const ListInsightsResponse = zod.array(ListInsightsResponseItem);
