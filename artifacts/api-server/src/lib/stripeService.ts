@@ -1,12 +1,9 @@
 import { getUncachableStripeClient } from "./stripeClient";
 import { stripeStorage } from "./stripeStorage";
 import { logger } from "./logger";
+import { PLAN_PRICE_MAP } from "./billingUtils";
 
 // ─── Plan ↔ Stripe Price ID mapping ──────────────────────────────────────────
-//
-// Read from environment variables — never hardcoded.
-// Used by the frontend plan-map endpoint to get price IDs without exposing
-// secret keys.
 
 export interface PlanPriceMap {
   starter: { monthly: string | null; yearly: string | null };
@@ -16,18 +13,9 @@ export interface PlanPriceMap {
 
 export function getPlanPriceMap(): PlanPriceMap {
   return {
-    starter: {
-      monthly: process.env.STRIPE_PRICE_STARTER_MONTHLY ?? null,
-      yearly:  process.env.STRIPE_PRICE_STARTER_YEARLY  ?? null,
-    },
-    pro: {
-      monthly: process.env.STRIPE_PRICE_PRO_MONTHLY ?? null,
-      yearly:  process.env.STRIPE_PRICE_PRO_YEARLY  ?? null,
-    },
-    elite: {
-      monthly: process.env.STRIPE_PRICE_ELITE_MONTHLY ?? null,
-      yearly:  process.env.STRIPE_PRICE_ELITE_YEARLY  ?? null,
-    },
+    starter: { monthly: PLAN_PRICE_MAP.starter.monthly, yearly: PLAN_PRICE_MAP.starter.yearly },
+    pro:     { monthly: PLAN_PRICE_MAP.pro.monthly,     yearly: PLAN_PRICE_MAP.pro.yearly },
+    elite:   { monthly: PLAN_PRICE_MAP.elite.monthly,   yearly: PLAN_PRICE_MAP.elite.yearly },
   };
 }
 
