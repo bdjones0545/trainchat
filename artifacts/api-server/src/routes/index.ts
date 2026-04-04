@@ -12,6 +12,7 @@ import stripeRouter from "./stripe";
 import sessionLogsRouter from "./session-logs";
 import streakRouter from "./streak";
 import adminRouter from "./admin";
+import guestRouter from "./guest";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(stripeRouter);
 router.use(sessionLogsRouter);
 router.use(streakRouter);
 router.use(adminRouter);
+router.use(guestRouter);
 
 export default router;

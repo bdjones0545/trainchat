@@ -121,6 +121,34 @@ Always dark (no `.dark` toggle — CSS vars in `:root` only). Electric blue prim
 
 Session-based (`express-session`). `SESSION_SECRET` env var required. `credentials: "include"` in `custom-fetch.ts`.
 
+## Guest Session System (Phase 1 Foundation)
+
+### Architecture
+- `lib/db/src/schema/guest-sessions.ts` — `guest_sessions` table
+- `artifacts/api-server/src/lib/guestService.ts` — service layer (init, get, update, convert)
+- `artifacts/api-server/src/routes/guest.ts` — REST endpoints
+- `artifacts/trainchat/src/hooks/useGuestSession.ts` — frontend hook
+- `GuestSessionInit` component in `App.tsx` — silent initialization on app load
+
+### guest_sessions Table Fields
+id, device_id (unique), status (active/converted/expired/blocked), created_at, updated_at, last_active_at, teaser_uses_count, onboarding_started_at, onboarding_completed_at, first_program_generated_at, paywall_shown_at, converted_at, linked_user_id (FK→users), metadata (jsonb)
+
+### API Endpoints
+- `POST /api/guest/session` — init or resume guest session (idempotent; updates lastActiveAt on resume)
+- `GET /api/guest/session/:deviceId` — read-only fetch
+- `PATCH /api/guest/session/:deviceId` — update markers (for future phases)
+
+### Frontend Hook: useGuestSession(isAuthenticated)
+- Generates 32-char hex deviceId via `crypto.getRandomValues()` → stored in `localStorage["trainchat_device_id"]`
+- Calls POST /api/guest/session and caches result in `sessionStorage["trainchat_guest_session"]`
+- Does nothing when `isAuthenticated = true` — zero interference with logged-in users
+- Returns: `{ deviceId, guestSession, guestSessionStatus, loading, error, refresh }`
+
+### Phase 2+ Extension Points
+- `convertGuestSession(deviceId, userId)` — links guest session to real account post-signup
+- `teaserUsesCount` + `status` — ready for teaser/paywall gating logic
+- `metadata` (jsonb) — extensible for onboarding answers, analytics markers
+
 ## Wearable Integration (Phase 6 ready)
 
 - `WearableData` interface with HRV/restingHR/sleep/readinessScore/trainingLoad/steps

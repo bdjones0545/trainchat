@@ -1,0 +1,166 @@
+PHASE 1 — BUILD THE GUEST SESSION + DEVICE ID FOUNDATION FOR TRAINCHAT
+
+We are NOT building the full teaser flow yet.
+Do NOT build the onboarding UI, AI teaser experience, paywall, or guest-to-user conversion flow in this phase.
+This phase is only for creating the technical foundation required to support a no-signup teaser experience later.
+
+OBJECTIVE
+Create a clean, reliable guest-mode foundation so visitors can be identified and tracked before creating an account. This system must work alongside the existing TrainChat authenticated user architecture without breaking current signup, login, dashboard, payment, or user session logic.
+
+CORE REQUIREMENT
+A new visitor should be able to enter the site and automatically receive a guest identity layer in the background using a device-based tracking system. This guest identity will later be used for onboarding answers, AI teaser usage, paywall gating, analytics, and guest-to-user conversion.
+
+PHASE 1 SCOPE ONLY
+
+Build the following:
+
+1. DEVICE ID SYSTEM
+Create a persistent device ID system for unauthenticated visitors.
+
+Requirements:
+- Generate a stable device ID on first visit if one does not already exist
+- Store it in localStorage
+- Reuse it on return visits
+- Device ID should be lightweight, privacy-conscious, and reasonably stable
+- Do not rely on cookies alone
+- Keep implementation simple, robust, and production-friendly
+
+The device ID should be accessible to the frontend and available for backend guest-session identification.
+
+2. GUEST SESSION MODEL
+Create a guest session architecture in the backend/database.
+
+Add a new guest session data model that can support future teaser usage.
+
+Recommended fields:
+- id
+- deviceId
+- status (active, converted, expired, blocked)
+- createdAt
+- updatedAt
+- lastActiveAt
+- teaserUsesCount
+- onboardingStartedAt
+- onboardingCompletedAt
+- firstProgramGeneratedAt
+- paywallShownAt
+- convertedAt
+- linkedUserId (nullable)
+- metadata/json field for extensibility
+
+Design this cleanly so later phases can store onboarding data, teaser outputs, analytics markers, and guest conversion data without reworking the schema.
+
+3. GUEST SESSION CREATION + FETCH LOGIC
+Build backend logic so that when the frontend provides a device ID:
+- the backend checks for an existing guest session for that device
+- if one exists and is valid, return it
+- if not, create a new guest session
+- update lastActiveAt on use
+- return normalized guest session data to the frontend
+
+This should be built as a clean service layer, not scattered logic.
+
+4. FRONTEND GUEST SESSION INITIALIZATION
+On app load or when a visitor lands on key entry points like the landing page:
+- check for existing device ID in localStorage
+- create one if missing
+- call backend to initialize or retrieve guest session
+- store guest session state client-side in a clean way
+
+This should not interfere with logged-in users.
+If the user is authenticated, existing user auth/session flow should remain primary.
+
+5. AUTHENTICATED USER SAFETY
+Do not break any existing authentication logic.
+
+Requirements:
+- guest session logic must coexist with current auth
+- if a user is logged in, app should continue using authenticated user state normally
+- guest session system should not override or conflict with user login/signup flows
+- keep boundaries clean between guest mode and authenticated mode
+
+6. BASIC SESSION STATE MANAGEMENT
+Add a frontend state layer or hook for guest session handling.
+
+This should expose:
+- deviceId
+- guestSession
+- guestSessionStatus
+- loading state
+- error state
+- helper methods for refresh/init if needed
+
+Build this in a way that future phases can easily plug into onboarding, AI teaser usage tracking, and paywall triggers.
+
+7. MINIMAL API ENDPOINTS
+Create only the minimal endpoints needed for Phase 1.
+
+Suggested endpoints:
+- initialize guest session
+- fetch guest session by device ID if needed
+- update guest last active timestamp if needed
+
+Keep the API simple and secure. Do not overbuild.
+
+8. ANALYTICS STUBS / EVENT READINESS
+Do not build full analytics yet, but make the guest session system ready for it.
+
+At minimum:
+- structure the code so future events like guest_session_created, onboarding_started, paywall_shown, and guest_converted can be logged cleanly
+- optional: log basic server-side console events for guest session creation/retrieval during development
+
+9. ANTI-ABUSE READINESS
+Do not fully implement teaser limits yet, but prepare the system for it.
+
+Requirements:
+- keep teaserUsesCount in schema
+- keep guest session status field
+- ensure future logic can block/restrict devices without redesigning the model
+
+10. GUEST-TO-USER MERGE READINESS
+Do not implement merge yet, but structure guest sessions so later we can:
+- link a guest session to a real user account
+- preserve guest activity
+- mark session as converted
+
+This should be easy to extend in later phases.
+
+11. CODE QUALITY RULES
+Important:
+- do not create hacked-together logic
+- use clean separation of concerns
+- keep services, models, routes, and frontend hooks organized
+- follow the current app architecture and coding style
+- do not break existing features
+- do not add UI clutter
+- do not add placeholder fake onboarding screens yet
+
+12. TESTING / VALIDATION
+After building, validate:
+- a new unauthenticated visitor gets a device ID
+- a guest session is created in the database
+- returning visitor on same device reuses the same device ID and guest session
+- authenticated users are unaffected
+- no existing signup/login/payment/dashboard flow is broken
+
+13. DELIVERABLES AFTER IMPLEMENTATION
+Once Phase 1 is complete, provide:
+1. summary of what was built
+2. database/schema changes made
+3. new API endpoints added
+4. frontend files/hooks/state added
+5. where guest session initialization happens
+6. any recommended cleanup before Phase 2
+
+IMPORTANT REMINDERS
+This is infrastructure only.
+Do NOT build:
+- onboarding questions
+- AI teaser program generation
+- paywall UI
+- signup-after-paywall flow
+- guest conversion flow
+- pricing UI changes
+
+We are only laying the technical foundation for guest mode in this phase.
+Build this carefully and cleanly so Phase 2 can plug into it without major refactoring.
