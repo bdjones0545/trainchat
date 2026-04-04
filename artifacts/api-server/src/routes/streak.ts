@@ -67,15 +67,15 @@ router.get("/streak", requireAuth, async (req: any, res): Promise<void> => {
       .where(eq(sessionLogsTable.userId, userId))
       .orderBy(desc(sessionLogsTable.completedAt)),
     db
-      .select({ date: readinessEntriesTable.date })
+      .select({ createdAt: readinessEntriesTable.createdAt })
       .from(readinessEntriesTable)
       .where(eq(readinessEntriesTable.userId, userId))
-      .orderBy(desc(readinessEntriesTable.date)),
+      .orderBy(desc(readinessEntriesTable.createdAt)),
   ]);
 
   const allDates = [
     ...logs.map((l) => l.completedAt),
-    ...readiness.map((r) => r.date),
+    ...readiness.map((r) => r.createdAt),
   ];
 
   const { currentStreak, longestStreak, totalSessions } = computeStreak(allDates);

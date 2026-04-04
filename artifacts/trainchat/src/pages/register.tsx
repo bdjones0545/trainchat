@@ -1,11 +1,14 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useRegister, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { GUEST_CONFIG } from "@/lib/guestConfig";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
+
+const DEVICE_ID_KEY = "trainchat_device_id";
 
 const registerSchema = z.object({
   name: z.string().min(1, "Name required"),
@@ -15,9 +18,45 @@ const registerSchema = z.object({
 
 type RegisterForm = z.infer<typeof registerSchema>;
 
+/**
+ * Call /api/guest/convert to merge guest session into new account.
+ * Silent — never throws to the caller; conversion failure is non-fatal.
+ */
+async function convertGuestSession(deviceId: string): Promise<boolean> {
+  try {
+    const res = await fetch("/api/guest/convert", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ deviceId }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Track a funnel event for the guest session (fire-and-forget). */
+async function trackGuestEvent(deviceId: string, event: string) {
+  try {
+    await fetch("/api/guest/track", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceId, event }),
+    });
+  } catch {
+    // silent
+  }
+}
+
 export default function Register() {
   const [, setLocation] = useLocation();
+  const search = useSearch();
+  const params = new URLSearchParams(search);
+  const fromTeaser = params.get("from") === "teaser";
+
   const [error, setError] = useState<string | null>(null);
+  const [converting, setConverting] = useState(false);
   const queryClient = useQueryClient();
   const register = useRegister();
 
@@ -33,7 +72,29 @@ export default function Register() {
       {
         onSuccess: async () => {
           await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
-          setLocation("/onboarding");
+
+          // ── Guest-to-user merge ─────────────────────────────────────────
+          const deviceId = (() => {
+            try { return localStorage.getItem(DEVICE_ID_KEY); } catch { return null; }
+          })();
+
+          if (deviceId) {
+            setConverting(true);
+            await trackGuestEvent(deviceId, GUEST_CONFIG.EVENTS.SIGNUP_COMPLETED);
+            const merged = await convertGuestSession(deviceId);
+
+            if (merged) {
+              // Merge succeeded → go straight to chat (profile + conversation ready)
+              await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+              setConverting(false);
+              setLocation("/chat");
+              return;
+            }
+            setConverting(false);
+          }
+
+          // No guest session or merge failed → standard onboarding path
+          setLocation(fromTeaser ? "/chat" : "/onboarding");
         },
         onError: (err: unknown) => {
           const apiErr = err as { data?: { error?: string } };
@@ -43,6 +104,12 @@ export default function Register() {
     );
   }
 
+  const isLoading = register.isPending || converting;
+  const headline = fromTeaser ? GUEST_CONFIG.SIGNUP_HEADLINE : "Create your account";
+  const subheadline = fromTeaser
+    ? GUEST_CONFIG.SIGNUP_SUBHEADLINE
+    : "Build your training system. Start here.";
+
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-sm">
@@ -51,10 +118,29 @@ export default function Register() {
           <img src={trainChatLogo} alt="TrainChat" className="h-10 object-contain" />
         </div>
 
+        {/* Teaser continuation badge */}
+        {fromTeaser && (
+          <div className="flex justify-center mb-6">
+            <span
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold"
+              style={{
+                background: "hsl(143 70% 45% / 0.12)",
+                color: "hsl(143 70% 55%)",
+                border: "1px solid hsl(143 70% 45% / 0.25)",
+              }}
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              Your plan is saved and ready to continue
+            </span>
+          </div>
+        )}
+
         {/* Header */}
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Create your account</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Build your training system. Start here.</p>
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight">{headline}</h1>
+          <p className="mt-2 text-sm text-muted-foreground">{subheadline}</p>
         </div>
 
         {/* Error */}
@@ -120,18 +206,30 @@ export default function Register() {
           <button
             data-testid="button-submit"
             type="submit"
-            disabled={register.isPending}
+            disabled={isLoading}
             className="w-full py-3 mt-2 bg-primary text-primary-foreground font-semibold text-sm rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150 active:scale-[0.99]"
           >
-            {register.isPending ? "Creating account..." : "Create account"}
+            {converting
+              ? "Saving your progress..."
+              : register.isPending
+                ? "Creating account..."
+                : fromTeaser
+                  ? "Continue My Journey"
+                  : "Create account"}
           </button>
+
+          {fromTeaser && (
+            <p className="text-center text-xs text-muted-foreground">
+              No credit card required
+            </p>
+          )}
         </form>
 
         {/* Login link */}
         <p className="mt-6 text-center text-sm text-muted-foreground">
           Already have an account?{" "}
           <button
-            onClick={() => setLocation("/login")}
+            onClick={() => setLocation(fromTeaser ? "/login?from=teaser" : "/login")}
             className="text-primary hover:text-primary/80 font-medium transition-colors"
           >
             Sign in

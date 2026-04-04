@@ -9,6 +9,8 @@ import {
   generateGuestProgram,
   generateGuestFollowup,
 } from "../lib/guestGenerate";
+import { mergeGuestToUser, TEASER_GENERATE_LIMIT, TEASER_TOTAL_LIMIT } from "../lib/guestMerge";
+import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
@@ -19,7 +21,6 @@ const InitBody = z.object({
 /**
  * POST /api/guest/session
  * Initialize or resume a guest session for the given device ID.
- * Called on every app load by unauthenticated visitors.
  * Safe to call repeatedly — idempotent.
  */
 router.post("/guest/session", async (req, res): Promise<void> => {
@@ -104,7 +105,7 @@ router.patch("/guest/session/:deviceId", async (req, res): Promise<void> => {
   }
 });
 
-// ─── Onboarding Schemas ──────────────────────────────────────────────────────
+// ─── Schemas ─────────────────────────────────────────────────────────────────
 
 const OnboardingBody = z.object({
   deviceId: z.string().min(8).max(128),
@@ -129,10 +130,19 @@ const FollowupBody = z.object({
   message: z.string().min(1).max(2000),
 });
 
+const ConvertBody = z.object({
+  deviceId: z.string().min(8).max(128),
+});
+
+const TrackBody = z.object({
+  deviceId: z.string().min(8).max(128),
+  event: z.string().min(1).max(100),
+  metadata: z.record(z.unknown()).optional(),
+});
+
 /**
  * POST /api/guest/onboarding
- * Save guest onboarding answers to the guest session metadata.
- * Marks onboardingCompletedAt and stores answers for program generation.
+ * Save guest onboarding answers. Marks onboardingCompletedAt.
  */
 router.post("/guest/onboarding", async (req, res): Promise<void> => {
   const parsed = OnboardingBody.safeParse(req.body);
@@ -149,15 +159,15 @@ router.post("/guest/onboarding", async (req, res): Promise<void> => {
       res.status(404).json({ error: "Guest session not found" });
       return;
     }
+    if (session.status === "blocked") {
+      res.status(403).json({ error: "Device blocked" });
+      return;
+    }
 
     const existingMeta = (session.metadata ?? {}) as Record<string, unknown>;
-
     const updated = await updateGuestSession(deviceId, {
       onboardingCompletedAt: new Date(),
-      metadata: {
-        ...existingMeta,
-        onboardingAnswers: answers,
-      },
+      metadata: { ...existingMeta, onboardingAnswers: answers },
     });
 
     res.json({ session: updated });
@@ -168,8 +178,11 @@ router.post("/guest/onboarding", async (req, res): Promise<void> => {
 
 /**
  * POST /api/guest/generate
- * Generate a personalized AI training program from stored onboarding answers.
- * Marks firstProgramGeneratedAt and increments teaserUsesCount.
+ * Generate a personalized program from stored onboarding answers.
+ *
+ * PHASE 3 ENFORCEMENT:
+ * Blocked if teaserUsesCount >= TEASER_GENERATE_LIMIT (default: 1).
+ * Each guest device may only generate one program — further use requires an account.
  */
 router.post("/guest/generate", async (req, res): Promise<void> => {
   const parsed = GenerateBody.safeParse(req.body);
@@ -184,6 +197,20 @@ router.post("/guest/generate", async (req, res): Promise<void> => {
     const session = await getGuestSession(deviceId);
     if (!session) {
       res.status(404).json({ error: "Guest session not found" });
+      return;
+    }
+    if (session.status === "blocked") {
+      res.status(403).json({ error: "Device blocked" });
+      return;
+    }
+
+    // ── Backend teaser limit enforcement ─────────────────────────────────
+    if (session.teaserUsesCount >= TEASER_GENERATE_LIMIT) {
+      res.status(403).json({
+        error: "Teaser limit reached",
+        code: "TEASER_EXHAUSTED",
+        message: "Your free program generation has been used. Create an account to continue.",
+      });
       return;
     }
 
@@ -205,8 +232,10 @@ router.post("/guest/generate", async (req, res): Promise<void> => {
 /**
  * POST /api/guest/followup
  * Process one follow-up interaction from a guest user.
- * Uses stored onboarding + program context for personalized response.
- * Increments teaserUsesCount — Phase 3 will gate further requests here.
+ *
+ * PHASE 3 ENFORCEMENT:
+ * Blocked if teaserUsesCount >= TEASER_TOTAL_LIMIT (default: 2).
+ * Guests may ask one follow-up question. Further interactions require an account.
  */
 router.post("/guest/followup", async (req, res): Promise<void> => {
   const parsed = FollowupBody.safeParse(req.body);
@@ -223,12 +252,104 @@ router.post("/guest/followup", async (req, res): Promise<void> => {
       res.status(404).json({ error: "Guest session not found" });
       return;
     }
+    if (session.status === "blocked") {
+      res.status(403).json({ error: "Device blocked" });
+      return;
+    }
+
+    // ── Backend teaser limit enforcement ─────────────────────────────────
+    if (session.teaserUsesCount >= TEASER_TOTAL_LIMIT) {
+      res.status(403).json({
+        error: "Teaser limit reached",
+        code: "TEASER_EXHAUSTED",
+        message: "Your free preview has been used. Create an account to continue unlimited coaching.",
+      });
+      return;
+    }
 
     const response = await generateGuestFollowup(deviceId, message);
     res.json({ response });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
+});
+
+/**
+ * POST /api/guest/convert
+ * Merge a guest session into the currently authenticated user account.
+ *
+ * Call immediately after registration or login when a guest deviceId is
+ * present in localStorage. Requires authentication.
+ *
+ * Idempotent — safe to call multiple times for the same device/user pair.
+ * On success:
+ *   - Populates user_profile from onboarding answers (if no profile exists)
+ *   - Creates a starter conversation with the generated program (if none exists)
+ *   - Sets user.onboardingComplete = true
+ *   - Marks guest session as converted with linkedUserId and convertedAt
+ */
+router.post("/guest/convert", requireAuth, async (req, res): Promise<void> => {
+  const parsed = ConvertBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid deviceId" });
+    return;
+  }
+
+  const { deviceId } = parsed.data;
+  const userId = req.session.userId!;
+
+  try {
+    const result = await mergeGuestToUser(deviceId, userId);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/guest/track
+ * Log a funnel analytics event to the guest session metadata.
+ *
+ * Events are appended to session.metadata.funnelEvents as timestamped entries.
+ * This lightweight internal layer can be extended to emit to external analytics later.
+ *
+ * Never errors — tracking must not break UX.
+ */
+router.post("/guest/track", async (req, res): Promise<void> => {
+  const parsed = TrackBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.json({ ok: true });
+    return;
+  }
+
+  const { deviceId, event, metadata } = parsed.data;
+
+  try {
+    const session = await getGuestSession(deviceId);
+    if (!session) {
+      res.json({ ok: true });
+      return;
+    }
+
+    const existingMeta = (session.metadata ?? {}) as Record<string, unknown>;
+    const existingEvents = Array.isArray(existingMeta.funnelEvents)
+      ? (existingMeta.funnelEvents as unknown[])
+      : [];
+
+    await updateGuestSession(deviceId, {
+      metadata: {
+        ...existingMeta,
+        funnelEvents: [
+          ...existingEvents,
+          { event, timestamp: new Date().toISOString(), ...(metadata ?? {}) },
+        ],
+      },
+    });
+  } catch {
+    // Silent — analytics must never break UX
+  }
+
+  res.json({ ok: true });
 });
 
 export default router;

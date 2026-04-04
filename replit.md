@@ -20,7 +20,7 @@ Agent-first AI training platform. The AI chat is the entire interface. Users reg
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- `pnpm --filter @workspace/api-server run seed:products` — seed Stripe products & prices (run after connecting Stripe; idempotent)
+- `pnpm --filter @workspace/scripts run seed-products` — seed Stripe products & prices (run after connecting Stripe; idempotent, uses `trainchat_plan` metadata key)
 
 ## Database Schema
 
@@ -189,6 +189,51 @@ id, device_id (unique), status (active/converted/expired/blocked), created_at, u
 - `convertGuestSession(deviceId, userId)` — links guest session to real account post-signup
 - `teaserUsesCount` + `status` — ready for teaser/paywall gating logic
 - `metadata` (jsonb) — extensible for onboarding answers, analytics markers
+
+## Guest Experience Phase 3 — Paywall + Signup/Conversion + Guest-to-User Merge
+
+### New Backend Files
+- `artifacts/api-server/src/lib/guestMerge.ts` — Core merge service: populates user_profile, creates starter conversation, sets onboardingComplete, converts guest session
+
+### New Frontend Files
+- `artifacts/trainchat/src/lib/guestConfig.ts` — Centralized config: teaser limits, paywall copy, feature bullets, CTAs, funnel event names (edit here to change everything)
+- `artifacts/trainchat/src/components/GuestPaywallModal.tsx` — Premium full-screen paywall overlay component (copy driven by guestConfig.ts)
+
+### New API Endpoints
+- `POST /api/guest/convert` — Requires auth; merges guest session into authenticated user (populates profile, creates conversation, marks onboardingComplete = true)
+- `POST /api/guest/track` — Fire-and-forget funnel event logging into guest session metadata
+
+### Backend Limit Enforcement
+- `/api/guest/generate` blocked when `teaserUsesCount >= TEASER_GENERATE_LIMIT` (default: 1)
+- `/api/guest/followup` blocked when `teaserUsesCount >= TEASER_TOTAL_LIMIT` (default: 2)
+- Both return `{ code: "TEASER_EXHAUSTED" }` for frontend detection
+- Limits defined at top of `guestMerge.ts` — single source of truth for backend
+
+### Paywall Trigger Logic (guest-start.tsx)
+- After follow-up response received → 1200ms delay → `GuestPaywallModal` appears as overlay
+- Return visitor with `teaserUsesCount >= 2` → program restored from metadata + paywall shown immediately
+- Return visitor with `teaserUsesCount >= 2` + no saved program → `LockedScreen` component shown
+- Return visitor with `status === "converted"` → redirect to `/chat`
+- Return visitor with partial onboarding → resumes from last step
+
+### Guest-to-User Merge (mergeGuestToUser)
+When called after registration or login:
+1. Loads guest session by deviceId
+2. Creates `user_profile` from `metadata.onboardingAnswers` if user has none
+3. Creates starter conversation with formatted program text if user has none
+4. Sets `users.onboardingComplete = true` (skips in-app onboarding)
+5. Marks guest session: `status = "converted"`, `linkedUserId`, `convertedAt`
+Idempotent — safe to call multiple times for the same device/user pair.
+
+### Auth Page Changes
+- `register.tsx` — `?from=teaser` mode: custom headline/subheadline, "Continue My Journey" CTA, "No credit card required" note, calls `POST /api/guest/convert` after registration, routes to `/chat` on success
+- `login.tsx` — `?from=teaser` mode: custom headline, calls `POST /api/guest/convert` after login if deviceId in localStorage, routes to `/chat` on merge success
+
+### Funnel Analytics
+Stored in `guest_sessions.metadata.funnelEvents` as timestamped array. Events: `paywall_shown`, `paywall_cta_clicked`, `paywall_signin_clicked`, `signup_started`, `signup_completed`, `payment_started`, `payment_completed`, `guest_converted`. All event names configurable in `guestConfig.ts`.
+
+### Config (artifacts/trainchat/src/lib/guestConfig.ts)
+Single file to change: teaser limits, paywall headline/subheadline/badge, feature bullets, CTA text, locked-state messaging, signup page messaging, funnel event names.
 
 ## Wearable Integration (Phase 6 ready)
 

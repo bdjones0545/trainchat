@@ -61,7 +61,7 @@ export class StripeStorage {
         `
       );
       const meta = result.rows[0]?.metadata as Record<string, string> | null;
-      const plan = meta?.plan;
+      const plan = meta?.plan ?? meta?.trainchat_plan;
       if (plan === "starter" || plan === "pro" || plan === "elite") return plan;
       return "starter";
     } catch {

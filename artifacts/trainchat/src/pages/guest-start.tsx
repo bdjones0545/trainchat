@@ -2,6 +2,8 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
 import { useGuestSession } from "@/hooks/useGuestSession";
+import { GUEST_CONFIG } from "@/lib/guestConfig";
+import { GuestPaywallModal } from "@/components/GuestPaywallModal";
 import logoSrc from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -43,7 +45,7 @@ interface GuestProgram {
   progressionPrinciple: string;
 }
 
-type GuestStep = "idle" | "onboarding" | "generating" | "output";
+type GuestStep = "idle" | "onboarding" | "generating" | "output" | "locked";
 
 // ─── Onboarding Questions ─────────────────────────────────────────────────────
 
@@ -206,6 +208,48 @@ function EntryScreen({ onStart }: { onStart: () => void }) {
               <div className="text-zinc-500 text-xs mt-0.5">{item.sub}</div>
             </div>
           ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Locked Screen (returning guest whose teaser is exhausted + no program) ───
+
+function LockedScreen({ onUnlock, onSignIn }: { onUnlock: () => void; onSignIn: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen px-4 text-center">
+      <div className="w-full max-w-md space-y-8">
+        <div className="space-y-5">
+          <img src={logoSrc} alt="TrainChat" className="h-12 mx-auto" />
+          <div
+            className="w-14 h-14 rounded-full flex items-center justify-center mx-auto"
+            style={{ background: "hsl(199 89% 48% / 0.12)", border: "1px solid hsl(199 89% 48% / 0.3)" }}
+          >
+            <svg className="w-6 h-6" style={{ color: "hsl(199 89% 48%)" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-3xl font-bold text-white tracking-tight">{GUEST_CONFIG.LOCKED_HEADLINE}</h1>
+            <p className="text-zinc-400 text-base max-w-sm mx-auto leading-relaxed">{GUEST_CONFIG.LOCKED_BODY}</p>
+          </div>
+        </div>
+        <div className="space-y-3">
+          <button
+            onClick={onUnlock}
+            className="w-full py-4 px-8 rounded-xl font-semibold text-white text-base transition-all hover:scale-[1.02] active:scale-[0.98]"
+            style={{ background: "hsl(199 89% 48%)", boxShadow: "0 0 30px hsl(199 89% 48% / 0.25)" }}
+          >
+            {GUEST_CONFIG.LOCKED_CTA}
+          </button>
+          <button
+            onClick={onSignIn}
+            className="w-full py-3 rounded-xl text-sm font-medium transition-colors hover:bg-white/5"
+            style={{ color: "hsl(199 89% 48%)", border: "1px solid hsl(199 89% 48% / 0.2)" }}
+          >
+            Already have an account? Sign in
+          </button>
         </div>
       </div>
     </div>
@@ -521,9 +565,11 @@ function DayCard({ day, defaultOpen }: { day: GuestProgramDay; defaultOpen?: boo
 function FollowupSection({
   deviceId,
   programName,
+  onPaywallTrigger,
 }: {
   deviceId: string;
   programName: string;
+  onPaywallTrigger: () => void;
 }) {
   const [message, setMessage] = useState("");
   const [response, setResponse] = useState<string | null>(null);
@@ -545,12 +591,20 @@ function FollowupSection({
       });
       setResponse(data.response ?? "");
       setUsed(true);
+      // After user reads the response, surface the paywall
+      setTimeout(onPaywallTrigger, 1200);
     } catch (err: any) {
-      setError("Couldn't get a response. Try again.");
+      const isExhausted = (err as any)?.code === "TEASER_EXHAUSTED";
+      if (isExhausted) {
+        setUsed(true);
+        onPaywallTrigger();
+      } else {
+        setError("Couldn't get a response. Try again.");
+      }
     } finally {
       setLoading(false);
     }
-  }, [message, loading, used, deviceId]);
+  }, [message, loading, used, deviceId, onPaywallTrigger]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -638,10 +692,12 @@ function ProgramOutput({
   program,
   deviceId,
   onRegister,
+  onPaywallTrigger,
 }: {
   program: GuestProgram;
   deviceId: string;
   onRegister: () => void;
+  onPaywallTrigger: () => void;
 }) {
   return (
     <div className="w-full max-w-2xl space-y-6 pb-16">
@@ -689,7 +745,7 @@ function ProgramOutput({
         </div>
       )}
 
-      <FollowupSection deviceId={deviceId} programName={program.programName} />
+      <FollowupSection deviceId={deviceId} programName={program.programName} onPaywallTrigger={onPaywallTrigger} />
 
       <div className="rounded-xl p-5 text-center space-y-3"
         style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(222 47% 18%)" }}>
@@ -712,6 +768,18 @@ function ProgramOutput({
   );
 }
 
+// ─── Funnel event helper (fire-and-forget, never throws) ─────────────────────
+
+async function trackFunnelEvent(deviceId: string, event: string, metadata?: Record<string, unknown>) {
+  try {
+    await fetch("/api/guest/track", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceId, event, ...(metadata ? { metadata } : {}) }),
+    });
+  } catch { /* silent */ }
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function GuestStart() {
@@ -721,8 +789,66 @@ export default function GuestStart() {
   const [answers, setAnswers] = useState<Partial<OnboardingAnswers>>({});
   const [program, setProgram] = useState<GuestProgram | null>(null);
   const [genError, setGenError] = useState<string | null>(null);
+  const [showPaywall, setShowPaywall] = useState(false);
+  const hasInitialized = useRef(false);
 
-  const { deviceId } = useGuestSession(false);
+  const { deviceId, guestSession } = useGuestSession(false);
+
+  // ── Return visitor handling ────────────────────────────────────────────────
+  // Runs once after the guest session loads to restore the correct UI state.
+  useEffect(() => {
+    if (hasInitialized.current || !guestSession) return;
+    hasInitialized.current = true;
+
+    // Already converted → send to app
+    if (guestSession.status === "converted") {
+      navigate("/chat");
+      return;
+    }
+
+    // Teaser already exhausted
+    if (guestSession.teaserUsesCount >= GUEST_CONFIG.TEASER_TOTAL_LIMIT) {
+      const savedProgram = (guestSession.metadata as any)?.firstProgramOutput as GuestProgram | undefined;
+      if (savedProgram) {
+        // Show program + paywall overlay (feels like continuation)
+        setProgram(savedProgram);
+        setStep("output");
+        setShowPaywall(true);
+        if (deviceId) trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.PAYWALL_SHOWN, { reason: "return_visitor" });
+      } else {
+        // No program saved → show locked state
+        setStep("locked");
+      }
+      return;
+    }
+
+    // Program generated, teaser not yet exhausted → restore output
+    if (guestSession.firstProgramGeneratedAt) {
+      const savedProgram = (guestSession.metadata as any)?.firstProgramOutput as GuestProgram | undefined;
+      if (savedProgram) {
+        setProgram(savedProgram);
+        setStep("output");
+      }
+      return;
+    }
+
+    // Onboarding completed but no program → resume from last question
+    if (guestSession.onboardingCompletedAt && !guestSession.firstProgramGeneratedAt) {
+      const savedAnswers = (guestSession.metadata as any)?.onboardingAnswers as Partial<OnboardingAnswers> | undefined;
+      if (savedAnswers) {
+        setAnswers(savedAnswers);
+        setQuestionIndex(QUESTIONS.length - 1);
+        setStep("onboarding");
+      }
+      return;
+    }
+
+    // Onboarding started but not completed → resume from step 1
+    if (guestSession.onboardingStartedAt && !guestSession.onboardingCompletedAt) {
+      setStep("onboarding");
+    }
+    // else: idle — no change needed
+  }, [guestSession, deviceId, navigate]);
 
   const handleStart = useCallback(async () => {
     setStep("onboarding");
@@ -807,13 +933,34 @@ export default function GuestStart() {
     }
   }, [answers, deviceId]);
 
+  const handlePaywallTrigger = useCallback(async () => {
+    setShowPaywall(true);
+    if (deviceId) {
+      await trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.PAYWALL_SHOWN);
+      // Record paywallShownAt on the session
+      try {
+        await fetch(`/api/guest/session/${deviceId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paywallShownAt: new Date().toISOString() }),
+        });
+      } catch { /* non-blocking */ }
+    }
+  }, [deviceId]);
+
   const handleRegister = useCallback(() => {
-    navigate("/register");
-  }, [navigate]);
+    if (deviceId) trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.PAYWALL_CTA_CLICKED);
+    navigate("/register?from=teaser");
+  }, [navigate, deviceId]);
+
+  const handleSignIn = useCallback(() => {
+    if (deviceId) trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.PAYWALL_SIGNIN_CLICKED);
+    navigate("/login?from=teaser");
+  }, [navigate, deviceId]);
 
   return (
     <div className="min-h-screen" style={{ background: "hsl(222 47% 7%)" }}>
-      {step !== "idle" && step !== "generating" && (
+      {step !== "idle" && step !== "generating" && step !== "locked" && (
         <div className="fixed top-0 left-0 right-0 z-10 px-4 py-3 flex items-center gap-3"
           style={{ background: "hsl(222 47% 7% / 0.9)", backdropFilter: "blur(8px)", borderBottom: "1px solid hsl(222 47% 14%)" }}>
           <img src={logoSrc} alt="TrainChat" className="h-6" />
@@ -844,7 +991,7 @@ export default function GuestStart() {
         </div>
       )}
 
-      <div className={`flex justify-center px-4 ${step !== "idle" && step !== "generating" ? "pt-20 pb-8" : ""}`}>
+      <div className={`flex justify-center px-4 ${step !== "idle" && step !== "generating" && step !== "locked" ? "pt-20 pb-8" : ""}`}>
         {step === "idle" && <EntryScreen onStart={handleStart} />}
 
         {step === "onboarding" && (
@@ -872,9 +1019,26 @@ export default function GuestStart() {
             program={program}
             deviceId={deviceId ?? ""}
             onRegister={handleRegister}
+            onPaywallTrigger={handlePaywallTrigger}
+          />
+        )}
+
+        {step === "locked" && (
+          <LockedScreen
+            onUnlock={handleRegister}
+            onSignIn={handleSignIn}
           />
         )}
       </div>
+
+      {/* Premium paywall overlay — shown after teaser is exhausted */}
+      {showPaywall && (
+        <GuestPaywallModal
+          deviceId={deviceId}
+          onRegister={handleRegister}
+          onSignIn={handleSignIn}
+        />
+      )}
     </div>
   );
 }

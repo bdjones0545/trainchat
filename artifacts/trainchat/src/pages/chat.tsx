@@ -38,35 +38,33 @@ const STARTER_PROMPTS = [
 ];
 
 async function fetchSubscription() {
-  const res = await customFetch("/api/subscription");
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    return await customFetch<any>("/api/subscription");
+  } catch {
+    return null;
+  }
 }
 
 async function fetchStreak() {
-  const res = await customFetch("/api/streak");
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    return await customFetch<any>("/api/streak");
+  } catch {
+    return null;
+  }
 }
 
 async function postSessionLog(data: any) {
-  const res = await customFetch("/api/session-logs", {
+  return await customFetch<any>("/api/session-logs", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("Failed to log session");
-  return res.json();
 }
 
 async function postCheckout(priceId: string) {
-  const res = await customFetch("/api/subscription/checkout", {
+  return await customFetch<any>("/api/subscription/checkout", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ priceId }),
   });
-  if (!res.ok) throw new Error("Checkout failed");
-  return res.json();
 }
 
 export default function Chat() {
@@ -292,19 +290,11 @@ export default function Chat() {
     }
   }
 
-  async function handleSelectPlan(planId: string) {
+  async function handleSelectPlan(planId: string, priceId?: string) {
     setShowPricing(false);
-    // In production, fetch real price IDs from /api/subscription/products
-    // For now, open Stripe checkout with the selected plan
-    const PRICE_IDS: Record<string, string | undefined> = {
-      starter: undefined,
-      pro: undefined,
-      elite: undefined,
-    };
 
-    const priceId = PRICE_IDS[planId];
     if (!priceId) {
-      alert("Stripe not yet connected. Price IDs will be available after connecting your Stripe account.");
+      alert("Stripe products are not yet configured. Please connect your Stripe account and create products first.");
       return;
     }
 

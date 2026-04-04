@@ -1,0 +1,279 @@
+PHASE 3 — BUILD THE PAYWALL + SIGNUP/CONVERSION + GUEST-TO-USER MERGE FLOW FOR TRAINCHAT
+
+We have already built:
+- Phase 1: guest session + device ID foundation
+- Phase 2: premium guest onboarding + AI teaser + first personalized output + one follow-up interaction
+
+In this phase, we are building the monetization and conversion system that activates AFTER the guest has experienced real value.
+
+Do NOT redesign the entire app.
+Do NOT break existing auth, billing, dashboard, or logged-in user flows.
+Integrate this carefully into the existing TrainChat architecture.
+
+OBJECTIVE
+After a guest user experiences the teaser, trigger a premium paywall and require account creation/payment to continue. Preserve the guest’s progress and merge it into the new real user account seamlessly so the user feels like they are continuing their coaching journey, not starting over.
+
+CORE STRATEGY
+The flow should be:
+1. guest enters with no signup friction
+2. guest completes onboarding
+3. guest receives real personalized output
+4. guest gets one meaningful follow-up interaction
+5. THEN premium paywall appears
+6. guest creates account
+7. guest completes payment if required
+8. guest session data merges into real account
+9. user continues seamlessly inside TrainChat
+
+This should feel premium, high-converting, and psychologically smooth.
+
+PHASE 3 SCOPE ONLY
+
+Build the following:
+
+1. PAYWALL TRIGGER LOGIC
+Implement clean paywall trigger logic for guest users.
+
+Recommended trigger:
+- show paywall after the guest has received:
+  - the first full personalized output
+  - and one meaningful follow-up interaction
+- OR when the guest attempts another deep interaction beyond the teaser limit
+
+Requirements:
+- use guest session state / teaser usage tracking from prior phases
+- paywall should appear only after value has clearly been delivered
+- do not trigger too early
+- do not allow unlimited free continuation
+- structure the logic cleanly so teaser limits can be adjusted later in one place
+
+Examples of what should trigger paywall:
+- requesting another program
+- requesting additional refinements after the allowed follow-up
+- trying to progress to next day/week
+- deeper customizations beyond the teaser limit
+
+2. PREMIUM PAYWALL EXPERIENCE
+Build a polished premium paywall screen/modal/page.
+
+The paywall should feel like:
+- continuation of the coaching experience
+- premium access unlock
+- saving progress and unlocking deeper personalization
+- not a harsh interruption
+- not spammy or cheap
+
+Messaging should emphasize:
+- your coach has already started learning you
+- your first plan is ready
+- save your progress and continue
+- unlock adaptive programming, progression, memory, tracking, and premium coaching tools
+- continue building your personalized system
+
+Suggested headline directions:
+- Unlock Your Full AI Coaching Experience
+- Your Plan Is Ready — Continue With Full Access
+- Save Your Progress and Keep Building
+
+Include:
+- clear CTA to create account / continue
+- concise premium feature bullets
+- reassurance that progress will be saved
+- mobile-first polished design
+- room for future pricing copy edits
+
+Make the paywall copy easy for me to edit later in a dedicated config/component file.
+
+3. SIGNUP AFTER PAYWALL
+After paywall, require account creation before continuing.
+
+Requirements:
+- route user into signup flow only after paywall
+- preserve guest session context during signup
+- do not lose generated teaser program, onboarding answers, or conversation state
+- after account creation, user should feel like they are resuming, not restarting
+- make the transition visually and technically seamless
+
+If login is supported for returning users, handle that path cleanly too:
+- if a returning existing user signs in after the paywall, allow guest session merge/association where appropriate
+
+4. PAYMENT / PLAN HANDOFF
+Connect the paywall flow to the existing payment / subscription system in TrainChat.
+
+Requirements:
+- after account creation, route into the appropriate pricing / checkout / subscription logic already used by the app
+- do not create a disconnected payment experience
+- preserve continuity from guest session -> signup -> payment -> full access
+- if your current app has plans/products already, use those
+- do not invent a temporary fake billing flow
+
+Important:
+The app should use the existing billing architecture if present.
+This phase is about connecting the guest teaser funnel into the real monetization system.
+
+5. GUEST-TO-USER MERGE LOGIC
+Implement the core guest-to-user merge flow.
+
+When a guest completes signup (or logs into an existing account if appropriate), merge or associate guest session data into the real user account.
+
+At minimum preserve/merge:
+- onboarding answers
+- generated teaser output
+- teaser conversation context that should carry forward
+- guest session metadata
+- teaser usage status
+- timestamps relevant to acquisition/conversion
+- linkage between guest session and user account
+
+Update guest session fields such as:
+- linkedUserId
+- convertedAt
+- status = converted
+
+This merge should be designed carefully so:
+- no important teaser context is lost
+- duplicate/conflicting data is handled safely
+- future personalization can use the guest data
+
+6. SEAMLESS POST-CONVERSION HANDOFF
+After signup/payment/merge, route the user into the authenticated TrainChat experience with continuity.
+
+The user should ideally see:
+- their generated plan still present
+- their context remembered
+- ability to continue the conversation/program naturally
+- no abrupt reset
+
+The post-conversion experience should feel like:
+“I unlocked the full version of the coach I already started with.”
+
+7. GUEST ACCESS BLOCKING AFTER LIMIT
+Once the teaser limit has been reached, prevent unlimited further guest usage.
+
+Requirements:
+- enforce teaser limit in backend logic, not just frontend
+- use guest session/device ID state
+- if guest has already used their teaser and has not converted, show the paywall or a graceful locked state instead of continuing generation
+- message example:
+  “Your free guided preview has already been used on this device. Create your account to continue.”
+
+Keep this logic clean and adjustable.
+
+8. RETURN VISITOR GUEST HANDLING
+Handle returning guest users properly.
+
+Cases to support:
+- returning same device that already used the teaser but did not convert
+- returning same device that hit paywall previously
+- returning same device after partial onboarding
+- returning guest who converts later
+
+Requirements:
+- resume intelligently when possible
+- if teaser already consumed, show paywall / locked continuation path
+- if onboarding was partially completed, resume cleanly
+- avoid broken loops or confusion
+
+9. ANALYTICS / FUNNEL EVENTS
+Now wire in real analytics/funnel tracking for the conversion flow.
+
+Track at minimum:
+- paywall_shown
+- paywall_cta_clicked
+- signup_started
+- signup_completed
+- payment_started
+- payment_completed
+- guest_converted
+- paywall_closed or abandoned if trackable
+
+Keep events organized so funnel performance can be inspected later.
+
+If there is an internal analytics/logging system already, connect into it.
+If not, add a clean lightweight event logging layer that can be extended later.
+
+10. CONFIGURABLE CONVERSION SETTINGS
+Create a clear place in code where I can later adjust:
+- teaser interaction limit
+- paywall trigger rule
+- paywall headline/subheadline/body copy
+- feature bullets
+- CTA text
+- locked-state message
+
+Do not hardcode conversion strategy everywhere.
+Keep this centralized and editable.
+
+11. AUTH / BILLING SAFETY
+Do not break:
+- existing signup/login logic
+- existing billing/subscription flows
+- current logged-in user dashboard
+- authenticated chat/program flows
+
+This phase must integrate with the existing app cleanly.
+
+12. UX / DESIGN PRINCIPLES
+The monetization flow should feel:
+- premium
+- intentional
+- seamless
+- psychologically smooth
+- trust-building
+- high-converting
+
+It should NOT feel:
+- abrupt
+- bait-and-switch
+- cheap
+- spammy
+- disconnected from the teaser experience
+
+13. ERROR HANDLING
+Handle gracefully:
+- signup failure
+- merge failure
+- payment interruption
+- duplicate account/device edge cases
+- guest session not found
+- returning guest with inconsistent state
+
+Do not leave users stranded or force them to restart if avoidable.
+
+14. DO NOT BUILD IN THIS PHASE
+Do NOT do a broad redesign of the whole app.
+Do NOT rebuild existing checkout from scratch if billing already exists.
+Do NOT create messy duplicate auth pathways.
+
+This phase is specifically:
+paywall + signup handoff + payment handoff + guest merge + guest lock enforcement
+
+15. TESTING / VALIDATION
+After building, validate:
+- guest can complete teaser before paywall
+- paywall appears at the correct time
+- guest cannot continue infinitely without converting
+- signup works after paywall
+- payment handoff works
+- guest data merges correctly into new account
+- converted user sees continuity after unlocking
+- returning guest users are handled correctly
+- logged-in user flows remain unaffected
+
+16. DELIVERABLES AFTER IMPLEMENTATION
+When complete, provide:
+1. summary of what was built
+2. where paywall trigger logic lives
+3. where teaser limit is configured
+4. where paywall copy can be edited later
+5. how signup handoff works
+6. how payment handoff works
+7. how guest-to-user merge works
+8. what analytics events were added
+9. any edge cases or cleanup to address before Phase 4
+
+IMPORTANT REMINDERS
+This phase should monetize the teaser AFTER value is delivered.
+Preserve continuity.
+Do not make the user start over after signup/payment.
+Build it like a premium access unlock, not a generic subscription wall.
