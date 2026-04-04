@@ -15,6 +15,7 @@ import {
   type ExerciseEntry,
   type MovementPattern,
 } from "./training-intelligence";
+import { type IntentResult, buildIntentPromptHint } from "./intent";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -474,18 +475,34 @@ function getEditTypeGuidance(editType: string, program: ProgramStructure): strin
   }
 }
 
+// ─── AI Response Options ─────────────────────────────────────────────────────
+
+export interface AIResponseOptions {
+  adaptationContext?: string;
+  memoryContext?: string;
+  insightHint?: string;
+  conversionHint?: string;
+  currentProgram?: ProgramStructure | null;
+  intentResult?: IntentResult | null;
+}
+
 // ─── Main entry point ────────────────────────────────────────────────────────
 
 export async function generateAIResponse(
   userMessage: string,
   history: ChatMessage[],
   userId: number,
-  adaptationContext?: string,
-  memoryContext?: string,
-  insightHint?: string,
-  conversionHint?: string,
-  currentProgram?: ProgramStructure | null
+  options: AIResponseOptions = {}
 ): Promise<AIResponse> {
+  const {
+    adaptationContext,
+    memoryContext,
+    insightHint,
+    conversionHint,
+    currentProgram,
+    intentResult,
+  } = options;
+
   const [profile] = await db
     .select()
     .from(userProfilesTable)
@@ -493,24 +510,49 @@ export async function generateAIResponse(
 
   const basePrompt = await buildSystemPrompt(profile ?? null);
 
-  // Detect edit intent and build edit context if a program exists
-  const editIntent = detectEditIntent(userMessage);
-  const editContext = (editIntent.isEdit && currentProgram)
-    ? buildEditContext(currentProgram, userMessage, editIntent)
-    : null;
+  // ── Intent-driven context building ───────────────────────────────────────
+  // Use the pre-classified intent result from the router instead of re-detecting.
+  // Fall back to internal detection only if no intent was passed.
+  let editContext: string | null = null;
+  let legacyEditIntent: EditIntent | null = null;
 
-  if (editIntent.isEdit && currentProgram) {
-    logger.info({ editType: editIntent.editType, confidence: editIntent.confidence }, "[EditPipeline] Edit intent detected — injecting current program for mutation");
-  } else if (editIntent.isEdit && !currentProgram) {
-    logger.warn("[EditPipeline] Edit intent detected but no current program found in conversation — treating as new request");
+  if (intentResult?.type === "EDIT_PROGRAM" && currentProgram) {
+    // Build edit context using the classified subtype
+    const syntheticEditIntent: EditIntent = {
+      isEdit: true,
+      editType: intentResult.editSubtype ?? "general_modification",
+      confidence: intentResult.confidence,
+    };
+    editContext = buildEditContext(currentProgram, userMessage, syntheticEditIntent);
+    legacyEditIntent = syntheticEditIntent;
+    logger.info(
+      { editType: syntheticEditIntent.editType, confidence: intentResult.confidence },
+      "[EditPipeline] Building edit context from routed intent"
+    );
+  } else if (intentResult?.type === "EDIT_PROGRAM" && !currentProgram) {
+    logger.warn("[EditPipeline] EDIT_PROGRAM intent but no current program available — AI will handle without program context");
+  } else if (!intentResult) {
+    // Legacy path: classify internally (backwards compat for direct calls)
+    const detected = detectEditIntent(userMessage);
+    if (detected.isEdit && currentProgram) {
+      editContext = buildEditContext(currentProgram, userMessage, detected);
+      legacyEditIntent = detected;
+    }
   }
 
-  const extras = [adaptationContext, memoryContext, insightHint, conversionHint, editContext].filter(Boolean).join("\n\n");
+  // Build intent-specific prompt hint (pain, readiness, retrieve, etc.)
+  const intentHint = intentResult ? buildIntentPromptHint(intentResult) : null;
+
+  const extras = [adaptationContext, memoryContext, insightHint, conversionHint, intentHint, editContext]
+    .filter(Boolean)
+    .join("\n\n");
   const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;
   const apiKey = process.env.OPENAI_API_KEY;
 
+  const activeEditIntent = legacyEditIntent;
+
   if (!apiKey) {
-    return generateFallbackResponse(userMessage, history, profile ?? null, currentProgram ?? null, editIntent);
+    return generateFallbackResponse(userMessage, history, profile ?? null, currentProgram ?? null, activeEditIntent ?? undefined, intentResult ?? undefined);
   }
 
   try {
@@ -520,8 +562,9 @@ export async function generateAIResponse(
       { role: "user" as const, content: userMessage },
     ];
 
-    // Edit requests need more tokens to return the full modified program JSON
-    const maxTokens = editContext ? 4000 : 2800;
+    // Edit and pain/readiness requests need more tokens
+    const isHeavyContext = editContext !== null || intentResult?.type === "ADJUST_FOR_PAIN" || intentResult?.type === "ADJUST_FOR_READINESS";
+    const maxTokens = isHeavyContext ? 4000 : 2800;
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -553,7 +596,11 @@ export async function generateAIResponse(
     return { content: cleanContent, structuredData };
   } catch (error) {
     logger.error({ error }, "OpenAI API call failed — using fallback");
-    return generateFallbackResponse(userMessage, history, profile ?? null, currentProgram ?? null, editIntent);
+    return generateFallbackResponse(userMessage, history, profile ?? null, {
+      currentProgram: currentProgram ?? null,
+      editIntent: activeEditIntent ?? undefined,
+      intentResult: intentResult ?? undefined,
+    });
   }
 }
 
@@ -561,21 +608,55 @@ export async function generateAIResponse(
 // Uses the training intelligence engine for exercise selection and program design.
 // Follows the same co-creation model as the real AI agent.
 
+interface FallbackOptions {
+  currentProgram?: ProgramStructure | null;
+  editIntent?: EditIntent;
+  intentResult?: IntentResult;
+}
+
 function generateFallbackResponse(
   userMessage: string,
   history: ChatMessage[],
   profile: UserProfile | null,
-  currentProgram?: ProgramStructure | null,
-  editIntent?: EditIntent
+  options: FallbackOptions = {}
 ): AIResponse {
+  const { currentProgram, editIntent, intentResult } = options;
   const lower = userMessage.toLowerCase();
   const userTurnCount = history.filter((m) => m.role === "user").length;
   const isFirstMessage = userTurnCount === 0;
 
+  // ── Readiness adjustment fallback ────────────────────────────────────────
+  if (intentResult?.type === "ADJUST_FOR_READINESS") {
+    const signal = intentResult.metadata?.signal as string ?? "general";
+    const responses: Record<string, string> = {
+      poor_sleep: `Poor sleep degrades force production, reaction time, and recovery speed. This is not a day to push intensity.\n\nFor today:\n- Drop load 15-20% across all sets\n- Keep reps technical — stop 3+ reps before failure\n- Skip any max-effort or PR attempts\n- Prioritize compound movements, cut accessories if needed\n\nConsistency over intensity. One suboptimal session won't derail the program — but training through CNS suppression can.`,
+      high_fatigue: `Accumulated fatigue is real and requires a response, not a push-through.\n\nOptions based on where you are:\n1. **Deload session** — reduce all loads by 40-50%, keep the same movements, lower reps\n2. **Active recovery** — 30 minutes of walking, light cycling, or mobility work\n3. **Full rest** — if you're at the point of systemic fatigue, one full day off accelerates recovery more than a junk session\n\nWhich direction fits your situation?`,
+      illness: `Training while ill is counterproductive — your immune system is already taxed and adding training stress delays recovery.\n\nRecommendation: rest until symptoms are gone. Once you're at 80%+, start with a reduced volume session before returning to normal loads.\n\nIf you're insisting on movement: light walking or mobility only. No lifting.`,
+      high_stress: `High psychological stress elevates cortisol, which competes with the adaptations you're training for.\n\nFor today: reduce intensity 20-30%, avoid failure sets, and focus on movement quality over load. If available, prioritize compound movements and skip high-demand isolation work.\n\nManaging recovery is part of the training system — not separate from it.`,
+      poor_recovery: `If your muscles haven't recovered, you're training on borrowed time.\n\nFor today: switch to an antagonist muscle group or active recovery. If the program has a rest day tomorrow, consider swapping.\n\nTell me which day you're supposed to train and I'll adjust accordingly.`,
+      travel: `Constrained environment changes the execution, not the objective.\n\nIf you have access to a hotel gym: focus on compound bodyweight or dumbbell movements. If not: bodyweight circuit targeting the same muscle groups as today's session.\n\nWhat equipment do you have access to right now?`,
+    };
+    return {
+      content: responses[signal] ?? `Noted on the readiness concern. Reduce session intensity 20-30% today and prioritize recovery. What does your schedule look like for the next 48 hours?`,
+      structuredData: null,
+    };
+  }
+
+  // ── Pain adjustment fallback ──────────────────────────────────────────────
+  if (intentResult?.type === "ADJUST_FOR_PAIN") {
+    const bodyPart = intentResult.metadata?.bodyPart as string ?? "unspecified";
+    const partLabel = bodyPart.replace("_", " ");
+    return {
+      content: `Flagging the ${partLabel} issue before we continue. A few things:\n\n1. If this is acute (recent, sharp, or getting worse) — stop training that area and consult a medical professional before loading it again.\n2. If this is chronic or a familiar pattern — we can program around it. Tell me:\n   - Is it sharp/acute or dull/chronic?\n   - What movements aggravate it?\n   - What range of motion is pain-free?\n\nWith that context, I'll remove the problematic exercises from the program and replace them with appropriate alternatives. The rest of the structure stays intact.`,
+      structuredData: null,
+    };
+  }
+
   // ── Edit request with current program (fallback mutation engine) ──
-  if (editIntent?.isEdit && currentProgram) {
-    logger.info({ editType: editIntent.editType }, "[FallbackEditPipeline] Applying fallback program mutation");
-    const mutated = applyFallbackMutation(currentProgram, editIntent.editType, lower, profile);
+  const activeEditIntent = editIntent;
+  if (activeEditIntent?.isEdit && currentProgram) {
+    logger.info({ editType: activeEditIntent.editType }, "[FallbackEditPipeline] Applying fallback program mutation");
+    const mutated = applyFallbackMutation(currentProgram, activeEditIntent.editType, lower, profile);
     if (mutated) {
       const confirmations: Record<string, string> = {
         add_core: "Added core work across the program. Core exercises are placed at the end of appropriate sessions to preserve NSCA exercise order and avoid competing with primary lifts. Updated structure is in the right panel.",
@@ -590,7 +671,7 @@ function generateFallbackResponse(
         general_modification: "Modification applied. Updated structure is in the right panel.",
       };
       return {
-        content: confirmations[editIntent.editType] ?? "Modification applied. Updated structure is in the right panel.",
+        content: confirmations[activeEditIntent.editType] ?? "Modification applied. Updated structure is in the right panel.",
         structuredData: mutated,
       };
     }

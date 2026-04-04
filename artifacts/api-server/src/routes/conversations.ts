@@ -3,7 +3,8 @@ import { db, conversationsTable, messagesTable } from "@workspace/db";
 import { eq, desc, count } from "drizzle-orm";
 import { CreateConversationBody, GetConversationParams, DeleteConversationParams, ListMessagesParams, SendMessageBody, SendMessageParams } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
-import { generateAIResponse, detectEditIntent, type ProgramStructure } from "../lib/ai";
+import { generateAIResponse, type ProgramStructure } from "../lib/ai";
+import { classifyIntent, logIntentSummary } from "../lib/intent";
 import { buildAdaptationContext } from "../lib/adaptation";
 import { syncMemoriesFromData, listMemories, buildMemoryContext } from "../lib/memory";
 import { generateInsights, buildInsightPromptHint } from "../lib/insights";
@@ -12,6 +13,35 @@ import { stripeStorage } from "../lib/stripeStorage";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Extracts the most recent valid structured program from a conversation's message history.
+ * Searches backwards through assistant messages for the latest program JSON.
+ */
+function resolveCurrentProgram(
+  history: Array<{ role: string; structuredData?: string | null }>
+): ProgramStructure | null {
+  const assistantMessages = [...history]
+    .reverse()
+    .filter((m) => m.role === "assistant" && m.structuredData);
+
+  for (const msg of assistantMessages) {
+    if (!msg.structuredData) continue;
+    try {
+      const data = typeof msg.structuredData === "string"
+        ? JSON.parse(msg.structuredData)
+        : msg.structuredData;
+      if (data?.days && Array.isArray(data.days) && data.days.length > 0) {
+        return data as ProgramStructure;
+      }
+    } catch {
+      // ignore malformed JSON
+    }
+  }
+  return null;
+}
 
 router.get("/conversations", requireAuth, async (req, res): Promise<void> => {
   const userId = req.session.userId!;
@@ -261,55 +291,123 @@ When it feels natural — especially when discussing program details, progress t
 Keep it helpful and intelligent, never promotional.`;
   }
 
-  // ── Edit intent detection & current program resolution ──────────────────
-  const editIntent = detectEditIntent(parsed.data.content);
-  let currentProgram: ProgramStructure | null = null;
+  // ── Phase A: Intent Classification & Request Routing ─────────────────────
 
-  if (editIntent.isEdit) {
-    // Find the most recent assistant message in the conversation that has structured program data
-    const assistantMessages = history
-      .filter((m) => m.role === "assistant" && m.structuredData)
-      .reverse();
+  // Resolve current active program from conversation history (needed for EDIT/RETRIEVE intents)
+  const latestStructuredProgram = resolveCurrentProgram(history);
+  const hasActiveProgram = latestStructuredProgram !== null;
 
-    for (const msg of assistantMessages) {
-      const rawData = msg.structuredData;
-      if (rawData) {
-        try {
-          const programData = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
-          if (programData?.days && Array.isArray(programData.days) && programData.days.length > 0) {
-            currentProgram = programData as ProgramStructure;
-            break;
-          }
-        } catch {
-          // ignore malformed JSON
-        }
-      }
-    }
+  // Classify the intent — this is the single source of truth for routing
+  const intentResult = classifyIntent(parsed.data.content, {
+    hasActiveProgram,
+    conversationTurnCount: history.filter((m) => m.role === "user").length,
+  });
 
-    logger.info(
-      { editType: editIntent.editType, confidence: editIntent.confidence, hasProgramContext: !!currentProgram },
-      "[EditPipeline] Processing edit request"
-    );
+  logIntentSummary(parsed.data.content, intentResult, hasActiveProgram);
 
-    if (!currentProgram) {
-      logger.warn("[EditPipeline] Edit intent detected but no structured program found in history");
-    }
+  // ── Intent-specific routing ───────────────────────────────────────────────
+
+  // RETRIEVE_CURRENT_PROGRAM — no AI call needed, return current program directly
+  if (intentResult.type === "RETRIEVE_CURRENT_PROGRAM" && latestStructuredProgram) {
+    logger.info("[IntentRouter] Handling RETRIEVE_CURRENT_PROGRAM — returning current program without AI call");
+    const [assistantMessage] = await db.insert(messagesTable).values({
+      conversationId: params.data.id,
+      role: "assistant",
+      content: "Here's your current program. Everything is in the right panel.",
+      structuredData: JSON.stringify(latestStructuredProgram),
+    }).returning();
+
+    await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+
+    res.json({
+      userMessage: {
+        id: userMessage.id,
+        conversationId: userMessage.conversationId,
+        role: userMessage.role,
+        content: userMessage.content,
+        createdAt: userMessage.createdAt.toISOString(),
+        structuredData: null,
+      },
+      assistantMessage: {
+        id: assistantMessage.id,
+        conversationId: assistantMessage.conversationId,
+        role: assistantMessage.role,
+        content: assistantMessage.content,
+        createdAt: assistantMessage.createdAt.toISOString(),
+        structuredData: assistantMessage.structuredData ?? null,
+      },
+      planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+      intentDebug: { type: intentResult.type, confidence: intentResult.confidence },
+    });
+    return;
   }
+
+  // RETRIEVE_CURRENT_PROGRAM but no program exists — fall through to AI
+  if (intentResult.type === "RETRIEVE_CURRENT_PROGRAM" && !latestStructuredProgram) {
+    logger.info("[IntentRouter] RETRIEVE_CURRENT_PROGRAM but no program found — routing to AI to explain");
+  }
+
+  // SAVE_PROGRAM — respond with save signal (frontend handles actual save)
+  if (intentResult.type === "SAVE_PROGRAM") {
+    logger.info("[IntentRouter] Handling SAVE_PROGRAM — responding with save confirmation");
+    const [assistantMessage] = await db.insert(messagesTable).values({
+      conversationId: params.data.id,
+      role: "assistant",
+      content: latestStructuredProgram
+        ? "Done. Your program has been saved and is ready in the right panel whenever you need it."
+        : "There's no active program to save yet. Build one first and I'll lock it in for you.",
+      structuredData: latestStructuredProgram ? JSON.stringify(latestStructuredProgram) : null,
+    }).returning();
+
+    await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+
+    res.json({
+      userMessage: {
+        id: userMessage.id,
+        conversationId: userMessage.conversationId,
+        role: userMessage.role,
+        content: userMessage.content,
+        createdAt: userMessage.createdAt.toISOString(),
+        structuredData: null,
+      },
+      assistantMessage: {
+        id: assistantMessage.id,
+        conversationId: assistantMessage.conversationId,
+        role: assistantMessage.role,
+        content: assistantMessage.content,
+        createdAt: assistantMessage.createdAt.toISOString(),
+        structuredData: assistantMessage.structuredData ?? null,
+      },
+      planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+      intentDebug: { type: intentResult.type, confidence: intentResult.confidence },
+      triggerSave: !!latestStructuredProgram,
+    });
+    return;
+  }
+
+  // For all other intents — route to AI with appropriate context
+  // EDIT_PROGRAM needs the current program; others may or may not
+  const currentProgram = (intentResult.type === "EDIT_PROGRAM" || intentResult.type === "RETRIEVE_CURRENT_PROGRAM")
+    ? latestStructuredProgram
+    : null;
 
   const { content: aiContent, structuredData } = await generateAIResponse(
     parsed.data.content,
     history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
     userId,
-    adaptationCtx || undefined,
-    (hasMemory && memoryCtx) ? memoryCtx : undefined,
-    insightHint || undefined,
-    conversionHint || undefined,
-    currentProgram
+    {
+      adaptationContext: adaptationCtx || undefined,
+      memoryContext: (hasMemory && memoryCtx) ? memoryCtx : undefined,
+      insightHint: insightHint || undefined,
+      conversionHint: conversionHint || undefined,
+      currentProgram,
+      intentResult,
+    }
   );
 
-  // Fallback warning if edit was detected but no structured data came back
-  if (editIntent.isEdit && currentProgram && !structuredData) {
-    logger.warn("[EditPipeline] Edit intent detected and program was available, but AI did not return updated JSON. Right panel will not update.");
+  // Warn if EDIT_PROGRAM was routed but no structured data returned
+  if (intentResult.type === "EDIT_PROGRAM" && currentProgram && !structuredData) {
+    logger.warn("[IntentRouter] EDIT_PROGRAM intent with program context, but AI did not return updated JSON. Right panel will NOT update.");
   }
 
   const [assistantMessage] = await db.insert(messagesTable).values({
@@ -351,6 +449,11 @@ Keep it helpful and intelligent, never promotional.`;
           messagesRemaining: planInfo.messagesRemaining,
         }
       : null,
+    intentDebug: {
+      type: intentResult.type,
+      confidence: intentResult.confidence,
+      editSubtype: intentResult.editSubtype ?? null,
+    },
   });
 });
 
