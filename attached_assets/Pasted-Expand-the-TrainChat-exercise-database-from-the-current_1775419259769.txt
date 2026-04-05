@@ -1,0 +1,119 @@
+Expand the TrainChat exercise database from the current total to approximately 1500 active exercises.
+
+Primary goal:
+Increase the exercise inventory to ~1500 while preserving data quality, consistency, and compatibility with the existing program generation system.
+
+Important:
+Do not just inflate the database with random duplicates. The expanded library must feel structured, intentional, and useful for intelligent exercise selection, swapping, progression, and regression.
+
+Requirements:
+1. Expand the database to around 1500 active exercises.
+2. Preserve all current exercise ids, references, and compatibility with the existing application.
+3. Normalize naming conventions across the full database.
+4. Avoid low-value duplicates unless they are truly meaningful variations.
+5. Ensure each exercise has clean, structured metadata.
+
+For every exercise, include or improve these fields wherever possible:
+- id
+- name
+- category
+- subcategory
+- movementPattern
+- primaryMuscles
+- secondaryMuscles
+- muscleGroups
+- equipment
+- difficultyLevel
+- skillLevel
+- bodyRegion
+- trainingGoal
+- athleticQuality
+- unilateralOrBilateral
+- planeOfMotion
+- forceType
+- impactLevel
+- mobilityDemand
+- stabilityDemand
+- jointStressProfile
+- contraindications
+- coachingCues
+- beginnerRegressionIds
+- progressionIds
+- variationIds
+- tags
+- isActive
+
+Expand coverage across these major buckets:
+- squat variations
+- hinge variations
+- lunge and split squat variations
+- horizontal push
+- vertical push
+- horizontal pull
+- vertical pull
+- carries
+- rotation and anti-rotation
+- anti-extension
+- anti-lateral flexion
+- core flexion
+- plyometrics
+- jump and landing drills
+- sprint mechanics
+- acceleration drills
+- deceleration drills
+- change of direction drills
+- med ball drills
+- mobility drills
+- activation drills
+- warm-up drills
+- recovery drills
+- self-myofascial release
+- rehab-friendly low-load movements
+- bodyweight exercises
+- dumbbell exercises
+- barbell exercises
+- kettlebell exercises
+- cable exercises
+- machine exercises
+- band exercises
+- sled exercises
+- trap bar exercises
+- sport-performance drills
+
+Ensure broad coverage for these user situations:
+- beginner
+- intermediate
+- advanced
+- youth athlete
+- adult general fitness
+- older adult friendly
+- home gym limited equipment
+- full commercial gym
+- fat loss
+- hypertrophy
+- strength
+- power
+- athletic performance
+- conditioning
+- mobility / recovery
+- shoulder-sensitive users
+- knee-sensitive users
+- low-back-sensitive users
+
+Implementation tasks:
+1. Audit the current exercise table/schema and identify any missing metadata fields needed for scale.
+2. Expand the seed data or import process to bring the total exercise count to ~1500.
+3. Keep the data structured and normalized.
+4. Add validation so malformed exercise records are rejected.
+5. Add or improve category coverage so the database is balanced rather than overstacked in a few patterns.
+6. Make sure variation, progression, and regression relationships are usable by the app.
+7. Ensure all exercises are active and queryable in the existing inventory logic.
+8. Confirm the final active exercise count in the database after seeding/import.
+9. Output a category summary showing how the 1500 exercises are distributed.
+
+Deliverables:
+- updated schema if needed
+- expanded exercise dataset
+- final active exercise count
+- category distribution summary
+- confirmation that the existing app can use the larger database without breaking
