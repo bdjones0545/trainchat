@@ -97,7 +97,13 @@ export default function Login() {
           }
 
           // No guest session or merge failed — route based on onboarding status
-          const onboardingComplete = result?.user?.onboardingComplete ?? true;
+          // The backend self-heals this flag, so it is always accurate.
+          const onboardingComplete = result?.user?.onboardingComplete ?? false;
+          if (process.env.NODE_ENV !== "production") {
+            console.info(
+              `[routing] login: onboardingComplete=${onboardingComplete} → ${onboardingComplete ? "/chat" : "/onboarding"}`,
+            );
+          }
           setLocation(onboardingComplete ? "/chat" : "/onboarding");
         },
         onError: (err: unknown) => {

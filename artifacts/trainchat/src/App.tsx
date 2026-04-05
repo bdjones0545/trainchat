@@ -39,9 +39,13 @@ function GuestSessionInit() {
 
 /**
  * Smart root redirect:
- * - Authenticated + onboarding complete → /chat
- * - Authenticated + onboarding NOT complete → /onboarding
- * - Unauthenticated users → /start (guest experience)
+ * - Authenticated + onboarding complete (or existing profile) → /chat
+ * - Authenticated + no complete profile → /onboarding (first-time users only)
+ * - Unauthenticated → /start (guest experience)
+ *
+ * The backend self-heals onboardingComplete: any user who already has a
+ * complete profile record gets the flag set to true on their next /me call,
+ * so returning free users are never bounced back into onboarding.
  */
 function SmartRoot() {
   const { data: me, isLoading } = useGetMe();
@@ -49,8 +53,13 @@ function SmartRoot() {
   if (isLoading) return null;
 
   if (me) {
-    if (me.onboardingComplete) return <Redirect to="/chat" />;
-    return <Redirect to="/onboarding" />;
+    const destination = me.onboardingComplete ? "/chat" : "/onboarding";
+    if (process.env.NODE_ENV !== "production") {
+      console.info(
+        `[routing] SmartRoot: userId=${me.id} onboardingComplete=${me.onboardingComplete} → ${destination}`,
+      );
+    }
+    return <Redirect to={destination} />;
   }
   return <Redirect to="/start" />;
 }

@@ -1,0 +1,56 @@
+Fix TrainChat routing so returning non-paying users go to the agent, not back into onboarding.
+
+Problem:
+Right now, when a non-paying user signs back in, they are taken to the onboarding modal instead of the AI agent. That is incorrect behavior for returning free users.
+
+Correct behavior:
+- Brand new user with no onboarding/profile state -> show onboarding
+- Returning free user who already completed onboarding -> go directly to the agent
+- Paid user -> go directly to the full paid experience
+- Free users can still have usage limits/paywall gating, but should not be forced through onboarding again unless their onboarding is truly incomplete
+
+Tasks:
+1. Audit the post-login routing logic on web and mobile.
+2. Identify all flags currently used for routing, including things like:
+   - isSubscribed / subscriptionStatus
+   - onboardingCompleted
+   - profileCompleted
+   - hasCompletedIntake
+   - hasUsedFreeInputs
+   - trial status
+   - user profile existence
+3. Decouple onboarding state from payment state.
+   - A user should not be considered “needs onboarding” just because they are not subscribed.
+4. Create clear route logic:
+   - if no onboarding/profile exists -> onboarding
+   - if onboarding exists and user is not subscribed -> agent with free limits
+   - if onboarding exists and user is subscribed -> full experience
+5. Persist a dedicated onboarding completion flag in the database, such as:
+   - onboardingCompleted: true
+   - onboardingCompletedAt
+6. Ensure this flag is set only when onboarding is actually completed successfully.
+7. On sign-in, fetch the user’s onboarding/profile state before deciding where to route them.
+8. Update the guard logic so non-paying returning users are routed to the agent page by default.
+9. Preserve paywall behavior:
+   - non-paying users can still be limited by token/input counts
+   - but they should enter the agent, not restart onboarding
+10. Add fallback logic:
+   - if onboarding is partially complete, resume onboarding only if critical required data is missing
+   - otherwise go to the agent
+11. Add console/server logs in development showing why the user was routed to:
+   - onboarding
+   - free agent
+   - paid dashboard
+12. Verify behavior for these scenarios:
+   - brand new user
+   - returning free user
+   - returning paid user
+   - partially completed onboarding user
+   - logged out then logged back in on mobile Safari
+
+Deliverables:
+- exact cause of the incorrect redirect
+- files changed
+- updated routing logic
+- confirmation that returning non-paying users now go to the agent
+- confirmation that only true first-time users are shown onboarding
