@@ -702,7 +702,11 @@ export async function generateAIResponse(
   const activeEditIntent = legacyEditIntent;
 
   if (!apiKey) {
-    return generateFallbackResponse(userMessage, history, profile ?? null, currentProgram ?? null, activeEditIntent ?? undefined, intentResult ?? undefined);
+    return generateFallbackResponse(userMessage, history, profile ?? null, {
+      currentProgram: currentProgram ?? null,
+      editIntent: activeEditIntent ?? undefined,
+      intentResult: intentResult ?? undefined,
+    });
   }
 
   try {

@@ -7,7 +7,10 @@ import {
   getCurrentWeek,
   getBlockSummary,
   initializeTrainingSystem,
+  createTrainingSystemFromProgram,
+  type ChatProgram,
 } from "../lib/training-system-service";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
@@ -117,6 +120,48 @@ router.post("/training-system/initialize", requireAuth, async (req, res): Promis
   } catch (err) {
     console.error("[training-system] POST /initialize error", err);
     res.status(500).json({ error: "Failed to initialize training system" });
+  }
+});
+
+// ─── POST /training-system/from-chat ─────────────────────────────────────────
+// Saves a chat-generated ProgramStructure as a real Training System in the DB.
+// This bridges the chat output → Training System page.
+router.post("/training-system/from-chat", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const userId = req.session.userId!;
+    const program = req.body as ChatProgram;
+
+    logger.info({ userId, programName: program?.programName }, "[training-system] POST /from-chat — received");
+
+    // Basic validation
+    if (!program || !program.programName) {
+      res.status(400).json({ error: "Missing programName in request body" });
+      return;
+    }
+    if (!Array.isArray(program.days) || program.days.length === 0) {
+      res.status(400).json({ error: "Program must have at least one day" });
+      return;
+    }
+
+    // Validate each day has exercises
+    for (const day of program.days) {
+      if (!Array.isArray(day.exercises) || day.exercises.length === 0) {
+        logger.warn({ userId, dayName: day.name }, "[training-system] Day has no exercises — skipping validation error, proceeding");
+      }
+    }
+
+    const system = await createTrainingSystemFromProgram(userId, program);
+
+    logger.info({ userId, systemId: system.id }, "[training-system] POST /from-chat — Training System created successfully");
+
+    res.status(201).json({
+      success: true,
+      systemId: system.id,
+      systemName: system.name,
+    });
+  } catch (err: any) {
+    logger.error({ err: err.message, stack: err.stack }, "[training-system] POST /from-chat error");
+    res.status(500).json({ error: "Failed to save training system from chat program" });
   }
 });
 

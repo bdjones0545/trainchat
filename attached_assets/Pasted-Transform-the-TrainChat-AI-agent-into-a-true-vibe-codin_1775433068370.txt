@@ -1,0 +1,240 @@
+Transform the TrainChat AI agent into a true “vibe coding” training system architect.
+
+Goal:
+The agent should function like Replit’s vibe coding experience, but for training programs. When a user speaks naturally, the agent should interpret the request, modify the real training system, and reflect changes instantly in the app.
+
+The agent must no longer act as a text-based advisor.
+It must act as a SYSTEM EDITOR.
+
+---
+
+CORE BEHAVIOR:
+
+When a user sends a message, the system must:
+
+1. CLASSIFY INTENT
+
+Determine if the message is:
+- informational (question)
+- suggestion request
+- system edit request
+- progression request
+- deload/recovery request
+- constraint change (time, equipment, injury)
+- schedule change
+- full rebuild request
+
+If informational → respond normally
+
+If system-related → enter EDIT MODE
+
+---
+
+2. EDIT MODE PIPELINE
+
+Every system modification must follow this pipeline:
+
+STEP 1 — READ
+- Load the user’s current Training System from database/state
+
+STEP 2 — REASON
+- Interpret what the user actually wants
+- Identify exactly what part of the system is affected
+
+STEP 3 — PATCH
+- Generate a structured update (NOT full rewrite unless necessary)
+
+STEP 4 — VALIDATE
+- Ensure patch maintains:
+  - program balance
+  - movement pattern coverage
+  - progression logic
+  - user constraints (equipment, injuries, time)
+
+STEP 5 — COMMIT
+- Apply patch to system
+- Save updated system to database
+- Increment version
+- Append change log
+
+STEP 6 — REFRESH UI
+- Invalidate queries
+- Update Training System page immediately
+
+STEP 7 — RESPOND
+- Explain what changed in a coaching tone
+
+---
+
+3. PATCH SYSTEM (CRITICAL)
+
+Do NOT rewrite the entire program every time.
+
+Use surgical patches like:
+
+{
+  "action": "swap_exercise",
+  "target": {
+    "day": 2,
+    "exercise": "Back Squat"
+  },
+  "replacement": {
+    "name": "Goblet Squat",
+    "sets": 4,
+    "reps": "8-10",
+    "rest": "90 sec",
+    "notes": "Reduced knee stress, maintains quad stimulus"
+  },
+  "reason": "User requested knee-friendly option"
+}
+
+Other supported actions:
+- add_exercise
+- remove_exercise
+- update_sets_reps
+- change_rest
+- rewrite_day
+- rewrite_week
+- change_split
+- reduce_volume
+- increase_volume
+- progression_update
+- deload_week
+- equipment_adjustment
+- time_constraint_adjustment
+
+---
+
+4. DATA STRUCTURE (SOURCE OF TRUTH)
+
+The Training System must be a structured object:
+
+{
+  title,
+  goal,
+  experienceLevel,
+  split,
+  daysPerWeek,
+  phase,
+  summary,
+  days: [
+    {
+      dayNumber,
+      title,
+      focus,
+      exercises: [
+        {
+          name,
+          sets,
+          reps,
+          rest,
+          notes,
+          movementPattern,
+          category
+        }
+      ]
+    }
+  ],
+  version,
+  lastUpdated,
+  changeLog[]
+}
+
+This object must be updated every time the agent makes a change.
+
+---
+
+5. VERSIONING
+
+Every change must:
+- create a change log entry
+- optionally snapshot previous version
+
+Change log example:
+{
+  timestamp,
+  action,
+  summary,
+  reason
+}
+
+---
+
+6. UI INTEGRATION
+
+After any change:
+
+- Show a system update card in chat:
+  - “Updated Day 2”
+  - “Back Squat → Goblet Squat”
+  - “Reduced knee load”
+
+- Training System page updates immediately
+- Mark updated exercises with:
+  - “Updated”
+  - “New”
+  - “Modified”
+
+---
+
+7. BEHAVIOR RULES
+
+- Never pretend a change was made unless it was saved
+- Always read current system before editing
+- If request is unclear → ask ONE concise question
+- If confidence is high → act immediately
+- Preserve program integrity
+- Do not randomly change unrelated parts
+- Respect:
+  - user goals
+  - injuries
+  - equipment
+  - time constraints
+
+---
+
+8. FAILSAFES
+
+If system does not exist:
+- create one before applying edits
+
+If patch fails:
+- do not update system
+- explain failure cleanly
+
+If data is missing:
+- fallback safely (no crashes)
+
+---
+
+9. LOGGING
+
+Log every step:
+- user input
+- detected intent
+- current system snapshot
+- generated patch
+- validation result
+- save result
+
+---
+
+10. FINAL EXPERIENCE
+
+The user should feel like:
+
+“I describe what I want, and my program evolves instantly.”
+
+NOT:
+
+“I get suggestions I have to manually interpret.”
+
+---
+
+Deliverables:
+1. Agent can modify real training system through chat
+2. Changes persist in database
+3. UI updates instantly after each change
+4. Versioning and change log work
+5. No crashes from missing data
+6. System behaves like “vibe coding” instead of static chat

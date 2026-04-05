@@ -13,7 +13,6 @@ import {
   useCreateConversation,
   useListMessages,
   useSendMessage,
-  useCreateProgram,
   useListMemories,
   useListInsights,
   useLogout,
@@ -134,7 +133,6 @@ export default function Chat() {
 
   const createConvo = useCreateConversation();
   const sendMessage = useSendMessage();
-  const createProgram = useCreateProgram();
 
   const isPremium = subscription?.plan === "pro" || subscription?.plan === "elite";
   const currentPlan = subscription?.plan ?? "free";
@@ -260,9 +258,11 @@ export default function Chat() {
     if (!latestProgram || !activeConvoId || isSaving || isSaved) return;
     setIsSaving(true);
 
-    createProgram.mutate(
-      {
-        data: {
+    try {
+      // Step 1: Save to saved_programs (legacy path — keeps existing program list working)
+      await customFetch<any>("/api/programs", {
+        method: "POST",
+        body: JSON.stringify({
           name: latestProgram.programName,
           description: latestProgram.description ?? "",
           conversationId: activeConvoId,
@@ -279,18 +279,53 @@ export default function Chat() {
               orderIndex: idx,
             })),
           })),
-        },
-      },
-      {
-        onSuccess: () => {
-          setIsSaving(false);
-          setIsSaved(true);
-        },
-        onError: () => {
-          setIsSaving(false);
-        },
-      }
-    );
+        }),
+      }).catch((err) => {
+        console.warn("[SaveProgram] saved_programs save failed (non-fatal):", err);
+      });
+
+      // Step 2: Save to Training System (the main fix — creates the structured system the /system page reads from)
+      console.log("[SaveProgram] Saving to Training System:", latestProgram.programName);
+      await customFetch<any>("/api/training-system/from-chat", {
+        method: "POST",
+        body: JSON.stringify({
+          programName: latestProgram.programName,
+          description: latestProgram.description ?? "",
+          progressionStrategy: latestProgram.progressionStrategy ?? undefined,
+          splitType: latestProgram.splitType ?? undefined,
+          days: (latestProgram.days ?? []).map((day) => ({
+            dayNumber: day.dayNumber,
+            name: day.name,
+            focus: day.focus ?? undefined,
+            notes: day.notes ?? undefined,
+            exercises: (day.exercises ?? []).map((ex) => ({
+              name: ex.name,
+              classification: ex.classification ?? undefined,
+              sets: typeof ex.sets === "number" ? ex.sets : 3,
+              reps: ex.reps ?? "10",
+              rest: ex.rest ?? "60 sec",
+              intent: ex.intent ?? undefined,
+              notes: ex.notes ?? undefined,
+            })),
+          })),
+        }),
+      });
+
+      console.log("[SaveProgram] Training System saved successfully");
+
+      // Step 3: Invalidate all Training System queries so /system page refreshes immediately
+      queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
+
+      setIsSaving(false);
+      setIsSaved(true);
+    } catch (err) {
+      console.error("[SaveProgram] Failed to save training system:", err);
+      setIsSaving(false);
+    }
   }
 
   async function handleSessionLog(data: any) {

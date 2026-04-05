@@ -1105,24 +1105,39 @@ function VibeBar({ onEditComplete, onUndone }: VibeBarProps) {
 // ─── Empty State ──────────────────────────────────────────────────────────────
 
 function EmptySystemState({ onInitialize, isLoading }: { onInitialize: () => void; isLoading: boolean }) {
+  const [, setLocation] = useLocation();
   return (
-    <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+    <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
       <div className="w-20 h-20 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-6">
         <Target className="w-10 h-10 text-primary" />
       </div>
       <h2 className="text-xl font-bold text-foreground mb-3">No Training System Yet</h2>
-      <p className="text-sm text-muted-foreground mb-8 max-w-xs leading-relaxed">
-        Build your personalized training system based on your profile. Structured, persistent, and ready to evolve with you.
+      <p className="text-sm text-muted-foreground mb-2 max-w-xs leading-relaxed">
+        Ask your coach to build a program in Chat, then tap <strong>Save to My System</strong> to activate it here.
       </p>
+      <p className="text-xs text-muted-foreground/70 mb-8 max-w-xs leading-relaxed">
+        Or generate one automatically from your profile below.
+      </p>
+
+      {/* Primary CTA — go to chat and build */}
+      <button
+        onClick={() => setLocation("/chat")}
+        className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-xl font-semibold text-sm hover:bg-primary/90 transition-all duration-150 shadow-lg shadow-primary/20 mb-3 w-full max-w-xs justify-center"
+      >
+        <MessageSquare className="w-4 h-4" />
+        Build in Chat
+      </button>
+
+      {/* Secondary CTA — auto-generate from profile */}
       <button
         onClick={onInitialize}
         disabled={isLoading}
-        className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-xl font-semibold text-sm hover:bg-primary/90 transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-primary/20"
+        className="inline-flex items-center gap-2 border border-border bg-card text-foreground px-6 py-3 rounded-xl font-semibold text-sm hover:border-primary/40 hover:bg-primary/5 transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed w-full max-w-xs justify-center"
       >
         {isLoading ? (
           <><RotateCcw className="w-4 h-4 animate-spin" />Building your system…</>
         ) : (
-          <><Zap className="w-4 h-4" />Build My Training System</>
+          <><Zap className="w-4 h-4" />Auto-Generate from Profile</>
         )}
       </button>
     </div>

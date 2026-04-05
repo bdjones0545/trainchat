@@ -17,6 +17,7 @@ import {
   type EquipmentLevel as CoachEquipmentLevel,
 } from "./coach-select";
 import { detectInjuryFlags, normalizeExperience } from "./training-intelligence";
+import { logger } from "./logger";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -928,5 +929,219 @@ export async function initializeTrainingSystem(userId: number): Promise<typeof t
     }
   }
 
+  return system;
+}
+
+// ─── Shared types for chat-generated program ──────────────────────────────────
+
+export interface ChatProgramExercise {
+  name: string;
+  classification?: string;
+  sets: number;
+  reps: string;
+  rest: string;
+  intent?: string;
+  notes?: string;
+}
+
+export interface ChatProgramDay {
+  dayNumber: number;
+  name: string;
+  focus?: string;
+  exercises: ChatProgramExercise[];
+  notes?: string;
+}
+
+export interface ChatProgram {
+  programName: string;
+  description?: string;
+  progressionStrategy?: string;
+  splitType?: string;
+  days: ChatProgramDay[];
+}
+
+// Maps the AI's exercise classification string to the DB category enum
+function mapClassificationToCategory(
+  classification?: string
+): "warmup" | "primary" | "accessory" | "conditioning" | "finisher" {
+  if (!classification) return "primary";
+  const c = classification.toLowerCase();
+  if (c.includes("plyometric") || c.includes("explosive")) return "warmup";
+  if (c.includes("olympic")) return "primary";
+  if (c.includes("primary")) return "primary";
+  if (c.includes("secondary")) return "accessory";
+  if (c.includes("accessory") || c.includes("isolation")) return "accessory";
+  if (c.includes("conditioning") || c.includes("metabolic")) return "conditioning";
+  if (c.includes("finisher")) return "finisher";
+  return "primary";
+}
+
+// Assigns sensible day-of-week values based on number of sessions
+function assignDaysOfWeek(count: number): number[] {
+  const patterns: Record<number, number[]> = {
+    1: [1],
+    2: [1, 4],
+    3: [1, 3, 5],
+    4: [1, 2, 4, 5],
+    5: [1, 2, 3, 5, 6],
+    6: [1, 2, 3, 4, 5, 6],
+  };
+  return patterns[Math.min(Math.max(count, 1), 6)] ?? [1, 3, 5];
+}
+
+function inferGoalFromProgram(program: ChatProgram): string {
+  const text = `${program.programName} ${program.description ?? ""}`.toLowerCase();
+  if (text.includes("strength") || text.includes("power")) return "strength";
+  if (text.includes("hypertrophy") || text.includes("muscle") || text.includes("size")) return "hypertrophy";
+  if (text.includes("fat") || text.includes("lean") || text.includes("weight loss")) return "fat_loss";
+  if (text.includes("athletic") || text.includes("sport") || text.includes("performance")) return "athletic";
+  if (text.includes("endurance") || text.includes("cardio") || text.includes("conditioning")) return "endurance";
+  return "general_fitness";
+}
+
+// Infer a session type based on the day label / focus text
+function inferSessionType(
+  day: ChatProgramDay
+): "lifting" | "conditioning" | "mobility" | "recovery" | "sport" | "rest" {
+  const text = `${day.name} ${day.focus ?? ""}`.toLowerCase();
+  if (text.includes("condition") || text.includes("cardio") || text.includes("metabolic")) return "conditioning";
+  if (text.includes("mobility") || text.includes("stretch")) return "mobility";
+  if (text.includes("rest") || text.includes("recovery")) return "rest";
+  return "lifting";
+}
+
+/**
+ * Creates a full Training System from a chat-generated program and saves it to
+ * the training_systems hierarchy (system → phase → weeks → sessions → exercises).
+ *
+ * This bridges the chat output to the Training System page so both stay in sync.
+ *
+ * - Archives any existing active system for the user.
+ * - Creates one 4-week phase with the program exercises replicated across all weeks.
+ * - Week 1 is set as "current"; weeks 2-4 are "upcoming".
+ */
+export async function createTrainingSystemFromProgram(
+  userId: number,
+  program: ChatProgram
+): Promise<typeof trainingSystems.$inferSelect> {
+  logger.info({ userId, programName: program.programName }, "[TrainingSystem] createTrainingSystemFromProgram — starting");
+
+  // Validate program has days
+  if (!program.days || !Array.isArray(program.days) || program.days.length === 0) {
+    throw new Error("Program must have at least one training day");
+  }
+
+  // Archive any existing active training systems
+  await db
+    .update(trainingSystems)
+    .set({ status: "archived" })
+    .where(and(eq(trainingSystems.userId, userId), eq(trainingSystems.status, "active")));
+
+  const goal = inferGoalFromProgram(program);
+  const daysPerWeek = program.days.length;
+  const phaseConfig = buildPhaseConfig(goal, daysPerWeek);
+
+  // Create the training system
+  const [system] = await db.insert(trainingSystems).values({
+    userId,
+    name: program.programName,
+    overarchingGoal: program.description ?? program.programName,
+    trainingStyle: program.splitType ?? phaseConfig.phaseName,
+    weeklyFrequency: daysPerWeek,
+    equipmentAccess: "As configured in your program",
+    constraints: null,
+    status: "active",
+    metadata: { source: "chat", progressionStrategy: program.progressionStrategy ?? null } as any,
+  }).returning();
+
+  logger.info({ systemId: system.id }, "[TrainingSystem] system created");
+
+  // Create Phase 1
+  const [phase] = await db.insert(trainingPhases).values({
+    trainingSystemId: system.id,
+    name: phaseConfig.phaseName,
+    goal: phaseConfig.phaseGoal,
+    emphasis: phaseConfig.emphasis,
+    weekCount: 4,
+    orderIndex: 0,
+    status: "current",
+    notes: program.progressionStrategy ?? null,
+  }).returning();
+
+  // Link system → phase
+  await db.update(trainingSystems)
+    .set({ currentPhaseId: phase.id })
+    .where(eq(trainingSystems.id, system.id));
+
+  logger.info({ phaseId: phase.id }, "[TrainingSystem] phase created");
+
+  const dayOfWeekMap = assignDaysOfWeek(daysPerWeek);
+
+  // Create 4 weeks
+  for (let weekIdx = 0; weekIdx < 4; weekIdx++) {
+    const weekConfig = phaseConfig.weekConfigs[weekIdx];
+    const weekNumber = weekIdx + 1;
+    const isDeload = weekConfig.volumeLevel === "deload";
+
+    const [week] = await db.insert(trainingWeeks).values({
+      trainingPhaseId: phase.id,
+      weekNumber,
+      label: weekConfig.label,
+      focus: weekConfig.focus,
+      volumeLevel: weekConfig.volumeLevel,
+      status: weekIdx === 0 ? "current" : "upcoming",
+      orderIndex: weekIdx,
+    }).returning();
+
+    logger.info({ weekId: week.id, weekNumber }, "[TrainingSystem] week created");
+
+    // Create sessions from the chat program days
+    for (let dayIdx = 0; dayIdx < program.days.length; dayIdx++) {
+      const day = program.days[dayIdx];
+      const sessionType = inferSessionType(day);
+      const dayOfWeek = dayOfWeekMap[dayIdx] ?? dayIdx + 1;
+
+      const warmupNotes = getWarmupNotes(sessionType, day.focus ?? day.name);
+      const coachingNotes = day.notes
+        ? day.notes
+        : getCoachingNotes(goal, weekIdx, day.name);
+
+      const [session] = await db.insert(trainingSessions).values({
+        trainingWeekId: week.id,
+        label: day.name,
+        sessionType,
+        dayOfWeek,
+        emphasis: day.focus ?? null,
+        warmupNotes,
+        coachingNotes,
+        isRestDay: sessionType === "rest",
+        orderIndex: dayIdx,
+      }).returning();
+
+      // For deload weeks, use a reduced subset of exercises
+      const exercises = isDeload
+        ? day.exercises.slice(0, Math.max(Math.ceil(day.exercises.length * 0.6), 2))
+        : day.exercises;
+
+      for (let exIdx = 0; exIdx < exercises.length; exIdx++) {
+        const ex = exercises[exIdx];
+        const category = mapClassificationToCategory(ex.classification);
+
+        await db.insert(sessionExercises).values({
+          trainingSessionId: session.id,
+          name: ex.name,
+          category,
+          sets: typeof ex.sets === "number" ? ex.sets : null,
+          reps: ex.reps ?? null,
+          rest: ex.rest ?? null,
+          tempo: null,
+          notes: ex.notes ?? ex.intent ?? null,
+          orderIndex: exIdx,
+        });
+      }
+    }
+  }
+
+  logger.info({ systemId: system.id, userId }, "[TrainingSystem] createTrainingSystemFromProgram — complete");
   return system;
 }

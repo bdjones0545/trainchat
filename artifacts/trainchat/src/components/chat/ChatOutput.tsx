@@ -167,7 +167,7 @@ export default function ChatOutput({
               ) : (
                 <>
                   <Save className="w-3 h-3" />
-                  Save
+                  Save to My System
                 </>
               )}
             </button>
