@@ -91,6 +91,12 @@ router.post("/auth/register", async (req, res): Promise<void> => {
 
   req.session.userId = user.id;
 
+  // Explicitly save the session to the store before responding so that the
+  // client's next request finds the session even if it arrives very quickly.
+  await new Promise<void>((resolve, reject) =>
+    req.session.save((err) => (err ? reject(err) : resolve())),
+  );
+
   logger.info(
     { userId: user.id },
     "auth: new user registered — routing to onboarding",
@@ -132,6 +138,13 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   }
 
   req.session.userId = user.id;
+
+  // Explicitly save the session before resolving onboarding state and
+  // responding, so the store has written the record before the client's
+  // next request arrives.
+  await new Promise<void>((resolve, reject) =>
+    req.session.save((err) => (err ? reject(err) : resolve())),
+  );
 
   const onboardingComplete = await resolveOnboardingComplete(
     user.id,

@@ -65,8 +65,8 @@ The UI features a dark theme with electric blue (HSL(199 89% 48%)) as the primar
 - Registration without a guest session routes to `/onboarding` to collect the profile. Login with `onboardingComplete: false` also routes to `/onboarding`.
 
 ### System Design Choices
-- **Database Schema**: Includes comprehensive tables for users, profiles, conversations, messages, saved programs, readiness entries, session feedback, user memories, session logs, analytics, and Stripe-related data.
-- **Auth**: Session-based authentication using `express-session`.
+- **Database Schema**: Includes comprehensive tables for users, profiles, conversations, messages, saved programs, readiness entries, session feedback, user memories, session logs, analytics, Stripe-related data, and `user_sessions` (PostgreSQL session store).
+- **Auth**: Session-based authentication using `express-session` with a **PostgreSQL-backed session store** (`connect-pg-simple`, `user_sessions` table). `app.set("trust proxy", 1)` is set so Replit's reverse proxy is trusted. Sessions are explicitly saved via `req.session.save()` before responding in register/login endpoints to prevent race conditions with async stores. Session cookie is `httpOnly`, `secure` in production, `SameSite=none` in production / `lax` in dev, 7-day TTL.
 - **Modularity**: Services are designed as distinct modules within the API server for better organization and maintainability.
 - **Extensibility**: Designed with clear extension points for future features like wearable integration.
 

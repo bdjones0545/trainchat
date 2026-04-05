@@ -8,6 +8,11 @@ import { WebhookHandlers } from "./lib/webhookHandlers";
 
 const app: Express = express();
 
+// Trust the Replit reverse proxy so that secure cookies and real IPs work
+// correctly in production. Without this, Express sees all connections as HTTP
+// even though they arrive over HTTPS via the proxy.
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,
