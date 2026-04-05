@@ -9,6 +9,14 @@ import {
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import type { UserProfile } from "@workspace/db";
+import {
+  selectSessionExercises,
+  type SessionType,
+  type GoalType as CoachGoalType,
+  type ExperienceTier as CoachExperienceTier,
+  type EquipmentLevel as CoachEquipmentLevel,
+} from "./coach-select";
+import { detectInjuryFlags, normalizeExperience } from "./training-intelligence";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -467,36 +475,36 @@ const exerciseLibrary: Record<string, Record<string, ExerciseTemplate[][]>> = {
 
 const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-const splitMaps: Record<number, { label: string; sessionType: "lifting" | "conditioning" | "mobility" | "recovery" | "rest"; emphasis: string; exerciseIndex: number; dayOfWeek: number }[]> = {
+const splitMaps: Record<number, { label: string; sessionType: "lifting" | "conditioning" | "mobility" | "recovery" | "rest"; coachSessionType: SessionType; emphasis: string; dayOfWeek: number }[]> = {
   2: [
-    { label: "Full Body A", sessionType: "lifting", emphasis: "Quad, Push, Pull", exerciseIndex: 0, dayOfWeek: 1 },
-    { label: "Full Body B", sessionType: "lifting", emphasis: "Hip, Push, Pull", exerciseIndex: 1, dayOfWeek: 4 },
+    { label: "Full Body A", sessionType: "lifting", coachSessionType: "full_body_a", emphasis: "Squat, horizontal push, horizontal pull", dayOfWeek: 1 },
+    { label: "Full Body B", sessionType: "lifting", coachSessionType: "full_body_b", emphasis: "Hinge, vertical pull, vertical push", dayOfWeek: 4 },
   ],
   3: [
-    { label: "Lower Body", sessionType: "lifting", emphasis: "Squat & Hinge patterns", exerciseIndex: 0, dayOfWeek: 1 },
-    { label: "Upper Push", sessionType: "lifting", emphasis: "Press & shoulder development", exerciseIndex: 1, dayOfWeek: 3 },
-    { label: "Upper Pull", sessionType: "lifting", emphasis: "Row, pull, and hinge accessory", exerciseIndex: 2, dayOfWeek: 5 },
+    { label: "Lower Body", sessionType: "lifting", coachSessionType: "lower_a", emphasis: "Squat & hinge patterns — full posterior chain", dayOfWeek: 1 },
+    { label: "Upper Push", sessionType: "lifting", coachSessionType: "upper_a", emphasis: "Horizontal & vertical press with shoulder stability", dayOfWeek: 3 },
+    { label: "Upper Pull", sessionType: "lifting", coachSessionType: "upper_b", emphasis: "Vertical & horizontal pull, arm accessory", dayOfWeek: 5 },
   ],
   4: [
-    { label: "Lower A — Squat Focus", sessionType: "lifting", emphasis: "Quad-dominant movements", exerciseIndex: 0, dayOfWeek: 1 },
-    { label: "Upper A — Push", sessionType: "lifting", emphasis: "Horizontal & vertical press", exerciseIndex: 1, dayOfWeek: 2 },
-    { label: "Lower B — Hinge Focus", sessionType: "lifting", emphasis: "Posterior chain & deadlift patterns", exerciseIndex: 2, dayOfWeek: 4 },
-    { label: "Upper B — Pull", sessionType: "lifting", emphasis: "Rows, pulls, and arm work", exerciseIndex: 2, dayOfWeek: 5 },
+    { label: "Lower A — Squat Focus", sessionType: "lifting", coachSessionType: "lower_a", emphasis: "Quad-dominant squat patterns, hinge accessory", dayOfWeek: 1 },
+    { label: "Upper A — Push", sessionType: "lifting", coachSessionType: "upper_a", emphasis: "Horizontal & vertical press, shoulder stability", dayOfWeek: 2 },
+    { label: "Lower B — Hinge Focus", sessionType: "lifting", coachSessionType: "lower_b", emphasis: "Hinge-dominant, posterior chain, unilateral legs", dayOfWeek: 4 },
+    { label: "Upper B — Pull", sessionType: "lifting", coachSessionType: "upper_b", emphasis: "Vertical & horizontal pull, arm accessory", dayOfWeek: 5 },
   ],
   5: [
-    { label: "Lower A — Squat Focus", sessionType: "lifting", emphasis: "Quad-dominant movements", exerciseIndex: 0, dayOfWeek: 1 },
-    { label: "Upper A — Push", sessionType: "lifting", emphasis: "Horizontal & vertical press", exerciseIndex: 1, dayOfWeek: 2 },
-    { label: "Lower B — Hinge Focus", sessionType: "lifting", emphasis: "Posterior chain", exerciseIndex: 2, dayOfWeek: 3 },
-    { label: "Upper B — Pull", sessionType: "lifting", emphasis: "Rows, pulls, and arm work", exerciseIndex: 2, dayOfWeek: 4 },
-    { label: "Full Body Power / Conditioning", sessionType: "lifting", emphasis: "Power, speed, and work capacity", exerciseIndex: 0, dayOfWeek: 6 },
+    { label: "Lower A — Squat Focus", sessionType: "lifting", coachSessionType: "lower_a", emphasis: "Quad-dominant movements", dayOfWeek: 1 },
+    { label: "Upper A — Push", sessionType: "lifting", coachSessionType: "upper_a", emphasis: "Horizontal & vertical press", dayOfWeek: 2 },
+    { label: "Lower B — Hinge Focus", sessionType: "lifting", coachSessionType: "lower_b", emphasis: "Posterior chain & hinge patterns", dayOfWeek: 3 },
+    { label: "Upper B — Pull", sessionType: "lifting", coachSessionType: "upper_b", emphasis: "Rows, pull-ups, and arm work", dayOfWeek: 4 },
+    { label: "Full Body Power / Conditioning", sessionType: "lifting", coachSessionType: "conditioning", emphasis: "Power, speed, and work capacity", dayOfWeek: 6 },
   ],
   6: [
-    { label: "Push A", sessionType: "lifting", emphasis: "Chest, front delts, triceps", exerciseIndex: 1, dayOfWeek: 1 },
-    { label: "Pull A", sessionType: "lifting", emphasis: "Back, rear delts, biceps", exerciseIndex: 2, dayOfWeek: 2 },
-    { label: "Legs A", sessionType: "lifting", emphasis: "Squat-focus", exerciseIndex: 0, dayOfWeek: 3 },
-    { label: "Push B", sessionType: "lifting", emphasis: "Incline, overhead, tris", exerciseIndex: 1, dayOfWeek: 4 },
-    { label: "Pull B", sessionType: "lifting", emphasis: "Deadlift, rows, bis", exerciseIndex: 2, dayOfWeek: 5 },
-    { label: "Legs B", sessionType: "lifting", emphasis: "Hinge-focus", exerciseIndex: 0, dayOfWeek: 6 },
+    { label: "Push A", sessionType: "lifting", coachSessionType: "push", emphasis: "Chest, front delts, triceps", dayOfWeek: 1 },
+    { label: "Pull A", sessionType: "lifting", coachSessionType: "pull", emphasis: "Back, rear delts, biceps", dayOfWeek: 2 },
+    { label: "Legs A", sessionType: "lifting", coachSessionType: "lower_a", emphasis: "Squat-dominant lower body", dayOfWeek: 3 },
+    { label: "Push B", sessionType: "lifting", coachSessionType: "push", emphasis: "Incline, overhead, triceps", dayOfWeek: 4 },
+    { label: "Pull B", sessionType: "lifting", coachSessionType: "pull", emphasis: "Deadlift, rows, biceps", dayOfWeek: 5 },
+    { label: "Legs B", sessionType: "lifting", coachSessionType: "lower_b", emphasis: "Hinge-dominant lower body", dayOfWeek: 6 },
   ],
 };
 
@@ -805,6 +813,17 @@ export async function initializeTrainingSystem(userId: number): Promise<typeof t
   const equipment = profile ? normalizeEquipment(profile.equipmentAccess) : "full_gym";
   const daysPerWeek = profile?.daysPerWeek ?? 3;
   const trainingStyle = profile?.trainingStyle ?? "balanced";
+  const experience = profile ? normalizeExperience(profile.experienceLevel ?? "intermediate") : "intermediate";
+  const injuryFlags = detectInjuryFlags(profile?.injuries ?? null);
+
+  // Map local normalised goal/equipment to coach-select types
+  const coachGoal: CoachGoalType =
+    goal === "athletic" ? "athletic_performance" :
+    (goal as CoachGoalType);
+  const coachEquipment: CoachEquipmentLevel =
+    equipment === "dumbbells" ? "dumbbells_only" :
+    equipment === "minimal" ? "home_limited" :
+    (equipment as CoachEquipmentLevel);
 
   const phaseConfig = buildPhaseConfig(goal, daysPerWeek);
   const systemName = getSystemName(goal, trainingStyle);
@@ -834,15 +853,15 @@ export async function initializeTrainingSystem(userId: number): Promise<typeof t
   await db.update(trainingSystems).set({ currentPhaseId: phase.id }).where(eq(trainingSystems.id, system.id));
 
   const splitDays = splitMaps[Math.min(daysPerWeek, 6)] ?? splitMaps[3];
-  const exerciseTemplates = exerciseLibrary[equipment] ?? exerciseLibrary.full_gym;
-  const goalExercises = (exerciseTemplates as any)[goal] ?? exerciseTemplates.general_fitness;
 
   for (let weekIdx = 0; weekIdx < 4; weekIdx++) {
     const weekConfig = phaseConfig.weekConfigs[weekIdx];
+    const weekNumber = weekIdx + 1;
+    const isDeload = weekConfig.volumeLevel === "deload";
 
     const [week] = await db.insert(trainingWeeks).values({
       trainingPhaseId: phase.id,
-      weekNumber: weekIdx + 1,
+      weekNumber,
       label: weekConfig.label,
       focus: weekConfig.focus,
       volumeLevel: weekConfig.volumeLevel,
@@ -852,7 +871,6 @@ export async function initializeTrainingSystem(userId: number): Promise<typeof t
 
     for (let sessionIdx = 0; sessionIdx < splitDays.length; sessionIdx++) {
       const splitDay = splitDays[sessionIdx];
-      const isDeload = weekConfig.volumeLevel === "deload";
 
       const [session] = await db.insert(trainingSessions).values({
         trainingWeekId: week.id,
@@ -866,34 +884,44 @@ export async function initializeTrainingSystem(userId: number): Promise<typeof t
         orderIndex: sessionIdx,
       }).returning();
 
-      const exTemplates: ExerciseTemplate[] = goalExercises[splitDay.exerciseIndex % goalExercises.length] ?? [];
+      // ── Intelligent coach selection from the 620-exercise DB ──
+      // Each week gets the correct week-number scaling (volume, intensity, deload).
+      // The coach engine applies NSCA hierarchy, goal-matched prescriptions,
+      // equipment filtering, and injury-aware selection automatically.
+      const coachExercises = await selectSessionExercises({
+        sessionType: splitDay.coachSessionType,
+        goal: coachGoal,
+        experience: experience as CoachExperienceTier,
+        equipment: coachEquipment,
+        injuryFlags: injuryFlags.map(String),
+        weekNumber: isDeload ? 4 : weekNumber,
+      });
 
-      let exercisesToInsert = exTemplates;
-      if (isDeload) {
-        exercisesToInsert = exTemplates.slice(0, Math.max(Math.floor(exTemplates.length * 0.6), 2));
-      }
+      // Deload: keep only the first 60% of exercises (primary + one secondary)
+      const exercisesToInsert = isDeload
+        ? coachExercises.slice(0, Math.max(Math.ceil(coachExercises.length * 0.6), 2))
+        : coachExercises;
 
       for (let exIdx = 0; exIdx < exercisesToInsert.length; exIdx++) {
         const ex = exercisesToInsert[exIdx];
-        let sets = ex.sets;
-        let reps = ex.reps;
 
-        if (weekConfig.volumeLevel === "high" && !isDeload) {
-          sets = Math.min(sets + 1, ex.category === "primary" ? 5 : 4);
-        }
-        if (isDeload) {
-          sets = Math.max(sets - 1, 2);
-        }
+        // Map CoachExercise role to the DB's category enum
+        const category: ExerciseTemplate["category"] =
+          ex.role === "explosive" ? "warmup" :
+          ex.role === "primary"   ? "primary" :
+          ex.role === "secondary" ? "accessory" :
+          ex.role === "conditioning" ? "conditioning" :
+          "accessory";
 
         await db.insert(sessionExercises).values({
           trainingSessionId: session.id,
           name: ex.name,
-          category: ex.category,
-          sets,
-          reps,
+          category,
+          sets: ex.sets,
+          reps: ex.reps,
           rest: ex.rest,
-          tempo: ex.tempo ?? null,
-          notes: ex.notes ?? null,
+          tempo: null,
+          notes: ex.notes,
           orderIndex: exIdx,
         });
       }
