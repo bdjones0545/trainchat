@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
-import { useCreateProfile } from "@workspace/api-client-react";
-import { ChevronRight, ChevronLeft } from "lucide-react";
+import { useCreateProfile, useGetMe } from "@workspace/api-client-react";
+import { ChevronRight, ChevronLeft, AlertCircle, Loader2 } from "lucide-react";
+
+const ONBOARDING_DRAFT_KEY = "trainchat_onboarding_draft";
 
 interface ProfileData {
   trainingGoal: string;
@@ -15,6 +17,19 @@ interface ProfileData {
   exercisePreferences: string;
   exercisesToAvoid: string;
 }
+
+const DEFAULT_DATA: ProfileData = {
+  trainingGoal: "",
+  experienceLevel: "",
+  trainingStyle: "",
+  daysPerWeek: 4,
+  sessionDuration: 60,
+  equipmentAccess: "",
+  injuries: "",
+  sportFocus: "",
+  exercisePreferences: "",
+  exercisesToAvoid: "",
+};
 
 const steps = [
   {
@@ -139,27 +154,58 @@ const steps = [
   },
 ];
 
+function loadDraft(): ProfileData {
+  try {
+    const raw = localStorage.getItem(ONBOARDING_DRAFT_KEY);
+    if (!raw) return { ...DEFAULT_DATA };
+    const parsed = JSON.parse(raw);
+    return { ...DEFAULT_DATA, ...parsed };
+  } catch {
+    return { ...DEFAULT_DATA };
+  }
+}
+
+function saveDraft(data: ProfileData) {
+  try {
+    localStorage.setItem(ONBOARDING_DRAFT_KEY, JSON.stringify(data));
+  } catch {
+    // localStorage unavailable — ignore
+  }
+}
+
+function clearDraft() {
+  try {
+    localStorage.removeItem(ONBOARDING_DRAFT_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export default function Onboarding() {
   const [, setLocation] = useLocation();
   const [step, setStep] = useState(0);
-  const [data, setData] = useState<ProfileData>({
-    trainingGoal: "",
-    experienceLevel: "",
-    trainingStyle: "",
-    daysPerWeek: 4,
-    sessionDuration: 60,
-    equipmentAccess: "",
-    injuries: "",
-    sportFocus: "",
-    exercisePreferences: "",
-    exercisesToAvoid: "",
-  });
+  const [data, setData] = useState<ProfileData>(loadDraft);
   const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const submittingRef = useRef(false);
   const createProfile = useCreateProfile();
+  const { data: me, isLoading: meLoading } = useGetMe();
 
   const currentStep = steps[step];
   const progress = ((step + 1) / steps.length) * 100;
   const isRequired = !("optional" in currentStep) || !currentStep.optional;
+
+  // Persist answers to localStorage so they survive a session expiry recovery
+  useEffect(() => {
+    saveDraft(data);
+  }, [data]);
+
+  // Detect auth state: if me is definitively null and loading is done, session is gone
+  useEffect(() => {
+    if (!meLoading && !me) {
+      console.warn("[onboarding] No authenticated session detected on mount.");
+    }
+  }, [me, meLoading]);
 
   function handleChoice(field: string, value: string | number) {
     setData((prev) => ({ ...prev, [field]: value }));
@@ -187,35 +233,101 @@ export default function Onboarding() {
   }
 
   function handleSubmit() {
-    if (createProfile.isPending) return;
+    if (submittingRef.current || createProfile.isPending) return;
+    submittingRef.current = true;
+
     setError(null);
+    setSessionExpired(false);
+
+    const payload = {
+      trainingGoal: data.trainingGoal,
+      experienceLevel: data.experienceLevel,
+      trainingStyle: data.trainingStyle,
+      daysPerWeek: data.daysPerWeek,
+      sessionDuration: data.sessionDuration,
+      equipmentAccess: data.equipmentAccess,
+      injuries: data.injuries || null,
+      sportFocus: data.sportFocus || null,
+      exercisePreferences: data.exercisePreferences || null,
+      exercisesToAvoid: data.exercisesToAvoid || null,
+    };
+
+    console.info("[onboarding] Submitting profile:", {
+      authenticated: !!me,
+      userId: me?.id ?? null,
+      endpoint: "/api/profile",
+      payload,
+    });
+
     createProfile.mutate(
+      { data: payload },
       {
-        data: {
-          trainingGoal: data.trainingGoal,
-          experienceLevel: data.experienceLevel,
-          trainingStyle: data.trainingStyle,
-          daysPerWeek: data.daysPerWeek,
-          sessionDuration: data.sessionDuration,
-          equipmentAccess: data.equipmentAccess,
-          injuries: data.injuries || null,
-          sportFocus: data.sportFocus || null,
-          exercisePreferences: data.exercisePreferences || null,
-          exercisesToAvoid: data.exercisesToAvoid || null,
+        onSuccess: () => {
+          console.info("[onboarding] Profile saved successfully — routing to /chat");
+          clearDraft();
+          submittingRef.current = false;
+          setLocation("/chat");
         },
-      },
-      {
-        onSuccess: () => setLocation("/chat"),
-        onError: (err) => {
-          const apiMessage =
-            err && typeof err === "object" && "data" in err
-              ? (err.data as { error?: string } | null)?.error
-              : err instanceof Error
-              ? err.message
-              : null;
-          setError(apiMessage ?? "Failed to save your profile. Please try again.");
+        onError: (err: unknown) => {
+          submittingRef.current = false;
+
+          const apiErr = err as { status?: number; data?: { error?: string; reason?: string } | null } | null;
+          const status = apiErr?.status;
+          const reason = apiErr?.data?.reason;
+          const rawMessage = apiErr?.data?.error;
+
+          console.error("[onboarding] Profile save failed:", {
+            status,
+            reason,
+            rawMessage,
+            userId: me?.id ?? null,
+            authenticated: !!me,
+          });
+
+          if (status === 401 || reason === "session_expired") {
+            setSessionExpired(true);
+            return;
+          }
+
+          const friendlyMessage =
+            rawMessage && rawMessage !== "Unauthorized"
+              ? rawMessage
+              : "Something went wrong saving your profile. Please try again.";
+
+          setError(friendlyMessage);
         },
       }
+    );
+  }
+
+  if (sessionExpired) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6">
+        <div className="w-full max-w-sm text-center">
+          <div className="flex justify-center mb-4">
+            <AlertCircle className="w-10 h-10 text-destructive" />
+          </div>
+          <h2 className="text-xl font-semibold text-foreground mb-2">Session expired</h2>
+          <p className="text-sm text-muted-foreground mb-6">
+            Your answers are saved. Sign in again and we'll pick up right where you left off.
+          </p>
+          <button
+            onClick={() => setLocation("/login")}
+            className="w-full py-3 bg-primary text-primary-foreground font-semibold text-sm rounded-xl hover:bg-primary/90 transition-all duration-150 active:scale-[0.99]"
+          >
+            Sign in to continue
+          </button>
+          <button
+            onClick={() => {
+              setSessionExpired(false);
+              setError(null);
+            }}
+            className="w-full mt-3 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
     );
   }
 
@@ -335,16 +447,19 @@ export default function Onboarding() {
               disabled={createProfile.isPending}
               className="w-full flex items-center justify-center gap-2 py-3.5 bg-primary text-primary-foreground font-semibold text-sm rounded-xl hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150 active:scale-[0.99]"
             >
-              {createProfile.isPending
-                ? "Saving..."
-                : step < steps.length - 1
-                ? (
-                  <>
-                    Continue
-                    <ChevronRight className="w-4 h-4" />
-                  </>
-                )
-                : "Complete Setup"}
+              {createProfile.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Saving your profile…
+                </>
+              ) : step < steps.length - 1 ? (
+                <>
+                  Continue
+                  <ChevronRight className="w-4 h-4" />
+                </>
+              ) : (
+                "Complete Setup"
+              )}
             </button>
             {!isRequired && (
               <button

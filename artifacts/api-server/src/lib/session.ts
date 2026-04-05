@@ -17,16 +17,27 @@ const store = new PgSession({
     logger.error({ args }, "session store error"),
 });
 
+// Detect whether we are running behind an HTTPS-terminating proxy.
+// On Replit, REPLIT_DOMAINS is always set (dev and prod), and all traffic
+// arrives over HTTPS via the Replit reverse proxy. In production the
+// NODE_ENV will be "production". Either condition means we need Secure
+// cookies and SameSite=none so that cross-context cookie delivery works
+// correctly (especially on iOS Safari / WebKit ITP).
+const isHttpsContext =
+  process.env.NODE_ENV === "production" ||
+  Boolean(process.env.REPLIT_DOMAINS);
+
 export const sessionMiddleware = session({
   store,
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === "production",
+    secure: isHttpsContext,
     httpOnly: true,
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    sameSite: isHttpsContext ? "none" : "lax",
+    path: "/",
   },
 });
 
