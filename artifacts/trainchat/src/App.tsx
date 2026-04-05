@@ -41,6 +41,19 @@ class ErrorBoundary extends Component<
 
   componentDidCatch(error: unknown, info: { componentStack: string }) {
     console.error("[ErrorBoundary]", error, info.componentStack);
+    try {
+      fetch("/api/client-error", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+          componentStack: info.componentStack,
+          url: window.location.href,
+          userAgent: navigator.userAgent,
+        }),
+      }).catch(() => {});
+    } catch {}
   }
 
   render() {
@@ -50,6 +63,11 @@ class ErrorBoundary extends Component<
           <p className="text-sm text-muted-foreground text-center">
             Something went wrong. Please refresh the page.
           </p>
+          {this.state.message && (
+            <p className="text-xs text-muted-foreground/60 text-center max-w-xs font-mono break-all">
+              {this.state.message}
+            </p>
+          )}
           <button
             onClick={() => window.location.reload()}
             className="px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg"

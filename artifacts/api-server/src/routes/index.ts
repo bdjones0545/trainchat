@@ -18,8 +18,18 @@ import trainingSystemEditRouter from "./training-system-edit";
 import trainingSystemDirectionsRouter from "./training-system-directions";
 import trainingSystemHistoryRouter from "./training-system-history";
 import { exercisesRouter } from "./exercises";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
+
+router.post("/api/client-error", (req, res): void => {
+  const { message, stack, url, userAgent } = req.body ?? {};
+  logger.error(
+    { message, stack, url, userAgent },
+    "client-error: browser rendering crash reported",
+  );
+  res.json({ ok: true });
+});
 
 router.use(healthRouter);
 router.use(authRouter);
