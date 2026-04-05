@@ -1,0 +1,149 @@
+Refactor TrainChat’s onboarding and signup flow to remove duplicate onboarding and make the product feel like “vibe coding your training” from the first screen.
+
+GOAL
+The current experience is confusing because users go through onboarding, then are asked to sign up, then are pushed through onboarding again. Remove that entire structure.
+
+NEW REQUIRED USER FLOW
+1. User lands on TrainChat and clicks the primary CTA
+2. User is taken directly into the AI Agent experience with no required signup and no traditional onboarding form first
+3. The AI Agent begins the experience conversationally inside the chat
+4. The user gets 5 free chat inputs/messages
+5. After the 5th input, show paywall/signup
+6. After signup/payment, the user resumes exactly where they left off in the same conversation
+7. Do not restart onboarding after signup
+8. Any deeper personalization should happen naturally inside the chat or optionally after signup
+
+CORE PRODUCT PRINCIPLE
+TrainChat should feel like the user is building their training plan with the agent in real time, not filling out forms before they get value.
+
+UX CHANGES REQUIRED
+
+1. REMOVE PRE-SIGNUP ONBOARDING
+- Remove the full onboarding flow before agent access
+- Remove any logic that forces users through intake questions before they can interact with the AI
+- Remove the duplicate onboarding sequence after signup
+- Audit all routes, components, modals, and redirects tied to onboarding so there is only one clean experience
+
+2. DIRECT-TO-AGENT ENTRY
+- The main CTA should take users straight to the TrainChat agent page
+- On first load, show a polished welcome state in chat
+- The first assistant message should guide the user into building their program conversationally
+
+EXAMPLE OPENING MESSAGE STYLE
+“Welcome to TrainChat. What do you want to build today—strength, fat loss, performance, recovery, or something custom?”
+Then the agent should continue asking smart follow-up questions naturally based on the user’s answers.
+
+3. PROGRESSIVE ONBOARDING INSIDE CHAT
+- Replace static onboarding forms with conversational profiling
+- The agent should gather context gradually through normal conversation:
+  - goal
+  - training experience
+  - injuries or limitations
+  - equipment access
+  - schedule
+  - sport/performance needs
+  - nutrition/body composition goals if relevant
+- The experience should feel natural, not like a questionnaire dump
+- Store these profile details as they are learned
+
+4. 5-FREE-INPUT GATING SYSTEM
+- Allow exactly 5 free user inputs before requiring signup/payment
+- Show a visible remaining free message counter if helpful, but keep it clean and premium
+- Count only meaningful user messages, not page loads
+- After the 5th user input, lock additional generation and show paywall/signup modal
+
+PAYWALL MESSAGE DIRECTION
+Use conversion-focused language like:
+“You’ve started building your program. Create your account to continue, save your progress, and unlock your personalized TrainChat experience.”
+
+5. SAVE STATE BEFORE SIGNUP
+- Persist free-trial conversation state using device ID, local storage, temp user session, or equivalent backend trial session architecture
+- Save:
+  - chat history
+  - inferred profile data
+  - partial program state
+  - free message count
+- After signup, restore the full chat exactly where the user left off
+- Do not clear the conversation on auth change
+- Merge guest session into authenticated user account
+
+6. NO SECOND ONBOARDING AFTER SIGNUP
+- After account creation or payment, return the user directly to the active conversation
+- Do not redirect them into another onboarding modal or multi-step intake
+- If additional data is useful, have the agent ask naturally in-chat later
+
+7. OPTIONAL POST-SIGNUP DEEPENING
+- If desired, the agent can optionally say something like:
+  “Want me to dial this in even further? I can ask a few quick questions and make this more personalized.”
+- This should be optional, conversational, and non-blocking
+
+TECHNICAL REQUIREMENTS
+
+1. ROUTING / FLOW
+- Audit existing onboarding, signup, and chat routing
+- Eliminate duplicate redirects and conflicting auth guards
+- Ensure guest users can access the agent page
+- Ensure auth/paywall triggers only after free limit is reached
+
+2. SESSION ARCHITECTURE
+Implement guest-to-user session continuity:
+- guest session ID or device ID
+- temporary chat persistence
+- temporary inferred profile persistence
+- merge into full user account after signup
+- preserve timestamps and message ordering
+
+3. DATABASE / STORAGE
+If needed, add support for:
+- guest sessions
+- trial conversations
+- trial message counts
+- inferred user profile fields collected pre-signup
+- session merge on account creation
+
+4. CHAT LOGIC
+- Agent should have a strong first-run conversational flow
+- First responses should be high-conviction, helpful, and personalized
+- The agent should feel collaborative, like it is building with the user
+- Avoid robotic intake phrasing
+
+5. UI / CONVERSION
+- Keep the interface minimal and premium
+- The experience should feel immediate, intelligent, and addictive
+- Focus on quick time-to-value
+- Reduce friction as much as possible
+- Make the first chat screen feel impressive even before signup
+
+COPY DIRECTION
+TrainChat should sound like:
+- expert
+- collaborative
+- high-performance
+- conversational
+- premium
+- motivating
+
+It should NOT sound like:
+- generic onboarding software
+- survey software
+- rigid questionnaire logic
+- cold SaaS automation
+
+SUCCESS CRITERIA
+This refactor is successful if:
+- users can begin with the agent instantly
+- there is no duplicated onboarding
+- they receive 5 free inputs before paywall
+- signup happens only after value is demonstrated
+- the conversation resumes perfectly after signup
+- the product feels like “building your program with AI” from the first interaction
+
+DELIVERABLES
+Please implement this refactor fully and also provide:
+1. a brief summary of what was changed
+2. any new routes, database changes, or session logic added
+3. any areas that still need manual review
+4. suggestions for further conversion optimization based on the new flow
+
+Important:
+Do not create a simplified mock version. Apply this to the real TrainChat architecture and preserve all current core functionality that should remain.
