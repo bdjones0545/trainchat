@@ -1,0 +1,101 @@
+Fix the TrainChat program generation flow so that when the AI generates a training program in chat, it also creates and saves a real structured Training System that appears in the app.
+
+Problem:
+Right now the AI generates a full program in the chat thread, but the Training System page still says “No Training System Yet.” This means the app is rendering the program as plain conversational text only, but not saving it into the structured system/database that the rest of the product reads from.
+
+I need this fixed at the architecture level.
+
+Tasks:
+1. Audit the full “Build My Training System” flow from:
+   - onboarding completion
+   - agent chat generation
+   - program response rendering
+   - dashboard/system page loading
+
+2. Identify:
+   - where the AI response is returned
+   - whether the response is plain text only
+   - whether structured JSON is being returned alongside the text
+   - whether any save-to-database function is firing
+   - which table/store/query the “Training System” page reads from
+
+3. Implement dual-output program generation:
+   - Output A: user-friendly chat response
+   - Output B: structured machine-readable training system object that gets saved
+
+4. Define and enforce a structured schema for saved training systems. Example:
+   {
+     title,
+     goal,
+     experienceLevel,
+     daysPerWeek,
+     split,
+     phase,
+     programSummary,
+     days: [
+       {
+         dayNumber,
+         title,
+         focus,
+         exercises: [
+           {
+             name,
+             sets,
+             reps,
+             rest,
+             notes,
+             category,
+             movementPattern
+           }
+         ]
+       }
+     ]
+   }
+
+5. After the AI generates the plan:
+   - parse/validate the structured output
+   - save it to the correct database table/store for the current user/guest/device
+   - associate it with the user profile
+   - mark training system as created
+   - refresh/invalidate relevant queries so the Training System page immediately shows the saved system
+
+6. Fix the app so the Training System page reads the saved structured plan, not the raw chat text.
+
+7. If the AI returns only text and no valid structured plan:
+   - do not pretend the system was built
+   - show an error or retry state
+   - do not leave chat and system page out of sync
+
+8. Add logging for:
+   - raw AI response
+   - parsed structured program
+   - save success/failure
+   - training system query result on page load
+
+9. Ensure this works for:
+   - guest/trial users
+   - authenticated unpaid users
+   - paid users
+
+10. If using guest/device-based onboarding first:
+   - save the generated training system under that guest/device profile
+   - merge it later into the user account if they sign up
+
+11. Audit the “Build My Training System” button:
+   - if a program already exists, route to it
+   - if chat already generated one but it wasn’t saved, repair and save it
+   - if no system exists, generate and save one properly
+
+12. Make the saved system render as a real app object:
+   - visible on Training System page
+   - days accessible
+   - future check-ins tied to it
+   - future edits/swaps update it instead of only changing chat
+
+Deliverables:
+1. Exact reason chat-generated programs are not appearing in the Training System page
+2. Exact files/routes/components involved
+3. Fix implemented
+4. Training system persists correctly after generation
+5. Chat output and saved system stay in sync
+6. Query invalidation/refresh works immediately after save
