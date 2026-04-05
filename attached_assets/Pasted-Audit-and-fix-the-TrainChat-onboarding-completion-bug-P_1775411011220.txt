@@ -1,0 +1,49 @@
+Audit and fix the TrainChat onboarding completion bug.
+
+Problem:
+On the final onboarding screen (Step 10 of 10, “Any exercises to avoid?”), clicking “Complete Setup” shows:
+“Failed to save your profile. Please try again.”
+
+Goal:
+Make onboarding complete successfully even when this final field is left blank, and make error handling specific instead of generic.
+
+Tasks:
+1. Trace the full onboarding completion flow from frontend submit -> API route -> validation -> database write.
+2. Identify every field sent in the final onboarding payload and compare them against:
+   - frontend state keys
+   - API request schema
+   - backend validation
+   - database column names/types
+3. Ensure optional fields are safely normalized before submit:
+   - empty text fields -> ""
+   - empty arrays -> []
+   - missing optional values should never crash the request
+4. Specifically verify the “exercises to avoid” field:
+   - if blank, it should save as "" or null intentionally
+   - backend must not reject undefined optional values
+5. Add detailed server-side logging for onboarding save failures:
+   - log request body
+   - log validated payload
+   - log exact database error
+   - log user id / auth state
+6. Improve frontend error handling:
+   - show the actual reason when available
+   - disable double-submit while saving
+   - show loading state on the Complete Setup button
+7. Check auth/session handling on published Replit deployment:
+   - verify token/cookie is included on onboarding save request
+   - verify CORS and credentials settings
+8. Verify database schema matches all onboarding fields currently collected in the UI.
+9. If a field does not exist in the DB, either:
+   - add the migration, or
+   - remove it from the save payload until supported
+10. Make onboarding robust:
+   - if one optional field fails normalization, do not fail the whole onboarding
+   - final completion should succeed with partial optional data
+
+Deliverables:
+- exact cause of the bug
+- files changed
+- code changes made
+- confirmation that onboarding works when “exercises to avoid” is blank
+- confirmation that onboarding works on mobile published build, not just development
