@@ -100,8 +100,8 @@ export default function Register() {
             setConverting(false);
           }
 
-          // No guest session or merge failed → go straight to chat
-          setLocation("/chat");
+          // No guest session or merge failed → go to onboarding to collect profile
+          setLocation("/onboarding");
         },
         onError: (err: unknown) => {
           const apiErr = err as { data?: { error?: string } };

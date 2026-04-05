@@ -6,6 +6,7 @@ import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
 import Chat from "@/pages/chat";
+import Onboarding from "@/pages/onboarding";
 import GuestStart from "@/pages/guest-start";
 import AdminDashboard from "@/pages/admin";
 import SystemPage from "@/pages/system";
@@ -38,7 +39,8 @@ function GuestSessionInit() {
 
 /**
  * Smart root redirect:
- * - Authenticated users → /chat
+ * - Authenticated + onboarding complete → /chat
+ * - Authenticated + onboarding NOT complete → /onboarding
  * - Unauthenticated users → /start (guest experience)
  */
 function SmartRoot() {
@@ -46,7 +48,10 @@ function SmartRoot() {
 
   if (isLoading) return null;
 
-  if (me) return <Redirect to="/chat" />;
+  if (me) {
+    if (me.onboardingComplete) return <Redirect to="/chat" />;
+    return <Redirect to="/onboarding" />;
+  }
   return <Redirect to="/start" />;
 }
 
@@ -57,7 +62,7 @@ function Router() {
       <Route path="/start" component={GuestStart} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
-      <Route path="/onboarding"><Redirect to="/chat" /></Route>
+      <Route path="/onboarding" component={Onboarding} />
       <Route path="/chat" component={Chat} />
       <Route path="/billing" component={BillingPage} />
       <Route path="/system" component={SystemPage} />

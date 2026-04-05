@@ -187,6 +187,8 @@ export default function Onboarding() {
   }
 
   function handleSubmit() {
+    if (createProfile.isPending) return;
+    setError(null);
     createProfile.mutate(
       {
         data: {
@@ -204,7 +206,15 @@ export default function Onboarding() {
       },
       {
         onSuccess: () => setLocation("/chat"),
-        onError: () => setError("Failed to save your profile. Please try again."),
+        onError: (err) => {
+          const apiMessage =
+            err && typeof err === "object" && "data" in err
+              ? (err.data as { error?: string } | null)?.error
+              : err instanceof Error
+              ? err.message
+              : null;
+          setError(apiMessage ?? "Failed to save your profile. Please try again.");
+        },
       }
     );
   }
@@ -338,8 +348,15 @@ export default function Onboarding() {
             </button>
             {!isRequired && (
               <button
-                onClick={() => { step < steps.length - 1 ? setStep((s) => s + 1) : handleSubmit(); }}
-                className="w-full mt-3 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
+                onClick={() => {
+                  if (step < steps.length - 1) {
+                    setStep((s) => s + 1);
+                  } else {
+                    handleSubmit();
+                  }
+                }}
+                disabled={createProfile.isPending}
+                className="w-full mt-3 text-sm text-muted-foreground hover:text-foreground transition-colors py-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Skip this step
               </button>

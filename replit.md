@@ -56,6 +56,14 @@ The UI features a dark theme with electric blue (HSL(199 89% 48%)) as the primar
   - **`changeLogId` added to `EditResult`** type — the backend already returned it, now the frontend uses it for one-click undo in the VibeBar.
   - **`submitQuickEdit` + `restoreChange`** API helpers added to system.tsx for direct exercise quick actions and undo support.
 
+### Onboarding Flow
+- The `/onboarding` route renders a 10-step form (`onboarding.tsx`) that collects user training preferences and saves them via `POST /api/profile`.
+- Steps 1–6 are required (training goal, experience, style, days/week, session duration, equipment).
+- Steps 7–10 are optional text fields (injuries, sport focus, exercise preferences, exercises to avoid) and are submitted as `null` when blank.
+- After completing onboarding, users are redirected to `/chat`.
+- Routing: unauthenticated → `/start`; authenticated without profile → `/onboarding`; authenticated with profile → `/chat`.
+- Registration without a guest session routes to `/onboarding` to collect the profile. Login with `onboardingComplete: false` also routes to `/onboarding`.
+
 ### System Design Choices
 - **Database Schema**: Includes comprehensive tables for users, profiles, conversations, messages, saved programs, readiness entries, session feedback, user memories, session logs, analytics, and Stripe-related data.
 - **Auth**: Session-based authentication using `express-session`.
