@@ -1,0 +1,142 @@
+Expand the TrainChat exercise inventory from 201 exercises to approximately 1500 high-quality exercises.
+
+Goal:
+Build a structured, scalable exercise library that allows the AI agent to generate much more personalized, varied, and intelligent programs for different users, equipment situations, pain limitations, sport demands, and progression levels.
+
+Requirements:
+1. Increase the exercise library to ~1500 exercises.
+2. Do NOT add random duplicate exercises just to inflate the number.
+3. Build the library with strong metadata so the AI can reason over the inventory intelligently.
+
+For every exercise, include as many of the following fields as possible:
+- id
+- name
+- category
+- subcategory
+- movementPattern
+- primaryMuscles
+- secondaryMuscles
+- muscleGroups
+- unilateralOrBilateral
+- planeOfMotion
+- forceType
+- equipment
+- bodyRegion
+- trainingGoal
+- athleticQuality
+- difficultyLevel
+- skillLevel
+- mobilityDemand
+- stabilityDemand
+- impactLevel
+- jointStressProfile
+- spineLoad
+- shoulderLoad
+- kneeLoad
+- hipLoad
+- contraindications
+- commonCompensations
+- coachingCues
+- beginnerRegressionIds
+- progressionIds
+- variationIds
+- tempoCompatible
+- repRangeRecommendations
+- setRangeRecommendations
+- timeBasedCompatible
+- warmupCompatible
+- cooldownCompatible
+- rehabCompatible
+- performanceCompatible
+- hypertrophyCompatible
+- strengthCompatible
+- powerCompatible
+- conditioningCompatible
+- coreCompatible
+- tags
+
+Organize the inventory across major buckets such as:
+- squat pattern
+- hinge pattern
+- lunge/split squat
+- horizontal push
+- vertical push
+- horizontal pull
+- vertical pull
+- rotation/anti-rotation
+- gait/carry
+- core flexion/anti-extension/anti-lateral flexion
+- plyometrics
+- sprint mechanics
+- jump/landing
+- change of direction
+- acceleration
+- deceleration
+- mobility drills
+- activation drills
+- warm-up drills
+- recovery drills
+- SMR
+- rehab-style low-load patterns
+- machine exercises
+- dumbbell exercises
+- kettlebell exercises
+- cable exercises
+- band exercises
+- bodyweight exercises
+- med ball drills
+- sled drills
+- trap bar lifts
+- barbell lifts
+- sport-performance drills
+
+Also ensure broad coverage across:
+- beginner
+- intermediate
+- advanced
+- youth athlete
+- adult general fitness
+- older adult friendly options
+- low-impact options
+- home gym options
+- full commercial gym options
+- limited equipment options
+- shoulder-sensitive options
+- knee-sensitive options
+- low-back-sensitive options
+
+Important:
+- Avoid obvious duplicates unless they are truly meaningful variations.
+- Normalize naming conventions.
+- Ensure exercise metadata is consistent across the library.
+- Make progression/regression relationships usable by the AI agent.
+- Add enough exercise variations that “swap exercise” feels intelligent and not repetitive.
+- Preserve current exercise data and extend it rather than breaking existing references.
+
+Implementation tasks:
+1. Audit the existing exercise schema and current seed structure.
+2. Upgrade the schema if needed to support richer metadata.
+3. Generate and insert a much larger structured seed dataset.
+4. Add validation so malformed exercises do not enter the database.
+5. Add indexing/searchability for:
+   - movement pattern
+   - equipment
+   - muscle group
+   - difficulty
+   - training goal
+   - joint stress / contraindications
+6. Update any inventory count logic so the system accurately reflects the new total.
+7. Ensure the AI agent can query this expanded inventory efficiently for:
+   - programming
+   - swaps
+   - regressions
+   - progressions
+   - injury-sensitive substitutions
+8. Test that the system performs well with ~1500 exercises and does not slow down generation significantly.
+
+Deliverables:
+- upgraded schema if needed
+- expanded exercise seed dataset
+- total final exercise count
+- summary of categories covered
+- confirmation that the AI can use the expanded library for smarter programming

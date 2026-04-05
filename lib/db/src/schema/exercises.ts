@@ -20,9 +20,18 @@ export const exerciseLibrary = pgTable("exercise_library", {
   // Movement classification
   movementPattern: text("movement_pattern").notNull(),
   // Values: squat | hinge | push_horizontal | push_vertical |
-  //         pull_horizontal | pull_vertical | carry | core |
+  //         pull_horizontal | pull_vertical | carry | core_anti_extension |
+  //         core_anti_rotation | core_anti_lateral | core_flexion | core_rotation |
   //         power_explosive | iso_chest | iso_shoulders | iso_arms |
-  //         iso_legs | conditioning
+  //         iso_legs | iso_back | conditioning | plyometric | mobility |
+  //         activation | smr | rehab | sport_performance | med_ball | sled
+
+  // Broad category
+  bodyRegion: text("body_region"),
+  // Values: upper_body | lower_body | full_body | core
+
+  // Unilateral vs bilateral flag
+  unilateral: boolean("unilateral").notNull().default(false),
 
   // Muscle targeting
   primaryMuscle: text("primary_muscle").notNull(),
@@ -34,7 +43,7 @@ export const exerciseLibrary = pgTable("exercise_library", {
   // Equipment requirements (array — exercise may support multiple)
   equipment: jsonb("equipment").$type<string[]>().notNull().default([]),
   // Values: barbell | dumbbell | cable | machine | bodyweight |
-  //         kettlebell | band | trap_bar | rings | trx
+  //         kettlebell | band | trap_bar | rings | trx | sled | med_ball | foam_roller | lacrosse_ball
 
   // Difficulty / skill demand
   difficultyLevel: text("difficulty_level").notNull().default("intermediate"),
@@ -42,7 +51,7 @@ export const exerciseLibrary = pgTable("exercise_library", {
 
   // Programming intent
   intentTags: jsonb("intent_tags").$type<string[]>().notNull().default([]),
-  // Values: strength | hypertrophy | power | endurance | rehab | athletic | fat_loss | mobility
+  // Values: strength | hypertrophy | power | endurance | rehab | athletic | fat_loss | mobility | activation | smr | sport_performance
 
   // Joint stress flags for injury-aware filtering
   jointStressProfile: jsonb("joint_stress_profile")
@@ -50,7 +59,14 @@ export const exerciseLibrary = pgTable("exercise_library", {
     .notNull()
     .default([]),
   // Values: knee_dominant | hip_dominant | spine_load | low_back_stress |
-  //         shoulder_dominant | elbow_stress | wrist_stress | low_impact
+  //         shoulder_dominant | elbow_stress | wrist_stress | low_impact | no_impact | ankle_stress
+
+  // Flexible tags for population, context, and special attributes
+  tags: jsonb("tags").$type<string[]>().notNull().default([]),
+  // Values: home_gym | outdoor | unilateral | bilateral | beginner_friendly | older_adult |
+  //         youth_athlete | shoulder_sensitive | knee_sensitive | low_back_sensitive |
+  //         low_impact | high_impact | sport_specific | athletic | warm_up | cool_down |
+  //         corrective | bodyweight_only | minimal_equipment | bilateral | tempo_based
 
   // ── Swap Cluster System ──
   // Exercises sharing a clusterId are direct swap candidates (same function, different equipment/variation)
