@@ -1,0 +1,58 @@
+Fix the TrainChat onboarding “Unauthorized” error on the final step.
+
+Problem:
+On Step 10 of onboarding, when the user clicks “Complete Setup,” the UI shows “Unauthorized.” This means the frontend is attempting to save onboarding data to an authenticated backend endpoint without a valid authenticated session/token, or the token is not being passed correctly.
+
+What I need:
+1. Audit the entire onboarding completion flow from frontend to backend.
+2. Identify where the final submit request is being sent.
+3. Check whether that endpoint requires authentication.
+4. Check whether the auth token/JWT/session is present at the time of the request.
+5. Check whether the Authorization header is actually being attached.
+6. Check whether onboarding is being submitted before user creation/login is complete.
+7. Check whether mobile Safari/private browser behavior is causing auth state hydration issues.
+
+Implement the correct architecture:
+- If onboarding is part of the free/trial flow before signup, save onboarding data to a guest/trial onboarding store that does NOT require auth.
+- If the user is already signed in, then save to the authenticated user profile endpoint.
+- Do not call an authenticated endpoint unless the token/session is confirmed valid.
+- Add a clean branch:
+  - guest user → save onboarding to guest profile / local draft / deviceId record
+  - authenticated user → save onboarding to user profile
+- If no token exists, never attempt authenticated save.
+- If token exists but is invalid, gracefully refresh or redirect to sign in.
+
+Frontend requirements:
+- Add detailed console logging for onboarding submit:
+  - current user state
+  - token existence
+  - endpoint being called
+  - request payload
+  - response status
+- Prevent generic “Unauthorized” text from showing raw to the user.
+- Replace it with a friendly retry/state-aware message.
+- Disable double submission.
+- Add loading state on “Complete Setup.”
+- Preserve onboarding answers if the request fails.
+
+Backend requirements:
+- Inspect the onboarding completion endpoint middleware.
+- Confirm whether auth middleware is incorrectly applied to guest onboarding routes.
+- Split routes clearly into:
+  - POST /api/onboarding/guest
+  - POST /api/onboarding/authenticated
+- Validate payload safely on both.
+- Return structured error responses with clear reason codes.
+
+Also fix the flow logic:
+- If the user is in the pre-signup free experience, onboarding should complete successfully without requiring account auth.
+- If the user signs up later, merge the guest onboarding data into their real account.
+- If the user already has an account, onboarding should save directly to their profile and then route correctly to the agent/dashboard.
+
+Deliverables:
+1. Diagnose exact root cause.
+2. Fix frontend + backend.
+3. Add logs for verification.
+4. Show me the exact files changed.
+5. Explain which endpoint was failing and why.
+6. Verify the flow works on mobile.
