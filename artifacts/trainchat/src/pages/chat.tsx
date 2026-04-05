@@ -174,7 +174,15 @@ export default function Chat() {
       if (last.structuredData) {
         try {
           const parsed = JSON.parse(last.structuredData) as ProgramStructure;
-          setLatestProgram(parsed);
+          // Normalize: ensure days is always an array before storing
+          const safe: ProgramStructure = {
+            ...parsed,
+            days: Array.isArray(parsed.days) ? parsed.days.map((d) => ({
+              ...d,
+              exercises: Array.isArray(d.exercises) ? d.exercises : [],
+            })) : [],
+          };
+          setLatestProgram(safe);
           setIsSaved(false);
         } catch {
           // ignore
@@ -258,11 +266,11 @@ export default function Chat() {
           name: latestProgram.programName,
           description: latestProgram.description ?? "",
           conversationId: activeConvoId,
-          days: latestProgram.days.map((day) => ({
+          days: (latestProgram.days ?? []).map((day) => ({
             dayNumber: day.dayNumber,
             name: day.name,
             notes: day.notes ?? undefined,
-            exercises: day.exercises.map((ex, idx) => ({
+            exercises: (day.exercises ?? []).map((ex, idx) => ({
               name: ex.name,
               sets: ex.sets,
               reps: ex.reps,

@@ -78,8 +78,9 @@ export default function ChatOutput({
     );
   }
 
-  const lockedDayCount = isPremium ? 0 : Math.max(0, program.days.length - 1);
-  const showPaywall = !isPremium && program.days.length > 1;
+  const days = program.days ?? [];
+  const lockedDayCount = isPremium ? 0 : Math.max(0, days.length - 1);
+  const showPaywall = !isPremium && days.length > 1;
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -111,7 +112,7 @@ export default function ChatOutput({
         </h3>
 
         {/* Meta row */}
-        {(program.splitType || program.days.length > 0) && (
+        {(program.splitType || days.length > 0) && (
           <div className="flex items-center gap-3 mb-2">
             {program.splitType && (
               <div className="flex items-center gap-1">
@@ -121,7 +122,7 @@ export default function ChatOutput({
             )}
             <div className="flex items-center gap-1">
               <Dumbbell className="w-3 h-3 text-muted-foreground" />
-              <span className="text-[10px] text-muted-foreground">{program.days.length} days</span>
+              <span className="text-[10px] text-muted-foreground">{days.length} days</span>
             </div>
             {!isPremium && (
               <div className="flex items-center gap-1 ml-auto">
@@ -212,7 +213,7 @@ export default function ChatOutput({
 
       {/* Days */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2 relative">
-        {program.days.map((day, idx) => {
+        {days.map((day, idx) => {
           const isLocked = !isPremium && idx > 0;
 
           return (
@@ -255,7 +256,7 @@ export default function ChatOutput({
                   )}
                   {!day.focus && (
                     <p className={`text-[10px] mt-0.5 ${isLocked ? "text-muted-foreground/40" : "text-muted-foreground"}`}>
-                      {isLocked ? "Locked" : `${day.exercises.length} exercises`}
+                      {isLocked ? "Locked" : `${day.exercises?.length ?? 0} exercises`}
                     </p>
                   )}
                 </div>
@@ -273,7 +274,7 @@ export default function ChatOutput({
               {/* Exercises */}
               {!isLocked && expandedDay === idx && (
                 <div className="border-t border-border divide-y divide-border/60">
-                  {day.exercises.map((ex, exIdx) => (
+                  {(day.exercises ?? []).map((ex, exIdx) => (
                     <div key={exIdx} className="px-3 py-2.5">
                       <p className="text-[11px] font-medium text-foreground leading-snug">{ex.name}</p>
                       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1.5">
