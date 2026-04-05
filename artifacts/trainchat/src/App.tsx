@@ -5,7 +5,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
-import Onboarding from "@/pages/onboarding";
 import Chat from "@/pages/chat";
 import GuestStart from "@/pages/guest-start";
 import AdminDashboard from "@/pages/admin";
@@ -58,7 +57,7 @@ function Router() {
       <Route path="/start" component={GuestStart} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
-      <Route path="/onboarding" component={Onboarding} />
+      <Route path="/onboarding"><Redirect to="/chat" /></Route>
       <Route path="/chat" component={Chat} />
       <Route path="/billing" component={BillingPage} />
       <Route path="/system" component={SystemPage} />

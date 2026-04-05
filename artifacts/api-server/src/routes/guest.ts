@@ -10,6 +10,7 @@ import {
   generateGuestFollowup,
 } from "../lib/guestGenerate";
 import { mergeGuestToUser, TEASER_GENERATE_LIMIT, TEASER_TOTAL_LIMIT } from "../lib/guestMerge";
+import { processGuestChat, GUEST_CHAT_LIMIT, type GuestChatMessage } from "../lib/guestChat";
 import { requireAuth } from "../middlewares/auth";
 import { trackEvent } from "../lib/analyticsService";
 
@@ -303,6 +304,76 @@ router.post("/guest/convert", requireAuth, async (req, res): Promise<void> => {
     const result = await mergeGuestToUser(deviceId, userId);
     res.json(result);
   } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Guest Chat Schema ────────────────────────────────────────────────────────
+
+const GuestChatBody = z.object({
+  deviceId: z.string().min(8).max(128),
+  message: z.string().min(1).max(4000),
+  history: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant"]),
+        content: z.string(),
+      })
+    )
+    .max(30)
+    .optional()
+    .default([]),
+});
+
+/**
+ * POST /api/guest/chat
+ * Handle a single conversational turn for a guest user.
+ *
+ * Allows up to GUEST_CHAT_LIMIT (5) user inputs before requiring signup.
+ * Stores conversation history in guest session metadata.
+ * Returns the AI response and remaining message count.
+ */
+router.post("/guest/chat", async (req, res): Promise<void> => {
+  const parsed = GuestChatBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+    return;
+  }
+
+  const { deviceId, message, history } = parsed.data;
+
+  try {
+    const result = await processGuestChat(
+      deviceId,
+      message,
+      history as GuestChatMessage[]
+    );
+
+    if (result.limitReached && !result.response) {
+      res.status(402).json({
+        error: "Free message limit reached",
+        code: "PAYWALL",
+        messageCount: result.messageCount,
+        limit: GUEST_CHAT_LIMIT,
+      });
+      return;
+    }
+
+    res.json({
+      response: result.response,
+      messageCount: result.messageCount,
+      limitReached: result.limitReached,
+      remaining: Math.max(0, GUEST_CHAT_LIMIT - result.messageCount),
+    });
+  } catch (err: any) {
+    if (err.message === "Guest session not found") {
+      res.status(404).json({ error: "Guest session not found" });
+      return;
+    }
+    if (err.message === "Device blocked") {
+      res.status(403).json({ error: "Device blocked" });
+      return;
+    }
     res.status(500).json({ error: err.message });
   }
 });

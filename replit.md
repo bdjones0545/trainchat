@@ -8,7 +8,8 @@ TrainChat is an agent-first AI training platform that uses an AI chat as its pri
 
 - I prefer a 3-panel chat layout (sidebar, chat, training output/intelligence panel).
 - I like to see detailed training output and intelligence in the right panel.
-- I expect a clear onboarding process.
+- The product should feel like "vibe coding your training" from the first screen — no pre-signup onboarding forms.
+- Users get 5 free chat messages before seeing a paywall/signup prompt.
 
 ## System Architecture
 
@@ -24,7 +25,7 @@ The UI features a dark theme with electric blue (HSL(199 89% 48%)) as the primar
 - **Insights Service**: Generates proactive suggestions based on user memories.
 - **AI Service**: Orchestrates AI responses by combining various contexts (user messages, system prompts, user profiles, intelligence, adaptation, memory, insights) and can fall back to a rule-based program generator.
 - **Plan Gating**: Manages feature access and message limits based on user subscription plans.
-- **Guest Session System**: Supports unauthenticated users, tracking onboarding and interactions, with a guest-to-user merge functionality upon signup/conversion.
+- **Guest Session System**: Supports unauthenticated users with a direct-to-agent experience. Users go straight into a real AI chat with no onboarding forms. They get 5 free messages before seeing a paywall. Chat history is persisted in localStorage and the backend, then restored into the user's account on signup/login via `/api/guest/convert`. The `/api/guest/chat` endpoint handles conversational AI for guests, counting messages and enforcing the 5-message limit. No second onboarding after signup — the agent gathers profile info conversationally.
 - **Stripe Subscription Billing**: Full recurring billing with Stripe Checkout (monthly/yearly), webhook handling for all subscription lifecycle events (checkout.session.completed, customer.subscription.created/updated/deleted, invoice.paid/payment_failed), billing portal access, and subscription-based access control. DB schema tracks `stripePriceId`, `billingInterval`, `currentPeriodEnd`, `cancelAtPeriodEnd`, `trialEnd`. Webhook handlers are idempotent and two-layer: StripeSync (schema sync) + business logic (users table sync). `/billing` page provides full subscription management UI.
 - **"Your System" Training System Foundation**: Implements a persistent, structured training program with a normalized database schema (`training_systems`, `training_phases`, `training_weeks`, `training_sessions`, `session_exercises`) and dedicated API routes for accessing and initializing user training systems.
 - **Natural Language Editing Engine**: Interprets natural language modification requests using GPT-4o to generate structured `EditPlan` JSON for modifications, with a rule-based fallback.

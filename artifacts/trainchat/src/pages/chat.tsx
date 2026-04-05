@@ -101,7 +101,7 @@ export default function Chat() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: me, isError: meError, isLoading: meLoading } = useGetMe();
-  const { data: profile, isError: profileError, isLoading: profileLoading } = useGetProfile({
+  const { data: profile, isLoading: profileLoading } = useGetProfile({
     query: { enabled: !!me },
   });
   const { data: conversations = [], isLoading: convosLoading } = useListConversations({
@@ -144,9 +144,7 @@ export default function Chat() {
     if (meError) setLocation("/login");
   }, [meError, setLocation]);
 
-  useEffect(() => {
-    if (profileError && !profileLoading) setLocation("/onboarding");
-  }, [profileError, profileLoading, setLocation]);
+  // Profile errors are handled gracefully — agent gathers info conversationally
 
   useEffect(() => {
     if (!me || convosLoading) return;

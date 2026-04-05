@@ -13,7 +13,7 @@ import { logger } from "./logger";
 // Mirrors GUEST_CONFIG.TEASER_TOTAL_LIMIT on the frontend.
 // Adjust both together when changing the teaser gate.
 export const TEASER_GENERATE_LIMIT = 1; // max distinct program generations
-export const TEASER_TOTAL_LIMIT = 2; // total interactions (1 program + 1 followup)
+export const TEASER_TOTAL_LIMIT = 5; // free chat messages before paywall
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -150,34 +150,56 @@ export async function mergeGuestToUser(
     .where(eq(conversationsTable.userId, userId))
     .limit(1);
 
-  if (!existingConv && program) {
-    const programName = String(program.programName ?? "Your Training Program");
+  if (!existingConv) {
+    // Prefer restoring the full chat history (new flow)
+    const chatHistory = meta.chatHistory as Array<{ role: string; content: string }> | undefined;
+    const convTitle = program
+      ? String(program.programName ?? "Your Training Program")
+      : "Your Training Program";
 
     const [conv] = await db
       .insert(conversationsTable)
-      .values({ userId, title: programName })
+      .values({ userId, title: convTitle })
       .returning();
 
-    const programText = formatProgramAsText(program);
-    const intro = program.coachIntro
-      ? `${program.coachIntro}\n\nHere is your personalized program:\n\n${programText}`
-      : programText;
+    if (chatHistory && chatHistory.length > 0) {
+      // Restore the full conversational history
+      const messageRows = chatHistory.map((msg) => ({
+        conversationId: conv.id,
+        role: msg.role as "user" | "assistant",
+        content: msg.content,
+        structuredData: null as string | null,
+      }));
 
-    await db.insert(messagesTable).values({
-      conversationId: conv.id,
-      role: "assistant",
-      content: intro,
-      structuredData: JSON.stringify({
-        type: "guest_program_import",
-        program,
-        sourceDeviceId: deviceId,
-      }),
-    });
+      await db.insert(messagesTable).values(messageRows);
 
-    logger.info(
-      { deviceId, userId, conversationId: conv.id },
-      "mergeGuestToUser: starter conversation created from guest program",
-    );
+      logger.info(
+        { deviceId, userId, conversationId: conv.id, messageCount: messageRows.length },
+        "mergeGuestToUser: full chat history restored from guest session",
+      );
+    } else if (program) {
+      // Fallback: legacy flow — format program as text message
+      const programText = formatProgramAsText(program);
+      const intro = program.coachIntro
+        ? `${program.coachIntro}\n\nHere is your personalized program:\n\n${programText}`
+        : programText;
+
+      await db.insert(messagesTable).values({
+        conversationId: conv.id,
+        role: "assistant",
+        content: intro,
+        structuredData: JSON.stringify({
+          type: "guest_program_import",
+          program,
+          sourceDeviceId: deviceId,
+        }),
+      });
+
+      logger.info(
+        { deviceId, userId, conversationId: conv.id },
+        "mergeGuestToUser: starter conversation created from guest program (legacy)",
+      );
+    }
   }
 
   // ── 3. Mark user onboarding complete ─────────────────────────────────────

@@ -96,12 +96,8 @@ export default function Login() {
             }
           }
 
-          // No guest session or merge failed — standard routing
-          if (!result.user.onboardingComplete) {
-            setLocation("/onboarding");
-          } else {
-            setLocation("/chat");
-          }
+          // No guest session or merge failed — go to chat
+          setLocation("/chat");
         },
         onError: (err: unknown) => {
           const apiErr = err as { data?: { error?: string } };
