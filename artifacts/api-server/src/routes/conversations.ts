@@ -4,7 +4,7 @@ import { eq, desc, count } from "drizzle-orm";
 import { CreateConversationBody, GetConversationParams, DeleteConversationParams, ListMessagesParams, SendMessageBody, SendMessageParams } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
 import { generateAIResponse, type ProgramStructure } from "../lib/ai";
-import { classifyIntent, logIntentSummary } from "../lib/intent";
+import { classifyIntent, logIntentSummary, type IntentResult } from "../lib/intent";
 import { resolveAction, logDecisionSummary } from "../lib/decision";
 import {
   selectResponseMode,
@@ -21,6 +21,11 @@ import { syncMemoriesFromData, listMemories, buildMemoryContext } from "../lib/m
 import { generateInsights, buildInsightPromptHint } from "../lib/insights";
 import { getUserPlanInfo } from "../lib/planGating";
 import { stripeStorage } from "../lib/stripeStorage";
+import { interpretEditRequest } from "../lib/edit-intent-service";
+import { applyEditPlan, type EditResult } from "../lib/edit-engine";
+import { createChangeLogEntry } from "../lib/change-log-service";
+import { getActiveTrainingSystem, getFullTrainingSystem } from "../lib/training-system-service";
+import { buildDecisionMemory } from "../lib/decision-memory-service";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -30,6 +35,7 @@ const router: IRouter = Router();
 /**
  * Extracts the most recent valid structured program from a conversation's message history.
  * Searches backwards through assistant messages for the latest program JSON.
+ * Skips system_edit markers (they are not draft programs).
  */
 function resolveCurrentProgram(
   history: Array<{ role: string; structuredData?: string | null }>
@@ -44,6 +50,8 @@ function resolveCurrentProgram(
       const data = typeof msg.structuredData === "string"
         ? JSON.parse(msg.structuredData)
         : msg.structuredData;
+      // Skip system_edit markers
+      if (data?._type === "system_edit") continue;
       if (data?.days && Array.isArray(data.days) && data.days.length > 0) {
         return data as ProgramStructure;
       }
@@ -52,6 +60,29 @@ function resolveCurrentProgram(
     }
   }
   return null;
+}
+
+/**
+ * Returns true if the intent should trigger a direct edit of the real training system.
+ * Only EDIT_PROGRAM and ADJUST_FOR_PAIN are eligible — these represent clear requests
+ * to modify the structure of an existing program.
+ */
+function isVibeEditIntent(intentResult: IntentResult): boolean {
+  return intentResult.type === "EDIT_PROGRAM" || intentResult.type === "ADJUST_FOR_PAIN";
+}
+
+/**
+ * Builds a coaching-toned confirmation message after a successful system edit.
+ * Uses the edit plan's changeSummary and applied count to create a concise, clear response.
+ */
+function buildVibeEditCoachingResponse(editResult: EditResult): string {
+  const summary = editResult.changeSummary;
+  const skipped = editResult.skippedCount;
+  const base = summary.endsWith(".") ? summary : `${summary}.`;
+  const suffix = skipped > 0
+    ? ` (${skipped} change${skipped > 1 ? "s" : ""} could not be applied.)`
+    : "";
+  return `${base}${suffix}\n\nYour training system is updated — the change is live now.`;
 }
 
 router.get("/conversations", requireAuth, async (req, res): Promise<void> => {
@@ -316,6 +347,11 @@ Keep it helpful and intelligent, never promotional.`;
 
   logIntentSummary(parsed.data.content, intentResult, hasActiveProgram);
 
+  // ── Load active training system (used for vibe edit routing) ──────────────
+  // Run in parallel with decision tree — it's a fast indexed query
+  const activeSystem = await getActiveTrainingSystem(userId).catch(() => null);
+  const hasActiveSystem = activeSystem !== null;
+
   // ── Decision Tree: resolve action type, preservation rules, and infer-vs-ask ──
   const actionDecision = resolveAction(intentResult, latestStructuredProgram, parsed.data.content);
   logDecisionSummary(parsed.data.content, intentResult, actionDecision, hasActiveProgram);
@@ -453,6 +489,136 @@ Keep it helpful and intelligent, never promotional.`;
     });
     return;
   }
+
+  // ── VIBE EDIT MODE ────────────────────────────────────────────────────────
+  // If the user has an active training system in the DB AND the intent is a
+  // system edit (EDIT_PROGRAM or ADJUST_FOR_PAIN), bypass the draft-program chat
+  // flow and directly edit the real training system. This is the "vibe coding" UX.
+  if (hasActiveSystem && isVibeEditIntent(intentResult)) {
+    logger.info(
+      { userId, systemId: activeSystem!.id, intentType: intentResult.type, editSubtype: intentResult.editSubtype },
+      "[VibeEdit] Entering vibe edit mode — editing real training system from chat"
+    );
+
+    try {
+      // Load full system + decision memory in parallel
+      const [fullSystem, decisionMemory] = await Promise.all([
+        getFullTrainingSystem(activeSystem!.id),
+        buildDecisionMemory(activeSystem!.id, userId).catch(() => null),
+      ]);
+
+      if (!fullSystem) {
+        logger.warn({ systemId: activeSystem!.id }, "[VibeEdit] Could not load full system — falling back to AI");
+        // Fall through to regular AI response below
+      } else {
+        // Interpret + apply the edit
+        const editPlan = await interpretEditRequest(
+          parsed.data.content,
+          fullSystem,
+          undefined,
+          adaptationCtx || undefined,
+          decisionMemory?.decisionMemoryContext || undefined,
+        );
+
+        logger.info(
+          { intent: editPlan.intent, scope: editPlan.scope, changes: editPlan.changes.length },
+          "[VibeEdit] Edit plan generated"
+        );
+
+        const editResult = await applyEditPlan(editPlan);
+
+        logger.info(
+          { applied: editResult.appliedCount, skipped: editResult.skippedCount, summary: editResult.changeSummary },
+          "[VibeEdit] Edit plan applied"
+        );
+
+        if (editResult.appliedCount > 0) {
+          // Log the change to system_change_log
+          const changeLogId = await createChangeLogEntry({
+            userId,
+            trainingSystemId: activeSystem!.id,
+            source: "ai_edit",
+            intent: editPlan.intent,
+            scope: editPlan.scope,
+            changeSummary: editResult.changeSummary,
+            requestText: parsed.data.content,
+            beforeSnapshot: editResult.beforeSnapshot,
+            afterSnapshot: editResult.afterSnapshot,
+            appliedCount: editResult.appliedCount,
+            skippedCount: editResult.skippedCount,
+          });
+
+          // Build coaching response confirming the change
+          const coachingContent = buildVibeEditCoachingResponse(editResult);
+
+          // Store the systemEdit marker in structuredData so MessageBubble
+          // can render a SystemUpdateCard in the conversation history
+          const systemEditData = {
+            _type: "system_edit" as const,
+            changeSummary: editResult.changeSummary,
+            changedIds: editResult.changedIds,
+            systemId: activeSystem!.id,
+            changeLogId,
+          };
+
+          const [assistantMessage] = await db.insert(messagesTable).values({
+            conversationId: params.data.id,
+            role: "assistant",
+            content: coachingContent,
+            structuredData: JSON.stringify(systemEditData),
+          }).returning();
+
+          await db.update(conversationsTable)
+            .set({ updatedAt: new Date() })
+            .where(eq(conversationsTable.id, params.data.id));
+
+          if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+            stripeStorage.incrementMessageCount(userId).catch(() => {});
+          }
+
+          res.json({
+            userMessage: {
+              id: userMessage.id,
+              conversationId: userMessage.conversationId,
+              role: userMessage.role,
+              content: userMessage.content,
+              createdAt: userMessage.createdAt.toISOString(),
+              structuredData: null,
+            },
+            assistantMessage: {
+              id: assistantMessage.id,
+              conversationId: assistantMessage.conversationId,
+              role: assistantMessage.role,
+              content: assistantMessage.content,
+              createdAt: assistantMessage.createdAt.toISOString(),
+              structuredData: assistantMessage.structuredData ?? null,
+            },
+            planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+            intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
+            systemEdit: {
+              applied: true,
+              changeSummary: editResult.changeSummary,
+              changedIds: editResult.changedIds,
+              systemId: activeSystem!.id,
+              changeLogId,
+            },
+          });
+          return;
+        }
+
+        // Edit plan produced no applied changes — fall through to AI response
+        logger.warn(
+          { intent: editPlan.intent, skipped: editResult.skippedCount },
+          "[VibeEdit] No changes applied — falling back to AI response"
+        );
+      }
+    } catch (err: any) {
+      logger.error({ err: err?.message, stack: err?.stack }, "[VibeEdit] Edit pipeline failed — falling back to AI");
+      // Fall through to regular AI response
+    }
+  }
+
+  // ── Standard AI Response Path ─────────────────────────────────────────────
 
   // For all other intents — route to AI with appropriate context
   // EDIT_PROGRAM needs the current program; others may or may not

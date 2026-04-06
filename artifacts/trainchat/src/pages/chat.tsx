@@ -166,13 +166,24 @@ export default function Chat() {
   }, [messages, isTyping]);
 
   useEffect(() => {
-    const aiMessages = messages.filter((m) => m.role === "assistant" && m.structuredData);
-    if (aiMessages.length > 0) {
-      const last = aiMessages[aiMessages.length - 1];
+    // Find the latest assistant message that has a draft program (not a system_edit marker)
+    const programMessages = messages.filter((m) => {
+      if (m.role !== "assistant" || !m.structuredData) return false;
+      try {
+        const data = JSON.parse(m.structuredData);
+        // Skip system_edit markers — they are not draft programs
+        if (data?._type === "system_edit") return false;
+        return data?.days && Array.isArray(data.days);
+      } catch {
+        return false;
+      }
+    });
+
+    if (programMessages.length > 0) {
+      const last = programMessages[programMessages.length - 1];
       if (last.structuredData) {
         try {
           const parsed = JSON.parse(last.structuredData) as ProgramStructure;
-          // Normalize: ensure days is always an array before storing
           const safe: ProgramStructure = {
             ...parsed,
             days: Array.isArray(parsed.days) ? parsed.days.map((d) => ({
@@ -242,6 +253,16 @@ export default function Chat() {
 
           if (data?.planInfo?.messagesRemaining !== undefined) {
             setMessagesUsed(data.planInfo.messageCount ?? messagesUsed + 1);
+          }
+
+          // If the agent applied a vibe edit to the real training system,
+          // invalidate all training-system query keys so the /system page refreshes instantly
+          if (data?.systemEdit?.applied) {
+            queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+            queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+            queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+            queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
+            queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
           }
         },
         onError: (err: any) => {

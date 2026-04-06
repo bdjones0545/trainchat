@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import SystemUpdateCard from "./SystemUpdateCard";
 
 interface Message {
   id: number;
@@ -137,9 +138,28 @@ function parseInline(text: string): React.ReactNode {
   });
 }
 
+// Parse structuredData to detect system_edit vs program
+function parseStructuredData(raw: string | null | undefined) {
+  if (!raw) return { type: "none" as const };
+  try {
+    const data = JSON.parse(raw);
+    if (data?._type === "system_edit") {
+      return { type: "system_edit" as const, data };
+    }
+    if (data?.days && Array.isArray(data.days)) {
+      return { type: "program" as const, data };
+    }
+  } catch {
+    // ignore
+  }
+  return { type: "none" as const };
+}
+
 export default function MessageBubble({ message }: Props) {
   const isUser = message.role === "user";
-  const hasProgram = !isUser && !!message.structuredData;
+  const parsed = parseStructuredData(message.structuredData);
+  const isSystemEdit = !isUser && parsed.type === "system_edit";
+  const hasProgram = !isUser && parsed.type === "program";
 
   return (
     <div className={`flex items-start gap-3 mb-5 message-animate ${isUser ? "flex-row-reverse" : ""}`}>
@@ -167,6 +187,13 @@ export default function MessageBubble({ message }: Props) {
         ) : (
           <div className="max-w-[90%] px-4 py-3 rounded-2xl rounded-tl-sm bg-card border border-border text-foreground">
             <RichContent text={message.content} />
+
+            {/* System edit card — shown when the agent modified the real training system */}
+            {isSystemEdit && (
+              <SystemUpdateCard data={parsed.data} />
+            )}
+
+            {/* Program generated indicator — shown when a draft program is in the right panel */}
             {hasProgram && (
               <div className="mt-3 pt-2.5 border-t border-border">
                 <div className="flex items-center gap-1.5">
