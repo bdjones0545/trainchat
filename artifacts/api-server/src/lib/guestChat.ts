@@ -10,70 +10,90 @@ export interface GuestChatMessage {
 
 // ─── System Prompt ────────────────────────────────────────────────────────────
 
-function buildGuestChatSystemPrompt(): string {
-  return `You are TrainChat — an elite AI performance architect and strength coach. You operate at the intersection of PhD-level exercise science, professional strength & conditioning, and world-class coaching.
+function buildGuestChatSystemPrompt(turnNumber: number): string {
+  return `You are TrainChat — an elite AI performance architect. You build personalized training systems through conversation. You feel less like a chatbot and more like an intelligent system that is actively constructing something for the user in real time.
 
-## YOUR ROLE
-You are building a personalized training program WITH the user in real time — through conversation. You do not ask all your questions at once. You gather information naturally and progressively, like a real coach would on a first call.
+## YOUR IDENTITY
+You are fast, precise, and confident. You do not ask unnecessary questions. You make intelligent inferences from minimal input and start building immediately. You reveal your work progressively — structure first, then details, then refinements.
 
-## CONVERSATION FLOW
-Start by understanding their core goal. Then progressively collect the context you need to build a great program:
-- What they want to achieve (goal)
-- Training experience level
-- Available equipment and training environment
-- Schedule / days per week they can train
-- Any injuries, limitations, or pain points
-- Training style preferences (powerlifting, bodybuilding, athletic, etc.)
-- Sport or performance focus if relevant
+## THE "VIBE CODING" PRINCIPLE (CRITICAL)
+The user should feel like something is being BUILT FOR THEM — not like they're filling out a form.
 
-Do NOT dump all these questions at once. Ask 1-2 naturally based on what they've shared. When you have enough context, start building their program conversationally — either as part of the chat or by offering to generate it.
+This means:
+- Echo back what you understood from their message immediately
+- Signal that you are already building ("Mapping your split now", "Building your week structure...")
+- Show partial structure FAST — within 2-3 messages
+- Ask AT MOST 1 clarifying question per response, never multiple at once
+- If you have 60% of the info you need, START BUILDING the other 40% from smart defaults
 
-## PERSONALITY
-- Expert, collaborative, high-performance
-- Warm confidence — you're a trusted coach, not a robot
-- Concise and direct — never wordy or generic
-- Conversational, not like a form or questionnaire
-- Motivating but grounded
-- Honest about what works
+## CONVERSATION STAGES (follow this progression)
+
+### STAGE 1 — First user response (Turn 1):
+Signal intelligence immediately. Echo what you understood + show you're already working.
+Example format:
+"Got it — [what you understood]. I'm already mapping your [split type].
+[Quick clarifying question if critical, otherwise just build]"
+
+### STAGE 2 — Second response (Turn 2):
+Show the STRUCTURE. Don't wait. Reveal the weekly split and Day 1 outline.
+Format:
+**Your [X]-Day [Split Name]**
+Day 1 — [Name]: [Exercise 1], [Exercise 2], [Exercise 3]...
+Day 2 — [Name]: ...
+[continue]
+
+Then: "This is your starting point. Want me to dial in sets, reps, and progressions?"
+
+### STAGE 3 — Third response onward (Turn 3+):
+Expand and refine. Add sets/reps, rest periods, progressions. Adjust based on feedback.
+
+## INTELLIGENT DEFAULTS (use these when info is missing)
+- Experience not stated → assume intermediate
+- Equipment not stated → assume full gym
+- Days not stated → ask ONCE, or default to 4 days
+- Goal is vague → pick the most specific interpretation and name it
+
+## LANGUAGE STYLE
+- Short, punchy sentences
+- No filler: never say "Great!", "Sure!", "Of course!", "Absolutely!"
+- Signal momentum: "Building your split...", "Mapping your week...", "Here's your Day 1..."
+- Sound like a confident coach who already knows what to do
+- Use "your" language: "your split", "your system", "your Day 1"
 
 ## RESPONSE FORMAT
-- Keep responses focused and scannable
-- Use line breaks for readability
-- When describing exercises or programs, be specific and structured
-- Use markdown formatting: **bold** for exercise names, headings for day structure
-- Do NOT use filler phrases like "Great question!" or "Certainly!"
+- Use **bold** for exercise names and day headers
+- Use short line breaks between sections
+- Max 2–3 sentences of prose before showing structured content
+- When showing programs: label each day, list exercises with sets×reps
 
-## WHAT YOU CAN DO IN CHAT
-- Ask smart follow-up questions to profile the user
-- Offer training advice and education
-- Design full programs (structured with days, exercises, sets/reps/rest)
-- Adjust programs based on feedback
-- Answer questions about training science, exercise mechanics, nutrition, recovery
-- Build custom protocols for specific goals
-
-## NSCA STANDARDS (apply to any program you design)
+## NSCA STANDARDS (always apply)
 Exercise order within sessions:
-1. Plyometric/Explosive movements first (CNS must be fresh)
-2. Olympic lifts / High-skill power work
-3. Primary strength compounds (squat, deadlift, bench, press, row)
+1. Plyometric/Explosive (CNS fresh)
+2. Olympic lifts / High-skill power
+3. Primary compounds (squat, deadlift, bench, press, row)
 4. Secondary compounds
 5. Accessory / Isolation
 6. Conditioning last
 
 Rep zones:
 - Strength: 1–6 reps | 3–6 sets | 2–5 min rest
-- Hypertrophy: 6–12 reps | 2–4 sets | 60–90 sec rest
-- Endurance/Metabolic: 12+ reps | 2–3 sets | 30–60 sec rest
+- Hypertrophy: 6–12 reps | 3–4 sets | 60–90 sec rest
+- Endurance: 12+ reps | 2–3 sets | 30–60 sec rest
 
-## OPENING CONTEXT
-The user has just arrived. Your first message should get them started immediately — not onboard them through a form. Get them excited about what you can build together.`;
+## CURRENT TURN: ${turnNumber}
+${turnNumber === 1
+  ? "This is the FIRST user response. Echo + signal you are building. Ask at most ONE question. Make them feel like the machine is already in motion."
+  : turnNumber === 2
+  ? "This is the SECOND exchange. Show the WEEKLY SPLIT and DAY 1 OUTLINE. Do not wait. Even if you are missing some details, show real structure now. This is the 'wow' moment."
+  : "Continue expanding and refining. Add detail to the structure. Adjust based on what they say. The system is already real — now make it great."}`;
 }
 
 // ─── OpenAI Call (conversational, non-JSON) ───────────────────────────────────
 
 async function callOpenAIChat(
   messages: GuestChatMessage[],
-  maxTokens = 600
+  turnNumber: number,
+  maxTokens = 700
 ): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("NO_API_KEY");
@@ -87,11 +107,11 @@ async function callOpenAIChat(
     body: JSON.stringify({
       model: "gpt-4o",
       messages: [
-        { role: "system", content: buildGuestChatSystemPrompt() },
+        { role: "system", content: buildGuestChatSystemPrompt(turnNumber) },
         ...messages.map((m) => ({ role: m.role, content: m.content })),
       ],
       max_tokens: maxTokens,
-      temperature: 0.7,
+      temperature: 0.65,
     }),
   });
 
@@ -107,50 +127,58 @@ async function callOpenAIChat(
   return data.choices[0]?.message?.content ?? "";
 }
 
-// ─── Fallback responses ───────────────────────────────────────────────────────
+// ─── Fallback responses (used when OpenAI is unavailable) ─────────────────────
 
 function buildFallbackResponse(
   userMessage: string,
-  history: GuestChatMessage[]
+  turnNumber: number
 ): string {
   const lower = userMessage.toLowerCase();
-  const isFirst = history.length <= 1;
 
-  if (isFirst) {
-    return `I can build you a fully personalized training program — and adapt it as you grow.\n\nTo get started, what's your primary goal right now? Build muscle, get stronger, lose fat, improve performance, or something else?`;
+  if (turnNumber === 1) {
+    // Echo + signal building
+    if (lower.match(/muscle|hypertrophy|size|bulk/)) {
+      return `Got it — muscle growth, maximum hypertrophy. I'm mapping your split now.\n\nOne question: how many days per week can you commit to?`;
+    }
+    if (lower.match(/strength|strong|power|lift|1rm/)) {
+      return `Strength focus. I'm already structuring your progression model.\n\nHow many days per week are you training?`;
+    }
+    if (lower.match(/fat|weight|lean|cut|lose|shred/)) {
+      return `Body recomposition — preserving muscle while cutting fat. Building your plan.\n\nHow many days per week do you have?`;
+    }
+    if (lower.match(/athletic|performance|sport|speed|explosive/)) {
+      return `Athletic performance. I'm mapping a sport-specific protocol for you.\n\nHow many training days per week?`;
+    }
+    if (lower.match(/pain|injury|rehab|recover/)) {
+      return `Training smart around limitations. I can build a system that respects your body and still drives progress.\n\nWhat are you working with, and how many days per week?`;
+    }
+    return `Understood. I'm already building the structure.\n\nOne thing I need: how many days per week are you training?`;
   }
 
-  if (lower.match(/muscle|hypertrophy|size|big/)) {
-    return `Muscle building is one of the best long-term investments you can make.\n\nA few quick questions to make this specific to you:\n- How long have you been training seriously?\n- What equipment do you have access to?`;
+  if (turnNumber === 2) {
+    // Show split structure
+    if (lower.match(/3|three/)) {
+      return `**Your 3-Day Full Body Split**\n\n**Day 1 — Full Body A**\nSquat, Bench Press, Barbell Row, Overhead Press, Romanian Deadlift\n\n**Day 2 — Full Body B**\nDeadlift, Incline Press, Pull-Up, Dumbbell Shoulder Press, Leg Press\n\n**Day 3 — Full Body C**\nFront Squat, Dip, Cable Row, Lateral Raise, Nordic Curl\n\nThis is your foundation. Want me to add sets, reps, and progressions?`;
+    }
+    if (lower.match(/5|five/)) {
+      return `**Your 5-Day Push/Pull/Legs Split**\n\n**Day 1 — Push**\nBench Press, Overhead Press, Incline DB Press, Lateral Raise, Tricep Pushdown\n\n**Day 2 — Pull**\nDeadlift, Barbell Row, Pull-Up, Face Pull, Barbell Curl\n\n**Day 3 — Legs**\nSquat, Romanian Deadlift, Leg Press, Leg Curl, Calf Raise\n\n**Day 4 — Push (Volume)**\n**Day 5 — Pull (Volume)**\n\nThis is your starting structure. Want the full sets/reps breakdown?`;
+    }
+    // Default: 4-day Upper/Lower
+    return `**Your 4-Day Upper/Lower Split**\n\n**Day 1 — Upper Strength**\nBench Press 4×4, Barbell Row 4×4, Overhead Press 3×5, Pull-Up 3×5\n\n**Day 2 — Lower Strength**\nSquat 4×4, Romanian Deadlift 3×6, Leg Press 3×8, Nordic Curl 3×8\n\n**Day 3 — Upper Hypertrophy**\nIncline DB Press 4×10, Cable Row 4×10, DB Shoulder Press 3×12, Lat Pulldown 3×12\n\n**Day 4 — Lower Hypertrophy**\nFront Squat 4×8, Leg Curl 4×10, Bulgarian Split Squat 3×12, Calf Raise 4×15\n\nThis is your system. Want me to add progressions and weekly structure?`;
   }
 
-  if (lower.match(/strength|strong|power|lift/)) {
-    return `Strength is the foundation of everything. Let's build something that moves the needle.\n\nTo design your program:\n- How many days per week can you train?\n- Any injuries or limitations I should know about?`;
-  }
-
-  if (lower.match(/fat|weight|lean|cut|lose/)) {
-    return `Body composition comes down to training hard, preserving muscle, and managing energy.\n\nTell me more:\n- What's your training experience level?\n- Do you have access to a gym or training at home?`;
-  }
-
-  if (lower.match(/beginner|new|start|just started/)) {
-    return `Starting is the hardest part — and you're here. Let's build something sustainable.\n\nFor a beginner program, I need to know:\n- How many days per week are you committing to?\n- What equipment do you have? (Full gym, home setup, bodyweight only?)`;
-  }
-
-  if (lower.match(/3 day|4 day|5 day|days?.?week|per week/)) {
-    return `Good. Frequency matters. Now let's dial in the details:\n- What's your primary goal — strength, muscle, fat loss, or performance?\n- Any injuries, limitations, or movements to avoid?`;
-  }
-
-  return `Understood. To build this out properly:\n- What does your training history look like? Beginner, intermediate, or advanced?\n- What equipment do you have access to?`;
+  return `Building on that now. The structure is locked in — let me refine the details for you.`;
 }
 
 // ─── Main service ─────────────────────────────────────────────────────────────
 
-export const GUEST_CHAT_LIMIT = 5; // free messages before paywall
+export const GUEST_CHAT_LIMIT = 5;
 
 export interface GuestChatResult {
   response: string;
   messageCount: number;
   limitReached: boolean;
+  turnNumber: number;
 }
 
 export async function processGuestChat(
@@ -164,16 +192,20 @@ export async function processGuestChat(
 
   const currentCount = session.teaserUsesCount ?? 0;
 
-  // Limit check — user has already used all free messages
+  // Limit check
   if (currentCount >= GUEST_CHAT_LIMIT) {
     return {
       response: "",
       messageCount: currentCount,
       limitReached: true,
+      turnNumber: currentCount,
     };
   }
 
-  // Build conversation for OpenAI (include history + new message)
+  // Turn number = which user message this is (1-indexed)
+  const turnNumber = currentCount + 1;
+
+  // Build conversation for OpenAI
   const fullHistory: GuestChatMessage[] = [
     ...history,
     { role: "user", content: userMessage },
@@ -181,13 +213,13 @@ export async function processGuestChat(
 
   let response: string;
   try {
-    response = await callOpenAIChat(fullHistory);
+    response = await callOpenAIChat(fullHistory, turnNumber);
     if (!response.trim()) throw new Error("Empty response");
   } catch (err: any) {
     if (err.message !== "NO_API_KEY") {
       logger.warn({ err: err.message, deviceId }, "Guest chat OpenAI failed — using fallback");
     }
-    response = buildFallbackResponse(userMessage, fullHistory);
+    response = buildFallbackResponse(userMessage, turnNumber);
   }
 
   const newCount = currentCount + 1;
@@ -216,7 +248,7 @@ export async function processGuestChat(
   });
 
   logger.info(
-    { deviceId, messageCount: newCount, limitReached },
+    { deviceId, messageCount: newCount, turnNumber, limitReached },
     "Guest chat message processed"
   );
 
@@ -224,5 +256,6 @@ export async function processGuestChat(
     response,
     messageCount: newCount,
     limitReached,
+    turnNumber,
   };
 }

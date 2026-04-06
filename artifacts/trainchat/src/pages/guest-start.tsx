@@ -7,7 +7,7 @@ import logoSrc from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-const FREE_MESSAGE_LIMIT = GUEST_CONFIG.TEASER_TOTAL_LIMIT; // 5
+const FREE_MESSAGE_LIMIT = GUEST_CONFIG.TEASER_TOTAL_LIMIT;
 const CHAT_HISTORY_KEY = "trainchat_guest_chat";
 const DEVICE_ID_KEY = "trainchat_device_id";
 
@@ -35,11 +35,7 @@ function loadLocalHistory(): ChatMessage[] {
 }
 
 function saveLocalHistory(history: ChatMessage[]) {
-  try { localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(history)); } catch { /* noop */ }
-}
-
-function clearLocalHistory() {
-  try { localStorage.removeItem(CHAT_HISTORY_KEY); } catch { /* noop */ }
+  try { localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(history)); } catch {}
 }
 
 async function trackFunnelEvent(deviceId: string, event: string, metadata?: Record<string, unknown>) {
@@ -49,7 +45,13 @@ async function trackFunnelEvent(deviceId: string, event: string, metadata?: Reco
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ deviceId, event, ...(metadata ? { metadata } : {}) }),
     });
-  } catch { /* silent */ }
+  } catch {}
+}
+
+// Detect whether a message looks like a structured training system preview
+function isSystemPreview(content: string): boolean {
+  return /Day\s+\d|Upper\s|Lower\s|Push\s|Pull\s|Legs\s|Full Body/.test(content) &&
+    /×|\bsets?\b|\breps?\b|4×|3×/.test(content);
 }
 
 // ─── Quick-start chips ────────────────────────────────────────────────────────
@@ -57,12 +59,12 @@ async function trackFunnelEvent(deviceId: string, event: string, metadata?: Reco
 const QUICK_START = [
   { label: "Build muscle", icon: "💪" },
   { label: "Get stronger", icon: "⚡" },
-  { label: "Lose fat", icon: "🔥" },
+  { label: "Lose fat & stay athletic", icon: "🔥" },
   { label: "Athletic performance", icon: "🏆" },
-  { label: "Reduce pain & train smart", icon: "🩺" },
+  { label: "Train around an injury", icon: "🩺" },
 ];
 
-// ─── Message Bubble ───────────────────────────────────────────────────────────
+// ─── Avatar ───────────────────────────────────────────────────────────────────
 
 function AgentAvatar() {
   return (
@@ -77,26 +79,85 @@ function AgentAvatar() {
   );
 }
 
-function AssistantMessage({ content }: { content: string }) {
-  // Render simple markdown-ish formatting
+// ─── Rich message renderer ────────────────────────────────────────────────────
+
+function parseInline(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <strong key={i} style={{ color: "#f4f4f5", fontWeight: 600 }}>
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return part;
+  });
+}
+
+function AssistantMessage({ content, isSystemPreviewMsg }: { content: string; isSystemPreviewMsg: boolean }) {
   const lines = content.split("\n");
+
   return (
-    <div className="flex items-start gap-3 max-w-[88%]">
+    <div className="flex items-start gap-3 max-w-[90%]">
       <AgentAvatar />
-      <div
-        className="rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed min-w-0"
-        style={{ background: "hsl(222 47% 13%)", border: "1px solid hsl(222 47% 20%)", color: "#e4e4e7" }}
-      >
-        {lines.map((line, i) => {
-          if (line.startsWith("**") && line.endsWith("**") && line.length > 4) {
-            return <p key={i} className="font-semibold text-white mb-1">{line.slice(2, -2)}</p>;
-          }
-          if (line.startsWith("- ") || line.startsWith("• ")) {
-            return <p key={i} className="pl-3 text-zinc-300 mb-0.5">· {line.slice(2)}</p>;
-          }
-          if (line === "") return <div key={i} className="h-2" />;
-          return <p key={i} className="mb-0.5 text-zinc-300">{line}</p>;
-        })}
+      <div style={{ minWidth: 0, flex: 1 }}>
+        {isSystemPreviewMsg && (
+          <div
+            className="inline-flex items-center gap-1.5 mb-2 px-2 py-1 rounded-full text-[10px] font-semibold uppercase tracking-widest"
+            style={{ background: "hsl(199 89% 48% / 0.12)", color: "hsl(199 89% 68%)", border: "1px solid hsl(199 89% 48% / 0.25)" }}
+          >
+            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            System Preview
+          </div>
+        )}
+        <div
+          className="rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed"
+          style={{
+            background: isSystemPreviewMsg ? "hsl(222 47% 11%)" : "hsl(222 47% 13%)",
+            border: isSystemPreviewMsg ? "1px solid hsl(199 89% 48% / 0.25)" : "1px solid hsl(222 47% 20%)",
+            color: "#d4d4d8",
+          }}
+        >
+          {lines.map((line, i) => {
+            // Bold-only lines (section headers like "**Your 4-Day Upper/Lower**")
+            if (line.startsWith("**") && line.endsWith("**") && line.length > 4) {
+              return (
+                <p key={i} style={{ fontWeight: 700, color: "#f4f4f5", marginBottom: "6px", marginTop: i > 0 ? "10px" : 0 }}>
+                  {line.slice(2, -2)}
+                </p>
+              );
+            }
+            // Day lines (e.g. "Day 1 — Upper Strength: ...")
+            if (line.match(/^(Day\s+\d|Upper|Lower|Push|Pull|Legs|Full Body)/)) {
+              return (
+                <p key={i} style={{ color: "#a1a1aa", fontSize: "12px", marginBottom: "3px", marginTop: i > 0 ? "6px" : 0 }}>
+                  {parseInline(line)}
+                </p>
+              );
+            }
+            // Bullet
+            if (line.startsWith("- ") || line.startsWith("• ")) {
+              return (
+                <p key={i} style={{ paddingLeft: "12px", color: "#a1a1aa", marginBottom: "2px" }}>
+                  · {parseInline(line.slice(2))}
+                </p>
+              );
+            }
+            // Empty line
+            if (line.trim() === "") {
+              return <div key={i} style={{ height: "6px" }} />;
+            }
+            // Normal text
+            return (
+              <p key={i} style={{ marginBottom: "4px" }}>
+                {parseInline(line)}
+              </p>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -115,47 +176,39 @@ function UserMessage({ content }: { content: string }) {
   );
 }
 
-function TypingIndicator() {
+// ─── Typing indicator — context-aware ────────────────────────────────────────
+
+function TypingIndicator({ turnNumber }: { turnNumber: number }) {
+  const label =
+    turnNumber <= 1
+      ? "Building your system"
+      : turnNumber === 2
+      ? "Mapping your structure"
+      : "Updating";
+
   return (
     <div className="flex items-start gap-3">
       <AgentAvatar />
       <div
-        className="rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-1"
+        className="rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2.5"
         style={{ background: "hsl(222 47% 13%)", border: "1px solid hsl(222 47% 20%)" }}
       >
-        {[0, 1, 2].map((i) => (
-          <div
-            key={i}
-            className="w-1.5 h-1.5 rounded-full animate-bounce"
-            style={{ background: "hsl(199 89% 48%)", animationDelay: `${i * 150}ms` }}
-          />
-        ))}
+        <div className="flex items-center gap-1">
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="w-1.5 h-1.5 rounded-full animate-bounce"
+              style={{ background: "hsl(199 89% 48%)", animationDelay: `${i * 150}ms` }}
+            />
+          ))}
+        </div>
+        <span className="text-xs text-zinc-500">{label}…</span>
       </div>
     </div>
   );
 }
 
-// ─── Message Counter ──────────────────────────────────────────────────────────
-
-function MessageCounter({ used, limit }: { used: number; limit: number }) {
-  const remaining = limit - used;
-  if (used === 0) return null;
-
-  return (
-    <div
-      className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full"
-      style={{
-        color: remaining <= 1 ? "hsl(38 92% 65%)" : "hsl(222 47% 45%)",
-        background: remaining <= 1 ? "hsl(38 92% 65% / 0.08)" : "transparent",
-        border: remaining <= 1 ? "1px solid hsl(38 92% 65% / 0.2)" : "none",
-      }}
-    >
-      <span>{remaining} free {remaining === 1 ? "message" : "messages"} left</span>
-    </div>
-  );
-}
-
-// ─── Locked Screen (return visitor) ──────────────────────────────────────────
+// ─── Locked Screen (return visitor who exhausted messages) ────────────────────
 
 function LockedScreen({ onUnlock, onSignIn }: { onUnlock: () => void; onSignIn: () => void }) {
   return (
@@ -199,15 +252,14 @@ function LockedScreen({ onUnlock, onSignIn }: { onUnlock: () => void; onSignIn: 
 export default function GuestStart() {
   const [, navigate] = useLocation();
 
-  // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [messageCount, setMessageCount] = useState(0);
   const [showPaywall, setShowPaywall] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
+  const [currentTurn, setCurrentTurn] = useState(0);
 
-  // Refs
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const hasInitialized = useRef(false);
@@ -215,24 +267,20 @@ export default function GuestStart() {
 
   const { deviceId, guestSession } = useGuestSession(false);
 
-  // ── Scroll to bottom on new messages ──────────────────────────────────────
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  // ── Track landing page view ────────────────────────────────────────────────
   useEffect(() => {
     if (landingTracked.current || !deviceId) return;
     landingTracked.current = true;
     trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.LANDING_PAGE_VIEWED);
   }, [deviceId]);
 
-  // ── Initialize: restore state or show welcome ──────────────────────────────
   useEffect(() => {
     if (hasInitialized.current || !guestSession) return;
     hasInitialized.current = true;
 
-    // Converted users go directly to chat
     if (guestSession.status === "converted") {
       navigate("/chat");
       return;
@@ -240,10 +288,9 @@ export default function GuestStart() {
 
     const savedCount = guestSession.teaserUsesCount ?? 0;
     setMessageCount(savedCount);
+    setCurrentTurn(savedCount);
 
-    // Return visitor who used all messages → locked
     if (savedCount >= FREE_MESSAGE_LIMIT) {
-      // Try restoring from localStorage first
       const localHistory = loadLocalHistory();
       if (localHistory.length > 0) {
         setMessages(localHistory);
@@ -254,7 +301,6 @@ export default function GuestStart() {
       return;
     }
 
-    // Restore existing conversation from localStorage
     const localHistory = loadLocalHistory();
     if (localHistory.length > 0) {
       setMessages(localHistory);
@@ -264,14 +310,13 @@ export default function GuestStart() {
       return;
     }
 
-    // Fresh start — show the welcome message
+    // Fresh start — the opening line sets the tone for the entire experience
     setMessages([{
       role: "assistant",
-      content: "What do you want to build today?",
+      content: "Let's build your training system.",
     }]);
   }, [guestSession, deviceId, navigate]);
 
-  // ── Send message ──────────────────────────────────────────────────────────
   const handleSend = useCallback(async (text?: string) => {
     const content = (text ?? inputText).trim();
     if (!content || isTyping) return;
@@ -284,20 +329,19 @@ export default function GuestStart() {
       inputRef.current.style.height = "auto";
     }
 
-    // Add user message immediately
     const userMsg: ChatMessage = { role: "user", content };
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     saveLocalHistory(newMessages);
 
-    // Track message send
     trackFunnelEvent(id, GUEST_CONFIG.EVENTS.GUEST_CHAT_MESSAGE, { messageCount: messageCount + 1 });
 
+    // Advance turn immediately so typing indicator shows the right label
+    setCurrentTurn((t) => t + 1);
     setIsTyping(true);
 
     try {
-      // Send only recent history to API (last 20 messages for context)
-      const historyForApi = newMessages.slice(-20, -1); // exclude the just-added user message
+      const historyForApi = newMessages.slice(-20, -1);
 
       const res = await fetch("/api/guest/chat", {
         method: "POST",
@@ -312,7 +356,6 @@ export default function GuestStart() {
       setIsTyping(false);
 
       if (res.status === 402) {
-        // Hit paywall — show it
         setShowPaywall(true);
         setMessageCount(FREE_MESSAGE_LIMIT);
         trackFunnelEvent(id, GUEST_CONFIG.EVENTS.PAYWALL_SHOWN, { trigger: "message_limit" });
@@ -322,11 +365,7 @@ export default function GuestStart() {
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         console.error("Guest chat error:", err);
-        // Show a fallback message
-        const fallback: ChatMessage = {
-          role: "assistant",
-          content: "Something went wrong. Please try again.",
-        };
+        const fallback: ChatMessage = { role: "assistant", content: "Something went wrong. Please try again." };
         const updated = [...newMessages, fallback];
         setMessages(updated);
         saveLocalHistory(updated);
@@ -343,7 +382,6 @@ export default function GuestStart() {
       saveLocalHistory(updated);
 
       if (data.limitReached) {
-        // Show paywall after rendering this last response
         setTimeout(() => {
           setShowPaywall(true);
           trackFunnelEvent(id, GUEST_CONFIG.EVENTS.PAYWALL_SHOWN, { trigger: "message_limit" });
@@ -352,10 +390,7 @@ export default function GuestStart() {
     } catch (err) {
       setIsTyping(false);
       console.error("Guest chat network error:", err);
-      const fallback: ChatMessage = {
-        role: "assistant",
-        content: "Connection interrupted. Please try again.",
-      };
+      const fallback: ChatMessage = { role: "assistant", content: "Connection interrupted. Please try again." };
       const updated = [...newMessages, fallback];
       setMessages(updated);
       saveLocalHistory(updated);
@@ -381,7 +416,6 @@ export default function GuestStart() {
     navigate("/login?from=teaser");
   }, [navigate, deviceId]);
 
-  // ── Locked: return visitor who exhausted all messages ─────────────────────
   if (isLocked) {
     return (
       <div className="min-h-screen" style={{ background: "hsl(222 47% 7%)" }}>
@@ -395,7 +429,8 @@ export default function GuestStart() {
 
   return (
     <div className="h-screen flex flex-col" style={{ background: "hsl(222 47% 7%)" }}>
-      {/* ── Top nav ──────────────────────────────────────────────────────── */}
+
+      {/* ── Top nav ────────────────────────────────────────────────────────── */}
       <div
         className="flex-shrink-0 flex items-center justify-between px-4 py-3"
         style={{ borderBottom: "1px solid hsl(222 47% 12%)" }}
@@ -425,25 +460,31 @@ export default function GuestStart() {
       <div className="flex-1 overflow-hidden flex flex-col max-w-2xl w-full mx-auto">
 
         {isBeforeFirstInput ? (
-          /* ── Welcome / initial state ──────────────────────────────────── */
+          /* ── Welcome / initial state ─────────────────────────────────── */
           <div className="flex-1 flex flex-col justify-center px-4 py-6 gap-5">
-            {/* Agent welcome message */}
+
+            {/* Opening message */}
             {messages.length > 0 && (
               <div className="flex items-start gap-3 animate-in fade-in slide-in-from-bottom-3 duration-400">
                 <AgentAvatar />
                 <div
-                  className="rounded-2xl rounded-tl-sm px-4 py-3.5 text-base leading-relaxed font-medium flex-1"
-                  style={{ background: "hsl(222 47% 13%)", border: "1px solid hsl(222 47% 20%)", color: "#e4e4e7" }}
+                  className="rounded-2xl rounded-tl-sm px-4 py-4 flex-1"
+                  style={{ background: "hsl(222 47% 13%)", border: "1px solid hsl(222 47% 20%)" }}
                 >
-                  {messages[0].content}
+                  <p className="text-lg font-semibold leading-snug" style={{ color: "#f4f4f5" }}>
+                    {messages[0].content}
+                  </p>
+                  <p className="text-xs mt-1.5" style={{ color: "hsl(222 47% 50%)" }}>
+                    Tell me your goal — I'll design it with you.
+                  </p>
                 </div>
               </div>
             )}
 
             {/* Quick-start chips */}
             <div
-              className="flex flex-col gap-2.5 animate-in fade-in slide-in-from-bottom-3 duration-500"
-              style={{ animationDelay: "100ms" }}
+              className="flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-3 duration-500"
+              style={{ animationDelay: "80ms" }}
             >
               {QUICK_START.map((opt) => (
                 <button
@@ -468,7 +509,7 @@ export default function GuestStart() {
                 >
                   <span className="text-lg w-7 text-center flex-shrink-0">{opt.icon}</span>
                   <span>{opt.label}</span>
-                  <svg className="w-4 h-4 ml-auto flex-shrink-0 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg className="w-4 h-4 ml-auto flex-shrink-0 opacity-25" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                   </svg>
                 </button>
@@ -476,7 +517,7 @@ export default function GuestStart() {
             </div>
           </div>
         ) : (
-          /* ── Full conversation view ──────────────────────────────────── */
+          /* ── Conversation view ───────────────────────────────────────── */
           <div className="flex-1 overflow-y-auto px-4 pt-5 pb-4 space-y-4">
             {messages.map((msg, i) => (
               <div
@@ -484,21 +525,21 @@ export default function GuestStart() {
                 className="animate-in fade-in slide-in-from-bottom-2 duration-300"
               >
                 {msg.role === "assistant"
-                  ? <AssistantMessage content={msg.content} />
+                  ? <AssistantMessage content={msg.content} isSystemPreviewMsg={isSystemPreview(msg.content)} />
                   : <UserMessage content={msg.content} />
                 }
               </div>
             ))}
             {isTyping && (
               <div className="animate-in fade-in duration-200">
-                <TypingIndicator />
+                <TypingIndicator turnNumber={currentTurn} />
               </div>
             )}
             <div ref={bottomRef} />
           </div>
         )}
 
-        {/* ── Input bar ───────────────────────────────────────────────────── */}
+        {/* ── Input bar ─────────────────────────────────────────────────── */}
         <div
           className="flex-shrink-0 px-4 pb-6 pt-3"
           style={{ borderTop: "1px solid hsl(222 47% 13%)" }}
@@ -518,7 +559,7 @@ export default function GuestStart() {
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyDown}
               rows={1}
-              placeholder={isBeforeFirstInput ? "Or describe your goal..." : "Message TrainChat..."}
+              placeholder={isBeforeFirstInput ? "Describe your goal..." : "Message TrainChat..."}
               className="flex-1 resize-none bg-transparent px-4 py-3.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none leading-relaxed"
               style={{ minHeight: "50px", maxHeight: "120px" }}
               onInput={(e) => {
@@ -544,7 +585,7 @@ export default function GuestStart() {
         </div>
       </div>
 
-      {/* ── Paywall modal ─────────────────────────────────────────────────── */}
+      {/* ── Paywall modal ────────────────────────────────────────────────── */}
       {showPaywall && (
         <GuestPaywallModal
           deviceId={deviceId}

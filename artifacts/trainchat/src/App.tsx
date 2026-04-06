@@ -12,7 +12,6 @@ import AdminDashboard from "@/pages/admin";
 import SystemPage from "@/pages/system";
 import BillingPage from "@/pages/billing";
 import { useGetMe } from "@workspace/api-client-react";
-import { useGuestSession } from "@/hooks/useGuestSession";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -81,20 +80,6 @@ class ErrorBoundary extends Component<
 }
 
 /**
- * Initializes the guest session silently on app load.
- * Only runs for unauthenticated visitors — has no effect on logged-in users.
- * Placed inside QueryClientProvider so it can use react-query hooks.
- */
-function GuestSessionInit() {
-  const { data: me, isLoading: meLoading } = useGetMe();
-  const isAuthenticated = !meLoading && !!me;
-
-  useGuestSession(isAuthenticated);
-
-  return null;
-}
-
-/**
  * Smart root redirect:
  * - Authenticated → /chat (onboarding happens through the agent, not a form)
  * - Unauthenticated → /start (the agent-first guest experience)
@@ -137,7 +122,6 @@ function App() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
-          <GuestSessionInit />
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <Router />
           </WouterRouter>
