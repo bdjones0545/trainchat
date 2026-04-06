@@ -11,24 +11,24 @@ export const GUEST_CONFIG = {
   TEASER_TOTAL_LIMIT: 5,
 
   // ─── Paywall Headline & Body ──────────────────────────────────────────────
-  PAYWALL_BADGE: "Continue Your Program",
-  PAYWALL_HEADLINE: "You've started building your program.",
+  PAYWALL_BADGE: "Your System Is Ready",
+  PAYWALL_HEADLINE: "Create your account to save and evolve your system.",
   PAYWALL_SUBHEADLINE:
-    "Create your account to continue, save your progress, and unlock your personalized TrainChat experience.",
-  PAYWALL_REASSURANCE: "Your conversation is saved and ready to continue.",
+    "Your training system is building. Create a free account to save it, keep editing it, and let it adapt to you over time.",
+  PAYWALL_REASSURANCE: "Your conversation and progress are saved — pick up exactly where you left off.",
 
   // ─── Paywall CTAs ─────────────────────────────────────────────────────────
-  PAYWALL_CTA_PRIMARY: "Create Free Account",
+  PAYWALL_CTA_PRIMARY: "Save My System — It's Free",
   PAYWALL_CTA_SIGNIN: "Already have an account? Sign in",
-  PAYWALL_NO_CC_NOTE: "No credit card required to create an account",
+  PAYWALL_NO_CC_NOTE: "No credit card required",
   PAYWALL_SOCIAL_PROOF: "Join thousands of athletes training smarter",
 
   // ─── Feature Bullets ─────────────────────────────────────────────────────
   PAYWALL_FEATURES: [
     {
-      icon: "🧠",
-      title: "Adaptive Programming",
-      desc: "Your coach evolves your program every week based on your real progress.",
+      icon: "⚡",
+      title: "Your System Evolves",
+      desc: "Edit it through conversation. The more you use it, the smarter it gets.",
     },
     {
       icon: "💬",
@@ -41,24 +41,24 @@ export const GUEST_CONFIG = {
       desc: "Log sessions, track milestones, and watch your gains compound.",
     },
     {
-      icon: "🗓️",
-      title: "Full Program Access",
-      desc: "Unlock every day, every week, every training block.",
+      icon: "🧠",
+      title: "Adaptive Programming",
+      desc: "Your program updates automatically based on your real progress and recovery.",
     },
   ],
 
   // ─── Return Visitor Locked State ─────────────────────────────────────────
-  LOCKED_HEADLINE: "Your Program Is Waiting",
+  LOCKED_HEADLINE: "Your System Is Waiting",
   LOCKED_SUBHEADLINE:
-    "You've used your free preview. Create an account to continue your coaching journey.",
+    "Create a free account to pick up where you left off and keep building.",
   LOCKED_BODY:
-    "Your conversation is saved. Create your account to pick up exactly where you left off.",
-  LOCKED_CTA: "Continue With Full Access",
+    "Your training system is saved. Create your account to continue editing it through conversation.",
+  LOCKED_CTA: "Continue Building My System",
 
   // ─── Post-Paywall Signup Page Messaging ──────────────────────────────────
-  SIGNUP_HEADLINE: "Continue Your Coaching Journey",
+  SIGNUP_HEADLINE: "Save Your Training System",
   SIGNUP_SUBHEADLINE:
-    "Your conversation is saved. Create your account and pick up exactly where you left off.",
+    "Your system is built and ready. Create your free account to save it and keep evolving it.",
 
   // ─── Funnel Event Names ───────────────────────────────────────────────────
   EVENTS: {

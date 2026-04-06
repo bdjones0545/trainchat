@@ -7,7 +7,6 @@ import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
 import Chat from "@/pages/chat";
-import Onboarding from "@/pages/onboarding";
 import GuestStart from "@/pages/guest-start";
 import AdminDashboard from "@/pages/admin";
 import SystemPage from "@/pages/system";
@@ -97,13 +96,8 @@ function GuestSessionInit() {
 
 /**
  * Smart root redirect:
- * - Authenticated + onboarding complete (or existing profile) → /chat
- * - Authenticated + no complete profile → /onboarding (first-time users only)
- * - Unauthenticated → /start (guest experience)
- *
- * The backend self-heals onboardingComplete: any user who already has a
- * complete profile record gets the flag set to true on their next /me call,
- * so returning free users are never bounced back into onboarding.
+ * - Authenticated → /chat (onboarding happens through the agent, not a form)
+ * - Unauthenticated → /start (the agent-first guest experience)
  */
 function SmartRoot() {
   const { data: me, isLoading } = useGetMe();
@@ -116,13 +110,7 @@ function SmartRoot() {
     );
   }
 
-  if (me) {
-    const destination = me.onboardingComplete ? "/chat" : "/onboarding";
-    console.info(
-      `[routing] SmartRoot: userId=${me.id} onboardingComplete=${me.onboardingComplete} → ${destination}`,
-    );
-    return <Redirect to={destination} />;
-  }
+  if (me) return <Redirect to="/chat" />;
   return <Redirect to="/start" />;
 }
 
@@ -133,7 +121,8 @@ function Router() {
       <Route path="/start" component={GuestStart} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
-      <Route path="/onboarding" component={Onboarding} />
+      {/* /onboarding is retired — agent handles onboarding through conversation */}
+      <Route path="/onboarding">{() => <Redirect to="/chat" />}</Route>
       <Route path="/chat" component={Chat} />
       <Route path="/billing" component={BillingPage} />
       <Route path="/system" component={SystemPage} />

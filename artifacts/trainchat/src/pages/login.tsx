@@ -96,15 +96,8 @@ export default function Login() {
             }
           }
 
-          // No guest session or merge failed — route based on onboarding status
-          // The backend self-heals this flag, so it is always accurate.
-          const onboardingComplete = result?.user?.onboardingComplete ?? false;
-          if (process.env.NODE_ENV !== "production") {
-            console.info(
-              `[routing] login: onboardingComplete=${onboardingComplete} → ${onboardingComplete ? "/chat" : "/onboarding"}`,
-            );
-          }
-          setLocation(onboardingComplete ? "/chat" : "/onboarding");
+          // Always route to chat — onboarding happens through the agent conversation
+          setLocation("/chat");
         },
         onError: (err: unknown) => {
           const apiErr = err as { data?: { error?: string } };

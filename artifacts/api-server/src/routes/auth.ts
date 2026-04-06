@@ -85,7 +85,9 @@ router.post("/auth/register", async (req, res): Promise<void> => {
       email: email.toLowerCase(),
       passwordHash,
       name,
-      onboardingComplete: false,
+      // Onboarding now happens through the agent conversation, not a form.
+      // Mark complete immediately so new users land directly in the chat.
+      onboardingComplete: true,
     })
     .returning();
 
@@ -99,7 +101,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
 
   logger.info(
     { userId: user.id },
-    "auth: new user registered — routing to onboarding",
+    "auth: new user registered — routing to chat (agent-first onboarding)",
   );
 
   res.status(201).json({
@@ -108,7 +110,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
       email: user.email,
       name: user.name,
       createdAt: user.createdAt.toISOString(),
-      onboardingComplete: false,
+      onboardingComplete: true,
     },
   });
 });

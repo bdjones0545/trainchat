@@ -267,7 +267,7 @@ export default function GuestStart() {
     // Fresh start — show the welcome message
     setMessages([{
       role: "assistant",
-      content: "Welcome to TrainChat. What do you want to build today — strength, fat loss, performance, recovery, or something custom?",
+      content: "What do you want to build today?",
     }]);
   }, [guestSession, deviceId, navigate]);
 
@@ -402,7 +402,6 @@ export default function GuestStart() {
       >
         <img src={logoSrc} alt="TrainChat" className="h-6" />
         <div className="flex items-center gap-3">
-          <MessageCounter used={messageCount} limit={FREE_MESSAGE_LIMIT} />
           <a
             href="/login"
             className="text-xs font-medium transition-colors"

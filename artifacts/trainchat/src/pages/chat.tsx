@@ -139,7 +139,7 @@ export default function Chat() {
   const currentStreak = streakData?.currentStreak ?? 0;
 
   useEffect(() => {
-    if (meError) setLocation("/login");
+    if (meError) setLocation("/start");
   }, [meError, setLocation]);
 
   // Profile errors are handled gracefully — agent gathers info conversationally
@@ -410,7 +410,7 @@ export default function Chat() {
     logout.mutate(undefined, {
       onSuccess: () => {
         queryClient.clear();
-        setLocation("/login");
+        setLocation("/start");
       },
     });
   }
