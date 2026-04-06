@@ -1,0 +1,206 @@
+Transform TrainChat from a traditional onboarding flow into an agent-first “vibe coding” experience with device-based memory.
+
+Goal:
+Users should land directly in the AI agent and begin building their training system immediately through conversation. Onboarding should happen naturally through chat instead of a multi-step form.
+
+---
+
+CORE FLOW (REPLACE CURRENT ONBOARDING):
+
+1. REMOVE TRADITIONAL ONBOARDING UI
+- Eliminate the 8–10 step onboarding modal
+- Do not require signup before interaction
+- Do not block access behind forms
+
+2. ROUTE USERS DIRECTLY TO AGENT
+- When user lands on app → immediately open chat interface
+- First message from agent:
+
+  “What do you want to build today?”
+
+---
+
+3. DEVICE ID SYSTEM (CRITICAL)
+
+Implement a device-based user system:
+
+On first visit:
+- Generate unique deviceId
+- Store in localStorage
+- Create temporary user profile tied to deviceId
+
+Persist:
+- chat history
+- onboarding responses
+- generated training system
+- system edits
+
+If deviceId exists:
+- restore session automatically
+- load existing system + chat
+
+---
+
+4. CONVERSATIONAL ONBOARDING (INSIDE AGENT)
+
+Convert onboarding into dynamic chat flow.
+
+Agent should gather:
+- goal
+- experience level
+- training frequency
+- equipment access
+- injuries/limitations
+- time constraints
+
+Example flow:
+
+Agent:
+“What’s your main goal right now?”
+
+User responds →
+
+Agent:
+“How many days per week can you train?”
+
+→ continue until enough data is collected
+
+IMPORTANT:
+- Do NOT ask all questions upfront
+- Ask progressively based on responses
+- Skip unnecessary questions
+- Keep it conversational and fast
+
+---
+
+5. EARLY VALUE DELIVERY (CRITICAL)
+
+Within first 2–3 messages:
+- Begin building training system
+- Show progress:
+
+“I’m building your system…”
+
+Then generate:
+- structured training program
+- initial weekly split
+- first version of system
+
+DO NOT wait until all inputs are collected.
+
+---
+
+6. TRAINING SYSTEM CREATION
+
+After enough data is gathered:
+- generate structured training system object
+- save it under deviceId profile
+- mark system as created
+
+Immediately:
+- display system in UI
+- allow edits via chat
+
+---
+
+7. PAYWALL / SIGNUP TIMING
+
+DO NOT require signup upfront.
+
+Gate AFTER value is delivered:
+
+Trigger points:
+- after system is built
+- after 2–3 agent interactions
+- when user tries to:
+  - save system
+  - make advanced edits
+  - access full dashboard
+
+Show message:
+
+“Create your AI to save and evolve your system.”
+
+---
+
+8. ACCOUNT CREATION + MERGE
+
+When user signs up:
+- link account to deviceId
+- migrate:
+  - training system
+  - chat history
+  - onboarding data
+
+Ensure no data is lost.
+
+---
+
+9. STATE MANAGEMENT
+
+Define 3 states:
+
+1. Guest (deviceId only)
+2. Authenticated free user
+3. Paid user
+
+System must behave correctly for each:
+- guest → limited interactions, system builds
+- free → can edit system, limited features
+- paid → full access
+
+---
+
+10. UI/UX REQUIREMENTS
+
+- Chat-first interface
+- System updates in real time
+- Show “building…” state
+- Show “system updated” cards after changes
+
+Add subtle onboarding indicators:
+- progress dots OR
+- “Learning about you…” messages
+
+---
+
+11. FAILSAFES
+
+- If user leaves mid-flow → resume via deviceId
+- If system incomplete → agent continues onboarding
+- If data missing → agent asks follow-up
+
+---
+
+12. LOGGING
+
+Log:
+- deviceId creation
+- onboarding responses collected
+- system generation trigger
+- system save result
+- signup + merge success
+
+---
+
+DELIVERABLES:
+
+1. Users land directly in agent (no onboarding modal)
+2. Device-based memory fully working
+3. Onboarding happens through conversation
+4. Training system builds within first few messages
+5. System persists before signup
+6. Signup merges data seamlessly
+7. UX feels like “vibe coding” instead of a form
+
+---
+
+FINAL EXPERIENCE:
+
+User should feel:
+
+“I opened it, said what I wanted, and my program built itself instantly.”
+
+NOT:
+
+“I filled out a form and then got something.”
