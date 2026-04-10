@@ -19,13 +19,13 @@ export interface AcknowledgedEvent {
   text: string;
 }
 
-/** Stage event — replaces generic "thinking" events.
- *  Each event maps to a real code boundary in the build pipeline. */
+/** Stage event — maps to a real code boundary in the build pipeline. */
 export interface StageEvent {
   type: "stage";
   stage: BuildStage;
   step: string;
   intentType?: string;
+  actionType?: string;
 }
 
 export interface CompleteEvent {
@@ -71,21 +71,38 @@ export interface StreamState {
   acknowledgment: string;
   /** Current build stage (from server — real pipeline boundary). */
   buildStage: BuildStage | null;
-  /** User-visible label for the current stage. */
+  /** User-visible label for the current stage (intent-specific from server). */
   stageLabel: string;
-  /** Labels of all completed stages (shown as committed bubbles). */
+  /** Labels of committed milestone stages, shown as locked bubbles. */
   stageHistory: string[];
   intentType: string | undefined;
+  /** Action type (PROGRAM_GENERATION, STRUCTURAL_REBUILD, DIRECT_MUTATION, SESSION_ADJUSTMENT). */
+  actionType: string | undefined;
   error: string | null;
 }
 
-/** Stages shown as committed message bubbles (milestone stages only). */
-const MILESTONE_STAGES = new Set<BuildStage>([
-  "planning",
-  "applying",
-  "validating",
-  "saving",
-]);
+// ─── Milestone stage logic ─────────────────────────────────────────────────────
+//
+// Which stages appear as committed message bubbles depends on the action type:
+//
+//   PROGRAM_GENERATION  — full build: planning, applying, validating, saving
+//   STRUCTURAL_REBUILD  — medium:     planning, applying, saving
+//   DIRECT_MUTATION     — fast:       applying, saving
+//   SESSION_ADJUSTMENT  — fast:       applying, saving
+//   default             — full:       planning, applying, validating, saving
+
+function getMilestoneStages(actionType?: string): Set<BuildStage> {
+  switch (actionType) {
+    case "DIRECT_MUTATION":
+    case "SESSION_ADJUSTMENT":
+      return new Set(["applying", "saving"]);
+    case "STRUCTURAL_REBUILD":
+      return new Set(["planning", "applying", "saving"]);
+    case "PROGRAM_GENERATION":
+    default:
+      return new Set(["planning", "applying", "validating", "saving"]);
+  }
+}
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
@@ -103,6 +120,7 @@ const INITIAL_STATE: StreamState = {
   stageLabel: "",
   stageHistory: [],
   intentType: undefined,
+  actionType: undefined,
   error: null,
 };
 
@@ -128,6 +146,7 @@ export function useStreamMessage(): UseStreamMessageResult {
         stageLabel: "",
         stageHistory: [],
         intentType: undefined,
+        actionType: undefined,
         error: null,
       });
 
@@ -184,16 +203,20 @@ export function useStreamMessage(): UseStreamMessageResult {
                 }));
 
               } else if (event.type === "stage") {
-                // Real pipeline stage boundary — update display from server truth.
-                // If the current stage is a milestone, commit it to history before
-                // advancing so it remains visible as a locked bubble.
+                // Real pipeline stage boundary.
+                // Resolve the current and incoming action types to determine milestones.
                 setState((s) => {
+                  const resolvedActionType = event.actionType ?? s.actionType;
+                  const milestones = getMilestoneStages(resolvedActionType);
+
+                  // Commit the previous stage to history if it was a milestone
                   const prevIsMilestone =
-                    s.buildStage !== null && MILESTONE_STAGES.has(s.buildStage);
+                    s.buildStage !== null && milestones.has(s.buildStage);
                   const newHistory =
                     prevIsMilestone && s.stageLabel
                       ? [...s.stageHistory, s.stageLabel]
                       : s.stageHistory;
+
                   return {
                     ...s,
                     phase: "building",
@@ -201,6 +224,7 @@ export function useStreamMessage(): UseStreamMessageResult {
                     stageLabel: event.step,
                     stageHistory: newHistory,
                     intentType: event.intentType ?? s.intentType,
+                    actionType: resolvedActionType,
                   };
                 });
 
@@ -245,3 +269,6 @@ export function useStreamMessage(): UseStreamMessageResult {
     reset,
   };
 }
+
+// ─── Re-export getMilestoneStages for use in components ──────────────────────
+export { getMilestoneStages };

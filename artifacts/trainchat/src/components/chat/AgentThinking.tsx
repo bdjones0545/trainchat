@@ -1,21 +1,21 @@
 import { useEffect, useState } from "react";
 import { Dumbbell, Check } from "lucide-react";
 import type { BuildStage } from "@/hooks/useStreamMessage";
+import { getMilestoneStages } from "@/hooks/useStreamMessage";
 
 /**
- * AgentThinking — Multi-step agent response display.
+ * AgentThinking — Multi-step agent execution display.
  *
- * Renders the agent's progress as a sequence of progressive message bubbles,
- * one per completed milestone stage, with the current stage showing as an
- * animated "typing" bubble. This gives the feel of a live system executing
- * steps rather than a chatbot waiting and then replying.
+ * Each build or update shows progressive message bubbles:
+ *   1. Acknowledgment bubble (instant, from server)
+ *   2. Committed milestone bubbles (locked in as each stage completes)
+ *   3. Active milestone bubble (animated dots while running)
  *
- * Stage sequence (from build-pipeline.ts):
- *   understanding → loading → classifying → planning → applying →
- *   validating → saving → [complete → component unmounts]
- *
- * Only milestone stages (planning, applying, validating, saving) appear as
- * separate committed bubbles. Earlier stages update silently in the background.
+ * Which stages appear as milestone bubbles is determined by actionType:
+ *   PROGRAM_GENERATION  → planning, applying, validating, saving  (full build)
+ *   STRUCTURAL_REBUILD  → planning, applying, saving              (medium)
+ *   DIRECT_MUTATION     → applying, saving                        (fast)
+ *   SESSION_ADJUSTMENT  → applying, saving                        (fast)
  */
 
 interface Props {
@@ -23,6 +23,7 @@ interface Props {
   buildStage: BuildStage | null;
   stageLabel: string;
   stageHistory: string[];
+  actionType?: string;
 }
 
 export default function AgentThinking({
@@ -30,6 +31,7 @@ export default function AgentThinking({
   buildStage,
   stageLabel,
   stageHistory,
+  actionType,
 }: Props) {
   const [dotCount, setDotCount] = useState(1);
 
@@ -40,9 +42,8 @@ export default function AgentThinking({
 
   const dots = ".".repeat(dotCount);
 
-  const isActiveMilestone =
-    buildStage !== null &&
-    ["planning", "applying", "validating", "saving"].includes(buildStage);
+  const milestones = getMilestoneStages(actionType);
+  const isActiveMilestone = buildStage !== null && milestones.has(buildStage);
 
   return (
     <div className="flex items-start gap-3 mb-4">

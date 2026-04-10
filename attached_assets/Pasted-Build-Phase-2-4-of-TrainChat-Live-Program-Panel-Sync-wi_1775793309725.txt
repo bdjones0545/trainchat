@@ -1,0 +1,196 @@
+Build Phase 2.4 of TrainChat: Live Program Panel Sync with Agent Build Stages.
+
+GOAL:
+The Program Panel should visually update in real time as the agent progresses through build stages.
+
+Right now:
+- agent messages show progress
+- program appears all at once at the end
+
+We want:
+- the program to appear and evolve step-by-step
+- synchronized with the agent’s thinking messages
+
+This creates the feeling of a system actively building a program in front of the user.
+
+--------------------------------------------------
+CORE PRODUCT RULE
+--------------------------------------------------
+
+The Program Panel must not appear instantly fully complete.
+
+It should build progressively in sync with agent stages.
+
+--------------------------------------------------
+SYNC BEHAVIOR
+--------------------------------------------------
+
+Each pipeline stage should trigger a visible UI update in the Program Panel.
+
+--------------------------------------------------
+STAGE → UI MAPPING
+--------------------------------------------------
+
+STAGE 1 — Understand Request
+UI:
+- Program panel shows:
+  “Initializing program…”
+
+--------------------------------------------------
+
+STAGE 2 — Load / Initialize
+UI:
+- Program title appears
+- Basic structure placeholder appears
+
+Example:
+“4-Day Training Program”
+(empty split placeholders)
+
+--------------------------------------------------
+
+STAGE 3 — Structure Split
+UI:
+- Days populate:
+
+Day 1  
+Day 2  
+Day 3  
+Day 4  
+
+(Just labels at first — no exercises yet)
+
+--------------------------------------------------
+
+STAGE 4 — Plan Modifications / Add Content
+UI:
+- Each day begins filling in with exercises progressively
+
+Example:
+Day 1 → exercises appear
+Day 2 → then appear
+Day 3 → etc.
+
+This can:
+- fade in
+- load one section at a time
+- animate lightly
+
+--------------------------------------------------
+
+STAGE 5 — Apply Changes
+UI:
+- exercise details finalize:
+  - sets
+  - reps
+  - rest
+
+--------------------------------------------------
+
+STAGE 6 — Validate Program
+UI:
+- subtle “refining…” state
+- minor adjustments occur
+
+--------------------------------------------------
+
+STAGE 7 — Save Program
+UI:
+- show:
+  “Saved”
+  or
+  small confirmation badge
+
+--------------------------------------------------
+
+STAGE 8 — Complete
+UI:
+- full program visible
+- no placeholders
+- ready for interaction
+
+--------------------------------------------------
+ANIMATION RULES
+--------------------------------------------------
+
+- Keep animations fast and smooth
+- Do NOT slow down UX artificially
+- Use:
+  - fade-in
+  - slide-in
+  - skeleton loading states
+
+Avoid:
+- flashy or distracting animations
+- long delays
+
+--------------------------------------------------
+USER EXPERIENCE GOAL
+--------------------------------------------------
+
+The user should feel:
+
+“I watched it build my program.”
+
+Not:
+
+“It appeared.”
+
+--------------------------------------------------
+IMPORTANT TIMING RULES
+--------------------------------------------------
+
+- Sync updates with agent messages
+- Each stage should feel connected
+- Do not batch everything at the end
+
+Even if fast:
+- show at least 2–3 visible steps
+
+--------------------------------------------------
+FAILURE CONDITIONS
+--------------------------------------------------
+
+Do NOT:
+- show full program instantly
+- leave panel blank until complete
+- show disconnected updates
+- desync from agent messages
+
+--------------------------------------------------
+MOBILE UX
+--------------------------------------------------
+
+- Ensure Program Panel is easy to open
+- Consider:
+  - auto-opening when build completes
+  - subtle highlight or pulse
+- Keep layout clean and readable
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+This is successful if:
+
+1. The user sees the program build in stages
+2. The agent messages match what is happening visually
+3. The system feels alive and responsive
+4. The experience feels like a real-time build process
+5. Users think:
+   “It’s actually building this right now”
+
+--------------------------------------------------
+FINAL PRODUCT PRINCIPLE
+--------------------------------------------------
+
+TrainChat should feel like a live system constructing a training program in real time.
+
+The agent narrates the build.
+
+The Program Panel shows the build.
+
+Together:
+They create a single synchronized experience.
+
+This is what makes the product feel like Replit — not a chatbot.

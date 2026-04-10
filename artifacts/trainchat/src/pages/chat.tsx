@@ -768,6 +768,7 @@ export default function Chat() {
                     buildStage={stream.state.buildStage}
                     stageLabel={stream.state.stageLabel}
                     stageHistory={stream.state.stageHistory}
+                    actionType={stream.state.actionType}
                   />
                 )}
 

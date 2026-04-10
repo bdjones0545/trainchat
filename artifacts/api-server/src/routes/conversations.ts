@@ -1001,8 +1001,8 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
   const responseMode = selectResponseMode(actionDecision.actionType);
 
-  // Emit classifying stage — intent is now known
-  emit(buildStageEvent("classifying", intentResult.type));
+  // Emit classifying stage — intent and action type are now known
+  emit(buildStageEvent("classifying", intentResult.type, actionDecision.actionType));
 
   // ── Helper: build the final SSE complete response ─────────────────────────
   function buildCompleteEvent(opts: {
@@ -1093,7 +1093,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
       if (fullSystem) {
         // Stage 4: Plan Modifications — interpretEditRequest analyses what needs to change
-        emit(buildStageEvent("planning", intentResult.type));
+        emit(buildStageEvent("planning", intentResult.type, actionDecision.actionType));
 
         const editPlan = await interpretEditRequest(
           parsed.data.content, fullSystem, undefined,
@@ -1101,16 +1101,16 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         );
 
         // Stage 5: Apply Changes — edit engine modifies the program object
-        emit(buildStageEvent("applying", intentResult.type));
+        emit(buildStageEvent("applying", intentResult.type, actionDecision.actionType));
 
         const editResult = await applyEditPlan(editPlan);
 
         if (editResult.appliedCount > 0) {
           // Stage 6: Validate — implicit in applyEditPlan quality checks; then save
-          emit(buildStageEvent("validating", intentResult.type));
+          emit(buildStageEvent("validating", intentResult.type, actionDecision.actionType));
 
           // Stage 7: Save Program State
-          emit(buildStageEvent("saving", intentResult.type));
+          emit(buildStageEvent("saving", intentResult.type, actionDecision.actionType));
 
           const changeLogId = await createChangeLogEntry({
             userId, trainingSystemId: activeSystem!.id, source: "ai_edit",
@@ -1159,7 +1159,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
   // ── Standard AI Response Path ─────────────────────────────────────────────
   // Stage 4: Plan Modifications — determine scope and pre-transform if needed
-  emit(buildStageEvent("planning", intentResult.type));
+  emit(buildStageEvent("planning", intentResult.type, actionDecision.actionType));
 
   const isModificationIntent = (
     intentResult.type === "EDIT_PROGRAM" ||
@@ -1186,7 +1186,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   }
 
   // Stage 5: Apply Changes — AI generates the program (this is the longest stage)
-  emit(buildStageEvent("applying", intentResult.type));
+  emit(buildStageEvent("applying", intentResult.type, actionDecision.actionType));
 
   const { content: aiContent, structuredData } = await generateAIResponse(
     parsed.data.content,
@@ -1206,11 +1206,11 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   );
 
   // Stage 6: Validate — AI response quality checks done; now persist
-  emit(buildStageEvent("validating", intentResult.type));
+  emit(buildStageEvent("validating", intentResult.type, actionDecision.actionType));
 
   // ── Persist AI response ───────────────────────────────────────────────────
   // Stage 7: Save Program State
-  emit(buildStageEvent("saving", intentResult.type));
+  emit(buildStageEvent("saving", intentResult.type, actionDecision.actionType));
 
   const [assistantMessage] = await db.insert(messagesTable).values({
     conversationId: params.data.id, role: "assistant", content: aiContent,

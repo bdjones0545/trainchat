@@ -1,0 +1,198 @@
+Upgrade TrainChat’s agent thinking and progress messages so they are DIRECTLY tied to the real build pipeline stages.
+
+GOAL:
+The agent should not display generic “thinking” messages.
+
+Instead, every message the agent sends during processing must reflect a REAL system stage.
+
+This creates the feeling that the system is actually building the program step-by-step — like Replit compiling code.
+
+--------------------------------------------------
+CORE PRODUCT RULE
+--------------------------------------------------
+
+Agent messages must map 1:1 with actual system execution stages.
+
+No fake thinking.
+No generic “working…” messages.
+
+Every message must represent a real internal step.
+
+--------------------------------------------------
+BUILD PIPELINE STAGES
+--------------------------------------------------
+
+All program builds and updates must follow these stages:
+
+1. Understand Request
+2. Load Program State
+3. Classify Change Type
+4. Plan Modifications
+5. Apply Changes
+6. Validate Program
+7. Save Program
+8. Update UI
+
+--------------------------------------------------
+AGENT MESSAGE MAPPING
+--------------------------------------------------
+
+Map each stage to a specific agent message.
+
+STAGE 1 — Understand Request
+Message:
+“Got it — understanding your request.”
+
+--------------------------------------------------
+
+STAGE 2 — Load Program State
+Message:
+“Loading your current program…”
+
+(If no program exists, skip or say:)
+“Setting up your program from scratch…”
+
+--------------------------------------------------
+
+STAGE 3 — Classify Change
+Message:
+“Mapping out what needs to change…”
+
+--------------------------------------------------
+
+STAGE 4 — Plan Modifications
+Message:
+“Structuring your training split…”
+
+--------------------------------------------------
+
+STAGE 5 — Apply Changes
+Message:
+“Applying updates to your program…”
+
+--------------------------------------------------
+
+STAGE 6 — Validate Program
+Message:
+“Validating your training structure…”
+
+--------------------------------------------------
+
+STAGE 7 — Save Program
+Message:
+“Saving your program…”
+
+--------------------------------------------------
+
+STAGE 8 — Complete
+Message:
+“Done. Your program is ready — check the Program tab.”
+
+--------------------------------------------------
+DYNAMIC MESSAGE LOGIC
+--------------------------------------------------
+
+Not every request needs all stages.
+
+Rules:
+
+FAST ACTION (small edit):
+- acknowledgment
+- apply
+- done
+
+MEDIUM ACTION:
+- acknowledgment
+- plan
+- apply
+- done
+
+FULL BUILD:
+- full stage sequence
+
+--------------------------------------------------
+IMPORTANT RULES
+--------------------------------------------------
+
+1. Messages must appear progressively (not all at once)
+2. Each message = one short sentence
+3. No explanation of training concepts
+4. No long paragraphs
+5. No repetition
+6. Messages must feel like system execution
+
+--------------------------------------------------
+UI/UX BEHAVIOR
+--------------------------------------------------
+
+- Show typing/processing indicator between messages
+- Messages should appear with slight delay (simulate real work)
+- Do NOT dump all messages instantly
+
+--------------------------------------------------
+EXAMPLES
+--------------------------------------------------
+
+User:
+“Build me a 4-day split”
+
+Agent flow:
+
+1. “Got it — understanding your request.”
+2. “Setting up your program from scratch…”
+3. “Structuring your training split…”
+4. “Selecting exercises and balancing volume…”
+5. “Validating your training structure…”
+6. “Saving your program…”
+7. “Done. Your program is ready — check the Program tab.”
+
+--------------------------------------------------
+
+User:
+“Make it 5 days”
+
+Agent flow:
+
+1. “Got it — updating your program.”
+2. “Mapping out what needs to change…”
+3. “Restructuring your weekly split…”
+4. “Saving your program…”
+5. “Done. Your update is live — check the Program tab.”
+
+--------------------------------------------------
+
+User:
+“My shoulder hurts”
+
+Agent flow:
+
+1. “Got it — adjusting your program.”
+2. “Identifying movements to modify…”
+3. “Applying shoulder-friendly changes…”
+4. “Saving your program…”
+5. “Done. Your update is live — check the Program tab.”
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+This feature is successful if:
+
+1. The agent feels like it is executing real steps
+2. The user can “follow along” with the build process
+3. The system feels transparent and intelligent
+4. The experience feels closer to Replit than ChatGPT
+5. Users feel like:
+   “It’s actually building something right now”
+
+--------------------------------------------------
+FINAL PRODUCT PRINCIPLE
+--------------------------------------------------
+
+TrainChat should feel like a system compiling a training program in real time.
+
+Every message is not “chat” — it is a visible step in system execution.
+
+The user is watching the build happen.
+
+Not waiting for a reply.
