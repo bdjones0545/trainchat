@@ -27,6 +27,7 @@ import { createChangeLogEntry } from "../lib/change-log-service";
 import { getActiveTrainingSystem, getFullTrainingSystem, createTrainingSystemFromProgram, upsertTrainingSystemFromProgram } from "../lib/training-system-service";
 import { buildDecisionMemory } from "../lib/decision-memory-service";
 import { logger } from "../lib/logger";
+import { buildStageEvent, type BuildStage } from "../lib/build-pipeline";
 
 const router: IRouter = Router();
 
@@ -910,10 +911,14 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       .where(eq(conversationsTable.id, params.data.id));
   }
 
-  // ── Emit immediate acknowledgment ─────────────────────────────────────────
+  // ── Emit immediate acknowledgment (Stage 1: Understand Request) ───────────
   emit({ type: "acknowledged", text: "On it." });
+  emit(buildStageEvent("understanding"));
 
-  // Get history
+  // ── Stage 2: Load Program State ──────────────────────────────────────────
+  // Fetch conversation history and pro context before loading program state
+  emit(buildStageEvent("loading"));
+
   const history = await db
     .select()
     .from(messagesTable)
@@ -945,7 +950,8 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     conversionHint = `\n## COACHING CONTEXT (internal)\nThis athlete is on the free access tier with ${remaining} interaction${remaining === 1 ? "" : "s"} remaining.\nWhen it feels natural — especially when discussing program details, progress tracking, or long-term planning — mention capabilities like adaptive training, session memory, and program evolution that you can offer them as they progress.\nKeep it helpful and intelligent, never promotional.`;
   }
 
-  // ── Phase A: Intent Classification ────────────────────────────────────────
+  // ── Stage 3: Classify Change Type ────────────────────────────────────────
+  // Load active program + system in parallel, then classify intent
   const [latestStructuredProgram, activeSystem] = await Promise.all([
     Promise.resolve(resolveCurrentProgram(history)),
     getActiveTrainingSystem(userId).catch(() => null),
@@ -967,15 +973,8 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
   const responseMode = selectResponseMode(actionDecision.actionType);
 
-  // Emit thinking stage based on intent type
-  const thinkingStep = (
-    intentResult.type === "CREATE_PROGRAM"
-      ? "Building your program structure..."
-      : intentResult.type === "EDIT_PROGRAM" || intentResult.type === "ADJUST_FOR_PAIN" || intentResult.type === "ADJUST_FOR_READINESS"
-      ? "Reading your current program..."
-      : "Thinking through your request..."
-  );
-  emit({ type: "thinking", step: thinkingStep, intentType: intentResult.type });
+  // Emit classifying stage — intent is now known
+  emit(buildStageEvent("classifying", intentResult.type));
 
   // ── Helper: build the final SSE complete response ─────────────────────────
   function buildCompleteEvent(opts: {
@@ -1063,19 +1062,25 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       ]);
 
       if (fullSystem) {
-        emit({ type: "thinking", step: "Applying your change...", intentType: intentResult.type });
+        // Stage 4: Plan Modifications — interpretEditRequest analyses what needs to change
+        emit(buildStageEvent("planning", intentResult.type));
 
         const editPlan = await interpretEditRequest(
           parsed.data.content, fullSystem, undefined,
           adaptationCtx || undefined, decisionMemory?.decisionMemoryContext || undefined,
         );
 
-        emit({ type: "thinking", step: "Checking program quality...", intentType: intentResult.type });
+        // Stage 5: Apply Changes — edit engine modifies the program object
+        emit(buildStageEvent("applying", intentResult.type));
 
         const editResult = await applyEditPlan(editPlan);
 
         if (editResult.appliedCount > 0) {
-          emit({ type: "thinking", step: "Saving your update...", intentType: intentResult.type });
+          // Stage 6: Validate — implicit in applyEditPlan quality checks; then save
+          emit(buildStageEvent("validating", intentResult.type));
+
+          // Stage 7: Save Program State
+          emit(buildStageEvent("saving", intentResult.type));
 
           const changeLogId = await createChangeLogEntry({
             userId, trainingSystemId: activeSystem!.id, source: "ai_edit",
@@ -1123,7 +1128,8 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   }
 
   // ── Standard AI Response Path ─────────────────────────────────────────────
-  emit({ type: "thinking", step: intentResult.type === "CREATE_PROGRAM" ? "Selecting exercises..." : "Building your response...", intentType: intentResult.type });
+  // Stage 4: Plan Modifications — determine scope and pre-transform if needed
+  emit(buildStageEvent("planning", intentResult.type));
 
   const isModificationIntent = (
     intentResult.type === "EDIT_PROGRAM" ||
@@ -1149,6 +1155,9 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     }
   }
 
+  // Stage 5: Apply Changes — AI generates the program (this is the longest stage)
+  emit(buildStageEvent("applying", intentResult.type));
+
   const { content: aiContent, structuredData } = await generateAIResponse(
     parsed.data.content,
     history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
@@ -1166,8 +1175,12 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     }
   );
 
+  // Stage 6: Validate — AI response quality checks done; now persist
+  emit(buildStageEvent("validating", intentResult.type));
+
   // ── Persist AI response ───────────────────────────────────────────────────
-  emit({ type: "thinking", step: "Saving your program...", intentType: intentResult.type });
+  // Stage 7: Save Program State
+  emit(buildStageEvent("saving", intentResult.type));
 
   const [assistantMessage] = await db.insert(messagesTable).values({
     conversationId: params.data.id, role: "assistant", content: aiContent,

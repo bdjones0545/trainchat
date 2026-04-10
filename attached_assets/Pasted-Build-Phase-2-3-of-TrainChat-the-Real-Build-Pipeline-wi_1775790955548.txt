@@ -1,0 +1,273 @@
+Build Phase 2.3 of TrainChat: the Real Build Pipeline with Structured System Stages.
+
+GOAL:
+TrainChat must no longer “fake” thinking or progress.
+
+Instead, it should operate through real internal build stages that:
+- drive the program generation and edits
+- power the agent’s progress updates
+- ensure consistent, high-quality outputs
+
+The system should feel like a real engine compiling a training program step-by-step.
+
+--------------------------------------------------
+CORE PRODUCT RULE
+--------------------------------------------------
+
+The agent’s “thinking” must reflect actual system stages.
+
+Do NOT simulate random progress messages.
+
+Every progress update must map to a real step in the build pipeline.
+
+--------------------------------------------------
+BUILD PIPELINE OVERVIEW
+--------------------------------------------------
+
+Every program creation or modification must go through these stages:
+
+1. Understand Request
+2. Load Program State
+3. Classify Change Type
+4. Plan Modifications
+5. Apply Changes
+6. Validate Program
+7. Save Program State
+8. Update UI
+
+Each stage must be implemented in system logic and optionally exposed to the agent communication layer.
+
+--------------------------------------------------
+STAGE DEFINITIONS
+--------------------------------------------------
+
+STAGE 1: Understand Request
+- Parse user input
+- Extract intent (goal, constraint, modification, etc.)
+- Identify key variables:
+  - goal
+  - frequency
+  - equipment
+  - injuries
+  - time
+  - preferences
+
+OUTPUT:
+Structured interpretation of user request
+
+--------------------------------------------------
+
+STAGE 2: Load Program State
+- Check if an active program exists
+- If yes → load structured program object
+- If no → initialize new program state
+
+OUTPUT:
+Current program state ready for modification or creation
+
+--------------------------------------------------
+
+STAGE 3: Classify Change Type
+- Use classification system:
+  - structure change
+  - exercise swap
+  - volume adjustment
+  - intensity adjustment
+  - constraint change
+  - emphasis shift
+  - explanation only
+  - full rebuild
+
+OUTPUT:
+Change type + scope (micro, day-level, full week, rebuild)
+
+--------------------------------------------------
+
+STAGE 4: Plan Modifications
+- Decide WHAT needs to change
+- Determine:
+  - which days are affected
+  - which exercises are affected
+  - how volume should shift
+  - how constraints are applied
+- Maintain 80/20 rule:
+  - 80% user intent
+  - 20% system intelligence
+
+OUTPUT:
+Modification plan (not yet applied)
+
+--------------------------------------------------
+
+STAGE 5: Apply Changes
+- Modify the program object
+- Preserve as much existing structure as possible
+- Ensure:
+  - no duplicates
+  - no broken split
+  - no constraint violations
+
+OUTPUT:
+Updated program state
+
+--------------------------------------------------
+
+STAGE 6: Validate Program
+- Run quality checks:
+  - volume balance
+  - recovery distribution
+  - equipment compatibility
+  - injury safety
+  - time constraints
+- Fix issues if detected
+
+OUTPUT:
+Validated program state
+
+--------------------------------------------------
+
+STAGE 7: Save Program State
+- Persist updated program
+- Update timestamp
+- Generate change summary (for “What Changed” panel)
+
+OUTPUT:
+Saved program + change summary
+
+--------------------------------------------------
+
+STAGE 8: Update UI
+- Refresh Program Panel
+- Update “What Changed” section
+- Trigger completion message
+
+OUTPUT:
+User-visible updated system
+
+--------------------------------------------------
+AGENT COMMUNICATION MAPPING
+--------------------------------------------------
+
+Map each stage to user-visible agent updates.
+
+Example:
+
+User request received →
+
+Agent:
+“Got it — building this now.”
+
+Stage 1–2 →
+“Understanding your request…”
+
+Stage 3–4 →
+“I’m mapping out your structure and changes…”
+
+Stage 5 →
+“Applying updates to your program…”
+
+Stage 6 →
+“Validating your training structure…”
+
+Stage 7–8 →
+“Done. Your program is updated and saved.”
+
+IMPORTANT:
+These messages must correspond to REAL system stages.
+
+--------------------------------------------------
+TIMING + UX RULES
+--------------------------------------------------
+
+If process is fast:
+- compress stages into 2–3 messages
+
+If process is longer:
+- show full stage progression
+
+Never:
+- show fake steps
+- spam messages
+- delay without feedback
+
+--------------------------------------------------
+SYSTEM ARCHITECTURE REQUIREMENTS
+--------------------------------------------------
+
+Create a pipeline-based processing system:
+
+handleUserRequest():
+  → understandRequest()
+  → loadProgramState()
+  → classifyChange()
+  → planModifications()
+  → applyChanges()
+  → validateProgram()
+  → saveProgram()
+  → updateUI()
+
+Each function should be modular and testable.
+
+--------------------------------------------------
+STATE TRACKING
+--------------------------------------------------
+
+Track current stage in state:
+
+currentBuildStage:
+- "understanding"
+- "loading"
+- "classifying"
+- "planning"
+- "applying"
+- "validating"
+- "saving"
+- "complete"
+
+This can be used for:
+- UI indicators
+- agent messaging
+- debugging
+
+--------------------------------------------------
+ERROR HANDLING
+--------------------------------------------------
+
+If any stage fails:
+- do NOT silently fail
+- agent should communicate:
+
+Example:
+“I ran into an issue adjusting your program — I’m fixing it now.”
+
+Then retry or fallback safely.
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+This feature is successful if:
+
+1. The agent’s “thinking” reflects real system steps
+2. Program updates are consistent and structured
+3. Edits feel intelligent and controlled (not random)
+4. The system behaves like a real engine, not a text generator
+5. Users feel like:
+   “This is building something, not just replying”
+
+--------------------------------------------------
+FINAL PRODUCT PRINCIPLE
+--------------------------------------------------
+
+TrainChat should feel like a system compiling a training program in real time.
+
+The agent is not guessing.
+The agent is executing a structured build pipeline.
+
+This is what transforms TrainChat from:
+- a chatbot
+
+into:
+- a true training system
+
+Build this pipeline as the core engine behind all program creation and modification.

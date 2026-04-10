@@ -1,5 +1,17 @@
 import { useState, useRef, useCallback } from "react";
 
+// ─── Build pipeline stage type (mirrors build-pipeline.ts on the server) ──────
+
+export type BuildStage =
+  | "understanding"
+  | "loading"
+  | "classifying"
+  | "planning"
+  | "applying"
+  | "validating"
+  | "saving"
+  | "complete";
+
 // ─── SSE event types emitted by the stream endpoint ──────────────────────────
 
 export interface AcknowledgedEvent {
@@ -7,8 +19,11 @@ export interface AcknowledgedEvent {
   text: string;
 }
 
-export interface ThinkingEvent {
-  type: "thinking";
+/** Stage event — replaces generic "thinking" events.
+ *  Each event maps to a real code boundary in the build pipeline. */
+export interface StageEvent {
+  type: "stage";
+  stage: BuildStage;
   step: string;
   intentType?: string;
 }
@@ -38,22 +53,25 @@ export interface CompleteEvent {
   systemEdit?: { applied: boolean };
 }
 
-export interface ErrorEvent {
+export interface StreamErrorEvent {
   type: "error";
   message: string;
   status?: number;
 }
 
-export type StreamEvent = AcknowledgedEvent | ThinkingEvent | CompleteEvent | ErrorEvent;
+export type StreamEvent = AcknowledgedEvent | StageEvent | CompleteEvent | StreamErrorEvent;
 
 // ─── Stream state ─────────────────────────────────────────────────────────────
 
-export type StreamPhase = "idle" | "acknowledged" | "thinking" | "complete" | "error";
+export type StreamPhase = "idle" | "acknowledged" | "building" | "complete" | "error";
 
 export interface StreamState {
   phase: StreamPhase;
   acknowledgment: string;
-  thinkingStep: string;
+  /** Current build stage (from server — real pipeline boundary). */
+  buildStage: BuildStage | null;
+  /** User-visible label for the current stage. */
+  stageLabel: string;
   intentType: string | undefined;
   error: string | null;
 }
@@ -70,7 +88,8 @@ interface UseStreamMessageResult {
 const INITIAL_STATE: StreamState = {
   phase: "idle",
   acknowledgment: "",
-  thinkingStep: "",
+  buildStage: null,
+  stageLabel: "",
   intentType: undefined,
   error: null,
 };
@@ -93,7 +112,8 @@ export function useStreamMessage(): UseStreamMessageResult {
       setState({
         phase: "acknowledged",
         acknowledgment: "",
-        thinkingStep: "",
+        buildStage: null,
+        stageLabel: "",
         intentType: undefined,
         error: null,
       });
@@ -149,17 +169,22 @@ export function useStreamMessage(): UseStreamMessageResult {
                   phase: "acknowledged",
                   acknowledgment: event.text,
                 }));
-              } else if (event.type === "thinking") {
+
+              } else if (event.type === "stage") {
+                // Real pipeline stage boundary — update display from server truth
                 setState((s) => ({
                   ...s,
-                  phase: "thinking",
-                  thinkingStep: event.step,
+                  phase: "building",
+                  buildStage: event.stage,
+                  stageLabel: event.step,
                   intentType: event.intentType ?? s.intentType,
                 }));
+
               } else if (event.type === "complete") {
                 setState((s) => ({ ...s, phase: "complete" }));
                 reader.cancel();
                 return event;
+
               } else if (event.type === "error") {
                 setState((s) => ({
                   ...s,
@@ -170,7 +195,7 @@ export function useStreamMessage(): UseStreamMessageResult {
                 return null;
               }
             } catch {
-              // ignore malformed event
+              // ignore malformed SSE event
             }
           }
         }

@@ -736,8 +736,8 @@ export default function Chat() {
                 {stream.isActive && (
                   <AgentThinking
                     acknowledgment={stream.state.acknowledgment || undefined}
-                    thinkingStep={stream.state.phase === "thinking" ? stream.state.thinkingStep : undefined}
-                    intentType={stream.state.intentType}
+                    buildStage={stream.state.buildStage}
+                    stageLabel={stream.state.stageLabel}
                   />
                 )}
 
