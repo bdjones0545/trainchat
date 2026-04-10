@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Dumbbell, Save, CheckCircle, Loader2, Lock, Zap, PlayCircle,
@@ -85,6 +85,43 @@ function getBuildPhase(stage: BuildStage | null): BuildPhase {
   if (stage === "applying") return "content";
   if (stage === "validating") return "refine";
   return "save";
+}
+
+// ─── Program diff / edit-animation helpers ────────────────────────────────────
+
+type DiffType = "added" | "swapped" | "volume" | "newday";
+
+function computeProgramDiff(
+  prev: ProgramStructure,
+  next: ProgramStructure,
+): Map<string, DiffType> {
+  const diffs = new Map<string, DiffType>();
+
+  next.days.forEach((nextDay, dIdx) => {
+    const prevDay = prev.days[dIdx];
+
+    if (!prevDay) {
+      diffs.set(`d${dIdx}`, "newday");
+      (nextDay.exercises ?? []).forEach((_, eIdx) => {
+        diffs.set(`d${dIdx}-e${eIdx}`, "added");
+      });
+      return;
+    }
+
+    (nextDay.exercises ?? []).forEach((ex, eIdx) => {
+      const prevEx = (prevDay.exercises ?? [])[eIdx];
+      const key = `d${dIdx}-e${eIdx}`;
+      if (!prevEx) {
+        diffs.set(key, "added");
+      } else if (prevEx.name !== ex.name) {
+        diffs.set(key, "swapped");
+      } else if (String(prevEx.sets) !== String(ex.sets) || prevEx.reps !== ex.reps) {
+        diffs.set(key, "volume");
+      }
+    });
+  });
+
+  return diffs;
 }
 
 // ─── Day skeleton for building state ──────────────────────────────────────────
@@ -263,6 +300,25 @@ function ProgramTab({
   isPremium,
 }: Omit<Props, "hasActiveSystem">) {
   const [expandedDay, setExpandedDay] = useState<number | null>(0);
+  const prevProgramRef = useRef<ProgramStructure | null>(null);
+  const [animatedKeys, setAnimatedKeys] = useState<Map<string, DiffType>>(new Map());
+  const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const prev = prevProgramRef.current;
+    if (program && prev && prev !== program) {
+      const diffs = computeProgramDiff(prev, program);
+      if (diffs.size > 0) {
+        if (animTimerRef.current) clearTimeout(animTimerRef.current);
+        setAnimatedKeys(diffs);
+        animTimerRef.current = setTimeout(() => setAnimatedKeys(new Map()), 1800);
+      }
+    }
+    prevProgramRef.current = program ?? null;
+    return () => {
+      if (animTimerRef.current) clearTimeout(animTimerRef.current);
+    };
+  }, [program]);
 
   if (!program) return <EmptyProgramState />;
 
@@ -275,6 +331,28 @@ function ProgramTab({
 
   return (
     <div className="relative flex flex-col h-full overflow-hidden">
+      <style>{`
+        @keyframes ex-added {
+          0%   { background: rgba(34,197,94,0.18); box-shadow: 0 0 0 1px rgba(34,197,94,0.45) inset; }
+          55%  { background: rgba(34,197,94,0.08); box-shadow: 0 0 0 1px rgba(34,197,94,0.2) inset; }
+          100% { background: transparent; box-shadow: none; }
+        }
+        @keyframes ex-swapped {
+          0%   { background: rgba(59,130,246,0.18); box-shadow: 0 0 0 1px rgba(59,130,246,0.45) inset; }
+          55%  { background: rgba(59,130,246,0.08); box-shadow: 0 0 0 1px rgba(59,130,246,0.2) inset; }
+          100% { background: transparent; box-shadow: none; }
+        }
+        @keyframes day-new {
+          0%   { background: rgba(34,197,94,0.12); box-shadow: 0 0 0 1px rgba(34,197,94,0.35) inset; opacity: 0; transform: translateY(8px); }
+          25%  { opacity: 1; transform: translateY(0); }
+          70%  { background: rgba(34,197,94,0.05); box-shadow: 0 0 0 1px rgba(34,197,94,0.15) inset; }
+          100% { background: transparent; box-shadow: none; }
+        }
+        @keyframes vol-flash {
+          0%,20% { color: rgb(251,191,36); }
+          100%   { color: inherit; }
+        }
+      `}</style>
       {isUpdating && updatePhase && <UpdatingBadge phase={updatePhase} />}
       {/* Program header */}
       <div className="p-4 border-b border-border flex-shrink-0">
@@ -409,13 +487,15 @@ function ProgramTab({
         {days.map((day, idx) => {
           const isLocked = !isPremium && idx > 0;
           const isExpanded = expandedDay === idx;
+          const dayDiff = animatedKeys.get(`d${idx}`);
 
           return (
             <div
               key={idx}
-              className={`bg-card border rounded-xl overflow-hidden transition-all duration-150 ${
+              className={`bg-card border rounded-xl overflow-hidden transition-colors duration-300 ${
                 isLocked ? "border-border/40 opacity-60" : isExpanded ? "border-primary/30" : "border-border"
               }`}
+              style={dayDiff === "newday" ? { animation: "day-new 1.8s ease forwards" } : undefined}
             >
               <button
                 onClick={() => !isLocked && setExpandedDay(isExpanded ? null : idx)}
@@ -455,18 +535,36 @@ function ProgramTab({
 
               {!isLocked && isExpanded && (
                 <div className="border-t border-border divide-y divide-border/50">
-                  {(day.exercises ?? []).map((ex, exIdx) => (
-                    <div key={exIdx} className="px-3 py-2.5">
+                  {(day.exercises ?? []).map((ex, exIdx) => {
+                    const exKey = `d${idx}-e${exIdx}`;
+                    const exDiff = animatedKeys.get(exKey);
+                    const rowAnim =
+                      exDiff === "added"   ? "ex-added 1.8s ease forwards" :
+                      exDiff === "swapped" ? "ex-swapped 1.8s ease forwards" :
+                      undefined;
+                    const volAnim = exDiff === "volume" ? "vol-flash 1.6s ease forwards" : undefined;
+                    return (
+                    <div
+                      key={exIdx}
+                      className="px-3 py-2.5"
+                      style={rowAnim ? { animation: rowAnim } : undefined}
+                    >
                       <p className="text-[11px] font-medium text-foreground">{ex.name}</p>
                       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1.5">
                         {ex.sets > 0 && (
                           <span className="text-[10px] text-muted-foreground">
-                            <span className="font-semibold text-foreground">{ex.sets}</span> sets
+                            <span
+                              className="font-semibold text-foreground"
+                              style={volAnim ? { animation: volAnim } : undefined}
+                            >{ex.sets}</span> sets
                           </span>
                         )}
                         {ex.reps && (
                           <span className="text-[10px] text-muted-foreground">
-                            <span className="font-semibold text-foreground">{ex.reps}</span> reps
+                            <span
+                              className="font-semibold text-foreground"
+                              style={volAnim ? { animation: volAnim } : undefined}
+                            >{ex.reps}</span> reps
                           </span>
                         )}
                         {ex.rest && (
@@ -479,7 +577,8 @@ function ProgramTab({
                         <p className="text-[10px] text-muted-foreground/70 mt-1.5 italic leading-relaxed">{ex.notes}</p>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                   {day.notes && (
                     <div className="px-3 py-2.5 bg-accent/15">
                       <p className="text-[10px] text-muted-foreground italic leading-relaxed">{day.notes}</p>
