@@ -29,6 +29,8 @@ router.get("/profile", requireAuth, async (req, res): Promise<void> => {
       sportFocus: profile.sportFocus ?? null,
       exercisePreferences: profile.exercisePreferences ?? null,
       exercisesToAvoid: profile.exercisesToAvoid ?? null,
+      yearsTraining: profile.yearsTraining ?? null,
+      calibrationScore: profile.calibrationScore ?? 0,
       createdAt: profile.createdAt.toISOString(),
       updatedAt: profile.updatedAt.toISOString(),
     });

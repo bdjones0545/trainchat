@@ -1,0 +1,343 @@
+Redesign TrainChat so it feels exactly like Replit-style vibe coding for your workout, with the support of a professional performance agent.
+
+CORE PRODUCT VISION:
+TrainChat should not feel like a chatbot that writes long workout answers.
+It should feel like a live training workspace where the user types what they want, and the system builds and updates their workout in real time.
+
+The feeling should be:
+“Vibe code your own training program with a professional agent guiding the build.”
+
+The user should feel like they are collaborating with an expert system, not receiving a static text response.
+
+--------------------------------------------------
+PRIMARY EXPERIENCE RULE
+--------------------------------------------------
+
+When a user types what they want, the agent should interpret it and update the SYSTEMS SEGMENT, not dump the full workout into the chat response.
+
+Example:
+User says:
+- “Build me a 4-day muscle-building program”
+- “Make it more athletic”
+- “I only have 45 minutes”
+- “My shoulder hurts on pressing”
+- “I want bigger arms but still move well”
+
+The system should:
+1. interpret the request
+2. generate or modify the workout structure
+3. update the live workout/program panel
+4. show what changed in a clean system view
+5. keep the agent response short and professional
+
+IMPORTANT:
+The actual workout should live in the SYSTEMS SEGMENT / PROGRAM PANEL.
+The chat response should only guide, explain, confirm, and coach.
+
+--------------------------------------------------
+80/20 PHILOSOPHY
+--------------------------------------------------
+
+The system should generate programs using this principle:
+
+- 80% of what the user wants
+- 20% of what the user needs
+
+Meaning:
+- honor their stated goals, preferences, and style
+- but intelligently include what a professional coach would add for balance, safety, performance, movement quality, and progression
+
+Examples:
+- if user wants arms and chest, still include scapular work, posterior chain, trunk, and lower body balance where appropriate
+- if user wants intense training every day, the system should still manage fatigue and recovery intelligently
+- if user wants hypertrophy, the system can still include mobility/stability/accessory correctives when needed
+- if user wants speed, include force production and tissue tolerance work
+- if user wants athletic training, include structure they may not think to ask for
+
+IMPORTANT:
+Do not over-explain the 80/20 logic in the chat response.
+Apply it in the system architecture and the generated workout itself.
+
+--------------------------------------------------
+CHAT RESPONSE BEHAVIOR
+--------------------------------------------------
+
+Agent responses should be short, premium, and collaborative.
+
+The response should sound like a professional architect/coach helping shape the build.
+
+Good examples:
+- “Built. I set this up as a 4-day hypertrophy split and adjusted exercise selection around your shoulder limitation.”
+- “Updated. I tightened session length to fit 45 minutes and redistributed accessory volume.”
+- “I added more athletic qualities without losing your muscle-building focus.”
+- “I rebuilt the lower body days to reduce knee stress and keep progression intact.”
+
+Bad behavior:
+- giant essay responses
+- repeating full workout in the chat
+- long introductions
+- duplicate text
+- markdown-heavy program dump in the message thread
+
+RULE:
+The agent explains the build.
+The systems segment shows the build.
+
+--------------------------------------------------
+SYSTEMS SEGMENT / PROGRAM PANEL
+--------------------------------------------------
+
+Create a dedicated systems segment that acts like the “workspace output.”
+
+This is where the actual workout is displayed and updated.
+
+The systems segment should include:
+
+1. Program Overview
+- program title
+- primary goal
+- training style
+- weekly frequency
+- session duration
+- current focus
+
+2. Weekly Split
+- Day 1
+- Day 2
+- Day 3
+- Day 4
+etc.
+
+3. Day Detail
+For each day show:
+- block name
+- exercises
+- sets
+- reps
+- rest
+- intensity or effort note
+- coaching notes if needed
+
+4. What Changed
+A change log after every update:
+- reduced session time from 60 to 45 min
+- replaced overhead press with landmine press
+- added posterior chain support
+- rebalanced upper/lower volume
+- inserted trunk stability work
+
+5. Why It Changed
+Short professional rationale:
+- shoulder tolerance
+- recovery balance
+- athletic carryover
+- hypertrophy support
+- movement quality
+
+6. Version History
+- V1 Initial Build
+- V2 45-Minute Update
+- V3 Shoulder-Friendly Revision
+- V4 Athletic Hybrid Revision
+
+7. Draft / Apply Changes layer
+For major revisions:
+- Preview Changes
+- Apply Update
+- Keep Current Version
+
+--------------------------------------------------
+CORE INTERACTION MODEL
+--------------------------------------------------
+
+The user should type naturally in chat, like they are giving build instructions.
+
+Examples:
+- “Build me a 5-day split for size.”
+- “Keep legs in but don’t crush me.”
+- “Make Fridays speed and athletic based.”
+- “I want big arms but I still want to move like an athlete.”
+- “I only have dumbbells at home this week.”
+- “Swap RDLs for something friendlier on my back.”
+
+The AI should treat these like live build instructions.
+
+Every user message should be evaluated as one of the following:
+1. create a new program
+2. modify current program
+3. swap an exercise
+4. change schedule/frequency
+5. adjust for pain/limitations
+6. change emphasis
+7. reduce or increase workload
+8. ask for explanation only
+
+When possible, directly update the systems segment.
+
+--------------------------------------------------
+SYSTEM LOGIC LAYER
+--------------------------------------------------
+
+Build an internal reasoning layer that translates user requests into structured training logic.
+
+The AI should maintain internal program state including:
+- goal
+- split structure
+- equipment
+- time constraints
+- experience level
+- injuries/limitations
+- preferred style
+- current progression model
+- total weekly volume
+- fatigue balance
+- must-include support work
+
+The user should not see all of this raw logic, but it should control the program output.
+
+The system must be able to make professional decisions such as:
+- balancing push/pull volume
+- managing lower body fatigue
+- inserting trunk/stability work
+- modifying exercises based on equipment
+- preserving progression while making swaps
+- keeping the user’s desired vibe while protecting program quality
+
+--------------------------------------------------
+PROFESSIONAL AGENT ROLE
+--------------------------------------------------
+
+The agent should feel like a real expert helping the user build.
+
+Tone:
+- confident
+- concise
+- collaborative
+- high-level
+- performance-oriented
+- never robotic
+- never overly verbose
+
+The agent is not just a cheerleader.
+The agent is a professional guide shaping the build intelligently.
+
+The system should behave like:
+“the user is driving the vision, the agent is protecting the quality.”
+
+--------------------------------------------------
+MOBILE-FIRST REPLIT-LIKE UX
+--------------------------------------------------
+
+This must work especially well on mobile.
+
+Layout:
+1. Left menu / slide-out menu
+- New Chat
+- Chat History
+- Saved Programs
+- Version History
+- Settings
+
+2. Main chat panel
+- user types build instructions
+- agent replies briefly
+- chat remains the command layer
+
+3. Systems segment
+- visible as a persistent section, tab, or slide-up drawer
+- contains the actual live workout/program
+- updates immediately after AI actions
+
+Recommended mobile tabs:
+- Chat
+- Program
+- Changes
+- Versions
+
+The user should be able to switch between them easily.
+
+IMPORTANT:
+Do not trap the workout inside the chat thread.
+The workout should live in the system workspace.
+
+--------------------------------------------------
+PROGRAM GENERATION RULES
+--------------------------------------------------
+
+When generating workouts:
+- follow professional training structure
+- use progressive overload logic
+- honor constraints
+- use 80/20 wants vs needs logic
+- avoid random exercise stacking
+- avoid repetitive fluff
+- avoid generic beginner-style outputs when user is advanced
+- keep session design coherent and coach-level
+
+The system should build programs like an actual high-level coach would structure them.
+
+--------------------------------------------------
+NO MORE STATIC PROGRAM DUMPS
+--------------------------------------------------
+
+Remove behavior where the AI posts full long-form programs directly into chat as giant text blocks.
+
+Instead:
+- chat = instruction + explanation
+- systems segment = actual structured workout output
+
+This is a critical product rule.
+
+--------------------------------------------------
+EMPTY STATE
+--------------------------------------------------
+
+When the user first lands in the system, the empty state should feel like Replit for training.
+
+Headline:
+- “What do you want to build?”
+
+Subtext:
+- “Describe the kind of training you want. I’ll build it and refine it with you.”
+
+Suggestion chips:
+- Build my workout
+- Make me a 4-day split
+- Add athletic work
+- Adjust for pain
+- Reduce session time
+- Swap exercises
+
+--------------------------------------------------
+SUCCESS STATE
+--------------------------------------------------
+
+The final product should feel like this:
+
+The user types:
+“I want a 4-day upper/lower for muscle gain, but keep me athletic and don’t wreck my knees.”
+
+The agent responds:
+“Built. I gave you a hypertrophy-focused upper/lower split, kept athletic elements in, and reduced knee stress through exercise selection.”
+
+Then the actual workout appears and updates in the systems segment, with:
+- full split
+- exercise details
+- progression
+- what changed
+- why it changed
+- version tracking
+
+That is the experience.
+
+--------------------------------------------------
+FINAL PRODUCT PRINCIPLE
+--------------------------------------------------
+
+TrainChat should feel like:
+Replit vibe coding your own workout with a professional agent.
+
+Not:
+a chatbot that spits out a workout.
+
+Build this as a live collaborative training workspace where chat controls the build and the systems segment displays the evolving program.

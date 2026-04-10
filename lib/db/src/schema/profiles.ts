@@ -16,6 +16,8 @@ export const userProfilesTable = pgTable("user_profiles", {
   sportFocus: text("sport_focus"),
   exercisePreferences: text("exercise_preferences"),
   exercisesToAvoid: text("exercises_to_avoid"),
+  yearsTraining: integer("years_training"),
+  calibrationScore: integer("calibration_score").default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

@@ -35,6 +35,7 @@ import StreakBadge from "@/components/chat/StreakBadge";
 import SessionLogModal from "@/components/chat/SessionLogModal";
 import PaywallModal from "@/components/PaywallModal";
 import PricingModal from "@/components/PricingModal";
+import CalibrationModal from "@/components/chat/CalibrationModal";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 
 const SUGGESTION_CHIPS = [
@@ -104,6 +105,8 @@ export default function Chat() {
   const [sessionLogSubmitting, setSessionLogSubmitting] = useState(false);
   const [messagesUsed, setMessagesUsed] = useState(0);
   const [mobilePanel, setMobilePanel] = useState<SlidePanel>(null);
+  const [showCalibration, setShowCalibration] = useState(false);
+  const [calibrationNudgeShown, setCalibrationNudgeShown] = useState(false);
 
   const logout = useLogout();
 
@@ -148,6 +151,15 @@ export default function Chat() {
     enabled: !!me,
     staleTime: 60000,
   });
+
+  const { data: profileRaw } = useQuery({
+    queryKey: ["profile"],
+    queryFn: () => customFetch<any>("/api/profile").catch(() => null),
+    enabled: !!me,
+    staleTime: 60000,
+  });
+
+  const calibrationScore: number = profileRaw?.calibrationScore ?? 0;
 
   const createConvo = useCreateConversation();
   const sendMessage = useSendMessage();
@@ -432,12 +444,27 @@ export default function Chat() {
           <div className="w-10 h-10 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-sm font-bold text-primary flex-shrink-0">
             {initials}
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-foreground truncate">{userName}</p>
             <p className="text-[11px] text-muted-foreground">
               {currentStreak > 0 ? `${currentStreak} day streak 🔥` : "Performance Athlete"}
             </p>
           </div>
+          {calibrationScore > 0 && (
+            <button
+              onClick={() => setShowCalibration(true)}
+              title="Improve AI Accuracy"
+              className={`flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-lg border transition-all ${
+                calibrationScore >= 70
+                  ? "text-green-400 border-green-400/30 bg-green-400/10"
+                  : calibrationScore >= 40
+                  ? "text-amber-400 border-amber-400/30 bg-amber-400/10"
+                  : "text-muted-foreground border-border bg-muted/20"
+              }`}
+            >
+              {calibrationScore}%
+            </button>
+          )}
         </div>
       </div>
 
@@ -605,6 +632,17 @@ export default function Chat() {
           isSubmitting={sessionLogSubmitting}
         />
       )}
+      {showCalibration && (
+        <CalibrationModal
+          onClose={() => {
+            setShowCalibration(false);
+            queryClient.invalidateQueries({ queryKey: ["profile"] });
+          }}
+          onComplete={() => {
+            queryClient.invalidateQueries({ queryKey: ["profile"] });
+          }}
+        />
+      )}
 
       {/* ─── Mobile header ─── */}
       <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border bg-background/95 backdrop-blur-sm flex-shrink-0 z-10">
@@ -710,6 +748,28 @@ export default function Chat() {
                   <MessageBubble key={msg.id} message={msg} />
                 ))}
                 {isTyping && <TypingIndicator />}
+
+                {/* Calibration nudge — shown once after first program is generated */}
+                {latestProgram && calibrationScore < 40 && !calibrationNudgeShown && (
+                  <div className="flex items-start gap-3 mb-5">
+                    <div className="w-7 h-7 rounded-full bg-card border border-primary/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <div className="w-2 h-2 rounded-full bg-primary" />
+                    </div>
+                    <div className="max-w-[90%] px-4 py-3 rounded-2xl rounded-tl-sm bg-card border border-border text-foreground">
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        Want me to dial this in more precisely? Tap{" "}
+                        <button
+                          onClick={() => { setShowCalibration(true); setCalibrationNudgeShown(true); }}
+                          className="text-primary font-semibold hover:underline"
+                        >
+                          Improve Accuracy
+                        </button>{" "}
+                        to share your body, limitations, and schedule — I'll optimize the program right after.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <div ref={messagesEndRef} />
               </div>
             )}
@@ -718,18 +778,31 @@ export default function Chat() {
           {/* Input bar */}
           <div className="flex-shrink-0 px-4 pb-5 pt-3 border-t border-border bg-background/80 backdrop-blur-sm">
             <div className="max-w-2xl mx-auto">
-              <div className="flex justify-between items-center mb-2">
-                <button
-                  onClick={() => setShowReadiness(true)}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold text-muted-foreground border border-border hover:text-foreground hover:border-primary/30 transition-all duration-150"
-                >
-                  <Activity className="w-3 h-3" />
-                  Check-In
-                </button>
+              <div className="flex items-center justify-between mb-2 gap-2">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setShowReadiness(true)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold text-muted-foreground border border-border hover:text-foreground hover:border-primary/30 transition-all duration-150"
+                  >
+                    <Activity className="w-3 h-3" />
+                    Check-In
+                  </button>
+                  <button
+                    onClick={() => setShowCalibration(true)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold border transition-all duration-150 ${
+                      calibrationScore >= 70
+                        ? "text-green-400 border-green-400/30 hover:bg-green-400/10"
+                        : "text-primary border-primary/30 bg-primary/5 hover:bg-primary/10"
+                    }`}
+                  >
+                    <Zap className="w-3 h-3" />
+                    {calibrationScore > 0 ? `Accuracy ${calibrationScore}%` : "Improve Accuracy"}
+                  </button>
+                </div>
                 {hasActiveSystem && (
                   <div className="flex items-center gap-1.5">
                     <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                    <span className="text-[10px] text-muted-foreground">System active — edits go live instantly</span>
+                    <span className="text-[10px] text-muted-foreground hidden sm:block">System active — edits go live instantly</span>
                   </div>
                 )}
               </div>
