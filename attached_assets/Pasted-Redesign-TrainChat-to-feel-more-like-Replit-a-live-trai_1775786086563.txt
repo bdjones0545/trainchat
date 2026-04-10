@@ -1,0 +1,201 @@
+Redesign TrainChat to feel more like Replit: a live training workspace, not a standard chatbot.
+
+Product goal:
+TrainChat should feel like “vibe coding your training program.”
+The user should be able to talk to the AI naturally, while the system actively builds, updates, and manages a live training plan in real time.
+
+CORE EXPERIENCE
+
+TrainChat should have 3 main layers:
+
+1. Left Sidebar
+- New Chat button
+- Chat/session history
+- Saved programs
+- Current active program
+- Pinned conversations
+- Mobile-friendly slide-out behavior
+
+2. Main Chat Workspace
+- Conversational AI interface
+- Streaming responses
+- Cleaner, shorter, action-oriented replies
+- The AI should explain what it is changing and why
+- The AI should act like a performance architect collaborating with the user
+
+3. Live Program Panel
+- A persistent program display that updates in real time
+- Show:
+  - weekly split
+  - day-by-day workouts
+  - exercise names
+  - sets/reps/rest
+  - progression logic
+  - notes/modifications
+- On mobile, this should appear as a slide-up drawer, tab, or segmented panel
+
+KEY PRODUCT PRINCIPLE
+
+Do not make the AI only respond with long text blocks.
+Instead, user chat inputs should be able to directly modify the live training system.
+
+Example:
+If user says “make this 5 days instead of 4,” the system should:
+- interpret the instruction
+- update the actual program data structure
+- show the visual changes in the live program panel
+- generate a short change summary
+- preserve version history
+
+REPLIT-LIKE BEHAVIORS
+
+1. Live state updates
+The program should function like editable app state, not static text output.
+
+2. Change log
+Whenever the AI makes a change, show a structured “What changed” panel, e.g.
+- Updated split from 4 days to 5 days
+- Rebalanced lower body volume
+- Added shoulder-friendly pressing substitutions
+
+3. Version history
+Add program versioning:
+- save snapshots after meaningful updates
+- let user compare versions
+- let user restore older versions
+- label versions clearly: V1, V2, V3 or timestamped
+
+4. Draft changes before apply
+For larger changes, the AI can prepare a draft update and present:
+- Preview Changes
+- Apply Changes
+- Keep Current Version
+
+5. Current context awareness
+The AI should understand:
+- current active program
+- user profile
+- injury limitations
+- equipment access
+- time constraints
+- current chat thread
+- prior saved preferences
+
+DATA MODEL REQUIREMENTS
+
+Create clear separation between:
+1. chat sessions
+2. persistent user profile
+3. active training program
+4. program versions
+5. AI-generated change logs
+
+Suggested entities:
+
+chat_sessions
+- id
+- user_id
+- title
+- created_at
+- updated_at
+
+chat_messages
+- id
+- chat_session_id
+- role
+- content
+- created_at
+
+training_programs
+- id
+- user_id
+- title
+- status (active, archived, draft)
+- created_at
+- updated_at
+
+training_program_versions
+- id
+- program_id
+- version_number
+- serialized_program_json
+- summary_of_changes
+- created_at
+
+program_change_logs
+- id
+- program_id
+- chat_message_id (optional)
+- change_type
+- description
+- created_at
+
+AI RESPONSE DESIGN
+
+AI replies should be shorter and more operational.
+
+Bad:
+- giant repeated paragraphs
+- long essay-like program intros
+- duplicate explanation text
+
+Good:
+- concise explanation
+- clear rationale
+- visible system updates
+- “I updated your Day 2 lower body session to reduce knee stress and shifted volume to hip-dominant patterns.”
+
+Also remove duplicate introductory text from program outputs.
+
+PROGRAM PANEL UX
+
+The live program panel should include:
+- Overview tab
+- Weekly Split tab
+- Day Detail tab
+- Change Log tab
+- Version History tab
+
+Optional action buttons:
+- Edit with AI
+- Swap exercise
+- Adjust volume
+- Regenerate day
+- Save as new version
+
+MOBILE EXPERIENCE
+
+Because many users will access this on mobile, make it feel premium on iPhone:
+- chat remains primary
+- program panel opens via tab or bottom sheet
+- sidebar contains chats and saved plans
+- active context always clear
+- buttons large enough for thumb use
+- no huge unbroken text blocks
+
+EMPTY STATE
+
+On new chat:
+- show “What do you want to build or adjust?”
+- suggestion chips:
+  - Build my program
+  - Adjust my current split
+  - Swap exercises
+  - Reduce fatigue
+  - Add speed work
+
+IMPORTANT PRODUCT RULE
+
+TrainChat should feel like the AI is editing a living training system in collaboration with the user.
+
+The user should never feel like:
+- they received a static text document
+- they must restart from scratch to make changes
+- they are trapped inside one long chat thread
+
+The user should feel like:
+- they are co-building their system with an intelligent performance architect
+- every message can shape the live program
+- the platform preserves state like a real workspace
+
+Please redesign the frontend, backend, and database architecture around this Replit-like interaction model while keeping it mobile-first and conversion-friendly.
