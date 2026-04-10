@@ -17,11 +17,12 @@ interface ChangeLogEntry {
   intent: string;
   scope: string;
   changeSummary: string;
-  requestText?: string;
+  requestText?: string | null;
   isMajorVersion: boolean;
-  versionLabel?: string;
+  versionLabel?: string | null;
   appliedCount: number;
   skippedCount: number;
+  decisionMetadata?: Record<string, unknown> | null;
   createdAt: string;
 }
 
@@ -362,7 +363,7 @@ function ChangesTab({ hasActiveSystem }: { hasActiveSystem?: boolean }) {
         </div>
         <p className="text-xs font-semibold text-foreground mb-1">No changes yet</p>
         <p className="text-[11px] text-muted-foreground leading-relaxed max-w-[200px]">
-          Save a program to your system and the AI will track every change here.
+          Build a program and every modification the AI makes will be logged here automatically.
         </p>
       </div>
     );
@@ -396,9 +397,9 @@ function ChangesTab({ hasActiveSystem }: { hasActiveSystem?: boolean }) {
         <div className="w-12 h-12 rounded-2xl bg-muted/30 flex items-center justify-center mb-4">
           <Activity className="w-5 h-5 text-muted-foreground/40" />
         </div>
-        <p className="text-xs font-semibold text-foreground mb-1">No changes logged yet</p>
+        <p className="text-xs font-semibold text-foreground mb-1">No changes yet</p>
         <p className="text-[11px] text-muted-foreground leading-relaxed max-w-[200px]">
-          Ask the AI to adjust your program and every change will appear here.
+          Every time the AI modifies your program, the change will be logged here automatically.
         </p>
       </div>
     );
@@ -407,35 +408,29 @@ function ChangesTab({ hasActiveSystem }: { hasActiveSystem?: boolean }) {
   return (
     <div className="overflow-y-auto h-full">
       <div className="p-3 space-y-2">
-        {history.map((entry) => (
-          <div key={entry.id} className="bg-card border border-border rounded-xl p-3">
-            <div className="flex items-start justify-between gap-2 mb-1.5">
-              <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${scopeColor(entry.scope)}`}>
-                {entry.scope}
-              </span>
-              <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatRelative(entry.createdAt)}</span>
-            </div>
-            <p className="text-[11px] text-foreground leading-relaxed">{entry.changeSummary}</p>
-            {entry.intent && entry.intent !== entry.changeSummary && (
-              <p className="text-[10px] text-primary/60 mt-1.5 font-medium">↳ {entry.intent}</p>
-            )}
-            {entry.requestText && (
-              <p className="text-[10px] text-muted-foreground/60 mt-1 italic">"{entry.requestText}"</p>
-            )}
-            {(entry.appliedCount > 0 || entry.skippedCount > 0) && (
-              <div className="flex items-center gap-2 mt-2">
-                {entry.appliedCount > 0 && (
-                  <span className="text-[10px] text-green-400/80 flex items-center gap-0.5">
-                    <CheckCircle className="w-2.5 h-2.5" /> {entry.appliedCount} applied
-                  </span>
-                )}
-                {entry.skippedCount > 0 && (
-                  <span className="text-[10px] text-amber-400/70">{entry.skippedCount} skipped</span>
-                )}
+        {history.map((entry) => {
+          const whyChanged = entry.decisionMetadata?.whyChanged as string | undefined;
+          return (
+            <div key={entry.id} className="bg-card border border-border rounded-xl p-3">
+              <div className="flex items-start justify-between gap-2 mb-1.5">
+                <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${scopeColor(entry.scope)}`}>
+                  {entry.isMajorVersion && entry.versionLabel ? entry.versionLabel : entry.scope}
+                </span>
+                <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatRelative(entry.createdAt)}</span>
               </div>
-            )}
-          </div>
-        ))}
+              <p className="text-[11px] text-foreground leading-relaxed">{entry.changeSummary}</p>
+              {whyChanged && (
+                <p className="text-[10px] text-primary/60 mt-1.5 leading-relaxed">↳ {whyChanged}</p>
+              )}
+              {!whyChanged && entry.intent && entry.intent !== entry.changeSummary && (
+                <p className="text-[10px] text-muted-foreground/50 mt-1 font-medium">{entry.intent.replace(/_/g, " ")}</p>
+              )}
+              {entry.requestText && (
+                <p className="text-[10px] text-muted-foreground/50 mt-1 italic line-clamp-2">"{entry.requestText}"</p>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

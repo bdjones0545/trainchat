@@ -24,7 +24,7 @@ import { stripeStorage } from "../lib/stripeStorage";
 import { interpretEditRequest } from "../lib/edit-intent-service";
 import { applyEditPlan, type EditResult } from "../lib/edit-engine";
 import { createChangeLogEntry } from "../lib/change-log-service";
-import { getActiveTrainingSystem, getFullTrainingSystem, createTrainingSystemFromProgram } from "../lib/training-system-service";
+import { getActiveTrainingSystem, getFullTrainingSystem, createTrainingSystemFromProgram, upsertTrainingSystemFromProgram } from "../lib/training-system-service";
 import { buildDecisionMemory } from "../lib/decision-memory-service";
 import { logger } from "../lib/logger";
 
@@ -64,11 +64,15 @@ function resolveCurrentProgram(
 
 /**
  * Returns true if the intent should trigger a direct edit of the real training system.
- * Only EDIT_PROGRAM and ADJUST_FOR_PAIN are eligible — these represent clear requests
- * to modify the structure of an existing program.
+ * EDIT_PROGRAM, ADJUST_FOR_PAIN, and ADJUST_FOR_READINESS all modify existing program
+ * structure — the vibe edit engine handles all three through the Change Engine pipeline.
  */
 function isVibeEditIntent(intentResult: IntentResult): boolean {
-  return intentResult.type === "EDIT_PROGRAM" || intentResult.type === "ADJUST_FOR_PAIN";
+  return (
+    intentResult.type === "EDIT_PROGRAM" ||
+    intentResult.type === "ADJUST_FOR_PAIN" ||
+    intentResult.type === "ADJUST_FOR_READINESS"
+  );
 }
 
 /**
@@ -335,22 +339,29 @@ Keep it helpful and intelligent, never promotional.`;
 
   // ── Phase A: Intent Classification & Request Routing ─────────────────────
 
-  // Resolve current active program from conversation history (needed for EDIT/RETRIEVE intents)
-  const latestStructuredProgram = resolveCurrentProgram(history);
+  // Load both conversation history program AND DB system in parallel.
+  // This is critical for cross-conversation continuity: if the user opens a new
+  // chat while having an existing program in the DB, the intent classifier must
+  // know a program exists so it routes edit requests correctly.
+  const [latestStructuredProgram, activeSystem] = await Promise.all([
+    Promise.resolve(resolveCurrentProgram(history)),
+    getActiveTrainingSystem(userId).catch(() => null),
+  ]);
+
   const hasActiveProgram = latestStructuredProgram !== null;
+  const hasActiveSystem = activeSystem !== null;
+
+  // For intent classification, combine both signals: a program exists if it's
+  // in either the conversation history OR the live DB system.
+  const hasAnyProgram = hasActiveProgram || hasActiveSystem;
 
   // Classify the intent — this is the single source of truth for routing
   const intentResult = classifyIntent(parsed.data.content, {
-    hasActiveProgram,
+    hasActiveProgram: hasAnyProgram,
     conversationTurnCount: history.filter((m) => m.role === "user").length,
   });
 
-  logIntentSummary(parsed.data.content, intentResult, hasActiveProgram);
-
-  // ── Load active training system (used for vibe edit routing) ──────────────
-  // Run in parallel with decision tree — it's a fast indexed query
-  const activeSystem = await getActiveTrainingSystem(userId).catch(() => null);
-  const hasActiveSystem = activeSystem !== null;
+  logIntentSummary(parsed.data.content, intentResult, hasAnyProgram);
 
   // ── Decision Tree: resolve action type, preservation rules, and infer-vs-ask ──
   const actionDecision = resolveAction(intentResult, latestStructuredProgram, parsed.data.content);
@@ -620,11 +631,16 @@ Keep it helpful and intelligent, never promotional.`;
 
   // ── Standard AI Response Path ─────────────────────────────────────────────
 
-  // For all other intents — route to AI with appropriate context
-  // EDIT_PROGRAM needs the current program; others may or may not
-  const currentProgram = (intentResult.type === "EDIT_PROGRAM" || intentResult.type === "RETRIEVE_CURRENT_PROGRAM")
-    ? latestStructuredProgram
-    : null;
+  // For all modification and retrieval intents, pass the current program state.
+  // Change Engine rule: the AI must always operate from the current active program.
+  // EDIT_PROGRAM, ADJUST_FOR_PAIN, ADJUST_FOR_READINESS, and RETRIEVE all need it.
+  const isModificationIntent = (
+    intentResult.type === "EDIT_PROGRAM" ||
+    intentResult.type === "ADJUST_FOR_PAIN" ||
+    intentResult.type === "ADJUST_FOR_READINESS" ||
+    intentResult.type === "RETRIEVE_CURRENT_PROGRAM"
+  );
+  const currentProgram = isModificationIntent ? latestStructuredProgram : null;
 
   // ── STRUCTURAL_REBUILD pre-transform ──────────────────────────────────────
   // When the decision tree resolves a STRUCTURAL_REBUILD, run the transformation
@@ -709,23 +725,60 @@ Keep it helpful and intelligent, never promotional.`;
     .set({ updatedAt: new Date() })
     .where(eq(conversationsTable.id, params.data.id));
 
-  // ── Auto-save program to training system ──────────────────────────────────
-  // When the AI returns a valid program (structuredData with days), automatically
-  // persist it to the training system — no manual "Save to My System" step needed.
+  // ── Auto-save / Auto-update program (Change Engine) ───────────────────────
+  // When the AI returns a valid program, persist it via upsert:
+  //   • first program → creates a new training system
+  //   • existing program → updates the system IN PLACE (same ID, change logged)
+  // This is the core of the Change Engine: the program is a living state,
+  // not regenerated from scratch on each message.
   let systemSaved = false;
   let autoSavedSystemId: number | undefined;
+  let changeLogId: number | undefined;
 
   if (structuredData && Array.isArray(structuredData.days) && structuredData.days.length > 0) {
     try {
-      const savedSystem = await createTrainingSystemFromProgram(userId, structuredData);
+      const { system: savedSystem, isUpdate } = await upsertTrainingSystemFromProgram(userId, structuredData);
       systemSaved = true;
       autoSavedSystemId = savedSystem.id;
-      logger.info(
-        { userId, systemId: savedSystem.id, programName: structuredData.programName },
-        "[AutoSave] Program automatically saved to training system"
-      );
+
+      if (isUpdate) {
+        logger.info(
+          { userId, systemId: savedSystem.id, programName: structuredData.programName },
+          "[ChangeEngine] Active program updated in place"
+        );
+
+        // Log what changed to the change log so the Changes tab shows it
+        if (structuredData.whatChanged) {
+          try {
+            const emptySnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
+            changeLogId = await createChangeLogEntry({
+              userId,
+              trainingSystemId: savedSystem.id,
+              source: "ai_edit",
+              intent: intentResult.editSubtype ?? intentResult.type.toLowerCase(),
+              scope: "system",
+              changeSummary: structuredData.whatChanged,
+              requestText: parsed.data.content.slice(0, 300),
+              beforeSnapshot: emptySnapshot,
+              afterSnapshot: emptySnapshot,
+              appliedCount: 1,
+              skippedCount: 0,
+              decisionMetadata: structuredData.whyChanged
+                ? { whyChanged: structuredData.whyChanged, intentType: intentResult.type }
+                : { intentType: intentResult.type },
+            });
+          } catch (logErr) {
+            logger.warn({ logErr }, "[ChangeEngine] Failed to write AI change log entry — non-fatal");
+          }
+        }
+      } else {
+        logger.info(
+          { userId, systemId: savedSystem.id, programName: structuredData.programName },
+          "[AutoSave] New training system created from program"
+        );
+      }
     } catch (err) {
-      logger.error({ err, userId }, "[AutoSave] Failed to auto-save training system — user can still save manually");
+      logger.error({ err, userId }, "[AutoSave] Failed to save training system — user can still save manually");
     }
   }
 

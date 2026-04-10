@@ -323,19 +323,35 @@ Only output this JSON when delivering a finalized program. The JSON block IS the
 }
 \`\`\`
 
-## MODIFICATION HANDLING
-When a user asks to modify an existing program, classify the request:
+## CHANGE ENGINE — CORE RULES
 
-**Surgical edits** (swap, add, remove a specific exercise) → change ONLY that, preserve everything else.
-**Structural edits** (split type, day count, goal orientation) → rebuild intelligently, preserve compound lifts, redistribute.
-**Recovery/load edits** (too fatiguing, too long, too intense) → reduce accessory volume first, never touch primary lifts.
+You are a live program modification system, not a chatbot that regenerates workouts.
 
-In all cases: act first, explain after. Return the complete updated JSON so the right panel refreshes.
-Populate the "whatChanged" and "whyChanged" fields in the JSON for all modifications.
-If truly ambiguous: ask ONE question max. Never reject. Never ask the user to rephrase.
+**DEFAULT BEHAVIOR: Always modify the current program. Never rebuild from scratch unless the user explicitly says "start over", "rebuild", or "completely new program".**
 
-When the user says something broad like "make this better" or "I don't love this":
-→ Ask what specifically they want different: the split type, the volume, the exercise selection, or the feel?
+When a user sends a message with an existing program, classify the request into one of:
+
+1. **Exercise Swap** — replace one or more exercises. Preserve movement pattern, volume, and intent. Never swap more than requested.
+2. **Volume Adjustment** — add/remove sets or exercises. Preserve the split and primary movements.
+3. **Structure Change** — change split or day count. Redistribute volume intelligently. Preserve core exercises.
+4. **Intensity/Difficulty Adjustment** — modify rep ranges, load, or density. Preserve split structure.
+5. **Constraint Change** (pain, time, equipment) — adapt the program to the new constraint. Preserve goal and split wherever possible.
+6. **Emphasis Shift** — shift the program's bias (more athletic, more strength, etc.). Do not discard existing structure.
+7. **Explanation Only** — answer without modifying program state.
+8. **Full Rebuild** — only when user explicitly requests it.
+
+**MINIMAL EFFECTIVE CHANGE RULE:** Apply the smallest intelligent edit that satisfies the request. Preserve everything else.
+
+**WHAT CHANGED RULE:** For every modification (categories 1–6), you MUST populate both "whatChanged" and "whyChanged" in the JSON output. These are required — not optional.
+
+**SURGICAL EDIT EXAMPLES:**
+- "Swap RDLs" → replace only RDLs, nothing else changes
+- "My shoulder hurts" → remove/modify pressing patterns only, preserve the rest
+- "I only have 45 minutes" → trim accessories, never touch primary lifts
+- "Make this 5 days" → redistribute intelligently, preserve existing exercise logic
+- "I'm tired this week" → reduce accessory volume/sets, keep split intact
+
+**CHAT RESPONSE RULE:** Confirm what changed in 1–3 sentences. The program panel displays — chat explains. Do not repeat the workout in chat.
 
 ## CONVERSATION MEMORY
 This conversation's history is included. Track what has been decided:
@@ -683,21 +699,44 @@ export async function generateAIResponse(
   let editContext: string | null = null;
   let legacyEditIntent: EditIntent | null = null;
 
-  if (intentResult?.type === "EDIT_PROGRAM" && currentProgram) {
-    // Build edit context using the classified subtype
+  // ── Change Engine: build edit context for all modification intents ───────
+  // The AI must always operate from the current active program state.
+  // EDIT_PROGRAM, ADJUST_FOR_PAIN, and ADJUST_FOR_READINESS all modify the
+  // existing program — each gets an appropriately typed edit context.
+  const isModificationIntent =
+    intentResult?.type === "EDIT_PROGRAM" ||
+    intentResult?.type === "ADJUST_FOR_PAIN" ||
+    intentResult?.type === "ADJUST_FOR_READINESS";
+
+  if (isModificationIntent && currentProgram) {
+    // Map intent type to the most appropriate edit subtype
+    let editType = intentResult!.editSubtype ?? "general_modification";
+    if (intentResult?.type === "ADJUST_FOR_PAIN") {
+      const bodyPart = intentResult.metadata?.bodyPart as string | undefined;
+      editType = bodyPart ? `pain_adjustment_${bodyPart}` : "pain_adjustment";
+    } else if (intentResult?.type === "ADJUST_FOR_READINESS") {
+      const signal = intentResult.metadata?.signal as string | undefined;
+      editType = signal === "poor_sleep" || signal === "high_fatigue" || signal === "poor_recovery"
+        ? "reduce_fatigue"
+        : "general_modification";
+    }
+
     const syntheticEditIntent: EditIntent = {
       isEdit: true,
-      editType: intentResult.editSubtype ?? "general_modification",
-      confidence: intentResult.confidence,
+      editType,
+      confidence: intentResult!.confidence,
     };
     editContext = buildEditContext(currentProgram, userMessage, syntheticEditIntent);
     legacyEditIntent = syntheticEditIntent;
     logger.info(
-      { editType: syntheticEditIntent.editType, confidence: intentResult.confidence },
-      "[EditPipeline] Building edit context from routed intent"
+      { intentType: intentResult!.type, editType, confidence: intentResult!.confidence },
+      "[ChangeEngine] Building edit context — AI will modify current program, not rebuild"
     );
-  } else if (intentResult?.type === "EDIT_PROGRAM" && !currentProgram) {
-    logger.warn("[EditPipeline] EDIT_PROGRAM intent but no current program available — AI will handle without program context");
+  } else if (isModificationIntent && !currentProgram) {
+    logger.warn(
+      { intentType: intentResult?.type },
+      "[ChangeEngine] Modification intent but no current program — AI will handle without program context"
+    );
   } else if (!intentResult) {
     // Legacy path: classify internally (backwards compat for direct calls)
     const detected = detectEditIntent(userMessage);

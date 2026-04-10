@@ -148,7 +148,9 @@ export interface ChangeLogEntry {
   targetId: number | null;
   targetLabel: string | null;
   appliedCount: number;
+  skippedCount: number;
   restoredFromId: number | null;
+  decisionMetadata: Record<string, unknown> | null;
   createdAt: Date;
   // Snapshots omitted in list view for efficiency — fetched in detail view
 }
@@ -173,7 +175,9 @@ export async function getChangeHistory(
       targetId: systemChangeLog.targetId,
       targetLabel: systemChangeLog.targetLabel,
       appliedCount: systemChangeLog.appliedCount,
+      skippedCount: systemChangeLog.skippedCount,
       restoredFromId: systemChangeLog.restoredFromId,
+      decisionMetadata: systemChangeLog.decisionMetadata,
       createdAt: systemChangeLog.createdAt,
     })
     .from(systemChangeLog)
@@ -186,7 +190,7 @@ export async function getChangeHistory(
     .orderBy(desc(systemChangeLog.createdAt))
     .limit(limit);
 
-  return baseQuery;
+  return baseQuery as unknown as ChangeLogEntry[];
 }
 
 // ─── Fetch single change detail (with snapshots) ──────────────────────────────

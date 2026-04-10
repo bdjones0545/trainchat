@@ -1145,3 +1145,157 @@ export async function createTrainingSystemFromProgram(
   logger.info({ systemId: system.id, userId }, "[TrainingSystem] createTrainingSystemFromProgram — complete");
   return system;
 }
+
+// ─── Upsert: update existing system or create new ───────────────────────────
+//
+// The Change Engine calls this instead of createTrainingSystemFromProgram.
+// If the user already has an active training system, we UPDATE it in place:
+//   - delete the existing phases (cascades to weeks → sessions → exercises)
+//   - recreate everything from the new program structure
+//   - keep the same system row/ID so the change log links correctly
+// If no active system exists, we create a brand-new one.
+//
+// Returns { system, isUpdate } so callers can log the right message.
+
+export async function upsertTrainingSystemFromProgram(
+  userId: number,
+  program: ChatProgram
+): Promise<{ system: typeof trainingSystems.$inferSelect; isUpdate: boolean }> {
+  if (!program.days || !Array.isArray(program.days) || program.days.length === 0) {
+    throw new Error("Program must have at least one training day");
+  }
+
+  const existingSystem = await getActiveTrainingSystem(userId);
+
+  // ── No active system → create fresh ──────────────────────────────────────
+  if (!existingSystem) {
+    const system = await createTrainingSystemFromProgram(userId, program);
+    return { system, isUpdate: false };
+  }
+
+  // ── Active system exists → update in place ────────────────────────────────
+  logger.info(
+    { userId, systemId: existingSystem.id, programName: program.programName },
+    "[TrainingSystem] upsertTrainingSystemFromProgram — updating existing system"
+  );
+
+  const goal = inferGoalFromProgram(program);
+  const daysPerWeek = program.days.length;
+  const phaseConfig = buildPhaseConfig(goal, daysPerWeek);
+
+  // Update system-level metadata (goal/style may have changed)
+  await db
+    .update(trainingSystems)
+    .set({
+      name: program.programName,
+      overarchingGoal: program.description ?? program.programName,
+      trainingStyle: program.splitType ?? phaseConfig.phaseName,
+      weeklyFrequency: daysPerWeek,
+      metadata: { source: "chat_edit", progressionStrategy: program.progressionStrategy ?? null } as any,
+    })
+    .where(eq(trainingSystems.id, existingSystem.id));
+
+  // Delete all existing phases — cascade removes weeks → sessions → exercises
+  const existingPhases = await db
+    .select({ id: trainingPhases.id })
+    .from(trainingPhases)
+    .where(eq(trainingPhases.trainingSystemId, existingSystem.id));
+
+  for (const phase of existingPhases) {
+    await db.delete(trainingPhases).where(eq(trainingPhases.id, phase.id));
+  }
+
+  // Recreate Phase 1 with the new program
+  const [phase] = await db.insert(trainingPhases).values({
+    trainingSystemId: existingSystem.id,
+    name: phaseConfig.phaseName,
+    goal: phaseConfig.phaseGoal,
+    emphasis: phaseConfig.emphasis,
+    weekCount: 4,
+    orderIndex: 0,
+    status: "current",
+    notes: program.progressionStrategy ?? null,
+  }).returning();
+
+  // Link system → phase
+  await db
+    .update(trainingSystems)
+    .set({ currentPhaseId: phase.id })
+    .where(eq(trainingSystems.id, existingSystem.id));
+
+  const dayOfWeekMap = assignDaysOfWeek(daysPerWeek);
+
+  // Recreate 4 weeks of sessions and exercises
+  for (let weekIdx = 0; weekIdx < 4; weekIdx++) {
+    const weekConfig = phaseConfig.weekConfigs[weekIdx];
+    const weekNumber = weekIdx + 1;
+    const isDeload = weekConfig.volumeLevel === "deload";
+
+    const [week] = await db.insert(trainingWeeks).values({
+      trainingPhaseId: phase.id,
+      weekNumber,
+      label: weekConfig.label,
+      focus: weekConfig.focus,
+      volumeLevel: weekConfig.volumeLevel,
+      status: weekIdx === 0 ? "current" : "upcoming",
+      orderIndex: weekIdx,
+    }).returning();
+
+    for (let dayIdx = 0; dayIdx < program.days.length; dayIdx++) {
+      const day = program.days[dayIdx];
+      const sessionType = inferSessionType(day);
+      const dayOfWeek = dayOfWeekMap[dayIdx] ?? dayIdx + 1;
+
+      const warmupNotes = getWarmupNotes(sessionType, day.focus ?? day.name);
+      const coachingNotes = day.notes
+        ? day.notes
+        : getCoachingNotes(goal, weekIdx, day.name);
+
+      const [session] = await db.insert(trainingSessions).values({
+        trainingWeekId: week.id,
+        label: day.name,
+        sessionType,
+        dayOfWeek,
+        emphasis: day.focus ?? null,
+        warmupNotes,
+        coachingNotes,
+        isRestDay: sessionType === "rest",
+        orderIndex: dayIdx,
+      }).returning();
+
+      const exercises = isDeload
+        ? day.exercises.slice(0, Math.max(Math.ceil(day.exercises.length * 0.6), 2))
+        : day.exercises;
+
+      for (let exIdx = 0; exIdx < exercises.length; exIdx++) {
+        const ex = exercises[exIdx];
+        const category = mapClassificationToCategory(ex.classification);
+
+        await db.insert(sessionExercises).values({
+          trainingSessionId: session.id,
+          name: ex.name,
+          category,
+          sets: typeof ex.sets === "number" ? ex.sets : null,
+          reps: ex.reps ?? null,
+          rest: ex.rest ?? null,
+          tempo: null,
+          notes: ex.notes ?? ex.intent ?? null,
+          orderIndex: exIdx,
+        });
+      }
+    }
+  }
+
+  logger.info(
+    { systemId: existingSystem.id, userId },
+    "[TrainingSystem] upsertTrainingSystemFromProgram — update complete"
+  );
+
+  // Return refreshed system row
+  const [updatedSystem] = await db
+    .select()
+    .from(trainingSystems)
+    .where(eq(trainingSystems.id, existingSystem.id));
+
+  return { system: updatedSystem, isUpdate: true };
+}

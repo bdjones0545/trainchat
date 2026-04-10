@@ -1,0 +1,289 @@
+Upgrade TrainChat’s agent communication layer so it feels like a real live professional agent working on the user’s program in real time.
+
+GOAL:
+Right now the system may be doing work in the background, but the user does not feel like the agent is actively collaborating with them.
+
+TrainChat should feel more like Replit:
+- it acknowledges requests immediately
+- it shows that it is thinking
+- it sends progress-style updates while working
+- it clearly tells the user when the build is complete
+- it feels alive, responsive, and premium
+
+The user should never wonder:
+- “Did it get my message?”
+- “Is it doing anything?”
+- “Is it stuck?”
+- “Is it done yet?”
+
+--------------------------------------------------
+CORE PRODUCT RULE
+--------------------------------------------------
+
+The agent must feel active during program generation and edits.
+
+Do not let the user send a request and then stare at a dead UI.
+
+Instead, the system should communicate in stages.
+
+--------------------------------------------------
+DESIRED AGENT FLOW
+--------------------------------------------------
+
+When the user sends a request, the agent should follow a real-time communication sequence:
+
+STAGE 1: Immediate acknowledgment
+Within 0–1 second, post a short message acknowledging the request.
+
+Examples:
+- “Got it — building this now.”
+- “Understood. I’m putting this together.”
+- “On it — I’m mapping out your program.”
+- “Got it. I’m building around your goal, equipment, and schedule.”
+
+Purpose:
+The user instantly knows the system heard them.
+
+STAGE 2: Thinking / working state
+Show visible live thinking status while the system is processing.
+
+This should NOT feel like a frozen app.
+It should feel like an agent actively working.
+
+Examples:
+- animated “Thinking…”
+- “Building your weekly structure…”
+- “Selecting exercises…”
+- “Balancing volume and recovery…”
+- “Finalizing your program…”
+
+Important:
+These should appear as live status updates, progress messages, or staged agent updates.
+Not just a static spinner with no meaning.
+
+STAGE 3: Optional progress-style micro updates
+If generation takes more than a few seconds, send short intermediate updates.
+
+Examples:
+- “I’ve locked in your split.”
+- “I’m adjusting exercise selection to match your equipment.”
+- “I’m balancing weekly volume now.”
+- “I’m making sure this fits your session length.”
+
+These updates should be brief and premium.
+Do not overdo them.
+Do not make them robotic or repetitive.
+
+STAGE 4: Completion message
+When the program or edit is complete, send a clean final message.
+
+Examples:
+- “Done. Your program is built and saved in the system panel.”
+- “Finished. I built your split and saved it to your live program.”
+- “Your update is complete — check the Program panel.”
+- “Done. I applied the change and updated your training system.”
+
+This completion message is mandatory.
+The user must clearly know the work is finished.
+
+--------------------------------------------------
+CHAT BEHAVIOR RULES
+--------------------------------------------------
+
+TrainChat should behave like a live agent, not a silent generator.
+
+Requirements:
+1. Immediate response after user message
+2. Visible thinking state
+3. Progress communication if work lasts more than a short moment
+4. Clear completion signal
+5. Tone should remain professional and performance-oriented
+
+Avoid:
+- dead silence
+- giant delays with no explanation
+- generic “loading”
+- robotic spammy updates
+- too many unnecessary messages
+
+--------------------------------------------------
+MESSAGE TIMING LOGIC
+--------------------------------------------------
+
+Implement timing behavior like this:
+
+If task is very fast:
+- acknowledgment
+- brief thinking indicator
+- completion message
+
+If task takes moderate time:
+- acknowledgment
+- thinking indicator
+- 1–2 intermediate progress updates
+- completion message
+
+If task takes longer:
+- acknowledgment
+- live thinking state
+- staged progress updates tied to actual generation steps
+- completion message
+
+Do not fake dozens of updates.
+Keep it believable and tied to real internal workflow.
+
+--------------------------------------------------
+VISIBLE THINKING UX
+--------------------------------------------------
+
+Add a stronger “thinking” experience in chat.
+
+Possible options:
+- animated agent bubble with changing status text
+- pulsing “Agent is building…”
+- step-based live status card
+- fading-in progress lines
+
+Preferred status sequence:
+1. Understanding request
+2. Building structure
+3. Selecting exercises
+4. Finalizing program
+5. Saved
+
+This should feel premium and dynamic.
+
+--------------------------------------------------
+AGENT PERSONALITY / TONE
+--------------------------------------------------
+
+The tone should feel like a professional performance architect.
+
+Style:
+- concise
+- confident
+- collaborative
+- premium
+- calm
+- intelligent
+
+Good:
+- “Got it — I’m building this now.”
+- “I’m tightening the structure to fit your 45-minute sessions.”
+- “Done. Your revised program is saved.”
+
+Bad:
+- overhyped language
+- too much cheerleading
+- robotic repeated phrasing
+- long paragraphs during progress states
+
+--------------------------------------------------
+MULTI-MESSAGE WORKFLOW
+--------------------------------------------------
+
+The agent should be able to send multiple short messages during longer builds.
+
+But these messages should be purposeful.
+
+Good example flow:
+
+User:
+“Build me a 4-day upper/lower hypertrophy plan with 60-minute sessions and full gym access.”
+
+Agent:
+1. “Got it — building this now.”
+2. “I’m setting your weekly structure.”
+3. “I’m choosing exercises and balancing volume.”
+4. “Done. Your program is built and saved in the Program panel.”
+
+This is much better than:
+- one giant answer after a long silence
+
+--------------------------------------------------
+SYSTEM EVENT TRIGGERS
+--------------------------------------------------
+
+Tie communication updates to real system events when possible:
+
+Examples:
+- request received
+- program state initialized
+- split created
+- exercise selection completed
+- quality checks complete
+- program saved
+- UI updated
+
+The agent should feel connected to actual system work.
+
+--------------------------------------------------
+PROGRAM PANEL COORDINATION
+--------------------------------------------------
+
+When the final completion message appears:
+- the Program panel should already be updated or update immediately
+- the user should be able to verify the work visually
+- optionally highlight the updated panel briefly
+
+Completion should feel synchronized:
+chat says it is done
+and the system visibly reflects that it is done
+
+--------------------------------------------------
+DONE STATE UX
+--------------------------------------------------
+
+When complete:
+- stop thinking animation
+- show completion message
+- optionally show a subtle “Saved” confirmation
+- make it obvious where the user should look next
+
+Example:
+“Done. Your program is ready in the Program tab.”
+
+--------------------------------------------------
+EDIT FLOW TOO
+--------------------------------------------------
+
+This system should work for both:
+1. new program generation
+2. edits to an existing program
+
+Example edit flow:
+
+User:
+“Make this 5 days instead of 4.”
+
+Agent:
+1. “Got it — updating your split.”
+2. “I’m redistributing volume across the week.”
+3. “Done. I expanded the program to 5 days and saved the update.”
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+This feature is successful if:
+
+1. The user always gets an immediate acknowledgment
+2. The UI visibly shows the agent working
+3. Longer tasks feel alive through staged updates
+4. The user gets a clear completion message every time
+5. The agent feels like a live collaborator, not a background script
+
+--------------------------------------------------
+FINAL PRODUCT PRINCIPLE
+--------------------------------------------------
+
+TrainChat should feel like a real agent building with the user in real time.
+
+The user should experience:
+- “It heard me”
+- “It’s working”
+- “It’s thinking”
+- “It’s updating my system”
+- “It’s done”
+
+Build this communication layer so the agent feels alive, collaborative, and premium — much closer to the Replit experience.
