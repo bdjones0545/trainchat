@@ -826,4 +826,398 @@ Keep it helpful and intelligent, never promotional.`;
   });
 });
 
+// ─── SSE Streaming Endpoint ───────────────────────────────────────────────────
+// POST /api/conversations/:id/messages/stream
+// Mirrors the standard send-message handler but streams Server-Sent Events so
+// the UI can show live thinking/progress states instead of waiting for the full
+// response. Same business logic, same routing rules — just with emit() calls at
+// key checkpoints.
+
+router.post("/conversations/:id/messages/stream", requireAuth, async (req, res): Promise<void> => {
+  const params = SendMessageParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const parsed = SendMessageBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  // ── SSE setup ─────────────────────────────────────────────────────────────
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  function emit(event: Record<string, unknown>): void {
+    try {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    } catch {
+      // client disconnected
+    }
+  }
+
+  function done(event: Record<string, unknown>): void {
+    emit(event);
+    res.end();
+  }
+
+  const userId = req.session.userId!;
+
+  // ── Plan gating ───────────────────────────────────────────────────────────
+  let planInfo = await getUserPlanInfo(userId).catch(() => null);
+  if (planInfo && !planInfo.canSendMessage) {
+    done({
+      type: "error",
+      status: 402,
+      message:
+        planInfo.plan === "free"
+          ? "You've used your 5 free interactions. Upgrade to keep training with your AI coach."
+          : "You've reached your monthly message limit. Upgrade to Pro for unlimited access.",
+    });
+    return;
+  }
+
+  const [convo] = await db
+    .select()
+    .from(conversationsTable)
+    .where(eq(conversationsTable.id, params.data.id));
+
+  if (!convo || convo.userId !== userId) {
+    done({ type: "error", status: 404, message: "Conversation not found" });
+    return;
+  }
+
+  // Save user message
+  const [userMessage] = await db
+    .insert(messagesTable)
+    .values({ conversationId: params.data.id, role: "user", content: parsed.data.content })
+    .returning();
+
+  // Auto-title on first message
+  const existingMessages = await db
+    .select({ id: messagesTable.id })
+    .from(messagesTable)
+    .where(eq(messagesTable.conversationId, params.data.id));
+  if (existingMessages.length === 1) {
+    const autoTitle = parsed.data.content.slice(0, 60).trim() + (parsed.data.content.length > 60 ? "…" : "");
+    await db
+      .update(conversationsTable)
+      .set({ title: autoTitle, updatedAt: new Date() })
+      .where(eq(conversationsTable.id, params.data.id));
+  }
+
+  // ── Emit immediate acknowledgment ─────────────────────────────────────────
+  emit({ type: "acknowledged", text: "On it." });
+
+  // Get history
+  const history = await db
+    .select()
+    .from(messagesTable)
+    .where(eq(messagesTable.conversationId, params.data.id))
+    .orderBy(messagesTable.createdAt);
+
+  const isPro = planInfo?.features.adaptationContext ?? false;
+  const hasMemory = planInfo?.features.memoryContext ?? false;
+
+  let adaptationCtx = "";
+  let memoryCtx = "";
+  let insightHint = "";
+
+  if (isPro) {
+    const [adaptation, memories] = await Promise.all([
+      buildAdaptationContext(userId).catch(() => ({ promptContext: "" })),
+      listMemories(userId).catch(() => []),
+    ]);
+    adaptationCtx = adaptation.promptContext;
+    memoryCtx = buildMemoryContext(memories);
+    const insights = await generateInsights(userId, memories).catch(() => []);
+    insightHint = buildInsightPromptHint(insights);
+    syncMemoriesFromData(userId).catch(() => {});
+  }
+
+  let conversionHint = "";
+  if (planInfo?.plan === "free") {
+    const remaining = planInfo.messagesRemaining ?? 0;
+    conversionHint = `\n## COACHING CONTEXT (internal)\nThis athlete is on the free access tier with ${remaining} interaction${remaining === 1 ? "" : "s"} remaining.\nWhen it feels natural — especially when discussing program details, progress tracking, or long-term planning — mention capabilities like adaptive training, session memory, and program evolution that you can offer them as they progress.\nKeep it helpful and intelligent, never promotional.`;
+  }
+
+  // ── Phase A: Intent Classification ────────────────────────────────────────
+  const [latestStructuredProgram, activeSystem] = await Promise.all([
+    Promise.resolve(resolveCurrentProgram(history)),
+    getActiveTrainingSystem(userId).catch(() => null),
+  ]);
+
+  const hasActiveProgram = latestStructuredProgram !== null;
+  const hasActiveSystem = activeSystem !== null;
+  const hasAnyProgram = hasActiveProgram || hasActiveSystem;
+
+  const intentResult = classifyIntent(parsed.data.content, {
+    hasActiveProgram: hasAnyProgram,
+    conversationTurnCount: history.filter((m) => m.role === "user").length,
+  });
+
+  logIntentSummary(parsed.data.content, intentResult, hasAnyProgram);
+
+  const actionDecision = resolveAction(intentResult, latestStructuredProgram, parsed.data.content);
+  logDecisionSummary(parsed.data.content, intentResult, actionDecision, hasActiveProgram);
+
+  const responseMode = selectResponseMode(actionDecision.actionType);
+
+  // Emit thinking stage based on intent type
+  const thinkingStep = (
+    intentResult.type === "CREATE_PROGRAM"
+      ? "Building your program structure..."
+      : intentResult.type === "EDIT_PROGRAM" || intentResult.type === "ADJUST_FOR_PAIN" || intentResult.type === "ADJUST_FOR_READINESS"
+      ? "Reading your current program..."
+      : "Thinking through your request..."
+  );
+  emit({ type: "thinking", step: thinkingStep, intentType: intentResult.type });
+
+  // ── Helper: build the final SSE complete response ─────────────────────────
+  function buildCompleteEvent(opts: {
+    userMsg: typeof userMessage;
+    assistantMsg: { id: number; conversationId: number; role: string; content: string; createdAt: Date; structuredData: string | null };
+    planInfoVal: typeof planInfo;
+    intentResultVal: typeof intentResult;
+    systemSavedVal: boolean;
+    systemIdVal?: number;
+    systemEditVal?: { applied: boolean };
+  }) {
+    return {
+      type: "complete",
+      userMessage: {
+        id: opts.userMsg.id,
+        conversationId: opts.userMsg.conversationId,
+        role: opts.userMsg.role,
+        content: opts.userMsg.content,
+        createdAt: opts.userMsg.createdAt.toISOString(),
+        structuredData: null,
+      },
+      assistantMessage: {
+        id: opts.assistantMsg.id,
+        conversationId: opts.assistantMsg.conversationId,
+        role: opts.assistantMsg.role,
+        content: opts.assistantMsg.content,
+        createdAt: opts.assistantMsg.createdAt.toISOString(),
+        structuredData: opts.assistantMsg.structuredData ?? null,
+      },
+      planInfo: opts.planInfoVal
+        ? { plan: opts.planInfoVal.plan, messagesRemaining: opts.planInfoVal.messagesRemaining }
+        : null,
+      intentDebug: {
+        type: opts.intentResultVal.type,
+        confidence: opts.intentResultVal.confidence,
+        editSubtype: opts.intentResultVal.editSubtype ?? null,
+      },
+      systemSaved: opts.systemSavedVal,
+      systemId: opts.systemIdVal,
+      systemEdit: opts.systemEditVal,
+    };
+  }
+
+  // ── Short-circuit: RETRIEVE_CURRENT_PROGRAM ───────────────────────────────
+  if (intentResult.type === "RETRIEVE_CURRENT_PROGRAM" && latestStructuredProgram) {
+    const retrieveContent = formatShortCircuitResponse({ mode: "EXECUTION_RESPONSE", hasActiveProgram: true });
+    const [assistantMessage] = await db.insert(messagesTable).values({
+      conversationId: params.data.id, role: "assistant", content: retrieveContent,
+      structuredData: JSON.stringify(latestStructuredProgram),
+    }).returning();
+    await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+    done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false }));
+    return;
+  }
+
+  // ── Short-circuit: ASK_CLARIFYING_QUESTION ────────────────────────────────
+  if (actionDecision.shouldAsk && actionDecision.clarifyingQuestion) {
+    const clarifyContent = formatShortCircuitResponse({ mode: "CLARIFICATION_RESPONSE", hasActiveProgram, clarifyingQuestion: actionDecision.clarifyingQuestion });
+    const [assistantMessage] = await db.insert(messagesTable).values({
+      conversationId: params.data.id, role: "assistant", content: clarifyContent, structuredData: null,
+    }).returning();
+    await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+    done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false }));
+    return;
+  }
+
+  // ── Short-circuit: SAVE_PROGRAM ───────────────────────────────────────────
+  if (intentResult.type === "SAVE_PROGRAM") {
+    const saveContent = formatShortCircuitResponse({ mode: "EXECUTION_RESPONSE", hasActiveProgram: !!latestStructuredProgram });
+    const [assistantMessage] = await db.insert(messagesTable).values({
+      conversationId: params.data.id, role: "assistant", content: saveContent,
+      structuredData: latestStructuredProgram ? JSON.stringify(latestStructuredProgram) : null,
+    }).returning();
+    await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+    done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false }));
+    return;
+  }
+
+  // ── Vibe Edit Mode ────────────────────────────────────────────────────────
+  if (hasActiveSystem && isVibeEditIntent(intentResult)) {
+    try {
+      const [fullSystem, decisionMemory] = await Promise.all([
+        getFullTrainingSystem(activeSystem!.id),
+        buildDecisionMemory(activeSystem!.id, userId).catch(() => null),
+      ]);
+
+      if (fullSystem) {
+        emit({ type: "thinking", step: "Applying your change...", intentType: intentResult.type });
+
+        const editPlan = await interpretEditRequest(
+          parsed.data.content, fullSystem, undefined,
+          adaptationCtx || undefined, decisionMemory?.decisionMemoryContext || undefined,
+        );
+
+        emit({ type: "thinking", step: "Checking program quality...", intentType: intentResult.type });
+
+        const editResult = await applyEditPlan(editPlan);
+
+        if (editResult.appliedCount > 0) {
+          emit({ type: "thinking", step: "Saving your update...", intentType: intentResult.type });
+
+          const changeLogId = await createChangeLogEntry({
+            userId, trainingSystemId: activeSystem!.id, source: "ai_edit",
+            intent: editPlan.intent, scope: editPlan.scope,
+            changeSummary: editResult.changeSummary, requestText: parsed.data.content,
+            beforeSnapshot: editResult.beforeSnapshot, afterSnapshot: editResult.afterSnapshot,
+            appliedCount: editResult.appliedCount, skippedCount: editResult.skippedCount,
+          });
+
+          const coachingContent = buildVibeEditCoachingResponse(editResult);
+          const systemEditData = {
+            _type: "system_edit" as const,
+            changeSummary: editResult.changeSummary,
+            changedIds: editResult.changedIds,
+            systemId: activeSystem!.id,
+            changeLogId,
+          };
+
+          const [assistantMessage] = await db.insert(messagesTable).values({
+            conversationId: params.data.id, role: "assistant",
+            content: coachingContent, structuredData: JSON.stringify(systemEditData),
+          }).returning();
+
+          await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+
+          if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+            stripeStorage.incrementMessageCount(userId).catch(() => {});
+          }
+
+          done({
+            ...buildCompleteEvent({
+              userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo,
+              intentResultVal: intentResult, systemSavedVal: false,
+            }),
+            systemEdit: { applied: true, changeSummary: editResult.changeSummary, changedIds: editResult.changedIds, systemId: activeSystem!.id, changeLogId },
+          });
+          return;
+        }
+        // No changes applied — fall through to AI
+        logger.warn({ intent: editPlan.intent, skipped: editResult.skippedCount }, "[VibeEdit:stream] No changes applied — falling back to AI");
+      }
+    } catch (err: any) {
+      logger.error({ err: err?.message }, "[VibeEdit:stream] Edit pipeline failed — falling back to AI");
+    }
+  }
+
+  // ── Standard AI Response Path ─────────────────────────────────────────────
+  emit({ type: "thinking", step: intentResult.type === "CREATE_PROGRAM" ? "Selecting exercises..." : "Building your response...", intentType: intentResult.type });
+
+  const isModificationIntent = (
+    intentResult.type === "EDIT_PROGRAM" ||
+    intentResult.type === "ADJUST_FOR_PAIN" ||
+    intentResult.type === "ADJUST_FOR_READINESS" ||
+    intentResult.type === "RETRIEVE_CURRENT_PROGRAM"
+  );
+  const currentProgram = isModificationIntent ? latestStructuredProgram : null;
+
+  let preTransformedProgram: ProgramStructure | null = currentProgram;
+  let transformHint: string | null = null;
+
+  if (actionDecision.actionType === "STRUCTURAL_REBUILD" && currentProgram) {
+    const meta = intentResult.metadata as { targetSplit?: string; targetDays?: number | null; targetGoalShift?: string | null } | undefined;
+    const transformType = resolveTransformType(meta?.targetSplit ?? "unknown", meta?.targetDays ?? null, meta?.targetGoalShift ?? null, currentProgram.days.length);
+    const transformRequest: TransformRequest = { type: transformType, targetDays: meta?.targetDays ?? currentProgram.days.length, rawRequest: parsed.data.content };
+    try {
+      const result = transformProgram(currentProgram, transformRequest);
+      preTransformedProgram = result.program;
+      transformHint = buildTransformPromptHint(result.log);
+    } catch (err) {
+      logger.error({ err }, "[ConversationRouter:stream] Split transform failed — falling back to AI-only");
+    }
+  }
+
+  const { content: aiContent, structuredData } = await generateAIResponse(
+    parsed.data.content,
+    history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+    userId,
+    {
+      adaptationContext: adaptationCtx || undefined,
+      memoryContext: (hasMemory && memoryCtx) ? memoryCtx : undefined,
+      insightHint: insightHint || undefined,
+      conversionHint: conversionHint || undefined,
+      currentProgram: preTransformedProgram,
+      intentResult,
+      actionDecision,
+      transformHint: transformHint || undefined,
+      responseMode,
+    }
+  );
+
+  // ── Persist AI response ───────────────────────────────────────────────────
+  emit({ type: "thinking", step: "Saving your program...", intentType: intentResult.type });
+
+  const [assistantMessage] = await db.insert(messagesTable).values({
+    conversationId: params.data.id, role: "assistant", content: aiContent,
+    structuredData: structuredData ? JSON.stringify(structuredData) : null,
+  }).returning();
+
+  await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+
+  // ── Auto-save / Change Engine ─────────────────────────────────────────────
+  let systemSaved = false;
+  let autoSavedSystemId: number | undefined;
+
+  if (structuredData && Array.isArray(structuredData.days) && structuredData.days.length > 0) {
+    try {
+      const { system: savedSystem, isUpdate } = await upsertTrainingSystemFromProgram(userId, structuredData);
+      systemSaved = true;
+      autoSavedSystemId = savedSystem.id;
+
+      if (isUpdate && structuredData.whatChanged) {
+        try {
+          const emptySnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
+          await createChangeLogEntry({
+            userId, trainingSystemId: savedSystem.id, source: "ai_edit",
+            intent: intentResult.editSubtype ?? intentResult.type.toLowerCase(),
+            scope: "system", changeSummary: structuredData.whatChanged,
+            requestText: parsed.data.content.slice(0, 300),
+            beforeSnapshot: emptySnapshot, afterSnapshot: emptySnapshot,
+            appliedCount: 1, skippedCount: 0,
+            decisionMetadata: structuredData.whyChanged
+              ? { whyChanged: structuredData.whyChanged, intentType: intentResult.type }
+              : { intentType: intentResult.type },
+          });
+        } catch (logErr) {
+          logger.warn({ logErr }, "[ChangeEngine:stream] Failed to write AI change log — non-fatal");
+        }
+      }
+    } catch (err) {
+      logger.error({ err, userId }, "[AutoSave:stream] Failed to save training system — non-fatal");
+    }
+  }
+
+  if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+    stripeStorage.incrementMessageCount(userId).catch(() => {});
+  }
+
+  done(buildCompleteEvent({
+    userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo,
+    intentResultVal: intentResult, systemSavedVal: systemSaved, systemIdVal: autoSavedSystemId,
+  }));
+});
+
 export default router;
+

@@ -12,7 +12,6 @@ import {
   useListConversations,
   useCreateConversation,
   useListMessages,
-  useSendMessage,
   useListMemories,
   useListInsights,
   useLogout,
@@ -23,7 +22,7 @@ import { customFetch } from "@workspace/api-client-react";
 import TopNav from "@/components/layout/TopNav";
 import MobileSlideLayout, { type SlidePanel } from "@/components/layout/MobileSlideLayout";
 import MessageBubble from "@/components/chat/MessageBubble";
-import TypingIndicator from "@/components/chat/TypingIndicator";
+import AgentThinking from "@/components/chat/AgentThinking";
 import LiveProgramPanel from "@/components/chat/LiveProgramPanel";
 import { type ProgramStructure } from "@/components/chat/ChatOutput";
 import ReadinessModal from "@/components/chat/ReadinessModal";
@@ -34,6 +33,7 @@ import SessionLogModal from "@/components/chat/SessionLogModal";
 import PaywallModal from "@/components/PaywallModal";
 import PricingModal from "@/components/PricingModal";
 import CalibrationModal from "@/components/chat/CalibrationModal";
+import { useStreamMessage } from "@/hooks/useStreamMessage";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 
 const SUGGESTION_CHIPS = [
@@ -89,7 +89,6 @@ export default function Chat() {
 
   const [activeConvoId, setActiveConvoId] = useState<number | null>(null);
   const [inputText, setInputText] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
   const [latestProgram, setLatestProgram] = useState<ProgramStructure | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
@@ -160,7 +159,7 @@ export default function Chat() {
   const calibrationScore: number = profileRaw?.calibrationScore ?? 0;
 
   const createConvo = useCreateConversation();
-  const sendMessage = useSendMessage();
+  const stream = useStreamMessage();
 
   const isPremium = subscription?.plan === "pro" || subscription?.plan === "elite";
   const currentPlan = subscription?.plan ?? "free";
@@ -190,7 +189,7 @@ export default function Chat() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isTyping]);
+  }, [messages, stream.isActive, stream.state.phase]);
 
   useEffect(() => {
     const programMessages = messages.filter((m) => {
@@ -260,45 +259,41 @@ export default function Chat() {
 
   async function handleSend(text?: string) {
     const content = (text ?? inputText).trim();
-    if (!content || !activeConvoId || sendMessage.isPending) return;
+    if (!content || !activeConvoId || stream.isActive) return;
 
     setInputText("");
     if (inputRef.current) {
       inputRef.current.style.height = "auto";
     }
-    setIsTyping(true);
 
-    sendMessage.mutate(
-      { id: activeConvoId, data: { content } },
-      {
-        onSuccess: (data: any) => {
-          queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(activeConvoId!) });
-          queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
-          setIsTyping(false);
+    const result = await stream.send(activeConvoId, content);
 
-          if (data?.planInfo?.messagesRemaining !== undefined) {
-            setMessagesUsed(data.planInfo.messageCount ?? messagesUsed + 1);
-          }
-
-          if (data?.systemEdit?.applied || data?.systemSaved) {
-            queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
-            queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
-            queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
-            queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
-            queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
-            if (data?.systemSaved) {
-              setIsSaved(true);
-            }
-          }
-        },
-        onError: (err: any) => {
-          setIsTyping(false);
-          if (err?.response?.status === 402 || err?.status === 402 || err?.message?.includes("402")) {
-            setShowPaywall(true);
-          }
-        },
+    if (!result) {
+      // Check if it was a paywall error (phase = error means stream errored)
+      if (stream.state.error?.includes("402") || stream.state.error?.toLowerCase().includes("limit")) {
+        setShowPaywall(true);
       }
-    );
+      return;
+    }
+
+    // Stream completed — process result
+    queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(activeConvoId!) });
+    queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+
+    if (result.planInfo?.messagesRemaining !== undefined) {
+      setMessagesUsed(messagesUsed + 1);
+    }
+
+    if (result.systemEdit?.applied || result.systemSaved) {
+      queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
+      if (result.systemSaved) {
+        setIsSaved(true);
+      }
+    }
   }
 
   async function handleSaveProgram() {
@@ -738,7 +733,13 @@ export default function Chat() {
                 {messages.map((msg) => (
                   <MessageBubble key={msg.id} message={msg} />
                 ))}
-                {isTyping && <TypingIndicator />}
+                {stream.isActive && (
+                  <AgentThinking
+                    acknowledgment={stream.state.acknowledgment || undefined}
+                    thinkingStep={stream.state.phase === "thinking" ? stream.state.thinkingStep : undefined}
+                    intentType={stream.state.intentType}
+                  />
+                )}
 
                 {/* Calibration nudge — shown once after first program is generated */}
                 {latestProgram && calibrationScore < 40 && !calibrationNudgeShown && (
@@ -806,7 +807,7 @@ export default function Chat() {
                   onKeyDown={handleKeyDown}
                   rows={1}
                   placeholder="Describe the training you want to build or adjust…"
-                  disabled={isTyping || sendMessage.isPending}
+                  disabled={stream.isActive}
                   className="flex-1 resize-none bg-transparent px-4 py-3.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none leading-relaxed max-h-40 overflow-y-auto disabled:opacity-60"
                   style={{ minHeight: "52px" }}
                   onInput={(e) => {
@@ -818,7 +819,7 @@ export default function Chat() {
                 <button
                   data-testid="button-send"
                   onClick={() => handleSend()}
-                  disabled={!inputText.trim() || sendMessage.isPending || isTyping || !activeConvoId}
+                  disabled={!inputText.trim() || stream.isActive || !activeConvoId}
                   className="m-2 p-2 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 active:scale-95 flex-shrink-0"
                 >
                   <SendHorizontal className="w-4 h-4" />
