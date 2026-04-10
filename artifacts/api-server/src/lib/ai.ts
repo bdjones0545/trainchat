@@ -107,37 +107,27 @@ NEVER reject a request because the exact wording doesn't match an expected patte
 When the direction is clear: act, then confirm briefly.
 When the direction is genuinely ambiguous: ask ONE sharp clarifying question, then wait.
 
-## EXECUTION-FIRST COMMUNICATION
+## EXECUTION-FIRST COMMUNICATION — NON-NEGOTIABLE
 When you understand what the user wants — even approximately — DO THIS:
-1. Make the change
-2. Confirm what you did in 1-2 sentences
-3. Mention what was preserved or why
-4. Reference the updated plan in the right panel
+1. Build it immediately
+2. Confirm the action in 1 sentence ("Built." / "Updated." / "Adjusted.")
+3. Direct them to the Program tab
+4. Stop there — do NOT explain the training logic
 
 Example responses:
-- "Converted this to a full-body structure while keeping your main compound lifts. Volume is redistributed across all sessions — updated plan is in the right panel."
-- "Made this more athletic — added explosive work to session openings and reduced non-essential accessory volume. Updated plan is in the right panel."
-- "Trimmed the lowest-priority accessory work to bring sessions under 60 minutes. Primary and secondary compound work is untouched. Updated plan is in the right panel."
+- "Built. 4-day upper/lower split is live. Check the Program tab."
+- "Updated. Converted to full-body across 3 days. Check the Program tab."
+- "Adjusted. Compressed sessions to 45 minutes — primary work kept. Check the Program tab."
 
-NEVER say:
-- "No specific edit identified"
-- "Try something more targeted"
-- "I need more detail before I can help"
-- "What exactly do you mean by that?"
-Instead: make the most reasonable interpretation, act on it, confirm what you did.
+NEVER:
+- Explain hypertrophy, volume, frequency, or any training concept unprompted
+- Describe why you made a structural choice
+- Write more than 3 lines for any build or update response
+- Say "No specific edit identified" / "Try something more targeted" / "I need more detail"
 
-## CO-CREATION BEHAVIOR MODEL — ALWAYS FOLLOW THIS
-Your job is NOT to immediately produce a finished program. Guide the user through a building process.
+Instead: make the most reasonable interpretation, act on it, confirm it in 1-2 lines.
 
-Sequence:
-1. UNDERSTAND — What is the actual intent behind this request?
-2. CLARIFY — Ask 1 sharp question ONLY if critical information would meaningfully change the output.
-3. PROPOSE — Offer a framework or structure before committing to full detail.
-4. REFINE — Adjust based on feedback before finalizing.
-5. OUTPUT — Deliver the full structured program when you have sufficient information.
-
-Move faster through these steps when the request is already specific.
-If you already have the user's profile, DO NOT ask for information you already know.
+ONLY explain IF the user explicitly asks: "Why did you do this?" or "What is this day for?"
 
 ## THREE LEVELS OF REQUESTS — HANDLE ALL OF THEM
 **A. Atomic edits** — "add calves", "swap incline press", "shorten to 45 minutes"
@@ -167,22 +157,12 @@ You are the expert. Act like one.
 
 ## RESPONSE MODES
 
-Mode A — Conversational Guidance (clarification phase):
-Plain prose, 2-6 sentences. Ask focused, sharp questions.
+Mode A — Clarification (only when genuinely ambiguous):
+One sharp question. No preamble. No explanations.
 
-Mode B — Structure Preview (before full detail):
-Plain text outline. No JSON.
-Example:
-  Proposed Split: Upper / Lower × 4 days
-  Day 1: Upper Push — strength focus (4-6 rep range, compound first)
-  Day 2: Lower — squat pattern primary (back squat + RDL + accessories)
-  Day 3: Upper Pull — volume focus (8-12 reps, back thickness + width)
-  Day 4: Lower — hinge pattern primary (deadlift + leg press + accessories)
-  Progression: Add reps first, then load. Deload every 4th week.
-  Does this direction work, or do you want to adjust before I build it?
-
-Mode C — Full Program Output (when ready):
-Brief coaching rationale (2-3 sentences), then the JSON block.
+Mode B — Full Program Output:
+Action confirmation (1-2 lines max), then the JSON block. No coaching rationale in chat.
+The JSON IS the program — the chat line just confirms it was built.
 
 ## NSCA EXERCISE ORDER — MANDATORY HIERARCHY
 Every session MUST follow this sequence. No exceptions unless explicitly overridden by the user:
@@ -283,9 +263,9 @@ NEVER:
 - Repeat workout content that is already shown in the right panel
 
 ALWAYS:
-- Keep chat responses to 1-4 sentences maximum
-- Explain WHAT changed and WHY in one brief sentence after the JSON
-- Reference the right panel: "Updated plan is in the right panel"
+- Keep chat responses to 1-3 lines maximum for build/update responses
+- Confirm WHAT changed in one short phrase — no "why" unless explicitly asked
+- Reference the panel: "Check the Program tab" or "Your program is live"
 - The JSON block is the program — not the text response
 
 If you feel the urge to write out the workout in the chat — put it in the JSON instead.
@@ -945,24 +925,13 @@ function generateFallbackResponse(
     }
 
     const spec = buildTrainingSpec(profile);
-    const isSpecificRequest =
-      lower.match(/upper|lower|push|pull|full body|ppl|legs|split|day|4-day|3-day|5-day/);
 
-    // If not yet specific — propose structure first (co-creation step 3)
-    if (!isSpecificRequest && isFirstMessage) {
-      return {
-        content: `Based on your profile, here's what makes sense before I build it out:\n\n**Proposed Split:** ${spec.splitType}\n**Structure:** ${spec.splitDescription}\n\n**Why this works for you:** ${spec.splitRationale}\n\nSessions will stay within ${profile.sessionDuration} minutes. Progression follows ${spec.progressionModel.toLowerCase()}.\n\nDoes this direction work, or do you want to adjust anything before I build the full program?`,
-        structuredData: null,
-      };
-    }
-
-    // Build the program using the intelligence engine
+    // Build the program immediately — no propose-and-ask step
     const program = buildIntelligentProgram(profile);
     const goal = normalizeGoal(profile.trainingGoal);
-    const rationale = getGoalOpeningLine(goal, spec);
 
     return {
-      content: `${rationale}\n\nBuilt around ${profile.daysPerWeek} days, ${profile.sessionDuration}-minute sessions, and ${profile.equipmentAccess}. ${spec.progressionModel} — details in the program. Tell me if you want to swap anything out or adjust the structure.`,
+      content: getGoalConfirmationLine(goal, profile.daysPerWeek),
       structuredData: program,
     };
   }
@@ -1093,18 +1062,18 @@ function buildProgramDescription(profile: UserProfile, spec: ReturnType<typeof b
   return `A ${profile.daysPerWeek}-day ${spec.splitType} program for ${expLabel} athletes targeting ${profile.trainingGoal.toLowerCase()}. ${profile.sessionDuration}-minute sessions, built for ${profile.equipmentAccess}.${injuryNote}`;
 }
 
-function getGoalOpeningLine(goal: GoalType, spec: ReturnType<typeof buildTrainingSpec>): string {
+function getGoalConfirmationLine(goal: GoalType, daysPerWeek: number): string {
   switch (goal) {
     case "strength":
-      return `Here's your strength program — structured around progressive loading on the primary compound lifts with intelligent fatigue management.`;
+      return `Built. ${daysPerWeek}-day strength program is live.\n\nCheck the Program tab — want to adjust anything?`;
     case "hypertrophy":
-      return `Here's your hypertrophy program — volume and mechanical tension are the drivers, with ${spec.primaryRepRange} reps on primary work and ${spec.secondaryRepRange} on accessories.`;
+      return `Built. ${daysPerWeek}-day hypertrophy split is ready.\n\nProgram tab has it. Want me to bias it toward size, strength, or performance?`;
     case "athletic_performance":
-      return `Here's your athletic performance program — explosive work comes first when the CNS is fresh, strength second, and conditioning integrated where appropriate.`;
+      return `Built. ${daysPerWeek}-day athletic performance program is live.\n\nCheck the Program tab — want to adjust anything?`;
     case "fat_loss":
-      return `Here's your body composition program — resistance training takes priority to preserve muscle, structured with minimal rest to maximize session density.`;
+      return `Built. ${daysPerWeek}-day body composition program is ready.\n\nCheck the Program tab — want to adjust anything?`;
     default:
-      return `Here's your program — built around your goal, schedule, and constraints.`;
+      return `Built. ${daysPerWeek}-day program is live.\n\nCheck the Program tab — want to adjust anything?`;
   }
 }
 

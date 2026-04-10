@@ -828,7 +828,7 @@ ${sportContext}
 - Do not program explosive/power work at the end of a session
 - Do not exceed realistic exercise count for the session duration
 - Do not ignore any injury flag in the user's profile
-- Explain your structural decisions briefly (1-2 sentences of coaching rationale per day)
+- Do NOT explain structural decisions in chat — the program panel is the output
 `.trim();
 }
 

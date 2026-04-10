@@ -103,66 +103,76 @@ Example: "Done — program saved and ready in the right panel."`;
         return `## RESPONSE FORMAT — THIS MESSAGE ONLY
 Use this exact structure — no headers, no extra sections:
 
-Line 1: One sentence confirming what type of program was built and for whom.
-Line 2: One sentence on the key structural decision (split, frequency, goal alignment).
-Line 3: "Updated plan is in the right panel."
+Line 1: "Built." followed by what was created in one short phrase.
+Line 2 (optional): One short sentence only if it adds necessary context. Skip if obvious.
+Line 3: "Check the Program tab." or "Your program is live in the Program tab."
 
-Total: 3 lines, 3 sentences maximum.
-Do NOT: list exercises in chat, repeat information from the JSON, use bullet points, add preamble.
-DO: be direct, confident, and concise.
+Total: 2-3 lines maximum. No training theory. No explanations of structure or science.
+Do NOT: describe why the split works, mention "twice-weekly contact," explain volume or frequency concepts, use bullet points, add preamble.
+DO: be decisive and minimal. The program is already built — just confirm it.
 
-Example:
-"Built a 4-day upper/lower program focused on hypertrophy with your equipment in mind.
-The split gives each muscle group twice-weekly contact at manageable volume — the most proven structure for your goal.
-Updated plan is in the right panel."`;
+Examples:
+"Built. 4-day upper/lower split is live.
+
+Check the Program tab — want to adjust anything?"
+
+"Built. 5-day hypertrophy program is ready.
+
+Program tab has it. Want me to bias it toward size, strength, or performance?"`;
       }
 
       if (isStructural) {
         return `## RESPONSE FORMAT — THIS MESSAGE ONLY
 Use this exact structure — no headers, no extra sections:
 
-Line 1: One sentence stating what structural change was made (e.g., "Converted this to a full-body structure").
-Line 2: One sentence on what was preserved and what changed (key compound lifts kept, volume redistributed, etc.).
-Line 3: "Updated plan is in the right panel."
+Line 1: "Updated." followed by what structural change was made in one short phrase.
+Line 2 (optional): One short sentence — only if something important was preserved. Skip if obvious.
+Line 3: "Check the Program tab."
 
-Total: 3 lines, 3 sentences maximum.
-Do NOT: describe every exercise, use bullet points, overexplain the reasoning.
-DO: be direct, confident — you made the decision already, just confirm it.
+Total: 2-3 lines maximum. No training theory. No explanations of recovery, frequency, or volume science.
+Do NOT: explain why the structure works, describe distribution logic, use bullet points.
+DO: state what changed, confirm it's done, point to the panel.
 
-Example:
-"Converted this to a push/pull/legs structure across 3 days.
-Main compound lifts are preserved — volume is redistributed so each pattern hits twice per week with proper recovery.
-Updated plan is in the right panel."`;
+Examples:
+"Updated. Converted to push/pull/legs across 3 days.
+
+Check the Program tab."
+
+"Updated. Expanded your split to 5 days — compounds are preserved.
+
+Check the Program tab."`;
       }
 
       if (isMutation) {
         return `## RESPONSE FORMAT — THIS MESSAGE ONLY
 Use this exact structure — no headers, no extra sections:
 
-Line 1: One sentence stating what was changed (be specific — the exercise, the day, the volume).
-Line 2 (optional): One sentence on why — only include if it adds real value. Skip if obvious.
-Final line: "Updated plan is in the right panel."
+Line 1: "Updated." or "Adjusted." followed by exactly what was changed in one short phrase.
+Line 2 (optional): Only include if it is a safety accommodation (injury, pain). Skip for normal changes.
+Final line: "Check the Program tab."
 
-Total: 2-3 lines maximum.
-Do NOT: list exercises, use bullet points, write paragraphs.
-DO: be surgical and specific — one change, clearly stated.
+Total: 2 lines (3 absolute max). No training theory. No stimulus explanations.
+Do NOT: explain why the exercise works, describe muscle activation, justify the choice.
+DO: state the change, confirm it's done, point to the panel.
 
 Examples:
-"Swapped incline barbell press for landmine press — better shoulder-safe alternative with the same horizontal push stimulus.
-Updated plan is in the right panel."
+"Updated. Swapped incline barbell press for landmine press.
 
-"Added calf raises to both lower-body sessions as a finisher.
-Updated plan is in the right panel."
+Check the Program tab."
 
-"Trimmed accessory volume across the week to keep sessions under 60 minutes. Primary and secondary compound work is untouched.
-Updated plan is in the right panel."`;
+"Adjusted. Compressed sessions to fit 45 minutes — accessory work trimmed, primary compounds kept.
+
+Check the Program tab."
+
+"Updated. Added calf raises to both lower-body sessions.
+
+Check the Program tab."`;
       }
 
       // Generic execution fallback
       return `## RESPONSE FORMAT — THIS MESSAGE ONLY
-3 sentences maximum. State what changed, why (briefly), and confirm the plan is updated.
-End with: "Updated plan is in the right panel."
-No bullet points. No headers. No lists. No program repetition in chat.`;
+2 lines maximum. State what changed in one phrase, then end with "Check the Program tab."
+No explanations. No training theory. No bullet points. No headers.`;
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -223,24 +233,24 @@ Examples:
 This is an adaptive response for readiness, fatigue, or pain adjustment.
 Use this exact structure:
 
-Line 1: Acknowledge what the user reported (fatigue, pain, poor sleep, low readiness). 1 sentence, empathetic but not dramatic.
-Line 2: State what was adjusted and what was kept. Be specific — "reduced accessory volume" not "made it easier."
-Line 3 (optional): Reinforce their control — 1 sentence. Only include if it adds real value.
-Final line: "Updated plan is in the right panel." — include only if the program was actually changed.
+Line 1: "Adjusted." followed by what was changed and what was kept. Be specific — "accessory volume trimmed" not "made it easier."
+Line 2 (optional): One short sentence acknowledging the issue — only if it's a pain/injury. Skip for fatigue or time.
+Final line: "Check the Program tab." — include only if the program was actually changed.
 
-Total: 2-4 lines maximum. No bullet points. No headers.
-Do NOT: overexplain, be overly empathetic, lecture about recovery.
-DO: be direct, supportive, and specific about the adjustment.
+Total: 2-3 lines maximum. No bullet points. No headers. No recovery lectures.
+Do NOT: overexplain, moralize about rest, write more than 3 lines.
+DO: be direct, specific about the adjustment, point to the panel.
 
 Examples:
-"Since recovery is low today, I reduced session density while keeping your main compound work intact.
-Accessory volume is cut back — the primary stimulus is still there.
-Updated plan is in the right panel."
+"Adjusted. Accessory volume cut — primary compounds kept intact.
 
-"For the shoulder issue, I've replaced pressing volume with shoulder-safe alternatives and kept your pulling work unchanged.
-Updated plan is in the right panel."
+Check the Program tab."
 
-"With limited sleep last night, cutting down to the primary lifts only makes sense — skip the accessory volume today and make it up later in the week."`;
+"Adjusted. Pressing replaced with shoulder-safe alternatives, pulling work unchanged.
+
+Check the Program tab."
+
+"Adjusted. Trimmed to primary lifts only for today — accessory work is dropped."`;
   }
 }
 
