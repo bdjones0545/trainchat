@@ -1,0 +1,290 @@
+Add a Persistent Agent State System to TrainChat so the agent feels like a continuous working entity, not a sequence of disconnected messages.
+
+GOAL:
+Right now the agent sends messages, but it still feels like chat. I want it to feel like a live agent that stays present while it works — much closer to Replit.
+
+The user should feel:
+- the agent is active
+- the agent is working right now
+- the agent is still on the task until it is finished
+- there is no dead air
+
+This should make the experience feel like:
+working → progressing → done
+
+Not:
+message → silence → message
+
+--------------------------------------------------
+CORE PRODUCT RULE
+--------------------------------------------------
+
+The agent must remain visibly active for the entire duration of any build or modify task.
+
+Do not rely only on separate chat messages.
+
+Add a persistent visible agent state that stays on screen while the system is processing.
+
+--------------------------------------------------
+PERSISTENT AGENT STATE UI
+--------------------------------------------------
+
+Add a dedicated agent status element to the main chat/workspace UI.
+
+This should remain visible while the system is working.
+
+It should display:
+- current status label
+- elapsed time
+- subtle animated indicator
+
+Example states:
+- Working…
+- Understanding request…
+- Building structure…
+- Selecting exercises…
+- Applying updates…
+- Validating…
+- Saving…
+- Done
+
+Elapsed time examples:
+- Working for 3s
+- Working for 12s
+- Working for 28s
+
+This must feel clean, premium, and minimal.
+
+--------------------------------------------------
+STATE MODEL
+--------------------------------------------------
+
+Create a persistent agent execution state model.
+
+Suggested states:
+- idle
+- active
+- understanding
+- loading
+- planning
+- applying
+- validating
+- saving
+- complete
+- error
+
+Suggested structure:
+agentExecutionState:
+- status
+- startedAt
+- elapsedSeconds
+- visibleLabel
+- taskType (build / modify / explain)
+- isVisible
+- isBlockingInput (optional)
+- lastCompletedMessage
+
+--------------------------------------------------
+STATE TRANSITIONS
+--------------------------------------------------
+
+Use this flow:
+
+IDLE
+→ ACTIVE
+→ UNDERSTANDING
+→ LOADING / INITIALIZING
+→ PLANNING
+→ APPLYING
+→ VALIDATING
+→ SAVING
+→ COMPLETE
+→ IDLE
+
+If failure happens:
+→ ERROR
+
+--------------------------------------------------
+UI BEHAVIOR
+--------------------------------------------------
+
+When a user sends a build or modify request:
+
+1. Agent state appears immediately
+2. It remains visible during the full task
+3. Status text updates as the pipeline changes
+4. Elapsed time updates live
+5. Final “Done” state appears briefly
+6. Then state returns to idle or collapses cleanly
+
+The persistent state should not flicker or disappear between sub-steps.
+
+It should feel like one continuous task.
+
+--------------------------------------------------
+VISUAL DESIGN REQUIREMENTS
+--------------------------------------------------
+
+Design this like a premium system status element, not a loud loading box.
+
+Use:
+- subtle pulse or animated dots
+- compact status card or inline bar
+- clean typography
+- dark theme consistent with TrainChat
+- minimal but noticeable presence
+
+Possible layouts:
+1. inline status card above the input
+2. sticky status strip under top nav
+3. compact agent activity card inside chat thread
+
+Preferred result:
+always visible while task is active, but not intrusive
+
+--------------------------------------------------
+ELAPSED TIME
+--------------------------------------------------
+
+Show elapsed time while the agent is working.
+
+Examples:
+- Working for 4s
+- Working for 11s
+
+This helps the system feel real and persistent.
+
+Timer starts immediately on task start.
+Timer stops when task completes or errors.
+
+--------------------------------------------------
+STATUS LABEL MAPPING
+--------------------------------------------------
+
+Map visible labels to real system stages.
+
+Examples:
+
+understanding
+- “Understanding your request…”
+
+loading / initializing
+- “Loading your current program…”
+- “Setting up your program…”
+
+planning
+- “Structuring your training split…”
+- “Planning your modifications…”
+
+applying
+- “Applying updates…”
+
+validating
+- “Validating your training structure…”
+
+saving
+- “Saving your program…”
+
+complete
+- “Done. Your program is ready.”
+
+error
+- “I hit a problem — retrying…”
+
+These status labels must reflect actual backend/system stages.
+Do not fake random updates.
+
+--------------------------------------------------
+CHAT + AGENT STATE COORDINATION
+--------------------------------------------------
+
+Keep the persistent agent state separate from regular chat messages.
+
+Chat messages can still appear, but the persistent state is what creates the feeling of an active agent.
+
+Behavior:
+- user sends command
+- persistent state appears immediately
+- optional short acknowledgment message appears
+- state updates continue while work happens
+- final chat confirmation appears when complete
+- persistent state shows done briefly
+- then collapses
+
+This should feel like one orchestrated system.
+
+--------------------------------------------------
+PROGRAM PANEL COORDINATION
+--------------------------------------------------
+
+The persistent agent state should sync with Program panel updates.
+
+As the agent status changes:
+- Program panel can progressively update
+- final “Done” should align with the fully updated panel
+- completion should feel synchronized
+
+The user should never see:
+- status says “Done” but panel is still stale
+
+--------------------------------------------------
+INPUT BEHAVIOR
+--------------------------------------------------
+
+While the agent is actively building or modifying:
+
+Option A (preferred):
+- keep input visible
+- disable sending new requests temporarily
+- show a subtle “Agent is working…” state
+
+Option B:
+- allow input, but queue the next request safely
+
+Do not let users accidentally break state by firing multiple overlapping updates with no control.
+
+Make the system feel intentional and in control.
+
+--------------------------------------------------
+ERROR STATE
+--------------------------------------------------
+
+If the task fails:
+- keep agent state visible
+- switch to error label
+- show concise recovery text
+
+Examples:
+- “I hit a problem while updating your program.”
+- “Retrying the last step…”
+
+If retry succeeds:
+- return to normal working flow
+- then complete
+
+Do not silently fail.
+Do not abruptly remove the working state.
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+This is successful if:
+
+1. The agent feels continuously present during any task
+2. Users always see that the agent is actively working
+3. There is no dead air in the UI
+4. Elapsed time and live state make the system feel real
+5. The experience feels much closer to Replit than chat
+6. Users feel like the agent is working on their system, not just preparing a reply
+
+--------------------------------------------------
+FINAL PRODUCT PRINCIPLE
+--------------------------------------------------
+
+TrainChat should feel like an agent that actively works in front of the user.
+
+Not replying.
+Working.
+
+Build this as a persistent execution layer that gives the agent real presence in the product.

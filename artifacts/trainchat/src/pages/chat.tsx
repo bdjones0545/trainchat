@@ -836,9 +836,10 @@ export default function Chat() {
 
           {/* Agent status bar — persistent working state */}
           <AgentStatusBar
-            isActive={stream.isActive}
+            phase={stream.state.phase}
             buildStage={stream.state.buildStage}
             actionType={stream.state.actionType}
+            error={stream.state.error}
           />
 
           {/* Input bar */}
