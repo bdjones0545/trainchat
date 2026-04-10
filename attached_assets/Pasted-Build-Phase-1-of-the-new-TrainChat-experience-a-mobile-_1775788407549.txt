@@ -1,0 +1,350 @@
+Build Phase 1 of the new TrainChat experience: a mobile-first Replit-style training workspace.
+
+PHASE 1 GOAL:
+Transform TrainChat from a chatbot that dumps workouts into chat into a live training workspace where:
+- chat is the instruction layer
+- the program/system panel is the output layer
+- users can “vibe code” their workout with a professional agent
+
+This phase is ONLY about the foundational UI/UX architecture and interaction model.
+Do not overbuild advanced automation yet.
+Just nail the core layout, state flow, and user experience.
+
+--------------------------------------------------
+PHASE 1 CORE PRODUCT RULE
+--------------------------------------------------
+
+The user types what they want in chat.
+The AI interprets the request and updates the program in a dedicated SYSTEM / PROGRAM PANEL.
+The full workout should no longer live as a giant text dump inside the chat thread.
+
+Chat = command + guidance
+Program panel = actual workout output
+
+--------------------------------------------------
+PHASE 1 MAIN OBJECTIVES
+--------------------------------------------------
+
+1. Separate chat from program output
+2. Create a Replit-like workspace feel
+3. Keep it mobile-first
+4. Make the system feel live and editable
+5. Keep AI responses short, professional, and action-oriented
+
+--------------------------------------------------
+LAYOUT STRUCTURE
+--------------------------------------------------
+
+Create a mobile-first app layout with 3 core areas:
+
+1. Sidebar / Slide-out Menu
+2. Main Chat Workspace
+3. Program / System Panel
+
+Because this is mobile-first, use a responsive structure:
+
+MOBILE:
+- primary view = chat workspace
+- program panel opens as a tab, bottom sheet, or segmented view
+- sidebar opens from hamburger menu
+
+DESKTOP/TABLET:
+- allow split-pane layout if desired
+- but mobile is priority
+
+--------------------------------------------------
+1. SIDEBAR / SLIDE-OUT MENU
+--------------------------------------------------
+
+Add a clean slide-out sidebar accessible from the hamburger icon.
+
+Include:
+- New Chat
+- Chat History
+- Saved Programs
+- Active Program
+- Settings
+
+Rules:
+- Keep it visually clean and premium
+- Use large tap-friendly items
+- Highlight current active chat/program
+- Do not overload with too many controls yet
+
+For now, placeholders are acceptable for some menu destinations as long as the structure is built.
+
+--------------------------------------------------
+2. MAIN CHAT WORKSPACE
+--------------------------------------------------
+
+The chat workspace remains the main command center.
+
+Requirements:
+- keep message thread clean and readable
+- improve spacing and reduce clutter
+- make user input box feel premium and central
+- preserve existing send interaction
+- keep “Check-In” button if already present
+- add new “Improve Accuracy” button next to Check-In if layout supports it cleanly
+
+Input placeholder:
+“Describe the training you want to build or adjust…”
+
+Agent behavior in this phase:
+- responses must be short
+- responses must confirm what was built or changed
+- responses should not dump the full program
+- responses should sound like a professional performance architect
+
+Examples:
+- “Built. I created a 4-day hypertrophy split and matched it to your available equipment.”
+- “Updated. I shortened the sessions to fit 45 minutes and redistributed accessory volume.”
+- “Adjusted. I changed pressing selections to reduce shoulder stress.”
+
+Do not allow giant repeated paragraphs in chat.
+
+--------------------------------------------------
+3. PROGRAM / SYSTEM PANEL
+--------------------------------------------------
+
+Create a dedicated panel for the actual program output.
+
+This is the most important part of Phase 1.
+
+The program panel should display structured workout information outside of chat.
+
+At minimum, include these sections:
+
+A. Program Overview
+- title
+- primary goal
+- frequency
+- session duration
+- current training style
+
+B. Weekly Split
+- Day 1
+- Day 2
+- Day 3
+- Day 4
+etc.
+
+C. Day Detail
+For each training day, show:
+- exercise name
+- sets
+- reps
+- rest
+- short note if relevant
+
+D. Build Status / Update Summary
+A small section showing the latest system action:
+- “Initial build created”
+- “Session time reduced to 45 min”
+- “Shoulder-friendly modifications applied”
+
+IMPORTANT:
+This panel should update when the AI builds or changes a plan.
+
+The program should feel like live app state, not pasted text.
+
+--------------------------------------------------
+MOBILE NAVIGATION FOR PROGRAM PANEL
+--------------------------------------------------
+
+Because this is mobile-first, implement one of these clean patterns:
+
+Preferred options:
+1. Top tabs:
+- Chat
+- Program
+
+or
+
+2. Bottom segmented control:
+- Chat
+- Program
+
+or
+
+3. Slide-up drawer for Program
+
+Pick the cleanest premium mobile UX.
+The user must always understand where to:
+- type instructions
+- view the generated workout
+
+This separation must be obvious.
+
+--------------------------------------------------
+EMPTY STATES
+--------------------------------------------------
+
+Create strong empty states.
+
+A. Empty Chat State
+When no program exists yet, show:
+Headline:
+“What do you want to build?”
+
+Subtext:
+“Describe your goal, schedule, equipment, or limitations. I’ll build it with you.”
+
+Suggestion chips:
+- Build my workout
+- Make me a 4-day split
+- Add athletic work
+- Adjust for pain
+- Reduce workout time
+
+B. Empty Program State
+If no active program exists yet:
+Headline:
+“No program built yet”
+Subtext:
+“Your workout system will appear here once you start building with the agent.”
+
+--------------------------------------------------
+INITIAL STATE FLOW
+--------------------------------------------------
+
+When a new user lands:
+1. they go straight into chat
+2. they see empty-state prompt
+3. they type a training request
+4. AI responds briefly
+5. system generates structured program
+6. program appears in Program panel
+
+This flow must feel fast and intuitive.
+
+--------------------------------------------------
+AI RESPONSE / UI CONNECTION
+--------------------------------------------------
+
+When the user sends a request:
+- show loading/thinking state
+- once AI returns, do TWO things:
+  1. post a short confirmation response in chat
+  2. populate or update the Program panel
+
+This dual update is critical.
+
+The user should feel:
+“I typed an instruction, and the system updated.”
+
+Not:
+“I got a long chatbot answer.”
+
+--------------------------------------------------
+REMOVE / REDUCE CURRENT PROBLEMS
+--------------------------------------------------
+
+Fix current UX issues:
+- giant text-heavy program dumps in chat
+- repeated introductory paragraphs
+- poor separation between conversation and output
+- hard-to-scan workout formatting
+- weak mobile hierarchy
+
+The interface should feel lighter, sharper, and more like a workspace.
+
+--------------------------------------------------
+DATA / STATE REQUIREMENTS FOR PHASE 1
+--------------------------------------------------
+
+You do not need full version history yet, but prepare the architecture for it.
+
+For Phase 1, the app should clearly separate:
+
+1. chat messages
+2. active program state
+
+Suggested front-end state shape:
+- activeChat
+- messages[]
+- activeProgram
+- programSummary
+- selectedProgramDay
+- latestSystemUpdate
+
+Suggested activeProgram structure:
+- title
+- goal
+- frequency
+- sessionDuration
+- trainingStyle
+- weeklySplit[]
+- dayDetails[]
+- updatedAt
+
+Each dayDetails item can include:
+- dayLabel
+- focus
+- exercises[]
+
+Each exercise can include:
+- name
+- sets
+- reps
+- rest
+- note
+
+Keep it simple, but structured.
+
+--------------------------------------------------
+DESIGN STYLE
+--------------------------------------------------
+
+Keep the existing TrainChat dark premium aesthetic, but make it more refined:
+- cleaner spacing
+- clearer typography hierarchy
+- more readable cards
+- stronger separation between sections
+- less clutter
+- more polished mobile interactions
+
+This should feel premium and modern, not like a generic chatbot.
+
+--------------------------------------------------
+SUCCESS CRITERIA FOR PHASE 1
+--------------------------------------------------
+
+Phase 1 is successful if:
+
+1. Users can type training requests naturally in chat
+2. AI responds with short professional confirmations
+3. The full workout appears in a separate Program panel
+4. Mobile users can easily switch between Chat and Program
+5. The experience feels like a live workspace, not a chat dump
+6. The UI is ready for future upgrades like:
+- change logs
+- version history
+- apply changes
+- draft revisions
+
+--------------------------------------------------
+IMPORTANT RESTRICTIONS
+--------------------------------------------------
+
+For Phase 1:
+- do NOT overbuild version history yet
+- do NOT build complex compare flows yet
+- do NOT make the system overly complicated
+- do NOT add unnecessary menus
+- do NOT let the AI keep dumping long workouts into chat
+
+Just build the strongest possible foundation for the Replit-style experience.
+
+--------------------------------------------------
+FINAL PRODUCT PRINCIPLE
+--------------------------------------------------
+
+TrainChat Phase 1 should feel like:
+“Chat-controlled workout building”
+
+The user types instructions in chat.
+The system builds the workout in the Program panel.
+The AI acts like a concise professional architect guiding the process.
+
+Build this cleanly, mobile-first, and with strong state separation so Phase 2 can layer on change logs, versions, and deeper system intelligence.

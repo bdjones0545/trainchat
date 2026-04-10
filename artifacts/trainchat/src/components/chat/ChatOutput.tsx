@@ -38,6 +38,8 @@ export interface ProgramStructure {
   splitType?: string;
   weekNumber?: number;
   blockLabel?: string;
+  whatChanged?: string;
+  whyChanged?: string;
   days: ProgramDay[];
 }
 

@@ -194,6 +194,29 @@ function ProgramTab({
         </div>
       </div>
 
+      {/* What Changed / Why Changed */}
+      {(program.whatChanged || program.whyChanged) && (
+        <div className="px-4 py-2.5 border-b border-border flex-shrink-0 bg-amber-400/5">
+          <div className="flex items-start gap-2">
+            <Activity className="w-3 h-3 text-amber-400 mt-0.5 flex-shrink-0" />
+            <div className="space-y-1.5 min-w-0">
+              {program.whatChanged && (
+                <div>
+                  <p className="text-[9px] font-bold text-amber-400 uppercase tracking-[0.1em] mb-0.5">What Changed</p>
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">{program.whatChanged}</p>
+                </div>
+              )}
+              {program.whyChanged && (
+                <div>
+                  <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-[0.1em] mb-0.5">Why</p>
+                  <p className="text-[10px] text-muted-foreground/70 leading-relaxed italic">{program.whyChanged}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Progression strategy */}
       {program.progressionStrategy && (
         <div className="px-4 py-2.5 border-b border-border flex-shrink-0 bg-primary/5">
@@ -393,8 +416,11 @@ function ChangesTab({ hasActiveSystem }: { hasActiveSystem?: boolean }) {
               <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatRelative(entry.createdAt)}</span>
             </div>
             <p className="text-[11px] text-foreground leading-relaxed">{entry.changeSummary}</p>
+            {entry.intent && entry.intent !== entry.changeSummary && (
+              <p className="text-[10px] text-primary/60 mt-1.5 font-medium">↳ {entry.intent}</p>
+            )}
             {entry.requestText && (
-              <p className="text-[10px] text-muted-foreground/60 mt-1.5 italic">"{entry.requestText}"</p>
+              <p className="text-[10px] text-muted-foreground/60 mt-1 italic">"{entry.requestText}"</p>
             )}
             {(entry.appliedCount > 0 || entry.skippedCount > 0) && (
               <div className="flex items-center gap-2 mt-2">

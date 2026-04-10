@@ -24,7 +24,7 @@ import { stripeStorage } from "../lib/stripeStorage";
 import { interpretEditRequest } from "../lib/edit-intent-service";
 import { applyEditPlan, type EditResult } from "../lib/edit-engine";
 import { createChangeLogEntry } from "../lib/change-log-service";
-import { getActiveTrainingSystem, getFullTrainingSystem } from "../lib/training-system-service";
+import { getActiveTrainingSystem, getFullTrainingSystem, createTrainingSystemFromProgram } from "../lib/training-system-service";
 import { buildDecisionMemory } from "../lib/decision-memory-service";
 import { logger } from "../lib/logger";
 
@@ -709,6 +709,26 @@ Keep it helpful and intelligent, never promotional.`;
     .set({ updatedAt: new Date() })
     .where(eq(conversationsTable.id, params.data.id));
 
+  // ── Auto-save program to training system ──────────────────────────────────
+  // When the AI returns a valid program (structuredData with days), automatically
+  // persist it to the training system — no manual "Save to My System" step needed.
+  let systemSaved = false;
+  let autoSavedSystemId: number | undefined;
+
+  if (structuredData && Array.isArray(structuredData.days) && structuredData.days.length > 0) {
+    try {
+      const savedSystem = await createTrainingSystemFromProgram(userId, structuredData);
+      systemSaved = true;
+      autoSavedSystemId = savedSystem.id;
+      logger.info(
+        { userId, systemId: savedSystem.id, programName: structuredData.programName },
+        "[AutoSave] Program automatically saved to training system"
+      );
+    } catch (err) {
+      logger.error({ err, userId }, "[AutoSave] Failed to auto-save training system — user can still save manually");
+    }
+  }
+
   // Increment message count for free/starter users
   if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
     stripeStorage.incrementMessageCount(userId).catch(() => {});
@@ -748,6 +768,8 @@ Keep it helpful and intelligent, never promotional.`;
       inferenceRationale: actionDecision.inferenceRationale,
       recommendedMaxTokens: actionDecision.recommendedMaxTokens,
     },
+    systemSaved,
+    systemId: autoSavedSystemId,
   });
 });
 

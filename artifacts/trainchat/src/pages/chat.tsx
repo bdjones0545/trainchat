@@ -39,12 +39,12 @@ import CalibrationModal from "@/components/chat/CalibrationModal";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 
 const SUGGESTION_CHIPS = [
-  { label: "Build my program", prompt: "Build me a training program" },
-  { label: "Adjust my split", prompt: "I want to adjust my current training split" },
+  { label: "Build my workout", prompt: "Build me a training program based on my goals" },
+  { label: "Make me a 4-day split", prompt: "Design a 4 day per week training split for me" },
+  { label: "Add athletic work", prompt: "I want to add athletic and explosive training to my program" },
+  { label: "Adjust for pain", prompt: "I have a pain or injury and need to adjust my program" },
+  { label: "Reduce session time", prompt: "My sessions are too long — help me shorten them" },
   { label: "Swap exercises", prompt: "Help me swap some exercises in my program" },
-  { label: "Reduce fatigue", prompt: "My fatigue is high — help me manage volume" },
-  { label: "Add speed work", prompt: "I want to add speed and conditioning work" },
-  { label: "5-day program", prompt: "Design a 5 day per week program for me" },
 ];
 
 async function fetchSubscription() {
@@ -282,12 +282,15 @@ export default function Chat() {
             setMessagesUsed(data.planInfo.messageCount ?? messagesUsed + 1);
           }
 
-          if (data?.systemEdit?.applied) {
+          if (data?.systemEdit?.applied || data?.systemSaved) {
             queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
             queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
             queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
             queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
             queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
+            if (data?.systemSaved) {
+              setIsSaved(true);
+            }
           }
         },
         onError: (err: any) => {
@@ -562,25 +565,17 @@ export default function Chat() {
     <div className="flex flex-col h-full overflow-hidden">
       <ReadinessSummary />
       <div className="flex-1 min-h-0 overflow-hidden">
-        {latestProgram || hasActiveSystem ? (
-          <LiveProgramPanel
-            program={latestProgram}
-            onSave={handleSaveProgram}
-            onFeedback={() => { setShowFeedback(true); setMobilePanel(null); }}
-            onLogSession={() => { setShowSessionLog(true); setMobilePanel(null); }}
-            onUpgrade={() => { setShowPricing(true); setMobilePanel(null); }}
-            isSaving={isSaving}
-            isSaved={isSaved}
-            isPremium={isPremium}
-            hasActiveSystem={hasActiveSystem}
-          />
-        ) : (
-          <InsightsPanel
-            insights={insights}
-            memories={memories}
-            isLoading={insightsLoading || memoriesLoading}
-          />
-        )}
+        <LiveProgramPanel
+          program={latestProgram}
+          onSave={handleSaveProgram}
+          onFeedback={() => { setShowFeedback(true); setMobilePanel(null); }}
+          onLogSession={() => { setShowSessionLog(true); setMobilePanel(null); }}
+          onUpgrade={() => { setShowPricing(true); setMobilePanel(null); }}
+          isSaving={isSaving}
+          isSaved={isSaved}
+          isPremium={isPremium}
+          hasActiveSystem={hasActiveSystem}
+        />
       </div>
     </div>
   );
@@ -725,10 +720,10 @@ export default function Chat() {
                   <Dumbbell className="w-6 h-6 text-primary" />
                 </div>
                 <h2 className="text-base font-semibold text-foreground mb-1.5">
-                  What do you want to build or adjust?
+                  What do you want to build?
                 </h2>
                 <p className="text-sm text-muted-foreground max-w-xs leading-relaxed mb-8">
-                  Tell me your goal and I'll co-build your training system with you — or adjust what you already have.
+                  Describe the kind of training you want. I'll build it and refine it with you.
                 </p>
                 <div className="flex flex-wrap justify-center gap-2 w-full max-w-md">
                   {SUGGESTION_CHIPS.map((chip) => (
