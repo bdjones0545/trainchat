@@ -2,8 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import {
   SendHorizontal, Zap, PanelLeftClose, PanelLeft, Activity,
-  Menu, Target, Settings, CreditCard, LogOut, Dumbbell,
-  MessageSquare, Plus, GitBranch, History,
+  Menu, Target, CreditCard, LogOut, Dumbbell,
+  MessageSquare, Plus,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -22,7 +22,6 @@ import {
 import { customFetch } from "@workspace/api-client-react";
 import TopNav from "@/components/layout/TopNav";
 import MobileSlideLayout, { type SlidePanel } from "@/components/layout/MobileSlideLayout";
-import ChatSidebar from "@/components/chat/ChatSidebar";
 import MessageBubble from "@/components/chat/MessageBubble";
 import TypingIndicator from "@/components/chat/TypingIndicator";
 import LiveProgramPanel from "@/components/chat/LiveProgramPanel";
@@ -30,7 +29,6 @@ import { type ProgramStructure } from "@/components/chat/ChatOutput";
 import ReadinessModal from "@/components/chat/ReadinessModal";
 import FeedbackModal from "@/components/chat/FeedbackModal";
 import ReadinessSummary from "@/components/chat/ReadinessSummary";
-import InsightsPanel from "@/components/chat/InsightsPanel";
 import StreakBadge from "@/components/chat/StreakBadge";
 import SessionLogModal from "@/components/chat/SessionLogModal";
 import PaywallModal from "@/components/PaywallModal";
@@ -43,7 +41,7 @@ const SUGGESTION_CHIPS = [
   { label: "Make me a 4-day split", prompt: "Design a 4 day per week training split for me" },
   { label: "Add athletic work", prompt: "I want to add athletic and explosive training to my program" },
   { label: "Adjust for pain", prompt: "I have a pain or injury and need to adjust my program" },
-  { label: "Reduce session time", prompt: "My sessions are too long — help me shorten them" },
+  { label: "Reduce workout time", prompt: "My sessions are too long — help me shorten them to fit my schedule" },
   { label: "Swap exercises", prompt: "Help me swap some exercises in my program" },
 ];
 
@@ -472,57 +470,67 @@ export default function Chat() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-        {/* Navigate */}
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-3">Navigate</p>
-        <button
-          onClick={() => { setLocation("/chat"); setMobilePanel(null); }}
-          className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-semibold bg-primary/10 text-primary transition-all text-left"
-        >
-          <MessageSquare className="w-4 h-4 flex-shrink-0" />
-          <span>Coach Chat</span>
-        </button>
-        <button
-          onClick={() => { setLocation("/system"); setMobilePanel(null); }}
-          className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
-        >
-          <Target className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-          <span>Your System</span>
-          {hasActiveSystem && (
-            <span className="ml-auto w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
-          )}
-        </button>
-
-        {/* Conversations */}
-        <div className="my-3 h-px bg-border" />
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-3">Conversations</p>
+        {/* Workspace */}
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-3">Workspace</p>
         <button
           onClick={() => { handleNewConversation(); setMobilePanel(null); }}
-          className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
         >
           <Plus className="w-4 h-4 text-muted-foreground flex-shrink-0" />
           <span>New Chat</span>
         </button>
-        {conversations.slice(0, 10).map((convo: any) => (
-          <button
-            key={convo.id}
-            onClick={() => { handleSelectConvo(convo.id); setMobilePanel(null); }}
-            className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm transition-all text-left ${
-              convo.id === activeConvoId
-                ? "bg-primary/10 text-primary font-semibold"
-                : "font-medium text-foreground hover:bg-muted/60 active:bg-muted/80"
-            }`}
-          >
-            <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 opacity-50" />
-            <span className="truncate">{convo.title ?? "Conversation"}</span>
-          </button>
-        ))}
+        <button
+          onClick={() => { setLocation("/system"); setMobilePanel(null); }}
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+        >
+          <Target className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <span>Saved Programs</span>
+        </button>
+        <button
+          onClick={() => { setLocation("/system"); setMobilePanel(null); }}
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+        >
+          <Dumbbell className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <span>Active Program</span>
+          {hasActiveSystem && (
+            <span className="ml-auto w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
+          )}
+        </button>
+        <button
+          onClick={() => { setMobilePanel(null); setLocation("/billing"); }}
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+        >
+          <CreditCard className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <span>Settings</span>
+        </button>
+
+        {/* Chat History */}
+        <div className="my-3 h-px bg-border" />
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-3">Chat History</p>
+        {conversations.length === 0 ? (
+          <p className="text-[11px] text-muted-foreground/50 px-3 py-2">No conversations yet</p>
+        ) : (
+          conversations.slice(0, 12).map((convo: any) => (
+            <button
+              key={convo.id}
+              onClick={() => { handleSelectConvo(convo.id); setMobilePanel(null); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all text-left ${
+                convo.id === activeConvoId
+                  ? "bg-primary/10 text-primary font-semibold"
+                  : "font-medium text-foreground hover:bg-muted/60 active:bg-muted/80"
+              }`}
+            >
+              <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 opacity-50" />
+              <span className="truncate">{convo.title ?? "Conversation"}</span>
+            </button>
+          ))
+        )}
 
         {/* Account */}
         <div className="my-3 h-px bg-border" />
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-3">Account</p>
         <button
           onClick={() => { setShowReadiness(true); setMobilePanel(null); }}
-          className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
         >
           <Activity className="w-4 h-4 text-muted-foreground flex-shrink-0" />
           <span>Daily Check-In</span>
@@ -530,19 +538,12 @@ export default function Chat() {
         {!isPremium && (
           <button
             onClick={() => { setShowPricing(true); setMobilePanel(null); }}
-            className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium text-primary hover:bg-primary/5 active:bg-primary/10 transition-all text-left"
+            className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-primary hover:bg-primary/5 active:bg-primary/10 transition-all text-left"
           >
             <Zap className="w-4 h-4 flex-shrink-0" />
             <span>Upgrade to Pro</span>
           </button>
         )}
-        <button
-          onClick={() => { setMobilePanel(null); setLocation("/billing"); }}
-          className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
-        >
-          <CreditCard className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-          <span>Manage Billing</span>
-        </button>
       </div>
 
       {/* Logout */}
@@ -670,16 +671,11 @@ export default function Chat() {
       {/* ─── Main layout ─── */}
       <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Desktop Sidebar */}
-        <div className="hidden md:block">
-          {sidebarOpen && (
-            <ChatSidebar
-              conversations={conversations}
-              activeId={activeConvoId}
-              onSelect={handleSelectConvo}
-              onNew={handleNewConversation}
-            />
-          )}
-        </div>
+        {sidebarOpen && (
+          <div className="hidden md:flex w-60 flex-shrink-0 border-r border-border h-full overflow-hidden flex-col">
+            {chatLeftPanel}
+          </div>
+        )}
 
         {/* Center chat column */}
         <div className="flex-1 flex flex-col min-w-0 relative">
@@ -723,7 +719,7 @@ export default function Chat() {
                   What do you want to build?
                 </h2>
                 <p className="text-sm text-muted-foreground max-w-xs leading-relaxed mb-8">
-                  Describe the kind of training you want. I'll build it and refine it with you.
+                  Describe your goal, schedule, equipment, or limitations. I'll build it with you.
                 </p>
                 <div className="flex flex-wrap justify-center gap-2 w-full max-w-md">
                   {SUGGESTION_CHIPS.map((chip) => (
@@ -809,7 +805,7 @@ export default function Chat() {
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleKeyDown}
                   rows={1}
-                  placeholder={hasActiveSystem ? "Ask me to adjust your program…" : "Message your performance architect…"}
+                  placeholder="Describe the training you want to build or adjust…"
                   disabled={isTyping || sendMessage.isPending}
                   className="flex-1 resize-none bg-transparent px-4 py-3.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none leading-relaxed max-h-40 overflow-y-auto disabled:opacity-60"
                   style={{ minHeight: "52px" }}
@@ -854,25 +850,17 @@ export default function Chat() {
                 </button>
               </div>
               <div className="flex-1 overflow-hidden">
-                {latestProgram || hasActiveSystem ? (
-                  <LiveProgramPanel
-                    program={latestProgram}
-                    onSave={handleSaveProgram}
-                    onFeedback={() => setShowFeedback(true)}
-                    onLogSession={() => setShowSessionLog(true)}
-                    onUpgrade={() => setShowPricing(true)}
-                    isSaving={isSaving}
-                    isSaved={isSaved}
-                    isPremium={isPremium}
-                    hasActiveSystem={hasActiveSystem}
-                  />
-                ) : (
-                  <InsightsPanel
-                    insights={insights}
-                    memories={memories}
-                    isLoading={insightsLoading || memoriesLoading}
-                  />
-                )}
+                <LiveProgramPanel
+                  program={latestProgram}
+                  onSave={handleSaveProgram}
+                  onFeedback={() => setShowFeedback(true)}
+                  onLogSession={() => setShowSessionLog(true)}
+                  onUpgrade={() => setShowPricing(true)}
+                  isSaving={isSaving}
+                  isSaved={isSaved}
+                  isPremium={isPremium}
+                  hasActiveSystem={hasActiveSystem}
+                />
               </div>
             </div>
           ) : (

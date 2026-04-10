@@ -74,9 +74,9 @@ function EmptyProgramState() {
       <div className="w-12 h-12 rounded-2xl bg-primary/8 border border-primary/15 flex items-center justify-center mb-5">
         <Dumbbell className="w-5 h-5 text-primary/40" />
       </div>
-      <h3 className="text-xs font-semibold text-foreground mb-2">Live Program</h3>
-      <p className="text-[11px] text-muted-foreground leading-relaxed max-w-[160px]">
-        Your program will appear here as the AI builds it. Start a conversation to get going.
+      <h3 className="text-xs font-semibold text-foreground mb-2">No program built yet</h3>
+      <p className="text-[11px] text-muted-foreground leading-relaxed max-w-[180px]">
+        Your workout system will appear here once you start building with the agent.
       </p>
     </div>
   );
