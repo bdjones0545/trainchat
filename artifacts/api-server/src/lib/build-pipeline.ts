@@ -29,13 +29,13 @@ export type BuildStage =
 
 /** User-visible labels for each stage. */
 export const STAGE_LABELS: Record<BuildStage, string> = {
-  understanding: "Understanding your request…",
-  loading:       "Loading your program state…",
-  classifying:   "Classifying the change type…",
-  planning:      "Mapping out your modifications…",
-  applying:      "Applying updates to your program…",
-  validating:    "Validating your training structure…",
-  saving:        "Saving your program…",
+  understanding: "Reading your request…",
+  loading:       "Loading your program…",
+  classifying:   "Identifying the change…",
+  planning:      "Mapping your split…",
+  applying:      "Building your program…",
+  validating:    "Checking structure…",
+  saving:        "Saving…",
   complete:      "Done.",
 };
 

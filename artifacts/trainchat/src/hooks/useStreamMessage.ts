@@ -73,9 +73,19 @@ export interface StreamState {
   buildStage: BuildStage | null;
   /** User-visible label for the current stage. */
   stageLabel: string;
+  /** Labels of all completed stages (shown as committed bubbles). */
+  stageHistory: string[];
   intentType: string | undefined;
   error: string | null;
 }
+
+/** Stages shown as committed message bubbles (milestone stages only). */
+const MILESTONE_STAGES = new Set<BuildStage>([
+  "planning",
+  "applying",
+  "validating",
+  "saving",
+]);
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
@@ -91,6 +101,7 @@ const INITIAL_STATE: StreamState = {
   acknowledgment: "",
   buildStage: null,
   stageLabel: "",
+  stageHistory: [],
   intentType: undefined,
   error: null,
 };
@@ -115,6 +126,7 @@ export function useStreamMessage(): UseStreamMessageResult {
         acknowledgment: "",
         buildStage: null,
         stageLabel: "",
+        stageHistory: [],
         intentType: undefined,
         error: null,
       });
@@ -172,14 +184,25 @@ export function useStreamMessage(): UseStreamMessageResult {
                 }));
 
               } else if (event.type === "stage") {
-                // Real pipeline stage boundary — update display from server truth
-                setState((s) => ({
-                  ...s,
-                  phase: "building",
-                  buildStage: event.stage,
-                  stageLabel: event.step,
-                  intentType: event.intentType ?? s.intentType,
-                }));
+                // Real pipeline stage boundary — update display from server truth.
+                // If the current stage is a milestone, commit it to history before
+                // advancing so it remains visible as a locked bubble.
+                setState((s) => {
+                  const prevIsMilestone =
+                    s.buildStage !== null && MILESTONE_STAGES.has(s.buildStage);
+                  const newHistory =
+                    prevIsMilestone && s.stageLabel
+                      ? [...s.stageHistory, s.stageLabel]
+                      : s.stageHistory;
+                  return {
+                    ...s,
+                    phase: "building",
+                    buildStage: event.stage,
+                    stageLabel: event.step,
+                    stageHistory: newHistory,
+                    intentType: event.intentType ?? s.intentType,
+                  };
+                });
 
               } else if (event.type === "complete") {
                 setState((s) => ({ ...s, phase: "complete" }));

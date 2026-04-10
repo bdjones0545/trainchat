@@ -1,0 +1,126 @@
+Upgrade TrainChat to behave like a real multi-step agent instead of a single-response chatbot.
+
+GOAL:
+The agent must feel alive, active, and working — not just returning a single message.
+
+The user should experience:
+- immediate acknowledgment
+- visible progress
+- staged thinking
+- clear completion
+
+--------------------------------------------------
+CORE RULE
+--------------------------------------------------
+
+For any system action (build or modify):
+
+DO NOT send a single response.
+
+Instead:
+The agent must respond in multiple stages.
+
+--------------------------------------------------
+AGENT RESPONSE FLOW
+--------------------------------------------------
+
+Every build/update must follow this pattern:
+
+STAGE 1 — ACKNOWLEDGMENT (instant)
+Send immediately after user message.
+
+Examples:
+- “Got it — building this now.”
+- “On it — updating your program.”
+- “Understood. Making that change.”
+
+--------------------------------------------------
+
+STAGE 2 — ACTIVE THINKING
+Show that the system is working.
+
+Examples:
+- “Setting up your weekly structure…”
+- “Adjusting your split…”
+- “Selecting exercises…”
+- “Rebalancing volume…”
+
+These should appear as separate messages or live-updating status.
+
+--------------------------------------------------
+
+STAGE 3 — FINALIZATION
+Short confirmation that work is complete.
+
+Examples:
+- “Built. Your program is ready.”
+- “Updated. Change applied.”
+
+--------------------------------------------------
+
+STAGE 4 — DIRECTION
+Always direct user to Program panel.
+
+Examples:
+- “Check the Program tab.”
+- “Your update is live in the Program panel.”
+
+--------------------------------------------------
+MESSAGE RULES
+--------------------------------------------------
+
+- Each message must be short (1 sentence)
+- No paragraphs
+- No explanations
+- No program details in chat
+
+--------------------------------------------------
+TIMING RULES
+--------------------------------------------------
+
+- Acknowledgment = immediate
+- Thinking messages = slight delay (simulate real work)
+- Completion = after system finishes
+
+--------------------------------------------------
+IMPORTANT
+--------------------------------------------------
+
+Thinking messages must feel tied to real steps:
+
+- building split
+- selecting exercises
+- validating program
+- saving
+
+Do NOT use random generic “thinking…”
+
+--------------------------------------------------
+UI BEHAVIOR
+--------------------------------------------------
+
+- Show typing indicator or animated thinking
+- Messages should appear progressively
+- Avoid all messages appearing instantly at once
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+This is successful if:
+
+1. The agent feels alive
+2. The user sees it working
+3. The experience feels interactive
+4. It feels like a system executing steps
+5. It feels like Replit — not ChatGPT
+
+--------------------------------------------------
+FINAL PRINCIPLE
+--------------------------------------------------
+
+The agent should feel like it is actively building the system in front of the user.
+
+Not replying.
+
+Executing.

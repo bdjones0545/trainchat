@@ -922,7 +922,25 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   }
 
   // ── Emit immediate acknowledgment (Stage 1: Understand Request) ───────────
-  emit({ type: "acknowledged", text: "On it." });
+  const ackText = (() => {
+    const lower = parsed.data.content.toLowerCase();
+    if (lower.match(/build|create|make me|design|generate|new program|start/))
+      return "Got it — building now.";
+    if (lower.match(/update|change|switch|convert|restructure|rebuild/))
+      return "On it — updating your program.";
+    if (lower.match(/add|include|throw in|put in/))
+      return "Got it — making that change.";
+    if (lower.match(/remove|cut|drop|eliminate|take out/))
+      return "On it — adjusting your program.";
+    if (lower.match(/shorter|longer|time|minutes|compress|shorten/))
+      return "On it — adjusting session length.";
+    if (lower.match(/shoulder|knee|back|hip|pain|hurt|injury|sore/))
+      return "Got it — adjusting for that.";
+    if (lower.match(/swap|replace|substitute|instead/))
+      return "On it — swapping that out.";
+    return "Got it — working on this now.";
+  })();
+  emit({ type: "acknowledged", text: ackText });
   emit(buildStageEvent("understanding"));
 
   // ── Stage 2: Load Program State ──────────────────────────────────────────

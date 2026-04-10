@@ -767,6 +767,7 @@ export default function Chat() {
                     acknowledgment={stream.state.acknowledgment || undefined}
                     buildStage={stream.state.buildStage}
                     stageLabel={stream.state.stageLabel}
+                    stageHistory={stream.state.stageHistory}
                   />
                 )}
 

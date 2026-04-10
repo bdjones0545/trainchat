@@ -1,106 +1,89 @@
 import { useEffect, useState } from "react";
-import { Dumbbell } from "lucide-react";
+import { Dumbbell, Check } from "lucide-react";
 import type { BuildStage } from "@/hooks/useStreamMessage";
 
 /**
- * AgentThinking — Phase 2.3 (Real Build Pipeline)
+ * AgentThinking — Multi-step agent response display.
  *
- * Every stage shown here corresponds to a real step in the build pipeline on
- * the server. There is NO fake auto-advancement — this component only updates
- * when a stage event arrives from the SSE stream.
+ * Renders the agent's progress as a sequence of progressive message bubbles,
+ * one per completed milestone stage, with the current stage showing as an
+ * animated "typing" bubble. This gives the feel of a live system executing
+ * steps rather than a chatbot waiting and then replying.
  *
- * Stage sequence (mirroring build-pipeline.ts):
+ * Stage sequence (from build-pipeline.ts):
  *   understanding → loading → classifying → planning → applying →
  *   validating → saving → [complete → component unmounts]
+ *
+ * Only milestone stages (planning, applying, validating, saving) appear as
+ * separate committed bubbles. Earlier stages update silently in the background.
  */
 
 interface Props {
   acknowledgment?: string;
   buildStage: BuildStage | null;
   stageLabel: string;
+  stageHistory: string[];
 }
 
-/** Progress fraction for each stage — used to drive the progress bar. */
-const STAGE_PROGRESS: Record<BuildStage, number> = {
-  understanding: 12,
-  loading:       25,
-  classifying:   38,
-  planning:      52,
-  applying:      68,
-  validating:    82,
-  saving:        93,
-  complete:      100,
-};
-
-export default function AgentThinking({ acknowledgment, buildStage, stageLabel }: Props) {
+export default function AgentThinking({
+  acknowledgment,
+  buildStage,
+  stageLabel,
+  stageHistory,
+}: Props) {
   const [dotCount, setDotCount] = useState(1);
-  const [prevLabel, setPrevLabel] = useState(stageLabel);
-  const [fading, setFading] = useState(false);
 
-  // Animated trailing dots — always live
   useEffect(() => {
-    const id = setInterval(() => setDotCount((d) => (d % 3) + 1), 480);
+    const id = setInterval(() => setDotCount((d) => (d % 3) + 1), 420);
     return () => clearInterval(id);
   }, []);
 
-  // Smooth label transition when stage advances
-  useEffect(() => {
-    if (stageLabel && stageLabel !== prevLabel) {
-      setFading(true);
-      const id = setTimeout(() => {
-        setPrevLabel(stageLabel);
-        setFading(false);
-      }, 160);
-      return () => clearTimeout(id);
-    }
-  }, [stageLabel, prevLabel]);
-
-  const progress = buildStage ? STAGE_PROGRESS[buildStage] : 8;
-  const displayLabel = prevLabel || stageLabel || "Starting up…";
   const dots = ".".repeat(dotCount);
+
+  const isActiveMilestone =
+    buildStage !== null &&
+    ["planning", "applying", "validating", "saving"].includes(buildStage);
 
   return (
     <div className="flex items-start gap-3 mb-4">
-      {/* Agent avatar */}
       <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mt-0.5">
         <Dumbbell className="w-3.5 h-3.5 text-primary" />
       </div>
 
-      <div className="flex flex-col gap-1.5 max-w-xs">
-        {/* Acknowledgment bubble — static once shown */}
+      <div className="flex flex-col gap-2 max-w-xs">
         {acknowledgment && (
-          <div className="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-2.5">
+          <div className="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-2.5 animate-in fade-in slide-in-from-bottom-1 duration-200">
             <p className="text-sm text-foreground leading-relaxed">{acknowledgment}</p>
           </div>
         )}
 
-        {/* Active stage bubble */}
-        <div className="bg-card border border-border/60 rounded-2xl rounded-tl-sm px-4 py-3">
-          {/* Stage label */}
-          <p
-            className="text-xs text-muted-foreground leading-relaxed mb-2.5 transition-opacity duration-150"
-            style={{ opacity: fading ? 0 : 1 }}
+        {stageHistory.map((label, i) => (
+          <div
+            key={i}
+            className="bg-card border border-border/50 rounded-2xl rounded-tl-sm px-4 py-2 animate-in fade-in slide-in-from-bottom-1 duration-200"
           >
-            {displayLabel}
-          </p>
-
-          {/* Progress bar — driven by real stage progress fraction */}
-          <div className="relative h-0.5 rounded-full bg-border overflow-hidden">
-            <div
-              className="absolute inset-y-0 left-0 bg-primary/50 rounded-full transition-all duration-700 ease-out"
-              style={{ width: `${progress}%` }}
-            />
-            {/* Animated shimmer overlay on the leading edge */}
-            <div
-              className="absolute inset-y-0 rounded-full animate-pulse bg-primary/30"
-              style={{
-                left: `${Math.max(0, progress - 12)}%`,
-                width: "12%",
-                animationDuration: "1.4s",
-              }}
-            />
+            <div className="flex items-center gap-2">
+              <Check className="w-3 h-3 text-primary/60 flex-shrink-0" />
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {label.replace(/…$/, "")}
+              </p>
+            </div>
           </div>
-        </div>
+        ))}
+
+        {isActiveMilestone && stageLabel && (
+          <div className="bg-card border border-border/60 rounded-2xl rounded-tl-sm px-4 py-2.5 animate-in fade-in slide-in-from-bottom-1 duration-200">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {stageLabel.replace(/…$/, "")}{dots}
+            </p>
+          </div>
+        )}
+
+        {!isActiveMilestone && !stageHistory.length && !acknowledgment && (
+          <div className="bg-card border border-border/60 rounded-2xl rounded-tl-sm px-4 py-2.5">
+            <p className="text-xs text-muted-foreground">{dots}</p>
+          </div>
+        )}
       </div>
     </div>
   );
