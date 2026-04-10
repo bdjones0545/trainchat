@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
 import type { ProgramStructure } from "./ChatOutput";
+import type { BuildStage } from "@/hooks/useStreamMessage";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,8 +27,15 @@ interface ChangeLogEntry {
   createdAt: string;
 }
 
+export interface BuildingState {
+  isBuilding: boolean;
+  stage: BuildStage | null;
+  actionType?: string;
+}
+
 interface Props {
   program: ProgramStructure | null;
+  buildingState?: BuildingState;
   onSave?: () => void;
   onFeedback?: () => void;
   onLogSession?: () => void;
@@ -67,6 +75,166 @@ function scopeColor(scope: string) {
   }
 }
 
+// ─── Build phase helpers ───────────────────────────────────────────────────────
+
+type BuildPhase = "init" | "structure" | "content" | "refine" | "save";
+
+function getBuildPhase(stage: BuildStage | null): BuildPhase {
+  if (!stage || stage === "understanding" || stage === "loading" || stage === "classifying") return "init";
+  if (stage === "planning") return "structure";
+  if (stage === "applying") return "content";
+  if (stage === "validating") return "refine";
+  return "save";
+}
+
+// ─── Day skeleton for building state ──────────────────────────────────────────
+
+function DaySkeleton({ dayNum, showExercises, delayMs, shimmer }: {
+  dayNum: number;
+  showExercises: boolean;
+  delayMs: number;
+  shimmer?: boolean;
+}) {
+  const widths = ["w-28", "w-24", "w-32", "w-20"];
+  const exWidths = [["w-32", "w-28", "w-24"], ["w-24", "w-28", "w-20"]];
+  const exW = exWidths[dayNum % 2];
+
+  return (
+    <div
+      className="bg-card border border-border/60 rounded-xl overflow-hidden"
+      style={{
+        animation: `fadeSlideIn 0.25s ease both`,
+        animationDelay: `${delayMs}ms`,
+      }}
+    >
+      <div className="flex items-center justify-between p-3">
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] font-bold bg-primary/15 text-primary px-1.5 py-0.5 rounded">
+              Day {dayNum}
+            </span>
+          </div>
+          <div
+            className={`h-2.5 bg-muted/40 rounded-full ${shimmer ? "animate-pulse" : ""} ${widths[(dayNum - 1) % widths.length]}`}
+          />
+        </div>
+        <ChevronDown className="w-3.5 h-3.5 text-muted-foreground/20" />
+      </div>
+      {showExercises && dayNum === 1 && (
+        <div className="border-t border-border/40 divide-y divide-border/20">
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="px-3 py-2.5"
+              style={{
+                animation: `fadeSlideIn 0.2s ease both`,
+                animationDelay: `${i * 80}ms`,
+              }}
+            >
+              <div className={`h-2.5 bg-muted/50 rounded-full animate-pulse mb-1.5 ${exW[i]}`} />
+              <div className="flex gap-2">
+                <div className="h-2 bg-muted/25 rounded-full animate-pulse w-14" />
+                <div className="h-2 bg-muted/25 rounded-full animate-pulse w-14" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Full skeleton build state (new program) ───────────────────────────────────
+
+function BuildingFromScratch({ stage }: { stage: BuildStage | null }) {
+  const phase = getBuildPhase(stage);
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <style>{`
+        @keyframes fadeSlideIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+
+      {/* Panel header — mirrors the real header */}
+      <div className="p-4 border-b border-border flex-shrink-0">
+        <div className="flex items-center gap-1.5 mb-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" style={{ animationDuration: "1s" }} />
+          <span className="text-[9px] font-bold text-primary uppercase tracking-[0.12em]">Building Program</span>
+        </div>
+
+        {phase === "init" ? (
+          <div className="space-y-2 mt-1">
+            <div className="h-3.5 bg-primary/12 rounded-full animate-pulse w-44" />
+            <div className="h-2.5 bg-muted/25 rounded-full animate-pulse w-28" />
+          </div>
+        ) : (
+          <div className="space-y-1.5 mt-1">
+            <div className="h-3.5 bg-primary/20 rounded-full w-44" />
+            <div className="h-2.5 bg-muted/35 rounded-full w-24" />
+          </div>
+        )}
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        {phase === "init" ? (
+          <div className="flex flex-col items-center justify-center h-28 gap-2.5">
+            <Loader2 className="w-4 h-4 animate-spin text-primary/40" />
+            <span className="text-[10px] text-muted-foreground">Initializing your program…</span>
+          </div>
+        ) : (
+          [1, 2, 3, 4].map((n) => (
+            <DaySkeleton
+              key={n}
+              dayNum={n}
+              showExercises={phase === "content" || phase === "refine" || phase === "save"}
+              delayMs={(n - 1) * 70}
+              shimmer={phase === "refine"}
+            />
+          ))
+        )}
+      </div>
+
+      {/* Save confirmation strip */}
+      {phase === "save" && (
+        <div
+          className="flex-shrink-0 border-t border-green-500/20 bg-green-500/5 px-4 py-2.5 flex items-center justify-center gap-2"
+          style={{ animation: "fadeSlideIn 0.2s ease both" }}
+        >
+          <CheckCircle className="w-3.5 h-3.5 text-green-400 animate-pulse" style={{ animationDuration: "1.2s" }} />
+          <span className="text-[11px] font-semibold text-green-400">Saving your program…</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Updating overlay (existing program being modified) ────────────────────────
+
+function UpdatingBadge({ phase }: { phase: BuildPhase }) {
+  return (
+    <div
+      className="absolute top-3 right-3 z-10 flex items-center gap-1.5 bg-card/90 border border-primary/25 backdrop-blur-sm rounded-full px-2.5 py-1"
+      style={{ animation: "fadeSlideIn 0.2s ease both" }}
+    >
+      {phase === "save" ? (
+        <>
+          <CheckCircle className="w-3 h-3 text-green-400" />
+          <span className="text-[10px] font-semibold text-green-400">Saving…</span>
+        </>
+      ) : (
+        <>
+          <Loader2 className="w-3 h-3 animate-spin text-primary" />
+          <span className="text-[10px] font-semibold text-primary">Updating…</span>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function EmptyProgramState() {
@@ -85,6 +253,7 @@ function EmptyProgramState() {
 
 function ProgramTab({
   program,
+  buildingState,
   onSave,
   onFeedback,
   onLogSession,
@@ -101,8 +270,12 @@ function ProgramTab({
   const lockedDayCount = isPremium ? 0 : Math.max(0, days.length - 1);
   const showPaywall = !isPremium && days.length > 1;
 
+  const isUpdating = buildingState?.isBuilding && !!program;
+  const updatePhase = isUpdating ? getBuildPhase(buildingState!.stage) : null;
+
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="relative flex flex-col h-full overflow-hidden">
+      {isUpdating && updatePhase && <UpdatingBadge phase={updatePhase} />}
       {/* Program header */}
       <div className="p-4 border-b border-border flex-shrink-0">
         {(program.weekNumber || program.blockLabel) && (
@@ -572,6 +745,7 @@ function HistoryTab({ hasActiveSystem }: { hasActiveSystem?: boolean }) {
 
 export default function LiveProgramPanel({
   program,
+  buildingState,
   onSave,
   onFeedback,
   onLogSession,
@@ -582,6 +756,11 @@ export default function LiveProgramPanel({
   hasActiveSystem = false,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("program");
+
+  // New-program skeleton: show full build animation when no program exists yet
+  if (buildingState?.isBuilding && !program) {
+    return <BuildingFromScratch stage={buildingState.stage} />;
+  }
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: "program", label: "Program", icon: Dumbbell },
@@ -618,6 +797,7 @@ export default function LiveProgramPanel({
         {activeTab === "program" && (
           <ProgramTab
             program={program}
+            buildingState={buildingState}
             onSave={onSave}
             onFeedback={onFeedback}
             onLogSession={onLogSession}

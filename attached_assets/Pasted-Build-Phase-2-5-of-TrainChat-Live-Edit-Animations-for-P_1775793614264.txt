@@ -1,0 +1,187 @@
+Build Phase 2.5 of TrainChat: Live Edit Animations for Program Updates.
+
+GOAL:
+When the user makes changes to their program, the updates should be visually animated so the user can SEE exactly what changed in real time.
+
+Right now:
+- program updates instantly
+- changes feel invisible
+
+We want:
+- edits to feel surgical, controlled, and satisfying
+- the user to visually track each change
+
+--------------------------------------------------
+CORE PRODUCT RULE
+--------------------------------------------------
+
+Program updates must NOT appear instantly with no feedback.
+
+Every meaningful change must be visually animated.
+
+--------------------------------------------------
+EDIT TYPES TO HANDLE
+--------------------------------------------------
+
+1. Exercise Swap
+2. Exercise Removal
+3. Exercise Addition
+4. Volume Change (sets/reps)
+5. Day Restructure
+6. Full Split Change
+
+Each must have a clear visual animation.
+
+--------------------------------------------------
+ANIMATION BEHAVIOR
+--------------------------------------------------
+
+1. EXERCISE SWAP
+
+Example:
+RDL → DB RDL
+
+Animation:
+- old exercise fades out
+- new exercise fades/slides in
+- slight highlight glow on new item
+
+User should clearly see:
+“This was replaced”
+
+--------------------------------------------------
+
+2. EXERCISE REMOVAL
+
+Animation:
+- item fades out and collapses
+- surrounding items shift smoothly
+
+--------------------------------------------------
+
+3. EXERCISE ADDITION
+
+Animation:
+- new exercise slides or fades in
+- slight highlight on entry
+
+--------------------------------------------------
+
+4. VOLUME CHANGE
+
+Example:
+3x10 → 4x8
+
+Animation:
+- numbers briefly highlight or pulse
+- transition smoothly (not instant jump)
+
+--------------------------------------------------
+
+5. DAY STRUCTURE CHANGE
+
+Example:
+4 days → 5 days
+
+Animation:
+- new day appears with fade/slide
+- layout adjusts smoothly
+
+--------------------------------------------------
+
+6. SPLIT RESTRUCTURE
+
+Animation:
+- entire layout reorganizes smoothly
+- no jarring full refresh
+
+--------------------------------------------------
+HIGHLIGHTING SYSTEM
+--------------------------------------------------
+
+Every change should briefly highlight:
+
+- color accent
+- glow
+- subtle pulse
+
+Duration:
+- short (0.5–1.5 seconds)
+
+Purpose:
+Draw attention to change without being distracting
+
+--------------------------------------------------
+SYNC WITH AGENT
+--------------------------------------------------
+
+Animations should align with agent messages:
+
+Agent:
+“Applying updates…”
+
+→ animation begins
+
+Agent:
+“Done.”
+
+→ animation finishes
+
+--------------------------------------------------
+TIMING RULES
+--------------------------------------------------
+
+- Animations must feel fast
+- No artificial delays
+- No blocking interaction
+
+User should feel:
+- responsive system
+- not slow UI
+
+--------------------------------------------------
+DO NOT
+--------------------------------------------------
+
+- reload entire program
+- flash full screen updates
+- remove context suddenly
+- over-animate
+
+--------------------------------------------------
+MOBILE UX
+--------------------------------------------------
+
+- animations must be lightweight
+- smooth on mobile devices
+- no lag
+- maintain readability
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+This is successful if:
+
+1. Users can visually track every change
+2. Edits feel intentional and controlled
+3. Users understand exactly what was modified
+4. The system feels alive during edits
+5. Iteration becomes satisfying and addictive
+
+--------------------------------------------------
+FINAL PRODUCT PRINCIPLE
+--------------------------------------------------
+
+TrainChat should feel like a live system being edited in front of the user.
+
+Not refreshed.
+
+Not replaced.
+
+Edited.
+
+Each change should feel like:
+a precise adjustment to a living system.
+
+This is what creates the addictive “vibe coding” experience.

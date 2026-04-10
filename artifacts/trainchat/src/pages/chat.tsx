@@ -194,6 +194,22 @@ export default function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, stream.isActive, stream.state.phase]);
 
+  // Auto-open the program panel when a build starts so users see it animate live
+  useEffect(() => {
+    if (stream.isActive) {
+      setRightPanelOpen(true);
+      if (!latestProgram) {
+        setMobilePanel("right");
+      }
+    }
+  }, [stream.isActive]);
+
+  const buildingState = {
+    isBuilding: stream.isActive,
+    stage: stream.state.buildStage,
+    actionType: stream.state.actionType,
+  };
+
   useEffect(() => {
     const programMessages = messages.filter((m) => {
       if (m.role !== "assistant" || !m.structuredData) return false;
@@ -592,6 +608,7 @@ export default function Chat() {
       <div className="flex-1 min-h-0 overflow-hidden">
         <LiveProgramPanel
           program={latestProgram}
+          buildingState={buildingState}
           onSave={handleSaveProgram}
           onFeedback={() => { setShowFeedback(true); setMobilePanel(null); }}
           onLogSession={() => { setShowSessionLog(true); setMobilePanel(null); }}
@@ -902,6 +919,7 @@ export default function Chat() {
               <div className="flex-1 overflow-hidden">
                 <LiveProgramPanel
                   program={latestProgram}
+                  buildingState={buildingState}
                   onSave={handleSaveProgram}
                   onFeedback={() => setShowFeedback(true)}
                   onLogSession={() => setShowSessionLog(true)}
