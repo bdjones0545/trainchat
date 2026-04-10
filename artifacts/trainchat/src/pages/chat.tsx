@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import {
   SendHorizontal, Zap, PanelLeftClose, PanelLeft, Activity,
   Menu, Target, CreditCard, LogOut, Dumbbell,
-  MessageSquare, Plus,
+  MessageSquare, Plus, RotateCcw,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -104,6 +104,9 @@ export default function Chat() {
   const [mobilePanel, setMobilePanel] = useState<SlidePanel>(null);
   const [showCalibration, setShowCalibration] = useState(false);
   const [calibrationNudgeShown, setCalibrationNudgeShown] = useState(false);
+  const [undoChangeLogId, setUndoChangeLogId] = useState<number | null>(null);
+  const [isUndoing, setIsUndoing] = useState(false);
+  const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const logout = useLogout();
 
@@ -293,6 +296,32 @@ export default function Chat() {
       if (result.systemSaved) {
         setIsSaved(true);
       }
+      // Show undo toast for 8 seconds after any program change
+      const logId = result.changeLogId ?? result.systemEdit?.changeLogId;
+      if (logId) {
+        if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+        setUndoChangeLogId(logId);
+        undoTimeoutRef.current = setTimeout(() => setUndoChangeLogId(null), 8000);
+      }
+    }
+  }
+
+  async function handleUndo() {
+    if (!undoChangeLogId || isUndoing) return;
+    setIsUndoing(true);
+    if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+    setUndoChangeLogId(null);
+    try {
+      await customFetch<any>(`/api/training-system/restore/${undoChangeLogId}`, { method: "POST" });
+      queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
+    } catch {
+      // Non-fatal: undo failed silently
+    } finally {
+      setIsUndoing(false);
     }
   }
 
@@ -766,6 +795,24 @@ export default function Chat() {
               </div>
             )}
           </div>
+
+          {/* Undo toast — appears briefly after a program change */}
+          {undoChangeLogId && (
+            <div className="flex-shrink-0 px-4 py-2 flex justify-center">
+              <div className="flex items-center gap-2 px-3 py-2 bg-card border border-border rounded-full shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-200">
+                <span className="text-[11px] text-muted-foreground">Program updated</span>
+                <span className="text-muted-foreground/40 text-[11px]">·</span>
+                <button
+                  onClick={handleUndo}
+                  disabled={isUndoing}
+                  className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Undo
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Input bar */}
           <div className="flex-shrink-0 px-4 pb-5 pt-3 border-t border-border bg-background/80 backdrop-blur-sm">

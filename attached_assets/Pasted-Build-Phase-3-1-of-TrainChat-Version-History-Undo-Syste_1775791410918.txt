@@ -1,0 +1,272 @@
+Build Phase 3.1 of TrainChat: Version History + Undo System.
+
+GOAL:
+Users must be able to:
+- see how their program has evolved over time
+- restore previous versions instantly
+- experiment freely without fear of losing progress
+
+This transforms TrainChat from a system that edits programs into a system that manages training evolution over time.
+
+--------------------------------------------------
+CORE PRODUCT RULE
+--------------------------------------------------
+
+Every meaningful change to the program must create a new version snapshot.
+
+Users should always be able to go backward.
+
+No destructive edits.
+No permanent loss of prior states.
+
+--------------------------------------------------
+VERSION HISTORY OVERVIEW
+--------------------------------------------------
+
+Create a Version History system tied to each training program.
+
+Each version represents a snapshot of the full program at a specific moment in time.
+
+Users should be able to:
+- view past versions
+- see what changed between versions
+- restore any previous version
+
+--------------------------------------------------
+VERSION SNAPSHOT RULES
+--------------------------------------------------
+
+Create a new version when:
+
+- initial program is created
+- structure changes (days/split)
+- major exercise swaps occur
+- volume/intensity is significantly adjusted
+- constraints change (time, equipment, injury)
+- emphasis shifts (e.g. more athletic, more arms)
+
+Do NOT create new versions for:
+- explanation-only messages
+- very minor edits (optional optimization)
+
+--------------------------------------------------
+VERSION DATA STRUCTURE
+--------------------------------------------------
+
+Each version should store:
+
+training_program_versions:
+- id
+- program_id
+- version_number (V1, V2, V3…)
+- created_at
+- snapshot_data (full serialized program)
+- change_summary (from “What Changed” system)
+- label (auto-generated title)
+
+Example labels:
+- “Initial Build”
+- “Converted to 5 Days”
+- “Shoulder-Friendly Update”
+- “45-Minute Optimization”
+- “Athletic Emphasis Added”
+
+--------------------------------------------------
+VERSION LABEL GENERATION
+--------------------------------------------------
+
+Auto-generate labels based on the dominant change.
+
+Examples:
+- “Initial Build”
+- “Added 5th Training Day”
+- “Reduced Session Time”
+- “Swapped Lower Body Exercises”
+- “Added Arm Emphasis”
+
+Keep labels:
+- short
+- clear
+- human-readable
+
+--------------------------------------------------
+UI DESIGN — VERSION HISTORY PANEL
+--------------------------------------------------
+
+Add a new section in the Program Panel:
+
+Option A (preferred):
+- Tab: “Versions”
+
+Option B:
+- Section below “What Changed”
+
+Each version entry should display:
+- version label
+- timestamp (e.g. “2 min ago”)
+- optional short change summary
+
+Example:
+
+V4 — Athletic Emphasis Added  
+Updated 2 min ago  
+- Added speed work  
+- Increased posterior chain focus  
+
+V3 — Shoulder-Friendly Update  
+Updated 10 min ago  
+- Replaced overhead pressing  
+- Adjusted upper body volume  
+
+--------------------------------------------------
+VERSION INTERACTION
+--------------------------------------------------
+
+User can tap a version to:
+
+1. Preview Version
+- show the program as it existed at that time
+- do NOT immediately overwrite current program
+
+2. Restore Version
+- button: “Restore This Version”
+- replaces current active program with selected version
+
+3. Cancel / Go Back
+- return to current version
+
+--------------------------------------------------
+RESTORE BEHAVIOR
+--------------------------------------------------
+
+When user restores a version:
+
+1. Load selected version snapshot
+2. Replace active program state
+3. Create a NEW version entry:
+   - label: “Restored to V2” (example)
+4. Update Program Panel
+5. Generate change summary:
+   - “Reverted to previous program version”
+
+6. Agent message:
+   “Restored. Your program is now back to the selected version.”
+
+IMPORTANT:
+Restoring a version does NOT delete history.
+
+--------------------------------------------------
+UNDO QUICK ACTION
+--------------------------------------------------
+
+Add a fast “Undo” option after every change.
+
+Behavior:
+- appears temporarily after an update
+- example UI:
+  “Update applied — Undo?”
+
+If tapped:
+- revert to previous version instantly
+
+This should feel fast and effortless.
+
+--------------------------------------------------
+CHANGE HISTORY INTEGRATION
+--------------------------------------------------
+
+Each version should store:
+- the “What Changed” summary from that update
+
+This allows users to:
+- understand evolution over time
+- trust system intelligence
+
+--------------------------------------------------
+AGENT COMMUNICATION
+--------------------------------------------------
+
+After each update, agent should optionally say:
+
+- “Saved as a new version.”
+- “You can restore previous versions anytime.”
+- “Want to compare or revert anything, just let me know.”
+
+Keep it subtle — do not over-explain.
+
+--------------------------------------------------
+SYSTEM BEHAVIOR FLOW
+--------------------------------------------------
+
+On every change:
+
+1. Change Engine modifies program
+2. “What Changed” summary is generated
+3. New version snapshot is created
+4. Version is stored
+5. UI updates:
+   - Program Panel updates
+   - What Changed updates
+   - Version list updates
+
+--------------------------------------------------
+MOBILE UX RULES
+--------------------------------------------------
+
+Since this is mobile-first:
+
+- Version panel should be:
+  - scrollable
+  - easy to tap
+  - clean card-based UI
+
+- Preview should:
+  - slide in or open as modal
+  - not feel heavy or confusing
+
+- Restore button must be:
+  - clear
+  - safe (confirmation optional)
+
+--------------------------------------------------
+FAILURE CONDITIONS (AVOID)
+--------------------------------------------------
+
+Do NOT:
+- overwrite program without versioning
+- lose previous states
+- make version labels confusing
+- overload UI with too much detail
+- hide version feature too deep
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+This feature is successful if:
+
+1. Every major change creates a version
+2. Users can easily see past versions
+3. Users can restore any version instantly
+4. Users feel safe experimenting
+5. The system feels like a true evolving workspace
+
+--------------------------------------------------
+FINAL PRODUCT PRINCIPLE
+--------------------------------------------------
+
+Version History transforms TrainChat into a system where users:
+
+- build
+- experiment
+- refine
+- revert
+- iterate
+
+This is what makes it feel like:
+Replit / Figma for training
+
+Instead of:
+a one-shot AI output
+
+Build this as a core system feature that gives users control over their training evolution.

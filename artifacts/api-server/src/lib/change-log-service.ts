@@ -36,6 +36,8 @@ export interface SystemSnapshot {
 // These intents and scopes represent structural changes that deserve a milestone.
 
 const MAJOR_INTENTS = new Set([
+  "create_program",
+  "initialize",
   "deload_week",
   "travel_mode",
   "change_session_type",
@@ -46,13 +48,18 @@ const MAJOR_INTENTS = new Set([
   "increase_intensity",
   "increase_weekly_volume",
   "restore",
-  "initialize",
 ]);
 
-export function classifyEdit(intent: string, scope: EditScope): { isMajorVersion: boolean; versionLabel?: string } {
-  const isMajor = MAJOR_INTENTS.has(intent) || scope === "block" || scope === "system";
+export function classifyEdit(
+  intent: string,
+  scope: EditScope,
+  overrides?: { isMajorVersion?: boolean; versionLabel?: string },
+): { isMajorVersion: boolean; versionLabel?: string } {
+  const isMajor = overrides?.isMajorVersion ?? (MAJOR_INTENTS.has(intent) || scope === "block" || scope === "system");
 
   const labelMap: Record<string, string> = {
+    create_program: "Initial Build",
+    initialize: "Program Initialized",
     deload_week: "Deload Week",
     travel_mode: "Travel / Equipment Adaptation",
     change_session_type: "Session Type Change",
@@ -62,14 +69,12 @@ export function classifyEdit(intent: string, scope: EditScope): { isMajorVersion
     refocus_block_athletic: "Athletic Block",
     increase_intensity: "High Intensity Phase",
     increase_weekly_volume: "Volume Accumulation Phase",
-    restore: "Restore — Prior State",
-    initialize: "Program Initialized",
+    restore: "Restored Prior Version",
   };
 
-  return {
-    isMajorVersion: isMajor,
-    versionLabel: isMajor ? (labelMap[intent] ?? undefined) : undefined,
-  };
+  const label = overrides?.versionLabel ?? (isMajor ? (labelMap[intent] ?? undefined) : undefined);
+
+  return { isMajorVersion: isMajor, versionLabel: label };
 }
 
 // ─── Create a change log entry ────────────────────────────────────────────────
@@ -87,14 +92,23 @@ export interface CreateChangeLogParams {
   targetLabel?: string;
   beforeSnapshot: SystemSnapshot;
   afterSnapshot: SystemSnapshot;
+  /** Full serialized program (ProgramStructure) stored for version restore capability */
+  fullProgramSnapshot?: Record<string, unknown>;
   appliedCount: number;
   skippedCount: number;
   restoredFromId?: number;
+  /** Optional overrides for isMajorVersion and versionLabel classification */
+  versionOverrides?: { isMajorVersion?: boolean; versionLabel?: string };
   decisionMetadata?: Record<string, unknown>;
 }
 
 export async function createChangeLogEntry(params: CreateChangeLogParams): Promise<number> {
-  const { isMajorVersion, versionLabel } = classifyEdit(params.intent, params.scope);
+  const { isMajorVersion, versionLabel } = classifyEdit(params.intent, params.scope, params.versionOverrides);
+
+  // Embed the full program snapshot inside afterSnapshot for restore capability
+  const afterSnapshotWithProgram = params.fullProgramSnapshot
+    ? { ...params.afterSnapshot, fullProgram: params.fullProgramSnapshot }
+    : params.afterSnapshot;
 
   try {
     const [inserted] = await db
@@ -113,7 +127,7 @@ export async function createChangeLogEntry(params: CreateChangeLogParams): Promi
         targetId: params.targetId ?? null,
         targetLabel: params.targetLabel ?? null,
         beforeSnapshot: params.beforeSnapshot as any,
-        afterSnapshot: params.afterSnapshot as any,
+        afterSnapshot: afterSnapshotWithProgram as any,
         appliedCount: params.appliedCount,
         skippedCount: params.skippedCount,
         restoredFromId: params.restoredFromId ?? null,

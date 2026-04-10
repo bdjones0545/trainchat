@@ -512,47 +512,57 @@ function HistoryTab({ hasActiveSystem }: { hasActiveSystem?: boolean }) {
     );
   }
 
+  const total = history.length;
+
   return (
     <div className="overflow-y-auto h-full">
       <div className="p-3 space-y-2">
-        {history.map((entry, idx) => (
-          <div
-            key={entry.id}
-            className={`bg-card border rounded-xl p-3 ${
-              idx === 0 ? "border-primary/30 bg-primary/5" : "border-border"
-            }`}
-          >
-            <div className="flex items-start justify-between gap-2 mb-1.5">
-              <div className="flex items-center gap-1.5">
-                <GitBranch className={`w-3 h-3 ${idx === 0 ? "text-primary" : "text-muted-foreground/60"}`} />
-                <span className={`text-[10px] font-bold ${idx === 0 ? "text-primary" : "text-muted-foreground"}`}>
-                  {entry.versionLabel ?? (idx === 0 ? "Current" : `Version ${history.length - idx}`)}
-                </span>
-                {idx === 0 && (
-                  <span className="text-[9px] font-bold text-primary bg-primary/15 px-1.5 py-0.5 rounded">LIVE</span>
-                )}
+        {history.map((entry, idx) => {
+          const versionNum = total - idx;
+          const isCurrentVersion = idx === 0;
+          const label = entry.versionLabel ?? (isCurrentVersion ? "Current Version" : `Version ${versionNum}`);
+
+          return (
+            <div
+              key={entry.id}
+              className={`bg-card border rounded-xl p-3 ${
+                isCurrentVersion ? "border-primary/30 bg-primary/5" : "border-border"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className={`text-[10px] font-black tabular-nums ${isCurrentVersion ? "text-primary" : "text-muted-foreground/70"}`}>
+                    V{versionNum}
+                  </span>
+                  <span className={`text-[10px] font-medium ${isCurrentVersion ? "text-foreground" : "text-muted-foreground"}`}>
+                    — {label}
+                  </span>
+                  {isCurrentVersion && (
+                    <span className="text-[9px] font-bold text-primary bg-primary/15 px-1.5 py-0.5 rounded-full">LIVE</span>
+                  )}
+                </div>
+                <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatRelative(entry.createdAt)}</span>
               </div>
-              <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatRelative(entry.createdAt)}</span>
+              <p className="text-[11px] text-muted-foreground leading-relaxed mb-2 line-clamp-2">{entry.changeSummary}</p>
+              {!isCurrentVersion && (
+                <button
+                  onClick={() => {
+                    setRestoringId(entry.id);
+                    restoreMutation.mutate(entry.id);
+                  }}
+                  disabled={restoringId === entry.id}
+                  className="flex items-center gap-1.5 text-[10px] font-semibold text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
+                >
+                  {restoringId === entry.id ? (
+                    <><Loader2 className="w-3 h-3 animate-spin" /> Restoring…</>
+                  ) : (
+                    <><RotateCcw className="w-3 h-3" /> Restore this version</>
+                  )}
+                </button>
+              )}
             </div>
-            <p className="text-[11px] text-foreground leading-relaxed mb-2">{entry.changeSummary}</p>
-            {idx > 0 && (
-              <button
-                onClick={() => {
-                  setRestoringId(entry.id);
-                  restoreMutation.mutate(entry.id);
-                }}
-                disabled={restoringId === entry.id}
-                className="flex items-center gap-1.5 text-[10px] font-semibold text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
-              >
-                {restoringId === entry.id ? (
-                  <><Loader2 className="w-3 h-3 animate-spin" /> Restoring…</>
-                ) : (
-                  <><RotateCcw className="w-3 h-3" /> Restore this version</>
-                )}
-              </button>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

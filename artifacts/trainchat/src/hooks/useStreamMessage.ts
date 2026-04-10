@@ -49,8 +49,9 @@ export interface CompleteEvent {
   planInfo: { plan: string; messagesRemaining: number } | null;
   systemSaved: boolean;
   systemId?: number;
+  changeLogId?: number;
   intentDebug?: { type: string; confidence: string; editSubtype: string | null };
-  systemEdit?: { applied: boolean };
+  systemEdit?: { applied: boolean; changeSummary?: string; changedIds?: number[]; systemId?: number; changeLogId?: number };
 }
 
 export interface StreamErrorEvent {

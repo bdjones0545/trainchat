@@ -742,28 +742,24 @@ Keep it helpful and intelligent, never promotional.`;
       systemSaved = true;
       autoSavedSystemId = savedSystem.id;
 
+      const emptySnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
+      const fullProgramSnapshot = structuredData as unknown as Record<string, unknown>;
+
       if (isUpdate) {
         logger.info(
           { userId, systemId: savedSystem.id, programName: structuredData.programName },
           "[ChangeEngine] Active program updated in place"
         );
-
-        // Log what changed to the change log so the Changes tab shows it
         if (structuredData.whatChanged) {
           try {
-            const emptySnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
             changeLogId = await createChangeLogEntry({
-              userId,
-              trainingSystemId: savedSystem.id,
-              source: "ai_edit",
+              userId, trainingSystemId: savedSystem.id, source: "ai_edit",
               intent: intentResult.editSubtype ?? intentResult.type.toLowerCase(),
-              scope: "system",
-              changeSummary: structuredData.whatChanged,
+              scope: "system", changeSummary: structuredData.whatChanged,
               requestText: parsed.data.content.slice(0, 300),
-              beforeSnapshot: emptySnapshot,
-              afterSnapshot: emptySnapshot,
-              appliedCount: 1,
-              skippedCount: 0,
+              beforeSnapshot: emptySnapshot, afterSnapshot: emptySnapshot,
+              fullProgramSnapshot,
+              appliedCount: 1, skippedCount: 0,
               decisionMetadata: structuredData.whyChanged
                 ? { whyChanged: structuredData.whyChanged, intentType: intentResult.type }
                 : { intentType: intentResult.type },
@@ -775,8 +771,22 @@ Keep it helpful and intelligent, never promotional.`;
       } else {
         logger.info(
           { userId, systemId: savedSystem.id, programName: structuredData.programName },
-          "[AutoSave] New training system created from program"
+          "[AutoSave] New training system created — logging Initial Build version"
         );
+        try {
+          changeLogId = await createChangeLogEntry({
+            userId, trainingSystemId: savedSystem.id, source: "initialize",
+            intent: "create_program", scope: "system",
+            changeSummary: `Program "${structuredData.programName}" created — ${structuredData.days.length} training days, ready to go.`,
+            requestText: parsed.data.content.slice(0, 300),
+            beforeSnapshot: emptySnapshot, afterSnapshot: emptySnapshot,
+            fullProgramSnapshot,
+            appliedCount: 1, skippedCount: 0,
+            versionOverrides: { isMajorVersion: true, versionLabel: "Initial Build" },
+          });
+        } catch (logErr) {
+          logger.warn({ logErr }, "[AutoSave] Failed to write Initial Build log — non-fatal");
+        }
       }
     } catch (err) {
       logger.error({ err, userId }, "[AutoSave] Failed to save training system — user can still save manually");
@@ -985,6 +995,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     systemSavedVal: boolean;
     systemIdVal?: number;
     systemEditVal?: { applied: boolean };
+    changeLogIdVal?: number;
   }) {
     return {
       type: "complete",
@@ -1015,6 +1026,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       systemSaved: opts.systemSavedVal,
       systemId: opts.systemIdVal,
       systemEdit: opts.systemEditVal,
+      changeLogId: opts.changeLogIdVal,
     };
   }
 
@@ -1192,6 +1204,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   // ── Auto-save / Change Engine ─────────────────────────────────────────────
   let systemSaved = false;
   let autoSavedSystemId: number | undefined;
+  let changeLogId: number | undefined;
 
   if (structuredData && Array.isArray(structuredData.days) && structuredData.days.length > 0) {
     try {
@@ -1199,22 +1212,50 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       systemSaved = true;
       autoSavedSystemId = savedSystem.id;
 
-      if (isUpdate && structuredData.whatChanged) {
+      const emptySnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
+      const fullProgramSnapshot = structuredData as unknown as Record<string, unknown>;
+
+      if (isUpdate) {
+        logger.info(
+          { userId, systemId: savedSystem.id, programName: structuredData.programName },
+          "[ChangeEngine:stream] Active program updated in place"
+        );
+        if (structuredData.whatChanged) {
+          try {
+            changeLogId = await createChangeLogEntry({
+              userId, trainingSystemId: savedSystem.id, source: "ai_edit",
+              intent: intentResult.editSubtype ?? intentResult.type.toLowerCase(),
+              scope: "system", changeSummary: structuredData.whatChanged,
+              requestText: parsed.data.content.slice(0, 300),
+              beforeSnapshot: emptySnapshot, afterSnapshot: emptySnapshot,
+              fullProgramSnapshot,
+              appliedCount: 1, skippedCount: 0,
+              decisionMetadata: structuredData.whyChanged
+                ? { whyChanged: structuredData.whyChanged, intentType: intentResult.type }
+                : { intentType: intentResult.type },
+            });
+          } catch (logErr) {
+            logger.warn({ logErr }, "[ChangeEngine:stream] Failed to write AI change log — non-fatal");
+          }
+        }
+      } else {
+        logger.info(
+          { userId, systemId: savedSystem.id, programName: structuredData.programName },
+          "[AutoSave:stream] New training system created — logging Initial Build version"
+        );
         try {
-          const emptySnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
-          await createChangeLogEntry({
-            userId, trainingSystemId: savedSystem.id, source: "ai_edit",
-            intent: intentResult.editSubtype ?? intentResult.type.toLowerCase(),
-            scope: "system", changeSummary: structuredData.whatChanged,
+          changeLogId = await createChangeLogEntry({
+            userId, trainingSystemId: savedSystem.id, source: "initialize",
+            intent: "create_program", scope: "system",
+            changeSummary: `Program "${structuredData.programName}" created — ${structuredData.days.length} training days, ready to go.`,
             requestText: parsed.data.content.slice(0, 300),
             beforeSnapshot: emptySnapshot, afterSnapshot: emptySnapshot,
+            fullProgramSnapshot,
             appliedCount: 1, skippedCount: 0,
-            decisionMetadata: structuredData.whyChanged
-              ? { whyChanged: structuredData.whyChanged, intentType: intentResult.type }
-              : { intentType: intentResult.type },
+            versionOverrides: { isMajorVersion: true, versionLabel: "Initial Build" },
           });
         } catch (logErr) {
-          logger.warn({ logErr }, "[ChangeEngine:stream] Failed to write AI change log — non-fatal");
+          logger.warn({ logErr }, "[AutoSave:stream] Failed to write Initial Build log — non-fatal");
         }
       }
     } catch (err) {
@@ -1229,6 +1270,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   done(buildCompleteEvent({
     userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo,
     intentResultVal: intentResult, systemSavedVal: systemSaved, systemIdVal: autoSavedSystemId,
+    changeLogIdVal: changeLogId,
   }));
 });
 

@@ -8,8 +8,14 @@ import {
   getBlockSummary,
   initializeTrainingSystem,
   createTrainingSystemFromProgram,
+  upsertTrainingSystemFromProgram,
   type ChatProgram,
 } from "../lib/training-system-service";
+import {
+  getChangeHistory,
+  getChangeDetail,
+  createChangeLogEntry,
+} from "../lib/change-log-service";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -162,6 +168,102 @@ router.post("/training-system/from-chat", requireAuth, async (req, res): Promise
   } catch (err: any) {
     logger.error({ err: err.message, stack: err.stack }, "[training-system] POST /from-chat error");
     res.status(500).json({ error: "Failed to save training system from chat program" });
+  }
+});
+
+// ─── GET /training-system/history ────────────────────────────────────────────
+// Returns change log entries for the active training system.
+// Used by the History tab in the Live Program Panel.
+router.get("/training-system/history", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const userId = req.session.userId!;
+    const limitParam = req.query.limit;
+    const limit = typeof limitParam === "string" ? Math.min(parseInt(limitParam, 10) || 30, 100) : 30;
+
+    const system = await getActiveTrainingSystem(userId);
+    if (!system) {
+      res.json({ history: [] });
+      return;
+    }
+
+    const history = await getChangeHistory(userId, system.id, limit);
+    res.json({ history });
+  } catch (err) {
+    logger.error({ err }, "[training-system] GET /history error");
+    res.status(500).json({ error: "Failed to load change history" });
+  }
+});
+
+// ─── POST /training-system/restore/:changeId ──────────────────────────────────
+// Restores the training system to the state captured in a change log entry's
+// afterSnapshot.fullProgram field.
+router.post("/training-system/restore/:changeId", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const userId = req.session.userId!;
+    const changeId = parseInt(req.params.changeId, 10);
+
+    if (isNaN(changeId)) {
+      res.status(400).json({ error: "Invalid changeId" });
+      return;
+    }
+
+    // Load the change log entry with its snapshots
+    const detail = await getChangeDetail(userId, changeId);
+    if (!detail) {
+      res.status(404).json({ error: "Change log entry not found" });
+      return;
+    }
+
+    // Extract the full program snapshot stored in afterSnapshot.fullProgram
+    const snapshot = detail.afterSnapshot as any;
+    const fullProgram = snapshot?.fullProgram;
+
+    if (!fullProgram || !Array.isArray(fullProgram.days) || fullProgram.days.length === 0) {
+      res.status(422).json({ error: "This version does not have a restoreable program snapshot" });
+      return;
+    }
+
+    // Restore the program by upserting from the snapshot
+    const { system: restoredSystem } = await upsertTrainingSystemFromProgram(userId, fullProgram as ChatProgram);
+
+    // Determine a restore label from the entry being restored
+    const sourceLabel = detail.versionLabel ?? detail.changeSummary.slice(0, 40);
+
+    // Log the restore operation as a new major version
+    const emptySnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
+    const newChangeLogId = await createChangeLogEntry({
+      userId,
+      trainingSystemId: restoredSystem.id,
+      source: "restore",
+      intent: "restore",
+      scope: "system",
+      changeSummary: `Restored to: "${sourceLabel}"`,
+      beforeSnapshot: emptySnapshot,
+      afterSnapshot: { ...emptySnapshot, fullProgram },
+      fullProgramSnapshot: fullProgram,
+      appliedCount: 1,
+      skippedCount: 0,
+      restoredFromId: changeId,
+      versionOverrides: {
+        isMajorVersion: true,
+        versionLabel: `Restored — ${sourceLabel}`,
+      },
+    });
+
+    logger.info(
+      { userId, systemId: restoredSystem.id, restoredFromId: changeId, newChangeLogId },
+      "[training-system] Program restored from version snapshot"
+    );
+
+    res.json({
+      success: true,
+      systemId: restoredSystem.id,
+      changeLogId: newChangeLogId,
+      message: "Restored. Your program is now back to the selected version.",
+    });
+  } catch (err) {
+    logger.error({ err }, "[training-system] POST /restore error");
+    res.status(500).json({ error: "Failed to restore program version" });
   }
 });
 
