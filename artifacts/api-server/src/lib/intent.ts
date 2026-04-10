@@ -271,7 +271,7 @@ function matchesStructuralEdit(lower: string): {
   const conditioningPattern = /\b(more conditioning focused|conditioning.first|more.{0,20}conditioning|conditioning.heavy|prioritize conditioning|sport.specific conditioning)\b/i;
   const performancePattern = /\b(better for performance|performance.focused|performance.based|more performance|athletic performance|sport performance)\b/i;
   const hypertrophyShiftPattern = /\b(less bodybuilding|more bodybuilding|more.{0,20}muscle building|muscle.building focus|hypertrophy.first|bodybuilding style program)\b/i;
-  const strengthShiftPattern = /\b(more powerlifting|powerlifting.style|strength.first|strength.focused program|strength.only|pure strength)\b/i;
+  const strengthShiftPattern = /\b(more powerlifting|powerlifting.style|strength.first|strength.focused program|strength.only|pure strength|upper body strength|lower body strength|want.{0,20}strength)\b/i;
 
   // ── Structural ambiguity (medium confidence only if has active program) ────
   const structuralVagueness = /\b(restructure|reorganize|redesign|rebalance|rethink|completely change.{0,20}structure|change.{0,20}structure|different structure|different split|different layout|different setup)\b/i;

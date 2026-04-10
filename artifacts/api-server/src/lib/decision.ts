@@ -142,12 +142,12 @@ function resolveStructuralEditAction(
     };
   }
 
-  // ASK: truly vague structural request — multiple valid outcomes exist
+  // INFER: vague structural request — make a reasonable assumption and act
+  // Per core rule: if direction is even loosely clear, act. Never loop on clarification.
   return {
-    actionType: "ASK_CLARIFYING_QUESTION",
-    shouldAsk: true,
-    clarifyingQuestion: `What direction do you want to go — full body, upper/lower, push/pull/legs, or a different day count? One of those gives me enough to work with.`,
-    inferenceRationale: "No clear structural target identified. Asking one clarifying question to resolve ambiguity.",
+    actionType: "STRUCTURAL_REBUILD",
+    shouldAsk: false,
+    inferenceRationale: "Vague structural request — inferring best reorganization based on current program and user profile. Proceeding with rebuild; user can refine after.",
   };
 }
 
