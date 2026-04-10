@@ -1,0 +1,431 @@
+Build Phase 2.1 of TrainChat: the Change Engine.
+
+GOAL:
+TrainChat must stop acting like a chatbot that regenerates a brand-new workout every time the user sends a message.
+
+Instead, it should behave like a live editable training system.
+
+The Change Engine should allow the AI to:
+- inspect the current active program
+- understand what the user is asking to change
+- apply the smallest intelligent change possible
+- preserve the rest of the program structure
+- update the Program Panel in real time
+
+This is the core system that makes TrainChat feel like Replit-style vibe coding for your workout.
+
+CORE PRODUCT RULE
+
+Do NOT rebuild the full program unless the user explicitly asks for a full rebuild.
+
+By default, every user message should be treated as an instruction to MODIFY the current system, not replace it.
+
+The AI should preserve as much of the current program as possible while intelligently applying the requested update.
+
+This is the defining rule of the Change Engine.
+
+CHANGE ENGINE OBJECTIVE
+
+When a user sends a message, the system should:
+
+1. load the active program state
+2. classify the user’s request
+3. decide whether this is:
+   - a targeted edit
+   - a partial restructuring
+   - or a full rebuild
+4. apply the change with minimal disruption
+5. update the stored program state
+6. update the Program Panel
+7. generate a short summary of what changed
+8. keep the chat response concise and professional
+
+CHANGE REQUEST CLASSIFICATION
+
+Create a request classification layer.
+
+Every incoming user instruction should be classified into one primary category:
+
+1. Structure Change
+Examples:
+- “Make this 5 days instead of 4”
+- “Switch this to upper/lower”
+- “Make Fridays athletic”
+- “Turn this into full body”
+
+Meaning:
+- modify weekly split structure
+- redistribute training stress intelligently
+- preserve as much useful content as possible
+
+2. Exercise Swap
+Examples:
+- “Swap RDLs”
+- “I hate lunges”
+- “Replace barbell bench with dumbbells”
+- “Give me a more athletic movement here”
+
+Meaning:
+- replace one or more exercises
+- preserve intent of the training day
+- maintain volume and movement pattern balance
+
+3. Volume Adjustment
+Examples:
+- “Add more arm work”
+- “Reduce leg volume”
+- “I want more chest emphasis”
+- “Back off a little this week”
+
+Meaning:
+- adjust workload while preserving overall structure
+- rebalance across the week if necessary
+
+4. Intensity / Difficulty Adjustment
+Examples:
+- “Make it harder”
+- “This is too much”
+- “Make this more advanced”
+- “Tone it down for this week”
+
+Meaning:
+- modify effort, density, progression, or difficulty
+- keep the split and general structure intact
+
+5. Constraint Change
+Examples:
+- “I only have 45 minutes now”
+- “I only have dumbbells this week”
+- “My shoulder hurts”
+- “I’m training at home”
+
+Meaning:
+- adapt the current program to the new constraint
+- preserve program intent whenever possible
+
+6. Emphasis Shift
+Examples:
+- “I want bigger arms”
+- “Make this more athletic”
+- “Keep hypertrophy but improve movement quality”
+- “I want more speed work”
+
+Meaning:
+- shift the bias of the current program
+- do not discard the existing plan unless necessary
+
+7. Explanation Only
+Examples:
+- “Why did you put this here?”
+- “What is this day targeting?”
+- “Why this rep scheme?”
+
+Meaning:
+- explain without changing program state
+
+8. Full Rebuild
+Examples:
+- “Start over”
+- “Rebuild this from scratch”
+- “Make me a completely new plan”
+- “Ignore the current setup”
+
+Meaning:
+- only here is the AI allowed to replace the full program
+
+MINIMAL EFFECTIVE CHANGE RULE
+
+The Change Engine must apply the smallest intelligent edit possible.
+
+Examples:
+
+If user says:
+“Make it 5 days instead of 4”
+
+DO:
+- expand to 5 training days
+- redistribute volume
+- preserve relevant exercise selections where appropriate
+- preserve the user’s goal and constraints
+
+DO NOT:
+- throw away the entire program and generate a totally unrelated new one
+
+If user says:
+“My shoulder hurts on pressing”
+
+DO:
+- identify pressing movements causing issue
+- replace or modify those selections
+- preserve upper body day structure
+- preserve goal of the day
+
+DO NOT:
+- rewrite the full week unnecessarily
+
+If user says:
+“I only have 45 minutes”
+
+DO:
+- compress sessions
+- trim accessories intelligently
+- preserve primary lifts and key adaptations
+
+DO NOT:
+- randomly delete important work without logic
+
+PROGRAM STATE FIRST
+
+The AI must always operate from the current active program state.
+
+Before generating any update, load:
+- program goal
+- weekly split
+- day structure
+- exercise list
+- sets/reps/rest
+- constraints
+- injuries/limitations
+- available equipment
+- session time target
+- user preferences
+- current emphasis
+
+Do NOT rely only on recent chat history.
+Do NOT treat each message like a fresh conversation.
+
+The program is a living system state.
+
+PROGRAM PRESERVATION RULES
+
+The Change Engine should preserve:
+- the program’s main goal unless user changes it
+- existing split structure unless user requests structural change
+- exercises that still fit the user’s needs
+- progression logic
+- movement balance across the week
+- fatigue management where already established
+- equipment compatibility
+- time constraints if already known
+
+The system should only modify what is required.
+
+EDIT DECISION LOGIC
+
+Build a decision layer like this:
+
+STEP 1:
+Does an active program exist?
+- if no active program exists → create initial build
+- if yes → continue to change classification
+
+STEP 2:
+Classify the user request into one of the change categories
+
+STEP 3:
+Determine scope of change:
+- micro edit
+- day-level edit
+- week-level restructure
+- full rebuild
+
+STEP 4:
+Apply the smallest change possible
+
+STEP 5:
+Run quality checks:
+- no duplicate exercise conflicts
+- no broken split logic
+- no incompatible equipment
+- no ignored injury flags
+- no unrealistic time overflow
+- maintain volume balance where possible
+
+STEP 6:
+Save updated program state
+
+STEP 7:
+Send:
+- concise chat confirmation
+- updated program panel data
+- what changed summary
+
+EXERCISE SWAP LOGIC
+
+When swapping exercises, do not swap randomly.
+
+The replacement should preserve:
+- movement pattern
+- training intent
+- muscle emphasis
+- equipment reality
+- joint tolerance
+- skill level
+
+Example:
+RDL may be swapped with:
+- DB RDL
+- hip hinge variation
+- trap bar hinge
+- cable pull-through
+depending on:
+- equipment
+- user discomfort
+- desired stimulus
+
+Swaps must feel coach-level, not generic.
+
+STRUCTURE CHANGE LOGIC
+
+When the user changes the split or number of days:
+
+Examples:
+- 4 days → 5 days
+- upper/lower → full body
+- add athletic day
+- remove a day
+
+The system must:
+- preserve as much existing exercise logic as possible
+- reallocate weekly volume intelligently
+- maintain recovery balance
+- avoid abrupt incoherence
+
+It should feel like the system was restructured, not erased.
+
+CONSTRAINT ADAPTATION LOGIC
+
+When constraints change, modify the current program to fit them.
+
+Examples:
+
+Time constraint:
+- reduce accessories first
+- reduce redundancy
+- preserve main training effect
+
+Equipment constraint:
+- replace incompatible exercises
+- keep day intent intact
+
+Pain/injury constraint:
+- remove aggravating patterns
+- substitute safer options
+- maintain user goal as much as possible
+
+Travel/home constraint:
+- adapt the week without losing continuity
+
+CHAT RESPONSE RULES
+
+The AI response in chat should be short and professional.
+
+It should confirm what changed, not dump the whole workout.
+
+Good examples:
+- “Updated. I expanded the split to 5 days and redistributed volume without losing your original hypertrophy focus.”
+- “Adjusted. I swapped the pressing variations to reduce shoulder stress and kept the upper body emphasis intact.”
+- “Compressed. I tightened the sessions to fit 45 minutes and preserved the key work.”
+
+Bad behavior:
+- giant essay
+- full workout pasted into chat
+- repeated intro paragraphs
+- vague “done” with no clarity
+
+RULE:
+Chat explains.
+Program panel displays.
+
+SYSTEM OUTPUTS
+
+Every successful change request should produce 3 outputs:
+
+1. Updated Program State
+- structured active program object
+
+2. Change Summary
+- a concise structured list of actual modifications
+
+3. Short Agent Response
+- clean confirmation in chat
+
+FALLBACK RULES
+
+If the user’s request is ambiguous:
+- prefer the least destructive interpretation
+- preserve existing program state
+- make minimal sensible adjustment
+
+If the request conflicts with the current system:
+- prioritize safety, coherence, and usability
+- adapt intelligently, not literally
+
+If the request truly requires rebuilding:
+- only then perform a full rebuild
+
+QUALITY CONTROL RULES
+
+Before finalizing any program change, validate:
+- does the updated split still make sense?
+- are there exercise duplicates that create bad redundancy?
+- does the program still fit time constraints?
+- does it still honor equipment limits?
+- are injury-sensitive patterns handled correctly?
+- is the weekly balance still reasonable?
+- did the change preserve the user’s core goal?
+
+Do not push broken program states into the Program Panel.
+
+FRONTEND / BACKEND BEHAVIOR
+
+Implement the Change Engine across system logic so that:
+- user sends message
+- current active program loads
+- request is classified
+- modification is applied
+- updated program state is saved
+- Program Panel refreshes
+- concise chat reply appears
+- What Changed data is returned for future display
+
+This should feel immediate and alive.
+
+SUCCESS STATE
+
+This feature is successful if TrainChat behaves like this:
+
+User:
+“Make this 5 days instead of 4.”
+
+System:
+- loads current program
+- preserves current goal and core structure
+- redistributes training across 5 days
+- updates Program Panel
+- replies:
+  “Updated. I expanded the split to 5 days and redistributed the weekly workload while keeping your original focus intact.”
+
+User:
+“My shoulder hurts on pressing.”
+
+System:
+- identifies aggravating pressing choices
+- swaps or modifies them
+- preserves upper body structure
+- updates Program Panel
+- replies:
+  “Adjusted. I changed the pressing selections to be more shoulder-friendly while keeping the upper body intent the same.”
+
+That is the expected behavior.
+
+FINAL PRODUCT PRINCIPLE
+
+The Change Engine is the foundation of Replit-style workout building.
+
+TrainChat should feel like:
+the user gives build instructions,
+the professional system edits the live program,
+and the workspace updates without wiping everything out.
+
+Build this as a true program modification engine, not a workout regeneration loop.
