@@ -1,0 +1,127 @@
+Add a Persistent Agent State System to TrainChat.
+
+GOAL:
+The agent should feel like a continuous working entity, not a sequence of disconnected messages.
+
+Right now:
+- the agent sends messages
+- then disappears between responses
+
+We want:
+- a persistent “working” presence
+- a clear sense that the agent is actively building or updating the system over time
+
+--------------------------------------------------
+CORE PRODUCT RULE
+--------------------------------------------------
+
+The agent should feel like it is continuously working until the task is complete.
+
+NOT:
+message → silence → message
+
+INSTEAD:
+active → working → progressing → done
+
+--------------------------------------------------
+PERSISTENT AGENT STATE UI
+--------------------------------------------------
+
+Add a visible agent status element in the chat UI.
+
+This should show:
+
+- current state:
+  - “Working…”
+  - “Building program…”
+  - “Updating split…”
+  - “Validating…”
+  - “Saving…”
+
+- optional timer:
+  - “Working for 12 seconds”
+
+- optional progress indicator:
+  - animated dots, bar, or subtle motion
+
+--------------------------------------------------
+BEHAVIOR RULES
+--------------------------------------------------
+
+1. When user sends a build or modify request:
+   - agent immediately enters ACTIVE state
+
+2. While processing:
+   - agent stays visible as “working”
+   - updates its status dynamically
+
+3. When complete:
+   - agent exits working state
+   - shows final message
+
+--------------------------------------------------
+STATE TRANSITIONS
+--------------------------------------------------
+
+IDLE → ACTIVE → WORKING → COMPLETE → IDLE
+
+--------------------------------------------------
+EXAMPLE FLOW
+--------------------------------------------------
+
+User:
+“Build me a 4-day split”
+
+System:
+
+[Agent State Appears]
+“Working… (0s)”
+
+→ updates:
+“Building your structure… (2s)”
+“Selecting exercises… (5s)”
+“Validating program… (8s)”
+
+→ final:
+“Done. Your program is ready.”
+
+[Agent State disappears or becomes idle]
+
+--------------------------------------------------
+IMPORTANT RULES
+--------------------------------------------------
+
+- The agent state must persist across the entire operation
+- Do NOT rely only on chat messages
+- Do NOT let the UI feel idle while processing
+- Status updates must feel real and tied to system steps
+
+--------------------------------------------------
+UI DESIGN
+--------------------------------------------------
+
+- Keep it clean and minimal
+- small status bar or inline element
+- not intrusive
+- always visible while working
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+This is successful if:
+
+1. The agent feels continuously active
+2. Users feel like something is happening at all times
+3. There is no “dead air” in the UI
+4. The experience feels like a live system, not a chat
+
+--------------------------------------------------
+FINAL PRINCIPLE
+--------------------------------------------------
+
+TrainChat should feel like an agent that is actively working on your system in real time.
+
+Not responding.
+
+Working.

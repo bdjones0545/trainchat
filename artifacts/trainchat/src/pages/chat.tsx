@@ -23,6 +23,7 @@ import TopNav from "@/components/layout/TopNav";
 import MobileSlideLayout, { type SlidePanel } from "@/components/layout/MobileSlideLayout";
 import MessageBubble from "@/components/chat/MessageBubble";
 import AgentThinking from "@/components/chat/AgentThinking";
+import AgentStatusBar from "@/components/chat/AgentStatusBar";
 import LiveProgramPanel from "@/components/chat/LiveProgramPanel";
 import { type ProgramStructure } from "@/components/chat/ChatOutput";
 import ReadinessModal from "@/components/chat/ReadinessModal";
@@ -832,6 +833,13 @@ export default function Chat() {
               </div>
             </div>
           )}
+
+          {/* Agent status bar — persistent working state */}
+          <AgentStatusBar
+            isActive={stream.isActive}
+            buildStage={stream.state.buildStage}
+            actionType={stream.state.actionType}
+          />
 
           {/* Input bar */}
           <div className="flex-shrink-0 px-4 pb-5 pt-3 border-t border-border bg-background/80 backdrop-blur-sm">
