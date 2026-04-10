@@ -44,8 +44,21 @@ The UI features a dark theme with electric blue accents and the Inter font, cent
 - **Fast Iteration Loop (Vibe Coding Flow)**: Features an always-visible "VibeBar" for quick commands and inline quick actions on exercise cards, allowing for rapid, iterative adjustments to the training plan with instant feedback and undo capabilities.
 - **Onboarding Flow**: A multi-step form collects user training preferences, directing users to the chat upon completion.
 
+### Agent Decision Architecture
+- **Intent Classification** (`intent.ts`): Classifies every user message into structured intent types (CREATE_PROGRAM, EDIT_PROGRAM, ADJUST_FOR_PAIN, etc.) using regex-based pattern matching. Includes `detectSport()` for sport-specific routing.
+- **Decision Tree** (`decision.ts`): Resolves `ActionType` (DIRECT_MUTATION, STRUCTURAL_REBUILD, etc.) from the classified intent. The fallback for vague structural requests is always `STRUCTURAL_REBUILD` — never a clarifying question.
+- **3-Tier Assumption Confidence**: System prompt encodes TIER 1 (high confidence → act immediately), TIER 2 (medium → smart default + act), TIER 3 (low → one question, then act).
+- **Goal-Specific Defaults**: Strength, hypertrophy, athletic/performance, and fat-loss all have explicit assumption defaults baked into the system prompt.
+- **Sport-Specific Defaults**: Soccer, basketball, baseball, tennis, track, swimming, and combat sports all have explicit programming biases in the system prompt.
+
+### Knowledge Base (Admin Education System)
+- **DB Table**: `coaching_knowledge` — stores philosophy notes, exercise intelligence, system rules, and sport templates.
+- **Retrieval** (`knowledge-retrieval.ts`): Context-aware retrieval that scores entries by goal, sport, body region, and tag overlap. Top matching entries are injected into the system prompt at build time.
+- **Admin API**: CRUD endpoints at `/api/admin/knowledge` (GET, POST, PUT/:id, DELETE/:id) — all protected by `requireAdmin`.
+- **Admin UI**: Knowledge Base tab in `/admin` — add, edit, activate/deactivate, and delete coaching knowledge entries with type, sport, goal, body region, and tag filters.
+
 ### System Design Choices
-- **Database Schema**: Comprehensive tables for users, profiles, conversations, training programs, readiness, feedback, memories, logs, analytics, and Stripe data.
+- **Database Schema**: Comprehensive tables for users, profiles, conversations, training programs, readiness, feedback, memories, logs, analytics, Stripe data, and coaching_knowledge.
 - **Authentication**: Session-based authentication using `express-session` with a PostgreSQL-backed store, configured for secure operation across environments, including Replit.
 - **Modularity & Extensibility**: Services are designed as distinct modules with clear extension points for future integrations.
 

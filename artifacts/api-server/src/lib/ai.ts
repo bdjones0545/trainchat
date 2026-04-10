@@ -30,6 +30,7 @@ import {
   detectCurrentSplit,
   type TransformRequest,
 } from "./split-transform";
+import { retrieveRelevantKnowledge } from "./knowledge-retrieval";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -398,6 +399,60 @@ When a user sends a message with an existing program, classify the request into 
 
 **CHAT RESPONSE RULE:** Confirm what changed in 1–3 sentences. The program panel displays — chat explains. Do not repeat the workout in chat.
 
+## 3-TIER ASSUMPTION CONFIDENCE SYSTEM
+
+When user input is incomplete, apply the correct tier and act accordingly:
+
+**TIER 1 — HIGH CONFIDENCE (act immediately, no clarification):**
+Input is directionally clear. Examples: "I want upper body strength", "make it more athletic", "add more arms", "I only have 45 minutes", "my shoulder hurts", "give me more speed work".
+→ Act. Optionally state assumption in 1 line. Never ask.
+
+**TIER 2 — MEDIUM CONFIDENCE (make smart default, act immediately):**
+Intent is mostly clear but one minor detail is missing. Examples: "make it harder", "I want to get stronger", "help me for soccer", "I want more explosive work".
+→ Choose the most sensible default for the goal/sport. Act. Optionally note the assumption briefly.
+Example: "I biased this toward moderate-volume strength work." or "I assumed field-sport performance emphasis."
+
+**TIER 3 — LOW CONFIDENCE (ask ONE question, then act on reply):**
+Request is too vague to act intelligently. Examples: "make it better", "fix it", "do something different".
+→ Ask ONE targeted question. Never repeat it. Whatever the user replies with — act.
+
+LOOP PREVENTION: If a clarifying question was already asked in this conversation, the next step MUST be action. Never ask the same question twice.
+
+## GOAL-SPECIFIC ASSUMPTION DEFAULTS
+
+Apply these defaults automatically when the goal is clear:
+
+**STRENGTH** — Lower rep emphasis on primary lifts (3–5 range). Longer rest on key movements. Reduced accessory redundancy. Progression focused on load. Neural efficiency emphasis. Preserve support work.
+
+**HYPERTROPHY / SIZE** — Moderate-to-higher volume. Moderate rep ranges (6–12). More accessory work. Mechanical tension + fatigue management. Balanced weekly volume. Include support work.
+
+**ATHLETIC / PERFORMANCE** — Force production and power/speed/coordination. Lower junk volume. Movement quality emphasis. Tissue tolerance, trunk control, deceleration, unilateral support. Preserve sport carryover.
+
+**FAT LOSS / GENERAL FITNESS** — Efficient sessions. Sustainable volume. General strength base. Conditioning integration. Exercise simplicity. Adherence priority.
+
+## SPORT-SPECIFIC ASSUMPTION DEFAULTS
+
+When user has a sport focus, automatically bias the program toward sport demands:
+
+**SOCCER** — Lower body strength, unilateral work, trunk control, deceleration, acceleration mechanics, posterior chain, adductor resilience, upper body support (not bodybuilding-first).
+
+**BASKETBALL** — Power, landing/deceleration ability, lower body strength, trunk/hip control, tendon tolerance, shoulder/scap support.
+
+**BASEBALL** — Rotational power, scap/cuff control, trunk stiffness, single-leg strength, throwing tolerance awareness. Avoid high-volume overhead pressing.
+
+**TENNIS / RACKET SPORTS** — Rotational power, wrist/elbow tolerance, unilateral lower body, scap stability, trunk anti-rotation.
+
+**TRACK / SPRINTING** — Acceleration mechanics, single-leg power, hip extension, posterior chain strength, minimal upper body hypertrophy volume.
+
+**SWIMMING** — Shoulder/scap health first, pulling volume emphasis, trunk stiffness, low lower-body fatigue.
+
+**COMBAT SPORTS / MMA** — Functional strength, isometric tolerance, grappling-relevant trunk and grip work, conditioning integration, sport-specific fatigue management.
+
+## ASSUMPTION TRANSPARENCY RULE
+When making a meaningful assumption, optionally state it in ONE short line max.
+Examples: "I biased this toward strength with manageable volume." / "I assumed field-sport performance emphasis." / "I built this around shoulder-friendly pressing."
+Do NOT over-explain. This line is optional — skip it when the action is obvious from context.
+
 ## CONVERSATION MEMORY
 This conversation's history is included. Track what has been decided:
 - Goals and constraints already stated — do not ask again
@@ -417,6 +472,13 @@ This user has not completed their training profile. If they ask for a personaliz
   // Build DB-backed exercise library context (async — gracefully skips on error)
   const exerciseLibraryContext = await buildDBExerciseContext(profile);
 
+  // Retrieve contextually relevant coaching knowledge from the knowledge base
+  const knowledgeContext = await retrieveRelevantKnowledge({
+    goal: profile.trainingGoal,
+    sport: profile.sportFocus,
+    bodyRegion: profile.injuries ? "injury_present" : null,
+  });
+
   return coreIdentity + `
 
 ## USER TRAINING PROFILE
@@ -433,7 +495,7 @@ ${profile.sportFocus ? `- Sport / Activity Focus: ${profile.sportFocus}` : ""}
 ${profile.exercisePreferences ? `- Exercise Preferences: ${profile.exercisePreferences}` : ""}
 ${profile.exercisesToAvoid ? `- Exercises to Avoid (NEVER program these): ${profile.exercisesToAvoid}` : ""}
 
-${intelligenceContext}${exerciseLibraryContext}`;
+${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}`;
 }
 
 // ─── JSON extractor ──────────────────────────────────────────────────────────

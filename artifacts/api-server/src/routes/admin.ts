@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, usersTable, conversationsTable, messagesTable, savedProgramsTable, sessionLogsTable } from "@workspace/db";
-import { eq, count, sql, gte } from "drizzle-orm";
+import { db, usersTable, conversationsTable, messagesTable, savedProgramsTable, sessionLogsTable, coachingKnowledgeTable } from "@workspace/db";
+import { eq, count, sql, gte, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { getFunnelMetrics, getRecentEvents } from "../lib/analyticsService";
 
@@ -143,6 +143,111 @@ router.get("/admin/events", requireAuth, requireAdmin, async (req, res): Promise
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ─── Knowledge Base CRUD ────────────────────────────────────────────────────
+
+/**
+ * GET /api/admin/knowledge
+ * List all coaching knowledge entries.
+ */
+router.get("/admin/knowledge", requireAuth, requireAdmin, async (_req, res): Promise<void> => {
+  const entries = await db
+    .select()
+    .from(coachingKnowledgeTable)
+    .orderBy(desc(coachingKnowledgeTable.createdAt));
+  res.json({ entries });
+});
+
+/**
+ * POST /api/admin/knowledge
+ * Create a new coaching knowledge entry.
+ */
+router.post("/admin/knowledge", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const { type, content, tags, sport, goal, bodyRegion, movementPattern, population, sourceType } = req.body ?? {};
+
+  if (!type || !content) {
+    res.status(400).json({ error: "type and content are required" });
+    return;
+  }
+
+  const validTypes = ["philosophy", "exercise", "rule", "sport_template"];
+  if (!validTypes.includes(type)) {
+    res.status(400).json({ error: `type must be one of: ${validTypes.join(", ")}` });
+    return;
+  }
+
+  const [entry] = await db
+    .insert(coachingKnowledgeTable)
+    .values({
+      type,
+      content,
+      tags: Array.isArray(tags) ? tags : [],
+      sport: sport || null,
+      goal: goal || null,
+      bodyRegion: bodyRegion || null,
+      movementPattern: movementPattern || null,
+      population: population || null,
+      sourceType: sourceType || "manual",
+      isActive: true,
+    })
+    .returning();
+
+  res.status(201).json({ entry });
+});
+
+/**
+ * PUT /api/admin/knowledge/:id
+ * Update a coaching knowledge entry.
+ */
+router.put("/admin/knowledge/:id", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  const { type, content, tags, sport, goal, bodyRegion, movementPattern, population, sourceType, isActive } = req.body ?? {};
+
+  const [updated] = await db
+    .update(coachingKnowledgeTable)
+    .set({
+      ...(type !== undefined && { type }),
+      ...(content !== undefined && { content }),
+      ...(tags !== undefined && { tags: Array.isArray(tags) ? tags : [] }),
+      ...(sport !== undefined && { sport: sport || null }),
+      ...(goal !== undefined && { goal: goal || null }),
+      ...(bodyRegion !== undefined && { bodyRegion: bodyRegion || null }),
+      ...(movementPattern !== undefined && { movementPattern: movementPattern || null }),
+      ...(population !== undefined && { population: population || null }),
+      ...(sourceType !== undefined && { sourceType }),
+      ...(isActive !== undefined && { isActive }),
+      updatedAt: new Date(),
+    })
+    .where(eq(coachingKnowledgeTable.id, id))
+    .returning();
+
+  if (!updated) {
+    res.status(404).json({ error: "Entry not found" });
+    return;
+  }
+
+  res.json({ entry: updated });
+});
+
+/**
+ * DELETE /api/admin/knowledge/:id
+ * Delete a coaching knowledge entry.
+ */
+router.delete("/admin/knowledge/:id", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  await db.delete(coachingKnowledgeTable).where(eq(coachingKnowledgeTable.id, id));
+  res.json({ ok: true });
 });
 
 export default router;

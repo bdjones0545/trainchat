@@ -58,7 +58,27 @@ export interface StructuralEditMetadata {
   targetSplit: "full_body" | "upper_lower" | "ppl" | "push_pull" | "unknown";
   targetDays: number | null;
   targetGoalShift: "athletic" | "fat_loss" | "strength" | "hypertrophy" | "conditioning" | null;
+  targetSport: string | null;
   preserveExercises: boolean;
+}
+
+// ─── Sport Detection ──────────────────────────────────────────────────────────
+
+export function detectSport(lower: string): string | null {
+  if (/\b(soccer|football|futbol|pitch)\b/.test(lower)) return "soccer";
+  if (/\b(basketball|hoops|court)\b/.test(lower)) return "basketball";
+  if (/\b(baseball|softball|pitcher|batter)\b/.test(lower)) return "baseball";
+  if (/\b(tennis|racket|racquet)\b/.test(lower)) return "tennis";
+  if (/\b(swimming|swim|pool)\b/.test(lower)) return "swimming";
+  if (/\b(track|sprint|sprinting|running|runner)\b/.test(lower)) return "track";
+  if (/\b(hockey|ice hockey|field hockey)\b/.test(lower)) return "hockey";
+  if (/\b(golf)\b/.test(lower)) return "golf";
+  if (/\b(mma|jiu.?jitsu|bjj|wrestling|judo|boxing|martial arts|combat)\b/.test(lower)) return "combat_sports";
+  if (/\b(volleyball|beach volleyball)\b/.test(lower)) return "volleyball";
+  if (/\b(lacrosse)\b/.test(lower)) return "lacrosse";
+  if (/\b(rowing|crew)\b/.test(lower)) return "rowing";
+  if (/\b(cycling|biking|cyclist)\b/.test(lower)) return "cycling";
+  return null;
 }
 
 // ─── Main Classifier ────────────────────────────────────────────────────────
@@ -253,7 +273,7 @@ function matchesStructuralEdit(lower: string): {
   const noMatch = {
     matched: false,
     confidence: "low" as const,
-    meta: { targetSplit: "unknown" as const, targetDays: null, targetGoalShift: null, preserveExercises: true },
+    meta: { targetSplit: "unknown" as const, targetDays: null, targetGoalShift: null, targetSport: null, preserveExercises: true },
   };
 
   // ── Split type conversion ──────────────────────────────────────────────────
@@ -281,6 +301,7 @@ function matchesStructuralEdit(lower: string): {
   let targetSplit: StructuralEditMetadata["targetSplit"] = "unknown";
   let targetDays: number | null = null;
   let targetGoalShift: StructuralEditMetadata["targetGoalShift"] = null;
+  let targetSport: string | null = null;
 
   if (fullBodyPattern.test(lower) || implicitFullBodyPattern.test(lower)) targetSplit = "full_body";
   else if (upperLowerPattern.test(lower)) targetSplit = "upper_lower";
@@ -298,6 +319,11 @@ function matchesStructuralEdit(lower: string): {
   else if (hypertrophyShiftPattern.test(lower)) targetGoalShift = "hypertrophy";
   else if (strengthShiftPattern.test(lower)) targetGoalShift = "strength";
 
+  // Sport-specific requests map to athletic goal shift
+  targetSport = detectSport(lower);
+  const hasSportRequest = targetSport !== null && /\b(for|train(ing)?|optimize|help|prep(are)?|focus|built|program|geared)\b/.test(lower);
+  if (hasSportRequest && !targetGoalShift) targetGoalShift = "athletic";
+
   const hasSplitChange = targetSplit !== "unknown";
   const hasDayChange = targetDays !== null;
   const hasGoalShift = targetGoalShift !== null;
@@ -307,15 +333,15 @@ function matchesStructuralEdit(lower: string): {
     return {
       matched: true,
       confidence: "high",
-      meta: { targetSplit, targetDays, targetGoalShift, preserveExercises: true },
+      meta: { targetSplit, targetDays, targetGoalShift, targetSport, preserveExercises: true },
     };
   }
 
-  if (hasGoalShift || hasVagueStructural) {
+  if (hasGoalShift || hasVagueStructural || hasSportRequest) {
     return {
       matched: true,
       confidence: "medium",
-      meta: { targetSplit, targetDays, targetGoalShift, preserveExercises: true },
+      meta: { targetSplit, targetDays, targetGoalShift, targetSport, preserveExercises: true },
     };
   }
 
