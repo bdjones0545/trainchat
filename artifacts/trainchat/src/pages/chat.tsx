@@ -2,8 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import {
   SendHorizontal, Zap, PanelLeftClose, PanelLeft, Activity,
-  Menu, Target, Settings, CreditCard, LogOut, SlidersHorizontal,
-  MessageSquare, Plus,
+  Menu, Target, Settings, CreditCard, LogOut, Dumbbell,
+  MessageSquare, Plus, GitBranch, History,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -25,7 +25,8 @@ import MobileSlideLayout, { type SlidePanel } from "@/components/layout/MobileSl
 import ChatSidebar from "@/components/chat/ChatSidebar";
 import MessageBubble from "@/components/chat/MessageBubble";
 import TypingIndicator from "@/components/chat/TypingIndicator";
-import ChatOutput, { type ProgramStructure } from "@/components/chat/ChatOutput";
+import LiveProgramPanel from "@/components/chat/LiveProgramPanel";
+import { type ProgramStructure } from "@/components/chat/ChatOutput";
 import ReadinessModal from "@/components/chat/ReadinessModal";
 import FeedbackModal from "@/components/chat/FeedbackModal";
 import ReadinessSummary from "@/components/chat/ReadinessSummary";
@@ -36,11 +37,13 @@ import PaywallModal from "@/components/PaywallModal";
 import PricingModal from "@/components/PricingModal";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 
-const STARTER_PROMPTS = [
-  "Build me a 4-day push/pull program",
-  "I want to get stronger — where do I start?",
-  "Design a program for 5 days a week",
-  "What's the best split for muscle gain?",
+const SUGGESTION_CHIPS = [
+  { label: "Build my program", prompt: "Build me a training program" },
+  { label: "Adjust my split", prompt: "I want to adjust my current training split" },
+  { label: "Swap exercises", prompt: "Help me swap some exercises in my program" },
+  { label: "Reduce fatigue", prompt: "My fatigue is high — help me manage volume" },
+  { label: "Add speed work", prompt: "I want to add speed and conditioning work" },
+  { label: "5-day program", prompt: "Design a 5 day per week program for me" },
 ];
 
 async function fetchSubscription() {
@@ -54,6 +57,14 @@ async function fetchSubscription() {
 async function fetchStreak() {
   try {
     return await customFetch<any>("/api/streak");
+  } catch {
+    return null;
+  }
+}
+
+async function fetchActiveSystem() {
+  try {
+    return await customFetch<any>("/api/training-system/active");
   } catch {
     return null;
   }
@@ -131,18 +142,24 @@ export default function Chat() {
     staleTime: 300000,
   });
 
+  const { data: activeSystem } = useQuery({
+    queryKey: ["training-system-active"],
+    queryFn: fetchActiveSystem,
+    enabled: !!me,
+    staleTime: 60000,
+  });
+
   const createConvo = useCreateConversation();
   const sendMessage = useSendMessage();
 
   const isPremium = subscription?.plan === "pro" || subscription?.plan === "elite";
   const currentPlan = subscription?.plan ?? "free";
   const currentStreak = streakData?.currentStreak ?? 0;
+  const hasActiveSystem = !!activeSystem?.id;
 
   useEffect(() => {
     if (meError) setLocation("/start");
   }, [meError, setLocation]);
-
-  // Profile errors are handled gracefully — agent gathers info conversationally
 
   useEffect(() => {
     if (!me || convosLoading) return;
@@ -166,12 +183,10 @@ export default function Chat() {
   }, [messages, isTyping]);
 
   useEffect(() => {
-    // Find the latest assistant message that has a draft program (not a system_edit marker)
     const programMessages = messages.filter((m) => {
       if (m.role !== "assistant" || !m.structuredData) return false;
       try {
         const data = JSON.parse(m.structuredData);
-        // Skip system_edit markers — they are not draft programs
         if (data?._type === "system_edit") return false;
         return data?.days && Array.isArray(data.days);
       } catch {
@@ -255,8 +270,6 @@ export default function Chat() {
             setMessagesUsed(data.planInfo.messageCount ?? messagesUsed + 1);
           }
 
-          // If the agent applied a vibe edit to the real training system,
-          // invalidate all training-system query keys so the /system page refreshes instantly
           if (data?.systemEdit?.applied) {
             queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
             queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
@@ -280,7 +293,6 @@ export default function Chat() {
     setIsSaving(true);
 
     try {
-      // Step 1: Save to saved_programs (legacy path — keeps existing program list working)
       await customFetch<any>("/api/programs", {
         method: "POST",
         body: JSON.stringify({
@@ -305,8 +317,6 @@ export default function Chat() {
         console.warn("[SaveProgram] saved_programs save failed (non-fatal):", err);
       });
 
-      // Step 2: Save to Training System (the main fix — creates the structured system the /system page reads from)
-      console.log("[SaveProgram] Saving to Training System:", latestProgram.programName);
       await customFetch<any>("/api/training-system/from-chat", {
         method: "POST",
         body: JSON.stringify({
@@ -332,9 +342,6 @@ export default function Chat() {
         }),
       });
 
-      console.log("[SaveProgram] Training System saved successfully");
-
-      // Step 3: Invalidate all Training System queries so /system page refreshes immediately
       queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
@@ -344,7 +351,7 @@ export default function Chat() {
       setIsSaving(false);
       setIsSaved(true);
     } catch (err) {
-      console.error("[SaveProgram] Failed to save training system:", err);
+      console.error("[SaveProgram] Failed:", err);
       setIsSaving(false);
     }
   }
@@ -391,12 +398,21 @@ export default function Chat() {
     setIsSaved(false);
   }
 
+  function handleLogout() {
+    logout.mutate(undefined, {
+      onSuccess: () => {
+        queryClient.clear();
+        setLocation("/start");
+      },
+    });
+  }
+
   if (meLoading || profileLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex items-center gap-3 text-muted-foreground">
           <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-          <span className="text-sm">Loading...</span>
+          <span className="text-sm">Loading…</span>
         </div>
       </div>
     );
@@ -406,14 +422,7 @@ export default function Chat() {
   const userName = me?.name ?? "User";
   const initials = userName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
 
-  function handleLogout() {
-    logout.mutate(undefined, {
-      onSuccess: () => {
-        queryClient.clear();
-        setLocation("/start");
-      },
-    });
-  }
+  // ─── Sidebar content ────────────────────────────────────────────────────────
 
   const chatLeftPanel = (
     <div className="flex flex-col h-full">
@@ -433,6 +442,7 @@ export default function Chat() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+        {/* Navigate */}
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-3">Navigate</p>
         <button
           onClick={() => { setLocation("/chat"); setMobilePanel(null); }}
@@ -447,9 +457,12 @@ export default function Chat() {
         >
           <Target className="w-4 h-4 text-muted-foreground flex-shrink-0" />
           <span>Your System</span>
+          {hasActiveSystem && (
+            <span className="ml-auto w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
+          )}
         </button>
 
-        {/* New conversation */}
+        {/* Conversations */}
         <div className="my-3 h-px bg-border" />
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-3">Conversations</p>
         <button
@@ -457,9 +470,9 @@ export default function Chat() {
           className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
         >
           <Plus className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-          <span>New Conversation</span>
+          <span>New Chat</span>
         </button>
-        {conversations.slice(0, 8).map((convo: any) => (
+        {conversations.slice(0, 10).map((convo: any) => (
           <button
             key={convo.id}
             onClick={() => { handleSelectConvo(convo.id); setMobilePanel(null); }}
@@ -474,6 +487,7 @@ export default function Chat() {
           </button>
         ))}
 
+        {/* Account */}
         <div className="my-3 h-px bg-border" />
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-3">Account</p>
         <button
@@ -515,12 +529,14 @@ export default function Chat() {
     </div>
   );
 
-  const chatRightPanel = (
-    <div className="flex flex-col h-full">
+  // ─── Right panel content ────────────────────────────────────────────────────
+
+  const liveProgramPanel = (
+    <div className="flex flex-col h-full overflow-hidden">
       <ReadinessSummary />
-      <div className="flex-1 overflow-y-auto min-h-0">
-        {latestProgram ? (
-          <ChatOutput
+      <div className="flex-1 min-h-0 overflow-hidden">
+        {latestProgram || hasActiveSystem ? (
+          <LiveProgramPanel
             program={latestProgram}
             onSave={handleSaveProgram}
             onFeedback={() => { setShowFeedback(true); setMobilePanel(null); }}
@@ -529,6 +545,7 @@ export default function Chat() {
             isSaving={isSaving}
             isSaved={isSaved}
             isPremium={isPremium}
+            hasActiveSystem={hasActiveSystem}
           />
         ) : (
           <InsightsPanel
@@ -546,9 +563,9 @@ export default function Chat() {
       activePanel={mobilePanel}
       onPanelClose={() => setMobilePanel(null)}
       leftPanel={chatLeftPanel}
-      rightPanel={chatRightPanel}
+      rightPanel={liveProgramPanel}
     >
-      {/* ─── Modals (always rendered, portal-like) ─── */}
+      {/* ─── Modals ─── */}
       {showReadiness && (
         <ReadinessModal
           onClose={() => setShowReadiness(false)}
@@ -589,7 +606,7 @@ export default function Chat() {
         />
       )}
 
-      {/* ─── Mobile header (mobile only) ─── */}
+      {/* ─── Mobile header ─── */}
       <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border bg-background/95 backdrop-blur-sm flex-shrink-0 z-10">
         <button
           onClick={() => setMobilePanel("left")}
@@ -602,24 +619,24 @@ export default function Chat() {
         <button
           onClick={() => setMobilePanel("right")}
           className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${
-            latestProgram
+            latestProgram || hasActiveSystem
               ? "text-primary bg-primary/10 hover:bg-primary/20"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
           } active:bg-muted/80`}
-          aria-label="Training output"
+          aria-label="Open training program"
         >
-          <SlidersHorizontal className="w-5 h-5" />
+          <Dumbbell className="w-5 h-5" />
         </button>
       </div>
 
-      {/* ─── Desktop TopNav (desktop only) ─── */}
+      {/* ─── Desktop TopNav ─── */}
       <div className="hidden md:block">
         <TopNav userName={userName} extraContent={<StreakBadge streak={currentStreak} />} />
       </div>
 
-      {/* ─── Main chat area ─── */}
+      {/* ─── Main layout ─── */}
       <div className="flex-1 flex overflow-hidden min-h-0">
-        {/* Desktop Sidebar (desktop only) */}
+        {/* Desktop Sidebar */}
         <div className="hidden md:block">
           {sidebarOpen && (
             <ChatSidebar
@@ -633,17 +650,13 @@ export default function Chat() {
 
         {/* Center chat column */}
         <div className="flex-1 flex flex-col min-w-0 relative">
-          {/* Desktop sidebar toggle */}
+          {/* Sidebar toggle */}
           <button
             onClick={() => setSidebarOpen((s) => !s)}
             className="hidden md:flex absolute top-3 left-3 z-10 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-all duration-150"
             title={sidebarOpen ? "Close sidebar" : "Open sidebar"}
           >
-            {sidebarOpen ? (
-              <PanelLeftClose className="w-4 h-4" />
-            ) : (
-              <PanelLeft className="w-4 h-4" />
-            )}
+            {sidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeft className="w-4 h-4" />}
           </button>
 
           {/* Free tier indicator */}
@@ -668,24 +681,25 @@ export default function Chat() {
                 <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
               </div>
             ) : messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full py-12 text-center">
-                <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-5">
-                  <Zap className="w-5 h-5 text-primary" />
+              /* ─── Empty state ─── */
+              <div className="flex flex-col items-center justify-center h-full py-12 px-4 text-center">
+                <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-5">
+                  <Dumbbell className="w-6 h-6 text-primary" />
                 </div>
-                <h2 className="text-base font-semibold text-foreground mb-2">
-                  Ready, {firstName}.
+                <h2 className="text-base font-semibold text-foreground mb-1.5">
+                  What do you want to build or adjust?
                 </h2>
                 <p className="text-sm text-muted-foreground max-w-xs leading-relaxed mb-8">
-                  Tell me what you're working toward and we'll build your program together.
+                  Tell me your goal and I'll co-build your training system with you — or adjust what you already have.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-sm">
-                  {STARTER_PROMPTS.map((msg) => (
+                <div className="flex flex-wrap justify-center gap-2 w-full max-w-md">
+                  {SUGGESTION_CHIPS.map((chip) => (
                     <button
-                      key={msg}
-                      onClick={() => handleSend(msg)}
-                      className="text-left px-3.5 py-3 text-xs text-muted-foreground bg-card border border-border rounded-xl hover:border-primary/40 hover:text-foreground hover:bg-accent transition-all duration-150"
+                      key={chip.label}
+                      onClick={() => handleSend(chip.prompt)}
+                      className="px-3.5 py-2 text-xs font-medium text-foreground bg-card border border-border rounded-full hover:border-primary/40 hover:text-primary hover:bg-primary/5 active:scale-95 transition-all duration-150"
                     >
-                      {msg}
+                      {chip.label}
                     </button>
                   ))}
                 </div>
@@ -704,7 +718,7 @@ export default function Chat() {
           {/* Input bar */}
           <div className="flex-shrink-0 px-4 pb-5 pt-3 border-t border-border bg-background/80 backdrop-blur-sm">
             <div className="max-w-2xl mx-auto">
-              <div className="flex justify-end mb-2">
+              <div className="flex justify-between items-center mb-2">
                 <button
                   onClick={() => setShowReadiness(true)}
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold text-muted-foreground border border-border hover:text-foreground hover:border-primary/30 transition-all duration-150"
@@ -712,6 +726,12 @@ export default function Chat() {
                   <Activity className="w-3 h-3" />
                   Check-In
                 </button>
+                {hasActiveSystem && (
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                    <span className="text-[10px] text-muted-foreground">System active — edits go live instantly</span>
+                  </div>
+                )}
               </div>
               <div className="relative flex items-end gap-2 bg-card border border-border rounded-2xl focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 transition-all duration-200">
                 <textarea
@@ -721,7 +741,7 @@ export default function Chat() {
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleKeyDown}
                   rows={1}
-                  placeholder="Message your performance architect..."
+                  placeholder={hasActiveSystem ? "Ask me to adjust your program…" : "Message your performance architect…"}
                   disabled={isTyping || sendMessage.isPending}
                   className="flex-1 resize-none bg-transparent px-4 py-3.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none leading-relaxed max-h-40 overflow-y-auto disabled:opacity-60"
                   style={{ minHeight: "52px" }}
@@ -747,14 +767,17 @@ export default function Chat() {
           </div>
         </div>
 
-        {/* Desktop right panel (desktop only) */}
+        {/* Desktop right panel */}
         <div className="hidden md:flex">
           {rightPanelOpen ? (
-            <div className="w-72 flex-shrink-0 border-l border-border flex flex-col bg-background overflow-hidden">
+            <div className="w-80 flex-shrink-0 border-l border-border flex flex-col bg-background overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                  Training Output
-                </span>
+                <div className="flex items-center gap-2">
+                  <div className={`w-1.5 h-1.5 rounded-full ${hasActiveSystem || latestProgram ? "bg-primary animate-pulse" : "bg-muted-foreground/30"}`} style={{ animationDuration: "3s" }} />
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                    Live Program
+                  </span>
+                </div>
                 <button
                   onClick={() => setRightPanelOpen(false)}
                   className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
@@ -762,10 +785,9 @@ export default function Chat() {
                   Hide
                 </button>
               </div>
-              <ReadinessSummary />
               <div className="flex-1 overflow-hidden">
-                {latestProgram ? (
-                  <ChatOutput
+                {latestProgram || hasActiveSystem ? (
+                  <LiveProgramPanel
                     program={latestProgram}
                     onSave={handleSaveProgram}
                     onFeedback={() => setShowFeedback(true)}
@@ -774,6 +796,7 @@ export default function Chat() {
                     isSaving={isSaving}
                     isSaved={isSaved}
                     isPremium={isPremium}
+                    hasActiveSystem={hasActiveSystem}
                   />
                 ) : (
                   <InsightsPanel
@@ -788,10 +811,10 @@ export default function Chat() {
             <button
               onClick={() => setRightPanelOpen(true)}
               className="flex-shrink-0 w-8 border-l border-border bg-background flex items-center justify-center hover:bg-accent transition-all duration-150 group"
-              title="Show training output"
+              title="Show live program"
             >
               <span className="text-[9px] text-muted-foreground group-hover:text-foreground font-semibold uppercase tracking-widest rotate-90 whitespace-nowrap transition-colors">
-                Output
+                Program
               </span>
             </button>
           )}

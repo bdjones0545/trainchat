@@ -1,0 +1,172 @@
+Add a “Calibration System” to TrainChat that enhances AI accuracy without interrupting the user’s flow.
+
+CORE GOAL:
+Users should be able to start immediately with the AI agent (no onboarding), and then optionally “upgrade” the system’s intelligence by providing more data through a calibration modal.
+
+This should feel like improving a system — not filling out onboarding.
+
+---
+
+UI PLACEMENT:
+
+1. Add a new button next to “Check-In” in the main chat screen:
+- Label: “Improve Accuracy” (preferred) or “Calibrate”
+- Mobile-first design: same row as Check-In
+- Visually equal importance, not hidden
+
+2. Button behavior:
+- Opens a slide-up modal (bottom sheet on mobile)
+- Smooth animation, fast load
+- Does NOT navigate away from chat
+
+---
+
+CALIBRATION MODAL DESIGN:
+
+Header:
+- “Upgrade Your Training Intelligence”
+
+Subtext:
+- “The more I know, the better I can build and adjust your program.”
+
+Progress Indicator:
+- Show “AI Accuracy Level”
+  - Low (0–30%)
+  - Medium (30–70%)
+  - High (70–100%)
+
+- Display % based on how much data user has provided
+
+---
+
+CALIBRATION INPUT SECTIONS:
+
+Make this fast, dynamic, and conversational — not a long boring form.
+
+1. Training Experience
+- Beginner / Intermediate / Advanced
+- Years training
+
+2. Primary Goal
+- Muscle Gain
+- Fat Loss
+- Athletic Performance
+- General Fitness
+
+3. Injuries / Limitations
+- Free text + quick select (knee, shoulder, back, etc.)
+
+4. Equipment Access
+- Full Gym
+- Dumbbells Only
+- Bodyweight
+- Custom
+
+5. Time Constraints
+- Days per week
+- Minutes per session
+
+6. Optional (Phase 2):
+- Sport
+- Recovery/sleep
+- Stress levels
+
+---
+
+SYSTEM BEHAVIOR:
+
+When user completes calibration:
+
+1. Save all inputs to persistent user profile
+2. Update long-term AI memory system
+3. Re-trigger program optimization
+
+Immediately send agent message:
+
+Example:
+“Perfect — I just upgraded your system with your training history, equipment access, and shoulder limitation. I’m optimizing your program now.”
+
+4. Rebuild or adjust current program using:
+- new calibration data
+- existing chat context
+- prior program state
+
+5. Visibly update the program (if one exists)
+
+---
+
+CHAT INTEGRATION:
+
+After the first program is generated, inject a message:
+
+“Want me to dial this in more precisely based on your body, limitations, and schedule? Tap ‘Improve Accuracy’.”
+
+This should increase calibration usage.
+
+---
+
+DATA MODEL:
+
+Add or expand user profile schema:
+
+user_profile:
+- experience_level
+- years_training
+- primary_goal
+- injuries
+- equipment
+- days_per_week
+- session_length
+- calibration_score (0–100)
+
+---
+
+CALIBRATION SCORING LOGIC:
+
+Assign weights to each section:
+- Experience: 15%
+- Goal: 15%
+- Injuries: 20%
+- Equipment: 15%
+- Time constraints: 20%
+- Optional inputs: 15%
+
+Calculate total score and display as AI Accuracy %
+
+---
+
+IMPORTANT PRODUCT RULE:
+
+Calibration is NOT onboarding.
+
+It must feel like:
+- optional
+- beneficial
+- fast
+- immediately impactful
+
+---
+
+UX PRINCIPLES:
+
+- Do not block the user from using the agent
+- Do not force completion
+- Keep it under 30–60 seconds total
+- Make the improvement visible after submission
+
+---
+
+FUTURE EXTENSION (not required now):
+
+- Show “AI Accuracy: Medium” badge in UI
+- Allow re-calibration anytime
+- Let AI suggest missing inputs dynamically in chat
+
+---
+
+FINAL GOAL:
+
+TrainChat should feel like a live system that gets smarter as the user feeds it more data — just like refining an environment in Replit.
+
+The user should feel:
+“I’m upgrading my AI coach,” not “I’m filling out a form.”

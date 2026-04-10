@@ -75,7 +75,7 @@ export default function MobileSlideLayout({
           }`}
         >
           <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
-            <span className="text-sm font-bold text-foreground">Advanced Tools</span>
+            <span className="text-sm font-bold text-foreground">Live Program</span>
             <button
               onClick={onPanelClose}
               className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
