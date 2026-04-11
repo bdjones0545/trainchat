@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, conversationsTable, messagesTable } from "@workspace/db";
+import { db, conversationsTable, messagesTable, neuralProfilesTable } from "@workspace/db";
 import { eq, desc, count } from "drizzle-orm";
 import { CreateConversationBody, GetConversationParams, DeleteConversationParams, ListMessagesParams, SendMessageBody, SendMessageParams } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
@@ -24,6 +24,7 @@ import { stripeStorage } from "../lib/stripeStorage";
 import { interpretEditRequest } from "../lib/edit-intent-service";
 import { applyEditPlan, type EditResult } from "../lib/edit-engine";
 import { createChangeLogEntry } from "../lib/change-log-service";
+import { interpretNeuralGraph, buildNeuralAdjustmentSummary, type NeuralBias, type Imbalance } from "../lib/neural-graph-interpreter";
 import { getActiveTrainingSystem, getFullTrainingSystem, createTrainingSystemFromProgram, upsertTrainingSystemFromProgram } from "../lib/training-system-service";
 import { buildDecisionMemory } from "../lib/decision-memory-service";
 import { logger } from "../lib/logger";
@@ -770,6 +771,37 @@ Keep it helpful and intelligent, never promotional.`;
     }
   }
 
+  // ── Neural Graph Context ───────────────────────────────────────────────────
+  // Load the user's neural adaptation profile and interpret it.
+  // This context is injected into every AI call so program decisions are graph-informed.
+  // When no API key is present (fallback mode), bias is applied post-hoc to the built program.
+  let neuralBias: NeuralBias | undefined;
+  let neuralImbalances: Imbalance[] | undefined;
+  let neuralContextStr: string | undefined;
+
+  try {
+    const [neuralRow] = await db
+      .select({ graphState: neuralProfilesTable.graphState })
+      .from(neuralProfilesTable)
+      .where(eq(neuralProfilesTable.userId, userId))
+      .limit(1);
+
+    if (neuralRow?.graphState) {
+      const interpretation = interpretNeuralGraph(neuralRow.graphState as any);
+      if (interpretation.hasMeaningfulData) {
+        neuralBias = interpretation.bias;
+        neuralImbalances = interpretation.imbalances;
+        neuralContextStr = interpretation.promptContext;
+        logger.info(
+          { powerBias: interpretation.bias.powerBias.toFixed(2), trunkBias: interpretation.bias.trunkBias.toFixed(2), recoveryBias: interpretation.bias.recoveryBias.toFixed(2), isActive: interpretation.bias.isActive },
+          "[NeuralGraph] Interpretation active — injecting into AI context"
+        );
+      }
+    }
+  } catch (err) {
+    logger.warn({ err }, "[NeuralGraph] Failed to load neural profile — proceeding without bias");
+  }
+
   let { content: aiContent, structuredData } = await generateAIResponse(
     parsed.data.content,
     history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
@@ -786,6 +818,9 @@ Keep it helpful and intelligent, never promotional.`;
       responseMode,
       extractedConstraints,
       userMessage: parsed.data.content,
+      neuralContext: neuralContextStr,
+      neuralBias,
+      neuralImbalances,
     }
   );
 
@@ -824,6 +859,9 @@ Keep it helpful and intelligent, never promotional.`;
           extractedConstraints,
           userMessage: parsed.data.content,
           transformHint: enforceHint,
+          neuralContext: neuralContextStr,
+          neuralBias,
+          neuralImbalances,
         }
       ).catch(() => null);
 

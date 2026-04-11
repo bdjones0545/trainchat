@@ -1,0 +1,327 @@
+We are building the PREDICTION LAYER for TrainChat.
+
+This is the next phase after:
+- Neural Feedback
+- Neural Graph
+- Neural Graph → Programming Feedback Loop
+
+IMPORTANT:
+This layer should make TrainChat feel anticipatory.
+
+Not just:
+- reactive
+- adaptive after the fact
+
+But:
+- aware of patterns before they become problems
+
+--------------------------------------------------
+CORE GOAL
+--------------------------------------------------
+
+TrainChat should begin identifying likely future outcomes based on user behavior and training trends.
+
+Examples:
+- likely fatigue accumulation
+- likely missed session risk
+- likely recovery dip
+- likely plateau
+- likely progression opportunity
+
+The product should feel like:
+“The system can see where I’m headed and adjusts before I get there.”
+
+--------------------------------------------------
+STEP 1: CREATE PREDICTION MODEL
+
+Create a lightweight prediction object:
+
+PredictionProfile {
+  userId: string
+
+  fatigueRisk: number
+  missedSessionRisk: number
+  plateauRisk: number
+  progressionOpportunity: number
+  recoveryDipRisk: number
+
+  activePredictions: PredictionSignal[]
+
+  lastUpdated: Date
+}
+
+PredictionSignal {
+  id: string
+  type: string
+  severity: "low" | "medium" | "high"
+  confidence: number
+
+  title: string
+  explanation: string
+  suggestedAction: string
+
+  createdAt: Date
+}
+
+--------------------------------------------------
+STEP 2: BUILD PREDICTION INPUT SOURCES
+
+Use these existing system signals:
+
+- readiness check-ins
+- session completion
+- missed sessions
+- progression success / failure
+- soreness trends
+- sleep / stress trends
+- consistency trends
+- neural graph patterns
+- recent volume / intensity changes
+
+Prediction must come from real data, not random prompts.
+
+--------------------------------------------------
+STEP 3: DEFINE FIRST PREDICTION TYPES
+
+Build first-pass support for:
+
+1. FATIGUE RISK
+Trigger examples:
+- multiple low-readiness days
+- rising soreness
+- poor sleep trend
+- repeated hard sessions
+
+2. MISSED SESSION RISK
+Trigger examples:
+- inconsistent recent adherence
+- repeated skipped accessories
+- delayed or partial sessions
+- low consistency node
+
+3. PLATEAU RISK
+Trigger examples:
+- repeated stalled lifts
+- no progression for multiple exposures
+- high effort without adaptation
+
+4. PROGRESSION OPPORTUNITY
+Trigger examples:
+- high readiness trend
+- consistent completions
+- successful recent progressions
+
+5. RECOVERY DIP RISK
+Trigger examples:
+- worsening sleep/stress trend
+- high soreness + reduced recovery node strength
+
+--------------------------------------------------
+STEP 4: BUILD PREDICTION ENGINE
+
+Create:
+
+generatePredictions(userData, neuralGraph, trainingDNA)
+
+This function should:
+- review recent patterns
+- assign risk/opportunity scores
+- create clear PredictionSignal objects
+
+Keep the logic understandable and grounded.
+
+--------------------------------------------------
+STEP 5: MAKE PREDICTIONS ACTIONABLE
+
+Each prediction must include a suggested action.
+
+Examples:
+
+Fatigue Risk:
+“Reduce lower-body volume for the next 2 sessions”
+
+Missed Session Risk:
+“Simplify your next workout to improve follow-through”
+
+Plateau Risk:
+“Hold load and improve quality before progressing”
+
+Progression Opportunity:
+“Increase intensity slightly next session”
+
+Recovery Dip Risk:
+“Shift next day toward lower stress and recovery emphasis”
+
+Do NOT surface predictions without an action.
+
+--------------------------------------------------
+STEP 6: ADD “COACH FORECAST” UI CARD
+
+Create a simple surface in the main system view:
+
+Coach Forecast
+
+This should show 1–3 active predictions.
+
+Example cards:
+- Fatigue Risk Rising
+- Progression Opportunity Detected
+- Recovery Dip Likely
+- Consistency Risk This Week
+
+Each card includes:
+- title
+- one-line explanation
+- action CTA
+
+--------------------------------------------------
+STEP 7: ALLOW ONE-TAP RESPONSE
+
+For each prediction, allow a direct action.
+
+Examples:
+- Adjust Next Session
+- Simplify This Week
+- Progress Next Lift
+- Hold Current Plan
+- Show Why
+
+This should feel useful, not passive.
+
+--------------------------------------------------
+STEP 8: ADD “SHOW WHY” EXPLANATION
+
+If the user taps “Show Why,” explain the basis simply.
+
+Examples:
+“Your last 3 check-ins showed lower energy and higher soreness.”
+“You have missed 2 of your last 4 planned sessions.”
+“You have completed all recent sessions with moderate effort and strong readiness.”
+
+This builds trust.
+
+--------------------------------------------------
+STEP 9: CONNECT PREDICTIONS TO PROGRAM ADJUSTMENTS
+
+Predictions should be able to influence:
+- next session structure
+- weekly volume
+- progression pacing
+- recovery emphasis
+- simplification of plan
+
+But do NOT silently overhaul the whole plan without user approval.
+
+Allowed:
+- suggest
+- recommend
+- low-risk auto-adjustments
+
+Not allowed:
+- major program rewrite without confirmation
+
+--------------------------------------------------
+STEP 10: LOG PREDICTION-DRIVEN CHANGES
+
+Changes tab should include entries like:
+- Reduced lower-body volume due to rising fatigue risk
+- Simplified next session due to missed-session risk
+- Increased load due to progression opportunity
+- Held progression due to plateau risk
+
+Source:
+prediction_layer
+
+--------------------------------------------------
+STEP 11: UPDATE HISTORY FOR BIG PREDICTION SHIFTS
+
+If prediction leads to a meaningful weekly adjustment:
+- create new version in History
+
+Examples:
+V4 — Weekly Load Reduced (Fatigue Management)
+V5 — Progression Push (High Readiness Trend)
+
+--------------------------------------------------
+STEP 12: KEEP TONE COACH-LIKE
+
+Avoid scary or robotic wording.
+
+Bad:
+“You are likely to fail tomorrow’s workout.”
+
+Better:
+“Your recent pattern suggests a lighter or simpler session may improve follow-through.”
+
+Bad:
+“Performance degradation detected.”
+
+Better:
+“Recovery looks slightly down — adjusting now can help keep momentum.”
+
+--------------------------------------------------
+STEP 13: KEEP IT LIGHTWEIGHT
+
+This is not meant to be a medical diagnostic engine or overcomplicated AI dashboard.
+
+Keep:
+- simple
+- clear
+- performance-oriented
+- actionable
+
+Do not overload user with too many predictions.
+
+Maximum:
+1–3 active predictions surfaced at once.
+
+--------------------------------------------------
+STEP 14: MAKE IT FEEL EARLY, NOT LATE
+
+Predictions should show up BEFORE the problem fully hits.
+
+Example:
+- fatigue trend emerging, not after a full crash
+- consistency slipping, not after user disappears
+- progression opportunity appearing, not missed for weeks
+
+This is the key difference.
+
+--------------------------------------------------
+STEP 15: SUCCESS STATE
+
+User opens TrainChat.
+
+System notices:
+- soreness climbing
+- sleep declining
+- lower-body session stress high
+- missed one recent session
+
+System shows:
+Coach Forecast:
+- Fatigue risk rising
+- Suggested action: reduce lower-body stress next session
+
+User taps:
+Adjust Next Session
+
+Program updates.
+Change log updates.
+System feels anticipatory and intelligent.
+
+--------------------------------------------------
+FINAL RULE
+--------------------------------------------------
+
+TrainChat should not just react after problems happen.
+
+It should identify likely outcomes early and help the user stay ahead of them.
+
+This phase should make the system feel:
+- aware
+- predictive
+- coach-like
+- trustworthy
+
+Implement this now.

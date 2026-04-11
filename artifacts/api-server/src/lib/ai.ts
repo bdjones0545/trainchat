@@ -1170,6 +1170,12 @@ export interface AIResponseOptions {
   responseMode?: ResponseMode;
   extractedConstraints?: ExtractedConstraints | null;
   userMessage?: string;
+  /** Neural adaptation context injected from the user's graph state */
+  neuralContext?: string;
+  /** Neural bias for post-hoc fallback program adaptation */
+  neuralBias?: import("./neural-graph-interpreter").NeuralBias;
+  /** Imbalances for fallback program adaptation */
+  neuralImbalances?: import("./neural-graph-interpreter").Imbalance[];
 }
 
 // ─── Main entry point ────────────────────────────────────────────────────────
@@ -1192,6 +1198,9 @@ export async function generateAIResponse(
     responseMode,
     extractedConstraints,
     userMessage: userMessageForContract,
+    neuralContext,
+    neuralBias,
+    neuralImbalances,
   } = options;
 
   const [profile] = await db
@@ -1300,7 +1309,7 @@ export async function generateAIResponse(
     logResponseMode(rmCtx);
   }
 
-  const extras = [adaptationContext, memoryContext, insightHint, conversionHint, intentHint, editContext, preservationContext, constraintContract, transformHint, responseModePrompt]
+  const extras = [adaptationContext, memoryContext, insightHint, conversionHint, intentHint, editContext, preservationContext, constraintContract, transformHint, responseModePrompt, neuralContext ?? null]
     .filter(Boolean)
     .join("\n\n");
   const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;
@@ -1314,6 +1323,8 @@ export async function generateAIResponse(
       editIntent: activeEditIntent ?? undefined,
       intentResult: intentResult ?? undefined,
       extractedConstraints: extractedConstraints ?? null,
+      neuralBias: neuralBias,
+      neuralImbalances: neuralImbalances,
     });
   }
 
@@ -1470,6 +1481,8 @@ interface FallbackOptions {
   editIntent?: EditIntent;
   intentResult?: IntentResult;
   extractedConstraints?: ExtractedConstraints | null;
+  neuralBias?: import("./neural-graph-interpreter").NeuralBias;
+  neuralImbalances?: import("./neural-graph-interpreter").Imbalance[];
 }
 
 function generateFallbackResponse(
@@ -1478,7 +1491,19 @@ function generateFallbackResponse(
   profile: UserProfile | null,
   options: FallbackOptions = {}
 ): AIResponse {
-  const { currentProgram, editIntent, intentResult, extractedConstraints } = options;
+  const { currentProgram, editIntent, intentResult, extractedConstraints, neuralBias, neuralImbalances } = options;
+
+  // Helper: apply neural bias to a generated program when bias is active
+  const applyNeural = (program: ProgramStructure): ProgramStructure => {
+    if (!neuralBias?.isActive) return program;
+    try {
+      const { applyNeuralBiasToProgram } = require("./neural-graph-interpreter");
+      const { adapted } = applyNeuralBiasToProgram(program, neuralBias, neuralImbalances ?? []);
+      return adapted;
+    } catch {
+      return program;
+    }
+  };
   const lower = userMessage.toLowerCase();
   const userTurnCount = history.filter((m) => m.role === "user").length;
   const isFirstMessage = userTurnCount === 0;
@@ -1536,7 +1561,7 @@ function generateFallbackResponse(
     }
     return {
       content: "I understood the requested change, but couldn't apply it to the current program state. Regenerating the updated structure now.",
-      structuredData: profile ? buildIntelligentProgram(profile) : null,
+      structuredData: profile ? applyNeural(buildIntelligentProgram(profile)) : null,
     };
   }
 
@@ -1587,7 +1612,7 @@ function generateFallbackResponse(
         exercisesToAvoid: null,
       };
 
-      const program = buildIntelligentProgram(defaultProfile);
+      const program = applyNeural(buildIntelligentProgram(defaultProfile));
       const confirmationLine = buildConstraintAwareConfirmation(defaultProfile, extractedConstraints ?? null);
       const refinementQ = extractedConstraints?.equipment
         ? "Want me to adjust anything — session length, split structure, or exercise selection?"
@@ -1634,7 +1659,7 @@ function generateFallbackResponse(
     }
 
     // Build the program with effective (constraint-merged) profile
-    const program = buildIntelligentProgram(effectiveProfile);
+    const program = applyNeural(buildIntelligentProgram(effectiveProfile));
     const goal = normalizeGoal(effectiveProfile.trainingGoal);
 
     // Build a confirmation line that reflects what was actually built

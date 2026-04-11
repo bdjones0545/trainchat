@@ -80,6 +80,27 @@ The UI features a dark theme with electric blue accents and the Inter font, cent
 - **Internal vs External**: XP/level math is retained internally as a proxy for training volume, but the public API returns only coaching-language data (`maturityLabel`, `maturityProgress`, `neuralFeedback`, performance scores).
 - **NeuralFeedback generation** (`generateNeuralFeedback()`): server-side coaching text generator. Produces 3 metrics (neural output, movement efficiency, force production) with direction arrows (↑/→/↓/⟳) and 2-4 system update bullets based on session quality, progression score, readiness, and streak continuity.
 
+### Neural Graph Intelligence Layer (Phase 3) — Program Influence
+
+- **`neural-graph-interpreter.ts`** (new) — pure function module, no DB calls:
+  - `interpretNeuralGraph(graphState)` → `NeuralInterpretation { bias, imbalances, adjustments, promptContext, hasMeaningfulData }`
+  - `NeuralBias` struct: `{ powerBias, trunkBias, recoveryBias, simplicityBias, strengthBias, lowerBodyBias, upperBodyBias, isActive }` — all 0-1, higher = more emphasis needed
+  - Imbalance detection: lower_trunk_gap, strength_power_gap, strength_quality_gap, adherence_risk, upper_lower_gap
+  - `applyNeuralBiasToProgram(program, bias, imbalances)` → `{ adapted: ProgramStructure, changeLog: string[] }` — post-hoc program adapter
+  - `buildNeuralAdjustmentSummary(adjustments, imbalances)` → coaching-language change log summary
+- **Integration points**:
+  - `ai.ts`: `AIResponseOptions` + `FallbackOptions` accept `neuralContext`, `neuralBias`, `neuralImbalances`
+  - `neuralContext` is injected into the AI system prompt extras array (same level as adaptationContext, memoryContext)
+  - `generateFallbackResponse` wraps every `buildIntelligentProgram()` call with `applyNeural()` (applies post-hoc bias when active)
+  - `conversations.ts` route loads `graph_state` from `neural_profiles` before every `generateAIResponse` call, interprets it, and passes the three neural params
+- **Effect on fallback programs** (when no OpenAI key or API failure):
+  - `powerBias > 0.55` → adds a second power exercise (Broad Jump / Lateral Bound / Med Ball Scoop Toss) to each session
+  - `trunkBias > 0.55` → increases trunk exercise sets + adds Pallof Press or Dead Bug earlier in session
+  - `recoveryBias > 0.6` → removes last conditioning exercise from each session to protect recovery
+  - `simplicityBias > 0.65` → removes lowest-priority accessory work
+- **Effect on AI programs** (when OpenAI key exists): Neural interpretation is injected as a structured context block in the system prompt. The AI receives node status labels, detected imbalances, and specific programming guidance in coaching language. No raw scores are exposed.
+- **Safety**: Neural loading is wrapped in try/catch. If the profile doesn't exist or fails to load, the route proceeds as normal without bias.
+
 ### Auto-Progression Engine (exercise-logs.ts + progression.ts)
 - **DB Table**: `exercise_logs` — per-exercise performance log (load, reps, sets, RPE, completion status, exercise role)
 - **Progression Service** (`progression.ts`): Computes READY_TO_PROGRESS / HOLD / REGRESS state from recent logs. Goal-differentiated (strength: load, hypertrophy: reps/volume, performance: quality+load). Exercise-role-aware (power: intent only; compound: +5-10 lbs; unilateral: +2.5 lbs; accessory: lowest priority).
