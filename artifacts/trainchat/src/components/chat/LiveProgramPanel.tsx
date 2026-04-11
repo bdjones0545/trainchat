@@ -623,7 +623,7 @@ function ProgramTab({
         )}
 
         {program.description && (
-          <p className="text-[11px] text-muted-foreground leading-relaxed mb-3">
+          <p className="text-[11px] text-foreground/70 leading-relaxed mb-3 font-medium">
             {program.description}
           </p>
         )}
@@ -1236,8 +1236,10 @@ export default function LiveProgramPanel({
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("program");
   const [hasUnseenChange, setHasUnseenChange] = useState(false);
+  const [showBuildSuccess, setShowBuildSuccess] = useState(false);
   const prevChangeSignalRef = useRef(0);
   const prevProgramSignalRef = useRef(0);
+  const buildSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // New program built → switch to Program tab so user sees the result
   useEffect(() => {
@@ -1245,6 +1247,10 @@ export default function LiveProgramPanel({
       prevProgramSignalRef.current = newProgramSignal;
       setActiveTab("program");
       setHasUnseenChange(true); // badge on Changes tab so user knows it populated
+      // Show the "Training system created" success indicator briefly
+      setShowBuildSuccess(true);
+      if (buildSuccessTimerRef.current) clearTimeout(buildSuccessTimerRef.current);
+      buildSuccessTimerRef.current = setTimeout(() => setShowBuildSuccess(false), 4000);
     }
   }, [newProgramSignal]);
 
@@ -1278,6 +1284,15 @@ export default function LiveProgramPanel({
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
+      {/* Training system created — transient success indicator */}
+      {showBuildSuccess && (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 border-b border-primary/20 flex-shrink-0">
+          <CheckCircle className="w-3 h-3 text-primary flex-shrink-0" />
+          <span className="text-[11px] font-semibold text-primary">Training system created</span>
+          <span className="ml-auto text-[10px] text-primary/50">{program?.splitType ?? ""}</span>
+        </div>
+      )}
+
       {/* Tab bar */}
       <div className="flex items-center gap-0 border-b border-border flex-shrink-0 px-2 pt-1">
         {tabs.map((tab) => {

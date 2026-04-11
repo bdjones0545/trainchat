@@ -1,0 +1,283 @@
+We need to polish the INITIAL PROGRAM BUILD experience so it feels immediate, visual, and high-value.
+
+Right now edits are starting to work, but the first build still does not feel impressive enough.
+
+GOAL:
+Make the first build feel like:
+- the system understood the request
+- it built something real
+- the user can instantly see what was created
+- the experience feels premium and alive
+
+--------------------------------------------------
+
+CORE PRODUCT RULE
+
+The first build is the most important moment in the app.
+
+When a user says:
+“I am a soccer player give me a 3 day strength plan”
+
+they should feel:
+- understood
+- impressed
+- guided
+- confident the system built something specific for them
+
+Not:
+- confused
+- blocked
+- unsure where the program is
+- unsure what changed
+
+--------------------------------------------------
+
+STEP 1: MAKE THE CHAT RESPONSE MORE BUILD-CENTRIC
+
+Current responses are too plain.
+
+New build response should include 3 things:
+
+1. Confirmation of what was understood
+2. Clear statement of what was built
+3. One smart refinement question
+
+Example:
+“Got it — I built a 3-day strength program with a soccer performance focus.
+
+You can open the Program tab to see the structure now.
+
+Do you have full gym access, or should I adjust it for limited equipment?”
+
+This response must always reflect the ACTUAL validated program:
+- correct days
+- correct goal
+- correct sport context if provided
+
+--------------------------------------------------
+
+STEP 2: ADD A “BUILD SUMMARY CARD” IN CHAT
+
+After the response, render a premium summary card for new builds.
+
+Card should show:
+- Program title
+- Frequency
+- Goal
+- Sport context if applicable
+- Session duration
+- Number of days built
+- CTA: “View Program”
+
+Example:
+SOCCER STRENGTH SYSTEM
+3 days/week
+Strength + performance focus
+45–60 min sessions
+
+[ View Program ]
+
+This card should make the build feel tangible.
+
+--------------------------------------------------
+
+STEP 3: AUTO-OPEN OR SPOTLIGHT THE PROGRAM PANEL
+
+After a successful initial build:
+- automatically open the Program tab
+OR
+- visually spotlight the Program button/panel
+
+The user should never wonder where the program went.
+
+If auto-opening is too aggressive, use:
+- pulse/glow on Program tab
+- tooltip: “Your program is ready”
+
+But the build must feel connected to the output.
+
+--------------------------------------------------
+
+STEP 4: ADD A SHORT BUILD ANIMATION
+
+When a new program is created:
+- briefly show a subtle “building system” transition
+- then fade in the program summary and day structure
+
+Examples:
+- skeleton state for 0.5–1.0 sec
+- cards fade in
+- weekly split animates in
+
+Keep it premium and fast, not gimmicky.
+
+--------------------------------------------------
+
+STEP 5: ADD TOP-OF-PANEL PROGRAM IDENTITY
+
+At the top of the Program tab, prominently show:
+
+- Program name
+- Frequency
+- Goal
+- Sport context
+
+Example:
+Soccer Strength Program
+3 Days/Week
+Strength + Performance
+
+This should be the first thing the user sees.
+
+Do NOT let the panel feel generic.
+
+--------------------------------------------------
+
+STEP 6: MAKE DAY LABELS FEEL CUSTOM, NOT TEMPLATE-BASED
+
+Avoid generic default naming when possible.
+
+For sport/performance builds, day labels should reflect intent.
+
+Examples for soccer:
+- Day 1 — Lower Strength + Acceleration
+- Day 2 — Upper Strength + Stability
+- Day 3 — Full Body Power + Trunk
+
+For general strength:
+- Day 1 — Lower Strength
+- Day 2 — Upper Strength
+- Day 3 — Full Body Strength
+
+The system should avoid feeling like a canned bodybuilding split unless that is explicitly requested.
+
+--------------------------------------------------
+
+STEP 7: GENERATE BETTER COACH NOTES
+
+Coach notes should explain WHY the structure fits the user’s request.
+
+For soccer example:
+“This 3-day structure builds force production, lower-body strength, and full-body support for sprinting, deceleration, and change of direction.”
+
+Do NOT use generic hypertrophy logic unless hypertrophy was requested.
+
+--------------------------------------------------
+
+STEP 8: IMPROVE EMPTY-TO-BUILT TRANSITION
+
+Right now the panel can feel empty before build and disconnected after build.
+
+When the first build happens:
+- replace placeholder immediately
+- animate in real content
+- scroll to top of the newly built program
+- make it obvious that the system has changed state
+
+The user should feel:
+“There was nothing here. Now my system exists.”
+
+--------------------------------------------------
+
+STEP 9: ADD “WHAT WAS CREATED” ENTRIES TO CHANGES TAB
+
+After initial build, Changes tab should instantly show:
+
+- Created new program from user request
+- Set frequency to X days/week
+- Set goal to strength / hypertrophy / performance
+- Applied sport context if relevant
+
+This makes the first build feel real and trackable.
+
+--------------------------------------------------
+
+STEP 10: IMPROVE HISTORY V1
+
+History tab should create a strong first version entry.
+
+V1 should include:
+- title
+- created from request
+- frequency
+- goal
+- sport
+- timestamp
+
+Example:
+V1 — Soccer Strength Program
+Created from user request
+3 days/week
+Strength + performance focus
+
+This should feel like the beginning of a real system.
+
+--------------------------------------------------
+
+STEP 11: ADD BUILD SUCCESS STATE
+
+After first build, show a short success state such as:
+
+“Program ready”
+or
+“Training system created”
+
+This can appear:
+- in the chat summary card
+- in the Program panel header
+- or as a brief toast
+
+Keep it premium.
+
+--------------------------------------------------
+
+STEP 12: MAKE THE FIRST FOLLOW-UP QUESTION SMARTER
+
+After building, ask only ONE refinement question, based on the biggest missing variable.
+
+Priority order:
+1. equipment
+2. session duration
+3. experience level
+
+Example:
+“Do you have full gym access or limited equipment?”
+
+Do not ask multiple questions at once.
+
+--------------------------------------------------
+
+STEP 13: TEST THIS EXACT FLOW
+
+Input:
+“I am a soccer player give me a 3 day strength plan”
+
+Expected:
+- response confirms 3-day soccer strength build
+- build summary card appears in chat
+- Program panel opens or is clearly spotlighted
+- Program panel shows 3-day identity at top
+- day labels reflect sport/performance intent
+- coach note is specific to soccer + strength
+- Changes tab logs build
+- History tab creates V1
+
+Not acceptable:
+- generic 4-day template
+- unclear output destination
+- weak first-build moment
+
+--------------------------------------------------
+
+FINAL RULE
+
+The first build should feel like the product’s magic moment.
+
+It must feel:
+- specific
+- immediate
+- visible
+- premium
+- correct
+
+Build this polish now without breaking the current edit flow.

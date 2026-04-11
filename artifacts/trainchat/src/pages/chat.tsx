@@ -1009,7 +1009,11 @@ export default function Chat() {
             ) : (
               <div className="max-w-2xl mx-auto">
                 {messages.map((msg) => (
-                  <MessageBubble key={msg.id} message={msg} />
+                  <MessageBubble
+                    key={msg.id}
+                    message={msg}
+                    onViewProgram={() => setMobilePanel("right")}
+                  />
                 ))}
                 {stream.isActive && (
                   <AgentThinking

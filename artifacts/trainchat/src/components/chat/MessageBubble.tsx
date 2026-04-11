@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import SystemUpdateCard from "./SystemUpdateCard";
+import BuildSummaryCard from "./BuildSummaryCard";
 
 interface Message {
   id: number;
@@ -12,6 +13,7 @@ interface Message {
 interface Props {
   message: Message;
   onProgramGenerated?: () => void;
+  onViewProgram?: () => void;
 }
 
 function formatTime(dateStr: string) {
@@ -138,7 +140,7 @@ function parseInline(text: string): React.ReactNode {
   });
 }
 
-// Parse structuredData to detect system_edit vs program
+// Parse structuredData to detect system_edit vs program_build vs program
 function parseStructuredData(raw: string | null | undefined) {
   if (!raw) return { type: "none" as const };
   try {
@@ -147,6 +149,9 @@ function parseStructuredData(raw: string | null | undefined) {
       return { type: "system_edit" as const, data };
     }
     if (data?.days && Array.isArray(data.days)) {
+      if (data._buildMeta) {
+        return { type: "program_build" as const, data };
+      }
       return { type: "program" as const, data };
     }
   } catch {
@@ -155,11 +160,12 @@ function parseStructuredData(raw: string | null | undefined) {
   return { type: "none" as const };
 }
 
-export default function MessageBubble({ message }: Props) {
+export default function MessageBubble({ message, onViewProgram }: Props) {
   const isUser = message.role === "user";
   const parsed = parseStructuredData(message.structuredData);
   const isSystemEdit = !isUser && parsed.type === "system_edit";
   const hasProgram = !isUser && parsed.type === "program";
+  const isInitialBuild = !isUser && parsed.type === "program_build";
 
   return (
     <div className={`flex items-start gap-3 mb-5 message-animate ${isUser ? "flex-row-reverse" : ""}`}>
@@ -193,13 +199,18 @@ export default function MessageBubble({ message }: Props) {
               <SystemUpdateCard data={parsed.data} />
             )}
 
-            {/* Program generated indicator — shown when a draft program is in the right panel */}
+            {/* Build summary card — shown for new initial program builds */}
+            {isInitialBuild && (
+              <BuildSummaryCard data={parsed.data} onViewProgram={onViewProgram} />
+            )}
+
+            {/* Program generated indicator — shown for subsequent program updates (not first build) */}
             {hasProgram && (
               <div className="mt-3 pt-2.5 border-t border-border">
                 <div className="flex items-center gap-1.5">
                   <div className="w-1.5 h-1.5 rounded-full bg-primary" />
                   <span className="text-[10px] font-semibold text-primary uppercase tracking-widest">
-                    Program generated — see right panel
+                    Program updated — see right panel
                   </span>
                 </div>
               </div>

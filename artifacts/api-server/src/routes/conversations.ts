@@ -846,6 +846,21 @@ Keep it helpful and intelligent, never promotional.`;
     }
   }
 
+  // ── Enrich structuredData with build metadata for initial builds ──────────
+  const isInitialBuildNonStream =
+    !hasActiveSystem &&
+    structuredData != null &&
+    (intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM");
+
+  if (isInitialBuildNonStream && structuredData) {
+    (structuredData as Record<string, unknown>)._buildMeta = {
+      frequency: structuredData.days.length,
+      goal: extractedConstraints?.primaryGoal ?? null,
+      sport: extractedConstraints?.sportFocus ?? null,
+      sessionDuration: extractedConstraints?.sessionDuration ?? null,
+    };
+  }
+
   const [assistantMessage] = await db.insert(messagesTable).values({
     conversationId: params.data.id,
     role: "assistant",
@@ -1411,7 +1426,23 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   // Stage 6: Validate — AI response quality checks done; now persist
   emit(buildStageEvent("validating", intentResult.type, actionDecision.actionType));
 
-  // ── Persist AI response ───────────────────────────────────────────────────
+  // ── Enrich structuredData with build metadata for initial builds ──────────
+  // If there was no active system before this request and we built a new program,
+  // attach _buildMeta so the chat message can render a rich BuildSummaryCard.
+  const isInitialBuild =
+    !hasActiveSystem &&
+    structuredData != null &&
+    (intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM");
+
+  if (isInitialBuild && structuredData) {
+    (structuredData as Record<string, unknown>)._buildMeta = {
+      frequency: structuredData.days.length,
+      goal: extractedConstraints?.primaryGoal ?? null,
+      sport: extractedConstraints?.sportFocus ?? null,
+      sessionDuration: extractedConstraints?.sessionDuration ?? null,
+    };
+  }
+
   // Stage 7: Save Program State
   emit(buildStageEvent("saving", intentResult.type, actionDecision.actionType));
 
