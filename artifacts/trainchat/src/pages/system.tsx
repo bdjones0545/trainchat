@@ -62,6 +62,7 @@ import ChangeDetailDrawer from "@/components/training/ChangeDetailDrawer";
 import ReadinessCheckIn from "@/components/training/ReadinessCheckIn";
 import SessionFeedback from "@/components/training/SessionFeedback";
 import InsightsPanel from "@/components/training/InsightsPanel";
+import TrainingProfileCard from "@/components/training/TrainingProfileCard";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 
 // ─── API helpers ─────────────────────────────────────────────────────────────
@@ -1641,6 +1642,7 @@ export default function SystemPage() {
         onApplied={(result) => { handleInsightApplied(result); setMobilePanel(null); }}
         onModify={(prefill) => { handleInsightModify(prefill); setMobilePanel(null); }}
       />
+      <TrainingProfileCard />
       <div className="h-px bg-border my-4" />
       <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-2">Quick Actions</p>
       <div className="space-y-2">
@@ -1852,11 +1854,12 @@ export default function SystemPage() {
                   )}
 
                   {/* Coach Insights — desktop only (mobile: in right panel) */}
-                  <div className="hidden md:block">
+                  <div className="hidden md:block space-y-3">
                     <InsightsPanel
                       onApplied={handleInsightApplied}
                       onModify={handleInsightModify}
                     />
+                    <TrainingProfileCard />
                   </div>
 
                   {/* Today's session */}

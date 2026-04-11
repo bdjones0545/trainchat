@@ -30,6 +30,8 @@ import {
   Sparkles,
   HelpCircle,
   Target,
+  Frown,
+  ActivitySquare,
 } from "lucide-react";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -44,7 +46,9 @@ export type InsightType =
   | "sleep_impact"
   | "recovery_strength"
   | "tolerance_building"
-  | "program_evolution";
+  | "program_evolution"
+  | "pain_trigger_pattern"
+  | "low_engagement_trend";
 
 export interface TrainingInsight {
   type: InsightType;
@@ -86,8 +90,10 @@ const INSIGHT_CONFIG: Record<InsightType, {
   missed_session_pattern:{ icon: Target,      color: "text-orange-400", badgeColor: "bg-orange-500/10 text-orange-400 border-orange-500/20", dotColor: "bg-orange-400" },
   sleep_impact:         { icon: Moon,         color: "text-violet-400", badgeColor: "bg-violet-500/10 text-violet-400 border-violet-500/20", dotColor: "bg-violet-400" },
   recovery_strength:    { icon: Heart,        color: "text-green-500",  badgeColor: "bg-green-500/10 text-green-500 border-green-500/20",   dotColor: "bg-green-500" },
-  tolerance_building:   { icon: Zap,          color: "text-primary",    badgeColor: "bg-primary/10 text-primary border-primary/20",         dotColor: "bg-primary" },
-  program_evolution:    { icon: RefreshCcw,   color: "text-orange-400", badgeColor: "bg-orange-500/10 text-orange-400 border-orange-500/20", dotColor: "bg-orange-400" },
+  tolerance_building:   { icon: Zap,            color: "text-primary",    badgeColor: "bg-primary/10 text-primary border-primary/20",         dotColor: "bg-primary" },
+  program_evolution:    { icon: RefreshCcw,     color: "text-orange-400", badgeColor: "bg-orange-500/10 text-orange-400 border-orange-500/20", dotColor: "bg-orange-400" },
+  pain_trigger_pattern: { icon: ActivitySquare, color: "text-red-500",    badgeColor: "bg-red-500/10 text-red-500 border-red-500/20",          dotColor: "bg-red-500" },
+  low_engagement_trend: { icon: Frown,          color: "text-violet-400", badgeColor: "bg-violet-500/10 text-violet-400 border-violet-500/20", dotColor: "bg-violet-400" },
 };
 
 // ─── Apply state per insight ──────────────────────────────────────────────

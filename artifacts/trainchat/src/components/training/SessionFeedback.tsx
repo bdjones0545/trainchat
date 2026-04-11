@@ -57,6 +57,15 @@ const PAIN_AREAS = [
   { key: "upper_back", label: "Upper back" },
 ];
 
+const DURATION_CHIPS = [
+  { value: 20,  label: "20 min" },
+  { value: 30,  label: "30 min" },
+  { value: 45,  label: "45 min" },
+  { value: 60,  label: "60 min" },
+  { value: 75,  label: "75 min" },
+  { value: 90,  label: "90+ min" },
+];
+
 type SessionStatus = "completed" | "partial" | "skipped";
 
 const STATUS_OPTIONS: { value: SessionStatus; label: string; emoji: string; color: string; selected: string }[] = [
@@ -169,6 +178,7 @@ function SessionRecapCard({ recap, onClose }: { recap: SessionRecap; onClose: ()
 
 export default function SessionFeedback({ sessionLabel, onClose, onSubmitted }: SessionFeedbackProps) {
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);
+  const [actualDuration, setActualDuration] = useState<number | null>(null);
   const [difficulty, setDifficulty] = useState<number | null>(null);
   const [pain, setPain] = useState<number | null>(null);
   const [energy, setEnergy] = useState<number | null>(null);
@@ -203,6 +213,7 @@ export default function SessionFeedback({ sessionLabel, onClose, onSubmitted }: 
         method: "POST",
         body: JSON.stringify({
           sessionStatus,
+          actualDuration: actualDuration ?? undefined,
           difficultyScore: difficulty ?? undefined,
           painScore: pain ?? undefined,
           energyScore: energy ?? undefined,
@@ -267,6 +278,31 @@ export default function SessionFeedback({ sessionLabel, onClose, onSubmitted }: 
                   })}
                 </div>
               </div>
+
+              {/* Duration — shown for completed/partial */}
+              {!isSkipped && (
+                <div>
+                  <p className="text-xs font-bold text-foreground mb-2">How long did it take?</p>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {DURATION_CHIPS.map((chip) => {
+                      const selected = actualDuration === chip.value;
+                      return (
+                        <button
+                          key={chip.value}
+                          onClick={() => setActualDuration(selected ? null : chip.value)}
+                          className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all duration-150 ${
+                            selected
+                              ? "bg-primary/10 border-primary/40 text-primary ring-1 ring-primary/20"
+                              : "bg-muted/30 border-border text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                          }`}
+                        >
+                          {chip.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Rating rows — hidden for skipped */}
               {!isSkipped && (

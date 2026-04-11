@@ -11,7 +11,7 @@
  * Every insight includes a plain-language data rationale ("Show Me Why").
  */
 
-import { db, readinessEntriesTable, sessionFeedbackTable, savedProgramsTable } from "@workspace/db";
+import { db, readinessEntriesTable, sessionFeedbackTable, savedProgramsTable, sessionLogsTable } from "@workspace/db";
 import { trainingSystems } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { type MemoryEntry } from "./memory";
@@ -28,7 +28,9 @@ export type InsightType =
   | "sleep_impact"
   | "recovery_strength"
   | "tolerance_building"
-  | "program_evolution";
+  | "program_evolution"
+  | "pain_trigger_pattern"
+  | "low_engagement_trend";
 
 export interface TrainingInsight {
   type: InsightType;
@@ -217,6 +219,81 @@ function analyzeFeedback(
   return insights;
 }
 
+// ─── Session log signal detection — real behavior patterns ────────────────────
+
+/**
+ * Analyze raw session_logs entries to detect real training behavior patterns.
+ * Looks for: recurring pain areas, low engagement trends.
+ */
+function analyzeSessionLogs(
+  logs: {
+    sessionStatus: string | null;
+    difficultyScore: number | null;
+    painScore: number | null;
+    energyScore: number | null;
+    enjoymentScore: number | null;
+    painAreas: string[] | null;
+    actualDuration: number | null;
+    completedAt: Date;
+  }[]
+): TrainingInsight[] {
+  const insights: TrainingInsight[] = [];
+  if (logs.length < 2) return insights;
+
+  const n = logs.length;
+
+  // ── Pain area pattern: same body area flagged in ≥3 sessions ──────────────
+  const areaCount: Record<string, number> = {};
+  let sessionsWithPain = 0;
+  for (const log of logs) {
+    if ((log.painScore ?? 0) >= 3 && log.painAreas && log.painAreas.length > 0) {
+      sessionsWithPain++;
+      for (const area of log.painAreas) {
+        areaCount[area] = (areaCount[area] ?? 0) + 1;
+      }
+    }
+  }
+  const recurringAreas = Object.entries(areaCount)
+    .filter(([, count]) => count >= 2)
+    .sort(([, a], [, b]) => b - a)
+    .map(([area]) => area);
+
+  if (recurringAreas.length > 0 && sessionsWithPain >= 2) {
+    const areaLabels: Record<string, string> = {
+      knee: "knee", lower_back: "lower back", shoulder: "shoulder",
+      hip: "hip", elbow: "elbow", wrist: "wrist",
+      ankle: "ankle", neck: "neck", upper_back: "upper back",
+    };
+    const topArea = areaLabels[recurringAreas[0]] ?? recurringAreas[0];
+    insights.push({
+      type: "pain_trigger_pattern",
+      title: `${topArea.charAt(0).toUpperCase() + topArea.slice(1)} discomfort recurring across sessions`,
+      body: `You've reported ${topArea} discomfort in ${areaCount[recurringAreas[0]]} of your recent sessions. This is a pattern worth addressing — I can adjust movement selection to reduce load on that area.`,
+      whyExplanation: `${sessionsWithPain} of your last ${n} sessions included pain reports. ${topArea.charAt(0).toUpperCase() + topArea.slice(1)} showed up in ${areaCount[recurringAreas[0]]} of those. Recurring pain in the same area across multiple sessions is a structural signal, not just soreness.`,
+      priority: 5,
+      triggerSource: "session_log_pain_pattern",
+    });
+  }
+
+  // ── Low engagement trend: avg enjoyment ≤ 2 across recent sessions ─────────
+  const withEnjoyment = logs.filter((l) => l.enjoymentScore != null);
+  if (withEnjoyment.length >= 3) {
+    const enjoymentAvg = avg(withEnjoyment.map((l) => l.enjoymentScore!));
+    if (enjoymentAvg <= 2.2) {
+      insights.push({
+        type: "low_engagement_trend",
+        title: "Enjoyment has been low recently",
+        body: `You've been rating sessions poorly for enjoyment lately. It's easier to stay consistent when training feels good — exercise rotation or a different session format might help.`,
+        whyExplanation: `Your last ${withEnjoyment.length} sessions with enjoyment ratings averaged ${fmt(enjoymentAvg)}/5. Sustained low enjoyment often predicts declining adherence over the following weeks.`,
+        priority: 3,
+        triggerSource: "session_log_enjoyment",
+      });
+    }
+  }
+
+  return insights;
+}
+
 // ─── Adherence / consistency signal detection ─────────────────────────────────
 
 function analyzeAdherence(
@@ -335,7 +412,7 @@ function deduplicateInsights(insights: TrainingInsight[]): TrainingInsight[] {
       result.push(insight);
     }
   }
-  return result.slice(0, 4);
+  return result.slice(0, 5);
 }
 
 // ─── Main entry point ─────────────────────────────────────────────────────────
@@ -347,7 +424,7 @@ export async function generateInsights(
   userId: number,
   memories: MemoryEntry[] = []
 ): Promise<TrainingInsight[]> {
-  const [readiness, feedback, programs, activeSystem] = await Promise.all([
+  const [readiness, feedback, sessionLogs, programs, activeSystem] = await Promise.all([
     db
       .select()
       .from(readinessEntriesTable)
@@ -359,6 +436,21 @@ export async function generateInsights(
       .from(sessionFeedbackTable)
       .where(eq(sessionFeedbackTable.userId, userId))
       .orderBy(desc(sessionFeedbackTable.createdAt))
+      .limit(10),
+    db
+      .select({
+        sessionStatus: sessionLogsTable.sessionStatus,
+        difficultyScore: sessionLogsTable.difficultyScore,
+        painScore: sessionLogsTable.painScore,
+        energyScore: sessionLogsTable.energyScore,
+        enjoymentScore: sessionLogsTable.enjoymentScore,
+        painAreas: sessionLogsTable.painAreas,
+        actualDuration: sessionLogsTable.actualDuration,
+        completedAt: sessionLogsTable.completedAt,
+      })
+      .from(sessionLogsTable)
+      .where(eq(sessionLogsTable.userId, userId))
+      .orderBy(desc(sessionLogsTable.completedAt))
       .limit(10),
     db
       .select({ id: savedProgramsTable.id, createdAt: savedProgramsTable.createdAt })
@@ -380,6 +472,7 @@ export async function generateInsights(
   const all = [
     ...analyzeReadiness(readiness),
     ...analyzeFeedback(feedback),
+    ...analyzeSessionLogs(sessionLogs),
     ...analyzeAdherence(feedback, programs, plannedPerWeek),
     ...analyzeMemories(memories),
   ];

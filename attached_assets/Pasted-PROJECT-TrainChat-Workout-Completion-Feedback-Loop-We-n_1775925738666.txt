@@ -1,0 +1,412 @@
+PROJECT: TrainChat Workout Completion + Feedback Loop
+
+We now have:
+1. Live Program Engine
+2. Adaptive Check-In Engine
+3. Proactive Coaching Agent Layer
+
+The next phase is to build the Workout Completion + Feedback Loop.
+
+This is the layer that teaches TrainChat what the user actually tolerates, completes, skips, struggles with, and responds best to over time.
+
+This is how the system becomes smarter from real training behavior, not just user intentions.
+
+--------------------------------------------------
+
+CORE GOAL
+
+Build a post-workout feedback system that:
+- captures what the user actually completed
+- tracks what was skipped, modified, or difficult
+- records exertion, pain, and session quality
+- feeds that information back into the training system
+- improves future programming decisions
+- strengthens personalization over time
+
+The product should feel like:
+“The system is learning how I really train, not just what I planned to do.”
+
+--------------------------------------------------
+
+PRODUCT OUTCOME
+
+After a session, the user should be able to quickly report:
+- completed as written
+- partially completed
+- skipped certain exercises
+- session felt too hard / too easy
+- pain increased during specific movements
+- session took longer or shorter than expected
+
+The system should use that information to:
+- update adherence tracking
+- modify future volume or exercise selection
+- improve progression logic
+- refine time estimates
+- detect tolerance patterns
+- strengthen future proactive suggestions
+
+--------------------------------------------------
+
+STEP 1: BUILD WORKOUT COMPLETION DATA MODEL
+
+Create a WorkoutCompletion model and database table.
+
+WorkoutCompletion {
+  id: string
+  userId: string
+  programId: string
+  programVersion: number
+  dayId: string
+  date: string
+
+  sessionStatus: "completed" | "partial" | "skipped" | "rescheduled"
+
+  plannedDuration: number
+  actualDuration: number
+
+  sessionRPE: number
+  sessionDifficulty: number
+  enjoyment: number
+  confidence: number
+
+  painDuringSession: number
+  painAreas: string[]
+  fatigueAfterSession: number
+
+  notes: string
+
+  completedExercises: CompletedExercise[]
+  skippedExercises: string[]
+  swappedExercises: ExerciseSwap[]
+
+  createdAt: Date
+}
+
+CompletedExercise {
+  exerciseId: string
+  exerciseName: string
+  completed: boolean
+  setsCompleted?: number
+  repsCompleted?: string
+  loadUsed?: string
+  difficulty?: number
+  painFlag?: boolean
+  notes?: string
+}
+
+ExerciseSwap {
+  originalExerciseName: string
+  replacementExerciseName: string
+  reason: string
+}
+
+Use consistent scales across the app:
+- 1-10 for RPE / pain / fatigue if already established
+- 1-5 where appropriate for ease of use
+
+--------------------------------------------------
+
+STEP 2: BUILD POST-WORKOUT FEEDBACK FLOW
+
+After a user finishes or exits a session, offer a fast feedback flow.
+
+Fields:
+- Did you complete this session?
+- How hard was it?
+- Did anything hurt?
+- Did you skip anything?
+- Did it fit your available time?
+- Any notes?
+
+Keep this fast and mobile-friendly.
+
+UI should support:
+- one-tap completion status
+- sliders for difficulty/pain/fatigue
+- chips for pain areas
+- checklist for skipped exercises
+- optional notes
+
+Target completion time:
+Under 30 seconds.
+
+--------------------------------------------------
+
+STEP 3: BUILD TRAINING TOLERANCE / RESPONSE PROFILE
+
+Create a derived learning layer such as:
+
+UserTrainingResponseProfile {
+  userId: string
+  programId: string
+
+  averageCompletionRate: number
+  averageSessionRPE: number
+  averagePainResponse: number
+  averageActualDuration: number
+  averageEnjoyment: number
+
+  frequentSkippedCategories: string[]
+  frequentPainTriggers: string[]
+  highSuccessExercisePatterns: string[]
+  lowCompliancePatterns: string[]
+
+  likelyTimeTolerance: number
+  likelyVolumeTolerance: string
+  likelyRecoveryNeed: string
+
+  updatedAt: Date
+}
+
+This should be updated over time from real session data.
+
+--------------------------------------------------
+
+STEP 4: BUILD SESSION EVALUATION ENGINE
+
+Create:
+
+evaluateWorkoutCompletion(program, workoutCompletion, responseProfile)
+
+This function should determine:
+- was session appropriately difficult?
+- was volume too high?
+- were certain exercises problematic?
+- is programmed duration unrealistic?
+- is the user consistently under-completing a certain session type?
+- are certain movement categories linked to pain or skipping?
+
+This engine should return:
+- evaluation summary
+- structured flags
+- optional structured program changes
+- user-facing explanation
+- coach-facing/internal summary
+
+--------------------------------------------------
+
+STEP 5: DEFINE ADAPTIVE FEEDBACK RULES
+
+Build deterministic rules first.
+
+Examples:
+
+IF sessionStatus = partial AND skippedExercises > 2:
+- flag possible session overload
+- consider reducing accessory volume next time
+
+IF actualDuration is consistently far lower or higher than planned:
+- update session time estimate
+- compress or expand future sessions
+
+IF sessionRPE very high for multiple sessions:
+- consider fatigue accumulation
+- reduce progression aggressiveness
+- trigger recovery suggestion
+
+IF painDuringSession elevated AND same exercise category involved:
+- flag exercise replacement candidate
+- reduce intensity or swap movement pattern
+
+IF user consistently completes main lifts but skips accessories:
+- preserve priority lifts
+- reduce accessory clutter in future programming
+
+IF enjoyment low across repeated sessions:
+- note low-engagement pattern
+- support exercise rotation or style shift later
+
+--------------------------------------------------
+
+STEP 6: CONNECT FEEDBACK TO ACTIVE PROGRAM
+
+When workout feedback is submitted:
+
+1. save workout completion
+2. update adherence/completion history
+3. update UserTrainingResponseProfile
+4. run evaluateWorkoutCompletion
+5. generate structured changes if needed
+6. apply low-risk updates or create recommendations
+7. append to change log
+8. influence proactive coaching logic
+
+This should make the system more accurate over time.
+
+--------------------------------------------------
+
+STEP 7: ADD WORKOUT FEEDBACK SOURCE TO CHANGE LOG
+
+Any workout-feedback-driven modifications must be logged with source metadata:
+
+source = "workout_feedback"
+
+Examples:
+- Reduced accessory volume after repeated partial completions
+- Updated session time target based on actual completion duration
+- Flagged knee-dominant pattern as pain trigger
+- Lowered progression rate after repeated high-RPE sessions
+- Suggested exercise swap after pain reported during split squats
+
+This creates proof that the system is learning.
+
+--------------------------------------------------
+
+STEP 8: DECIDE WHAT AUTO-APPLIES VS WHAT RECOMMENDS
+
+Low-risk adjustments can auto-apply:
+- session time estimate updates
+- accessory trimming
+- minor note updates
+- future substitution suggestions
+
+Medium/high-impact changes should be recommended first:
+- weekly frequency changes
+- major volume reductions
+- progression model changes
+- broader exercise family replacement
+
+The system should remain helpful, not unpredictable.
+
+--------------------------------------------------
+
+STEP 9: ADD “SESSION RECAP” UI
+
+After feedback submission, show a short recap card:
+
+Examples:
+- “Nice work — session completed as planned.”
+- “I noticed this session ran long. I’ll account for that.”
+- “You skipped accessory work again. I can simplify future sessions.”
+- “Pain increased during lunges. I’ll flag that movement pattern.”
+
+This creates immediate value for the user.
+
+--------------------------------------------------
+
+STEP 10: FEED THIS INTO PROACTIVE COACHING
+
+Workout completion data should strengthen the proactive agent.
+
+Examples of new proactive insights:
+- “You consistently skip the last 2 accessories on lower-body days. Want a tighter version?”
+- “Your actual session times average 28 minutes, but your plan is built for 45. Want me to compress it?”
+- “Front-loaded strength blocks are going well. Want me to simplify the rest of the session?”
+- “Split squat variations keep triggering discomfort. I can replace that pattern.”
+
+This will make recommendations far smarter.
+
+--------------------------------------------------
+
+STEP 11: IMPROVE ADHERENCE TRACKING
+
+Build stronger adherence status:
+- planned
+- completed
+- partial
+- skipped
+- rescheduled
+
+Track by:
+- day
+- week
+- block
+- program version
+
+This will help determine:
+- whether the split is realistic
+- whether progression is too aggressive
+- whether the user needs a simpler plan
+- whether recovery issues are hurting adherence
+
+--------------------------------------------------
+
+STEP 12: SUPPORT EXERCISE-LEVEL LEARNING
+
+Track exercise-level performance signals over time.
+
+Examples:
+- which exercises are often skipped
+- which exercises are completed consistently
+- which exercises trigger pain
+- which exercises users report as enjoyable
+- which exercises fit time constraints well
+
+This should later support:
+- smarter swaps
+- better personalization
+- more tailored recommendations
+- “favorite / successful movement” bias
+
+Do not fully overcomplicate this yet, but structure for it now.
+
+--------------------------------------------------
+
+STEP 13: BUILD TRUSTWORTHY TONE
+
+The feedback loop must feel coach-like and supportive.
+
+Bad tone:
+- “You failed to finish your workout.”
+
+Better tone:
+- “This session may be slightly overloaded for your current schedule.”
+- “You consistently complete the main work. I can simplify the rest.”
+- “This pattern suggests a tighter plan may fit better.”
+
+Keep it useful and non-judgmental.
+
+--------------------------------------------------
+
+STEP 14: ARCHITECTURE FOR FUTURE
+
+Design this system so it can later support:
+- exercise progression recommendations using logged loads
+- auto-detection of favorite exercise types
+- plateaus and stagnation detection
+- pain trigger heatmaps
+- personalized session templates
+- long-term training DNA scoring
+
+Do not build all of this now, but build clean extensible foundations.
+
+--------------------------------------------------
+
+FINAL PRODUCT RULE
+
+TrainChat should learn from:
+- what the user says
+- how the user feels
+- what the user actually does
+
+This phase is about the third one:
+REAL BEHAVIOR.
+
+That is what makes the system legitimately intelligent.
+
+--------------------------------------------------
+
+SUCCESS STATE
+
+User finishes a session.
+
+They report:
+- completed main lifts
+- skipped 3 accessories
+- session took 55 minutes instead of 40
+- session felt very hard
+- mild knee discomfort during lunges
+
+System:
+- saves the session
+- updates adherence
+- recognizes accessory overload
+- flags lunges as a possible pain trigger
+- updates future time expectations
+- logs the insight
+- optionally suggests a tighter lower-body day next time
+
+That is the goal.
+
+Build this now.

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, sessionLogsTable, sessionFeedbackTable } from "@workspace/db";
+import { db, sessionLogsTable, sessionFeedbackTable, systemChangeLog, trainingSystems } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { z } from "zod";
@@ -27,6 +27,75 @@ const CreateSessionLogBody = z.object({
   painAreas: z.array(z.string()).optional(),
 
   notes: z.string().optional(),
+});
+
+// ── Response profile / summary ────────────────────────────────────────────────
+// Returns aggregated training behavior data (UserTrainingResponseProfile).
+router.get("/session-logs/summary", requireAuth, async (req: any, res): Promise<void> => {
+  const userId = req.session.userId!;
+  const logs = await db
+    .select()
+    .from(sessionLogsTable)
+    .where(eq(sessionLogsTable.userId, userId))
+    .orderBy(desc(sessionLogsTable.completedAt))
+    .limit(30);
+
+  if (logs.length === 0) {
+    res.json({ totalSessions: 0, message: "No sessions logged yet." });
+    return;
+  }
+
+  const total = logs.length;
+  const completed = logs.filter((l) => l.sessionStatus === "completed").length;
+  const partial = logs.filter((l) => l.sessionStatus === "partial").length;
+  const skipped = logs.filter((l) => l.sessionStatus === "skipped").length;
+  const completionRate = Math.round((completed / total) * 100);
+
+  const withDiff = logs.filter((l) => l.difficultyScore != null);
+  const withPain = logs.filter((l) => l.painScore != null);
+  const withEnergy = logs.filter((l) => l.energyScore != null);
+  const withEnjoy = logs.filter((l) => l.enjoymentScore != null);
+  const withDuration = logs.filter((l) => l.actualDuration != null);
+
+  function average(vals: number[]): number | null {
+    if (vals.length === 0) return null;
+    return Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10;
+  }
+
+  const avgDifficulty = average(withDiff.map((l) => l.difficultyScore!));
+  const avgPain = average(withPain.map((l) => l.painScore!));
+  const avgEnergy = average(withEnergy.map((l) => l.energyScore!));
+  const avgEnjoyment = average(withEnjoy.map((l) => l.enjoymentScore!));
+  const avgActualDuration = average(withDuration.map((l) => l.actualDuration!));
+
+  // Tally pain area frequency
+  const areaCount: Record<string, number> = {};
+  for (const log of logs) {
+    if ((log.painScore ?? 0) >= 3 && log.painAreas) {
+      for (const area of (log.painAreas as string[])) {
+        areaCount[area] = (areaCount[area] ?? 0) + 1;
+      }
+    }
+  }
+  const frequentPainAreas = Object.entries(areaCount)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 3)
+    .map(([area, count]) => ({ area, count }));
+
+  res.json({
+    totalSessions: total,
+    completed,
+    partial,
+    skipped,
+    completionRate,
+    avgDifficulty,
+    avgPain,
+    avgEnergy,
+    avgEnjoyment,
+    avgActualDuration,
+    frequentPainAreas,
+    updatedAt: new Date().toISOString(),
+  });
 });
 
 router.get("/session-logs", requireAuth, async (req: any, res): Promise<void> => {
@@ -121,6 +190,38 @@ router.post("/session-logs", requireAuth, async (req: any, res): Promise<void> =
     painAreas: data.painAreas,
     notes: data.notes,
   });
+
+  // ── Write change log note for significant flags ───────────────────────────
+  // Non-fatal: if no active system, skip.
+  const significantFlags = recap.flags.filter((f) => f.type === "pain_trigger" || f.type === "overload");
+  if (significantFlags.length > 0) {
+    try {
+      const activeSystem = await db
+        .select({ id: trainingSystems.id })
+        .from(trainingSystems)
+        .where(eq(trainingSystems.userId, userId))
+        .orderBy(desc(trainingSystems.createdAt))
+        .limit(1)
+        .then((rows) => rows[0] ?? null);
+
+      if (activeSystem) {
+        const changeSummary = significantFlags
+          .map((f) => f.detail)
+          .join("; ");
+        await db.insert(systemChangeLog).values({
+          userId,
+          trainingSystemId: activeSystem.id,
+          source: "workout_feedback",
+          intent: "session_signal",
+          scope: "session",
+          changeSummary: `Workout feedback signal: ${changeSummary}`,
+          isMajorVersion: false,
+        });
+      }
+    } catch {
+      // Non-fatal — recap already built
+    }
+  }
 
   res.status(201).json({
     id: log.id,

@@ -3,6 +3,15 @@ import { useState } from "react";
 
 type SessionStatus = "completed" | "partial" | "skipped";
 
+const DURATION_CHIPS = [
+  { value: 20,  label: "20 min" },
+  { value: 30,  label: "30 min" },
+  { value: 45,  label: "45 min" },
+  { value: 60,  label: "60 min" },
+  { value: 75,  label: "75 min" },
+  { value: 90,  label: "90+ min" },
+];
+
 interface Props {
   programName?: string;
   dayNumber?: number;
@@ -12,6 +21,7 @@ interface Props {
     savedProgramId?: number;
     dayNumber?: number;
     sessionStatus?: SessionStatus;
+    actualDuration?: number;
     difficultyScore?: number;
     painScore?: number;
     energyScore?: number;
@@ -101,6 +111,7 @@ export default function SessionLogModal({
   isSubmitting,
 }: Props) {
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);
+  const [actualDuration, setActualDuration] = useState<number | null>(null);
   const [difficulty, setDifficulty] = useState<number | null>(null);
   const [pain, setPain] = useState<number | null>(null);
   const [energy, setEnergy] = useState<number | null>(null);
@@ -113,6 +124,7 @@ export default function SessionLogModal({
       savedProgramId,
       dayNumber,
       sessionStatus: sessionStatus ?? undefined,
+      actualDuration: isSkipped ? undefined : (actualDuration ?? undefined),
       difficultyScore: isSkipped ? undefined : (difficulty ?? undefined),
       painScore: isSkipped ? undefined : (pain ?? undefined),
       energyScore: isSkipped ? undefined : (energy ?? undefined),
@@ -173,6 +185,30 @@ export default function SessionLogModal({
                 })}
               </div>
             </div>
+
+            {!isSkipped && (
+              <div>
+                <span className="block text-xs font-semibold text-foreground mb-2">How long did it take?</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {DURATION_CHIPS.map((chip) => {
+                    const selected = actualDuration === chip.value;
+                    return (
+                      <button
+                        key={chip.value}
+                        onClick={() => setActualDuration(selected ? null : chip.value)}
+                        className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                          selected
+                            ? "bg-primary/10 border-primary/40 text-primary ring-1 ring-primary/20"
+                            : "border-border/60 bg-white/4 text-muted-foreground hover:border-border hover:text-foreground"
+                        }`}
+                      >
+                        {chip.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {!isSkipped && (<>
               <ScoreSelector
