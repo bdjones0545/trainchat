@@ -1,0 +1,212 @@
+We are building the Neural Graph Layer for TrainChat.
+
+This is Phase 2 of the neural system.
+
+IMPORTANT:
+This is NOT gamification.
+
+We are NOT building:
+- XP systems
+- levels
+- points
+
+We ARE building:
+A visual system that represents how the user’s training is evolving over time.
+
+--------------------------------------------------
+CORE IDEA
+--------------------------------------------------
+
+The user has a “Neural System” that evolves based on:
+
+- consistency
+- progression
+- movement quality
+- training behavior
+
+This system is visualized as a network of connections.
+
+--------------------------------------------------
+STEP 1: CREATE NEURAL GRAPH MODEL
+
+NeuralGraph {
+  userId: string
+
+  nodes: Node[]
+  connections: Connection[]
+
+  totalConnections: number
+  connectionStrength: number
+
+  lastUpdated: Date
+}
+
+Node {
+  id: string
+  type: string
+  label: string
+
+  activationLevel: number
+}
+
+Connection {
+  fromNode: string
+  toNode: string
+
+  strength: number
+  lastReinforced: Date
+}
+
+--------------------------------------------------
+STEP 2: DEFINE CORE NODE TYPES
+
+Create nodes for:
+
+- Strength
+- Power
+- Movement Quality
+- Consistency
+- Recovery
+- Lower Body Output
+- Upper Body Output
+- Trunk Stability
+
+These represent training qualities.
+
+--------------------------------------------------
+STEP 3: BUILD CONNECTION LOGIC
+
+When user completes sessions:
+
+- strengthen connections between nodes
+- increase connection strength
+
+Examples:
+
+Completed lower body strength session:
+→ Strength ↔ Lower Body Output
+
+Completed full session consistently:
+→ Consistency ↔ Strength
+
+Progressed lift:
+→ Strength ↔ Power
+
+--------------------------------------------------
+STEP 4: ADD VISUAL REPRESENTATION
+
+Create a simple graph view:
+
+- nodes (circles)
+- connections (lines)
+- strength = thickness or brightness
+
+As user trains:
+- lines grow stronger
+- nodes glow more
+- graph becomes more connected
+
+--------------------------------------------------
+STEP 5: ADD “REINFORCEMENT” EFFECT
+
+After session:
+
+Show:
+“Neural pathways reinforced”
+
+Then animate:
+- specific connections strengthening
+- subtle glow/pulse effect
+
+--------------------------------------------------
+STEP 6: CONNECT TO REAL DATA
+
+Graph must reflect:
+
+- sessions completed
+- progression
+- consistency
+- readiness behavior
+
+NOT random growth.
+
+--------------------------------------------------
+STEP 7: KEEP UI CLEAN
+
+Do NOT:
+- overload with labels
+- make it confusing
+
+Keep:
+- minimal
+- intuitive
+- visually impressive
+
+--------------------------------------------------
+STEP 8: ADD INSIGHT OVERLAY
+
+When user taps node:
+
+Show insight:
+
+Example:
+“Lower Body Output improving due to consistent strength sessions”
+
+This ties graph → meaning.
+
+--------------------------------------------------
+STEP 9: INTEGRATE INTO FLOW
+
+User journey:
+
+1. completes session
+2. sees neural feedback
+3. sees graph update
+
+This creates:
+visual reinforcement of behavior
+
+--------------------------------------------------
+STEP 10: KEEP IT GROUNDED
+
+Language should stay:
+
+- performance-based
+- scientific
+- coach-like
+
+Avoid:
+- “level up”
+- “XP gained”
+- game language
+
+--------------------------------------------------
+STEP 11: SUCCESS STATE
+
+User trains →
+
+Graph becomes more connected →
+
+User sees:
+- stronger connections
+- clearer structure
+- visual progress
+
+Feels:
+“I am building something real”
+
+--------------------------------------------------
+FINAL RULE
+
+This is a representation of adaptation.
+
+It must feel:
+- meaningful
+- grounded
+- intelligent
+
+NOT:
+- gamified
+- gimmicky
+
+Implement this now.

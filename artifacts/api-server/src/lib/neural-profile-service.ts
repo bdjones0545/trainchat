@@ -1,22 +1,22 @@
 /**
- * Neural Profile Service — Gamification + Progression Layer
+ * Neural Profile Service — Training Adaptation Tracking Layer
  *
- * Manages XP, levels, milestones, and neural connection metrics.
- * Tone: performance-driven, scientific, athlete-focused.
- * Philosophy: every metric traces back to a real training behavior.
+ * Tracks and interprets how consistent training shapes neural efficiency,
+ * movement quality, and force production capacity.
+ *
+ * Internally uses XP/level math as a proxy for training volume, but the
+ * public-facing API speaks only in coaching and performance language.
+ *
+ * Philosophy: every signal traces back to a real training behavior.
  */
 
 import { db, neuralProfilesTable, sessionLogsTable, exerciseLogsTable, readinessEntriesTable } from "@workspace/db";
-import { eq, desc, count, and, gte } from "drizzle-orm";
+import { eq, desc, and, gte } from "drizzle-orm";
 
-// ─── Level System ─────────────────────────────────────────────────────────────
-// Total XP required to REACH level N (1-indexed).
-// Growth formula: each level costs 100 more XP than the previous.
-// Level 2: 500, Level 3: 1100, Level 4: 1800, Level 5: 2600, ...
+// ─── Internal progression math (not exposed to UI) ───────────────────────────
 
-export function xpRequiredForLevel(level: number): number {
+function xpRequiredForLevel(level: number): number {
   if (level <= 1) return 0;
-  // Cumulative: sum of (500 + (i-1)*100) for i=2..level
   let total = 0;
   for (let i = 2; i <= level; i++) {
     total += 500 + (i - 2) * 100;
@@ -24,57 +24,37 @@ export function xpRequiredForLevel(level: number): number {
   return total;
 }
 
-export function levelFromXp(totalXp: number): number {
+function levelFromXp(totalXp: number): number {
   let level = 1;
   while (xpRequiredForLevel(level + 1) <= totalXp) level++;
   return level;
 }
 
-export function xpToNextLevel(level: number, currentXp: number): number {
-  const nextThreshold = xpRequiredForLevel(level + 1);
-  return Math.max(0, nextThreshold - currentXp);
-}
-
-export function xpProgressInLevel(level: number, currentXp: number): number {
+function xpProgressInLevel(level: number, currentXp: number): number {
   const levelStart = xpRequiredForLevel(level);
   const levelEnd = xpRequiredForLevel(level + 1);
   const progress = currentXp - levelStart;
   const span = levelEnd - levelStart;
-  return Math.round((progress / span) * 100);
+  return Math.max(0, Math.min(100, Math.round((progress / span) * 100)));
 }
 
-export function levelLabel(level: number): string {
-  if (level <= 2) return "Developing Trainee";
-  if (level <= 5) return "Structured Athlete";
-  if (level <= 10) return "Disciplined Competitor";
-  if (level <= 15) return "High Performance";
+// ─── Maturity label (replaces "level" in the UI) ─────────────────────────────
+
+function maturityLabel(level: number): string {
+  if (level <= 2) return "Developing Foundation";
+  if (level <= 5) return "Building Structure";
+  if (level <= 10) return "Consistent Athlete";
+  if (level <= 15) return "High Compliance";
   if (level <= 20) return "Elite Adherence";
   return "Neural Master";
 }
 
-// ─── XP Awards ───────────────────────────────────────────────────────────────
+// ─── XP Award constants ───────────────────────────────────────────────────────
 
-export type XpEvent =
-  | "session_completed"
-  | "session_perfect"
-  | "progression_achieved"
-  | "streak_day"
-  | "milestone_unlocked"
-  | "first_session"
-  | "sessions_5"
-  | "sessions_20"
-  | "sessions_50"
-  | "streak_3"
-  | "streak_7"
-  | "streak_14"
-  | "streak_30";
-
-const XP_AWARDS: Record<XpEvent, number> = {
+const XP = {
   session_completed: 50,
   session_perfect: 75,
-  progression_achieved: 25,
   streak_day: 10,
-  milestone_unlocked: 0,
   first_session: 100,
   sessions_5: 150,
   sessions_20: 300,
@@ -85,65 +65,119 @@ const XP_AWARDS: Record<XpEvent, number> = {
   streak_30: 1000,
 };
 
-// ─── Milestones ───────────────────────────────────────────────────────────────
+// ─── Milestones (for internal tracking — unlocking these signals adaptation) ──
 
 export interface Milestone {
   id: string;
   label: string;
   description: string;
-  xpReward: number;
 }
 
 export const MILESTONES: Milestone[] = [
-  {
-    id: "first_session",
-    label: "First Rep",
-    description: "Logged your first training session",
-    xpReward: XP_AWARDS.first_session,
-  },
-  {
-    id: "sessions_5",
-    label: "5 Sessions In",
-    description: "Completed 5 training sessions",
-    xpReward: XP_AWARDS.sessions_5,
-  },
-  {
-    id: "sessions_20",
-    label: "20 Sessions In",
-    description: "Completed 20 training sessions — consistent foundation",
-    xpReward: XP_AWARDS.sessions_20,
-  },
-  {
-    id: "sessions_50",
-    label: "50 Sessions",
-    description: "50 sessions completed — this is a system",
-    xpReward: XP_AWARDS.sessions_50,
-  },
-  {
-    id: "streak_3",
-    label: "3-Day Streak",
-    description: "3 consecutive days of training",
-    xpReward: XP_AWARDS.streak_3,
-  },
-  {
-    id: "streak_7",
-    label: "7-Day Streak",
-    description: "Full week of consistent training",
-    xpReward: XP_AWARDS.streak_7,
-  },
-  {
-    id: "streak_14",
-    label: "14-Day Streak",
-    description: "Two weeks of unbroken consistency",
-    xpReward: XP_AWARDS.streak_14,
-  },
-  {
-    id: "streak_30",
-    label: "30-Day Streak",
-    description: "30 days straight — elite adherence",
-    xpReward: XP_AWARDS.streak_30,
-  },
+  { id: "first_session",  label: "First Session",      description: "Training system activated" },
+  { id: "sessions_5",     label: "5 Sessions",         description: "Consistent foundation forming" },
+  { id: "sessions_20",    label: "20 Sessions",        description: "Neural pathways reinforcing" },
+  { id: "sessions_50",    label: "50 Sessions",        description: "System operating at high output" },
+  { id: "streak_3",       label: "3-Day Continuity",   description: "Short-term pattern established" },
+  { id: "streak_7",       label: "7-Day Continuity",   description: "Weekly rhythm locked in" },
+  { id: "streak_14",      label: "14-Day Continuity",  description: "Sustained adaptation in progress" },
+  { id: "streak_30",      label: "30-Day Continuity",  description: "Long-term structural adaptation" },
 ];
+
+// ─── Neural Feedback (coaching-language interpretation) ───────────────────────
+
+export interface NeuralMetric {
+  label: string;
+  direction: "up" | "stable" | "down" | "challenged";
+  detail: string;
+}
+
+export interface NeuralFeedback {
+  metrics: NeuralMetric[];
+  systemUpdates: string[];
+  summary: string;
+}
+
+function generateNeuralFeedback(opts: {
+  sessionStatus: string;
+  isPerfect: boolean;
+  consistencyScore: number;
+  progressionScore: number;
+  recoveryScore: number;
+  streakDays: number;
+  newMilestones: Milestone[];
+  difficultyScore?: number | null;
+}): NeuralFeedback {
+  const { sessionStatus, isPerfect, consistencyScore, progressionScore, recoveryScore, streakDays, difficultyScore } = opts;
+  const isCompleted = sessionStatus === "completed";
+  const isPartial = sessionStatus === "partial";
+  const isSkipped = sessionStatus === "skipped";
+
+  const metrics: NeuralMetric[] = [];
+
+  // Neural output — based on session completion and consistency
+  if (isCompleted && isPerfect) {
+    metrics.push({ label: "Neural output", direction: "up", detail: "peak activation — full session at optimal intensity" });
+  } else if (isCompleted && consistencyScore >= 70) {
+    metrics.push({ label: "Neural output", direction: "up", detail: "increasing — session demand met" });
+  } else if (isCompleted) {
+    metrics.push({ label: "Neural output", direction: "stable", detail: "maintained — session completed" });
+  } else if (isPartial) {
+    metrics.push({ label: "Neural output", direction: "challenged", detail: "partial — adaptation still occurring" });
+  } else {
+    metrics.push({ label: "Neural output", direction: "down", detail: "session not completed" });
+  }
+
+  // Movement efficiency — based on progression score and difficulty
+  if (progressionScore >= 75) {
+    metrics.push({ label: "Movement efficiency", direction: "up", detail: "improving — movement quality confirmed" });
+  } else if (progressionScore >= 50) {
+    metrics.push({ label: "Movement efficiency", direction: "stable", detail: "maintained — patterns reinforcing" });
+  } else if (difficultyScore && difficultyScore >= 4) {
+    metrics.push({ label: "Movement efficiency", direction: "challenged", detail: "load tolerance being tested" });
+  } else {
+    metrics.push({ label: "Movement efficiency", direction: "stable", detail: "patterns holding" });
+  }
+
+  // Force production — based on progression and difficulty interaction
+  if (isCompleted && progressionScore >= 70 && (difficultyScore ?? 3) <= 3) {
+    metrics.push({ label: "Force production", direction: "up", detail: "reinforced — capacity expanding" });
+  } else if (difficultyScore && difficultyScore >= 4) {
+    metrics.push({ label: "Force production", direction: "challenged", detail: "near-maximal output — adaptation in progress" });
+  } else if (isCompleted) {
+    metrics.push({ label: "Force production", direction: "stable", detail: "maintained — tissue loading adequate" });
+  } else {
+    metrics.push({ label: "Force production", direction: "down", detail: "below target — review next session" });
+  }
+
+  // System updates
+  const systemUpdates: string[] = [];
+  if (isCompleted) systemUpdates.push("Movement patterns logged");
+  if (isCompleted && progressionScore >= 60) systemUpdates.push("Progression pathway active next session");
+  if (isPartial) systemUpdates.push("Partial load recorded — full session next");
+  if (streakDays >= 3) systemUpdates.push(`Continuity maintained — ${streakDays} sessions in sequence`);
+  if (recoveryScore >= 70) systemUpdates.push("Recovery markers within optimal range");
+  if (recoveryScore < 40 && isCompleted) systemUpdates.push("Recovery signal low — monitor readiness next session");
+  opts.newMilestones.forEach((m) => systemUpdates.push(m.description));
+
+  // Fallback
+  if (systemUpdates.length === 0) {
+    systemUpdates.push("Session data recorded");
+  }
+
+  // Summary
+  const summary = isPerfect
+    ? "System operating at peak output. All training signals positive."
+    : isCompleted && consistencyScore >= 60
+    ? "Training signals consistent. Neural pathways reinforcing."
+    : isCompleted
+    ? "Session completed. Adaptation accumulating."
+    : isPartial
+    ? "Partial session logged. Consistency drives long-term adaptation."
+    : "Session skipped. Resume as soon as recovery allows.";
+
+  return { metrics, systemUpdates, summary };
+}
 
 // ─── Score computation ────────────────────────────────────────────────────────
 
@@ -168,18 +202,15 @@ async function computeScores(userId: number): Promise<{
       .limit(30),
   ]);
 
-  // Consistency: sessions completed / 4 weeks × weekly target (assume 3/week target)
-  const targetSessions = 12; // 4 weeks × 3 sessions/week
+  const targetSessions = 12;
   const completed = sessionLogs.filter((l) => l.sessionStatus === "completed" || l.sessionStatus === "partial").length;
   const consistencyScore = Math.min(100, Math.round((completed / targetSessions) * 100));
 
-  // Progression: ratio of 'easy'+'solid' to total exercise logs
   const goodLogs = exerciseLogs.filter((l) => l.completionStatus === "easy" || l.completionStatus === "solid").length;
   const progressionScore = exerciseLogs.length > 0
     ? Math.min(100, Math.round((goodLogs / exerciseLogs.length) * 100))
     : 0;
 
-  // Recovery: average readiness × 20 (1-5 → 0-100)
   const avgReadiness = readinessEntries.length > 0
     ? readinessEntries.reduce((sum, r) => sum + (r.readinessScore ?? 3), 0) / readinessEntries.length
     : 3;
@@ -188,30 +219,30 @@ async function computeScores(userId: number): Promise<{
   return { consistencyScore, progressionScore, recoveryScore };
 }
 
-// ─── Core award function ──────────────────────────────────────────────────────
+// ─── AwardResult ─────────────────────────────────────────────────────────────
 
 export interface AwardResult {
-  xpGained: number;
-  newXp: number;
-  oldLevel: number;
-  newLevel: number;
-  leveledUp: boolean;
-  newlyUnlockedMilestones: Milestone[];
+  // Internal — used for neural profile data tracking
   neuralConnectionsAdded: number;
+  newlyUnlockedMilestones: Milestone[];
+
+  // Coaching output — what the UI shows
+  neuralFeedback: NeuralFeedback;
+
+  // Profile state
   profile: {
-    level: number;
-    xp: number;
-    xpProgressPercent: number;
-    xpToNextLevel: number;
+    maturityLabel: string;
+    maturityProgress: number;        // 0-100 — how far through current maturity tier
     consistencyScore: number;
     progressionScore: number;
     recoveryScore: number;
     totalSessionsCompleted: number;
     neuralConnections: number;
     unlockedMilestones: string[];
-    levelLabel: string;
   };
 }
+
+// ─── Core award function ──────────────────────────────────────────────────────
 
 export async function awardXpForSession(
   userId: number,
@@ -231,33 +262,31 @@ export async function awardXpForSession(
     .then((rows) => rows[0] ?? null);
 
   if (!profile) {
-    const [created] = await db
-      .insert(neuralProfilesTable)
-      .values({ userId })
-      .returning();
+    const [created] = await db.insert(neuralProfilesTable).values({ userId }).returning();
     profile = created;
   }
 
   const isCompleted = opts.sessionStatus === "completed" || opts.sessionStatus === "partial";
   if (!isCompleted) {
-    return buildResult(profile, 0, [], 0);
+    const skippedFeedback = generateNeuralFeedback({
+      sessionStatus: opts.sessionStatus,
+      isPerfect: false,
+      consistencyScore: profile.consistencyScore,
+      progressionScore: profile.progressionScore,
+      recoveryScore: profile.recoveryScore,
+      streakDays: opts.streakDays ?? 0,
+      newMilestones: [],
+      difficultyScore: opts.difficultyScore,
+    });
+    return buildResult(profile, skippedFeedback, [], 0);
   }
 
-  let xpGained = 0;
-  const connectionsAdded = 3;
-
-  // Base session XP
-  xpGained += opts.isPerfect ? XP_AWARDS.session_perfect : XP_AWARDS.session_completed;
-
-  // Streak bonus
+  let xpGained = opts.isPerfect ? XP.session_perfect : XP.session_completed;
   if (opts.streakDays && opts.streakDays >= 1) {
-    xpGained += XP_AWARDS.streak_day * Math.min(opts.streakDays, 5);
+    xpGained += XP.streak_day * Math.min(opts.streakDays, 5);
   }
 
-  // New session count (after this award)
   const newSessionCount = profile.totalSessionsCompleted + 1;
-
-  // Check milestones
   const alreadyUnlocked = new Set(profile.unlockedMilestones as string[]);
   const newlyUnlocked: Milestone[] = [];
 
@@ -267,7 +296,7 @@ export async function awardXpForSession(
       if (m) {
         newlyUnlocked.push(m);
         alreadyUnlocked.add(id);
-        xpGained += m.xpReward;
+        xpGained += XP[id as keyof typeof XP] ?? 0;
       }
     }
   }
@@ -276,7 +305,6 @@ export async function awardXpForSession(
   checkMilestone("sessions_5", newSessionCount >= 5);
   checkMilestone("sessions_20", newSessionCount >= 20);
   checkMilestone("sessions_50", newSessionCount >= 50);
-
   if (opts.streakDays) {
     checkMilestone("streak_3", opts.streakDays >= 3);
     checkMilestone("streak_7", opts.streakDays >= 7);
@@ -285,14 +313,11 @@ export async function awardXpForSession(
   }
 
   const newXp = profile.xp + xpGained;
-  const oldLevel = profile.level;
   const newLevel = levelFromXp(newXp);
-  const newConnections = profile.neuralConnections + connectionsAdded;
+  const connectionsAdded = 3;
 
-  // Compute scores
   const scores = await computeScores(userId);
 
-  // Update profile
   const [updated] = await db
     .update(neuralProfilesTable)
     .set({
@@ -302,18 +327,29 @@ export async function awardXpForSession(
       progressionScore: scores.progressionScore,
       recoveryScore: scores.recoveryScore,
       totalSessionsCompleted: newSessionCount,
-      neuralConnections: newConnections,
+      neuralConnections: profile.neuralConnections + connectionsAdded,
       unlockedMilestones: Array.from(alreadyUnlocked),
       lastUpdated: new Date(),
     })
     .where(eq(neuralProfilesTable.userId, userId))
     .returning();
 
-  return buildResult(updated, xpGained, newlyUnlocked, connectionsAdded, oldLevel);
+  const feedback = generateNeuralFeedback({
+    sessionStatus: opts.sessionStatus,
+    isPerfect: opts.isPerfect ?? false,
+    consistencyScore: scores.consistencyScore,
+    progressionScore: scores.progressionScore,
+    recoveryScore: scores.recoveryScore,
+    streakDays: opts.streakDays ?? 0,
+    newMilestones: newlyUnlocked,
+    difficultyScore: opts.difficultyScore,
+  });
+
+  return buildResult(updated, feedback, newlyUnlocked, connectionsAdded);
 }
 
 export async function awardXpForProgression(userId: number): Promise<void> {
-  let profile = await db
+  const profile = await db
     .select()
     .from(neuralProfilesTable)
     .where(eq(neuralProfilesTable.userId, userId))
@@ -322,7 +358,7 @@ export async function awardXpForProgression(userId: number): Promise<void> {
 
   if (!profile) return;
 
-  const newXp = profile.xp + XP_AWARDS.progression_achieved;
+  const newXp = profile.xp + 25;
   const newLevel = levelFromXp(newXp);
 
   await db
@@ -341,10 +377,7 @@ export async function getOrCreateProfile(userId: number) {
 
   if (!profile) {
     const scores = await computeScores(userId);
-    const [created] = await db
-      .insert(neuralProfilesTable)
-      .values({ userId, ...scores })
-      .returning();
+    const [created] = await db.insert(neuralProfilesTable).values({ userId, ...scores }).returning();
     profile = created;
   }
 
@@ -354,39 +387,28 @@ export async function getOrCreateProfile(userId: number) {
 // ─── Result helpers ───────────────────────────────────────────────────────────
 
 function formatProfile(profile: typeof neuralProfilesTable.$inferSelect) {
-  const lvl = profile.level;
   return {
-    level: lvl,
-    xp: profile.xp,
-    xpProgressPercent: xpProgressInLevel(lvl, profile.xp),
-    xpToNextLevel: xpToNextLevel(lvl, profile.xp),
+    maturityLabel: maturityLabel(profile.level),
+    maturityProgress: xpProgressInLevel(profile.level, profile.xp),
     consistencyScore: profile.consistencyScore,
     progressionScore: profile.progressionScore,
     recoveryScore: profile.recoveryScore,
     totalSessionsCompleted: profile.totalSessionsCompleted,
     neuralConnections: profile.neuralConnections,
     unlockedMilestones: profile.unlockedMilestones as string[],
-    levelLabel: levelLabel(lvl),
   };
 }
 
 function buildResult(
   profile: typeof neuralProfilesTable.$inferSelect,
-  xpGained: number,
+  feedback: NeuralFeedback,
   milestones: Milestone[],
   connectionsAdded: number,
-  oldLevel?: number,
 ): AwardResult {
-  const newLevel = profile.level;
-  const lvlBefore = oldLevel ?? newLevel;
   return {
-    xpGained,
-    newXp: profile.xp,
-    oldLevel: lvlBefore,
-    newLevel,
-    leveledUp: newLevel > lvlBefore,
-    newlyUnlockedMilestones: milestones,
     neuralConnectionsAdded: connectionsAdded,
+    newlyUnlockedMilestones: milestones,
+    neuralFeedback: feedback,
     profile: formatProfile(profile),
   };
 }

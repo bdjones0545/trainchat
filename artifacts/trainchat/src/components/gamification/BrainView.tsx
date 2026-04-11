@@ -1,20 +1,21 @@
 /**
- * BrainView — Neural Network Visualization
+ * BrainView — Neural System Dashboard
  *
- * A clean, scientific SVG visualization of the user's "training brain."
- * Nodes represent training domains. Connections represent behavioral consistency.
- * Active connections glow and pulse based on real performance data.
+ * A clean, scientific SVG visualization of the user's training adaptation state.
+ * Nodes represent training domains. Connections represent accumulated consistency.
+ * Active connections glow and pulse based on real logged data.
  *
- * Tone: elite sports science dashboard, not a video game.
+ * Language: coaching and performance science.
+ * No XP, no levels. Every metric traces to real training behavior.
  */
 
 import { useEffect, useState } from "react";
-import { X, TrendingUp, Zap, Activity, Award } from "lucide-react";
+import { X, Activity } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 
 // ─── Node layout ──────────────────────────────────────────────────────────────
-// 16 nodes arranged in an oval brain-like cluster
+// 16 nodes in an oval brain-like cluster
 
 const NODES = [
   { id: 0,  x: 200, y: 60,  label: "Power" },
@@ -35,7 +36,6 @@ const NODES = [
   { id: 15, x: 130, y: 240, label: "Adaptation" },
 ];
 
-// All possible connections (edges)
 const ALL_EDGES = [
   [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9], [9, 0],
   [0, 13], [1, 12], [2, 12], [3, 14], [4, 15], [5, 11], [6, 15], [7, 11], [8, 13], [9, 13],
@@ -47,17 +47,14 @@ const ALL_EDGES = [
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface NeuralProfileData {
-  level: number;
-  xp: number;
-  xpProgressPercent: number;
-  xpToNextLevel: number;
+  maturityLabel: string;
+  maturityProgress: number;
   consistencyScore: number;
   progressionScore: number;
   recoveryScore: number;
   totalSessionsCompleted: number;
   neuralConnections: number;
   unlockedMilestones: string[];
-  levelLabel: string;
 }
 
 interface Props {
@@ -66,17 +63,20 @@ interface Props {
 
 // ─── Score bar ────────────────────────────────────────────────────────────────
 
-function ScoreBar({ label, value, color }: { label: string; value: number; color: string }) {
+function ScoreBar({ label, value, color, subtitle }: { label: string; value: number; color: string; subtitle?: string }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-1">
-        <span className="text-[10px] text-muted-foreground font-medium">{label}</span>
-        <span className="text-[10px] font-bold text-foreground">{value}%</span>
+        <div>
+          <span className="text-[10px] text-foreground font-semibold">{label}</span>
+          {subtitle && <span className="text-[9px] text-muted-foreground ml-1.5">{subtitle}</span>}
+        </div>
+        <span className="text-[10px] font-bold" style={{ color }}>{value}%</span>
       </div>
       <div className="h-1 bg-muted/20 rounded-full overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-1000"
-          style={{ width: `${value}%`, background: color }}
+          style={{ width: `${value}%`, background: color, boxShadow: `0 0 4px ${color}60` }}
         />
       </div>
     </div>
@@ -85,7 +85,7 @@ function ScoreBar({ label, value, color }: { label: string; value: number; color
 
 // ─── Neural SVG ───────────────────────────────────────────────────────────────
 
-function NeuralSVG({ connections, consistencyScore }: { connections: number; consistencyScore: number }) {
+function NeuralSVG({ connections }: { connections: number }) {
   const [pulse, setPulse] = useState(0);
   const activeEdgeCount = Math.min(connections, ALL_EDGES.length);
   const activeEdges = ALL_EDGES.slice(0, activeEdgeCount);
@@ -97,49 +97,29 @@ function NeuralSVG({ connections, consistencyScore }: { connections: number; con
   }, []);
 
   return (
-    <svg viewBox="0 30 380 290" className="w-full" style={{ maxHeight: 260 }}>
+    <svg viewBox="0 30 380 290" className="w-full" style={{ maxHeight: 240 }}>
       <defs>
-        <filter id="glow">
+        <filter id="bv-glow">
           <feGaussianBlur stdDeviation="2.5" result="coloredBlur" />
-          <feMerge>
-            <feMergeNode in="coloredBlur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-        <filter id="glow-strong">
-          <feGaussianBlur stdDeviation="4" result="coloredBlur" />
-          <feMerge>
-            <feMergeNode in="coloredBlur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
+          <feMerge><feMergeNode in="coloredBlur" /><feMergeNode in="SourceGraphic" /></feMerge>
         </filter>
       </defs>
 
-      {/* Inactive edges (dormant) */}
-      {ALL_EDGES.slice(activeEdgeCount).map(([a, b], i) => {
-        const na = NODES[a], nb = NODES[b];
-        return (
-          <line
-            key={`inactive-${i}`}
-            x1={na.x} y1={na.y} x2={nb.x} y2={nb.y}
-            stroke="rgba(99,102,241,0.06)"
-            strokeWidth="0.8"
-          />
-        );
-      })}
+      {/* Dormant edges */}
+      {ALL_EDGES.slice(activeEdgeCount).map(([a, b], i) => (
+        <line key={`d-${i}`} x1={NODES[a].x} y1={NODES[a].y} x2={NODES[b].x} y2={NODES[b].y}
+          stroke="rgba(99,102,241,0.05)" strokeWidth="0.8" />
+      ))}
 
       {/* Active edges */}
       {activeEdges.map(([a, b], i) => {
-        const na = NODES[a], nb = NODES[b];
         const isPulsing = pulse % 3 === i % 3;
         return (
-          <line
-            key={`active-${i}`}
-            x1={na.x} y1={na.y} x2={nb.x} y2={nb.y}
-            stroke={isPulsing ? "rgba(99,102,241,0.7)" : "rgba(99,102,241,0.3)"}
+          <line key={`a-${i}`} x1={NODES[a].x} y1={NODES[a].y} x2={NODES[b].x} y2={NODES[b].y}
+            stroke={isPulsing ? "rgba(99,102,241,0.65)" : "rgba(99,102,241,0.25)"}
             strokeWidth={isPulsing ? 1.5 : 1}
-            filter={isPulsing ? "url(#glow)" : undefined}
-            style={{ transition: "stroke-opacity 1s ease, stroke-width 0.5s ease" }}
+            filter={isPulsing ? "url(#bv-glow)" : undefined}
+            style={{ transition: "stroke 0.8s ease" }}
           />
         );
       })}
@@ -149,37 +129,14 @@ function NeuralSVG({ connections, consistencyScore }: { connections: number; con
         const isActive = activeNodeIds.has(node.id);
         return (
           <g key={node.id}>
-            {isActive && (
-              <circle
-                cx={node.x} cy={node.y} r={8}
-                fill="rgba(99,102,241,0.12)"
-                filter="url(#glow)"
-              />
-            )}
-            <circle
-              cx={node.x}
-              cy={node.y}
-              r={isActive ? 4 : 2.5}
-              fill={isActive ? "#6366f1" : "rgba(99,102,241,0.2)"}
-              filter={isActive ? "url(#glow)" : undefined}
+            {isActive && <circle cx={node.x} cy={node.y} r={7} fill="rgba(99,102,241,0.1)" filter="url(#bv-glow)" />}
+            <circle cx={node.x} cy={node.y} r={isActive ? 3.5 : 2}
+              fill={isActive ? "#6366f1" : "rgba(99,102,241,0.18)"}
+              filter={isActive ? "url(#bv-glow)" : undefined}
             />
           </g>
         );
       })}
-
-      {/* Central hub label */}
-      {connections >= 10 && (
-        <text
-          x="200" y="168"
-          textAnchor="middle"
-          fill="rgba(99,102,241,0.5)"
-          fontSize="8"
-          fontWeight="700"
-          letterSpacing="0.1em"
-        >
-          NEURAL CORE
-        </text>
-      )}
     </svg>
   );
 }
@@ -197,89 +154,78 @@ export default function BrainView({ onClose }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-sm bg-[#0d1117] border border-primary/25 rounded-2xl overflow-hidden shadow-2xl">
-        {/* Glowing top edge */}
-        <div className="h-px w-full bg-gradient-to-r from-transparent via-primary to-transparent" />
+      <div className="relative w-full max-w-sm bg-[#0d1117] border border-primary/20 rounded-2xl overflow-hidden shadow-2xl">
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
 
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-4 pb-2">
           <div className="flex items-center gap-2">
-            <Activity className="w-4 h-4 text-primary" />
-            <span className="text-[11px] font-bold text-primary uppercase tracking-[0.15em]">
-              Neural Profile
+            <Activity className="w-3.5 h-3.5 text-primary" />
+            <span className="text-[10px] font-bold text-primary uppercase tracking-[0.16em]">
+              Neural System
             </span>
           </div>
-          <button
-            onClick={onClose}
-            className="w-7 h-7 rounded-lg bg-muted/30 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+          <button onClick={onClose}
+            className="w-6 h-6 rounded-lg bg-muted/30 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="w-3 h-3" />
           </button>
         </div>
 
         {isLoading ? (
-          <div className="px-4 py-12 flex flex-col items-center gap-2">
-            <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-            <span className="text-[10px] text-muted-foreground">Loading neural data…</span>
+          <div className="px-4 py-10 flex flex-col items-center gap-2">
+            <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+            <span className="text-[9px] text-muted-foreground">Loading adaptation data…</span>
           </div>
         ) : profile ? (
           <div className="px-4 pb-4">
-            {/* Level + XP */}
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/30 flex flex-col items-center justify-center flex-shrink-0">
-                <span className="text-xl font-black text-primary leading-none">{profile.level}</span>
-                <span className="text-[8px] text-primary/60 font-bold uppercase">LVL</span>
+            {/* Maturity state */}
+            <div className="mb-3">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-[11px] font-semibold text-foreground">{profile.maturityLabel}</p>
+                <span className="text-[9px] text-muted-foreground">{profile.maturityProgress}% to next stage</span>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-bold text-foreground">{profile.levelLabel}</p>
-                <p className="text-[9px] text-muted-foreground mb-1.5">{profile.xpToNextLevel} XP to next level</p>
-                <div className="h-1.5 bg-muted/20 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary rounded-full"
-                    style={{
-                      width: `${profile.xpProgressPercent}%`,
-                      boxShadow: "0 0 6px rgba(99,102,241,0.5)",
-                    }}
-                  />
-                </div>
+              <div className="h-1 bg-muted/20 rounded-full overflow-hidden">
+                <div className="h-full bg-primary/60 rounded-full"
+                  style={{ width: `${profile.maturityProgress}%`, boxShadow: "0 0 5px rgba(99,102,241,0.4)" }} />
               </div>
             </div>
 
-            {/* Neural SVG */}
-            <div className="bg-muted/5 rounded-xl border border-primary/10 mb-3 overflow-hidden">
-              <NeuralSVG connections={profile.neuralConnections} consistencyScore={profile.consistencyScore} />
+            {/* SVG network */}
+            <div className="bg-muted/5 rounded-xl border border-primary/8 mb-3 overflow-hidden">
+              <NeuralSVG connections={profile.neuralConnections} />
             </div>
 
-            {/* Neural connections count */}
+            {/* Connections label */}
             <div className="flex items-center justify-center gap-1.5 mb-3">
               <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-              <span className="text-[10px] text-muted-foreground">
-                <span className="text-primary font-bold">{profile.neuralConnections}</span> neural connections active
+              <span className="text-[9px] text-muted-foreground">
+                <span className="text-primary/80 font-semibold">{profile.neuralConnections}</span> active connections
               </span>
             </div>
 
-            {/* Score bars */}
+            {/* Performance scores */}
             <div className="space-y-2.5 mb-3">
-              <ScoreBar label="Consistency" value={profile.consistencyScore} color="#6366f1" />
-              <ScoreBar label="Progression" value={profile.progressionScore} color="#22c55e" />
-              <ScoreBar label="Recovery" value={profile.recoveryScore} color="#f59e0b" />
+              <ScoreBar label="Consistency" value={profile.consistencyScore} color="#6366f1" subtitle="sessions completed vs target" />
+              <ScoreBar label="Progression" value={profile.progressionScore} color="#22c55e" subtitle="quality execution rate" />
+              <ScoreBar label="Recovery" value={profile.recoveryScore} color="#f59e0b" subtitle="readiness index" />
             </div>
 
             {/* Stats */}
             <div className="grid grid-cols-2 gap-2">
-              <div className="bg-muted/15 border border-border/30 rounded-xl p-2.5 text-center">
+              <div className="bg-muted/10 border border-border/20 rounded-xl p-2.5 text-center">
                 <p className="text-base font-black text-foreground">{profile.totalSessionsCompleted}</p>
                 <p className="text-[9px] text-muted-foreground">Sessions Logged</p>
               </div>
-              <div className="bg-muted/15 border border-border/30 rounded-xl p-2.5 text-center">
+              <div className="bg-muted/10 border border-border/20 rounded-xl p-2.5 text-center">
                 <p className="text-base font-black text-foreground">{profile.unlockedMilestones.length}</p>
-                <p className="text-[9px] text-muted-foreground">Milestones</p>
+                <p className="text-[9px] text-muted-foreground">Patterns Formed</p>
               </div>
             </div>
           </div>
         ) : (
-          <p className="px-4 py-8 text-center text-[11px] text-muted-foreground">
-            Log sessions to begin building your neural profile.
+          <p className="px-4 py-8 text-center text-[10px] text-muted-foreground">
+            Begin logging sessions to activate your neural profile.
           </p>
         )}
       </div>
