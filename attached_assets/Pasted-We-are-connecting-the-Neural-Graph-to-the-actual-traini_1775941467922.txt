@@ -1,0 +1,208 @@
+We are connecting the Neural Graph to the actual training system.
+
+This is Phase 3 of the neural system.
+
+IMPORTANT:
+The Neural Graph is no longer just visual.
+
+It must now influence:
+- program generation
+- progression decisions
+- session adjustments
+
+--------------------------------------------------
+CORE IDEA
+--------------------------------------------------
+
+The system should learn:
+
+“What the user is good at”
+“What needs development”
+“What is being under-trained”
+
+Then adjust the program accordingly.
+
+--------------------------------------------------
+STEP 1: DEFINE NODE MEANING
+
+Each node represents a training quality:
+
+- Strength
+- Power
+- Movement Quality
+- Consistency
+- Recovery
+- Lower Body Output
+- Upper Body Output
+- Trunk Stability
+
+Each node has:
+- activationLevel (0–100)
+- connectionStrengths
+
+--------------------------------------------------
+STEP 2: CREATE INTERPRETATION LAYER
+
+Build function:
+
+interpretNeuralGraph(graph)
+
+This function should detect:
+
+- strong nodes (high activation)
+- weak nodes (low activation)
+- imbalances between nodes
+
+Example:
+
+If:
+Lower Body Output = high  
+Trunk Stability = low  
+
+→ imbalance detected
+
+--------------------------------------------------
+STEP 3: APPLY PROGRAMMING ADJUSTMENTS
+
+Use interpretation to influence programming.
+
+Examples:
+
+LOW TRUNK STABILITY:
+→ add more anti-rotation / bracing work
+
+LOW POWER:
+→ increase power exposure (jumps, throws)
+
+LOW CONSISTENCY:
+→ simplify program structure
+→ reduce volume
+
+HIGH STRENGTH + LOW POWER:
+→ shift emphasis toward explosive work
+
+HIGH FATIGUE SIGNALS:
+→ reduce volume
+→ increase recovery emphasis
+
+--------------------------------------------------
+STEP 4: ADD “BIAS SYSTEM” TO PROGRAM BUILDER
+
+Modify builder to include:
+
+programBias = {
+  strengthBias
+  powerBias
+  recoveryBias
+  simplicityBias
+}
+
+Bias is influenced by Neural Graph.
+
+Example:
+
+If Power is low:
+powerBias = high
+
+If consistency is low:
+simplicityBias = high
+
+--------------------------------------------------
+STEP 5: ADJUST SESSION DESIGN
+
+Session structure should adapt:
+
+Example:
+
+If Power is underdeveloped:
+- add additional power movement
+- prioritize explosive work
+
+If Recovery is weak:
+- reduce volume
+- reduce high-stress lifts
+
+If Trunk Stability is low:
+- add trunk work earlier in session
+
+--------------------------------------------------
+STEP 6: ADJUST PROGRESSION
+
+Neural Graph should influence progression:
+
+If node is strong:
+→ allow more aggressive progression
+
+If node is weak:
+→ progress slower
+→ focus on quality
+
+--------------------------------------------------
+STEP 7: ADD EXPLANATION TO USER
+
+When system adjusts program:
+
+Explain briefly:
+
+Example:
+“Added more trunk stability work to improve force transfer and control.”
+
+“Shifting focus toward power development based on your training patterns.”
+
+This builds trust.
+
+--------------------------------------------------
+STEP 8: LOG THESE CHANGES
+
+Changes tab should include:
+
+- Increased power emphasis based on neural profile
+- Added trunk work to address imbalance
+- Simplified program due to consistency trends
+
+--------------------------------------------------
+STEP 9: UPDATE GRAPH AFTER ADJUSTMENTS
+
+Graph should reflect:
+- what is being trained
+- what is improving
+
+So:
+Training ↔ Graph ↔ Training
+
+--------------------------------------------------
+STEP 10: KEEP IT SUBTLE
+
+Do NOT:
+- overwhelm user with data
+- expose raw scores
+
+Keep:
+- simple explanations
+- meaningful adjustments
+
+--------------------------------------------------
+STEP 11: SUCCESS STATE
+
+User trains →
+
+Graph evolves →
+
+System adjusts program →
+
+User sees:
+“This is adapting to me”
+
+--------------------------------------------------
+FINAL RULE
+
+The Neural Graph is not decoration.
+
+It is the intelligence layer of the system.
+
+It must influence:
+- what is built
+- what is adjusted
+- how progression occurs
+
+Implement this now.

@@ -25,6 +25,12 @@ export const neuralProfilesTable = pgTable("neural_profiles", {
     .notNull()
     .default([]),
 
+  graphState: jsonb("graph_state").$type<{
+    nodes: Array<{ id: string; activationLevel: number }>;
+    connections: Array<{ from: string; to: string; strength: number; lastReinforced: string }>;
+    version: number;
+  }>(),
+
   lastUpdated: timestamp("last_updated", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

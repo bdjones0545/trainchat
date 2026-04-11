@@ -1,13 +1,12 @@
 /**
  * Training Feedback Overlay
  *
- * Post-session coaching interpretation card.
- * Reads like a coach analyzing your session — not a game reward screen.
- *
- * Shows: neural output, movement efficiency, force production metrics
- * with direction indicators, system update bullets, and connections added.
+ * Post-session coaching interpretation. Slides up from the bottom after session close.
+ * Shows: performance metrics with directional signals, system updates, and specific
+ * pathways that were reinforced in this session.
  *
  * Tone: scientific, performance-driven. No XP, no levels, no arcade language.
+ * Auto-dismisses after 6 seconds or on tap.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -33,10 +32,18 @@ export interface Milestone {
   description: string;
 }
 
+export interface ReinforcedConnection {
+  from: string;
+  to: string;
+  fromLabel: string;
+  toLabel: string;
+}
+
 export interface NeuralAwardResult {
   neuralConnectionsAdded: number;
   newlyUnlockedMilestones: Milestone[];
   neuralFeedback: NeuralFeedback;
+  recentlyReinforced: ReinforcedConnection[];
   profile: {
     maturityLabel: string;
     maturityProgress: number;
@@ -58,23 +65,11 @@ interface Props {
 // ─── Direction indicator ──────────────────────────────────────────────────────
 
 function DirectionArrow({ direction }: { direction: NeuralMetric["direction"] }) {
-  if (direction === "up") {
-    return <span className="text-emerald-400 font-bold text-sm leading-none">↑</span>;
-  }
-  if (direction === "down") {
-    return <span className="text-red-400 font-bold text-sm leading-none">↓</span>;
-  }
-  if (direction === "challenged") {
-    return <span className="text-amber-400 font-bold text-sm leading-none">⟳</span>;
-  }
-  return <span className="text-muted-foreground font-bold text-sm leading-none">→</span>;
-}
-
-function directionColor(direction: NeuralMetric["direction"]) {
-  if (direction === "up") return "text-emerald-400";
-  if (direction === "down") return "text-red-400";
-  if (direction === "challenged") return "text-amber-400";
-  return "text-muted-foreground";
+  const cls = "font-bold text-[13px] leading-none w-4 flex-shrink-0 mt-0.5";
+  if (direction === "up") return <span className={`${cls} text-emerald-400`}>↑</span>;
+  if (direction === "down") return <span className={`${cls} text-red-400`}>↓</span>;
+  if (direction === "challenged") return <span className={`${cls} text-amber-400`}>⟳</span>;
+  return <span className={`${cls} text-muted-foreground`}>→</span>;
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -101,19 +96,19 @@ export default function NeuralGrowthOverlay({ result, streakDays, onDismiss }: P
     setTimeout(onDismiss, 350);
   }
 
-  const { neuralFeedback: feedback, neuralConnectionsAdded, profile } = result;
+  const { neuralFeedback: feedback, recentlyReinforced, neuralConnectionsAdded, profile } = result;
 
   return (
     <div
       className="fixed inset-0 z-[60] flex items-end justify-center pointer-events-none"
       style={{ isolation: "isolate" }}
     >
-      {/* Dim backdrop */}
+      {/* Backdrop */}
       <div
         className="absolute inset-0 pointer-events-auto"
         onClick={handleDismiss}
         style={{
-          background: "rgba(0,0,0,0.4)",
+          background: "rgba(0,0,0,0.45)",
           opacity: visible ? 1 : 0,
           transition: "opacity 0.3s ease",
         }}
@@ -128,74 +123,87 @@ export default function NeuralGrowthOverlay({ result, streakDays, onDismiss }: P
         }}
       >
         <div className="m-3 rounded-2xl bg-[#0d1117] border border-primary/25 overflow-hidden shadow-2xl">
-          {/* Top accent */}
           <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
 
           <div className="p-5">
             {/* Header */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-md bg-primary/15 border border-primary/30 flex items-center justify-center">
+                <div className="w-5 h-5 rounded-md bg-primary/12 border border-primary/25 flex items-center justify-center">
                   <Activity className="w-3 h-3 text-primary" />
                 </div>
                 <span className="text-[10px] font-bold text-primary uppercase tracking-[0.18em]">
                   Training Feedback
                 </span>
               </div>
-              <span className="text-[9px] text-muted-foreground/50">tap to dismiss</span>
+              <span className="text-[9px] text-muted-foreground/40">tap to dismiss</span>
             </div>
 
-            {/* Metrics */}
+            {/* Performance metrics */}
             <div className="space-y-2.5 mb-4">
               {feedback.metrics.map((metric, i) => (
-                <div key={i} className="flex items-start gap-2.5">
+                <div key={i} className="flex items-start gap-2">
                   <DirectionArrow direction={metric.direction} />
                   <div className="flex-1 min-w-0">
                     <span className="text-[11px] font-semibold text-foreground">{metric.label}</span>
-                    <span className="text-[10px] text-muted-foreground ml-2">— {metric.detail}</span>
+                    <span className="text-[10px] text-muted-foreground ml-2 leading-relaxed">— {metric.detail}</span>
                   </div>
                 </div>
               ))}
             </div>
 
             {/* Divider */}
-            <div className="border-t border-border/30 mb-3" />
+            <div className="border-t border-border/25 mb-3" />
 
             {/* System updates */}
-            <div className="mb-4">
-              <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-[0.12em] mb-2">
+            <div className="mb-3">
+              <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-[0.12em] mb-1.5">
                 System Update
               </p>
               <div className="space-y-1">
                 {feedback.systemUpdates.slice(0, 3).map((update, i) => (
                   <div key={i} className="flex items-center gap-2">
-                    <div className="w-1 h-1 rounded-full bg-primary/50 flex-shrink-0" />
-                    <span className="text-[11px] text-muted-foreground">{update}</span>
+                    <div className="w-1 h-1 rounded-full bg-primary/40 flex-shrink-0" />
+                    <span className="text-[10px] text-muted-foreground">{update}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Footer data row */}
-            <div className="flex items-center justify-between pt-3 border-t border-border/20">
-              <div className="flex items-center gap-1">
-                <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                <span className="text-[9px] text-muted-foreground">
-                  <span className="text-primary/80 font-medium">+{neuralConnectionsAdded}</span> connections
-                  {" "}· {profile.neuralConnections} total
-                </span>
-              </div>
+            {/* Reinforced pathways — the key new piece */}
+            {recentlyReinforced && recentlyReinforced.length > 0 && (
+              <>
+                <div className="border-t border-border/25 mb-3" />
+                <div>
+                  <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-[0.12em] mb-1.5">
+                    Pathways Reinforced
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {recentlyReinforced.slice(0, 4).map((conn, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/8 border border-primary/20"
+                      >
+                        <div className="w-1 h-1 rounded-full bg-primary/60" />
+                        <span className="text-[9px] text-primary/80 font-medium">
+                          {conn.fromLabel} ↔ {conn.toLabel}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Footer */}
+            <div className="flex items-center justify-between pt-3 mt-2 border-t border-border/20">
+              <span className="text-[9px] text-muted-foreground/50">{feedback.summary}</span>
               {streakDays !== undefined && streakDays >= 3 && (
-                <span className="text-[9px] text-muted-foreground">
-                  {streakDays} session streak
+                <span className="text-[9px] text-muted-foreground/50 flex-shrink-0 ml-2">
+                  {streakDays}-session run
                 </span>
               )}
             </div>
-
-            {/* Summary */}
-            <p className="text-[10px] text-muted-foreground/50 italic mt-2.5">
-              {feedback.summary}
-            </p>
           </div>
         </div>
       </div>
