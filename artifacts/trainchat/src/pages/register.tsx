@@ -77,8 +77,10 @@ export default function Register() {
     register.mutate(
       { data },
       {
-        onSuccess: async () => {
-          await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+        onSuccess: async (result) => {
+          // Seed the cache immediately so Chat sees a valid user on mount
+          // and doesn't fire its stale-error redirect back to /start.
+          queryClient.setQueryData(getGetMeQueryKey(), result.user);
 
           // ── Guest-to-user merge ─────────────────────────────────────────
           const deviceId = (() => {
@@ -92,7 +94,7 @@ export default function Register() {
 
             if (merged) {
               // Merge succeeded → go straight to chat (profile + conversation ready)
-              await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+              queryClient.setQueryData(getGetMeQueryKey(), result.user);
               setConverting(false);
               setLocation("/chat");
               return;

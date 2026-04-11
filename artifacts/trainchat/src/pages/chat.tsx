@@ -123,7 +123,7 @@ export default function Chat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const { data: me, isError: meError, isLoading: meLoading } = useGetMe();
+  const { data: me, isError: meError, isLoading: meLoading, isFetching: meFetching } = useGetMe();
   const { data: profile } = useGetProfile({
     query: { enabled: !!me },
   });
@@ -197,9 +197,11 @@ export default function Chat() {
     return () => clearTimeout(id);
   }, []); // intentionally empty — runs once on mount only
 
-  // Only redirect on CONFIRMED auth failure (not during loading or transient errors)
+  // Only redirect on CONFIRMED auth failure (not during loading, fetching, or transient errors).
+  // The `!meFetching` guard prevents acting on a stale error cache entry while a
+  // background refetch (triggered by login) is still in flight.
   useEffect(() => {
-    if (!meLoading && meError && !me) {
+    if (!meLoading && !meFetching && meError && !me) {
       /**
        * Clear the sessionStorage guest session cache before redirecting to /start.
        * This ensures GuestStart always fetches the authoritative status from the
@@ -229,7 +231,7 @@ export default function Chat() {
       });
       setLocation("/start");
     }
-  }, [meLoading, meError, me, setLocation]);
+  }, [meLoading, meFetching, meError, me, setLocation]);
 
   // Conversation bootstrap: select the first existing convo, or create one.
   // FIX: hasAttemptedConvoCreate ref prevents creating duplicate conversations on

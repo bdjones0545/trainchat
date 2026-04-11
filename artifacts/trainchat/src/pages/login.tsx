@@ -74,7 +74,9 @@ export default function Login() {
       { data },
       {
         onSuccess: async (result) => {
-          await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+          // Seed the cache immediately so Chat sees a valid user on mount
+          // and doesn't fire its stale-error redirect back to /start.
+          queryClient.setQueryData(getGetMeQueryKey(), result.user);
 
           // ── Guest-to-user merge on login ──────────────────────────────
           const deviceId = (() => {
@@ -90,7 +92,7 @@ export default function Login() {
               // Guest session merged — user's profile is now populated,
               // starter conversation created, onboardingComplete = true.
               // Always route to chat for a seamless continuation experience.
-              await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+              queryClient.setQueryData(getGetMeQueryKey(), result.user);
               setLocation("/chat");
               return;
             }

@@ -1,0 +1,87 @@
+The current behavior is no longer mainly a loop. The app now consistently falls to the Sign in screen on startup instead of landing on the agent.
+
+Observed behavior:
+- app opens
+- ends on Sign in
+- expected behavior is to restore the correct user/app state and land on agent when a valid session exists
+- if no valid session exists, Sign in is fine, but I need proof that this is the real auth state and not a startup timing bug
+
+I need a focused auth + startup routing audit.
+
+Please investigate these exact areas:
+
+1. Verify whether session persistence is actually working
+- Check whether auth token/session survives refresh, reopen, and mobile webview reload
+- Confirm whether the session exists in storage before startup routing runs
+- Log whether the app is truly unauthenticated or just unresolved during hydration
+
+2. Add startup auth diagnostics
+For every startup, log:
+- pathname
+- authResolved
+- authLoading
+- current user id or null
+- session token present true/false
+- profile resolved true/false
+- deviceId
+- guest session status
+- final route decision
+- exact reason Sign in was shown
+
+3. Block route decisions until auth hydration is complete
+- Do not show Sign in while auth is unresolved
+- Render loading only until auth restoration/hydration finishes
+- Only show Sign in if auth has definitively resolved to unauthenticated
+
+4. Audit protected route logic for agent/chat
+- Find the exact condition that prevents access to the agent route
+- Confirm whether the route guard is checking:
+  - authUser
+  - profile
+  - calibration status
+  - stale onboarding flags
+  - guest conversion state
+- Print the exact boolean chain causing redirect to Sign in
+
+5. Audit logout/login cleanup
+- Check whether logout is clearing too much state or the wrong state
+- Check whether login successfully writes session state before navigation
+- Check whether any startup effect immediately clears auth-related storage after login
+
+6. Audit mobile/webview session behavior
+Because this is happening in testing on mobile, verify:
+- cookies/localStorage/sessionStorage behavior in this environment
+- whether auth persistence depends on cookie settings not working in this webview
+- whether session restoration fails specifically on replit mobile preview
+
+7. Centralize startup decision
+Create one startup resolver:
+resolveStartupState({
+  authResolved,
+  authUser,
+  sessionPresent,
+  profileResolved,
+  calibrationRequired,
+  guestSession,
+  deviceId
+})
+
+Allowed outputs only:
+- loading
+- sign_in
+- calibration
+- agent
+
+8. Prove whether Sign in is correct or incorrect
+I want a final report that says one of these:
+A) Sign in is correct because no valid session exists
+B) Sign in is incorrect and caused by hydration timing / guard logic
+C) Sign in is caused by mobile preview session persistence failure
+
+Deliverables:
+- exact root cause
+- files changed
+- startup logs
+- auth persistence findings
+- final guard logic
+- proof of why Sign in is being rendered
