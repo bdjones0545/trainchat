@@ -1,0 +1,122 @@
+Fix the onboarding loop issue in TrainChat.
+
+GOAL:
+Prevent infinite loops where the onboarding modal keeps flashing and the app never loads.
+
+--------------------------------------------------
+CORE RULE
+--------------------------------------------------
+
+The app must NEVER enter a loop between:
+- loading state
+- onboarding modal
+- app render
+
+--------------------------------------------------
+FIX 1 — ADD LOADING GATE
+--------------------------------------------------
+
+Do NOT render onboarding logic until user state is fully loaded.
+
+Add:
+
+if (userLoading) {
+  return LoadingScreen
+}
+
+Only after user is resolved:
+→ run onboarding check
+
+--------------------------------------------------
+FIX 2 — SAFE ONBOARDING CHECK
+--------------------------------------------------
+
+Replace:
+
+if (!user.onboardingComplete)
+
+WITH:
+
+if (user && user.onboardingComplete === false)
+
+AND handle undefined separately:
+
+if (user && user.onboardingComplete === undefined) {
+  treat as NOT completed but DO NOT loop
+}
+
+--------------------------------------------------
+FIX 3 — LOCAL FALLBACK FLAG
+--------------------------------------------------
+
+Store onboarding completion locally:
+
+localStorage.setItem("onboardingComplete", true)
+
+On load:
+
+if (localStorage.onboardingComplete === "true") {
+  bypass modal
+}
+
+This prevents loops if backend fails.
+
+--------------------------------------------------
+FIX 4 — PREVENT REPEATED MODAL TRIGGERS
+--------------------------------------------------
+
+Add guard:
+
+if (hasCheckedOnboarding) return
+
+Use state:
+
+const [hasCheckedOnboarding, setHasCheckedOnboarding] = useState(false)
+
+Run onboarding logic ONCE only.
+
+--------------------------------------------------
+FIX 5 — FAIL-SAFE TIMEOUT
+--------------------------------------------------
+
+If app is stuck loading > 2–3 seconds:
+
+→ force fallback to main app
+
+Example:
+
+setTimeout(() => {
+  if (!resolved) {
+    forceLoadApp()
+  }
+}, 3000)
+
+--------------------------------------------------
+FIX 6 — LOGGING (IMPORTANT)
+--------------------------------------------------
+
+Log these:
+
+- user object on load
+- onboardingComplete value
+- modal trigger condition
+
+This will expose the exact failure point.
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+1. App loads without flashing
+2. Onboarding appears ONLY once (if needed)
+3. Returning users skip onboarding instantly
+4. No infinite re-renders
+5. No stuck loading screen
+
+--------------------------------------------------
+FINAL PRINCIPLE
+--------------------------------------------------
+
+User state must resolve BEFORE UI decisions are made.
+
+Never let onboarding logic run on unstable or undefined state.
