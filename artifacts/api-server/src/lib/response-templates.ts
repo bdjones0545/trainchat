@@ -112,7 +112,7 @@ Do NOT: describe why the split works, mention "twice-weekly contact," explain vo
 DO: be decisive and minimal. The program is already built — just confirm it.
 
 Examples:
-"Built. 4-day upper/lower split is live.
+"Built. Your program is live.
 
 Check the Program tab — want to adjust anything?"
 

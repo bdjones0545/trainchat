@@ -1,0 +1,148 @@
+We have a specific bug to fix right now.
+
+BUG:
+When the user explicitly asks for a 3-day plan, the system still builds and responds with a 4-day program.
+
+Example input:
+“I am a soccer player give me a 3 day training plan”
+
+Current incorrect output:
+“Built a 4-day strength program.”
+
+This means a 4-day default is still overriding user input somewhere in the code.
+
+GOAL:
+Find the exact code path where program frequency is assigned and fix it so explicit user input always wins.
+
+STEP 1: TRACE THE FULL FLOW
+Trace this exact request through the full system:
+
+1. user message received
+2. intent/constraint extraction
+3. program generation request
+4. program object creation
+5. response text generation
+6. UI render
+
+Add temporary debug logs for each stage.
+
+Log:
+- raw user message
+- extracted daysPerWeek
+- extracted goal
+- extracted sportFocus
+- generation input payload
+- generated program.daysPerWeek
+- final rendered response summary
+
+STEP 2: FIND ANY HARDCODED DEFAULTS
+Search the codebase for all of these:
+- 4-day
+- 4 days
+- daysPerWeek = 4
+- frequency = 4
+- defaultFrequency
+- upperLower4Day
+- strengthUpper4Day
+- canned response strings saying “Built a 4-day...”
+- any fallback logic like daysPerWeek || 4
+
+Look for anywhere a 4-day default can override extracted user constraints.
+
+STEP 3: FIX PRIORITY ORDER
+Enforce this priority order everywhere frequency is assigned:
+
+1. explicit user message
+2. validated extracted constraints
+3. saved user profile
+4. safe default only if nothing was provided
+
+If the user says 3 days, no 4-day default should ever be used.
+
+STEP 4: FIX CONSTRAINT EXTRACTION
+Make sure the extractor correctly turns:
+“I am a soccer player give me a 3 day training plan”
+
+into:
+- daysPerWeek = 3
+- sportFocus = soccer
+
+If extraction is failing, fix that first.
+
+STEP 5: FIX THE BUILDER FUNCTION
+In the function that creates the program object:
+
+- if extracted daysPerWeek exists, assign it directly
+- choose or adapt a template to that frequency
+- do not select a 4-day template unless the user explicitly asked for 4 days
+
+If only 4-day templates currently exist, create or adapt a valid 3-day structure instead of forcing a 4-day build.
+
+STEP 6: FIX RESPONSE TEXT
+Response text must be generated from the final validated program object, not from a canned string.
+
+Bad:
+“Built a 4-day strength program.”
+
+Good:
+“Built a ${program.daysPerWeek}-day strength program.”
+
+The response must always reflect the actual built program.
+
+STEP 7: ADD HARD VALIDATION
+Before rendering or responding, validate:
+
+- if the user explicitly requested daysPerWeek
+- and program.daysPerWeek does not match
+- then block render and regenerate or throw an error in logs
+
+Pseudo logic:
+
+if (constraints.daysPerWeek && program.daysPerWeek !== constraints.daysPerWeek) {
+  throw new Error("Program frequency mismatch with explicit user request");
+}
+
+Do not silently continue.
+
+STEP 8: BLOCK INVALID UI RENDER
+Do not allow the Program tab or chat confirmation to render an invalid frequency.
+
+If the built program does not match explicit user input:
+- do not show it
+- retry generation
+- if still broken, show a temporary fallback:
+“I’m correcting the program to match your requested frequency.”
+
+STEP 9: TEST THIS EXACT CASE
+Input:
+“I am a soccer player give me a 3 day training plan”
+
+Expected:
+- extracted daysPerWeek = 3
+- built program.daysPerWeek = 3
+- response says 3-day
+- program tab shows 3-day structure
+
+Not acceptable:
+- any 4-day output
+
+STEP 10: TEST ADDITIONAL CASES
+Also test:
+- “make me a 2 day plan”
+- “build me a 5 day split”
+- “I need 4 days per week”
+
+Each one must produce the exact requested frequency.
+
+STEP 11: REMOVE TEMPORARY 4-DAY OVERRIDES
+If there is any old fallback template or placeholder response still forcing 4 days:
+- remove it
+- replace it with dynamic logic tied to extracted constraints and validated program state
+
+FINAL RULE:
+Frequency cannot be interpreted when explicitly stated.
+
+If the user says 3 days, the system must build 3 days.
+If the user says 2 days, the system must build 2 days.
+
+Find the override and fix it now.

@@ -29,7 +29,7 @@ The user should never feel interrogated. They should feel like they said somethi
 → After showing structure, ask ONE refinement question at the end.
 
 ### When the user's message is missing only ONE piece of info (e.g., days not stated)
-→ Use smart defaults for everything missing (full gym, intermediate, 60min, 4 days)
+→ Use smart defaults for everything missing (full gym, intermediate, 60min, 3 days)
 → Echo what you understood, SHOW partial structure, then ask ONE targeted question.
 
 ### NEVER:
@@ -41,7 +41,7 @@ The user should never feel interrogated. They should feel like they said somethi
 ## SMART DEFAULTS (always apply when info is missing)
 - Experience not stated → intermediate
 - Equipment not stated → full gym
-- Days not stated → 4 days (or ask ONCE and default to 4 if no answer)
+- Days not stated → ask ONCE how many days per week; if no answer, default to 3 days
 - Goal is vague → athletic performance + strength
 - Sport detected → athletic performance bias + sport-specific exercises
 
@@ -129,8 +129,11 @@ function extractDaysFromMessage(lower: string): number | null {
   const patterns = [
     /\b(\d)\s*[\-–]?\s*day(?:s)?\s*(?:a|per)\s*week\b/i,
     /\b(\d)\s*[\-–]?\s*day\s+(?:program|split|routine|plan|strength|training)\b/i,
+    /\b(\d)\s*[\-–]?\s*day\s+\w+\s+(?:program|split|routine|plan|training)\b/i,
     /\b(\d)\s+times?\s*(?:a|per)\s*week\b/i,
     /\btrain(?:ing)?\s+(\d)\s+days?\b/i,
+    /\bgive\s+me\s+a\s+(\d)\s*[\-–]?\s*day\b/i,
+    /\b(\d)\s*[\-–]?\s*days?\s+(?:a\s+week|per\s+week|weekly)?\b/i,
   ];
   for (const pat of patterns) {
     const m = lower.match(pat);
@@ -210,7 +213,7 @@ function buildFallbackResponse(
 
   if (turnNumber === 2) {
     // Check current message AND use detectedDays from it
-    const days = detectedDays ?? 4;
+    const days = detectedDays ?? 3;
     return buildFallbackStructure(days, sportName, goalStr);
   }
 
