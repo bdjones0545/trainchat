@@ -1,0 +1,292 @@
+We are now building the Live Program Engine for TrainChat.
+
+The UI refactor is done. Now we need to make the system feel real, persistent, and intelligent.
+
+CORE OBJECTIVE:
+Turn the “Live Program” into a living, structured training system that:
+- updates after every user message
+- tracks all changes
+- stores a persistent program state
+- reflects real training logic (splits, sessions, progression, constraints)
+
+This is the core product engine, not just UI.
+
+--------------------------------------------------
+
+1. CREATE STRUCTURED PROGRAM DATA MODEL
+
+Define a program object:
+
+program = {
+  programId,
+  userId,
+  activeChatId,
+  goal,
+  subGoal,
+  scheduleDaysPerWeek,
+  experienceLevel,
+  equipment,
+  locationContext,
+  limitations,
+  timePerSession,
+  sportFocus,
+  trainingMode,
+  status,
+  lastUpdated,
+  version,
+
+  weeklySplit: [
+    {
+      id,
+      label,
+      focus,
+      duration,
+      notes,
+      exercises: [
+        {
+          id,
+          name,
+          category,
+          sets,
+          reps,
+          rest,
+          tempo,
+          intensity,
+          rir,
+          notes,
+          swapOptions
+        }
+      ]
+    }
+  ],
+
+  progressionModel: {
+    type,
+    rules,
+    deloadLogic
+  },
+
+  constraints: {
+    equipmentLimits,
+    painFlags,
+    timeCap,
+    frequencyCap
+  },
+
+  programSummary,
+  currentPhase,
+  todayRecommendation,
+
+  programChangeLog: [],
+  programVersions: []
+}
+
+--------------------------------------------------
+
+2. BUILD PROGRAM STATE ENGINE
+
+Create function:
+
+updateProgramState(currentProgram, structuredChanges)
+
+This function must:
+- add exercises
+- remove exercises
+- swap exercises
+- update sets/reps/rest/tempo/intensity
+- modify weekly split
+- adjust duration
+- apply constraints
+- update progression
+- increment version
+- append to change log
+- persist to database
+
+--------------------------------------------------
+
+3. FORCE STRUCTURED AI OUTPUT
+
+Every training-related AI response MUST return:
+
+A) Natural language response
+B) Structured JSON
+
+Example:
+
+{
+  "programSummary": "4-day hypertrophy split with lower-body focus and 45-minute sessions.",
+  "changes": [
+    {
+      "type": "update_split",
+      "weeklySplit": [
+        { "label": "Upper 1", "focus": "Hypertrophy", "duration": 45 },
+        { "label": "Lower 1", "focus": "Hypertrophy", "duration": 45 },
+        { "label": "Upper 2", "focus": "Hypertrophy", "duration": 45 },
+        { "label": "Lower 2", "focus": "Hypertrophy", "duration": 45 }
+      ]
+    },
+    {
+      "type": "add_exercise",
+      "dayLabel": "Lower 1",
+      "exercise": {
+        "name": "Romanian Deadlift",
+        "sets": 4,
+        "reps": "8",
+        "rest": "90 sec"
+      }
+    },
+    {
+      "type": "modify_constraint",
+      "constraintKey": "timeCap",
+      "value": 45
+    }
+  ],
+  "changeLogEntries": [
+    "Updated to 4-day split",
+    "Added Romanian Deadlift to Lower 1",
+    "Set sessions to 45 minutes"
+  ]
+}
+
+Frontend/backend must:
+- parse JSON
+- apply updates to program
+- re-render UI
+
+--------------------------------------------------
+
+4. BUILD CHANGES TAB
+
+Create programChangeLog:
+
+Each entry:
+- timestamp
+- version
+- changeType
+- description
+
+Examples:
+- Added Romanian Deadlift to Lower Day
+- Reduced session time to 45 minutes
+- Swapped Squat → Goblet Squat (equipment constraint)
+- Added acceleration work
+
+Render this in a clean list UI.
+
+--------------------------------------------------
+
+5. LIVE PROGRAM UI STRUCTURE
+
+Display:
+
+A) Weekly Split
+- list of days with label, focus, duration
+
+B) Day Detail View
+- exercises
+- sets/reps/rest
+- notes
+
+C) Today Highlight (optional)
+
+D) Program Summary Header
+- goal
+- days per week
+- duration
+- focus
+
+--------------------------------------------------
+
+6. REPLACE EMPTY STATE
+
+Remove:
+“No program built yet”
+
+Replace with:
+- skeleton weekly split
+- placeholder exercises
+- faded UI
+
+Text:
+“Your training system will build here as you work with the agent.”
+
+--------------------------------------------------
+
+7. PERSIST PROGRAM
+
+Store in PostgreSQL:
+- tied to userId or deviceId
+
+On reload:
+- fetch program
+- render immediately
+
+--------------------------------------------------
+
+8. VERSIONING
+
+Each update:
+- increment version
+
+Store snapshots for future:
+- revert
+- compare
+
+--------------------------------------------------
+
+9. CHAT → PROGRAM LOOP
+
+After each message:
+1. user sends message
+2. AI responds
+3. JSON parsed
+4. program updates
+5. UI updates
+6. change log updates
+7. state saved
+
+Must feel instant and alive.
+
+--------------------------------------------------
+
+10. PRODUCT RULE
+
+This is NOT a chatbot.
+
+This IS:
+A system where the user and AI build a real evolving training program together.
+
+Every interaction must:
+- change something
+- improve something
+- update the system
+
+--------------------------------------------------
+
+PRIORITY ORDER:
+
+1. Program data model
+2. AI structured output
+3. updateProgramState function
+4. Live Program UI
+5. Changes tab
+6. Persistence
+7. Placeholder state
+8. Versioning
+
+--------------------------------------------------
+
+END GOAL:
+
+User types:
+“Make this a 4-day split with more leg work and 45 minutes”
+
+System:
+- updates split
+- updates exercises
+- logs changes
+- updates UI instantly
+
+That is the TrainChat experience.
+
+Build this now.

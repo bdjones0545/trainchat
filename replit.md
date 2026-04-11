@@ -15,14 +15,24 @@ TrainChat is an agent-first AI training platform designed to provide personalize
 - Users get 5 free chat messages before seeing a paywall/signup prompt.
 - Mobile: left slide panel for sidebar, right slide panel for Live Program (labeled "Live Program" in header).
 
-## Live Program Panel (Right Panel)
+## Live Program Panel (Right Panel) — Live Program Engine
 
 The right panel uses `LiveProgramPanel.tsx` which has 3 tabs:
-1. **Program** — Shows the draft program from chat (day cards with exercises, save button, paywall for free users)
+1. **Program** — Shows the program from the DB training system OR the chat draft, whichever exists
 2. **Changes** — Fetches from `GET /api/training-system/history` and shows recent AI change log entries with scope badges
 3. **History** — Shows major version snapshots from the change log; allows restore via `POST /api/training-system/restore/:id`
 
-The panel shows `InsightsPanel` instead when there is no draft program AND no active training system.
+### Data Sources (priority order)
+- `latestProgram` — chat-derived draft (from AI JSON in messages, only when user has no active system)
+- `dbSystemProgram` — derived from `/api/training-system/week` via `transformSystemToProgram()`; shown when `hasActiveSystem=true`
+- `displayProgram = latestProgram ?? dbSystemProgram` — what the panel actually renders
+- `isInSystem = isSaved || (hasActiveSystem && !latestProgram)` — controls save button visibility
+
+### Key behaviors
+- When `hasActiveSystem=true`, the messages effect does NOT restore `latestProgram` from message history (DB is source of truth)
+- After "Save to My System": clears `latestProgram`, panel transitions to DB-backed display
+- After a vibe edit (AI edits DB system): clears `latestProgram`, `weekData` query is invalidated, panel shows updated DB state
+- The "Save to My System" button only appears when there is an unsaved chat draft (`latestProgram && !isSaved`)
 
 ## System Architecture
 

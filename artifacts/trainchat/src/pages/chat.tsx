@@ -73,6 +73,45 @@ async function fetchActiveSystem() {
   }
 }
 
+async function fetchCurrentWeek() {
+  try {
+    return await customFetch<any>("/api/training-system/week");
+  } catch {
+    return null;
+  }
+}
+
+function transformSystemToProgram(
+  systemName: string,
+  overarchingGoal: string,
+  weekData: any
+): ProgramStructure | null {
+  if (!weekData) return null;
+  const allSessions = weekData.sessions ?? [];
+  const sessions = allSessions.filter((s: any) => !s.isRestDay);
+  if (sessions.length === 0) return null;
+
+  return {
+    programName: systemName,
+    description: overarchingGoal ?? "",
+    weekNumber: weekData.weekNumber,
+    blockLabel: weekData.label ?? weekData.focus ?? undefined,
+    days: sessions.map((session: any, idx: number) => ({
+      dayNumber: idx + 1,
+      name: session.label,
+      focus: session.emphasis ?? undefined,
+      exercises: (session.exercises ?? []).map((ex: any) => ({
+        name: ex.name,
+        sets: typeof ex.sets === "number" ? ex.sets : 3,
+        reps: ex.reps ?? "10",
+        rest: ex.rest ?? "60s",
+        notes: ex.notes ?? undefined,
+      })),
+      notes: session.coachingNotes ?? undefined,
+    })),
+  };
+}
+
 async function postSessionLog(data: any) {
   return await customFetch<any>("/api/session-logs", {
     method: "POST",
@@ -164,6 +203,13 @@ export default function Chat() {
     staleTime: 60000,
   });
 
+  const { data: weekData } = useQuery({
+    queryKey: ["training-system-week"],
+    queryFn: fetchCurrentWeek,
+    enabled: !!me && !!activeSystem?.id,
+    staleTime: 30000,
+  });
+
   const { data: profileRaw } = useQuery({
     queryKey: ["profile"],
     queryFn: () => customFetch<any>("/api/profile").catch(() => null),
@@ -180,6 +226,21 @@ export default function Chat() {
   const currentPlan = subscription?.plan ?? "free";
   const currentStreak = streakData?.currentStreak ?? 0;
   const hasActiveSystem = !!activeSystem?.id;
+
+  // ── Live Program Engine ───────────────────────────────────────────────────
+  // When the user has a real DB training system, derive a displayable ProgramStructure
+  // from the live week data so the right panel reflects the actual DB state.
+  const dbSystemProgram: ProgramStructure | null =
+    hasActiveSystem && activeSystem && weekData
+      ? transformSystemToProgram(activeSystem.name, activeSystem.overarchingGoal, weekData)
+      : null;
+
+  // Priority: chat-derived draft > DB system > null (empty state)
+  const displayProgram = latestProgram ?? dbSystemProgram;
+
+  // The program is "in system" if explicitly saved this session OR if
+  // we're showing the DB-backed program (no chat draft, system active)
+  const isInSystem = isSaved || (hasActiveSystem && !latestProgram);
 
   // FIX 8: log auth/user state transitions for debugging
   useEffect(() => {
@@ -303,6 +364,14 @@ export default function Chat() {
   };
 
   useEffect(() => {
+    // When the user has an active DB training system, the database is the
+    // source of truth. Clear any stale chat-derived program so the right panel
+    // shows the live system via dbSystemProgram instead of old message history.
+    if (hasActiveSystem) {
+      setLatestProgram(null);
+      return;
+    }
+
     const programMessages = messages.filter((m) => {
       if (m.role !== "assistant" || !m.structuredData) return false;
       try {
@@ -335,7 +404,7 @@ export default function Chat() {
     } else {
       if (messages.length === 0) setLatestProgram(null);
     }
-  }, [messages]);
+  }, [messages, hasActiveSystem]);
 
   // Check for checkout success in URL
   useEffect(() => {
@@ -403,6 +472,11 @@ export default function Chat() {
       queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
       if (result.systemSaved) {
         setIsSaved(true);
+      }
+      // Vibe edit mutated the DB system — clear the chat draft so the
+      // right panel switches to showing the live DB-backed program
+      if (result.systemEdit?.applied) {
+        setLatestProgram(null);
       }
       // Show undo toast for 8 seconds after any program change
       const logId = result.changeLogId ?? result.systemEdit?.changeLogId;
@@ -495,6 +569,8 @@ export default function Chat() {
 
       setIsSaving(false);
       setIsSaved(true);
+      // Clear the chat draft — panel will now show the live DB system
+      setLatestProgram(null);
     } catch (err) {
       console.error("[SaveProgram] Failed:", err);
       setIsSaving(false);
@@ -733,14 +809,14 @@ export default function Chat() {
       <ReadinessSummary />
       <div className="flex-1 min-h-0 overflow-hidden">
         <LiveProgramPanel
-          program={latestProgram}
+          program={displayProgram}
           buildingState={buildingState}
-          onSave={handleSaveProgram}
+          onSave={latestProgram && !isSaved ? handleSaveProgram : undefined}
           onFeedback={() => { setShowFeedback(true); setMobilePanel(null); }}
           onLogSession={() => { setShowSessionLog(true); setMobilePanel(null); }}
           onUpgrade={() => { setShowPricing(true); setMobilePanel(null); }}
-          isSaving={isSaving}
-          isSaved={isSaved}
+          isSaving={!!latestProgram && isSaving}
+          isSaved={isInSystem}
           isPremium={isPremium}
           hasActiveSystem={hasActiveSystem}
         />
@@ -788,7 +864,7 @@ export default function Chat() {
       )}
       {showSessionLog && (
         <SessionLogModal
-          programName={latestProgram?.programName}
+          programName={displayProgram?.programName}
           dayNumber={undefined}
           onClose={() => setShowSessionLog(false)}
           onSubmit={handleSessionLog}
@@ -1058,14 +1134,14 @@ export default function Chat() {
               </div>
               <div className="flex-1 overflow-hidden">
                 <LiveProgramPanel
-                  program={latestProgram}
+                  program={displayProgram}
                   buildingState={buildingState}
-                  onSave={handleSaveProgram}
+                  onSave={latestProgram && !isSaved ? handleSaveProgram : undefined}
                   onFeedback={() => setShowFeedback(true)}
                   onLogSession={() => setShowSessionLog(true)}
                   onUpgrade={() => setShowPricing(true)}
-                  isSaving={isSaving}
-                  isSaved={isSaved}
+                  isSaving={!!latestProgram && isSaving}
+                  isSaved={isInSystem}
                   isPremium={isPremium}
                   hasActiveSystem={hasActiveSystem}
                 />
