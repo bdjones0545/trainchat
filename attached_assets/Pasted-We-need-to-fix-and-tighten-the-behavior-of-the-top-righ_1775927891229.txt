@@ -1,0 +1,264 @@
+We need to fix and tighten the behavior of the top-right menu system:
+
+- Program
+- Changes
+- History
+
+Right now these tabs exist visually, but they are not correctly synchronized with user actions or system state.
+
+The goal is to make these tabs feel like:
+“A live system panel showing what was built, what changed, and how the program evolved.”
+
+--------------------------------------------------
+
+CORE PRINCIPLE
+
+After ANY meaningful user action (especially a NEW PROGRAM BUILD), all three tabs must update correctly and consistently.
+
+User input → system builds or updates → ALL tabs reflect it immediately.
+
+--------------------------------------------------
+
+STEP 1: DEFINE CLEAR ROLES FOR EACH TAB
+
+PROGRAM TAB = CURRENT STATE
+- Shows the current active program
+- Weekly split
+- Exercises
+- Duration
+- Program summary
+- Today’s workout
+
+CHANGES TAB = WHAT JUST HAPPENED
+- Shows the most recent updates
+- Chronological list of changes
+- Tied to latest version update
+- Should feel like a live changelog
+
+HISTORY TAB = VERSION TIMELINE
+- Shows program versions over time
+- Each version represents a meaningful state
+- Allows future rollback (not required yet)
+
+--------------------------------------------------
+
+STEP 2: FIX NEW PROGRAM BUILD BEHAVIOR
+
+When user triggers a NEW_PROGRAM_BUILD:
+
+Example:
+“I am a soccer player give me a 3 day per week strength program”
+
+The system MUST do ALL of the following:
+
+### PROGRAM TAB
+- Immediately render the new program
+- Correct frequency (3 days)
+- Correct goal (strength)
+- Correct sport context (soccer)
+- Show full weekly structure (not empty or generic)
+
+### CHANGES TAB
+Replace generic or empty messages with structured entries:
+
+- Created new program from user request
+- Set goal to strength
+- Set frequency to 3 days/week
+- Applied soccer performance context
+
+Each entry should:
+- have timestamp
+- have version number (V1)
+- appear immediately
+
+DO NOT show:
+- “No specific edit identified for that request”
+
+### HISTORY TAB
+Create initial version entry:
+
+Version 1:
+- Created from user request
+- Goal: Strength
+- Frequency: 3 days/week
+- Sport: Soccer
+- Timestamp
+
+This should appear instantly after build.
+
+--------------------------------------------------
+
+STEP 3: FIX PROGRAM MODIFICATION BEHAVIOR
+
+When user modifies program:
+
+Example:
+“Make this 4 days and add more leg work”
+
+### PROGRAM TAB
+- Update structure immediately
+- Reflect 4 days
+- Adjust lower-body emphasis
+
+### CHANGES TAB
+Append entries like:
+- Updated frequency to 4 days/week
+- Increased lower-body volume
+- Adjusted weekly split structure
+
+### HISTORY TAB
+Add new version:
+
+Version 2:
+- Frequency updated to 4 days
+- Lower-body emphasis added
+
+--------------------------------------------------
+
+STEP 4: ENSURE ALL THREE TABS SHARE THE SAME SOURCE OF TRUTH
+
+All tabs must derive from:
+- program state
+- programChangeLog
+- programVersions
+
+DO NOT generate content separately per tab.
+
+Instead:
+- Program tab = program object
+- Changes tab = programChangeLog
+- History tab = programVersions
+
+This prevents desync issues.
+
+--------------------------------------------------
+
+STEP 5: AUTO-OPEN RELEVANT TAB AFTER ACTION
+
+After a NEW_PROGRAM_BUILD:
+- Default open = Program tab
+
+After a PROGRAM_MODIFICATION:
+- Optionally highlight Changes tab briefly
+- Or show a “View Changes” prompt
+
+After multiple changes:
+- Allow easy switching between tabs
+
+--------------------------------------------------
+
+STEP 6: ADD VISUAL FEEDBACK ON TAB CONTENT
+
+When something updates:
+
+PROGRAM TAB:
+- highlight changed sections briefly
+
+CHANGES TAB:
+- scroll to newest entry
+- animate new entries
+
+HISTORY TAB:
+- highlight new version card
+
+This makes the system feel alive.
+
+--------------------------------------------------
+
+STEP 7: FIX EMPTY STATES
+
+PROGRAM TAB:
+- never empty
+- show skeleton program before build
+- show real program immediately after build
+
+CHANGES TAB:
+- before any actions:
+  “Your program changes will appear here”
+
+HISTORY TAB:
+- before any actions:
+  “Your program versions will appear here”
+
+After first build:
+- both tabs should be populated
+
+--------------------------------------------------
+
+STEP 8: REMOVE GENERIC OR MISLEADING MESSAGES
+
+DO NOT show:
+- “No specific edit identified” for clear actions
+- generic placeholders after real builds
+- mismatched summaries
+
+Every tab must reflect real system behavior.
+
+--------------------------------------------------
+
+STEP 9: TEST FULL FLOW
+
+Test this exact flow:
+
+INPUT:
+“I am a soccer player give me a 3 day per week strength program”
+
+VERIFY:
+
+PROGRAM TAB:
+- shows 3-day structure
+- strength goal
+- soccer context
+
+CHANGES TAB:
+- shows creation entries
+
+HISTORY TAB:
+- shows Version 1 with correct metadata
+
+Then input:
+“Make this 4 days and more lower body”
+
+VERIFY:
+
+PROGRAM TAB:
+- updated structure
+
+CHANGES TAB:
+- new entries appended
+
+HISTORY TAB:
+- Version 2 added
+
+--------------------------------------------------
+
+STEP 10: PRODUCT RULE
+
+The top-right menu is NOT navigation.
+
+It is a SYSTEM VIEW.
+
+It must answer:
+- What is my program? (Program)
+- What just changed? (Changes)
+- How has it evolved? (History)
+
+If these 3 questions are not clearly answered, the system is not working.
+
+--------------------------------------------------
+
+SUCCESS STATE
+
+User builds program →
+Program tab shows correct structure →
+Changes tab shows what was created →
+History tab shows Version 1 →
+
+User modifies program →
+Program updates →
+Changes logs update →
+History creates Version 2 →
+
+Everything feels connected, accurate, and alive.
+
+Build this now.

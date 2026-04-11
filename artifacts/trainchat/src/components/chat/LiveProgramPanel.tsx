@@ -44,8 +44,10 @@ interface Props {
   isSaved?: boolean;
   isPremium?: boolean;
   hasActiveSystem?: boolean;
-  /** Increment this to signal a new change occurred — auto-switches to Changes tab */
+  /** Increment when a program edit occurs — auto-switches to Changes tab */
   newChangeSignal?: number;
+  /** Increment when a new program is built — auto-switches to Program tab */
+  newProgramSignal?: number;
 }
 
 type Tab = "program" | "changes" | "history";
@@ -733,20 +735,71 @@ function ProgramTab({
   );
 }
 
+function InitialBuildCard({ entry, animate }: { entry: ChangeLogEntry; animate: boolean }) {
+  const meta = entry.decisionMetadata ?? {};
+  const bullets: string[] = [];
+
+  const goal = meta.programGoal as string | null;
+  const sport = meta.programSport as string | null;
+  const days = meta.programDays as number | null;
+  const constraints = meta.extractedConstraints as Record<string, unknown> | null;
+
+  bullets.push("Created new training program");
+  if (goal) bullets.push(`Goal set to ${goal.replace(/_/g, " ")}`);
+  if (days) bullets.push(`Frequency set to ${days} day${days !== 1 ? "s" : ""}/week`);
+  if (sport) bullets.push(`Applied ${sport} performance context`);
+  if (constraints?.equipment) bullets.push(`Equipment: ${constraints.equipment}`);
+  if (constraints?.experienceLevel) bullets.push(`Experience: ${constraints.experienceLevel}`);
+  if (constraints?.sessionDuration) bullets.push(`Session length: ${constraints.sessionDuration} min`);
+
+  if (bullets.length === 1 && entry.changeSummary) {
+    const parts = entry.changeSummary.split(" · ").filter(Boolean);
+    if (parts.length > 1) {
+      bullets.length = 0;
+      parts.forEach((p) => bullets.push(p));
+    }
+  }
+
+  return (
+    <div
+      className="bg-card border border-primary/25 rounded-xl p-3 bg-primary/5"
+      style={animate ? { animation: "change-entry-in 1.4s ease forwards" } : undefined}
+    >
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary/15 text-primary">
+            {entry.versionLabel ?? "V1 Initial Build"}
+          </span>
+        </div>
+        <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatRelative(entry.createdAt)}</span>
+      </div>
+      <ul className="space-y-1.5">
+        {bullets.map((bullet, i) => (
+          <li key={i} className="flex items-start gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary/60 mt-1.5 flex-shrink-0" />
+            <span className="text-[11px] text-foreground leading-relaxed">{bullet}</span>
+          </li>
+        ))}
+      </ul>
+      {entry.requestText && (
+        <p className="text-[10px] text-muted-foreground/50 mt-2 italic line-clamp-2">"{entry.requestText}"</p>
+      )}
+    </div>
+  );
+}
+
 function ChangesTab({ hasActiveSystem, newChangeSignal }: { hasActiveSystem?: boolean; newChangeSignal?: number }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [animateNewest, setAnimateNewest] = useState(false);
   const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["training-system-history"],
+    queryKey: ["training-system-history", "changes"],
     queryFn: () => customFetch<{ history: ChangeLogEntry[] }>("/api/training-system/history?limit=20"),
     enabled: !!hasActiveSystem,
     staleTime: 0,
   });
 
-  // Trigger newest-entry animation and scroll to top when a new change arrives.
-  // 600ms delay gives the refetch time to complete before we animate.
   useEffect(() => {
     if (!newChangeSignal || newChangeSignal === 0) return;
     const t1 = setTimeout(() => {
@@ -769,7 +822,7 @@ function ChangesTab({ hasActiveSystem, newChangeSignal }: { hasActiveSystem?: bo
         </div>
         <p className="text-xs font-semibold text-foreground mb-1">No changes yet</p>
         <p className="text-[11px] text-muted-foreground leading-relaxed max-w-[200px]">
-          Build a program and every modification the AI makes will be logged here automatically.
+          Your program changes will appear here after your first build.
         </p>
       </div>
     );
@@ -823,8 +876,20 @@ function ChangesTab({ hasActiveSystem, newChangeSignal }: { hasActiveSystem?: bo
       `}</style>
       <div className="p-3 space-y-2">
         {history.map((entry, idx) => {
-          const whyChanged = entry.decisionMetadata?.whyChanged as string | undefined;
           const isNewest = idx === 0;
+          const isInitialBuild = entry.source === "initialize";
+
+          if (isInitialBuild) {
+            return (
+              <InitialBuildCard
+                key={entry.id}
+                entry={entry}
+                animate={isNewest && animateNewest}
+              />
+            );
+          }
+
+          const whyChanged = entry.decisionMetadata?.whyChanged as string | undefined;
           return (
             <div
               key={entry.id}
@@ -860,17 +925,18 @@ function HistoryTab({ hasActiveSystem }: { hasActiveSystem?: boolean }) {
   const [restoringId, setRestoringId] = useState<number | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["training-system-history"],
-    queryFn: () => customFetch<{ history: ChangeLogEntry[] }>("/api/training-system/history?limit=30"),
+    queryKey: ["training-system-history", "versions"],
+    queryFn: () => customFetch<{ history: ChangeLogEntry[] }>("/api/training-system/history?limit=50"),
     enabled: !!hasActiveSystem,
-    staleTime: 30000,
+    staleTime: 0,
   });
 
   const restoreMutation = useMutation({
     mutationFn: (changeId: number) =>
       customFetch<any>(`/api/training-system/restore/${changeId}`, { method: "POST" }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-history", "changes"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-history", "versions"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-full"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
@@ -940,6 +1006,16 @@ function HistoryTab({ hasActiveSystem }: { hasActiveSystem?: boolean }) {
           const versionNum = total - idx;
           const isCurrentVersion = idx === 0;
           const label = entry.versionLabel ?? (isCurrentVersion ? "Current Version" : `Version ${versionNum}`);
+          const meta = entry.decisionMetadata ?? {};
+          const goal = meta.programGoal as string | null;
+          const sport = meta.programSport as string | null;
+          const days = meta.programDays as number | null;
+          const isInitial = entry.source === "initialize";
+
+          const metaTags: string[] = [];
+          if (goal) metaTags.push(goal.replace(/_/g, " "));
+          if (days) metaTags.push(`${days}d/wk`);
+          if (sport) metaTags.push(sport);
 
           return (
             <div
@@ -954,7 +1030,7 @@ function HistoryTab({ hasActiveSystem }: { hasActiveSystem?: boolean }) {
                     V{versionNum}
                   </span>
                   <span className={`text-[10px] font-medium ${isCurrentVersion ? "text-foreground" : "text-muted-foreground"}`}>
-                    — {label}
+                    — {isInitial ? (entry.versionLabel ?? "Initial Build") : label}
                   </span>
                   {isCurrentVersion && (
                     <span className="text-[9px] font-bold text-primary bg-primary/15 px-1.5 py-0.5 rounded-full">LIVE</span>
@@ -962,7 +1038,23 @@ function HistoryTab({ hasActiveSystem }: { hasActiveSystem?: boolean }) {
                 </div>
                 <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatRelative(entry.createdAt)}</span>
               </div>
-              <p className="text-[11px] text-muted-foreground leading-relaxed mb-2 line-clamp-2">{entry.changeSummary}</p>
+
+              {metaTags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-1.5">
+                  {metaTags.map((tag, i) => (
+                    <span key={i} className="text-[9px] font-semibold bg-muted/50 text-muted-foreground px-1.5 py-0.5 rounded capitalize">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <p className="text-[11px] text-muted-foreground leading-relaxed mb-2 line-clamp-2">
+                {isInitial
+                  ? (entry.changeSummary.split(" · ")[0] ?? entry.changeSummary)
+                  : entry.changeSummary}
+              </p>
+
               {!isCurrentVersion && (
                 <button
                   onClick={() => {
@@ -1001,17 +1093,28 @@ export default function LiveProgramPanel({
   isPremium = false,
   hasActiveSystem = false,
   newChangeSignal = 0,
+  newProgramSignal = 0,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("program");
   const [hasUnseenChange, setHasUnseenChange] = useState(false);
-  const prevSignalRef = useRef(0);
+  const prevChangeSignalRef = useRef(0);
+  const prevProgramSignalRef = useRef(0);
 
-  // Auto-switch to Changes tab and mark badge when a new change arrives
+  // New program built → switch to Program tab so user sees the result
   useEffect(() => {
-    if (newChangeSignal > 0 && newChangeSignal !== prevSignalRef.current) {
-      prevSignalRef.current = newChangeSignal;
+    if (newProgramSignal > 0 && newProgramSignal !== prevProgramSignalRef.current) {
+      prevProgramSignalRef.current = newProgramSignal;
+      setActiveTab("program");
+      setHasUnseenChange(true); // badge on Changes tab so user knows it populated
+    }
+  }, [newProgramSignal]);
+
+  // Program edited → switch to Changes tab to show what changed
+  useEffect(() => {
+    if (newChangeSignal > 0 && newChangeSignal !== prevChangeSignalRef.current) {
+      prevChangeSignalRef.current = newChangeSignal;
       setActiveTab("changes");
-      setHasUnseenChange(false); // we're already switching to the tab
+      setHasUnseenChange(false);
     }
   }, [newChangeSignal]);
 

@@ -151,6 +151,7 @@ export default function Chat() {
   const [isUndoing, setIsUndoing] = useState(false);
   const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [newChangeSignal, setNewChangeSignal] = useState(0);
+  const [newProgramSignal, setNewProgramSignal] = useState(0);
 
   // Startup state: fail-safe lets the agent render even if auth hangs
   const [forceReady, setForceReady] = useState(false);
@@ -479,9 +480,12 @@ export default function Chat() {
       if (result.systemEdit?.applied) {
         setLatestProgram(null);
       }
-      // Signal the program panel that a change occurred — only for edits to an existing system
-      // (not on initial program creation, where users should see the Program tab)
-      if (result.systemEdit?.applied || (result.systemSaved && hasActiveSystem)) {
+      // After a new program build: switch to Program tab to show the result
+      if (result.systemSaved) {
+        setNewProgramSignal((n) => n + 1);
+      }
+      // After a program modification (edit): switch to Changes tab to show what changed
+      if (result.systemEdit?.applied) {
         setNewChangeSignal((n) => n + 1);
       }
       // Show undo toast for 8 seconds after any program change
@@ -825,8 +829,9 @@ export default function Chat() {
           isSaving={!!latestProgram && isSaving}
           isSaved={isInSystem}
           isPremium={isPremium}
-          hasActiveSystem={hasActiveSystem}
+          hasActiveSystem={hasActiveSystem || !!latestProgram}
           newChangeSignal={newChangeSignal}
+          newProgramSignal={newProgramSignal}
         />
       </div>
     </div>
@@ -1158,8 +1163,9 @@ export default function Chat() {
                   isSaving={!!latestProgram && isSaving}
                   isSaved={isInSystem}
                   isPremium={isPremium}
-                  hasActiveSystem={hasActiveSystem}
+                  hasActiveSystem={hasActiveSystem || !!latestProgram}
                   newChangeSignal={newChangeSignal}
+                  newProgramSignal={newProgramSignal}
                 />
               </div>
             </div>
