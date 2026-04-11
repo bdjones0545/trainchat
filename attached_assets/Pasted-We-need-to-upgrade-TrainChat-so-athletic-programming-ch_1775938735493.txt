@@ -1,0 +1,270 @@
+We need to upgrade TrainChat so athletic programming changes based on season context.
+
+CURRENT ISSUE:
+Programs can be structurally solid, but they do not yet adapt enough to whether the athlete is:
+- in-season
+- off-season
+- pre-season
+- return-to-play / reduced availability
+
+GOAL:
+Make season context a core programming variable so the same soccer athlete receives very different training depending on timing and performance demands.
+
+This should feel like real sport performance programming, not one fixed template.
+
+--------------------------------------------------
+CORE RULE
+--------------------------------------------------
+
+Season context must influence:
+- weekly structure
+- training volume
+- intensity
+- power exposure
+- exercise selection
+- recovery demands
+- session density
+- lower-body loading strategy
+
+The system should never program an in-season soccer athlete the same way it programs an off-season athlete.
+
+--------------------------------------------------
+STEP 1: ADD SEASON CONTEXT AS A REQUIRED ATHLETE VARIABLE
+
+For athlete builds, add:
+
+seasonContext:
+- off_season
+- pre_season
+- in_season
+- post_season
+- return_to_play (optional support)
+
+Also add:
+- gameFrequencyPerWeek
+- practiceFrequencyPerWeek
+- matchDayKnown (optional)
+- currentPriority
+
+If season context is not provided, infer carefully:
+- athlete asking broadly = ask 1 follow-up after build
+- default to neutral athletic build, not aggressive high-volume loading
+
+--------------------------------------------------
+STEP 2: DEFINE PROGRAMMING RULES BY SEASON
+
+OFF-SEASON
+Primary goals:
+- build strength
+- build force production
+- improve tissue tolerance
+- build movement capacity
+- increase work capacity
+- develop weak links
+
+Programming traits:
+- highest training volume tolerance
+- more aggressive strength progression
+- more robust accessory work
+- more unilateral support
+- more general development work
+- more room for hypertrophy if useful
+
+PRE-SEASON
+Primary goals:
+- convert strength to power
+- increase readiness for sport demands
+- improve speed/power expression
+- manage fatigue while increasing specificity
+
+Programming traits:
+- moderate volume
+- maintain/build strength
+- increase power and elastic work
+- more sport-transfer emphasis
+- tighter session structure
+- less junk accessory work
+
+IN-SEASON
+Primary goals:
+- maintain strength/power
+- reduce fatigue
+- preserve output
+- support readiness and durability
+- avoid excessive soreness
+
+Programming traits:
+- lower volume
+- maintain intensity selectively
+- minimal effective dose
+- fewer total lifts
+- careful lower-body loading
+- more recovery-aware structure
+- day placement around matches/practices matters
+
+POST-SEASON
+Primary goals:
+- recovery
+- restore movement quality
+- reduce accumulated fatigue
+- rebuild baseline gradually
+
+Programming traits:
+- lower intensity
+- moderate/low volume
+- more restoration work
+- address restrictions / pain / asymmetry
+
+RETURN-TO-PLAY
+Primary goals:
+- rebuild confidence
+- restore movement quality
+- progressive loading
+- protect irritated structures
+- regain sport capacity
+
+Programming traits:
+- controlled exercise selection
+- conservative progression
+- more positional and unilateral control work
+- fatigue monitored closely
+
+--------------------------------------------------
+STEP 3: CHANGE PROGRAM STRUCTURE BASED ON SEASON
+
+For soccer examples:
+
+OFF-SEASON 3-DAY:
+- more total volume
+- robust strength work
+- more unilateral support
+- more accessory development
+- can tolerate heavier lower-body loading
+
+PRE-SEASON 3-DAY:
+- strength + power blend
+- more explosive work
+- less accessory clutter
+- more decel/accel preparation
+- tighter total workload
+
+IN-SEASON 3-DAY:
+- may become 2 lift days + 1 regen / primer day
+OR
+- 3 shorter sessions with very low fatigue cost
+- strength maintenance only
+- reduced eccentric stress
+- careful lower-body exercise choice around games
+
+The system must know these are NOT the same.
+
+--------------------------------------------------
+STEP 4: ADD MATCH / PRACTICE AWARENESS
+
+If the user provides game or practice frequency, use it.
+
+Examples:
+
+If in-season + 2 games/week:
+- reduce lower-body volume significantly
+- prioritize readiness
+- avoid excessive soreness
+- use lower total session stress
+
+If in-season + 1 game/week:
+- maintain 1 meaningful strength exposure
+- 1 lighter neural/power exposure
+- 1 upper or regen session depending on schedule
+
+If practices are dense:
+- reduce extra plyometric or heavy eccentric work
+
+--------------------------------------------------
+STEP 5: CHANGE SESSION TITLES BY SEASON
+
+OFF-SEASON:
+- Lower Force Production
+- Upper Strength + Trunk
+- Full Body Strength + Positional Support
+
+PRE-SEASON:
+- Acceleration Support + Lower Strength
+- Upper Power + Trunk Integrity
+- Full Body Reactive Strength
+
+IN-SEASON:
+- Strength Maintenance
+- Neural Primer + Power
+- Recovery / Durability Session
+
+Do not use identical day identity across all phases.
+
+--------------------------------------------------
+STEP 6: ADJUST EXERCISE SELECTION BY SEASON
+
+OFF-SEASON:
+- more squats, hinges, unilateral loading
+- more development volume
+- broader exercise menu
+
+PRE-SEASON:
+- maintain strength lifts
+- add more jumps, throws, rapid intent work
+- reduce unnecessary accessory volume
+
+IN-SEASON:
+- use safer, lower-fatigue options where appropriate
+- more trap bar / DB / controlled movements if useful
+- fewer exercises total
+- more trunk, isometric, and low-cost power support
+- avoid crushing lower-body soreness
+
+POST-SEASON:
+- mobility
+- tissue quality
+- moderate strength re-entry
+- rebuild positions
+
+--------------------------------------------------
+STEP 7: ADJUST COACH NOTES BY SEASON
+
+Coach notes must reflect the phase.
+
+OFF-SEASON note example:
+“This phase emphasizes force production, tissue capacity, and strength development while there is room to tolerate higher loading.”
+
+PRE-SEASON note example:
+“This phase shifts toward faster force expression, power transfer, and readiness for field demands while maintaining strength.”
+
+IN-SEASON note example:
+“This phase is built to maintain strength and neural output without interfering with match performance or recovery.”
+
+Do not use generic notes regardless of season.
+
+--------------------------------------------------
+STEP 8: ADD SEASON CONTEXT TO BUILD SUMMARY CARD
+
+If season context is known, show it clearly in the chat build card and program panel.
+
+Example:
+SOCCER PERFORMANCE SYSTEM
+3 days/week
+In-Season Maintenance
+45–60 min sessions
+
+or
+
+SOCCER PERFORMANCE SYSTEM
+3 days/week
+Off-Season Strength + Power
+
+This increases trust immediately.
+
+--------------------------------------------------
+STEP 9: ASK ONE SMART FOLLOW-UP WHEN SEASON IS MISSING
+
+If user says:
+“I play soccer give me a 3 day program”
+
+Build a neutral athletic version first, then ask:
+“Are you in-season, off-season, or

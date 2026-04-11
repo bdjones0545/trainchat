@@ -12,6 +12,13 @@ import { logger } from "./logger";
 // These ALWAYS override profile defaults when present.
 // Priority: explicit user input > stored profile > safe defaults.
 
+export type SeasonContext =
+  | "off_season"
+  | "pre_season"
+  | "in_season"
+  | "post_season"
+  | "return_to_play";
+
 export interface ExtractedConstraints {
   sportFocus: string | null;
   primaryGoal: string | null;
@@ -22,6 +29,9 @@ export interface ExtractedConstraints {
   trainingBias: string | null;
   limitations: string | null;
   locationContext: string | null;
+  seasonContext: SeasonContext | null;
+  gameFrequencyPerWeek: number | null;
+  practiceFrequencyPerWeek: number | null;
 }
 
 // ─── Constraint Extractor ─────────────────────────────────────────────────────
@@ -149,6 +159,26 @@ export function extractConstraints(message: string): ExtractedConstraints {
     locationContext = "outdoor";
   }
 
+  // ── Season context ────────────────────────────────────────────────────────
+  const seasonContext = detectSeasonContext(lower);
+
+  // ── Game frequency ────────────────────────────────────────────────────────
+  let gameFrequencyPerWeek: number | null = null;
+  const gameFreqMatch = lower.match(/\b(\d)\s*(?:games?|matches?)\s*(?:a|per)\s*week\b/i)
+    ?? lower.match(/\b(\d)\s*(?:times?|x)\s*(?:a|per)\s*week\b.*\b(?:play|game|match)\b/i);
+  if (gameFreqMatch) {
+    const raw = parseInt(gameFreqMatch[1], 10);
+    if (raw >= 1 && raw <= 7) gameFrequencyPerWeek = raw;
+  }
+
+  // ── Practice frequency ────────────────────────────────────────────────────
+  let practiceFrequencyPerWeek: number | null = null;
+  const practiceFreqMatch = lower.match(/\b(\d)\s*(?:practices?|trainings?|sessions?)\s*(?:a|per)\s*week\b/i);
+  if (practiceFreqMatch) {
+    const raw = parseInt(practiceFreqMatch[1], 10);
+    if (raw >= 1 && raw <= 7) practiceFrequencyPerWeek = raw;
+  }
+
   return {
     sportFocus,
     primaryGoal,
@@ -159,6 +189,9 @@ export function extractConstraints(message: string): ExtractedConstraints {
     trainingBias,
     limitations,
     locationContext,
+    seasonContext,
+    gameFrequencyPerWeek,
+    practiceFrequencyPerWeek,
   };
 }
 
@@ -200,6 +233,22 @@ export function buildConstraintContract(
   if (constraints.limitations) {
     parts.push(`- limitations = "${constraints.limitations}" → Avoid exercises conflicting with this limitation.`);
   }
+  if (constraints.seasonContext) {
+    const seasonLabels: Record<string, string> = {
+      off_season: "OFF-SEASON",
+      pre_season: "PRE-SEASON",
+      in_season: "IN-SEASON",
+      post_season: "POST-SEASON",
+      return_to_play: "RETURN TO PLAY",
+    };
+    parts.push(`- seasonContext = ${constraints.seasonContext} → This is a ${seasonLabels[constraints.seasonContext]} program. Apply all ${seasonLabels[constraints.seasonContext]} programming rules: volume, intensity, exercise selection, session density, and day identity MUST reflect this phase.`);
+  }
+  if (constraints.gameFrequencyPerWeek !== null) {
+    parts.push(`- gameFrequencyPerWeek = ${constraints.gameFrequencyPerWeek} → Athlete plays ${constraints.gameFrequencyPerWeek} game(s)/match(es) per week. Reduce lower-body eccentric stress and session fatigue accordingly. Readiness and recovery take priority.`);
+  }
+  if (constraints.practiceFrequencyPerWeek !== null) {
+    parts.push(`- practiceFrequencyPerWeek = ${constraints.practiceFrequencyPerWeek} → Athlete has ${constraints.practiceFrequencyPerWeek} practice(s)/training session(s) per week. Total training stress must account for field/court load.`);
+  }
 
   parts.push(`\n**VALIDATION REQUIREMENTS (YOU MUST CHECK THESE BEFORE OUTPUTTING JSON):**`);
   if (constraints.daysPerWeek !== null) {
@@ -211,18 +260,34 @@ export function buildConstraintContract(
   if (constraints.sportFocus) {
     parts.push(`☑ programName or description references "${constraints.sportFocus}" or sport support`);
   }
+  if (constraints.seasonContext) {
+    parts.push(`☑ programName or description includes the season phase (off-season, pre-season, in-season, etc.)`);
+    parts.push(`☑ Volume, intensity, and exercise selection MATCH the ${constraints.seasonContext} programming rules`);
+    parts.push(`☑ Day names and coach notes REFLECT the season phase — not generic fitness language`);
+  }
   parts.push(`☑ NO invented constraints (no hypertrophy if strength was requested, no 4 days if 3 were requested)`);
 
   parts.push(`\n**BUILD CONTRACT RESPONSE FORMAT:**`);
   parts.push(`STEP 1: Output the complete JSON program block.`);
-  parts.push(`STEP 2: Confirm what was built in 1-2 lines. Example:`);
-  if (constraints.sportFocus && constraints.primaryGoal && constraints.daysPerWeek) {
+  parts.push(`STEP 2: Confirm what was built in 1-2 lines. Include sport + season phase if both known. Example:`);
+  if (constraints.sportFocus && constraints.seasonContext && constraints.daysPerWeek) {
+    const seasonLabels: Record<string, string> = {
+      off_season: "off-season",
+      pre_season: "pre-season",
+      in_season: "in-season",
+      post_season: "post-season",
+      return_to_play: "return-to-play",
+    };
+    parts.push(`"Built a ${constraints.daysPerWeek}-day ${constraints.sportFocus} ${seasonLabels[constraints.seasonContext]} program. Check the Program tab."`);
+  } else if (constraints.sportFocus && constraints.primaryGoal && constraints.daysPerWeek) {
     parts.push(`"Built a ${constraints.daysPerWeek}-day ${constraints.primaryGoal} program with ${constraints.sportFocus} performance support. Check the Program tab."`);
   } else if (constraints.daysPerWeek && constraints.primaryGoal) {
     parts.push(`"Built a ${constraints.daysPerWeek}-day ${constraints.primaryGoal} program. Check the Program tab."`);
   }
-  parts.push(`STEP 3: Ask exactly ONE refinement question about something not yet stated:`);
-  if (!constraints.equipment) {
+  parts.push(`STEP 3: Ask exactly ONE refinement question about something not yet stated. Priority order:`);
+  if (constraints.sportFocus && !constraints.seasonContext) {
+    parts.push(`→ Season context is missing for a sport athlete — ask: "Are you in-season, off-season, or pre-season right now? I'll adjust the volume and intensity to match."`);
+  } else if (!constraints.equipment) {
     parts.push(`→ Example: "Do you have full gym access, or should I adjust for limited equipment?"`);
   } else if (!constraints.sessionDuration) {
     parts.push(`→ Example: "How long are your sessions — 45 minutes or closer to an hour?"`);
@@ -290,6 +355,30 @@ export interface StructuralEditMetadata {
   targetGoalShift: "athletic" | "fat_loss" | "strength" | "hypertrophy" | "conditioning" | null;
   targetSport: string | null;
   preserveExercises: boolean;
+}
+
+// ─── Season Context Detection ─────────────────────────────────────────────────
+
+export function detectSeasonContext(lower: string): SeasonContext | null {
+  // Return to play — check first, most specific
+  if (/\b(return to play|return from injury|coming back from|recovering from|rehab|rehabbing|post.?injury)\b/.test(lower)) return "return_to_play";
+
+  // Post-season
+  if (/\b(post.?season|after (the )?season|season (is |just |just ended|over|done|finished)|off for (the )?season|took time off|end of (the )?season)\b/.test(lower)) return "post_season";
+
+  // In-season — explicit
+  if (/\b(in.?season|during (the )?season|mid.?season|playing season|currently (playing|competing)|have games?|have matches?|playing (now|right now|this (week|month|season)))\b/.test(lower)) return "in_season";
+
+  // In-season — inferred from game/match frequency
+  if (/\b(\d)\s*(?:games?|matches?)\s*(?:a|per)\s*week\b/.test(lower)) return "in_season";
+
+  // Pre-season
+  if (/\b(pre.?season|before (the )?season|preseason|getting ready for (the )?season|season (starts|begins|is coming|coming up)|preparing for (the )?season)\b/.test(lower)) return "pre_season";
+
+  // Off-season — explicit
+  if (/\b(off.?season|offseason|no (games?|season|matches?)|between seasons?|not (currently )?playing|out of season|training (for )?next season)\b/.test(lower)) return "off_season";
+
+  return null;
 }
 
 // ─── Sport Detection ──────────────────────────────────────────────────────────

@@ -107,6 +107,17 @@ function buildInitialBuildSummary(
     parts.push(`Sport context: ${sportLabel.charAt(0).toUpperCase() + sportLabel.slice(1)}`);
   }
 
+  if (constraints?.seasonContext) {
+    const seasonLabels: Record<string, string> = {
+      off_season: "Off-Season",
+      pre_season: "Pre-Season",
+      in_season: "In-Season",
+      post_season: "Post-Season",
+      return_to_play: "Return to Play",
+    };
+    parts.push(`Season phase: ${seasonLabels[constraints.seasonContext] ?? constraints.seasonContext}`);
+  }
+
   if (constraints?.sessionDuration) {
     parts.push(`Session duration: ${constraints.sessionDuration} minutes`);
   }

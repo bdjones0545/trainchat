@@ -13,6 +13,13 @@
 
 // ─── Core Types ──────────────────────────────────────────────────────────────
 
+export type SeasonContext =
+  | "off_season"
+  | "pre_season"
+  | "in_season"
+  | "post_season"
+  | "return_to_play";
+
 export interface UserProfile {
   trainingGoal: string;
   experienceLevel: string;
@@ -24,6 +31,9 @@ export interface UserProfile {
   sportFocus: string | null;
   exercisePreferences: string | null;
   exercisesToAvoid: string | null;
+  seasonContext?: SeasonContext | null;
+  gameFrequencyPerWeek?: number | null;
+  practiceFrequencyPerWeek?: number | null;
 }
 
 // Normalized goal categories
@@ -775,6 +785,139 @@ function buildGoalRationale(goal: GoalType, experience: ExperienceTier): string 
   }
 }
 
+// ─── Season Context Builder ───────────────────────────────────────────────────
+
+function buildSeasonContext(profile: UserProfile): string {
+  if (!profile.seasonContext) return "";
+
+  const sport = profile.sportFocus ? `${profile.sportFocus} ` : "";
+  const gameLoad = profile.gameFrequencyPerWeek
+    ? `\nGame/match load: ${profile.gameFrequencyPerWeek} game(s)/match(es) per week — lower-body eccentric stress and session fatigue must be managed accordingly.`
+    : "";
+  const practiceLoad = profile.practiceFrequencyPerWeek
+    ? `\nPractice/field load: ${profile.practiceFrequencyPerWeek} practice(s)/field session(s) per week — total weekly training stress must account for this.`
+    : "";
+
+  const phaseRules: Record<SeasonContext, string> = {
+    off_season: `
+SEASON PHASE: OFF-SEASON ${sport}PROGRAM
+This is the highest-tolerance training phase. The athlete has no game or competition demands — this is the time to build.
+
+Programming priorities:
+- Build force production and maximum strength (highest volume and loading of the year)
+- Develop tissue tolerance and structural capacity
+- Improve movement quality, asymmetry, and weak links
+- Broader exercise menu — more unilateral support, more accessory development
+- More robust posterior chain and structural work
+- Hypertrophy support is appropriate if there is a genuine structural gap
+
+Volume/intensity guidance:
+- Highest weekly set volume of any phase
+- Aggressive progressive overload — load is the primary adaptation lever
+- More exercises per session (6–9) when session duration allows
+- More accessory and development work is appropriate
+- Sessions can be longer and more demanding
+
+Day naming convention: "Lower Force Production", "Upper Strength + Trunk", "Full Body Strength + Positional Support"
+Coach note tone: "This phase emphasizes force production and structural development while there is room to tolerate higher loading and build capacity for next season."`,
+
+    pre_season: `
+SEASON PHASE: PRE-SEASON ${sport}PROGRAM
+The athlete is transitioning from strength to power and readiness. Volume decreases, speed/quality of output increases.
+
+Programming priorities:
+- Convert built strength into explosive power output
+- Increase sport specificity — more acceleration, deceleration, change-of-direction prep
+- Maintain strength while reducing pure volume
+- Increase reactive and elastic work (jumps, bounds, reactive drills)
+- Remove accessory junk — every exercise must have sport transfer
+
+Volume/intensity guidance:
+- Moderate volume — down from off-season, but intensity of key lifts is maintained
+- Power output emphasis on explosive work — max intent, low volume
+- Fewer total exercises per session (5–7)
+- Less accessory clutter — tighter, higher-quality sessions
+- Session density increases — less total rest, more purposeful movement
+
+Day naming convention: "Acceleration Support + Lower Strength", "Upper Power + Trunk Integrity", "Full Body Reactive Strength"
+Coach note tone: "This phase shifts toward faster force expression, power transfer, and readiness for field demands while maintaining the strength built in the off-season."`,
+
+    in_season: `
+SEASON PHASE: IN-SEASON ${sport}PROGRAM
+The athlete is competing. The gym's job is to SUPPORT performance, not create fatigue. Minimal effective dose.
+
+Programming priorities:
+- MAINTAIN strength and neural output — do not try to build during this phase
+- Reduce total fatigue — soreness interferes with performance and readiness
+- Preserve power expression with low-volume, high-quality work
+- Avoid excessive eccentric stress in lower body (no heavy soreness before games)
+- Support structural durability — tissue tolerance, trunk stiffness, hip stability
+
+Volume/intensity guidance:
+- LOWEST volume of any phase — quality over quantity
+- Fewer total lifts per session (4–6 maximum)
+- Maintain intensity on primary compound lifts (do not reduce load, reduce sets instead)
+- Careful lower-body loading — prefer trap bar, DB, or controlled machines over high-eccentric barbell
+- More isometric and low-fatigue-cost options for trunk and accessory work
+- Power work: low volume, high quality (1–2 sets × 3–5 reps), maintain neural activation
+- Session duration is shorter — 30–50 min max for most in-season lifts
+${gameLoad}${practiceLoad}
+
+Day naming convention: "Strength Maintenance + Lower Power", "Neural Primer + Upper", "Recovery / Durability Session"
+Coach note tone: "This phase is built to maintain strength and neural output without interfering with match performance or recovery. Every exercise is here for a specific readiness or durability reason."
+
+CRITICAL IN-SEASON RULES:
+- Do NOT program high-volume leg work the day before a game
+- Do NOT include heavy eccentric-dominant lower-body work that causes 48+ hours of soreness
+- Do NOT try to add new volume or development work — maintain what exists
+- If the user has 2+ games/week, consider reducing to 2 lift days total`,
+
+    post_season: `
+SEASON PHASE: POST-SEASON ${sport}PROGRAM
+The athlete has just finished competing. Accumulated fatigue is real. This phase restores, not builds.
+
+Programming priorities:
+- Recovery and deload — allow the body to reset after a competitive season
+- Restore movement quality — address restrictions, asymmetry, and accumulated tightness
+- Reduce accumulated fatigue — lower intensity and volume
+- Gradually rebuild strength baseline
+- Address any lingering pain, restrictions, or structural issues from the season
+
+Volume/intensity guidance:
+- LOW intensity — primary lifts at 60–70% of normal working load
+- Low-to-moderate volume — 3–4 sets per movement, fewer exercises
+- More mobility, positional, and tissue quality work than a standard training phase
+- Progressive re-entry — start light, build back over 2–4 weeks
+- No heavy eccentrics, no max effort lifting in the first 2–3 weeks
+
+Day naming convention: "Restoration + Movement Quality", "Light Strength Re-Entry", "Mobility + Tissue Work"
+Coach note tone: "This phase is about restoration, not development. The goal is to reduce accumulated fatigue, restore movement quality, and rebuild a baseline before the next training phase begins."`,
+
+    return_to_play: `
+SEASON PHASE: RETURN TO PLAY ${sport}PROGRAM
+The athlete is returning from injury or extended absence. Progressive loading with structural protection.
+
+Programming priorities:
+- Rebuild movement quality and neuromuscular confidence
+- Restore positional control and single-leg stability before loading
+- Conservative exercise progression — do not rush loading
+- Protect irritated or healing structures — avoid aggravating movements
+- Regain sport-specific movement capacity gradually
+
+Volume/intensity guidance:
+- Conservative loading — start at 50–60% of prior working weights
+- Low volume — quality reps over quantity
+- Prefer bilateral before unilateral, machines before free weights where appropriate
+- Emphasize positional control, bracing, and movement mechanics over load
+- More isometric work — builds tolerance without high-force eccentrics
+
+Day naming convention: "Movement Re-Entry + Positional Strength", "Controlled Loading + Trunk Stability", "Single-Leg Rebuild + Structural Work"
+Coach note tone: "This phase prioritizes rebuilding movement quality, neuromuscular confidence, and structural resilience. Loading is conservative and progressive — the goal is to regain capacity safely, not rush back to prior performance levels."`,
+  };
+
+  return `\n### SEASON PHASE RULES — MANDATORY\n${phaseRules[profile.seasonContext]}`;
+}
+
 // ─── AI Prompt Context Builder ───────────────────────────────────────────────
 
 /**
@@ -796,6 +939,8 @@ export function buildIntelligenceContext(profile: UserProfile): string {
   const sportContext = profile.sportFocus
     ? `\nSPORT CONTEXT: User trains for ${profile.sportFocus}.\nThis is not a generic fitness program — it is a sport performance program. Every element must serve athletic output.\n\nBias the program toward:\n- Acceleration and deceleration mechanics (horizontal and lateral force production)\n- Change of direction resilience (unilateral lower body, frontal plane loading)\n- Trunk stiffness and anti-rotation (Pallof press, Copenhagen plank, landmine rotation)\n- Posterior chain and single-leg stability (single-leg RDL, RFESS, step-up, Nordic curl where applicable)\n- Power development specific to ${profile.sportFocus} demands (jumps, bounds, med ball throws appropriate to the sport)\n\nExercise names, day names, focus notes, and coaching cues must ALL reflect ${profile.sportFocus} performance — not generic fitness language.`
     : "";
+
+  const seasonContext = buildSeasonContext(profile);
 
   return `
 ## COMPUTED TRAINING SPECIFICATION
@@ -843,9 +988,6 @@ ${spec.weeklyIntensityNotes}
 ### SESSION EFFICIENCY RULE
 Session target: ${spec.sessionDuration} minutes
 ${spec.sessionDensity === "tight" ? "TIGHT SESSION: Maximum 5-6 exercises. Pair accessories as supersets if needed. No fluff." : spec.sessionDensity === "moderate" ? "MODERATE SESSION: 5-8 exercises. Efficient transitions. Include main work and meaningful accessories." : "EXTENDED SESSION: 6-10 exercises. Room for warm-up sets, accessories, and quality work without rushing."}
-${injurySection}
-${excludedExercises}
-${sportContext}
 
 ### QUALITY GUARDRAILS
 - Do not repeat the same exercise twice in a session
@@ -855,6 +997,7 @@ ${sportContext}
 - Do not exceed realistic exercise count for the session duration
 - Do not ignore any injury flag in the user's profile
 - Do NOT explain structural decisions in chat — the program panel is the output
+${seasonContext}${injurySection}${excludedExercises}${sportContext}
 `.trim();
 }
 
