@@ -89,12 +89,13 @@ exercisesRouter.get("/cluster/:clusterId", async (req, res) => {
 });
 
 // ── Lookup single exercise ─────────────────────────────────────────────────────
-exercisesRouter.get("/lookup/:name", async (req, res) => {
+exercisesRouter.get("/lookup/:name", async (req, res): Promise<void> => {
   try {
     const exerciseName = decodeURIComponent(req.params.name);
     const exercise = await findExerciseByName(exerciseName);
     if (!exercise) {
-      return res.status(404).json({ success: false, error: "Exercise not found" });
+      res.status(404).json({ success: false, error: "Exercise not found" });
+      return;
     }
     res.json({ success: true, data: exercise });
   } catch (err: any) {
@@ -103,7 +104,7 @@ exercisesRouter.get("/lookup/:name", async (req, res) => {
 });
 
 // ── Filter / search ────────────────────────────────────────────────────────────
-exercisesRouter.post("/filter", async (req, res) => {
+exercisesRouter.post("/filter", async (req, res): Promise<void> => {
   try {
     const {
       patterns = [],
@@ -111,12 +112,19 @@ exercisesRouter.post("/filter", async (req, res) => {
       injuryFlags = [],
       difficultyMax,
       intentTags = [],
+      sportTransferTags = [],
+      tags = [],
+      role,
+      unilateralOnly,
+      maxNeuralDemand,
+      maxTimeCost,
       excludeNames = [],
       maxCount,
     } = req.body;
 
     if (!Array.isArray(patterns) || patterns.length === 0) {
-      return res.status(400).json({ success: false, error: "patterns array is required" });
+      res.status(400).json({ success: false, error: "patterns array is required" });
+      return;
     }
 
     const results: Record<string, any[]> = {};
@@ -127,6 +135,12 @@ exercisesRouter.post("/filter", async (req, res) => {
         injuryFlags,
         difficultyMax,
         intentTags,
+        sportTransferTags,
+        tags,
+        role,
+        unilateralOnly,
+        maxNeuralDemand,
+        maxTimeCost,
         excludeNames,
         maxCount,
       });

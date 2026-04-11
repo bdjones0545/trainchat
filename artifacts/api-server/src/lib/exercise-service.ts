@@ -1,19 +1,21 @@
 /**
- * Exercise Service — Intelligent exercise library queries
+ * Exercise Service — Decision-Ready Movement System
  *
- * Provides fast, structured access to the exercise_library table.
+ * Provides structured, constraint-aware access to the exercise library.
  * Powers swap clusters, equipment filtering, injury-aware selection,
- * body-region filtering, unilateral/bilateral routing, and AI context injection.
+ * neural demand filtering, time compression, sport-specific biasing,
+ * and AI context injection.
  *
- * New fields leveraged: bodyRegion, unilateral, tags
+ * Every query function is designed to support the Program Specialist Decision Layer:
+ * PATTERN → CATEGORY → EXERCISE → VARIANTS
  */
 
 import { db, exerciseLibrary } from "@workspace/db";
-import { eq, inArray, and, sql } from "drizzle-orm";
+import { eq, inArray, and, sql, ne } from "drizzle-orm";
 
 export type { ExerciseLibraryEntry } from "@workspace/db";
 
-// ─── Equipment mapping (matches EquipmentLevel in training-intelligence) ───────
+// ─── Equipment mapping ────────────────────────────────────────────────────────
 
 const EQUIPMENT_LEVEL_MAP: Record<string, string[]> = {
   full_gym: ["barbell", "dumbbell", "cable", "machine", "bodyweight", "kettlebell", "band", "trap_bar", "rings", "trx", "sled", "med_ball"],
@@ -34,7 +36,7 @@ const DIFFICULTY_ORDER: Record<string, number> = {
 /**
  * Find an exercise by exact name (case-insensitive).
  */
-export async function findExerciseByName(name: string): Promise<ExerciseLibraryEntry | null> {
+export async function findExerciseByName(name: string) {
   const rows = await db
     .select()
     .from(exerciseLibrary)
@@ -45,12 +47,9 @@ export async function findExerciseByName(name: string): Promise<ExerciseLibraryE
 
 /**
  * Get all exercises in the same cluster as the given clusterId.
- * These are direct swap candidates.
+ * These are direct swap candidates (same role, different equipment/constraint level).
  */
-export async function getClusterMembers(
-  clusterId: string,
-  excludeName?: string
-): Promise<ExerciseLibraryEntry[]> {
+export async function getClusterMembers(clusterId: string, excludeName?: string) {
   const rows = await db
     .select()
     .from(exerciseLibrary)
@@ -67,33 +66,48 @@ export async function getClusterMembers(
 }
 
 /**
- * Find swap candidates for an exercise.
- * Returns cluster members that satisfy equipment + injury + unilateral constraints.
+ * Find smart swap candidates for an exercise.
+ * Respects equipment, injury, neural demand, and time constraints.
+ * Falls back to movement pattern search if no cluster exists.
  */
 export async function getSwapCandidates(opts: {
   exerciseName: string;
   equipmentLevel?: string;
   injuryFlags?: string[];
   unilateralOnly?: boolean;
+  maxNeuralDemand?: "low" | "moderate" | "high";
+  maxTimeCost?: "low" | "moderate" | "high";
   maxCount?: number;
-}): Promise<ExerciseLibraryEntry[]> {
-  const { exerciseName, equipmentLevel = "full_gym", injuryFlags = [], unilateralOnly, maxCount = 6 } = opts;
+}) {
+  const {
+    exerciseName,
+    equipmentLevel = "full_gym",
+    injuryFlags = [],
+    unilateralOnly,
+    maxNeuralDemand,
+    maxTimeCost,
+    maxCount = 6,
+  } = opts;
 
   const exercise = await findExerciseByName(exerciseName);
   if (!exercise || !exercise.clusterId) {
-    const fallback = await getByMovementPattern({
-      pattern: exercise?.movementPattern ?? "squat",
+    return getByMovementPattern({
+      pattern: exercise?.movementPattern ?? "knee_dominant",
       equipmentLevel,
       injuryFlags,
       unilateralOnly: unilateralOnly ?? exercise?.unilateral ?? false,
       excludeNames: [exerciseName],
+      maxNeuralDemand,
+      maxTimeCost,
       maxCount,
     });
-    return fallback;
   }
 
   const clusterMembers = await getClusterMembers(exercise.clusterId, exerciseName);
   const allowed = EQUIPMENT_LEVEL_MAP[equipmentLevel] ?? EQUIPMENT_LEVEL_MAP.full_gym;
+  const neuralOrder: Record<string, number> = { low: 0, moderate: 1, high: 2 };
+  const maxNeuralLevel = maxNeuralDemand ? neuralOrder[maxNeuralDemand] : 2;
+  const maxTimeLevel = maxTimeCost ? neuralOrder[maxTimeCost] : 2;
 
   return clusterMembers
     .filter((ex) => {
@@ -104,6 +118,12 @@ export async function getSwapCandidates(opts: {
         if (injuryFlags.some((flag) => stress.includes(flag))) return false;
       }
       if (unilateralOnly !== undefined && ex.unilateral !== unilateralOnly) return false;
+      if (maxNeuralDemand && ex.neuralDemand) {
+        if ((neuralOrder[ex.neuralDemand] ?? 1) > maxNeuralLevel) return false;
+      }
+      if (maxTimeCost && ex.timeCost) {
+        if ((neuralOrder[ex.timeCost] ?? 1) > maxTimeLevel) return false;
+      }
       return true;
     })
     .slice(0, maxCount);
@@ -111,7 +131,7 @@ export async function getSwapCandidates(opts: {
 
 /**
  * Get exercises by movement pattern with full constraint filtering.
- * Now includes bodyRegion, unilateral, and tags filtering.
+ * Supports sport biasing via sportTransferTags, neural demand cap, and time cost cap.
  */
 export async function getByMovementPattern(opts: {
   pattern: string;
@@ -119,22 +139,30 @@ export async function getByMovementPattern(opts: {
   injuryFlags?: string[];
   difficultyMax?: "beginner" | "intermediate" | "advanced";
   intentTags?: string[];
+  sportTransferTags?: string[];
   tags?: string[];
   bodyRegion?: string;
+  role?: string;
   unilateralOnly?: boolean;
   excludeNames?: string[];
+  maxNeuralDemand?: "low" | "moderate" | "high";
+  maxTimeCost?: "low" | "moderate" | "high";
   maxCount?: number;
-}): Promise<ExerciseLibraryEntry[]> {
+}) {
   const {
     pattern,
     equipmentLevel = "full_gym",
     injuryFlags = [],
     difficultyMax,
     intentTags = [],
+    sportTransferTags = [],
     tags = [],
     bodyRegion,
+    role,
     unilateralOnly,
     excludeNames = [],
+    maxNeuralDemand,
+    maxTimeCost,
     maxCount,
   } = opts;
 
@@ -151,6 +179,9 @@ export async function getByMovementPattern(opts: {
   const allowed = EQUIPMENT_LEVEL_MAP[equipmentLevel] ?? EQUIPMENT_LEVEL_MAP.full_gym;
   const maxLevel = difficultyMax ? DIFFICULTY_ORDER[difficultyMax] : 3;
   const excludeSet = new Set(excludeNames.map((n) => n.toLowerCase()));
+  const neuralOrder: Record<string, number> = { low: 0, moderate: 1, high: 2 };
+  const maxNeuralLevel = maxNeuralDemand ? neuralOrder[maxNeuralDemand] : 2;
+  const maxTimeLevel = maxTimeCost ? neuralOrder[maxTimeCost] : 2;
 
   const filtered = rows.filter((ex) => {
     if (excludeSet.has(ex.name.toLowerCase())) return false;
@@ -162,20 +193,29 @@ export async function getByMovementPattern(opts: {
       if (injuryFlags.some((f) => stress.includes(f))) return false;
     }
     if (bodyRegion && ex.bodyRegion && ex.bodyRegion !== bodyRegion) return false;
+    if (role && ex.role && ex.role !== role) return false;
     if (unilateralOnly !== undefined && ex.unilateral !== unilateralOnly) return false;
     if (tags.length > 0) {
       const exTags = ex.tags as string[];
       if (!tags.some((t) => exTags.includes(t))) return false;
     }
+    if (maxNeuralDemand && ex.neuralDemand) {
+      if ((neuralOrder[ex.neuralDemand] ?? 1) > maxNeuralLevel) return false;
+    }
+    if (maxTimeCost && ex.timeCost) {
+      if ((neuralOrder[ex.timeCost] ?? 1) > maxTimeLevel) return false;
+    }
     return true;
   });
 
-  // Boost exercises that match intent tags
-  if (intentTags.length > 0) {
+  // Score: intent tags first, then sport transfer tags (for sport-specific biasing)
+  if (intentTags.length > 0 || sportTransferTags.length > 0) {
     filtered.sort((a, b) => {
-      const aScore = (a.intentTags as string[]).filter((t) => intentTags.includes(t)).length;
-      const bScore = (b.intentTags as string[]).filter((t) => intentTags.includes(t)).length;
-      return bScore - aScore;
+      const aIntent = (a.intentTags as string[]).filter((t) => intentTags.includes(t)).length;
+      const bIntent = (b.intentTags as string[]).filter((t) => intentTags.includes(t)).length;
+      const aSport = (a.sportTransferTags as string[]).filter((t) => sportTransferTags.includes(t)).length;
+      const bSport = (b.sportTransferTags as string[]).filter((t) => sportTransferTags.includes(t)).length;
+      return (bIntent + bSport) - (aIntent + aSport);
     });
   }
 
@@ -191,13 +231,17 @@ export async function getForPatterns(opts: {
   injuryFlags?: string[];
   difficultyMax?: "beginner" | "intermediate" | "advanced";
   intentTags?: string[];
+  sportTransferTags?: string[];
   tags?: string[];
   bodyRegion?: string;
+  role?: string;
   unilateralOnly?: boolean;
+  maxNeuralDemand?: "low" | "moderate" | "high";
+  maxTimeCost?: "low" | "moderate" | "high";
   perPatternMax?: number;
-}): Promise<Record<string, ExerciseLibraryEntry[]>> {
-  const { patterns, perPatternMax = 8, ...rest } = opts;
-  const result: Record<string, ExerciseLibraryEntry[]> = {};
+}) {
+  const { patterns, perPatternMax = 6, ...rest } = opts;
+  const result: Record<string, Awaited<ReturnType<typeof getByMovementPattern>>> = {};
   await Promise.all(
     patterns.map(async (pattern) => {
       result[pattern] = await getByMovementPattern({
@@ -212,7 +256,7 @@ export async function getForPatterns(opts: {
 
 /**
  * Get exercises filtered by body region.
- * Useful for upper/lower body splits, full-body day filtering, etc.
+ * Useful for upper/lower splits and full-body days.
  */
 export async function getByBodyRegion(opts: {
   bodyRegion: "upper_body" | "lower_body" | "full_body" | "core";
@@ -220,16 +264,20 @@ export async function getByBodyRegion(opts: {
   injuryFlags?: string[];
   difficultyMax?: "beginner" | "intermediate" | "advanced";
   intentTags?: string[];
+  role?: string;
   unilateralOnly?: boolean;
+  maxNeuralDemand?: "low" | "moderate" | "high";
   maxCount?: number;
-}): Promise<ExerciseLibraryEntry[]> {
+}) {
   const {
     bodyRegion,
     equipmentLevel = "full_gym",
     injuryFlags = [],
     difficultyMax,
     intentTags = [],
+    role,
     unilateralOnly,
+    maxNeuralDemand,
     maxCount,
   } = opts;
 
@@ -245,6 +293,8 @@ export async function getByBodyRegion(opts: {
 
   const allowed = EQUIPMENT_LEVEL_MAP[equipmentLevel] ?? EQUIPMENT_LEVEL_MAP.full_gym;
   const maxLevel = difficultyMax ? DIFFICULTY_ORDER[difficultyMax] : 3;
+  const neuralOrder: Record<string, number> = { low: 0, moderate: 1, high: 2 };
+  const maxNeuralLevel = maxNeuralDemand ? neuralOrder[maxNeuralDemand] : 2;
 
   const filtered = rows.filter((ex) => {
     const hasEquipment = (ex.equipment as string[]).some((e) => allowed.includes(e));
@@ -254,7 +304,11 @@ export async function getByBodyRegion(opts: {
       const stress = ex.jointStressProfile as string[];
       if (injuryFlags.some((f) => stress.includes(f))) return false;
     }
+    if (role && ex.role && ex.role !== role) return false;
     if (unilateralOnly !== undefined && ex.unilateral !== unilateralOnly) return false;
+    if (maxNeuralDemand && ex.neuralDemand) {
+      if ((neuralOrder[ex.neuralDemand] ?? 1) > maxNeuralLevel) return false;
+    }
     return true;
   });
 
@@ -270,9 +324,28 @@ export async function getByBodyRegion(opts: {
 }
 
 /**
- * Get joint-friendly / low-impact exercise alternatives.
- * Filters by jointStressProfile tags that do NOT include the injury flags,
- * and prioritizes exercises tagged low_impact or older_adult.
+ * Time-compressed exercise selection.
+ * Drops low-priority accessories and high timeCost exercises.
+ * Returns only the exercises the system should keep under time pressure.
+ */
+export async function getTimeCompressedExercises(opts: {
+  patterns: string[];
+  equipmentLevel?: string;
+  injuryFlags?: string[];
+  perPatternMax?: number;
+}) {
+  return getForPatterns({
+    ...opts,
+    maxTimeCost: "moderate",
+    tags: [],
+    intentTags: ["strength", "power", "athletic"],
+    perPatternMax: opts.perPatternMax ?? 3,
+  });
+}
+
+/**
+ * Get joint-friendly alternatives by filtering out stress flags
+ * and prioritizing constraint-aware tags.
  */
 export async function getJointFriendlyAlternatives(opts: {
   movementPattern: string;
@@ -280,7 +353,7 @@ export async function getJointFriendlyAlternatives(opts: {
   equipmentLevel?: string;
   difficultyMax?: "beginner" | "intermediate" | "advanced";
   maxCount?: number;
-}): Promise<ExerciseLibraryEntry[]> {
+}) {
   const { movementPattern, injuryFlags, equipmentLevel = "full_gym", difficultyMax, maxCount = 6 } = opts;
 
   return getByMovementPattern({
@@ -288,15 +361,50 @@ export async function getJointFriendlyAlternatives(opts: {
     equipmentLevel,
     injuryFlags,
     difficultyMax,
-    tags: ["low_impact", "older_adult", "knee_sensitive", "low_back_sensitive", "shoulder_sensitive"],
+    tags: ["shoulder_sensitive", "knee_sensitive", "low_back_sensitive", "low_impact", "beginner_friendly"],
     maxCount,
   });
 }
 
 /**
- * Build a compact AI context string from exercise options.
- * Used in prompt injection for program generation and edits.
- * Now includes bodyRegion, unilateral status, tags, and progression links.
+ * Get sport-specific exercise selections.
+ * Biases the library toward exercises with matching sportTransferTags.
+ */
+export async function getSportSpecificExercises(opts: {
+  sport: string;
+  patterns: string[];
+  equipmentLevel?: string;
+  injuryFlags?: string[];
+  perPatternMax?: number;
+}) {
+  const SPORT_TAG_MAP: Record<string, string[]> = {
+    soccer: ["change_of_direction", "acceleration", "deceleration", "lower_body_force"],
+    basketball: ["vertical_jump", "change_of_direction", "lower_body_force", "stiffness"],
+    baseball: ["rotational_power", "upper_body_force", "trunk_stability"],
+    tennis: ["rotational_power", "change_of_direction", "upper_body_force", "anti_rotation"],
+    football: ["lower_body_force", "acceleration", "upper_body_force", "stiffness"],
+    rugby: ["lower_body_force", "acceleration", "upper_body_force", "trunk_stability"],
+    lacrosse: ["rotational_power", "change_of_direction", "upper_body_force"],
+    mma: ["rotational_power", "trunk_stability", "upper_body_force", "lower_body_force"],
+    swimming: ["upper_body_force", "trunk_stability", "anti_rotation"],
+    sprinting: ["acceleration", "stiffness", "lower_body_force"],
+    general_athletic: ["acceleration", "lower_body_force", "trunk_stability"],
+  };
+
+  const transferTags = SPORT_TAG_MAP[opts.sport.toLowerCase()] ?? SPORT_TAG_MAP.general_athletic;
+
+  return getForPatterns({
+    patterns: opts.patterns,
+    equipmentLevel: opts.equipmentLevel,
+    injuryFlags: opts.injuryFlags,
+    sportTransferTags: transferTags,
+    perPatternMax: opts.perPatternMax ?? 4,
+  });
+}
+
+/**
+ * Build compact AI context string from exercise options.
+ * Includes role, neural demand, time cost, and sport transfer tags for richer AI reasoning.
  */
 export async function buildExerciseContext(opts: {
   patterns: string[];
@@ -304,81 +412,96 @@ export async function buildExerciseContext(opts: {
   injuryFlags?: string[];
   difficultyMax?: "beginner" | "intermediate" | "advanced";
   intentTags?: string[];
+  sportTransferTags?: string[];
   tags?: string[];
   bodyRegion?: string;
+  role?: string;
   unilateralOnly?: boolean;
+  maxNeuralDemand?: "low" | "moderate" | "high";
+  maxTimeCost?: "low" | "moderate" | "high";
   perPatternMax?: number;
   verbose?: boolean;
-}): Promise<string> {
+}) {
   const { verbose = false, ...queryOpts } = opts;
   const byPattern = await getForPatterns(queryOpts);
 
   const lines: string[] = [
-    "AVAILABLE EXERCISE LIBRARY (use these names exactly when prescribing exercises):",
-    "Format: Name (equipment | difficulty | body_region) [unilateral?] [tags]",
-    "        → easier: ... | harder: ...",
+    "EXERCISE LIBRARY — Decision-Ready Movement System",
+    "Format: Name | role | equipment | difficulty | neural_demand | time_cost",
+    "        → easier: ... | harder: ... | sport: ...",
+    "",
   ];
 
   for (const [pattern, exercises] of Object.entries(byPattern)) {
     if (exercises.length === 0) continue;
     const label = pattern.replace(/_/g, " ").toUpperCase();
-    lines.push(`\n${label}:`);
+    lines.push(`[${label}]`);
+
     for (const ex of exercises) {
       const equip = (ex.equipment as string[]).join("/");
-      const region = ex.bodyRegion ?? "—";
-      const lateral = ex.unilateral ? " [unilateral]" : "";
-      const exTags = (ex.tags as string[]).slice(0, 3).join(", ");
-      const tagStr = exTags ? ` {${exTags}}` : "";
-      let line = `  - ${ex.name} (${equip} | ${ex.difficultyLevel} | ${region})${lateral}${tagStr}`;
+      const role = ex.role ?? "—";
+      const neural = ex.neuralDemand ?? "—";
+      const time = ex.timeCost ?? "—";
+      const lateral = ex.unilateral ? " [uni]" : "";
+      let line = `  ${ex.name}${lateral} | ${role} | ${equip} | ${ex.difficultyLevel} | neural:${neural} | time:${time}`;
 
       if (verbose) {
         const easier = (ex.easierVariations as string[]).join(", ");
         const harder = (ex.harderVariations as string[]).join(", ");
-        if (easier || harder) {
-          const progressions: string[] = [];
-          if (easier) progressions.push(`easier: ${easier}`);
-          if (harder) progressions.push(`harder: ${harder}`);
-          line += `\n      → ${progressions.join(" | ")}`;
+        const sport = (ex.sportTransferTags as string[]).join(", ");
+        const progressions: string[] = [];
+        if (easier) progressions.push(`easier: ${easier}`);
+        if (harder) progressions.push(`harder: ${harder}`);
+        if (sport) progressions.push(`sport: ${sport}`);
+        if (progressions.length > 0) {
+          line += `\n    → ${progressions.join(" | ")}`;
         }
       }
 
       lines.push(line);
     }
+    lines.push("");
   }
 
   return lines.join("\n");
 }
 
 /**
- * Build swap candidate context for a specific exercise.
- * Returns a formatted string for AI injection when handling a swap request.
+ * Build swap candidate context for the AI.
+ * Returns a formatted string showing what the system can swap to given constraints.
  */
 export async function buildSwapContext(opts: {
   exerciseName: string;
   equipmentLevel?: string;
   injuryFlags?: string[];
   unilateralOnly?: boolean;
-}): Promise<string> {
+  maxNeuralDemand?: "low" | "moderate" | "high";
+  maxTimeCost?: "low" | "moderate" | "high";
+}) {
   const candidates = await getSwapCandidates({ ...opts, maxCount: 8 });
+  const exercise = await findExerciseByName(opts.exerciseName);
+
   if (candidates.length === 0) {
-    return `No direct cluster matches found for "${opts.exerciseName}". Use your best judgment.`;
+    return `No direct cluster matches found for "${opts.exerciseName}". Use movement pattern and role to find alternatives.`;
   }
 
   const lines = [
-    `SWAP CANDIDATES for "${opts.exerciseName}" (prefer these options):`,
+    `SWAP CANDIDATES for "${opts.exerciseName}" (${exercise?.role ?? "unknown role"} | ${exercise?.movementPattern ?? ""})`,
+    `Constraints applied: equipment=${opts.equipmentLevel ?? "full_gym"} | injury=${(opts.injuryFlags ?? []).join(",") || "none"} | neural_max=${opts.maxNeuralDemand ?? "any"} | time_max=${opts.maxTimeCost ?? "any"}`,
+    "",
     ...candidates.map((ex) => {
       const equip = (ex.equipment as string[]).join("/");
-      const region = ex.bodyRegion ?? "—";
       const lateral = ex.unilateral ? " [unilateral]" : " [bilateral]";
       const easier = (ex.easierVariations as string[]).join(", ");
       const harder = (ex.harderVariations as string[]).join(", ");
-      const exTags = (ex.tags as string[]).filter((t) =>
-        ["low_impact", "home_gym", "knee_sensitive", "shoulder_sensitive", "low_back_sensitive", "older_adult", "beginner_friendly"].includes(t)
+      const constraintTags = (ex.tags as string[]).filter((t) =>
+        ["shoulder_sensitive", "knee_sensitive", "low_back_sensitive", "low_impact", "beginner_friendly", "time_efficient"].includes(t)
       ).join(", ");
-      let line = `  - ${ex.name} (${equip} | ${ex.difficultyLevel} | ${region})${lateral}`;
-      if (exTags) line += ` {${exTags}}`;
-      if (easier) line += ` | easier: ${easier}`;
-      if (harder) line += ` | harder: ${harder}`;
+
+      let line = `  - ${ex.name}${lateral} | ${equip} | ${ex.difficultyLevel} | neural:${ex.neuralDemand} | time:${ex.timeCost}`;
+      if (constraintTags) line += ` {${constraintTags}}`;
+      if (easier) line += `\n      easier: ${easier}`;
+      if (harder) line += `\n      harder: ${harder}`;
       return line;
     }),
   ];
@@ -386,12 +509,9 @@ export async function buildSwapContext(opts: {
 }
 
 /**
- * Get regressions/progressions for an exercise.
+ * Get regressions and progressions for an exercise.
  */
-export async function getProgressions(exerciseName: string): Promise<{
-  easier: ExerciseLibraryEntry[];
-  harder: ExerciseLibraryEntry[];
-}> {
+export async function getProgressions(exerciseName: string) {
   const exercise = await findExerciseByName(exerciseName);
   if (!exercise) return { easier: [], harder: [] };
 
@@ -401,18 +521,12 @@ export async function getProgressions(exerciseName: string): Promise<{
   const [easier, harder] = await Promise.all([
     easierNames.length > 0
       ? db.select().from(exerciseLibrary).where(
-          and(
-            inArray(exerciseLibrary.name, easierNames),
-            eq(exerciseLibrary.isActive, true)
-          )
+          and(inArray(exerciseLibrary.name, easierNames), eq(exerciseLibrary.isActive, true))
         )
       : Promise.resolve([]),
     harderNames.length > 0
       ? db.select().from(exerciseLibrary).where(
-          and(
-            inArray(exerciseLibrary.name, harderNames),
-            eq(exerciseLibrary.isActive, true)
-          )
+          and(inArray(exerciseLibrary.name, harderNames), eq(exerciseLibrary.isActive, true))
         )
       : Promise.resolve([]),
   ]);
@@ -421,25 +535,19 @@ export async function getProgressions(exerciseName: string): Promise<{
 }
 
 /**
- * Get all exercises — for admin/seed verification.
+ * Get all active exercises — for admin/seed verification.
  */
-export async function getAllExercises(): Promise<ExerciseLibraryEntry[]> {
+export async function getAllExercises() {
   return db.select().from(exerciseLibrary).where(eq(exerciseLibrary.isActive, true));
 }
 
 /**
- * Get library stats including new field breakdowns.
+ * Get library stats for the decision system.
  */
-export async function getLibraryStats(): Promise<{
-  total: number;
-  byPattern: Record<string, number>;
-  byBodyRegion: Record<string, number>;
-  clusterCount: number;
-  unilateralCount: number;
-  bilateralCount: number;
-}> {
+export async function getLibraryStats() {
   const all = await getAllExercises();
   const byPattern: Record<string, number> = {};
+  const byRole: Record<string, number> = {};
   const byBodyRegion: Record<string, number> = {};
   const clusters = new Set<string>();
   let unilateralCount = 0;
@@ -449,6 +557,8 @@ export async function getLibraryStats(): Promise<{
     byPattern[ex.movementPattern] = (byPattern[ex.movementPattern] ?? 0) + 1;
     const region = ex.bodyRegion ?? "unclassified";
     byBodyRegion[region] = (byBodyRegion[region] ?? 0) + 1;
+    const role = ex.role ?? "unclassified";
+    byRole[role] = (byRole[role] ?? 0) + 1;
     if (ex.clusterId) clusters.add(ex.clusterId);
     if (ex.unilateral) unilateralCount++;
     else bilateralCount++;
@@ -457,6 +567,7 @@ export async function getLibraryStats(): Promise<{
   return {
     total: all.length,
     byPattern,
+    byRole,
     byBodyRegion,
     clusterCount: clusters.size,
     unilateralCount,

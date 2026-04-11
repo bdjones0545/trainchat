@@ -62,6 +62,22 @@ The UI features a dark theme with electric blue accents and the Inter font, cent
 - **Goal-Specific Defaults**: Strength, hypertrophy, athletic/performance, and fat-loss all have explicit assumption defaults baked into the system prompt.
 - **Sport-Specific Defaults**: Soccer, basketball, baseball, tennis, track, swimming, and combat sports all have explicit programming biases in the system prompt.
 
+### Exercise Library — Decision-Ready Movement System
+
+- **Philosophy**: Depth over count. ~75 precision exercises across 12 movement buckets. NOT a flat list — a coaching decision engine.
+- **12 Movement Buckets**: `knee_dominant`, `hip_dominant`, `push_horizontal`, `push_vertical`, `pull_horizontal`, `pull_vertical`, `power_explosive`, `core_anti_extension`, `core_anti_rotation`, `core_rotation`, `core_lateral`, `accessory_lower`, `accessory_upper`, `conditioning`, `mobility_prep`
+- **New Schema Fields** (added in this session):
+  - `role`: `primary_strength | primary_power | unilateral_strength | accessory | conditioning | prep_activation | corrective`
+  - `neuralDemand`: `low | moderate | high` — used for readiness-aware time compression
+  - `timeCost`: `low | moderate | high` — first filter during short sessions
+  - `sportTransferTags`: `acceleration | deceleration | change_of_direction | rotational_power | trunk_stability | lower_body_force | upper_body_force | stiffness | landing_control | anti_rotation`
+- **Swap Cluster System**: 16 clusters. Exercises in the same cluster are direct swap candidates. `getSwapCandidates()` filters by equipment, injury, neural demand, and time cost.
+- **Progression Links**: Every key exercise has `easierVariations` and `harderVariations` — enables regression/progression without rebuilding programs.
+- **Accessory Priority**: Accessory exercises (biceps curl, triceps pushdown, lateral raise) are tagged `low_priority` and `removable_when_compressed` — first to be dropped under time pressure.
+- **Exercise Service** (`exercise-service.ts`): All query functions now support `sportTransferTags`, `maxNeuralDemand`, `maxTimeCost`, and `role` filtering. New function: `getSportSpecificExercises()` maps 10 sports to transfer tags. `buildExerciseContext()` and `buildSwapContext()` updated to surface new fields to the AI.
+- **AI Context**: `buildDBExerciseContext()` in `training-intelligence.ts` updated to use new bucket names and passes verbose context (easier/harder/sport transfer) to the program generation AI.
+- **Seed**: `seed-exercises.ts` is the authoritative seed. `seed-exercises-expanded.ts` is retired. Run: `cd artifacts/api-server && pnpm exec tsx scripts/seed-exercises.ts`
+
 ### Knowledge Base (Admin Education System)
 - **DB Table**: `coaching_knowledge` — stores philosophy notes, exercise intelligence, system rules, and sport templates.
 - **Retrieval** (`knowledge-retrieval.ts`): Context-aware retrieval that scores entries by goal, sport, body region, and tag overlap. Top matching entries are injected into the system prompt at build time.

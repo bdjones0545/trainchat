@@ -1020,24 +1020,32 @@ export async function buildDBExerciseContext(profile: UserProfile): Promise<stri
     const spec = buildTrainingSpec(profile);
     const equipment = spec.equipment;
 
-    // Map training patterns to DB movement patterns
+    // Core movement buckets always included
     const patterns = [
-      "squat", "hinge", "push_horizontal", "push_vertical",
-      "pull_horizontal", "pull_vertical", "core", "carry",
-      // power_explosive is included for ALL goals — every session starts with power
+      "knee_dominant",
+      "hip_dominant",
+      "push_horizontal",
+      "push_vertical",
+      "pull_horizontal",
+      "pull_vertical",
       "power_explosive",
-      // iso_legs always included for unilateral lower body access
-      "iso_legs",
+      "core_anti_extension",
+      "core_anti_rotation",
     ];
 
-    // Add iso patterns for hypertrophy
-    if (spec.goal === "hypertrophy" || spec.goal === "general_fitness") {
-      patterns.push("iso_chest", "iso_shoulders", "iso_arms");
-    }
-
-    // Add conditioning for fat loss / athletic
+    // Add conditioning for fat loss or athletic goals
     if (spec.goal === "fat_loss" || spec.goal === "athletic_performance") {
       patterns.push("conditioning");
+    }
+
+    // Add accessory patterns for hypertrophy
+    if (spec.goal === "hypertrophy" || spec.goal === "general_fitness") {
+      patterns.push("accessory_lower", "accessory_upper");
+    }
+
+    // Add prep/mobility patterns for recovery or lower readiness
+    if (spec.goal === "mobility" || spec.goal === "recovery") {
+      patterns.push("mobility_prep", "core_lateral", "core_rotation");
     }
 
     const context = await buildExerciseContext({
@@ -1046,10 +1054,11 @@ export async function buildDBExerciseContext(profile: UserProfile): Promise<stri
       injuryFlags: spec.injuryFlags,
       difficultyMax: spec.experience,
       intentTags: [spec.goal],
-      perPatternMax: 10,
+      verbose: true,
+      perPatternMax: 6,
     });
 
-    return `\n### EXERCISE LIBRARY\n${context}\n\nIMPORTANT: When selecting exercises, use ONLY names from the EXERCISE LIBRARY above. These are verified exercise names. Do not invent or modify names.`;
+    return `\n### EXERCISE LIBRARY — Decision-Ready Movement System\n${context}\n\nIMPORTANT: Use ONLY exercise names from the EXERCISE LIBRARY above. Every exercise has swap options (easier/harder) — use them when adapting. Do not invent exercise names.`;
   } catch (err) {
     // If DB is unavailable, fall back gracefully (no crash)
     return "";
