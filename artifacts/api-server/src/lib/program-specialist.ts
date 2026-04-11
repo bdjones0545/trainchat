@@ -1108,100 +1108,99 @@ function capitalizeFirst(s: string): string {
 
 // ─── Specialist Coaching Response Builder ─────────────────────────────────────
 //
-// Generates the coach-voiced response for a decision.
-// Structure (mandatory): Acknowledge → "I'm [move]" → "This will [outcome]" → Confirm
+// 4-line mandatory structure (STRICT):
+//   LINE 1 — Acknowledge intent
+//   LINE 2 — Coaching move (strong verb, no "I'm" / "I will" / "I am going to")
+//   LINE 3 — Performance-focused reason
+//   LINE 4 — "Updated — check your program."
 //
 // Called AFTER applySpecialistMutations() so the response reflects what was done.
 
-const CONFIRM_LINE = "Your system is updated — check the Program tab.";
+const CONFIRM_LINE = "Updated — check your program.";
 
 type IntentVoice = {
   acknowledge: (decision: SpecialistDecision) => string;
   move: (decision: SpecialistDecision) => string;
-  outcome: (decision: SpecialistDecision) => string;
+  reason: (decision: SpecialistDecision) => string;
 };
 
 const INTENT_VOICE: Partial<Record<SpecialistIntentType, IntentVoice>> = {
   BIAS_SHIFT: {
     acknowledge: (d) => {
       const labels: Record<string, string> = {
-        endurance: "shifting your system toward endurance",
-        strength: "shifting your system toward strength",
-        power: "shifting this toward power",
-        hypertrophy: "shifting your system toward hypertrophy",
-        athletic: "keeping this athletic",
+        endurance:  "pushing this toward endurance",
+        strength:   "shifting this toward strength",
+        power:      "shifting toward power",
+        hypertrophy:"pushing into hypertrophy",
+        athletic:   "keeping this athletic",
       };
-      return `Got it — ${labels[d.biasTarget ?? "athletic"] ?? "shifting your training emphasis"}.`;
+      return `Got it — ${labels[d.biasTarget ?? "athletic"] ?? "shifting the emphasis"}.`;
     },
     move: (d) => {
       const moves: Record<string, string> = {
-        endurance: "I'm tightening rest periods, increasing density, and adding higher-rep support work while keeping enough strength work to maintain output.",
-        strength: "I'm pulling primary lifts into a lower rep range, extending rest to support heavier loading, and trimming conditioning volume to reduce interference.",
-        power: "I'm adding explosive openers and reducing some accessory volume so you can produce higher output each session.",
-        hypertrophy: "I'm adding accessory volume and moving rep ranges into the muscle-building zone while keeping rest moderate for metabolic stimulus.",
-        athletic: "I'm adding explosive openers and conditioning support while keeping the primary compound work that builds the foundation.",
+        endurance:  "Tightening rest and increasing work density while keeping core strength work.",
+        strength:   "Pulling rep ranges down, extending rest, and trimming conditioning to reduce interference.",
+        power:      "Adding explosive openers and trimming fatigue-heavy work.",
+        hypertrophy:"Adding accessory volume and shifting rep ranges into the muscle-building zone.",
+        athletic:   "Adding explosive openers and conditioning support while keeping primary compound work.",
       };
-      return moves[d.biasTarget ?? "athletic"] ?? "I'm adjusting training emphasis across the program.";
+      return moves[d.biasTarget ?? "athletic"] ?? "Shifting the training emphasis across the program.";
     },
-    outcome: (d) => {
-      const outcomes: Record<string, string> = {
-        endurance: "This will improve your work capacity without sacrificing performance.",
-        strength: "This will drive maximal strength adaptation without the interference of conditioning volume.",
-        power: "This will improve speed and force production without excess fatigue.",
-        hypertrophy: "This will increase muscle-building stimulus while maintaining movement quality.",
-        athletic: "This will improve explosive output and conditioning carryover to sport.",
+    reason: (d) => {
+      const reasons: Record<string, string> = {
+        endurance:  "Builds work capacity without losing output.",
+        strength:   "Drives maximal strength adaptation without conditioning interference.",
+        power:      "Improves output without killing speed.",
+        hypertrophy:"Increases muscle-building stimulus without losing movement quality.",
+        athletic:   "Improves explosive output and conditioning carryover to sport.",
       };
-      return outcomes[d.biasTarget ?? "athletic"] ?? "This will shift your training toward the requested emphasis.";
+      return reasons[d.biasTarget ?? "athletic"] ?? "Shifts training toward the requested emphasis.";
     },
   },
 
   PAIN_ADJUSTMENT: {
     acknowledge: (d) => {
       const part = String(d.logContext.bodyPart ?? "the affected area");
-      return `Understood — taking stress off your ${part}.`;
+      return `Understood — taking stress off the ${part}.`;
     },
-    move: () => "I'm replacing aggravating movements with joint-friendly alternatives while keeping the same movement patterns and training intent.",
-    outcome: () => "This keeps progress moving without aggravating the issue.",
+    move: () => "Swapping aggravating movements while preserving training intent.",
+    reason: () => "Keeps progress moving without flare-ups.",
   },
 
   READINESS_ADJUSTMENT: {
-    acknowledge: () => "Got it — today is a managed session, not a max-effort day.",
-    move: () => "I'm reducing volume and trimming accessory work. Primary compound movements stay — at a reduced intensity that keeps quality high.",
-    outcome: () => "This keeps you training without digging a deeper fatigue hole.",
+    acknowledge: () => "Got it — managing today's session.",
+    move: () => "Reducing volume and trimming accessories. Primary compound work stays at reduced intensity.",
+    reason: () => "Keeps you training without digging a deeper fatigue hole.",
   },
 
   RECOVERY_SHIFT: {
     acknowledge: (d) => {
       const region = String(d.logContext.region ?? "overall");
-      const regionLabel = region === "lower_body" ? "lower body" : region === "upper_body" ? "upper body" : "overall";
-      return `Got it — pulling stress off your ${regionLabel}.`;
+      const label = region === "lower_body" ? "lower body" : region === "upper_body" ? "upper body" : "overall load";
+      return `Got it — pulling stress off your ${label}.`;
     },
     move: (d) => {
       const region = String(d.logContext.region ?? "overall");
-      if (region === "lower_body") {
-        return "I'm reducing lower-body loading and keeping upper work intact so you can still train without digging a deeper fatigue hole.";
-      }
-      if (region === "upper_body") {
-        return "I'm pulling back upper-body accessory volume and keeping lower work intact.";
-      }
-      return "I'm reducing overall accessory load and trimming the highest-demand work to support recovery.";
+      if (region === "lower_body") return "Reducing lower-body load and keeping upper work in place.";
+      if (region === "upper_body") return "Pulling back upper-body volume and keeping lower work intact.";
+      return "Reducing accessory load and trimming the highest-demand work.";
     },
-    outcome: () => "This will help you recover while maintaining training consistency.",
+    reason: () => "Helps recovery without breaking consistency.",
   },
 
   TIME_COMPRESSION: {
     acknowledge: (d) => {
       const mins = d.logContext.duration;
-      return mins ? `Got it — compressing this to ${mins} minutes.` : "Got it — compressing this session.";
+      return mins ? `Got it — tightening this to ${mins} minutes.` : "Got it — tightening the session.";
     },
-    move: () => "I'm trimming lower-priority accessory work and tightening rest periods while keeping the main lifts in place.",
-    outcome: () => "This keeps the session effective without wasting time.",
+    move: () => "Cutting low-priority work and compressing rest while keeping main lifts.",
+    reason: () => "Keeps it effective without wasting time.",
   },
 
   EQUIPMENT_ADJUSTMENT: {
     acknowledge: () => "Got it — adapting to your equipment.",
-    move: () => "I'm substituting barbell movements for dumbbell equivalents that hit the same patterns and maintain the same session intent.",
-    outcome: () => "This preserves the training effect with what you have available.",
+    move: () => "Swapping barbell movements for dumbbell equivalents that hit the same patterns.",
+    reason: () => "Preserves the training effect with what you have available.",
   },
 
   SEASON_SHIFT: {
@@ -1211,15 +1210,15 @@ const INTENT_VOICE: Partial<Record<SpecialistIntentType, IntentVoice>> = {
     },
     move: (d) => {
       const phase = String(d.logContext.phaseLabel ?? "");
-      if (phase.includes("in-season")) return "I'm reducing non-essential volume and maintaining intensity to keep you sharp for competition.";
-      if (phase.includes("pre-season")) return "I'm increasing conditioning support and maintaining strength work to ramp up for the start of the season.";
-      return "I'm restructuring the program emphasis to match the current training phase.";
+      if (phase.includes("in-season"))  return "Reducing non-essential volume and keeping intensity high.";
+      if (phase.includes("pre-season")) return "Increasing conditioning support while keeping strength work intact.";
+      return "Restructuring emphasis to match the current training phase.";
     },
-    outcome: (d) => {
+    reason: (d) => {
       const phase = String(d.logContext.phaseLabel ?? "");
-      if (phase.includes("in-season")) return "This will keep your output high without building unnecessary fatigue during the competitive period.";
-      if (phase.includes("pre-season")) return "This will bring your conditioning and performance to a peak ahead of the season.";
-      return "This aligns your training with where you are in the year.";
+      if (phase.includes("in-season"))  return "Keeps output high without accumulating unnecessary fatigue.";
+      if (phase.includes("pre-season")) return "Brings conditioning and performance to a peak ahead of the season.";
+      return "Aligns training with where you are in the year.";
     },
   },
 
@@ -1228,117 +1227,125 @@ const INTENT_VOICE: Partial<Record<SpecialistIntentType, IntentVoice>> = {
       const sport = String(d.logContext.sport ?? "your sport");
       return `Got it — orienting this toward ${sport}.`;
     },
-    move: () => "I'm adding explosive openers and conditioning support that transfers to your sport's demands. Primary compound work stays — it's the foundation.",
-    outcome: () => "This will build the physical qualities that carry over most to your game.",
+    move: () => "Adding explosive openers and conditioning support while keeping primary compound work.",
+    reason: () => "Builds the physical qualities that carry over most to the game.",
   },
 
   SPLIT_CHANGE: {
     acknowledge: () => "Got it — restructuring the training frequency.",
-    move: () => "I'm redistributing your primary compound work across the new day structure while keeping total volume approximately the same.",
-    outcome: () => "This gives you a different training rhythm without losing the program's core intent.",
+    move: () => "Redistributing primary compound work across the new day structure. Total volume stays the same.",
+    reason: () => "Different rhythm without losing the program's core intent.",
   },
 
   VOLUME_CHANGE: {
-    acknowledge: (d) => {
-      return d.logContext.direction === "reduce"
-        ? "Got it — pulling total volume back."
-        : "Got it — adding volume.";
-    },
-    move: (d) => {
-      return d.logContext.direction === "reduce"
-        ? "I'm removing lowest-priority accessories and trimming remaining accessory set counts. Primary compound work is untouched."
-        : "I'm expanding accessory sets and adding additional work to appropriate sessions. Primary structure unchanged.";
-    },
-    outcome: (d) => {
-      return d.logContext.direction === "reduce"
-        ? "This will reduce overall training stress while keeping the core program intact."
-        : "This will increase weekly volume and stimulus for continued adaptation.";
-    },
+    acknowledge: (d) => d.logContext.direction === "reduce"
+      ? "Got it — pulling total volume back."
+      : "Got it — adding volume.",
+    move: (d) => d.logContext.direction === "reduce"
+      ? "Removing lowest-priority accessories and trimming remaining set counts. Primary lifts untouched."
+      : "Expanding accessory sets and adding work to appropriate sessions. Primary structure unchanged.",
+    reason: (d) => d.logContext.direction === "reduce"
+      ? "Reduces training stress while keeping the core program intact."
+      : "Increases weekly stimulus for continued adaptation.",
   },
 
   INTENSITY_CHANGE: {
-    acknowledge: (d) => {
-      return d.logContext.direction === "increase"
-        ? "Got it — pushing intensity."
-        : "Got it — dialing intensity back.";
-    },
-    move: (d) => {
-      return d.logContext.direction === "increase"
-        ? "I'm moving primary lifts into a lower rep range and extending rest to support heavier loading."
-        : "I'm shifting rep ranges to a technical quality focus and reducing effort expectations.";
-    },
-    outcome: (d) => {
-      return d.logContext.direction === "increase"
-        ? "This will drive a stronger strength stimulus without excess volume."
-        : "This keeps you training productively without pushing into a fatigue hole.";
-    },
+    acknowledge: (d) => d.logContext.direction === "increase"
+      ? "Got it — pushing intensity."
+      : "Got it — dialing intensity back.",
+    move: (d) => d.logContext.direction === "increase"
+      ? "Pulling rep ranges down and extending rest on primary lifts."
+      : "Shifting rep ranges toward technical quality and reducing effort expectations.",
+    reason: (d) => d.logContext.direction === "increase"
+      ? "Drives a stronger strength stimulus without excess volume."
+      : "Keeps you training productively without pushing into a fatigue hole.",
   },
 
   EXERCISE_SWAP: {
     acknowledge: () => "Got it — making the swap.",
-    move: () => "I'm replacing the exercise while preserving the movement pattern, session role, and sets/reps prescription.",
-    outcome: () => "This keeps the program's structure and intent intact.",
+    move: () => "Replacing the exercise while preserving movement pattern, role, and sets/reps.",
+    reason: () => "Keeps the program's structure and intent intact.",
   },
 };
 
-// ─── Secondary Intent Addendum Lines ─────────────────────────────────────────
+// ─── Multi-intent: combined acknowledge + move ────────────────────────────────
 
-function buildSecondaryAddendum(secondaries: SpecialistIntentType[], metadata: Record<string, unknown>): string {
-  if (secondaries.length === 0) return "";
+function buildMultiAcknowledge(primary: string, secondaries: SpecialistIntentType[], metadata: Record<string, unknown>): string | null {
+  if (secondaries.length === 0) return null;
 
-  const lines: string[] = [];
-  for (const secondary of secondaries.slice(0, 2)) {
-    switch (secondary) {
-      case "TIME_COMPRESSION":
-        lines.push("tightening rest periods and trimming accessories to fit the time constraint");
+  const tags: string[] = [];
+  for (const s of secondaries.slice(0, 1)) {
+    switch (s) {
+      case "TIME_COMPRESSION": {
+        const mins = metadata.duration;
+        tags.push(mins ? `tightening to ${mins} minutes` : "tightening the session");
         break;
+      }
       case "PAIN_ADJUSTMENT":
-        lines.push(`removing load on the ${String(metadata.bodyPart ?? "affected area")}`);
+        tags.push(`taking stress off the ${String(metadata.bodyPart ?? "affected area")}`);
         break;
       case "RECOVERY_SHIFT":
-        lines.push("further reducing volume to support recovery");
-        break;
-      case "EQUIPMENT_ADJUSTMENT":
-        lines.push("substituting barbell movements for dumbbell equivalents");
+        tags.push("managing recovery");
         break;
       case "VOLUME_CHANGE":
-        lines.push("trimming total volume");
+        tags.push("trimming volume");
+        break;
+      case "EQUIPMENT_ADJUSTMENT":
+        tags.push("adapting to equipment");
         break;
     }
   }
 
-  return lines.length > 0 ? `, then ${lines.join(", ")}` : "";
+  if (tags.length === 0) return null;
+  return `Got it — ${primary} and ${tags.join(", ")}.`;
+}
+
+function buildSecondaryMoveClause(secondaries: SpecialistIntentType[], metadata: Record<string, unknown>): string {
+  if (secondaries.length === 0) return "";
+  const clauses: string[] = [];
+  for (const s of secondaries.slice(0, 1)) {
+    switch (s) {
+      case "TIME_COMPRESSION": clauses.push("then trimming accessories to fit the time"); break;
+      case "PAIN_ADJUSTMENT":  clauses.push(`then removing load on the ${String(metadata.bodyPart ?? "affected area")}`); break;
+      case "RECOVERY_SHIFT":   clauses.push("then further reducing load to support recovery"); break;
+      case "VOLUME_CHANGE":    clauses.push("then trimming total volume"); break;
+      case "EQUIPMENT_ADJUSTMENT": clauses.push("then substituting barbell movements for dumbbell equivalents"); break;
+    }
+  }
+  return clauses.length > 0 ? `, ${clauses.join(", ")}` : "";
 }
 
 export function buildSpecialistResponse(decision: SpecialistDecision): string {
   const { primaryIntent, secondaryIntents, requiresClarification, clarificationPrompt } = decision;
 
-  // Escalation case — ambiguous request
   if (requiresClarification || primaryIntent === "AMBIGUOUS") {
-    return clarificationPrompt ?? "Got it — what direction do you want to push it: more strength, more endurance, more explosive, or lower overall fatigue?";
+    return clarificationPrompt ?? "What direction do you want to push it — more strength, more endurance, more explosive, or lower overall fatigue?";
   }
 
   const voice = INTENT_VOICE[primaryIntent];
 
-  // Fallback for any intent type not explicitly voiced
   if (!voice) {
-    return `Got it — applying the requested change.\n\nI'm adjusting the program based on your direction. Primary structure preserved.\n\n${CONFIRM_LINE}`;
+    return `Got it — adjustment applied.\n\nKeeping primary structure intact.\n\nUpdated — check your program.`;
   }
 
-  const acknowledge = voice.acknowledge(decision);
-  const hasSecondary = secondaryIntents.length > 0;
+  const primaryAcknowledgeCore = voice.acknowledge(decision)
+    .replace(/^Got it — /, "")
+    .replace(/^Understood — /, "")
+    .replace(/\.$/, "");
 
-  // Build the "I'm [move]" line, incorporating secondary intent if present
-  let moveStatement = voice.move(decision);
-  if (hasSecondary && secondaryIntents[0]) {
-    const addendum = buildSecondaryAddendum(secondaryIntents, decision.logContext);
-    if (addendum) {
-      // Replace trailing period with addendum
-      moveStatement = moveStatement.replace(/\.$/, "") + addendum + ".";
-    }
-  }
+  // Line 1: combined acknowledge if multi-intent, otherwise standard
+  const multiAck = buildMultiAcknowledge(primaryAcknowledgeCore, secondaryIntents, decision.logContext);
+  const line1 = multiAck ?? voice.acknowledge(decision);
 
-  const outcome = voice.outcome(decision);
+  // Line 2: primary move + secondary clause
+  const primaryMove = voice.move(decision);
+  const secondaryClause = buildSecondaryMoveClause(secondaryIntents, decision.logContext);
+  const line2 = secondaryClause
+    ? primaryMove.replace(/\.$/, "") + secondaryClause + "."
+    : primaryMove;
 
-  return `${acknowledge}\n\n${moveStatement}\n\n${outcome}\n\n${CONFIRM_LINE}`;
+  // Line 3: reason
+  const line3 = voice.reason(decision);
+
+  return `${line1}\n\n${line2}\n\n${line3}\n\n${CONFIRM_LINE}`;
 }
