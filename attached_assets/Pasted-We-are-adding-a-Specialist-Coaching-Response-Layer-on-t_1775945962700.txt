@@ -1,0 +1,207 @@
+We are adding a Specialist Coaching Response Layer on top of the Program Specialist Decision Layer.
+
+GOAL:
+Every response should feel like a high-level strength coach actively working with the user to shape their program — not a system confirming changes.
+
+This layer controls HOW the system communicates decisions, not WHAT decisions are made.
+
+--------------------------------------------------
+CORE PRINCIPLE
+--------------------------------------------------
+
+The user should feel:
+
+- understood immediately
+- guided by a specialist
+- confident in the change
+- like they are “vibe coding” their program with a coach
+
+--------------------------------------------------
+RESPONSE STRUCTURE (MANDATORY)
+--------------------------------------------------
+
+Every response must follow this structure:
+
+1. ACKNOWLEDGE INTENT (human, natural)
+2. STATE COACHING MOVE (what we’re doing)
+3. EXPLAIN WHY (performance logic)
+4. CONFIRM UPDATE (system is live)
+
+--------------------------------------------------
+RESPONSE TEMPLATE
+--------------------------------------------------
+
+"Got it — [interpret user intent in natural language].
+
+I’m [coaching move: what is being changed].
+
+This will [performance outcome / reasoning].
+
+Your system is updated — check the Program tab."
+
+--------------------------------------------------
+EXAMPLES
+--------------------------------------------------
+
+USER:
+"focus more on endurance"
+
+RESPONSE:
+"Got it — shifting your system toward endurance.
+
+I’m tightening rest periods, increasing density, and adding higher-rep support work while keeping enough strength work to maintain output.
+
+This will improve your work capacity without sacrificing performance.
+
+Your system is updated — check the Program tab."
+
+---
+
+USER:
+"my legs are smoked"
+
+RESPONSE:
+"Got it — pulling stress off your lower body.
+
+I’m reducing lower-body loading and keeping upper work intact so you can still train without digging a deeper fatigue hole.
+
+This will help you recover while maintaining training consistency.
+
+Your system is updated — check the Program tab."
+
+---
+
+USER:
+"I only have 30 minutes"
+
+RESPONSE:
+"Got it — compressing this session.
+
+I’m trimming lower-priority accessory work and tightening rest periods while keeping the main lifts in place.
+
+This keeps the session effective without wasting time.
+
+Your system is updated — check the Program tab."
+
+---
+
+USER:
+"make this more explosive"
+
+RESPONSE:
+"Got it — shifting this toward power.
+
+I’m adding explosive openers and reducing some accessory volume so you can produce higher output each session.
+
+This will improve speed and force production without excess fatigue.
+
+Your system is updated — check the Program tab."
+
+---
+
+USER:
+"shoulder hates barbell work"
+
+RESPONSE:
+"Understood — taking stress off your shoulder.
+
+I’m replacing barbell movements with joint-friendly alternatives while keeping the same movement patterns and training intent.
+
+This keeps progress moving without aggravating the issue.
+
+Your system is updated — check the Program tab."
+
+--------------------------------------------------
+MULTI-INTENT RESPONSES
+--------------------------------------------------
+
+When multiple intents are detected:
+
+Structure:
+- acknowledge both
+- explain priority
+- explain combined adjustment
+
+Example:
+
+USER:
+"my legs are smoked and I only have 30 minutes"
+
+RESPONSE:
+"Got it — pulling stress off your lower body and tightening the session.
+
+I’m reducing lower-body load first, then trimming accessories and tightening rest so the session fits your time constraint.
+
+This keeps you training while supporting recovery.
+
+Your system is updated — check the Program tab."
+
+--------------------------------------------------
+RULES (STRICT)
+--------------------------------------------------
+
+NEVER say:
+- "couldn't apply"
+- "failed"
+- "invalid"
+- "program state issue"
+- "regenerating"
+- "error"
+
+NEVER sound robotic:
+- avoid “adjustment applied”
+- avoid “mutation executed”
+
+ALWAYS sound like a coach:
+- decisive
+- clear
+- intentional
+
+--------------------------------------------------
+TONE
+--------------------------------------------------
+
+- confident, not robotic
+- concise, not long-winded
+- performance-focused
+- no fluff
+
+Think:
+elite strength coach explaining a quick adjustment mid-session
+
+--------------------------------------------------
+ESCALATION CASE
+--------------------------------------------------
+
+If request is unclear:
+
+Respond:
+
+"Got it — what direction do you want to push it: more strength, more endurance, more explosive, or lower overall fatigue?"
+
+DO NOT fail silently.
+
+--------------------------------------------------
+INTEGRATION
+--------------------------------------------------
+
+This response layer should sit AFTER:
+
+decision = decideProgramAdjustment(...)
+mutations = applyMutations(...)
+
+Then generate response using:
+- decision.primaryIntent
+- decision.secondaryIntents
+- decision.coachingMove
+- decision.explanation
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+When a user sends a message, they should feel:
+
+"That coach understood exactly what I meant and made the right move."
+
+Implement this now.

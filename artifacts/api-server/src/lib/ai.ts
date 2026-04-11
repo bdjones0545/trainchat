@@ -17,7 +17,7 @@ import {
   type ExerciseFilter,
 } from "./training-intelligence";
 import { type IntentResult, buildIntentPromptHint, type ExtractedConstraints, buildConstraintContract } from "./intent";
-import { decideProgramAdjustment, applySpecialistMutations, buildSpecialistChangeSummary } from "./program-specialist";
+import { decideProgramAdjustment, applySpecialistMutations, buildSpecialistChangeSummary, buildSpecialistResponse } from "./program-specialist";
 import { type ActionDecision, buildPreservationContext } from "./decision";
 import {
   type ResponseMode,
@@ -1653,19 +1653,20 @@ function generateFallbackResponse(
     if (!specialistDecision.requiresClarification && specialistDecision.primaryIntent !== "AMBIGUOUS" && specialistDecision.mutations.length > 0) {
       const mutatedProgram = applySpecialistMutations(currentProgram, specialistDecision);
       const changeSummary = buildSpecialistChangeSummary(specialistDecision);
+      const responseText = buildSpecialistResponse(specialistDecision);
       logger.info(
         { primaryIntent: specialistDecision.primaryIntent, secondaryIntents: specialistDecision.secondaryIntents, changeCount: changeSummary.length },
         "[ProgramSpecialist] Decision applied — returning specialist response"
       );
       return {
-        content: specialistDecision.explanation,
+        content: responseText,
         structuredData: mutatedProgram,
         changeSummary,
       };
     }
     if (specialistDecision.requiresClarification) {
       return {
-        content: specialistDecision.clarificationPrompt ?? specialistDecision.explanation,
+        content: buildSpecialistResponse(specialistDecision),
         structuredData: null,
       };
     }
@@ -1679,21 +1680,21 @@ function generateFallbackResponse(
     const mutated = applyFallbackMutation(currentProgram, activeEditIntent.editType, lower, profile);
     if (mutated) {
       const confirmations: Record<string, string> = {
-        add_core: "Added core work across the program. Core exercises are placed at the end of appropriate sessions to preserve NSCA exercise order and avoid competing with primary lifts. Updated structure is in the right panel.",
-        add_hamstrings: "Added hamstring-focused accessory work to lower body days. Placed after primary hinge movements to maintain NSCA order. Updated structure is in the right panel.",
-        add_calves: "Added calf work to lower body sessions as end-of-session accessories. Updated structure is in the right panel.",
-        swap_exercise: "Exercise swap applied. Movement pattern and NSCA classification preserved. Updated structure is in the right panel.",
-        remove_exercise: "Exercise removed. Remaining structure is intact. Updated structure is in the right panel.",
-        shorten_sessions: "Lowest-priority accessory work trimmed to shorten sessions. Primary compound structure preserved. Updated structure is in the right panel.",
-        make_more_athletic: "Added explosive work to session openings and enhanced conditioning integration. Updated structure is in the right panel.",
-        reduce_fatigue: "Reduced accessory volume on high-demand days. Primary compound work preserved. Updated structure is in the right panel.",
-        injury_modification: "Removed exercises that conflict with the stated limitation and replaced where needed. Updated structure is in the right panel.",
-        structural_edit: "Converted the program to the new structure while preserving your main compound lifts and overall training volume. The updated plan is in the right panel.",
-        general_modification: "Modification applied. Updated structure is in the right panel.",
-        endurance_bias: "Got it — shifting your system toward endurance.\n\nRep ranges pushed higher on primary and secondary compound work to build work capacity. Rest intervals tightened to increase density. Conditioning finishers added to each session.\n\nUpdated program is in the right panel.",
-        strength_bias: "Got it — shifting your system toward strength.\n\nPrimary lifts moved into a lower rep range with extended rest to support heavier loading. An extra set added to primary movements for volume at intensity. Conditioning trimmed to reduce interference with strength adaptation.\n\nUpdated program is in the right panel.",
-        power_bias: "Got it — shifting your system toward power.\n\nExplosive work added to the start of sessions before fatigue accumulates. Trailing accessory trimmed to keep session length controlled.\n\nUpdated program is in the right panel.",
-        reduce_volume: "Got it — volume reduced.\n\nLowest-priority accessory work removed from each session. Remaining accessory sets trimmed. Primary compound structure is untouched.\n\nUpdated program is in the right panel.",
+        add_core: "Got it — adding core work.\n\nI'm placing trunk exercises at the end of appropriate sessions to keep them out of competition with primary lifts.\n\nThis builds anti-extension and anti-rotation strength that transfers to every compound movement.\n\nYour system is updated — check the Program tab.",
+        add_hamstrings: "Got it — adding hamstring work.\n\nI'm placing hamstring-focused accessory work after primary hinge movements on lower body days.\n\nThis addresses a common gap in posterior chain development without disrupting session flow.\n\nYour system is updated — check the Program tab.",
+        add_calves: "Got it — adding calf work.\n\nI'm adding calf raises to the end of lower body sessions as accessories.\n\nConsistent calf work builds the foundation for better force transfer through the ankle.\n\nYour system is updated — check the Program tab.",
+        swap_exercise: "Got it — making the swap.\n\nI'm replacing the exercise while preserving the movement pattern, session role, and sets/reps prescription.\n\nThis keeps the program's structure and intent intact.\n\nYour system is updated — check the Program tab.",
+        remove_exercise: "Got it — removing it.\n\nI'm cutting the exercise from the program. The surrounding structure stays intact.\n\nYour system is updated — check the Program tab.",
+        shorten_sessions: "Got it — compressing this session.\n\nI'm trimming lower-priority accessory work while keeping the main lifts in place.\n\nThis keeps the session effective without wasting time.\n\nYour system is updated — check the Program tab.",
+        make_more_athletic: "Got it — adding athletic emphasis.\n\nI'm adding explosive openers and enhancing conditioning integration. Primary compound work stays — it's the foundation.\n\nThis will improve speed, force production, and conditioning carryover to sport.\n\nYour system is updated — check the Program tab.",
+        reduce_fatigue: "Got it — pulling fatigue back.\n\nI'm reducing accessory volume on high-demand days. Primary compound work is untouched.\n\nThis will let you recover better between sessions without losing training stimulus.\n\nYour system is updated — check the Program tab.",
+        injury_modification: "Understood — taking stress off the affected area.\n\nI'm removing exercises that load the limitation and replacing where possible. The rest of the structure stays intact.\n\nThis keeps progress moving without aggravating the issue.\n\nYour system is updated — check the Program tab.",
+        structural_edit: "Got it — restructuring the program.\n\nI'm preserving your main compound lifts and redistributing total volume across the new structure.\n\nThis gives you a different training rhythm without losing the program's core intent.\n\nYour system is updated — check the Program tab.",
+        general_modification: "Got it — adjustment applied.\n\nI'm keeping the primary structure intact and making the requested change.\n\nYour system is updated — check the Program tab.",
+        endurance_bias: "Got it — shifting your system toward endurance.\n\nI'm tightening rest periods, increasing density, and adding higher-rep support work while keeping enough strength work to maintain output.\n\nThis will improve your work capacity without sacrificing performance.\n\nYour system is updated — check the Program tab.",
+        strength_bias: "Got it — shifting your system toward strength.\n\nI'm pulling primary lifts into a lower rep range, extending rest to support heavier loading, and trimming conditioning volume to reduce interference.\n\nThis will drive maximal strength adaptation without interference.\n\nYour system is updated — check the Program tab.",
+        power_bias: "Got it — shifting this toward power.\n\nI'm adding explosive openers and reducing some accessory volume so you can produce higher output each session.\n\nThis will improve speed and force production without excess fatigue.\n\nYour system is updated — check the Program tab.",
+        reduce_volume: "Got it — pulling total volume back.\n\nI'm removing lowest-priority accessories and trimming remaining accessory set counts. Primary compound work is untouched.\n\nThis will reduce overall training stress while keeping the core program intact.\n\nYour system is updated — check the Program tab.",
       };
       return {
         content: confirmations[activeEditIntent.editType] ?? "Modification applied. Updated structure is in the right panel.",
