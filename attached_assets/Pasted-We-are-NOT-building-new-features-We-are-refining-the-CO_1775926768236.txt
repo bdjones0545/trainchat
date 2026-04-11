@@ -1,0 +1,111 @@
+We are NOT building new features.
+
+We are refining the CORE LOOP of TrainChat until it feels instant, real, and impressive.
+
+## CORE LOOP (THIS MUST BE PERFECT)
+
+User sends message →
+AI responds →
+Structured changes returned →
+Program updates →
+UI re-renders →
+Change log updates
+
+This entire loop must feel:
+- fast
+- visible
+- structured
+- reliable
+
+## TASKS
+
+### 1. ENSURE EVERY TRAINING MESSAGE RETURNS STRUCTURED JSON
+
+- No exceptions
+- Always include changes array
+- Always include changeLogEntries
+
+If no real change:
+- return empty changes array
+- still return explanation
+
+### 2. MAKE PROGRAM UPDATES IMMEDIATE
+
+- Apply updates as soon as response is received
+- Do NOT delay rendering
+- Optimistically update if possible
+
+### 3. VISUALLY HIGHLIGHT WHAT CHANGED
+
+When program updates:
+- briefly highlight changed elements
+- animate updated sections (subtle)
+- show visual feedback (not just static refresh)
+
+Example:
+- new exercise fades in
+- modified set/reps briefly glow
+- updated duration flashes lightly
+
+### 4. MAKE CHANGE LOG FEEL ALIVE
+
+- Append changes instantly
+- Scroll to newest change
+- Show version increment
+- Timestamp each change
+
+### 5. IMPROVE ERROR HANDLING
+
+If JSON parsing fails:
+- do NOT break UI
+- fallback to safe state
+- log error
+- show message: “Updating program…”
+
+### 6. GUARANTEE STATE CONSISTENCY
+
+- program state must always match what is rendered
+- no desync between chat and program
+- no stale UI
+
+### 7. TEST CORE SCENARIOS
+
+Manually test:
+
+INPUTS:
+- “Build me a 3 day program”
+- “Make this 4 days”
+- “Add more leg work”
+- “Make this 45 minutes”
+- “Swap squats for something easier”
+
+VERIFY:
+- program updates correctly
+- change log updates
+- UI reflects changes instantly
+
+### 8. REMOVE ANY FRICTION
+
+- no unnecessary loading states
+- no dead screens
+- no empty program feel
+- no confusing transitions
+
+## PRODUCT RULE
+
+Do NOT add:
+- new tabs
+- new features
+- new systems
+
+UNTIL:
+This loop feels smooth, fast, and impressive.
+
+## SUCCESS CRITERIA
+
+A user should feel:
+“I type → it builds instantly → I see exactly what changed”
+
+That is the product.
+
+Perfect this.
