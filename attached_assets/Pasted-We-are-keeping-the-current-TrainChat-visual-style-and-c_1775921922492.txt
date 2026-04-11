@@ -1,0 +1,206 @@
+We are keeping the current TrainChat visual style and core direction, but we need to evolve the UX so it feels like a training builder operating system, not just an AI chat screen with menus.
+
+## Core Product Direction
+TrainChat should feel like vibe coding for training.
+
+The user is not here just to chat.
+The user is here to:
+- describe a goal
+- have the agent build a live training system
+- see the program update in real time
+- view what changed and why
+- save and continue evolving that system over time
+
+So the UI needs to communicate this clearly:
+- Chat is the input
+- Live Program is the output
+- Changes tab is the proof
+- Saved Programs are memory/history
+
+## Primary UX Goal
+Refactor the current mobile layout into a more powerful builder experience.
+
+Right now the app feels too much like:
+- an AI assistant shell
+- a landing page inside the product
+- a separate “Live Program” area that feels empty until something happens
+
+We want it to feel like:
+- a real training workspace
+- a system being actively built with the user
+- a persistent live program engine
+
+## What To Change
+
+### 1. Turn the home screen into a true builder workspace
+Keep the premium dark design, but stop making the center area feel like a marketing hero section.
+
+Replace the current tone of:
+“What do you want to build?”
+
+With a more tool-like training-builder tone such as:
+- “Build your training system”
+- “Describe your goal and I’ll build it live”
+- “Tell me your goal, schedule, equipment, and limitations. I’ll structure the plan with you.”
+
+The screen should feel like a training console, not a splash screen.
+
+### 2. Create a persistent split between conversation and output
+On mobile, this should still feel like one unified system.
+
+Build the experience so that:
+- the chat composer and AI conversation remain the input layer
+- the live program is always the destination of the conversation
+- each message can trigger visible program updates
+- the user can easily switch between:
+  - Builder
+  - Program
+  - Changes
+  - History
+
+Do not make “Live Program” feel detached from the chat.
+It should feel like the program is being built from the conversation in real time.
+
+### 3. Redesign the “Live Program” panel so it is never empty
+The current empty state (“No program built yet”) feels dead and weak.
+
+Replace it with a structured preview state that teaches the user what TrainChat builds.
+
+Even before a program exists, show a smart placeholder layout like:
+- Weekly Split
+- Today’s Session
+- Exercise Blocks
+- Progression Strategy
+- Modifications / Swaps
+- Agent Change Log
+
+This should look like a skeleton of a real system, not an empty box.
+
+When no program exists, use copy like:
+“Your training system will appear here as you build with the agent.”
+or
+“As you describe your goals, your live program will populate here in real time.”
+
+### 4. Make program-building visually obvious
+After each agent action, the UI should clearly show:
+- what was added
+- what was modified
+- what was removed
+- what changed in today’s plan or weekly split
+
+Add a Changes tab that logs updates in a clean structured way, for example:
+- Added lower-body power block
+- Reduced total workout duration to 45 minutes
+- Swapped barbell squat for goblet squat due to equipment limits
+- Adjusted volume to match recovery/readiness
+- Added acceleration work for athletic development
+
+Each change item should feel like proof that the system is alive.
+
+### 5. Improve the quick action chips
+The current chips are a good start, but they are too generic.
+
+Replace them with more concrete, training-specific quick starts such as:
+- Build a hypertrophy plan
+- Make me a 4-day split
+- Add speed and power work
+- Adjust around knee pain
+- Cut this to 45 minutes
+- Swap for home equipment
+- Build around basketball performance
+- Improve strength without adding bulk
+
+These should immediately communicate intelligence and specificity.
+
+### 6. Rename “Improve Accuracy”
+“Improve Accuracy” sounds too technical and too AI-system focused.
+
+Rename it to something more user-centered, such as one of these:
+- More Personalized
+- Use My Profile
+- Build With More Precision
+- Refine My Plan
+
+Choose the best option based on the UI flow, but make it feel relevant to training, not model tuning.
+
+### 7. Reorganize the menu around the program, not chat
+The side menu currently still feels too chat-app oriented.
+
+Refactor navigation hierarchy to emphasize the training system itself.
+
+Recommended structure:
+- Builder
+- Active Program
+- Saved Programs
+- Check-In
+- Progress / History
+- Settings
+- Upgrade to Pro
+
+De-emphasize generic “New Chat” framing.
+The product should not psychologically feel like a chat history app.
+It should feel like a training operating system with conversations attached to programs.
+
+### 8. Make “Active Program” the primary object
+The user should feel that they own a living program, not a collection of chats.
+
+Across the product, prioritize:
+- current plan
+- today’s workout
+- recent changes
+- progression logic
+- saved systems
+
+Chat history should be secondary to the actual training artifact.
+
+### 9. Improve the first-use experience
+When a user first lands in the builder, help them understand what to do immediately.
+
+The first screen should guide them into action with:
+- a better builder headline
+- quick-start examples
+- visible connection to the live program
+- a smarter empty state
+
+Goal: reduce hesitation and make users instantly feel that the agent is ready to build.
+
+### 10. Keep the premium visual identity
+Do not change the brand feel.
+Keep:
+- dark premium interface
+- blue highlights
+- minimal modern look
+- strong spacing and polished cards
+
+But make the interface feel more alive, more purposeful, and more system-driven.
+
+## UX Outcome We Want
+After this refactor, the app should feel like this:
+
+A user opens TrainChat and immediately understands:
+- this is where I build my training
+- the agent is helping me structure it
+- my live program updates as I talk
+- I can inspect changes and progression
+- this is more than chat — it is my adaptive training system
+
+## Build Instructions
+Please implement this as a UX/UI refactor of the current mobile app without breaking existing functionality.
+
+Prioritize:
+1. Builder workspace redesign
+2. Persistent relationship between chat and live program
+3. Better Live Program empty state
+4. Changes tab with real update logging structure
+5. Better quick action chips
+6. Navigation hierarchy centered on the training system
+7. Improved onboarding feel without adding friction
+
+## Important Product Principle
+Do not make this feel like ChatGPT for fitness.
+Make it feel like:
+the user and the agent are building a real training system together.
+
+That distinction is the product.
+
+Please update the UI/UX accordingly and preserve mobile responsiveness.
