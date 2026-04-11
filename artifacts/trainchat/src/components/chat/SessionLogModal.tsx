@@ -1,6 +1,8 @@
 import { X, CheckCircle, Loader2 } from "lucide-react";
 import { useState } from "react";
 
+type SessionStatus = "completed" | "partial" | "skipped";
+
 interface Props {
   programName?: string;
   dayNumber?: number;
@@ -9,6 +11,7 @@ interface Props {
   onSubmit: (data: {
     savedProgramId?: number;
     dayNumber?: number;
+    sessionStatus?: SessionStatus;
     difficultyScore?: number;
     painScore?: number;
     energyScore?: number;
@@ -83,6 +86,12 @@ function ScoreSelector({
   );
 }
 
+const STATUS_CHIPS: { value: SessionStatus; label: string; emoji: string }[] = [
+  { value: "completed", label: "Completed", emoji: "✅" },
+  { value: "partial",   label: "Partial",   emoji: "⏭️" },
+  { value: "skipped",   label: "Skipped",   emoji: "⏸️" },
+];
+
 export default function SessionLogModal({
   programName,
   dayNumber,
@@ -91,18 +100,22 @@ export default function SessionLogModal({
   onSubmit,
   isSubmitting,
 }: Props) {
+  const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);
   const [difficulty, setDifficulty] = useState<number | null>(null);
   const [pain, setPain] = useState<number | null>(null);
   const [energy, setEnergy] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
 
+  const isSkipped = sessionStatus === "skipped";
+
   function handleSubmit() {
     onSubmit({
       savedProgramId,
       dayNumber,
-      difficultyScore: difficulty ?? undefined,
-      painScore: pain ?? undefined,
-      energyScore: energy ?? undefined,
+      sessionStatus: sessionStatus ?? undefined,
+      difficultyScore: isSkipped ? undefined : (difficulty ?? undefined),
+      painScore: isSkipped ? undefined : (pain ?? undefined),
+      energyScore: isSkipped ? undefined : (energy ?? undefined),
       notes: notes.trim() || undefined,
     });
   }
@@ -137,29 +150,53 @@ export default function SessionLogModal({
           </div>
 
           <div className="space-y-5">
-            <ScoreSelector
-              label="How difficult was it?"
-              value={difficulty}
-              onChange={setDifficulty}
-              getLabel={(v) => DIFFICULTY_LABELS[v]}
-              highlightColor="bg-primary text-primary-foreground border-primary"
-            />
+            {/* Session status */}
+            <div>
+              <span className="block text-xs font-semibold text-foreground mb-2">How did it go?</span>
+              <div className="flex gap-2">
+                {STATUS_CHIPS.map((chip) => {
+                  const selected = sessionStatus === chip.value;
+                  return (
+                    <button
+                      key={chip.value}
+                      onClick={() => setSessionStatus(chip.value)}
+                      className={`flex-1 flex flex-col items-center gap-1 py-2.5 rounded-xl border text-center transition-all text-xs font-semibold ${
+                        selected
+                          ? "bg-primary/15 border-primary/50 text-primary ring-1 ring-primary/30"
+                          : "border-border/60 bg-white/4 text-muted-foreground hover:border-border hover:text-foreground"
+                      }`}
+                    >
+                      <span className="text-base">{chip.emoji}</span>
+                      <span>{chip.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-            <ScoreSelector
-              label="Any pain or discomfort?"
-              value={pain}
-              onChange={setPain}
-              getLabel={(v) => PAIN_LABELS[v]}
-              highlightColor={`${pain && pain >= 4 ? "bg-red-500 text-white border-red-500" : "bg-amber-500 text-white border-amber-500"}`}
-            />
-
-            <ScoreSelector
-              label="Energy level after?"
-              value={energy}
-              onChange={setEnergy}
-              getLabel={(v) => ENERGY_LABELS[v]}
-              highlightColor="bg-green-600 text-white border-green-600"
-            />
+            {!isSkipped && (<>
+              <ScoreSelector
+                label="How difficult was it?"
+                value={difficulty}
+                onChange={setDifficulty}
+                getLabel={(v) => DIFFICULTY_LABELS[v]}
+                highlightColor="bg-primary text-primary-foreground border-primary"
+              />
+              <ScoreSelector
+                label="Any pain or discomfort?"
+                value={pain}
+                onChange={setPain}
+                getLabel={(v) => PAIN_LABELS[v]}
+                highlightColor={`${pain && pain >= 4 ? "bg-red-500 text-white border-red-500" : "bg-amber-500 text-white border-amber-500"}`}
+              />
+              <ScoreSelector
+                label="Energy level after?"
+                value={energy}
+                onChange={setEnergy}
+                getLabel={(v) => ENERGY_LABELS[v]}
+                highlightColor="bg-green-600 text-white border-green-600"
+              />
+            </>)}
 
             <div>
               <label className="block text-xs font-semibold text-foreground mb-2">Notes (optional)</label>

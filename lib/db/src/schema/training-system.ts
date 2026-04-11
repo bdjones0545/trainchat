@@ -228,7 +228,7 @@ export const systemChangeLog = pgTable("system_change_log", {
 
   // Who / what made this change
   source: text("source", {
-    enum: ["ai_edit", "quick_action", "initialize", "restore", "auto_adjust", "proactive_agent"],
+    enum: ["ai_edit", "quick_action", "initialize", "restore", "auto_adjust", "proactive_agent", "workout_feedback"],
   })
     .notNull()
     .default("ai_edit"),

@@ -582,6 +582,7 @@ export default function Chat() {
     try {
       await postSessionLog(data);
       queryClient.invalidateQueries({ queryKey: ["streak"] });
+      queryClient.invalidateQueries({ queryKey: ["insights"] });
       setShowSessionLog(false);
     } catch {
       // silently fail
