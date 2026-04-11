@@ -1,16 +1,18 @@
 /**
- * TrainChat Insights & Proactive Suggestions Service (Phase 5)
+ * TrainChat Proactive Coaching Agent — Insights & Signal Detection
  *
- * Generates intelligent, coach-like proactive suggestions based on:
- * - recent readiness trends
+ * Generates intelligent, coach-like proactive recommendations by analyzing:
+ * - daily readiness trends
  * - session feedback patterns
+ * - adherence vs planned frequency
  * - long-term memory
- * - adherence signals
  *
- * Suggestions are non-spammy, high-value, and actionable.
+ * Recommendations are non-spammy, high-value, and fully explainable.
+ * Every insight includes a plain-language data rationale ("Show Me Why").
  */
 
 import { db, readinessEntriesTable, sessionFeedbackTable, savedProgramsTable } from "@workspace/db";
+import { trainingSystems } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { type MemoryEntry } from "./memory";
 
@@ -22,6 +24,7 @@ export type InsightType =
   | "pain_warning"
   | "consistency_positive"
   | "schedule_review"
+  | "missed_session_pattern"
   | "sleep_impact"
   | "recovery_strength"
   | "tolerance_building"
@@ -31,8 +34,34 @@ export interface TrainingInsight {
   type: InsightType;
   title: string;
   body: string;
+  /** Plain-language explanation of the data behind this recommendation. */
+  whyExplanation: string;
   priority: number; // 1-5 (5 = most urgent/important)
   triggerSource: string;
+}
+
+/** Full trend summary computed across recent data. Returned by runProactiveCoachingReview. */
+export interface UserTrainingTrendSummary {
+  userId: number;
+  windowDays: number;
+
+  // Readiness averages (1-5 scale)
+  avgReadiness: number;
+  avgSleepQuality: number;
+  avgStress: number;
+  avgSoreness: number;
+  avgMotivation: number;
+  avgPain: number;
+
+  // Session metrics
+  completedSessionCount: number;
+  plannedSessionsPerWeek: number;
+  actualSessionsPerWeek: number;
+  consistencyScore: number; // 0-1 ratio of actual vs planned
+
+  // Signals
+  insights: TrainingInsight[];
+  generatedAt: Date;
 }
 
 // ─── Data helpers ─────────────────────────────────────────────────────────────
@@ -46,62 +75,79 @@ function daysSince(date: Date): number {
   return (Date.now() - date.getTime()) / 86400000;
 }
 
-// ─── Insight generators ───────────────────────────────────────────────────────
+function fmt(n: number, decimals = 1): string {
+  return n.toFixed(decimals);
+}
+
+// ─── Readiness signal detection ───────────────────────────────────────────────
 
 function analyzeReadiness(
-  entries: { sleepScore: number; energyScore: number; sorenessScore: number; stressScore: number; motivationScore: number; painScore: number; createdAt: Date }[]
+  entries: {
+    sleepScore: number;
+    energyScore: number;
+    sorenessScore: number;
+    stressScore: number;
+    motivationScore: number;
+    painScore: number;
+    createdAt: Date;
+  }[]
 ): TrainingInsight[] {
   const insights: TrainingInsight[] = [];
   if (entries.length < 3) return insights;
 
   const recent = entries.slice(0, 5);
+  const n = recent.length;
   const sleepAvg = avg(recent.map((e) => e.sleepScore));
   const energyAvg = avg(recent.map((e) => e.energyScore));
   const sorenessAvg = avg(recent.map((e) => e.sorenessScore));
   const stressAvg = avg(recent.map((e) => e.stressScore));
   const painAvg = avg(recent.map((e) => e.painScore));
   const motivationAvg = avg(recent.map((e) => e.motivationScore));
-
-  // Deload suggestion — multiple poor readiness days
   const composite = (sleepAvg + energyAvg + motivationAvg + (6 - sorenessAvg) + (6 - stressAvg)) / 5;
-  if (composite < 2.6 && recent.length >= 3) {
+
+  // Deload — multiple poor-readiness days
+  if (composite < 2.6 && n >= 3) {
     insights.push({
       type: "deload_suggestion",
       title: "Consider a lighter week",
       body: `You've had several low-readiness check-ins recently. A lighter week — reduced volume, lower intensity — will likely accelerate recovery and set up better training quality next week.`,
+      whyExplanation: `Your last ${n} check-ins averaged ${fmt(composite)}/5 overall readiness (sleep ${fmt(sleepAvg)}, energy ${fmt(energyAvg)}, soreness ${fmt(sorenessAvg)}, stress ${fmt(stressAvg)}). Sustained low readiness is a clear signal to reduce training load.`,
       priority: 4,
       triggerSource: "readiness_trend",
     });
   }
 
-  // Sleep impact warning
-  if (sleepAvg < 2.4 && recent.length >= 3) {
+  // Sleep impact
+  if (sleepAvg < 2.4 && n >= 3) {
     insights.push({
       type: "sleep_impact",
       title: "Sleep quality is affecting your recovery",
       body: `Your recent sleep scores are low. Poor sleep directly limits training adaptation. I'd suggest keeping sessions shorter and less intense until sleep improves.`,
+      whyExplanation: `Your last ${n} check-ins averaged ${fmt(sleepAvg)}/5 for sleep quality. Sleep quality below 2.5/5 significantly reduces hormonal recovery and training adaptation.`,
       priority: 4,
       triggerSource: "sleep_trend",
     });
   }
 
-  // Recovery strength — strong readiness
-  if (composite >= 4.2 && recent.length >= 4) {
+  // Recovery strength — strong readiness window
+  if (composite >= 4.2 && n >= 4) {
     insights.push({
       type: "recovery_strength",
-      title: "You're recovering well",
+      title: "You're recovering well — good window to push",
       body: `Your readiness has been consistently strong. This is a good window to push training quality — your body is primed to adapt.`,
+      whyExplanation: `Your last ${n} check-ins averaged ${fmt(composite)}/5 overall readiness (sleep ${fmt(sleepAvg)}, energy ${fmt(energyAvg)}, motivation ${fmt(motivationAvg)}). Sustained high readiness is the best time to increase training stimulus.`,
       priority: 2,
       triggerSource: "readiness_trend",
     });
   }
 
-  // Pain warning — recurring pain scores
-  if (painAvg >= 3.0 && recent.length >= 3) {
+  // Pain warning
+  if (painAvg >= 3.0 && n >= 3) {
     insights.push({
       type: "pain_warning",
       title: "Recurring discomfort pattern",
       body: `You've reported elevated pain in several check-ins. Worth reviewing which movements may be contributing. I can adjust your program to reduce joint stress.`,
+      whyExplanation: `Your last ${n} check-ins averaged ${fmt(painAvg)}/5 for pain level. Pain scores above 3/5 consistently reported across multiple days suggest a structural issue worth addressing in programming.`,
       priority: 5,
       triggerSource: "pain_trend",
     });
@@ -110,44 +156,59 @@ function analyzeReadiness(
   return insights;
 }
 
+// ─── Session feedback signal detection ────────────────────────────────────────
+
 function analyzeFeedback(
-  entries: { difficultyScore: number; painResponseScore: number; energyResponseScore: number; createdAt: Date }[]
+  entries: {
+    difficultyScore: number;
+    painResponseScore: number;
+    energyResponseScore: number;
+    createdAt: Date;
+  }[]
 ): TrainingInsight[] {
   const insights: TrainingInsight[] = [];
   if (entries.length < 2) return insights;
 
-  const difficultyAvg = avg(entries.map((e) => e.difficultyScore));
+  const n = entries.length;
+  const diffAvg = avg(entries.map((e) => e.difficultyScore));
   const painAvg = avg(entries.map((e) => e.painResponseScore));
   const energyAvg = avg(entries.map((e) => e.energyResponseScore));
 
   // Progression ready
-  if (difficultyAvg <= 2.3 && energyAvg >= 4.0 && entries.length >= 3) {
+  if (diffAvg <= 2.3 && energyAvg >= 4.0 && n >= 3) {
     insights.push({
       type: "progression_ready",
       title: "Ready to progress",
       body: `You've been handling sessions well — feeling strong after training. This is a solid signal to add a small load increment or volume increase next week.`,
+      whyExplanation: `Your last ${n} sessions averaged ${fmt(diffAvg)}/5 difficulty and ${fmt(energyAvg)}/5 post-session energy. Sessions feeling easy with high energy output means your body has adapted and is ready for more.`,
       priority: 3,
       triggerSource: "feedback_tolerance",
     });
   }
 
   // Tolerance building
-  if (difficultyAvg >= 3.5 && difficultyAvg < 4.5 && energyAvg >= 3.0 && entries.length >= 3) {
+  if (diffAvg >= 3.5 && diffAvg < 4.5 && energyAvg >= 3.0 && n >= 3) {
     insights.push({
       type: "tolerance_building",
       title: "Building tolerance well",
       body: `Sessions are appropriately challenging and you're responding well. Current programming is in the right zone — stay the course.`,
+      whyExplanation: `Your last ${n} sessions averaged ${fmt(diffAvg)}/5 difficulty with ${fmt(energyAvg)}/5 post-session energy. A difficulty of 3.5-4.5 with maintained energy is the ideal training zone for adaptation.`,
       priority: 1,
       triggerSource: "feedback_difficulty",
     });
   }
 
   // Struggling
-  if (difficultyAvg >= 4.5 || (painAvg >= 3.5 && entries.length >= 2)) {
+  if (diffAvg >= 4.5 || (painAvg >= 3.5 && n >= 2)) {
+    const reason =
+      diffAvg >= 4.5
+        ? `sessions are averaging ${fmt(diffAvg)}/5 difficulty`
+        : `post-session pain is averaging ${fmt(painAvg)}/5`;
     insights.push({
       type: "deload_suggestion",
       title: "Sessions may be too demanding",
       body: `Your recent feedback suggests sessions are exceeding your current capacity. Pulling back on intensity or volume will help your body keep up with the work.`,
+      whyExplanation: `Your last ${n} sessions show that ${reason}. When training consistently exceeds capacity, recovery suffers and injury risk rises.`,
       priority: 5,
       triggerSource: "feedback_difficulty",
     });
@@ -156,46 +217,67 @@ function analyzeFeedback(
   return insights;
 }
 
+// ─── Adherence / consistency signal detection ─────────────────────────────────
+
 function analyzeAdherence(
   feedback: { createdAt: Date }[],
-  savedPrograms: { createdAt: Date }[]
+  savedPrograms: { createdAt: Date }[],
+  plannedSessionsPerWeek: number | null
 ): TrainingInsight[] {
   const insights: TrainingInsight[] = [];
 
   if (feedback.length >= 4) {
     const earliest = feedback[feedback.length - 1];
-    const latest = feedback[0];
     const daySpan = Math.max(1, daysSince(earliest.createdAt));
-    const sessionsPerWeek = (feedback.length / daySpan) * 7;
+    const actualPerWeek = (feedback.length / daySpan) * 7;
 
-    if (sessionsPerWeek >= 3.5) {
+    if (actualPerWeek >= 3.5) {
       insights.push({
         type: "consistency_positive",
         title: "Strong training consistency",
         body: `You've been showing up consistently. That's the single biggest driver of long-term progress. Keep it up.`,
+        whyExplanation: `You've logged ${feedback.length} sessions over the last ${Math.round(daySpan)} days — that's ${fmt(actualPerWeek)} sessions/week. Consistent training frequency is the highest-leverage variable for long-term adaptation.`,
         priority: 2,
         triggerSource: "adherence_streak",
       });
-    } else if (sessionsPerWeek < 1.8 && daySpan >= 14) {
+    } else if (actualPerWeek < 1.8 && daySpan >= 14) {
       insights.push({
         type: "schedule_review",
         title: "Training frequency is lower than planned",
         body: `Your session log suggests you're training less frequently than your program calls for. A simpler format with fewer required sessions might improve adherence.`,
+        whyExplanation: `Over the last ${Math.round(daySpan)} days you've averaged ${fmt(actualPerWeek)} sessions/week${plannedSessionsPerWeek ? ` — your program targets ${plannedSessionsPerWeek}/week` : ""}. The gap between planned and actual training suggests the current format may not fit your schedule.`,
         priority: 3,
         triggerSource: "adherence_pattern",
       });
     }
+
+    // Missed session pattern — planned vs actual gap
+    if (
+      plannedSessionsPerWeek !== null &&
+      actualPerWeek < plannedSessionsPerWeek * 0.6 &&
+      daySpan >= 10 &&
+      feedback.length >= 2
+    ) {
+      insights.push({
+        type: "missed_session_pattern",
+        title: "Missing sessions regularly",
+        body: `You're completing fewer sessions than your program is designed for. Restructuring your weekly format around your real availability will produce better results than an ambitious-but-incomplete plan.`,
+        whyExplanation: `Your program targets ${plannedSessionsPerWeek} sessions/week. Over the last ${Math.round(daySpan)} days you've averaged ${fmt(actualPerWeek)}/week — ${Math.round((1 - actualPerWeek / plannedSessionsPerWeek) * 100)}% fewer than planned. A sustainable reduced-frequency plan will outperform an ambitious one you can't maintain.`,
+        priority: 4,
+        triggerSource: "adherence_gap",
+      });
+    }
   }
 
-  // Program evolution suggestion — if saved programs exist and newest is old
+  // Program evolution
   if (savedPrograms.length > 0) {
-    const latestProgram = savedPrograms[0];
-    const daysSinceProgram = daysSince(latestProgram.createdAt);
+    const daysSinceProgram = daysSince(savedPrograms[0].createdAt);
     if (daysSinceProgram >= 28) {
       insights.push({
         type: "program_evolution",
         title: "Time to evolve your program",
-        body: `Your current program is about ${Math.round(daysSinceProgram / 7)} weeks old. Most training blocks benefit from a refresh — progressive overload, exercise rotation, or a new phase — around the 4-week mark.`,
+        body: `Your current program is about ${Math.round(daysSinceProgram / 7)} weeks old. Most training blocks benefit from a refresh around the 4-week mark.`,
+        whyExplanation: `Your current program was created ${Math.round(daysSinceProgram)} days ago (${fmt(daysSinceProgram / 7, 0)} weeks). After 4 weeks, the body adapts to the same stimuli and progressive overload requires either exercise rotation, rep/set scheme changes, or a new phase emphasis.`,
         priority: 3,
         triggerSource: "program_age",
       });
@@ -204,6 +286,8 @@ function analyzeAdherence(
 
   return insights;
 }
+
+// ─── Long-term memory signal detection ────────────────────────────────────────
 
 function analyzeMemories(memories: MemoryEntry[]): TrainingInsight[] {
   const insights: TrainingInsight[] = [];
@@ -215,7 +299,8 @@ function analyzeMemories(memories: MemoryEntry[]): TrainingInsight[] {
     insights.push({
       type: "pain_warning",
       title: "Multiple pain patterns on record",
-      body: `You have a history of recurring discomfort in ${highConfidencePain.length} movement areas. I'm actively programming around these. Let me know if any new patterns emerge.`,
+      body: `You have a history of recurring discomfort in ${highConfidencePain.length} movement areas. I'm actively programming around these — let me know if any new patterns emerge.`,
+      whyExplanation: `Your training history shows ${highConfidencePain.length} high-confidence recurring discomfort patterns. These have been extracted from your check-ins and session feedback over time.`,
       priority: 3,
       triggerSource: "memory_pain_patterns",
     });
@@ -226,9 +311,10 @@ function analyzeMemories(memories: MemoryEntry[]): TrainingInsight[] {
   );
   if (adherenceNeg) {
     insights.push({
-      type: "schedule_review",
+      type: "missed_session_pattern",
       title: "Adherence pattern detected",
       body: `Based on your training history, consistency has been a challenge. Shorter, more realistic sessions may help — sustainable beats ambitious-but-incomplete.`,
+      whyExplanation: `Your long-term training history shows a recurring pattern of inconsistent attendance. A reduced-complexity plan with fewer required sessions per week often leads to better total training volume over time.`,
       priority: 3,
       triggerSource: "memory_adherence",
     });
@@ -249,19 +335,19 @@ function deduplicateInsights(insights: TrainingInsight[]): TrainingInsight[] {
       result.push(insight);
     }
   }
-  return result.slice(0, 4); // Cap at 4 insights — avoid overwhelming the user
+  return result.slice(0, 4);
 }
 
-// ─── Main export ──────────────────────────────────────────────────────────────
+// ─── Main entry point ─────────────────────────────────────────────────────────
 
 /**
- * Generate proactive insights for a user based on all available data.
+ * Generate proactive coaching insights for a user based on all available data.
  */
 export async function generateInsights(
   userId: number,
   memories: MemoryEntry[] = []
 ): Promise<TrainingInsight[]> {
-  const [readiness, feedback, programs] = await Promise.all([
+  const [readiness, feedback, programs, activeSystem] = await Promise.all([
     db
       .select()
       .from(readinessEntriesTable)
@@ -280,20 +366,98 @@ export async function generateInsights(
       .where(eq(savedProgramsTable.userId, userId))
       .orderBy(desc(savedProgramsTable.createdAt))
       .limit(5),
+    db
+      .select({ weeklyFrequency: trainingSystems.weeklyFrequency })
+      .from(trainingSystems)
+      .where(eq(trainingSystems.userId, userId))
+      .orderBy(desc(trainingSystems.createdAt))
+      .limit(1)
+      .then((rows) => rows[0] ?? null),
   ]);
 
-  const readinessInsights = analyzeReadiness(readiness);
-  const feedbackInsights = analyzeFeedback(feedback);
-  const adherenceInsights = analyzeAdherence(feedback, programs);
-  const memoryInsights = analyzeMemories(memories);
+  const plannedPerWeek = activeSystem?.weeklyFrequency ?? null;
 
-  const all = [...readinessInsights, ...feedbackInsights, ...adherenceInsights, ...memoryInsights];
+  const all = [
+    ...analyzeReadiness(readiness),
+    ...analyzeFeedback(feedback),
+    ...analyzeAdherence(feedback, programs, plannedPerWeek),
+    ...analyzeMemories(memories),
+  ];
+
   return deduplicateInsights(all);
 }
 
 /**
- * Build a concise prompt line for AI system context.
- * Used to hint the AI about current proactive suggestions without bloating the prompt.
+ * Run a full proactive coaching review and return both insights and a trend summary.
+ * Call this after check-in submission, workout completion, or app open.
+ */
+export async function runProactiveCoachingReview(userId: number, memories: MemoryEntry[] = []): Promise<UserTrainingTrendSummary> {
+  const [readiness, feedback, activeSystem] = await Promise.all([
+    db
+      .select()
+      .from(readinessEntriesTable)
+      .where(eq(readinessEntriesTable.userId, userId))
+      .orderBy(desc(readinessEntriesTable.createdAt))
+      .limit(10),
+    db
+      .select()
+      .from(sessionFeedbackTable)
+      .where(eq(sessionFeedbackTable.userId, userId))
+      .orderBy(desc(sessionFeedbackTable.createdAt))
+      .limit(10),
+    db
+      .select({ weeklyFrequency: trainingSystems.weeklyFrequency })
+      .from(trainingSystems)
+      .where(eq(trainingSystems.userId, userId))
+      .orderBy(desc(trainingSystems.createdAt))
+      .limit(1)
+      .then((rows) => rows[0] ?? null),
+  ]);
+
+  const recentReadiness = readiness.slice(0, 7);
+  const windowDays =
+    recentReadiness.length >= 2
+      ? Math.min(30, daysSince(recentReadiness[recentReadiness.length - 1].createdAt))
+      : 7;
+
+  const avgSleepQuality = avg(recentReadiness.map((e) => e.sleepScore));
+  const avgStress = avg(recentReadiness.map((e) => e.stressScore));
+  const avgSoreness = avg(recentReadiness.map((e) => e.sorenessScore));
+  const avgMotivation = avg(recentReadiness.map((e) => e.motivationScore));
+  const avgPain = avg(recentReadiness.map((e) => e.painScore));
+  const avgReadiness =
+    (avgSleepQuality + avg(recentReadiness.map((e) => e.energyScore)) + avgMotivation + (6 - avgSoreness) + (6 - avgStress)) / 5;
+
+  const plannedPerWeek = activeSystem?.weeklyFrequency ?? 3;
+  const feedbackDaySpan =
+    feedback.length >= 2
+      ? Math.max(1, daysSince(feedback[feedback.length - 1].createdAt))
+      : 7;
+  const actualPerWeek = feedback.length >= 1 ? (feedback.length / feedbackDaySpan) * 7 : 0;
+  const consistencyScore = Math.min(1, actualPerWeek / Math.max(1, plannedPerWeek));
+
+  const insights = await generateInsights(userId, memories);
+
+  return {
+    userId,
+    windowDays,
+    avgReadiness,
+    avgSleepQuality,
+    avgStress,
+    avgSoreness,
+    avgMotivation,
+    avgPain,
+    completedSessionCount: feedback.length,
+    plannedSessionsPerWeek: plannedPerWeek,
+    actualSessionsPerWeek: actualPerWeek,
+    consistencyScore,
+    insights,
+    generatedAt: new Date(),
+  };
+}
+
+/**
+ * Build a concise prompt hint for the AI system context.
  */
 export function buildInsightPromptHint(insights: TrainingInsight[]): string {
   if (insights.length === 0) return "";

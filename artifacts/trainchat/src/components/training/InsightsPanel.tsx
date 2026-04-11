@@ -26,7 +26,10 @@ import {
   Loader2,
   X,
   ChevronRight,
+  ChevronDown,
   Sparkles,
+  HelpCircle,
+  Target,
 } from "lucide-react";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -37,6 +40,7 @@ export type InsightType =
   | "pain_warning"
   | "consistency_positive"
   | "schedule_review"
+  | "missed_session_pattern"
   | "sleep_impact"
   | "recovery_strength"
   | "tolerance_building"
@@ -46,6 +50,8 @@ export interface TrainingInsight {
   type: InsightType;
   title: string;
   body: string;
+  /** Plain-language data rationale shown when user taps "Why?" */
+  whyExplanation?: string;
   priority: number;
   triggerSource: string;
 }
@@ -72,15 +78,16 @@ const INSIGHT_CONFIG: Record<InsightType, {
   badgeColor: string;
   dotColor: string;
 }> = {
-  deload_suggestion:   { icon: TrendingDown, color: "text-amber-500",  badgeColor: "bg-amber-500/10 text-amber-500 border-amber-500/20",  dotColor: "bg-amber-500" },
-  progression_ready:   { icon: TrendingUp,   color: "text-green-500",  badgeColor: "bg-green-500/10 text-green-500 border-green-500/20",  dotColor: "bg-green-500" },
-  pain_warning:        { icon: AlertTriangle, color: "text-red-500",   badgeColor: "bg-red-500/10 text-red-500 border-red-500/20",        dotColor: "bg-red-500" },
-  consistency_positive:{ icon: CheckCircle2, color: "text-green-400",  badgeColor: "bg-green-500/10 text-green-400 border-green-500/20",  dotColor: "bg-green-400" },
-  schedule_review:     { icon: Calendar,     color: "text-blue-400",   badgeColor: "bg-blue-500/10 text-blue-400 border-blue-500/20",     dotColor: "bg-blue-400" },
-  sleep_impact:        { icon: Moon,         color: "text-violet-400", badgeColor: "bg-violet-500/10 text-violet-400 border-violet-500/20",dotColor: "bg-violet-400" },
-  recovery_strength:   { icon: Heart,        color: "text-green-500",  badgeColor: "bg-green-500/10 text-green-500 border-green-500/20",  dotColor: "bg-green-500" },
-  tolerance_building:  { icon: Zap,          color: "text-primary",    badgeColor: "bg-primary/10 text-primary border-primary/20",        dotColor: "bg-primary" },
-  program_evolution:   { icon: RefreshCcw,   color: "text-orange-400", badgeColor: "bg-orange-500/10 text-orange-400 border-orange-500/20",dotColor: "bg-orange-400" },
+  deload_suggestion:    { icon: TrendingDown, color: "text-amber-500",  badgeColor: "bg-amber-500/10 text-amber-500 border-amber-500/20",   dotColor: "bg-amber-500" },
+  progression_ready:    { icon: TrendingUp,   color: "text-green-500",  badgeColor: "bg-green-500/10 text-green-500 border-green-500/20",   dotColor: "bg-green-500" },
+  pain_warning:         { icon: AlertTriangle, color: "text-red-500",   badgeColor: "bg-red-500/10 text-red-500 border-red-500/20",         dotColor: "bg-red-500" },
+  consistency_positive: { icon: CheckCircle2, color: "text-green-400",  badgeColor: "bg-green-500/10 text-green-400 border-green-500/20",   dotColor: "bg-green-400" },
+  schedule_review:      { icon: Calendar,     color: "text-blue-400",   badgeColor: "bg-blue-500/10 text-blue-400 border-blue-500/20",      dotColor: "bg-blue-400" },
+  missed_session_pattern:{ icon: Target,      color: "text-orange-400", badgeColor: "bg-orange-500/10 text-orange-400 border-orange-500/20", dotColor: "bg-orange-400" },
+  sleep_impact:         { icon: Moon,         color: "text-violet-400", badgeColor: "bg-violet-500/10 text-violet-400 border-violet-500/20", dotColor: "bg-violet-400" },
+  recovery_strength:    { icon: Heart,        color: "text-green-500",  badgeColor: "bg-green-500/10 text-green-500 border-green-500/20",   dotColor: "bg-green-500" },
+  tolerance_building:   { icon: Zap,          color: "text-primary",    badgeColor: "bg-primary/10 text-primary border-primary/20",         dotColor: "bg-primary" },
+  program_evolution:    { icon: RefreshCcw,   color: "text-orange-400", badgeColor: "bg-orange-500/10 text-orange-400 border-orange-500/20", dotColor: "bg-orange-400" },
 };
 
 // ─── Apply state per insight ──────────────────────────────────────────────
@@ -101,6 +108,7 @@ interface InsightCardProps {
 function InsightCard({ insight, onDismiss, onApply, onModify, onApplied }: InsightCardProps) {
   const [state, setState] = useState<InsightState>("idle");
   const [summary, setSummary] = useState<string | null>(null);
+  const [showWhy, setShowWhy] = useState(false);
   const config = INSIGHT_CONFIG[insight.type] ?? INSIGHT_CONFIG.tolerance_building;
   const Icon = config.icon;
 
@@ -121,7 +129,7 @@ function InsightCard({ insight, onDismiss, onApply, onModify, onApplied }: Insig
       {/* Card header */}
       <div className="flex items-start gap-3 p-4">
         <div className={`w-9 h-9 rounded-xl ${config.badgeColor} border flex items-center justify-center flex-shrink-0 mt-0.5`}>
-          <Icon className={`w-4.5 h-4.5 ${config.color}`} />
+          <Icon className={`w-4 h-4 ${config.color}`} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start gap-2 mb-1">
@@ -141,6 +149,17 @@ function InsightCard({ insight, onDismiss, onApply, onModify, onApplied }: Insig
           <X className="w-3.5 h-3.5" />
         </button>
       </div>
+
+      {/* "Show Me Why" expansion */}
+      {showWhy && insight.whyExplanation && (
+        <div className="mx-4 mb-3 bg-muted/40 border border-border rounded-lg px-3 py-2.5">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <HelpCircle className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Why am I seeing this?</span>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">{insight.whyExplanation}</p>
+        </div>
+      )}
 
       {/* Success state */}
       {state === "applied" && summary && (
@@ -176,6 +195,16 @@ function InsightCard({ insight, onDismiss, onApply, onModify, onApplied }: Insig
             Modify
             <ChevronRight className="w-3 h-3" />
           </button>
+          {insight.whyExplanation && (
+            <button
+              onClick={() => setShowWhy((v) => !v)}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors px-1.5 py-1.5 rounded-md hover:bg-muted/60"
+            >
+              <HelpCircle className="w-3 h-3" />
+              <span>Why?</span>
+              <ChevronDown className={`w-3 h-3 transition-transform ${showWhy ? "rotate-180" : ""}`} />
+            </button>
+          )}
           <span className="flex-1" />
           <span className={`w-2 h-2 rounded-full ${config.dotColor} flex-shrink-0`} />
         </div>

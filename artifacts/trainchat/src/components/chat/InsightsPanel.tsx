@@ -18,6 +18,7 @@ export interface TrainingInsight {
   type: string;
   title: string;
   body: string;
+  whyExplanation?: string;
   priority: number;
   triggerSource: string;
 }
@@ -55,6 +56,8 @@ function insightConfig(type: string): {
       return { Icon: CheckCircle2, color: "text-green-400", bg: "bg-green-400/10 border-green-400/20" };
     case "schedule_review":
       return { Icon: Calendar, color: "text-orange-400", bg: "bg-orange-400/10 border-orange-400/20" };
+    case "missed_session_pattern":
+      return { Icon: Calendar, color: "text-amber-400", bg: "bg-amber-400/10 border-amber-400/20" };
     case "sleep_impact":
       return { Icon: Moon, color: "text-indigo-400", bg: "bg-indigo-400/10 border-indigo-400/20" };
     case "recovery_strength":

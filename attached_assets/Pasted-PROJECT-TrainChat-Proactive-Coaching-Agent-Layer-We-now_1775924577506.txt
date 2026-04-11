@@ -1,0 +1,443 @@
+PROJECT: TrainChat Proactive Coaching Agent Layer
+
+We now have:
+1. Live Program Engine
+2. Adaptive Check-In Engine
+
+The next phase is to make TrainChat PROACTIVE.
+
+Right now the system reacts when the user chats or submits a check-in.
+Now it should begin detecting patterns, surfacing recommendations, and prompting smart coaching actions automatically.
+
+This is the layer that makes TrainChat feel like a real coaching system instead of just a responsive tool.
+
+--------------------------------------------------
+
+CORE GOAL
+
+Build a proactive agent layer that:
+- watches behavior trends over time
+- identifies meaningful coaching signals
+- surfaces intelligent recommendations
+- prompts user action when appropriate
+- suggests program modifications before the user asks
+- creates a sense that the system is paying attention
+
+The product should feel like:
+“My coach is noticing things and helping me stay on track.”
+
+--------------------------------------------------
+
+PRODUCT OUTCOME
+
+The user should start seeing things like:
+- “Your recovery has been trending down for 4 days. Consider a lighter session today.”
+- “You’ve missed 2 lower-body sessions this week. Want me to rebalance your split?”
+- “Your check-ins suggest high motivation and strong recovery. Want to progress intensity?”
+- “You’ve reported knee discomfort 3 times this week. I can shift your lower-body plan.”
+- “You’ve only had 30 minutes available for 3 sessions in a row. Want me to rebuild your plan around shorter sessions?”
+
+This should feel intelligent, useful, and timely.
+Not spammy.
+
+--------------------------------------------------
+
+STEP 1: BUILD TREND ANALYSIS MODEL
+
+Create a trend analysis layer that looks across recent user data.
+
+Analyze:
+- daily check-ins
+- missed workouts
+- completed workouts
+- skipped days
+- reported pain areas
+- time available
+- readiness
+- sleep
+- soreness
+- stress
+- motivation
+- session duration trends
+- exercise swap frequency
+
+Create a derived summary object such as:
+
+UserTrainingTrendSummary {
+  userId: string
+  programId: string
+  windowDays: number
+
+  avgReadiness: number
+  avgSleepQuality: number
+  avgStress: number
+  avgSoreness: number
+  avgMotivation: number
+
+  missedWorkoutCount: number
+  completedWorkoutCount: number
+  painPatternFrequency: {
+    area: string
+    count: number
+  }[]
+
+  avgTimeAvailable: number
+  recentAdjustmentCount: number
+  consistencyScore: number
+
+  trendFlags: string[]
+  generatedAt: Date
+}
+
+--------------------------------------------------
+
+STEP 2: BUILD PROACTIVE SIGNAL DETECTION ENGINE
+
+Create:
+
+detectProactiveCoachingSignals(program, trendSummary)
+
+This function should detect important patterns and output structured signals.
+
+Examples of signal types:
+- recovery_decline
+- pain_pattern_emerging
+- high_readiness_opportunity
+- time_constraint_pattern
+- missed_session_pattern
+- inconsistency_risk
+- deload_candidate
+- progression_candidate
+- session_compression_candidate
+- exercise_replacement_candidate
+
+Each signal should return:
+- signalType
+- severity
+- confidence
+- title
+- explanation
+- suggestedAction
+- optionalStructuredChanges
+
+Example output:
+[
+  {
+    "signalType": "recovery_decline",
+    "severity": "medium",
+    "confidence": 0.87,
+    "title": "Recovery has been trending down",
+    "explanation": "Your sleep and readiness scores have both dropped over the last 4 days.",
+    "suggestedAction": "Offer lighter session or short deload adjustment"
+  }
+]
+
+--------------------------------------------------
+
+STEP 3: BUILD PROACTIVE RECOMMENDATION OBJECT
+
+Create a ProactiveRecommendation model:
+
+ProactiveRecommendation {
+  id: string
+  userId: string
+  programId: string
+
+  signalType: string
+  severity: string
+  title: string
+  explanation: string
+  suggestedActionLabel: string
+  suggestedActionType: string
+
+  status: string
+  surfacedAt: Date
+  actedOnAt?: Date
+
+  optionalStructuredChanges?: object
+}
+
+Status values:
+- active
+- dismissed
+- accepted
+- expired
+
+--------------------------------------------------
+
+STEP 4: CREATE PROACTIVE COACHING CARD UI
+
+Add a new card/module on the main Builder or Active Program screen:
+
+“Coach Insights” or “TrainChat Recommendations”
+
+This card should surface 1-3 high-value proactive suggestions.
+
+Examples:
+- Recovery has been trending down
+- Knee discomfort is becoming a pattern
+- Your schedule suggests shorter sessions would fit better
+- Readiness is high — opportunity to progress
+
+Each card should include:
+- title
+- 1-2 sentence explanation
+- action button
+- dismiss option
+
+Action buttons:
+- Adjust My Plan
+- Keep As Is
+- Show Me Why
+- Switch Today’s Session
+- Rebuild Around 30 Minutes
+- Start Deload
+- Progress My Plan
+
+--------------------------------------------------
+
+STEP 5: ALLOW ONE-TAP ACCEPTANCE OF RECOMMENDED CHANGES
+
+If the user accepts a recommendation:
+- apply optionalStructuredChanges
+- update the active program
+- update change log
+- update version
+- mark recommendation as accepted
+- show confirmation summary
+
+Example:
+User taps “Rebuild Around 30 Minutes”
+System:
+- reduces session durations
+- preserves top-priority movements
+- updates split if needed
+- logs change as proactive agent action
+
+This is a major part of the product.
+It should feel powerful and effortless.
+
+--------------------------------------------------
+
+STEP 6: ADD “WHY AM I SEEING THIS?” EXPLANATION
+
+Every proactive recommendation should be explainable.
+
+If user taps “Show Me Why”:
+Show the data basis in plain language.
+
+Example:
+“You reported 30 minutes available in 3 of your last 4 check-ins, and your current sessions are built for 50 minutes.”
+
+or
+
+“You logged knee discomfort in 3 recent lower-body sessions, so I’m suggesting safer exercise swaps.”
+
+This builds trust.
+
+--------------------------------------------------
+
+STEP 7: ADD PROACTIVE ACTION SOURCE TO CHANGE LOG
+
+Any proactive change applied by the system must be tracked with source metadata.
+
+Update change log schema to include:
+- source = "user_request" | "daily_check_in" | "proactive_agent"
+
+Examples:
+- Reduced session duration based on recurring time constraints
+- Suggested and applied lower-body exercise swaps due to repeated knee pain reports
+- Triggered deload recommendation after multi-day recovery decline
+- Increased progression targets after sustained high-readiness trend
+
+--------------------------------------------------
+
+STEP 8: BUILD RULES FOR WHEN TO SURFACE RECOMMENDATIONS
+
+Do NOT spam the user.
+
+Only surface proactive recommendations when:
+- there is enough signal confidence
+- the suggestion is actionable
+- the recommendation is useful now
+- the user has not recently dismissed the same suggestion
+
+Rules:
+- suppress duplicate recommendations for a cooldown period
+- prioritize high-confidence, high-impact items
+- show max 1-3 recommendations at once
+- expire stale recommendations after defined time window
+
+--------------------------------------------------
+
+STEP 9: SUPPORT THESE FIRST PROACTIVE PATTERNS
+
+Build first-pass support for these:
+
+1. RECOVERY DECLINE
+Trigger when:
+- readiness down
+- sleep down
+- stress or soreness elevated for multiple days
+
+Recommendation:
+- lighter session
+- short deload
+- reduced intensity
+
+2. PAIN PATTERN
+Trigger when:
+- same pain area appears multiple times recently
+
+Recommendation:
+- swap risky movements
+- reduce load or plyometric demand
+- shift movement selection
+
+3. TIME CONSTRAINT PATTERN
+Trigger when:
+- recent time available consistently lower than programmed session length
+
+Recommendation:
+- compress plan
+- reduce accessory volume
+- rebuild around shorter sessions
+
+4. HIGH READINESS / PROGRESSION OPPORTUNITY
+Trigger when:
+- readiness high
+- soreness manageable
+- consistency good
+
+Recommendation:
+- progress top sets
+- add volume carefully
+- emphasize performance
+
+5. MISSED SESSION PATTERN
+Trigger when:
+- repeated skipped workouts or low adherence
+
+Recommendation:
+- simplify split
+- reduce weekly frequency
+- rebuild for better compliance
+
+--------------------------------------------------
+
+STEP 10: CREATE SCHEDULED PROACTIVE REVIEW FUNCTION
+
+Create a function such as:
+
+runProactiveCoachingReview(userId, programId)
+
+This should:
+- load recent check-ins and workout history
+- calculate trend summary
+- detect signals
+- generate recommendations
+- store active recommendations
+
+This can initially run:
+- on app open
+- after check-in submission
+- after workout completion
+- after missed session detection
+
+Architecture should support background scheduling later.
+
+--------------------------------------------------
+
+STEP 11: ADD COMPLETION / ADHERENCE TRACKING
+
+To make proactive logic valuable, improve adherence tracking.
+
+Track:
+- planned session
+- completed session
+- skipped session
+- partially completed session
+- delayed/rescheduled session
+
+This allows the proactive layer to identify:
+- plan too ambitious
+- low consistency risk
+- frequency mismatch
+- recovery problems impacting adherence
+
+--------------------------------------------------
+
+STEP 12: MAKE THE AGENT FEEL SUPPORTIVE, NOT ANNOYING
+
+Tone matters.
+
+Recommendations should feel:
+- helpful
+- coach-like
+- concise
+- evidence-based
+- non-judgmental
+
+Bad tone:
+- “You are behind.”
+- “You failed to complete your workouts.”
+
+Better tone:
+- “Your recent pattern suggests a simpler weekly structure may fit better.”
+- “I can adjust the plan to better match your current recovery and schedule.”
+
+--------------------------------------------------
+
+STEP 13: OPTIONAL USER CONTROLS
+
+Add settings later for:
+- proactive suggestions on/off
+- suggestion frequency
+- coaching tone
+- auto-apply low-risk adjustments vs ask first
+
+Do not fully build settings yet, but structure system so this is possible.
+
+--------------------------------------------------
+
+STEP 14: PRESERVE TRUST
+
+The proactive agent should NOT silently overhaul the whole program without permission.
+
+Allowed:
+- recommendations
+- one-tap suggested changes
+- minor low-risk suggestions
+
+Not allowed without user approval:
+- major full-program rebuilds
+- large frequency changes
+- major goal changes
+
+The system should guide, not hijack.
+
+--------------------------------------------------
+
+STEP 15: SUCCESS STATE
+
+A user opens TrainChat.
+
+The system has noticed:
+- low sleep for 4 days
+- 2 missed sessions this week
+- repeated 30-minute availability
+- mild knee discomfort logged 3 times
+
+The user sees:
+1. “Your recovery has been trending down. Want a lighter 3-day version this week?”
+2. “Your recent time availability suggests a shorter-session plan may fit better.”
+3. “Knee discomfort is becoming a pattern. I can swap a few lower-body movements.”
+
+User taps one option.
+Program updates immediately.
+Change log updates.
+System feels alive and intelligent.
+
+That is the goal.
+
+Build this now.

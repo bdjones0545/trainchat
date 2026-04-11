@@ -46,6 +46,8 @@ const INSIGHT_EDIT_REQUESTS: Record<InsightType, string> = {
     "I've been training consistently. Keep the current plan on track — no major changes needed. Add a note acknowledging the consistency and any minor optimization based on current recovery.",
   schedule_review:
     "My training frequency has been lower than planned. Simplify the weekly schedule — remove one session or convert it to optional, and adjust the remaining sessions to be more manageable and time-efficient.",
+  missed_session_pattern:
+    "I've been completing significantly fewer sessions than my program requires. Reduce the weekly session count to match my realistic availability — rebuild the week around fewer but higher-quality sessions. Preserve the highest-priority movements and consolidate or remove lower-priority sessions.",
   sleep_impact:
     "My sleep quality has been poor and it's affecting my recovery. Make this week shorter and lower intensity — reduce accessory work, shorten session duration, and add coaching notes about sleep's impact on adaptation.",
   recovery_strength:
@@ -99,7 +101,7 @@ router.post("/insights/apply", requireAuth, async (req, res): Promise<void> => {
       changeLogId = await createChangeLogEntry({
         userId,
         trainingSystemId: activeSystem.id,
-        source: "auto_adjust",
+        source: "proactive_agent",
         intent: editPlan.intent,
         scope: editPlan.scope,
         changeSummary: editResult.changeSummary,
