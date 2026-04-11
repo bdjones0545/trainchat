@@ -1038,10 +1038,29 @@ export async function generateAIResponse(
     });
   }
 
+  // ── Helper: single AI call ────────────────────────────────────────────────
+  const callOpenAI = async (
+    msgs: { role: "system" | "user" | "assistant"; content: string }[],
+    maxTok: number,
+  ): Promise<{ cleanContent: string; structuredData: ProgramStructure | null }> => {
+    const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: "gpt-4o", messages: msgs, max_tokens: maxTok, temperature: 0.6 }),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`OpenAI API error ${resp.status}: ${errText}`);
+    }
+    const data = (await resp.json()) as { choices: { message: { content: string } }[] };
+    const rawContent = data.choices[0]?.message?.content ?? "I'm unable to respond right now.";
+    return extractStructuredData(rawContent);
+  };
+
   try {
-    const messages = [
+    const baseMessages = [
       { role: "system" as const, content: systemPrompt },
-      ...history.slice(-30).map((m) => ({ role: m.role, content: m.content })),
+      ...history.slice(-30).map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
       { role: "user" as const, content: userMessage },
     ];
 
@@ -1049,32 +1068,107 @@ export async function generateAIResponse(
     const maxTokens = actionDecision?.recommendedMaxTokens
       ?? (editContext !== null || intentResult?.type === "ADJUST_FOR_PAIN" || intentResult?.type === "ADJUST_FOR_READINESS" ? 4000 : 2800);
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o",
-        messages,
-        max_tokens: maxTokens,
-        temperature: 0.6,
-      }),
-    });
+    let { cleanContent, structuredData } = await callOpenAI(baseMessages, maxTokens);
 
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`OpenAI API error ${response.status}: ${errText}`);
+    // ── Hard Constraint Validation + Auto-Retry ───────────────────────────
+    // Only validate/retry for new program builds where constraints exist
+    const shouldValidate =
+      extractedConstraints !== null &&
+      extractedConstraints !== undefined &&
+      (intentResult?.type === "CREATE_PROGRAM" || intentResult?.type === "START_NEW_PROGRAM") &&
+      structuredData !== null;
+
+    if (shouldValidate && structuredData && extractedConstraints) {
+      const violations = validateProgramAgainstConstraints(structuredData, extractedConstraints);
+      const criticalViolations = violations.filter((v) => v.field === "daysPerWeek");
+
+      if (criticalViolations.length > 0) {
+        logger.warn(
+          { violations: criticalViolations, attempt: 1 },
+          "[ConstraintEnforcement] Day count violation detected — retrying with stricter instruction"
+        );
+
+        const MAX_RETRIES = 2;
+        for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+          const violationDetails = criticalViolations
+            .map((v) => `• ${v.field}: expected ${v.expected}, got ${v.actual}`)
+            .join("\n");
+
+          const correctionInstruction = `CONSTRAINT VIOLATION DETECTED — MANDATORY CORRECTION REQUIRED:
+
+The program you just generated has ${structuredData.days.length} day(s). The user explicitly requested ${extractedConstraints.daysPerWeek} day(s).
+
+THIS IS A CRITICAL ERROR. You MUST fix it now.
+
+RULES FOR THIS RETRY:
+1. The program MUST have EXACTLY ${extractedConstraints.daysPerWeek} training days — no more, no less.
+2. The "days" array in your JSON MUST have exactly ${extractedConstraints.daysPerWeek} elements.
+3. This constraint cannot be negotiated or approximated.
+4. Count the days array length before outputting. If it is not ${extractedConstraints.daysPerWeek}, fix it.
+
+Regenerate the complete program now with exactly ${extractedConstraints.daysPerWeek} days.`;
+
+          const retryMessages = [
+            ...baseMessages,
+            { role: "assistant" as const, content: cleanContent },
+            { role: "user" as const, content: correctionInstruction },
+          ];
+
+          const retryResult = await callOpenAI(retryMessages, maxTokens);
+          logger.info(
+            {
+              attempt: attempt + 2,
+              newDayCount: retryResult.structuredData?.days?.length ?? "no-program",
+              hasProgram: retryResult.structuredData !== null,
+            },
+            "[ConstraintEnforcement] Retry result"
+          );
+
+          if (retryResult.structuredData) {
+            const retryViolations = validateProgramAgainstConstraints(retryResult.structuredData, extractedConstraints);
+            if (!retryViolations.some((v) => v.field === "daysPerWeek")) {
+              // Retry succeeded
+              logger.info({ attempt: attempt + 2 }, "[ConstraintEnforcement] Retry succeeded — correct day count");
+              cleanContent = retryResult.cleanContent;
+              structuredData = retryResult.structuredData;
+              break;
+            }
+            // Update for next retry
+            cleanContent = retryResult.cleanContent;
+            structuredData = retryResult.structuredData;
+          }
+        }
+
+        // Final check: if still wrong after retries, use deterministic fallback
+        if (structuredData) {
+          const finalViolations = validateProgramAgainstConstraints(structuredData, extractedConstraints);
+          if (finalViolations.some((v) => v.field === "daysPerWeek")) {
+            logger.error(
+              { daysExpected: extractedConstraints.daysPerWeek, daysActual: structuredData.days.length },
+              "[ConstraintEnforcement] All retries failed — using deterministic fallback"
+            );
+            const fallback = generateFallbackResponse(userMessage, history, profile ?? null, {
+              currentProgram: null,
+              intentResult: intentResult ?? undefined,
+              extractedConstraints,
+            });
+            const days = extractedConstraints.daysPerWeek;
+            const sport = extractedConstraints.sportFocus;
+            const goal = extractedConstraints.primaryGoal ?? "strength";
+            const sportLabel = sport ? ` with ${sport} performance focus` : "";
+            return {
+              content: `I'm fixing your program to match your request. Built a ${days}-day ${goal} program${sportLabel}. Check the Program tab.\n\nDo you have full gym access, or should I adjust for limited equipment?`,
+              structuredData: fallback.structuredData,
+            };
+          }
+        }
+      }
+
+      logger.info(
+        { dayCount: structuredData?.days?.length, violations: violations.length },
+        "[ConstraintEnforcement] Validation passed"
+      );
     }
-
-    const data = (await response.json()) as {
-      choices: { message: { content: string } }[];
-    };
-
-    const rawContent =
-      data.choices[0]?.message?.content ?? "I'm unable to respond right now.";
-    const { cleanContent, structuredData } = extractStructuredData(rawContent);
 
     return { content: cleanContent, structuredData };
   } catch (error) {

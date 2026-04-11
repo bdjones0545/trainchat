@@ -1,0 +1,121 @@
+We need to implement HARD CONSTRAINT ENFORCEMENT for program generation.
+
+Right now the system is ignoring explicit user input (e.g., "3 days") and generating incorrect programs (e.g., 4 days).
+
+This is a critical logic issue.
+
+## GOAL
+
+Ensure that user-stated constraints are ALWAYS respected.
+
+The system must NEVER output a program that violates:
+- requested days per week
+- requested goal
+- requested sport (if provided)
+
+## STEP 1: EXTRACT HARD CONSTRAINTS
+
+Before generation, extract:
+
+constraints = {
+  daysPerWeek,
+  goal,
+  sportFocus,
+  sessionDuration (optional),
+  equipment (optional)
+}
+
+Example:
+“I play soccer want a 3 day strength program”
+
+→
+daysPerWeek = 3
+goal = strength
+sportFocus = soccer
+
+## STEP 2: PASS CONSTRAINTS INTO GENERATION
+
+When generating program, explicitly inject:
+
+- MUST be 3 days
+- MUST be strength-focused
+- SHOULD reflect soccer performance
+
+## STEP 3: ADD VALIDATION LAYER (CRITICAL)
+
+After program is generated, run:
+
+validateProgram(program, constraints)
+
+Validation rules:
+
+IF program.daysPerWeek !== constraints.daysPerWeek
+→ FAIL
+
+IF program.goal does not match constraints.goal
+→ FAIL
+
+IF constraints.sportFocus exists AND not reflected
+→ WARN (not fail, but prefer inclusion)
+
+## STEP 4: AUTO-RETRY ON FAILURE
+
+If validation fails:
+
+- DO NOT render program
+- regenerate with stricter instruction
+
+Retry up to 2 times
+
+If still failing:
+Return fallback message:
+“I’m fixing your program to match your request…”
+
+## STEP 5: BLOCK UI RENDER ON INVALID PROGRAM
+
+DO NOT show:
+- incorrect frequency
+- mismatched structure
+
+Program tab should ONLY render validated programs.
+
+## STEP 6: FIX RESPONSE TEXT
+
+Response must reflect actual output.
+
+If program is 3 days:
+“Built a 3-day strength program…”
+
+Never say 4 if user asked for 3.
+
+## STEP 7: ADD DEBUG LOGGING (TEMP)
+
+Log:
+- extracted constraints
+- generated program structure
+- validation result
+
+This will help diagnose issues.
+
+## STEP 8: TEST CASE
+
+Input:
+“I play soccer want a 3 day strength training routine”
+
+Expected:
+- program.daysPerWeek = 3
+- response says 3-day
+- UI shows 3 days
+
+NOT:
+- 4-day anything
+
+## FINAL RULE
+
+User input is law.
+
+The system adapts to the user.
+
+The user does NOT adapt to the system.
+
+Implement this now.

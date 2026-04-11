@@ -180,7 +180,7 @@ export function buildConstraintContract(
   parts.push(`**Extracted hard constraints:**`);
 
   if (constraints.daysPerWeek !== null) {
-    parts.push(`- daysPerWeek = ${constraints.daysPerWeek} → The program MUST have exactly ${constraints.daysPerWeek} training days. This is NON-NEGOTIABLE.`);
+    parts.push(`- daysPerWeek = ${constraints.daysPerWeek} → The program MUST have exactly ${constraints.daysPerWeek} training days. BEFORE you output your JSON, count the number of elements in the "days" array. If it is not ${constraints.daysPerWeek}, fix it. This is NON-NEGOTIABLE.`);
   }
   if (constraints.primaryGoal) {
     parts.push(`- primaryGoal = ${constraints.primaryGoal} → The program goal MUST be ${constraints.primaryGoal}. Do NOT substitute hypertrophy, fat_loss, or any other goal unless this was explicitly stated.`);
@@ -201,9 +201,9 @@ export function buildConstraintContract(
     parts.push(`- limitations = "${constraints.limitations}" → Avoid exercises conflicting with this limitation.`);
   }
 
-  parts.push(`\n**VALIDATION REQUIREMENTS (check before outputting JSON):**`);
+  parts.push(`\n**VALIDATION REQUIREMENTS (YOU MUST CHECK THESE BEFORE OUTPUTTING JSON):**`);
   if (constraints.daysPerWeek !== null) {
-    parts.push(`☑ days array length === ${constraints.daysPerWeek}`);
+    parts.push(`☑ Count: days array length === ${constraints.daysPerWeek}. STOP and recount if unsure. If wrong, fix before output.`);
   }
   if (constraints.primaryGoal) {
     parts.push(`☑ programName and description reflect "${constraints.primaryGoal}" — NOT a different goal`);
