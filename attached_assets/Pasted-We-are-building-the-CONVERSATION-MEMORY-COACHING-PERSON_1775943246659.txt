@@ -1,0 +1,306 @@
+We are building the CONVERSATION MEMORY + COACHING PERSONALITY LAYER for TrainChat.
+
+This is the next phase after:
+- Neural Feedback
+- Neural Graph
+- Neural Graph → Programming Feedback Loop
+- Prediction Layer
+
+IMPORTANT:
+This layer should make TrainChat feel like a real coach who:
+- remembers the user
+- tracks patterns over time
+- communicates with a consistent voice
+- becomes more personally relevant the longer the user uses it
+
+--------------------------------------------------
+CORE GOAL
+--------------------------------------------------
+
+TrainChat should not feel like a fresh chatbot every session.
+
+It should feel like:
+- a coach who knows the athlete
+- remembers previous conversations
+- understands tendencies and context
+- speaks with a clear, consistent coaching style
+
+The product should feel like:
+“This coach knows how I train, how I respond, and how to talk to me.”
+
+--------------------------------------------------
+STEP 1: CREATE MEMORY MODEL
+
+Create a persistent coaching memory object.
+
+CoachingMemory {
+  userId: string
+
+  communicationStyle: string
+  motivationStyle: string
+  preferredCoachingTone: string
+
+  knownGoals: string[]
+  knownSportContext: string[]
+  knownConstraints: string[]
+  knownEquipment: string[]
+  knownPainPatterns: string[]
+
+  recurringBehaviorPatterns: string[]
+  adherencePatterns: string[]
+  readinessPatterns: string[]
+
+  recentKeyEvents: string[]
+  recentProgramChanges: string[]
+
+  lastUpdated: Date
+}
+
+--------------------------------------------------
+STEP 2: STORE HIGH-VALUE MEMORY ONLY
+
+Memory should capture things that improve future coaching quality.
+
+Examples of good memory:
+- user is a soccer athlete
+- user prefers concise coaching
+- user often trains with limited time
+- user tends to under-recover after lower-body days
+- user frequently requests strength-focused programming
+- user responds well to direct coaching language
+
+Do NOT store:
+- random chat filler
+- one-off irrelevant remarks
+- overly personal details not useful for coaching
+
+--------------------------------------------------
+STEP 3: BUILD MEMORY UPDATE FUNCTION
+
+Create:
+
+updateCoachingMemory(userMessage, systemActions, recentTrainingData)
+
+This function should:
+- identify durable user preferences
+- detect recurring context
+- update relevant memory fields gradually
+- ignore noise
+
+Memory must become more useful over time, not bloated.
+
+--------------------------------------------------
+STEP 4: CONNECT MEMORY TO PROGRAMMING
+
+Memory should influence:
+- program generation
+- refinement questions
+- auto-adjustments
+- prediction explanations
+
+Examples:
+
+If user often trains with limited time:
+→ bias future programming toward shorter sessions
+
+If user repeatedly prefers strength:
+→ bias future builds toward strength-first logic
+
+If user has recurring knee discomfort:
+→ keep that context active in future recommendations
+
+--------------------------------------------------
+STEP 5: CONNECT MEMORY TO FOLLOW-UP QUESTIONS
+
+TrainChat should ask smarter follow-ups based on memory.
+
+Examples:
+
+If equipment already known:
+→ do not ask again
+
+If season context already known:
+→ reference it directly
+
+If user repeatedly dislikes long sessions:
+→ ask:
+“Want me to keep these around 35–40 minutes again?”
+
+The system should stop feeling repetitive.
+
+--------------------------------------------------
+STEP 6: CREATE COACHING PERSONALITY MODEL
+
+Add a coaching personality layer with stable traits.
+
+CoachPersonality {
+  tone: string
+  style: string
+  directness: string
+  explanationDepth: string
+  motivationMode: string
+}
+
+Possible examples:
+- precise and clinical
+- direct and performance-focused
+- encouraging but concise
+- high-accountability coach tone
+
+This should stay consistent unless intentionally changed.
+
+--------------------------------------------------
+STEP 7: DEFINE DEFAULT TRAINCHAT PERSONALITY
+
+TrainChat’s default coaching voice should feel:
+
+- performance-focused
+- intelligent
+- concise
+- confident
+- coach-like
+- not robotic
+- not overly chatty
+- not cheesy
+
+Avoid:
+- generic assistant wording
+- overuse of hype
+- therapy-like tone
+- excessive politeness that weakens authority
+
+Good examples:
+- “We’re keeping this lower-body volume controlled this week.”
+- “You’re ready to push intensity here.”
+- “Recovery trend is down. Let’s tighten the next two sessions.”
+
+--------------------------------------------------
+STEP 8: PERSONALIZE TONE TO USER WHEN APPROPRIATE
+
+If the user consistently responds better to:
+- more direct language
+- more explanation
+- more motivating tone
+- less detail
+
+Allow the system to adapt within bounds.
+
+But keep the brand voice stable.
+
+--------------------------------------------------
+STEP 9: ADD “MEMORY-AWARE RESPONSE GENERATION”
+
+Before generating a response, include:
+- active memory context
+- recent training context
+- current program context
+- personality style
+
+This should influence:
+- wording
+- follow-up questions
+- recommendations
+- summary language
+
+--------------------------------------------------
+STEP 10: PREVENT REPETITIVE COACHING
+
+If the system already knows:
+- sport
+- goal
+- equipment
+- time limits
+- season context
+
+Do not ask again unless context changed.
+
+This is critical.
+
+The user should feel:
+“It remembers me”
+
+NOT:
+“Why is it asking the same thing again?”
+
+--------------------------------------------------
+STEP 11: ADD LIGHT MEMORY VISIBILITY (OPTIONAL)
+
+Optionally expose a simple section like:
+
+“What TrainChat knows about your system”
+- Soccer athlete
+- Strength priority
+- Limited time midweek
+- Full gym access
+
+This can build trust, but keep it clean and optional.
+
+--------------------------------------------------
+STEP 12: CONNECT MEMORY TO PREDICTION + NEURAL SYSTEM
+
+Memory should improve:
+- prediction accuracy
+- refinement quality
+- neural graph interpretation
+- coaching explanations
+
+Example:
+If user historically under-recovers after high-volume weeks,
+prediction layer can explain fatigue risk with more context.
+
+--------------------------------------------------
+STEP 13: ADD CHANGE LOG SOURCE FOR MEMORY-INFLUENCED ADJUSTMENTS
+
+When memory affects a change, log it.
+
+Examples:
+- Shortened session based on repeated time-constraint pattern
+- Preserved strength focus based on user preference history
+- Avoided repeated knee-irritating exercise based on past reports
+
+Source:
+coaching_memory
+
+--------------------------------------------------
+STEP 14: KEEP MEMORY CLEAN AND TRUSTWORTHY
+
+Do NOT invent user preferences.
+Do NOT overstate what the system “knows.”
+Do NOT store sensitive or irrelevant information beyond coaching usefulness.
+
+Memory should be:
+- useful
+- grounded
+- minimal
+- durable
+
+--------------------------------------------------
+STEP 15: SUCCESS STATE
+
+A user returns after multiple sessions.
+
+TrainChat:
+- remembers they are a soccer athlete
+- remembers they prefer strength-focused builds
+- remembers they usually need shorter midweek sessions
+- remembers previous knee discomfort pattern
+- responds in a consistent coach-like voice
+
+The user feels:
+“This actually knows me”
+
+--------------------------------------------------
+FINAL RULE
+--------------------------------------------------
+
+TrainChat should not just become smarter.
+
+It should become more personally relevant and more coach-like over time.
+
+That means:
+- memory
+- consistency
+- voice
+- context awareness
+
+Implement this now.

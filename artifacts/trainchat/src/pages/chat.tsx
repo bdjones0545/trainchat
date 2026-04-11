@@ -851,6 +851,7 @@ export default function Chat() {
           onFeedback={() => { setShowFeedback(true); setMobilePanel(null); }}
           onLogSession={() => { setShowSessionLog(true); setMobilePanel(null); }}
           onUpgrade={() => { setShowPricing(true); setMobilePanel(null); }}
+          onSendMessage={(msg) => handleSend(msg)}
           isSaving={!!latestProgram && isSaving}
           isSaved={isInSystem}
           isPremium={isPremium}
@@ -1199,6 +1200,7 @@ export default function Chat() {
                   onFeedback={() => setShowFeedback(true)}
                   onLogSession={() => setShowSessionLog(true)}
                   onUpgrade={() => setShowPricing(true)}
+                  onSendMessage={(msg) => handleSend(msg)}
                   isSaving={!!latestProgram && isSaving}
                   isSaved={isInSystem}
                   isPremium={isPremium}

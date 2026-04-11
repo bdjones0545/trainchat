@@ -101,6 +101,33 @@ The UI features a dark theme with electric blue accents and the Inter font, cent
 - **Effect on AI programs** (when OpenAI key exists): Neural interpretation is injected as a structured context block in the system prompt. The AI receives node status labels, detected imbalances, and specific programming guidance in coaching language. No raw scores are exposed.
 - **Safety**: Neural loading is wrapped in try/catch. If the profile doesn't exist or fails to load, the route proceeds as normal without bias.
 
+### Prediction Layer (Phase 4) — Coach Forecast
+
+- **`prediction-service.ts`** (new) — real-time pattern recognition engine, no DB writes, no stored predictions:
+  - `generatePredictions(userId)` → `{ predictions: PredictionSignal[], generatedAt: Date }` — max 3 signals, sorted high→medium→low severity
+  - **FATIGUE_RISK**: triggers on elevated average soreness (≥3.5/5), poor sleep (≤2.5/5), low energy, or 3+ recent hard sessions. Evidence text traces back to exact check-in data.
+  - **MISSED_SESSION_RISK**: triggers on 2+ skipped/rescheduled sessions in last 10, or partial completions, or low consistency score. Actionable prompt: simplify next session.
+  - **PLATEAU_RISK**: detects exercises logged 3+ times with load variation <2.5 lbs AND repeated hard/failed status. Groups by exercise name from exercise_logs.
+  - **PROGRESSION_OPPORTUNITY**: triggers when recent sessions all completed, avg energy+motivation ≥3.8/5, ≥65% of reps rated solid/easy, avg session difficulty ≤3.2. Only surfaces when no fatigue risk detected (prevents conflicting signals).
+  - **RECOVERY_DIP_RISK**: triggers on declining sleep trend or rising stress trend over last 7 readiness entries. Suppressed if fatigue risk already present.
+  - Each `PredictionSignal`: `{ id, type, severity, confidence, title, explanation, evidence, suggestedAction, actionPrompt }`
+- **Route**: `GET /api/predictions` (auth required) — no DB writes, read-only from readiness, session, exercise, neural_profiles tables
+- **`CoachForecast.tsx`** (new frontend component):
+  - React Query with 10-minute stale time. Renders 0-3 prediction cards sorted by severity.
+  - Each card: type icon, title, one-line explanation, severity badge, "Show Why" toggle (expands evidence detail), action button
+  - "Show Why" → inline expanded evidence panel — specific numbers, session counts, score trends
+  - Action button sends `signal.actionPrompt` (pre-written coaching request) directly into the AI chat via `onSendMessage`
+  - Three states: active predictions, "All clear" empty state, "Building your pattern" insufficient data state
+  - Tone: coaching-language throughout. No diagnostic or alarming framing.
+- **`LiveProgramPanel.tsx`** updates:
+  - Added `"forecast"` to `Tab` type — fourth tab alongside Program/Changes/History
+  - Added `onSendMessage?: (message: string) => void` prop — threads through from `chat.tsx`
+  - Added `{ id: "forecast", label: "Forecast", icon: Zap }` to tab bar
+  - Tab content: `<CoachForecast onSendMessage={onSendMessage} />` when active
+- **`chat.tsx`** update: both `LiveProgramPanel` instances receive `onSendMessage={(msg) => handleSend(msg)}`
+- **Data sources read**: `readiness_entries` (sleep, soreness, stress, energy, motivation), `session_logs` (completion status, difficulty), `exercise_logs` (load, reps, completion status), `neural_profiles` (consistencyScore)
+- **Safety**: predictions are entirely computed in memory from existing records. No new DB tables, no stored prediction state, no schema changes needed.
+
 ### Auto-Progression Engine (exercise-logs.ts + progression.ts)
 - **DB Table**: `exercise_logs` — per-exercise performance log (load, reps, sets, RPE, completion status, exercise role)
 - **Progression Service** (`progression.ts`): Computes READY_TO_PROGRESS / HOLD / REGRESS state from recent logs. Goal-differentiated (strength: load, hypertrophy: reps/volume, performance: quality+load). Exercise-role-aware (power: intent only; compound: +5-10 lbs; unilateral: +2.5 lbs; accessory: lowest priority).

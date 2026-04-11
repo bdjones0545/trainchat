@@ -10,6 +10,7 @@ import { customFetch } from "@workspace/api-client-react";
 import type { ProgramStructure } from "./ChatOutput";
 import type { BuildStage } from "@/hooks/useStreamMessage";
 import ExerciseLogInline, { type ProgressionTarget } from "@/components/training/ExerciseLogInline";
+import CoachForecast from "./CoachForecast";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -62,9 +63,11 @@ interface Props {
   newProgramSignal?: number;
   /** Change targets from the latest edit — used for highlighting and scrolling */
   changeTargets?: ChangeTarget[];
+  /** Callback to send a pre-written coaching message from the Forecast tab */
+  onSendMessage?: (message: string) => void;
 }
 
-type Tab = "program" | "changes" | "history";
+type Tab = "program" | "changes" | "history" | "forecast";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1300,6 +1303,7 @@ export default function LiveProgramPanel({
   newChangeSignal = 0,
   newProgramSignal = 0,
   changeTargets = [],
+  onSendMessage,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("program");
   const [hasUnseenChange, setHasUnseenChange] = useState(false);
@@ -1347,6 +1351,7 @@ export default function LiveProgramPanel({
     { id: "program", label: "Program", icon: Dumbbell },
     { id: "changes", label: "Changes", icon: Activity },
     { id: "history", label: "History", icon: GitBranch },
+    { id: "forecast", label: "Forecast", icon: Zap },
   ];
 
   return (
@@ -1412,6 +1417,7 @@ export default function LiveProgramPanel({
           />
         )}
         {activeTab === "history" && <HistoryTab hasActiveSystem={hasActiveSystem} />}
+        {activeTab === "forecast" && <CoachForecast onSendMessage={onSendMessage} />}
       </div>
     </div>
   );
