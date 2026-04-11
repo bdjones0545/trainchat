@@ -33,6 +33,13 @@ export interface BuildingState {
   actionType?: string;
 }
 
+export interface ChangeTarget {
+  type: "exercise_swap" | "exercise_update" | "exercise_added";
+  originalExercise?: string;
+  newExercise: string;
+  exerciseId: number;
+}
+
 interface Props {
   program: ProgramStructure | null;
   buildingState?: BuildingState;
@@ -44,10 +51,12 @@ interface Props {
   isSaved?: boolean;
   isPremium?: boolean;
   hasActiveSystem?: boolean;
-  /** Increment when a program edit occurs — auto-switches to Changes tab */
+  /** Increment when a program edit occurs — auto-navigates to Program tab and highlights change */
   newChangeSignal?: number;
   /** Increment when a new program is built — auto-switches to Program tab */
   newProgramSignal?: number;
+  /** Change targets from the latest edit — used for highlighting and scrolling */
+  changeTargets?: ChangeTarget[];
 }
 
 type Tab = "program" | "changes" | "history";
@@ -414,11 +423,90 @@ function ProgramTab({
   isSaving,
   isSaved,
   isPremium,
+  changeTargets,
+  newChangeSignal,
 }: Omit<Props, "hasActiveSystem">) {
   const [expandedDay, setExpandedDay] = useState<number | null>(0);
   const prevProgramRef = useRef<ProgramStructure | null>(null);
   const [animatedKeys, setAnimatedKeys] = useState<Map<string, DiffType>>(new Map());
   const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Change-highlight state ────────────────────────────────────────────────
+  const [highlightedNames, setHighlightedNames] = useState<Set<string>>(new Set());
+  const [inlineLabels, setInlineLabels] = useState<Map<string, string>>(new Map());
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingScrollName = useRef<string | null>(null);
+  const exerciseRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const prevChangeSignalRef2 = useRef(0);
+
+  // When a new change signal fires, set up highlights and find the day to expand
+  useEffect(() => {
+    if (!newChangeSignal || newChangeSignal === prevChangeSignalRef2.current) return;
+    if (!changeTargets?.length) return;
+    prevChangeSignalRef2.current = newChangeSignal;
+
+    const names = new Set<string>();
+    const labels = new Map<string, string>();
+
+    for (const target of changeTargets) {
+      names.add(target.newExercise);
+      if (target.type === "exercise_swap" && target.originalExercise) {
+        labels.set(target.newExercise, `${target.originalExercise} → ${target.newExercise}`);
+      } else if (target.type === "exercise_added") {
+        labels.set(target.newExercise, `Added: ${target.newExercise}`);
+      }
+    }
+
+    setHighlightedNames(names);
+    setInlineLabels(labels);
+
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => {
+      setHighlightedNames(new Set());
+      setInlineLabels(new Map());
+    }, 3500);
+
+    // Find the day containing the first target and expand it
+    const firstTarget = changeTargets[0];
+    pendingScrollName.current = firstTarget.newExercise;
+
+    if (program) {
+      const dayIdx = program.days.findIndex((d) =>
+        (d.exercises ?? []).some((e) => e.name === firstTarget.newExercise)
+      );
+      if (dayIdx !== -1) {
+        setExpandedDay(dayIdx);
+      }
+    }
+  }, [newChangeSignal]);
+
+  // After expandedDay changes and pendingScrollName is set, scroll to the exercise
+  useEffect(() => {
+    if (!pendingScrollName.current) return;
+    const name = pendingScrollName.current;
+    const timer = setTimeout(() => {
+      const el = exerciseRefs.current.get(name);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        pendingScrollName.current = null;
+      }
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [expandedDay]);
+
+  // When program updates (after query invalidation), try pending scroll again
+  useEffect(() => {
+    if (!pendingScrollName.current || !program) return;
+    const name = pendingScrollName.current;
+    // Find the day in the new program data
+    const dayIdx = program.days.findIndex((d) =>
+      (d.exercises ?? []).some((e) => e.name === name)
+    );
+    if (dayIdx !== -1) {
+      setExpandedDay(dayIdx);
+    }
+  }, [program]);
 
   useEffect(() => {
     const prev = prevProgramRef.current;
@@ -467,6 +555,26 @@ function ProgramTab({
         @keyframes vol-flash {
           0%,20% { color: rgb(251,191,36); }
           100%   { color: inherit; }
+        }
+        @keyframes ex-highlight-glow {
+          0%   { background: rgba(99,102,241,0.22); box-shadow: 0 0 0 1.5px rgba(99,102,241,0.55) inset, 0 0 12px rgba(99,102,241,0.2); }
+          40%  { background: rgba(99,102,241,0.12); box-shadow: 0 0 0 1px rgba(99,102,241,0.3) inset; }
+          100% { background: transparent; box-shadow: none; }
+        }
+        @keyframes ex-name-fadein {
+          0%   { opacity: 0; transform: translateY(-3px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes badge-pop {
+          0%   { opacity: 0; transform: scale(0.7); }
+          40%  { opacity: 1; transform: scale(1.05); }
+          60%  { transform: scale(1); }
+          80%  { opacity: 1; }
+          100% { opacity: 0; }
+        }
+        @keyframes label-fade {
+          0%,60% { opacity: 1; }
+          100%   { opacity: 0; }
         }
       `}</style>
       {isUpdating && updatePhase && <UpdatingBadge phase={updatePhase} />}
@@ -599,7 +707,7 @@ function ProgramTab({
       )}
 
       {/* Days */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2 relative">
+      <div ref={scrollAreaRef} className="flex-1 overflow-y-auto p-3 space-y-2 relative">
         {days.map((day, idx) => {
           const isLocked = !isPremium && idx > 0;
           const isExpanded = expandedDay === idx;
@@ -654,7 +762,10 @@ function ProgramTab({
                   {(day.exercises ?? []).map((ex, exIdx) => {
                     const exKey = `d${idx}-e${exIdx}`;
                     const exDiff = animatedKeys.get(exKey);
+                    const isHighlighted = highlightedNames.has(ex.name);
+                    const inlineLabel = inlineLabels.get(ex.name);
                     const rowAnim =
+                      isHighlighted ? "ex-highlight-glow 3.5s ease forwards" :
                       exDiff === "added"   ? "ex-added 1.8s ease forwards" :
                       exDiff === "swapped" ? "ex-swapped 1.8s ease forwards" :
                       undefined;
@@ -662,10 +773,37 @@ function ProgramTab({
                     return (
                     <div
                       key={exIdx}
+                      ref={(el) => {
+                        if (el) exerciseRefs.current.set(ex.name, el);
+                        else exerciseRefs.current.delete(ex.name);
+                      }}
                       className="px-3 py-2.5"
                       style={rowAnim ? { animation: rowAnim } : undefined}
                     >
-                      <p className="text-[11px] font-medium text-foreground">{ex.name}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p
+                          className="text-[11px] font-medium text-foreground"
+                          style={isHighlighted ? { animation: "ex-name-fadein 0.4s ease forwards" } : undefined}
+                        >
+                          {ex.name}
+                        </p>
+                        {isHighlighted && (
+                          <span
+                            className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex-shrink-0"
+                            style={{ animation: "badge-pop 3.5s ease forwards" }}
+                          >
+                            Updated
+                          </span>
+                        )}
+                      </div>
+                      {isHighlighted && inlineLabel && (
+                        <p
+                          className="text-[10px] text-indigo-400/80 mt-0.5 font-medium"
+                          style={{ animation: "label-fade 3.5s ease forwards" }}
+                        >
+                          {inlineLabel}
+                        </p>
+                      )}
                       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1.5">
                         {ex.sets > 0 && (
                           <span className="text-[10px] text-muted-foreground">
@@ -1094,6 +1232,7 @@ export default function LiveProgramPanel({
   hasActiveSystem = false,
   newChangeSignal = 0,
   newProgramSignal = 0,
+  changeTargets = [],
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("program");
   const [hasUnseenChange, setHasUnseenChange] = useState(false);
@@ -1109,12 +1248,13 @@ export default function LiveProgramPanel({
     }
   }, [newProgramSignal]);
 
-  // Program edited → switch to Changes tab to show what changed
+  // Program edited → switch to Program tab and highlight the change
+  // (Changes tab gets an unseen badge so user can still see it)
   useEffect(() => {
     if (newChangeSignal > 0 && newChangeSignal !== prevChangeSignalRef.current) {
       prevChangeSignalRef.current = newChangeSignal;
-      setActiveTab("changes");
-      setHasUnseenChange(false);
+      setActiveTab("program");
+      setHasUnseenChange(true);
     }
   }, [newChangeSignal]);
 
@@ -1177,6 +1317,8 @@ export default function LiveProgramPanel({
             isSaving={isSaving}
             isSaved={isSaved}
             isPremium={isPremium}
+            changeTargets={changeTargets}
+            newChangeSignal={newChangeSignal}
           />
         )}
         {activeTab === "changes" && (

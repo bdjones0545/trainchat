@@ -152,6 +152,12 @@ export default function Chat() {
   const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [newChangeSignal, setNewChangeSignal] = useState(0);
   const [newProgramSignal, setNewProgramSignal] = useState(0);
+  const [changeTargets, setChangeTargets] = useState<Array<{
+    type: "exercise_swap" | "exercise_update" | "exercise_added";
+    originalExercise?: string;
+    newExercise: string;
+    exerciseId: number;
+  }>>([]);
 
   // Startup state: fail-safe lets the agent render even if auth hangs
   const [forceReady, setForceReady] = useState(false);
@@ -484,8 +490,11 @@ export default function Chat() {
       if (result.systemSaved) {
         setNewProgramSignal((n) => n + 1);
       }
-      // After a program modification (edit): switch to Changes tab to show what changed
+      // After a program modification (edit): switch to Program tab and highlight what changed
       if (result.systemEdit?.applied) {
+        if (result.systemEdit?.changeTargets?.length) {
+          setChangeTargets(result.systemEdit.changeTargets);
+        }
         setNewChangeSignal((n) => n + 1);
       }
       // Show undo toast for 8 seconds after any program change
@@ -832,6 +841,7 @@ export default function Chat() {
           hasActiveSystem={hasActiveSystem || !!latestProgram}
           newChangeSignal={newChangeSignal}
           newProgramSignal={newProgramSignal}
+          changeTargets={changeTargets}
         />
       </div>
     </div>
@@ -1166,6 +1176,7 @@ export default function Chat() {
                   hasActiveSystem={hasActiveSystem || !!latestProgram}
                   newChangeSignal={newChangeSignal}
                   newProgramSignal={newProgramSignal}
+                  changeTargets={changeTargets}
                 />
               </div>
             </div>

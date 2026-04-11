@@ -676,6 +676,7 @@ Keep it helpful and intelligent, never promotional.`;
               applied: true,
               changeSummary: editResult.changeSummary,
               changedIds: editResult.changedIds,
+              changeTargets: editResult.changeTargets,
               systemId: activeSystem!.id,
               changeLogId,
             },

@@ -347,6 +347,13 @@ async function captureAfterSnapshot(changedIds: ChangedIds): Promise<SystemSnaps
 
 // ─── Main Entry Point ────────────────────────────────────────────────────────
 
+export interface ChangeTarget {
+  type: "exercise_swap" | "exercise_update" | "exercise_added";
+  originalExercise?: string;
+  newExercise: string;
+  exerciseId: number;
+}
+
 export interface EditResult {
   appliedCount: number;
   skippedCount: number;
@@ -355,6 +362,7 @@ export interface EditResult {
   changedIds: ChangedIds;
   beforeSnapshot: SystemSnapshot;
   afterSnapshot: SystemSnapshot;
+  changeTargets: ChangeTarget[];
 }
 
 export async function applyEditPlan(plan: EditPlan): Promise<EditResult> {
@@ -378,6 +386,47 @@ export async function applyEditPlan(plan: EditPlan): Promise<EditResult> {
   // Phase 4: Capture state AFTER applying changes
   const afterSnapshot = await captureAfterSnapshot(changedIds);
 
+  // Build change targets for frontend highlighting
+  const changeTargets: ChangeTarget[] = [];
+  for (const change of plan.changes) {
+    if (change.type === "replace_exercise") {
+      const before = beforeSnapshot.exercises[String(change.id)];
+      const after = afterSnapshot.exercises[String(change.id)];
+      if (before?.name && after?.name) {
+        changeTargets.push({
+          type: "exercise_swap",
+          originalExercise: before.name as string,
+          newExercise: after.name as string,
+          exerciseId: change.id,
+        });
+      }
+    } else if (change.type === "update_exercise") {
+      const before = beforeSnapshot.exercises[String(change.id)];
+      const after = afterSnapshot.exercises[String(change.id)];
+      if (after?.name) {
+        changeTargets.push({
+          type: "exercise_update",
+          originalExercise: before?.name as string | undefined,
+          newExercise: after.name as string,
+          exerciseId: change.id,
+        });
+      }
+    }
+  }
+  // Include newly added exercises
+  for (const result of results) {
+    if (result.applied && result.newId) {
+      const after = afterSnapshot.exercises[String(result.newId)];
+      if (after?.name) {
+        changeTargets.push({
+          type: "exercise_added",
+          newExercise: after.name as string,
+          exerciseId: result.newId,
+        });
+      }
+    }
+  }
+
   return {
     appliedCount,
     skippedCount,
@@ -386,5 +435,6 @@ export async function applyEditPlan(plan: EditPlan): Promise<EditResult> {
     changedIds,
     beforeSnapshot,
     afterSnapshot,
+    changeTargets,
   };
 }
