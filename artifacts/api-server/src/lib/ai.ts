@@ -494,8 +494,22 @@ This conversation's history is included. Track what has been decided:
   if (!profile) {
     return coreIdentity + `
 
-## USER CONTEXT
-This user has not completed their training profile. If they ask for a personalized program, collect: goal, experience level, days per week, session duration, and equipment access.`;
+## USER CONTEXT — NO PROFILE ON FILE
+This user has not completed their training profile.
+
+## CRITICAL — BUILD-FIRST RULE (NO EXCEPTIONS)
+Do NOT ask multiple questions before building. Do NOT run an intake form. Do NOT say "I need a few things first."
+
+If the user provides ANY training intent (goal, sport, days, style) → BUILD IMMEDIATELY using smart defaults for anything not stated:
+- Equipment: full gym (unless stated otherwise)
+- Session duration: 60 minutes (unless stated otherwise)
+- Experience: intermediate (unless stated otherwise)
+- Goal: athletic performance + strength if sport is mentioned; strength if unspecified
+
+After building, ask exactly ONE refinement question (e.g., "Do you have full gym access or limited equipment?").
+
+NEVER ask 5 questions. NEVER delay building. NEVER respond with a list of things you "need" before starting.
+The product rule: build first → refine second. Always.`;
   }
 
   // Build rich intelligence context from the training engine
@@ -1178,11 +1192,37 @@ function generateFallbackResponse(
   }
 
   // ── Program request ──
-  if (lower.match(/build|create|design|make|give me|generate|program|plan|routine|split|workout/)) {
+  if (lower.match(/build|create|design|make|give me|generate|program|plan|routine|split|workout|want|soccer|basketball|sport|strength|hypertrophy|athletic/)) {
     if (!profile) {
+      // Build-first: use extracted constraints + smart defaults — never ask multiple questions
+      const defaultProfile: UserProfile = {
+        trainingGoal: extractedConstraints?.primaryGoal
+          ? (extractedConstraints.primaryGoal === "athletic_performance" ? "athletic performance"
+            : extractedConstraints.primaryGoal === "hypertrophy" ? "hypertrophy"
+            : extractedConstraints.primaryGoal === "fat_loss" ? "fat loss"
+            : extractedConstraints.primaryGoal === "general_fitness" ? "general fitness"
+            : "strength")
+          : (extractedConstraints?.sportFocus ? "athletic performance" : "strength"),
+        experienceLevel: extractedConstraints?.experienceLevel ?? "intermediate",
+        trainingStyle: "balanced",
+        daysPerWeek: extractedConstraints?.daysPerWeek ?? 4,
+        sessionDuration: extractedConstraints?.sessionDuration ?? 60,
+        equipmentAccess: extractedConstraints?.equipment ?? "full gym",
+        injuries: extractedConstraints?.limitations ?? null,
+        sportFocus: extractedConstraints?.sportFocus ?? null,
+        exercisePreferences: null,
+        exercisesToAvoid: null,
+      };
+
+      const program = buildIntelligentProgram(defaultProfile);
+      const confirmationLine = buildConstraintAwareConfirmation(defaultProfile, extractedConstraints ?? null);
+      const refinementQ = extractedConstraints?.equipment
+        ? "Want me to adjust anything — session length, split structure, or exercise selection?"
+        : "Do you have full gym access, or should I adjust for limited equipment?";
+
       return {
-        content: `To build you the right program, I need a few things:\n\n1. **Primary goal** — strength, hypertrophy, athletic performance, general fitness?\n2. **Days per week** available to train\n3. **Session length** in minutes\n4. **Equipment** — full gym, dumbbells only, home setup, bodyweight?\n5. **Experience level** — beginner, intermediate, or advanced?\n\nGive me these and I'll build the structure.`,
-        structuredData: null,
+        content: `${confirmationLine}\n\n${refinementQ}`,
+        structuredData: program,
       };
     }
 

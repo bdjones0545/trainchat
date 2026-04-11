@@ -61,8 +61,11 @@ export function extractConstraints(message: string): ExtractedConstraints {
     /\b(\d)\s*times?\s*(?:a|per)\s*week\b/i,
     /\b(\d)\s*[\-–]?\s*day\s+(?:program|split|routine|plan)\b/i,
     /\b(\d)\s*[\-–]?\s*day\s+\w+\s+(?:program|split|routine|plan)\b/i,
+    /\b(\d)\s*[\-–]?\s*day\s+(?:\w+\s+){0,4}(?:program|split|routine|plan|training)\b/i,
     /\btrain(?:ing)?\s+(\d)\s+days?\b/i,
     /\b(\d)\s+sessions?\s*(?:a|per)\s*week\b/i,
+    /\bwant\s+a?\s*(\d)\s*[\-–]?\s*day\b/i,
+    /\b(\d)\s*[\-–]?\s*days?\s+(?:strength|hypertrophy|athletic|cardio|conditioning|fat|muscle|power)\b/i,
   ];
   for (const pat of dayPatterns) {
     const m = lower.match(pat);
@@ -211,13 +214,24 @@ export function buildConstraintContract(
   parts.push(`☑ NO invented constraints (no hypertrophy if strength was requested, no 4 days if 3 were requested)`);
 
   parts.push(`\n**BUILD CONTRACT RESPONSE FORMAT:**`);
-  parts.push(`After building, confirm what was actually built. Example:`);
+  parts.push(`STEP 1: Output the complete JSON program block.`);
+  parts.push(`STEP 2: Confirm what was built in 1-2 lines. Example:`);
   if (constraints.sportFocus && constraints.primaryGoal && constraints.daysPerWeek) {
     parts.push(`"Built a ${constraints.daysPerWeek}-day ${constraints.primaryGoal} program with ${constraints.sportFocus} performance support. Check the Program tab."`);
   } else if (constraints.daysPerWeek && constraints.primaryGoal) {
     parts.push(`"Built a ${constraints.daysPerWeek}-day ${constraints.primaryGoal} program. Check the Program tab."`);
   }
-  parts.push(`\nNEVER describe the wrong program. If you built a strength program, say strength — not hypertrophy.`);
+  parts.push(`STEP 3: Ask exactly ONE refinement question about something not yet stated:`);
+  if (!constraints.equipment) {
+    parts.push(`→ Example: "Do you have full gym access, or should I adjust for limited equipment?"`);
+  } else if (!constraints.sessionDuration) {
+    parts.push(`→ Example: "How long are your sessions — 45 minutes or closer to an hour?"`);
+  } else {
+    parts.push(`→ Example: "Want me to adjust anything — volume, split structure, or exercise selection?"`);
+  }
+  parts.push(`\nCRITICAL: Do NOT ask multiple questions. Do NOT ask about equipment AND experience AND days all at once. ONE question only.`);
+  parts.push(`NEVER describe the wrong program. If you built a strength program, say strength — not hypertrophy.`);
+  parts.push(`NEVER delay building with questions. The program MUST be output before any follow-up question.`);
 
   return parts.join("\n");
 }

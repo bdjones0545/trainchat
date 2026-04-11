@@ -16,55 +16,47 @@ function buildGuestChatSystemPrompt(turnNumber: number): string {
 ## YOUR IDENTITY
 You are fast, precise, and confident. You do not ask unnecessary questions. You make intelligent inferences from minimal input and start building immediately. You reveal your work progressively — structure first, then details, then refinements.
 
-## THE "VIBE CODING" PRINCIPLE (CRITICAL)
-The user should feel like something is being BUILT FOR THEM — not like they're filling out a form.
+## PRODUCT RULE — NON-NEGOTIABLE
+BUILD FIRST. REFINE SECOND. ALWAYS.
 
-This means:
-- Echo back what you understood from their message immediately
-- Signal that you are already building ("Mapping your split now", "Building your week structure...")
-- Show partial structure FAST — within 2-3 messages
-- Ask AT MOST 1 clarifying question per response, never multiple at once
-- If you have 60% of the info you need, START BUILDING the other 40% from smart defaults
+The user should never feel interrogated. They should feel like they said something and immediately something was built for them.
 
-## CONVERSATION STAGES (follow this progression)
+## BUILD-FIRST PROTOCOL
 
-### STAGE 1 — First user response (Turn 1):
-Signal intelligence immediately. Echo what you understood + show you're already working.
-Example format:
-"Got it — [what you understood]. I'm already mapping your [split type].
-[Quick clarifying question if critical, otherwise just build]"
+### When the user's message contains: days + goal OR days + sport OR sport + goal
+→ SKIP ALL QUESTIONS. Show the FULL WEEKLY STRUCTURE immediately. No preamble. Just build.
+→ Confirm in 1 line what you built ("3-day strength program with soccer focus — here's your split:"), then show the program.
+→ After showing structure, ask ONE refinement question at the end.
 
-### STAGE 2 — Second response (Turn 2):
-Show the STRUCTURE. Don't wait. Reveal the weekly split and Day 1 outline.
-Format:
-**Your [X]-Day [Split Name]**
-Day 1 — [Name]: [Exercise 1], [Exercise 2], [Exercise 3]...
-Day 2 — [Name]: ...
-[continue]
+### When the user's message is missing only ONE piece of info (e.g., days not stated)
+→ Use smart defaults for everything missing (full gym, intermediate, 60min, 4 days)
+→ Echo what you understood, SHOW partial structure, then ask ONE targeted question.
 
-Then: "This is your starting point. Want me to dial in sets, reps, and progressions?"
+### NEVER:
+- Ask multiple questions in one response
+- Delay showing structure until you have "complete" information
+- Say "I need a few things first" or run an intake form
+- Ask about equipment, experience, AND days all at once
 
-### STAGE 3 — Third response onward (Turn 3+):
-Expand and refine. Add sets/reps, rest periods, progressions. Adjust based on feedback.
-
-## INTELLIGENT DEFAULTS (use these when info is missing)
-- Experience not stated → assume intermediate
-- Equipment not stated → assume full gym
-- Days not stated → ask ONCE, or default to 4 days
-- Goal is vague → pick the most specific interpretation and name it
+## SMART DEFAULTS (always apply when info is missing)
+- Experience not stated → intermediate
+- Equipment not stated → full gym
+- Days not stated → 4 days (or ask ONCE and default to 4 if no answer)
+- Goal is vague → athletic performance + strength
+- Sport detected → athletic performance bias + sport-specific exercises
 
 ## LANGUAGE STYLE
 - Short, punchy sentences
 - No filler: never say "Great!", "Sure!", "Of course!", "Absolutely!"
-- Signal momentum: "Building your split...", "Mapping your week...", "Here's your Day 1..."
+- Signal momentum: "Building your split...", "Here's your structure...", "Program is live..."
 - Sound like a confident coach who already knows what to do
 - Use "your" language: "your split", "your system", "your Day 1"
 
 ## RESPONSE FORMAT
-- Use **bold** for exercise names and day headers
-- Use short line breaks between sections
-- Max 2–3 sentences of prose before showing structured content
-- When showing programs: label each day, list exercises with sets×reps
+- Use **bold** for day headers
+- List exercises clearly with sets×reps
+- Max 2 sentences of prose before showing program content
+- Always end with ONE refinement question
 
 ## NSCA STANDARDS (always apply)
 Exercise order within sessions:
@@ -82,10 +74,14 @@ Rep zones:
 
 ## CURRENT TURN: ${turnNumber}
 ${turnNumber === 1
-  ? "This is the FIRST user response. Echo + signal you are building. Ask at most ONE question. Make them feel like the machine is already in motion."
+  ? `TURN 1 — BUILD-FIRST RULES:
+If the user stated days + goal/sport → SHOW THE FULL SPLIT NOW. No questions first.
+Format: 1 confirmation line → full weekly split with exercises → 1 refinement question.
+If days NOT stated → echo goal/sport, show Day 1 structure as a preview, ask ONE question (days per week).
+NEVER ask about equipment, experience, AND days in the same message.`
   : turnNumber === 2
-  ? "This is the SECOND exchange. Show the WEEKLY SPLIT and DAY 1 OUTLINE. Do not wait. Even if you are missing some details, show real structure now. This is the 'wow' moment."
-  : "Continue expanding and refining. Add detail to the structure. Adjust based on what they say. The system is already real — now make it great."}`;
+  ? "TURN 2 — Show the COMPLETE WEEKLY SPLIT if not already shown. Include all days with exercises, sets×reps. This is the 'wow' moment. End with one refinement question."
+  : "TURN 3+ — Expand and refine. Add progression detail, adjust based on feedback. The system is real — make it great."}`;
 }
 
 // ─── OpenAI Call (conversational, non-JSON) ───────────────────────────────────
@@ -129,42 +125,93 @@ async function callOpenAIChat(
 
 // ─── Fallback responses (used when OpenAI is unavailable) ─────────────────────
 
+function extractDaysFromMessage(lower: string): number | null {
+  const patterns = [
+    /\b(\d)\s*[\-–]?\s*day(?:s)?\s*(?:a|per)\s*week\b/i,
+    /\b(\d)\s*[\-–]?\s*day\s+(?:program|split|routine|plan|strength|training)\b/i,
+    /\b(\d)\s+times?\s*(?:a|per)\s*week\b/i,
+    /\btrain(?:ing)?\s+(\d)\s+days?\b/i,
+  ];
+  for (const pat of patterns) {
+    const m = lower.match(pat);
+    if (m) {
+      const raw = parseInt(m[1], 10);
+      if (raw >= 1 && raw <= 7) return raw;
+    }
+  }
+  return null;
+}
+
+function buildFallbackStructure(days: number, sport: string | null, goal: string): string {
+  const sportLine = sport ? ` with ${sport} performance focus` : "";
+
+  if (days <= 3) {
+    return `**Your ${days}-Day Full Body Split${sportLine}**\n\n**Day 1 — Full Body A**\nBox Jump 3×5, Squat 4×4-6, Romanian Deadlift 3×6, Barbell Row 3×6, Nordic Curl 3×8, Copenhagen Plank 3×20s\n\n**Day 2 — Full Body B**\nDeadlift 4×3-5, Incline Press 3×6, Pull-Up 3×6, Bulgarian Split Squat 3×8, Lateral Raise 3×12, Core Circuit\n\n**Day 3 — Full Body C**\nPower Clean 4×3, Front Squat 3×5, Bench Press 3×5, Cable Row 3×8, Hip Thrust 3×10, Calf Raise 3×15\n\nThis is your foundation. Want me to add sets, reps, and progressions?`;
+  }
+
+  if (days === 4) {
+    return `**Your 4-Day Upper/Lower Split${sportLine}**\n\n**Day 1 — Upper Strength**\nBench Press 4×4, Barbell Row 4×4, Overhead Press 3×5, Weighted Pull-Up 3×5\n\n**Day 2 — Lower Strength**\nSquat 4×4, Romanian Deadlift 3×6, Leg Press 3×8, Nordic Curl 3×8\n\n**Day 3 — Upper Hypertrophy**\nIncline DB Press 4×10, Cable Row 4×10, DB Shoulder Press 3×12, Lat Pulldown 3×12\n\n**Day 4 — Lower Hypertrophy**\nFront Squat 4×8, Leg Curl 4×10, Bulgarian Split Squat 3×12, Calf Raise 4×15\n\nThis is your system. Want me to add progressions and weekly structure?`;
+  }
+
+  return `**Your 5-Day Push/Pull/Legs Split${sportLine}**\n\n**Day 1 — Push**\nBench Press 4×4, Overhead Press 3×5, Incline DB Press 3×10, Lateral Raise 3×12\n\n**Day 2 — Pull**\nDeadlift 4×3, Barbell Row 4×5, Pull-Up 3×6, Face Pull 3×15\n\n**Day 3 — Legs**\nSquat 4×4, Romanian Deadlift 3×6, Leg Press 3×10, Nordic Curl 3×8\n\n**Day 4 — Push (Volume)**\nIncline Barbell Press 4×8, DB Press 3×12, Tricep Work 3×12, Shoulder Circuit\n\n**Day 5 — Pull (Volume)**\nTrap Bar Deadlift 3×8, Cable Row 4×10, Lat Pulldown 3×12, Bicep Work 3×12\n\nFull structure is ready. Want sets/reps breakdowns and progression?`;
+}
+
 function buildFallbackResponse(
   userMessage: string,
   turnNumber: number
 ): string {
   const lower = userMessage.toLowerCase();
 
+  // Detect if key context is already in the message
+  const detectedDays = extractDaysFromMessage(lower);
+  const hasSport = /soccer|basketball|baseball|tennis|hockey|rugby|mma|wrestling|volleyball|lacrosse|track|sprint|swimming|cycling|golf|football|futbol/.test(lower);
+  const sportName = hasSport
+    ? (lower.match(/soccer|futbol|football/) ? "soccer"
+      : lower.match(/basketball/) ? "basketball"
+      : lower.match(/baseball/) ? "baseball"
+      : lower.match(/tennis/) ? "tennis"
+      : lower.match(/hockey/) ? "hockey"
+      : lower.match(/mma|wrestling|jiu.?jitsu|boxing/) ? "combat sports"
+      : lower.match(/track|sprint/) ? "track"
+      : lower.match(/swimming/) ? "swimming"
+      : lower.match(/volleyball/) ? "volleyball"
+      : "sport")
+    : null;
+  const goalStr = lower.match(/strength|strong|power/) ? "strength"
+    : lower.match(/muscle|hypertrophy|size|bulk/) ? "hypertrophy"
+    : lower.match(/fat|lean|cut|shred/) ? "fat loss"
+    : hasSport ? "athletic performance"
+    : "strength";
+
   if (turnNumber === 1) {
-    // Echo + signal building
-    if (lower.match(/muscle|hypertrophy|size|bulk/)) {
-      return `Got it — muscle growth, maximum hypertrophy. I'm mapping your split now.\n\nOne question: how many days per week can you commit to?`;
+    // If we already have enough context, build immediately — never ask blocking questions
+    if (detectedDays !== null) {
+      // Days stated — build structure immediately (turn 2 behavior)
+      const structure = buildFallbackStructure(detectedDays, sportName, goalStr);
+      const goalLabel = hasSport ? `${sportName} performance + ${goalStr}` : goalStr;
+      return `Got it — ${detectedDays}-day ${goalLabel} program. Building your split now.\n\n${structure}`;
     }
-    if (lower.match(/strength|strong|power|lift|1rm/)) {
-      return `Strength focus. I'm already structuring your progression model.\n\nHow many days per week are you training?`;
+
+    // No days stated — echo goal, signal building, ask ONE question
+    if (hasSport) {
+      return `${sportName ? sportName.charAt(0).toUpperCase() + sportName.slice(1) : "Sport"} performance + strength. I'm already mapping a sport-specific protocol.\n\nOne question: how many training days per week do you have?`;
+    }
+    if (lower.match(/muscle|hypertrophy|size|bulk/)) {
+      return `Hypertrophy focus — I'm mapping your split now.\n\nHow many days per week can you commit to?`;
+    }
+    if (lower.match(/strength|strong|power|lift/)) {
+      return `Strength focus. Already structuring your progression model.\n\nHow many days per week are you training?`;
     }
     if (lower.match(/fat|weight|lean|cut|lose|shred/)) {
-      return `Body recomposition — preserving muscle while cutting fat. Building your plan.\n\nHow many days per week do you have?`;
+      return `Body recomposition — building your plan now.\n\nHow many days per week do you have?`;
     }
-    if (lower.match(/athletic|performance|sport|speed|explosive/)) {
-      return `Athletic performance. I'm mapping a sport-specific protocol for you.\n\nHow many training days per week?`;
-    }
-    if (lower.match(/pain|injury|rehab|recover/)) {
-      return `Training smart around limitations. I can build a system that respects your body and still drives progress.\n\nWhat are you working with, and how many days per week?`;
-    }
-    return `Understood. I'm already building the structure.\n\nOne thing I need: how many days per week are you training?`;
+    return `Understood. Building your structure now.\n\nOne thing: how many days per week are you training?`;
   }
 
   if (turnNumber === 2) {
-    // Show split structure
-    if (lower.match(/3|three/)) {
-      return `**Your 3-Day Full Body Split**\n\n**Day 1 — Full Body A**\nSquat, Bench Press, Barbell Row, Overhead Press, Romanian Deadlift\n\n**Day 2 — Full Body B**\nDeadlift, Incline Press, Pull-Up, Dumbbell Shoulder Press, Leg Press\n\n**Day 3 — Full Body C**\nFront Squat, Dip, Cable Row, Lateral Raise, Nordic Curl\n\nThis is your foundation. Want me to add sets, reps, and progressions?`;
-    }
-    if (lower.match(/5|five/)) {
-      return `**Your 5-Day Push/Pull/Legs Split**\n\n**Day 1 — Push**\nBench Press, Overhead Press, Incline DB Press, Lateral Raise, Tricep Pushdown\n\n**Day 2 — Pull**\nDeadlift, Barbell Row, Pull-Up, Face Pull, Barbell Curl\n\n**Day 3 — Legs**\nSquat, Romanian Deadlift, Leg Press, Leg Curl, Calf Raise\n\n**Day 4 — Push (Volume)**\n**Day 5 — Pull (Volume)**\n\nThis is your starting structure. Want the full sets/reps breakdown?`;
-    }
-    // Default: 4-day Upper/Lower
-    return `**Your 4-Day Upper/Lower Split**\n\n**Day 1 — Upper Strength**\nBench Press 4×4, Barbell Row 4×4, Overhead Press 3×5, Pull-Up 3×5\n\n**Day 2 — Lower Strength**\nSquat 4×4, Romanian Deadlift 3×6, Leg Press 3×8, Nordic Curl 3×8\n\n**Day 3 — Upper Hypertrophy**\nIncline DB Press 4×10, Cable Row 4×10, DB Shoulder Press 3×12, Lat Pulldown 3×12\n\n**Day 4 — Lower Hypertrophy**\nFront Squat 4×8, Leg Curl 4×10, Bulgarian Split Squat 3×12, Calf Raise 4×15\n\nThis is your system. Want me to add progressions and weekly structure?`;
+    // Check current message AND use detectedDays from it
+    const days = detectedDays ?? 4;
+    return buildFallbackStructure(days, sportName, goalStr);
   }
 
   return `Building on that now. The structure is locked in — let me refine the details for you.`;
