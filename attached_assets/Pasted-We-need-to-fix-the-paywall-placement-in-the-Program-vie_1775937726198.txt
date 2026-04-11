@@ -1,0 +1,106 @@
+We need to fix the paywall placement in the Program view.
+
+CURRENT ISSUE:
+The “locked days” teaser/overlay is covering Day 1 of the program. This blocks the user from fully seeing the first workout and weakens the initial value moment.
+
+GOAL:
+Let the user fully experience Day 1 before they hit the paywall.
+
+The experience should feel like:
+“Here’s your first workout → this is valuable → unlock the rest”
+
+NOT:
+“You can’t really see anything until you pay”
+
+--------------------------------------------------
+REQUIRED FIX
+--------------------------------------------------
+
+1. NEVER COVER DAY 1
+- Day 1 must always be fully visible
+- No overlay, blur, or lock card should sit on top of Day 1
+- The user should be able to scroll through all of Day 1 without interruption
+
+2. MOVE THE PAYWALL BELOW DAY 1
+- Insert the paywall only AFTER Day 1 is fully rendered
+- The paywall should appear between Day 1 and Day 2
+- Do not place it in the middle of Day 1’s exercise list
+
+Correct flow:
+- Program title / summary
+- Full Day 1
+- Paywall block
+- Locked preview of remaining days
+
+3. KEEP THE PAYWALL IN CONTEXT
+The paywall should say something like:
+“Unlock your full 3-day program and all future AI adjustments”
+
+Optional supporting line:
+“Continue building your system with the AI”
+
+CTA button:
+“Unlock Full Program”
+
+4. PREVIEW THE REMAINING DAYS WITHOUT REVEALING THEM
+For Day 2 and beyond, do one of these:
+- show only day headers
+- show blurred content
+- show teaser titles without full exercises
+
+Examples:
+- Day 2 — Lower Body Power + Acceleration
+- Day 3 — Full Body Strength + Trunk
+
+Do not fully reveal the locked days.
+
+5. PRESERVE THE SENSE OF VALUE
+Even if the remaining days are locked, keep visible:
+- program title
+- days per week
+- goal / performance focus
+- overall structure
+
+Only restrict the detailed content after Day 1.
+
+6. KEEP THE SCROLL FLOW NATURAL
+The user should scroll like this:
+- build result
+- open Program tab
+- see full Day 1
+- then hit lock block
+- then see teased future days
+
+This should feel smooth and intentional, not abrupt.
+
+7. IMPROVE CONVERSION PSYCHOLOGY
+We want the user to think:
+“This first day is legit. I want the rest.”
+
+Not:
+“I got blocked before I could even judge the value.”
+
+Value must come before restriction.
+
+8. MOBILE UX REQUIREMENT
+Make sure the paywall block:
+- fits cleanly on mobile
+- does not overlap exercise cards
+- does not obstruct scrolling
+- does not hide important Day 1 content
+
+9. TEST CASE
+When a user generates a 3-day program:
+- Day 1 is 100% visible
+- paywall appears only after Day 1
+- remaining 2 days are locked/teased
+- CTA is clearly visible
+- Day 1 remains easy to scroll and read
+
+10. FINAL RULE
+Never place the paywall over the first meaningful part of the program.
+
+Day 1 is the hook.
+The paywall comes after the hook.
+
+Implement this now.

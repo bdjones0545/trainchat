@@ -707,135 +707,179 @@ function ProgramTab({
       )}
 
       {/* Days */}
-      <div ref={scrollAreaRef} className="flex-1 overflow-y-auto p-3 space-y-2 relative">
+      <div ref={scrollAreaRef} className="flex-1 overflow-y-auto p-3 space-y-2">
         {days.map((day, idx) => {
           const isLocked = !isPremium && idx > 0;
           const isExpanded = expandedDay === idx;
           const dayDiff = animatedKeys.get(`d${idx}`);
 
           return (
-            <div
-              key={idx}
-              className={`bg-card border rounded-xl overflow-hidden transition-colors duration-300 ${
-                isLocked ? "border-border/40 opacity-60" : isExpanded ? "border-primary/30" : "border-border"
-              }`}
-              style={dayDiff === "newday" ? { animation: "day-new 1.8s ease forwards" } : undefined}
-            >
-              <button
-                onClick={() => !isLocked && setExpandedDay(isExpanded ? null : idx)}
-                className={`w-full flex items-center justify-between p-3 text-left transition-colors ${
-                  isLocked ? "cursor-not-allowed" : "hover:bg-accent/30"
-                }`}
-                disabled={isLocked}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                      isLocked ? "bg-accent/40 text-muted-foreground/60"
-                      : isExpanded ? "bg-primary text-primary-foreground"
-                      : "bg-primary/15 text-primary"
-                    }`}>
-                      Day {day.dayNumber}
-                    </span>
-                    {isLocked && <Lock className="w-3 h-3 text-muted-foreground/50" />}
+            <div key={idx}>
+              {/* Inline paywall — sits between Day 1 and Day 2, inside the scroll flow */}
+              {showPaywall && idx === 1 && (
+                <div className="rounded-xl border border-primary/20 bg-card p-5 text-center mb-2">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-3 mx-auto">
+                    <Lock className="w-4 h-4 text-primary" />
                   </div>
-                  <p className={`text-[11px] font-semibold truncate ${isLocked ? "text-muted-foreground/50" : "text-foreground"}`}>
-                    {day.name}
+                  <h4 className="text-sm font-bold text-foreground mb-1">
+                    Unlock your full {days.length}-day program
+                  </h4>
+                  <p className="text-[11px] text-muted-foreground mb-1 leading-relaxed">
+                    Continue building your system with the AI — all future edits included.
                   </p>
-                  <p className={`text-[10px] mt-0.5 ${isLocked ? "text-muted-foreground/40" : "text-muted-foreground"}`}>
-                    {isLocked ? "Locked — upgrade to view" : day.focus || `${day.exercises?.length ?? 0} exercises`}
+                  <p className="text-[10px] text-muted-foreground/60 mb-4">
+                    {lockedDayCount} more day{lockedDayCount === 1 ? "" : "s"} below
                   </p>
-                </div>
-                <div className="flex-shrink-0 ml-2">
-                  {isLocked ? (
-                    <Lock className="w-3.5 h-3.5 text-muted-foreground/40" />
-                  ) : isExpanded ? (
-                    <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
-                  ) : (
-                    <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                  {onUpgrade && (
+                    <button
+                      onClick={onUpgrade}
+                      className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-primary text-primary-foreground text-[12px] font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all"
+                    >
+                      <Zap className="w-3.5 h-3.5" /> Unlock Full Program
+                    </button>
                   )}
                 </div>
-              </button>
+              )}
 
-              {!isLocked && isExpanded && (
-                <div className="border-t border-border divide-y divide-border/50">
-                  {(day.exercises ?? []).map((ex, exIdx) => {
-                    const exKey = `d${idx}-e${exIdx}`;
-                    const exDiff = animatedKeys.get(exKey);
-                    const isHighlighted = highlightedNames.has(ex.name);
-                    const inlineLabel = inlineLabels.get(ex.name);
-                    const rowAnim =
-                      isHighlighted ? "ex-highlight-glow 3.5s ease forwards" :
-                      exDiff === "added"   ? "ex-added 1.8s ease forwards" :
-                      exDiff === "swapped" ? "ex-swapped 1.8s ease forwards" :
-                      undefined;
-                    const volAnim = exDiff === "volume" ? "vol-flash 1.6s ease forwards" : undefined;
-                    return (
-                    <div
-                      key={exIdx}
-                      ref={(el) => {
-                        if (el) exerciseRefs.current.set(ex.name, el);
-                        else exerciseRefs.current.delete(ex.name);
-                      }}
-                      className="px-3 py-2.5"
-                      style={rowAnim ? { animation: rowAnim } : undefined}
-                    >
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p
-                          className="text-[11px] font-medium text-foreground"
-                          style={isHighlighted ? { animation: "ex-name-fadein 0.4s ease forwards" } : undefined}
-                        >
-                          {ex.name}
-                        </p>
-                        {isHighlighted && (
-                          <span
-                            className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex-shrink-0"
-                            style={{ animation: "badge-pop 3.5s ease forwards" }}
-                          >
-                            Updated
-                          </span>
-                        )}
+              {/* Day card — full for Day 1, teaser header only for locked days */}
+              {isLocked ? (
+                <div
+                  className="bg-card border border-border/30 rounded-xl overflow-hidden opacity-40"
+                  style={dayDiff === "newday" ? { animation: "day-new 1.8s ease forwards" } : undefined}
+                >
+                  <div className="flex items-center justify-between p-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-accent/40 text-muted-foreground/60">
+                          Day {day.dayNumber}
+                        </span>
                       </div>
-                      {isHighlighted && inlineLabel && (
-                        <p
-                          className="text-[10px] text-indigo-400/80 mt-0.5 font-medium"
-                          style={{ animation: "label-fade 3.5s ease forwards" }}
-                        >
-                          {inlineLabel}
-                        </p>
-                      )}
-                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1.5">
-                        {ex.sets > 0 && (
-                          <span className="text-[10px] text-muted-foreground">
-                            <span
-                              className="font-semibold text-foreground"
-                              style={volAnim ? { animation: volAnim } : undefined}
-                            >{ex.sets}</span> sets
-                          </span>
-                        )}
-                        {ex.reps && (
-                          <span className="text-[10px] text-muted-foreground">
-                            <span
-                              className="font-semibold text-foreground"
-                              style={volAnim ? { animation: volAnim } : undefined}
-                            >{ex.reps}</span> reps
-                          </span>
-                        )}
-                        {ex.rest && (
-                          <span className="text-[10px] bg-accent/60 px-1.5 py-0.5 rounded text-muted-foreground">
-                            {ex.rest}
-                          </span>
-                        )}
-                      </div>
-                      {ex.notes && (
-                        <p className="text-[10px] text-muted-foreground/70 mt-1.5 italic leading-relaxed">{ex.notes}</p>
+                      <p className="text-[11px] font-semibold text-muted-foreground/70 truncate">
+                        {day.name}
+                      </p>
+                      {day.focus && (
+                        <p className="text-[10px] text-muted-foreground/50 mt-0.5 truncate">{day.focus}</p>
                       )}
                     </div>
-                    );
-                  })}
-                  {day.notes && (
-                    <div className="px-3 py-2.5 bg-accent/15">
-                      <p className="text-[10px] text-muted-foreground italic leading-relaxed">{day.notes}</p>
+                    <Lock className="w-3 h-3 text-muted-foreground/30 flex-shrink-0 ml-2" />
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className={`bg-card border rounded-xl overflow-hidden transition-colors duration-300 ${
+                    isExpanded ? "border-primary/30" : "border-border"
+                  }`}
+                  style={dayDiff === "newday" ? { animation: "day-new 1.8s ease forwards" } : undefined}
+                >
+                  <button
+                    onClick={() => setExpandedDay(isExpanded ? null : idx)}
+                    className="w-full flex items-center justify-between p-3 text-left hover:bg-accent/30 transition-colors"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                          isExpanded ? "bg-primary text-primary-foreground" : "bg-primary/15 text-primary"
+                        }`}>
+                          Day {day.dayNumber}
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-semibold text-foreground truncate">
+                        {day.name}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {day.focus || `${day.exercises?.length ?? 0} exercises`}
+                      </p>
+                    </div>
+                    <div className="flex-shrink-0 ml-2">
+                      {isExpanded ? (
+                        <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                      )}
+                    </div>
+                  </button>
+
+                  {isExpanded && (
+                    <div className="border-t border-border divide-y divide-border/50">
+                      {(day.exercises ?? []).map((ex, exIdx) => {
+                        const exKey = `d${idx}-e${exIdx}`;
+                        const exDiff = animatedKeys.get(exKey);
+                        const isHighlighted = highlightedNames.has(ex.name);
+                        const inlineLabel = inlineLabels.get(ex.name);
+                        const rowAnim =
+                          isHighlighted ? "ex-highlight-glow 3.5s ease forwards" :
+                          exDiff === "added"   ? "ex-added 1.8s ease forwards" :
+                          exDiff === "swapped" ? "ex-swapped 1.8s ease forwards" :
+                          undefined;
+                        const volAnim = exDiff === "volume" ? "vol-flash 1.6s ease forwards" : undefined;
+                        return (
+                          <div
+                            key={exIdx}
+                            ref={(el) => {
+                              if (el) exerciseRefs.current.set(ex.name, el);
+                              else exerciseRefs.current.delete(ex.name);
+                            }}
+                            className="px-3 py-2.5"
+                            style={rowAnim ? { animation: rowAnim } : undefined}
+                          >
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p
+                                className="text-[11px] font-medium text-foreground"
+                                style={isHighlighted ? { animation: "ex-name-fadein 0.4s ease forwards" } : undefined}
+                              >
+                                {ex.name}
+                              </p>
+                              {isHighlighted && (
+                                <span
+                                  className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex-shrink-0"
+                                  style={{ animation: "badge-pop 3.5s ease forwards" }}
+                                >
+                                  Updated
+                                </span>
+                              )}
+                            </div>
+                            {isHighlighted && inlineLabel && (
+                              <p
+                                className="text-[10px] text-indigo-400/80 mt-0.5 font-medium"
+                                style={{ animation: "label-fade 3.5s ease forwards" }}
+                              >
+                                {inlineLabel}
+                              </p>
+                            )}
+                            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1.5">
+                              {ex.sets > 0 && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  <span
+                                    className="font-semibold text-foreground"
+                                    style={volAnim ? { animation: volAnim } : undefined}
+                                  >{ex.sets}</span> sets
+                                </span>
+                              )}
+                              {ex.reps && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  <span
+                                    className="font-semibold text-foreground"
+                                    style={volAnim ? { animation: volAnim } : undefined}
+                                  >{ex.reps}</span> reps
+                                </span>
+                              )}
+                              {ex.rest && (
+                                <span className="text-[10px] bg-accent/60 px-1.5 py-0.5 rounded text-muted-foreground">
+                                  {ex.rest}
+                                </span>
+                              )}
+                            </div>
+                            {ex.notes && (
+                              <p className="text-[10px] text-muted-foreground/70 mt-1.5 italic leading-relaxed">{ex.notes}</p>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {day.notes && (
+                        <div className="px-3 py-2.5 bg-accent/15">
+                          <p className="text-[10px] text-muted-foreground italic leading-relaxed">{day.notes}</p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -843,31 +887,6 @@ function ProgramTab({
             </div>
           );
         })}
-
-        {showPaywall && (
-          <div className="absolute inset-x-3 bottom-3 rounded-xl overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-t from-[#080e18] via-[#080e18]/90 to-transparent pointer-events-none" />
-            <div className="relative bg-[#0c1220]/95 border border-primary/20 rounded-xl p-5 text-center backdrop-blur-sm">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-3 mx-auto">
-                <Lock className="w-4 h-4 text-primary" />
-              </div>
-              <h4 className="text-sm font-bold text-foreground mb-1">
-                {lockedDayCount} more day{lockedDayCount === 1 ? "" : "s"} locked
-              </h4>
-              <p className="text-[11px] text-muted-foreground mb-4 leading-relaxed">
-                Unlock your full program and all future AI edits.
-              </p>
-              {onUpgrade && (
-                <button
-                  onClick={onUpgrade}
-                  className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-primary text-primary-foreground text-[12px] font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all"
-                >
-                  <Zap className="w-3.5 h-3.5" /> Unlock Full Program
-                </button>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
