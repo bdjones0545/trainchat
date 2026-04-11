@@ -3,6 +3,7 @@ import { db, readinessEntriesTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { logger } from "../lib/logger";
+import { evaluateAndAdapt } from "../lib/check-in-adaptation";
 
 const router: IRouter = Router();
 
@@ -30,9 +31,25 @@ router.post("/readiness", requireAuth, async (req, res): Promise<void> => {
       .values({ userId, sleepScore, energyScore, sorenessScore, stressScore, motivationScore, painScore, notes: notes ?? null })
       .returning();
 
+    // ── Adaptive Check-In Engine ──────────────────────────────────────────────
+    // Evaluates readiness signals and proactively adjusts the active training
+    // system. Non-blocking — failures never break the check-in save.
+    const adaptation = await evaluateAndAdapt(userId, entry.id, {
+      sleepScore,
+      energyScore,
+      sorenessScore,
+      stressScore,
+      motivationScore,
+      painScore,
+    }).catch((err) => {
+      logger.error({ err, userId }, "Adaptation engine error (non-fatal)");
+      return null;
+    });
+
     res.status(201).json({
       ...entry,
       createdAt: entry.createdAt.toISOString(),
+      adaptation: adaptation ?? null,
     });
   } catch (err) {
     logger.error({ err }, "Failed to save readiness entry");

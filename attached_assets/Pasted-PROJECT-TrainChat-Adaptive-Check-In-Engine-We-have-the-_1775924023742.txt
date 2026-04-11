@@ -1,0 +1,358 @@
+PROJECT: TrainChat Adaptive Check-In Engine
+
+We have the Live Program Engine in place.
+Now we are building the next major layer:
+
+The system should adapt the user’s program based on daily check-ins WITHOUT requiring the user to manually request changes.
+
+This is the feature that makes TrainChat feel intelligent, alive, and personalized.
+
+--------------------------------------------------
+
+CORE GOAL
+
+Turn TrainChat into a system that:
+- collects daily readiness and recovery signals
+- interprets those signals
+- adjusts the active training plan automatically when needed
+- explains what changed and why
+- logs those changes visibly in the program history
+
+This is NOT just a check-in form.
+This is an adaptive decision engine.
+
+--------------------------------------------------
+
+PRODUCT OUTCOME
+
+A user should be able to open the app, complete a fast daily check-in, and then see:
+
+- whether they should train as planned
+- whether volume or intensity was reduced
+- whether a recovery session was substituted
+- whether exercises were swapped due to pain
+- whether the session was progressed due to high readiness
+
+The app should feel like it is coaching them in real time.
+
+--------------------------------------------------
+
+STEP 1: BUILD DAILY CHECK-IN DATA MODEL
+
+Create a DailyCheckIn model and database table.
+
+DailyCheckIn {
+  id: string
+  userId: string
+  programId: string
+  date: string
+
+  energy: number
+  soreness: number
+  painLevel: number
+  sleepQuality: number
+  stress: number
+  motivation: number
+  readiness: number
+
+  painAreas: string[]
+  notes: string
+
+  completedYesterdayWorkout: boolean
+  todayTimeAvailable: number
+  equipmentContext: string[]
+  wantsHardSession: boolean
+
+  createdAt: Date
+}
+
+Use a 1-5 or 1-10 scale consistently across the app.
+
+--------------------------------------------------
+
+STEP 2: BUILD ADAPTIVE DECISION ENGINE
+
+Create:
+
+evaluateCheckInAndAdjustProgram(program, checkIn)
+
+This function should analyze readiness and determine one of several modes:
+
+1. TRAIN AS PLANNED
+- readiness good
+- no major pain flags
+- adequate time and recovery
+
+2. LIGHT MODIFICATION
+- slightly lower energy
+- mild soreness or stress
+- reduce volume slightly
+- keep overall session structure
+
+3. PAIN MODIFICATION
+- pain flagged in a relevant area
+- swap risky exercises
+- reduce intensity
+- prioritize safer movement options
+
+4. RECOVERY / DELOAD MODE
+- poor sleep
+- high soreness
+- high stress
+- low motivation/readiness
+- reduce volume significantly or replace with recovery-focused work
+
+5. PROGRESSION / GREEN LIGHT
+- high readiness
+- low soreness
+- good sleep
+- good motivation
+- allow progression or performance emphasis
+
+This engine should return:
+- adjustmentMode
+- list of structured changes
+- user-facing explanation
+- coach note
+
+--------------------------------------------------
+
+STEP 3: DEFINE ADAPTIVE RULES
+
+Build a rules layer so the system behaves consistently.
+
+Examples:
+
+IF painLevel is high AND painAreas includes knee:
+- reduce or remove high knee-load movements
+- swap squat/lunge variations if necessary
+- avoid aggressive plyometrics if not appropriate
+
+IF sleepQuality is low AND stress is high:
+- reduce intensity
+- shorten session
+- reduce total sets
+- consider recovery emphasis
+
+IF readiness is high AND soreness is low:
+- allow progression
+- add load, volume, or performance emphasis depending on program type
+
+IF todayTimeAvailable is much lower than programmed session duration:
+- compress session intelligently
+- preserve main priority blocks
+- remove low-priority accessories
+
+IF user missed yesterday workout:
+- do not blindly stack volume
+- intelligently re-sequence or continue based on current day logic
+
+--------------------------------------------------
+
+STEP 4: CONNECT CHECK-IN TO LIVE PROGRAM
+
+When a user completes a daily check-in:
+
+1. save the check-in
+2. run evaluateCheckInAndAdjustProgram
+3. generate structured program changes
+4. apply those changes to the active program
+5. update today’s session view
+6. append entries to Changes tab
+7. show user a clear summary of what changed
+
+The user should immediately see:
+- updated session
+- updated duration if changed
+- swapped exercises if needed
+- explanation of why
+
+--------------------------------------------------
+
+STEP 5: ADD “TODAY ADJUSTMENT SUMMARY” CARD
+
+On the main Builder / Program screen, create a highly visible card such as:
+
+Today’s Adjustment Summary
+
+Examples:
+- “Training as planned today.”
+- “Reduced lower-body volume due to soreness and poor sleep.”
+- “Swapped jumping drills for low-impact power work due to knee pain.”
+- “Compressed session to 30 minutes based on your available time.”
+- “Progressed intensity today due to high readiness.”
+
+This should feel like a real coach decision.
+
+--------------------------------------------------
+
+STEP 6: ADD ADAPTATION LOGGING
+
+All check-in-based modifications must be logged in programChangeLog.
+
+Each entry should include:
+- timestamp
+- version
+- changeType
+- source = "daily_check_in"
+- description
+
+Examples:
+- Reduced total sets by 20 percent due to low readiness
+- Swapped split squats for leg press due to knee discomfort
+- Shortened session to 30 minutes based on time availability
+- Increased top-set load recommendation due to strong readiness signals
+
+This creates visible proof of intelligence.
+
+--------------------------------------------------
+
+STEP 7: SUPPORT STRUCTURED AI + RULES TOGETHER
+
+Use a hybrid system:
+
+1. Rules engine handles consistent safety and logic
+2. AI can explain the change in natural language
+3. AI can optionally suggest nuanced modifications
+4. Final output must still be structured JSON that updates the program state
+
+Do NOT rely only on vague AI text.
+The system must remain deterministic enough to trust.
+
+--------------------------------------------------
+
+STEP 8: UPDATE PROGRAM STATE SAFELY
+
+When applying check-in adjustments:
+- do not destroy the entire program
+- modify only what is needed for today or near-term progression
+- preserve the overall structure unless signals justify broader changes
+
+Examples:
+- change only today’s session
+- reduce volume for one session
+- swap one exercise block
+- temporarily change intensity target
+- trigger short recovery mode for 1-3 sessions if needed
+
+--------------------------------------------------
+
+STEP 9: BUILD DAILY CHECK-IN UI
+
+Create a fast, mobile-friendly check-in flow.
+
+Fields:
+- Energy
+- Soreness
+- Pain level
+- Sleep quality
+- Stress
+- Motivation
+- Time available today
+- Pain areas
+- Notes
+
+Design goal:
+This should take under 30 seconds to complete.
+
+Use:
+- sliders
+- segmented buttons
+- chips for pain areas
+- optional free-text note
+
+Make it frictionless and clean.
+
+--------------------------------------------------
+
+STEP 10: ADD CHECK-IN ENTRY POINTS
+
+The daily check-in should be accessible from:
+- side navigation
+- Active Program / Builder screen
+- today’s workout section
+
+Make it obvious and habitual.
+
+--------------------------------------------------
+
+STEP 11: SHOW BEFORE / AFTER SESSION ADJUSTMENT
+
+Inside today’s workout, optionally provide a simple comparison:
+
+Original plan
+Adjusted plan
+
+Example:
+Original:
+- Back Squat 4x6
+- Walking Lunge 3x10
+- Broad Jump 3x5
+
+Adjusted:
+- Goblet Squat 3x8
+- Step-Up 2x10
+- Med Ball Power Throw 3x5
+
+This makes the adaptation tangible.
+
+--------------------------------------------------
+
+STEP 12: BUILD FOR RETENTION
+
+This feature should make users feel:
+- understood
+- coached
+- safer
+- more consistent
+
+It should reduce the feeling that they need to “figure it out themselves.”
+
+The system should reward check-in completion by making the training feel smarter every day.
+
+--------------------------------------------------
+
+STEP 13: OPTIONAL ADAPTIVE MODES TO SUPPORT
+
+Design architecture so we can later support:
+- recovery mode
+- travel mode
+- pain flare-up mode
+- deload week mode
+- performance day mode
+
+Do not fully build all of these yet, but structure the engine for expansion.
+
+--------------------------------------------------
+
+FINAL PRODUCT RULE
+
+TrainChat should not feel like it only responds when spoken to.
+
+It should feel like:
+“A coaching system that interprets how I’m doing and adjusts my training accordingly.”
+
+That is the differentiation.
+
+--------------------------------------------------
+
+SUCCESS STATE
+
+User opens app.
+User completes daily check-in:
+- poor sleep
+- sore legs
+- only 30 minutes available
+- mild knee pain
+
+System immediately:
+- reduces lower-body volume
+- swaps one risky movement
+- shortens session
+- updates Today’s Workout
+- logs the change
+- explains the adjustment clearly
+
+That is the goal.
+
+Build this now.

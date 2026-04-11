@@ -835,7 +835,14 @@ export default function Chat() {
       {showReadiness && (
         <ReadinessModal
           onClose={() => setShowReadiness(false)}
-          onSubmit={() => setShowReadiness(false)}
+          onSubmit={(adaptation) => {
+            setShowReadiness(false);
+            if (adaptation && adaptation.changesApplied > 0) {
+              queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+              queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+              queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
+            }
+          }}
         />
       )}
       {showFeedback && (

@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { X, Moon, Zap, Activity, Brain, Flame, AlertTriangle } from "lucide-react";
 import { useCreateReadinessEntry } from "@workspace/api-client-react";
+import AdaptationSummaryCard, { type AdaptationResult } from "./AdaptationSummaryCard";
 
 interface ReadinessModalProps {
   onClose: () => void;
-  onSubmit?: () => void;
+  onSubmit?: (adaptation: AdaptationResult | null) => void;
 }
 
 interface ReadinessScores {
@@ -94,6 +95,7 @@ export default function ReadinessModal({ onClose, onSubmit }: ReadinessModalProp
   });
   const [notes, setNotes] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [adaptation, setAdaptation] = useState<AdaptationResult | null>(null);
 
   const createReadiness = useCreateReadinessEntry();
 
@@ -105,15 +107,17 @@ export default function ReadinessModal({ onClose, onSubmit }: ReadinessModalProp
     createReadiness.mutate(
       { data: { ...scores, notes: notes.trim() || undefined } },
       {
-        onSuccess: () => {
+        onSuccess: (data: any) => {
+          setAdaptation(data?.adaptation ?? null);
           setSubmitted(true);
-          setTimeout(() => {
-            onSubmit?.();
-            onClose();
-          }, 1200);
         },
       }
     );
+  }
+
+  function handleDismiss() {
+    onSubmit?.(adaptation);
+    onClose();
   }
 
   return (
@@ -193,15 +197,19 @@ export default function ReadinessModal({ onClose, onSubmit }: ReadinessModalProp
           </div>
         </div>
 
-        {/* Footer */}
+        {/* Footer / Adaptation result */}
         <div className="px-5 pb-5 pt-3 border-t border-border">
           {submitted ? (
-            <div className="flex items-center justify-center gap-2 py-2.5">
-              <div className="w-4 h-4 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center">
-                <div className="w-2 h-2 rounded-full bg-green-400" />
+            adaptation ? (
+              <AdaptationSummaryCard adaptation={adaptation} onDismiss={handleDismiss} />
+            ) : (
+              <div className="flex items-center justify-center gap-2 py-2.5">
+                <div className="w-4 h-4 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center">
+                  <div className="w-2 h-2 rounded-full bg-green-400" />
+                </div>
+                <span className="text-sm font-medium text-green-400">Logged — your agent has it.</span>
               </div>
-              <span className="text-sm font-medium text-green-400">Logged — your agent has it.</span>
-            </div>
+            )
           ) : (
             <button
               onClick={handleSubmit}

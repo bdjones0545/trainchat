@@ -8,6 +8,7 @@
 import { useState } from "react";
 import { X, CheckCircle2, ChevronDown } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
+import AdaptationSummaryCard, { type AdaptationResult } from "@/components/chat/AdaptationSummaryCard";
 
 // ─── Score configs ─────────────────────────────────────────────────────────
 
@@ -99,7 +100,7 @@ type Scores = Record<string, number>;
 
 interface ReadinessCheckInProps {
   onClose: () => void;
-  onSubmitted: () => void;
+  onSubmitted: (adaptation: AdaptationResult | null) => void;
 }
 
 // ─── Component ─────────────────────────────────────────────────────────────
@@ -110,6 +111,7 @@ export default function ReadinessCheckIn({ onClose, onSubmitted }: ReadinessChec
   const [showNotes, setShowNotes] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [adaptation, setAdaptation] = useState<AdaptationResult | null>(null);
 
   const allAnswered = DIMENSIONS.every((d) => scores[d.key] !== undefined);
 
@@ -117,7 +119,7 @@ export default function ReadinessCheckIn({ onClose, onSubmitted }: ReadinessChec
     if (!allAnswered || submitting) return;
     setSubmitting(true);
     try {
-      await customFetch("/api/readiness", {
+      const data = await customFetch<any>("/api/readiness", {
         method: "POST",
         body: JSON.stringify({
           sleepScore: scores.sleepScore,
@@ -129,14 +131,16 @@ export default function ReadinessCheckIn({ onClose, onSubmitted }: ReadinessChec
           notes: notes.trim() || null,
         }),
       });
+      setAdaptation(data?.adaptation ?? null);
       setSubmitted(true);
-      setTimeout(() => {
-        onSubmitted();
-        onClose();
-      }, 1200);
     } catch {
       setSubmitting(false);
     }
+  }
+
+  function handleDismiss() {
+    onSubmitted(adaptation);
+    onClose();
   }
 
   return (
@@ -162,13 +166,20 @@ export default function ReadinessCheckIn({ onClose, onSubmitted }: ReadinessChec
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
           {submitted ? (
-            <div className="flex flex-col items-center justify-center py-10 gap-3">
-              <div className="w-14 h-14 rounded-full bg-green-500/15 flex items-center justify-center">
-                <CheckCircle2 className="w-7 h-7 text-green-500" />
+            adaptation ? (
+              <AdaptationSummaryCard adaptation={adaptation} onDismiss={handleDismiss} />
+            ) : (
+              <div className="flex flex-col items-center justify-center py-10 gap-3">
+                <div className="w-14 h-14 rounded-full bg-green-500/15 flex items-center justify-center">
+                  <CheckCircle2 className="w-7 h-7 text-green-500" />
+                </div>
+                <p className="text-sm font-bold text-foreground">Check-in logged</p>
+                <p className="text-xs text-muted-foreground text-center">Your coach is now aware of how you're feeling today.</p>
+                <button onClick={handleDismiss} className="mt-2 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">
+                  Close
+                </button>
               </div>
-              <p className="text-sm font-bold text-foreground">Check-in logged</p>
-              <p className="text-xs text-muted-foreground text-center">Your coach is now aware of how you're feeling today.</p>
-            </div>
+            )
           ) : (
             <>
               {DIMENSIONS.map((dim) => (

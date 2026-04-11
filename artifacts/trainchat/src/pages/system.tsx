@@ -1959,9 +1959,14 @@ export default function SystemPage() {
       {showReadinessCheckIn && (
         <ReadinessCheckIn
           onClose={() => setShowReadinessCheckIn(false)}
-          onSubmitted={() => {
+          onSubmitted={(adaptation) => {
             refetchReadiness();
             queryClient.invalidateQueries({ queryKey: ["insights"] });
+            if (adaptation && adaptation.changesApplied > 0) {
+              queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+              queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+              queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
+            }
           }}
         />
       )}
