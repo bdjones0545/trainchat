@@ -14,6 +14,7 @@ import {
   type GoalType,
   type ExerciseEntry,
   type MovementPattern,
+  type ExerciseFilter,
 } from "./training-intelligence";
 import { type IntentResult, buildIntentPromptHint, type ExtractedConstraints, buildConstraintContract } from "./intent";
 import { type ActionDecision, buildPreservationContext } from "./decision";
@@ -1752,7 +1753,10 @@ function buildIntelligentProgram(profile: UserProfile): ProgramStructure {
 
 function buildProgramName(profile: UserProfile): string {
   const goal = normalizeGoal(profile.trainingGoal);
-  const labels: Record<GoalType, string> = {
+  const sport = profile.sportFocus;
+  const season = profile.seasonContext;
+
+  const goalLabels: Record<GoalType, string> = {
     hypertrophy: "Hypertrophy",
     strength: "Strength",
     athletic_performance: "Athletic Performance",
@@ -1760,15 +1764,39 @@ function buildProgramName(profile: UserProfile): string {
     general_fitness: "General Fitness",
     endurance: "Endurance",
   };
-  const split = buildTrainingSpec(profile).splitType.split(" ")[0];
-  return `${labels[goal]} — ${split} ${profile.daysPerWeek}-Day Program`;
+
+  const seasonLabels: Record<string, string> = {
+    off_season: "Off-Season",
+    pre_season: "Pre-Season",
+    in_season: "In-Season",
+    post_season: "Post-Season",
+    return_to_play: "Return to Play",
+  };
+
+  const daysLabel = `${profile.daysPerWeek}-Day`;
+
+  if (sport) {
+    const sportName = sport.charAt(0).toUpperCase() + sport.slice(1);
+    const seasonLabel = season ? ` ${seasonLabels[season]}` : "";
+    return `${sportName}${seasonLabel} Performance Program — ${daysLabel}`;
+  }
+
+  return `${goalLabels[goal]} Program — ${daysLabel}`;
 }
 
 function buildProgramDescription(profile: UserProfile, spec: ReturnType<typeof buildTrainingSpec>): string {
   const exp = normalizeExperience(profile.experienceLevel);
   const expLabel = exp === "beginner" ? "beginner" : exp === "intermediate" ? "intermediate" : "advanced";
   const injuryNote = spec.injuryFlags.length > 0 ? ` Programmed with ${spec.injuryFlags.map(f => f.replace("_", " ")).join(", ")} modifications.` : "";
-  return `A ${profile.daysPerWeek}-day ${spec.splitType} program for ${expLabel} athletes targeting ${profile.trainingGoal.toLowerCase()}. ${profile.sessionDuration}-minute sessions, built for ${profile.equipmentAccess}.${injuryNote}`;
+  const sport = profile.sportFocus;
+  const season = profile.seasonContext;
+
+  if (sport) {
+    const seasonPhrase = season ? ` ${season.replace("_", "-")}` : "";
+    return `A ${profile.daysPerWeek}-day${seasonPhrase} performance program built for ${expLabel} ${sport} athletes. Sessions are structured around neural demand — power first, strength second, unilateral and trunk work last. ${profile.sessionDuration}-minute sessions, ${profile.equipmentAccess}.${injuryNote}`;
+  }
+
+  return `A ${profile.daysPerWeek}-day ${spec.splitType} program for ${expLabel} athletes targeting ${profile.trainingGoal.toLowerCase()}. Sessions follow NSCA hierarchy — explosive work first, compound strength second, accessories last. ${profile.sessionDuration}-minute sessions, ${profile.equipmentAccess}.${injuryNote}`;
 }
 
 function getGoalConfirmationLine(goal: GoalType, daysPerWeek: number): string {
@@ -1824,6 +1852,9 @@ function buildConstraintAwareConfirmation(
 
 // ─── Day builders ─────────────────────────────────────────────────────────────
 
+// Base filter — all ExerciseFilter fields except patterns (added per-call)
+type BaseFilter = Omit<ExerciseFilter, "patterns">;
+
 function buildDays(
   goal: GoalType,
   experience: ReturnType<typeof normalizeExperience>,
@@ -1843,46 +1874,96 @@ function buildDays(
     preferStressLevel: injuryFlags.length > 0 ? ("low" as const) : ("any" as const),
   };
 
-  if (days <= 3) return buildFullBodyDays(goal, experience, spec, baseFilter, days);
-  if (days === 4) return buildUpperLowerDays(goal, experience, spec, baseFilter);
+  if (days <= 3) return buildFullBodyDays(goal, experience, spec, baseFilter, days, profile);
+  if (days === 4) return buildUpperLowerDays(goal, experience, spec, baseFilter, profile);
   return buildPPLDays(goal, experience, spec, baseFilter, days);
 }
 
-// NSCA intent cues by exercise classification
+// NSCA intent cues by exercise classification — position + purpose + transfer standard
 const NSCA_INTENT_CUES: Record<string, string> = {
-  power_explosive: "Explosive concentric — max intent on every rep. CNS must be fresh.",
-  olympic: "Bar speed is the priority. Move with maximal intent. Reset between reps.",
-  primary: "Max effort on working sets. Control the eccentric (2-3 sec), drive hard on the concentric.",
-  secondary: "Controlled tempo throughout. Focus on the target muscle. 2 RIR on all working sets.",
-  accessory: "Full range of motion. Stability focus. Feel the target muscle — quality over load.",
-  conditioning: "Work:rest ratio is intentional. Maintain form under fatigue.",
+  prep_lower: "Prime hip mobility, glute activation, and ankle stiffness — prepare the joints and patterns the session will demand.",
+  prep_upper: "Set scapular position and activate rotator cuff support — prepare the shoulder complex for pressing and pulling under load.",
+  prep_full: "Dynamic activation through the full kinetic chain — raise tissue temperature and prime CNS readiness for power output.",
+  power_horizontal: "Project force horizontally — drive through the floor with triple extension. Develops the acceleration phase of sprinting.",
+  power_vertical: "Project force vertically — maximum height intent with full extension through ankle, knee, and hip.",
+  power_lateral: "Lateral force production and deceleration — stick the landing, absorb eccentrically, project back. Develops change-of-direction capacity.",
+  power_rotational: "Rotate through the hips, not the arms — develop rotational power that transfers to cutting, throwing, and striking mechanics.",
+  power_posterior: "Hip-driven explosive extension — posterior chain power that transfers directly to sprint push-off mechanics.",
+  power_explosive: "Maximum velocity intent on every rep — this is a neural quality session, not a fatigue session. Reset fully between reps.",
+  olympic: "Bar speed and triple extension are the only metrics — the weight is secondary. Reset posture and intent before every rep.",
+  primary_squat: "Maintain stacked posture, drive vertically through the floor — builds bilateral force production that transfers to sprint and jump mechanics.",
+  primary_hinge: "Hips back, lat tension before the pull — develop posterior chain stiffness and force application from the hip that transfers directly to sprinting.",
+  primary_press: "Full retraction, drive through the bar — build upper body force output and structural balance to support athletic load transfer.",
+  primary_pull: "Drive elbows back past the torso — build posterior chain and scapular stability that supports posture, trunk transfer, and overhead resilience.",
+  primary: "Maximum quality on every working set — drive intent through the movement pattern, not just the load.",
+  secondary: "Controlled tempo, feel the target position — each rep should improve mechanics, not just accumulate fatigue.",
+  unilateral_lower: "Single-leg position control — stay tall in the hip, resist pelvic drop. Reproduces the stance phase demands of sprinting and change of direction.",
+  unilateral_lateral: "Load the frontal plane — develop adductor and abductor capacity for lateral cutting and single-leg stability under horizontal force.",
+  accessory: "Quality range of motion, stable position throughout — addresses a structural gap or resilience need in this program.",
+  trunk_anti_rotation: "Stay tall and resist the rotation — anti-rotation under load directly mimics the trunk demands of contact, cutting, and force transfer.",
+  trunk_anti_extension: "Brace the trunk and resist extension — build lumbar stiffness and proximal stability that anchors all force production.",
+  trunk_lateral: "Lateral trunk stability under a sustained load — develops the lateral chain capacity needed for single-leg stiffness and change of direction.",
+  trunk_carry: "Walk tall, resist sag — weighted carry develops full-chain stiffness and postural endurance that transfers to every athletic movement.",
+  trunk: "Purposeful trunk loading — every rep should reinforce bracing, position, or anti-rotation. This is not a finisher, it is structural support work.",
+  conditioning: "Work-to-rest ratio is intentional — maintain posture and mechanics under fatigue, not just effort.",
 };
 
-function classifyExercise(pattern: MovementPattern): string {
-  if (pattern === "power_explosive") return "Plyometric/Explosive";
-  if (pattern === "squat" || pattern === "hinge") return "Primary";
-  if (pattern === "push_horizontal" || pattern === "push_vertical" || pattern === "pull_horizontal" || pattern === "pull_vertical") return "Secondary Compound";
+function classifyExercise(pattern: MovementPattern, role?: "prep" | "power" | "primary" | "secondary" | "unilateral" | "trunk" | "accessory"): string {
+  if (role === "prep") return "Prep";
+  if (role === "power" || pattern === "power_explosive") return "Power";
+  if (role === "primary") return "Primary";
+  if (role === "secondary") return "Secondary";
+  if (role === "unilateral") return "Unilateral";
+  if (role === "trunk") return "Trunk";
+  if (pattern === "carry") return "Carry";
   if (pattern === "conditioning") return "Conditioning";
   return "Accessory";
 }
 
-function intentForPattern(pattern: MovementPattern): string {
-  if (pattern === "power_explosive") return NSCA_INTENT_CUES.power_explosive;
-  if (pattern === "squat" || pattern === "hinge") return NSCA_INTENT_CUES.primary;
-  if (pattern === "push_horizontal" || pattern === "push_vertical" || pattern === "pull_horizontal" || pattern === "pull_vertical") return NSCA_INTENT_CUES.secondary;
+function intentForPattern(pattern: MovementPattern, role?: "prep" | "power" | "primary" | "secondary" | "unilateral" | "trunk" | "accessory", sessionType?: "lower" | "upper" | "full"): string {
+  if (role === "prep") {
+    if (sessionType === "lower") return NSCA_INTENT_CUES.prep_lower;
+    if (sessionType === "upper") return NSCA_INTENT_CUES.prep_upper;
+    return NSCA_INTENT_CUES.prep_full;
+  }
+  if (role === "power" || pattern === "power_explosive") return NSCA_INTENT_CUES.power_explosive;
+  if (role === "primary") {
+    if (pattern === "squat") return NSCA_INTENT_CUES.primary_squat;
+    if (pattern === "hinge") return NSCA_INTENT_CUES.primary_hinge;
+    if (pattern === "push_horizontal" || pattern === "push_vertical") return NSCA_INTENT_CUES.primary_press;
+    if (pattern === "pull_horizontal" || pattern === "pull_vertical") return NSCA_INTENT_CUES.primary_pull;
+    return NSCA_INTENT_CUES.primary;
+  }
+  if (role === "unilateral") {
+    if (pattern === "squat") return NSCA_INTENT_CUES.unilateral_lower;
+    return NSCA_INTENT_CUES.unilateral_lateral;
+  }
+  if (role === "trunk") {
+    if (pattern === "carry") return NSCA_INTENT_CUES.trunk_carry;
+    return NSCA_INTENT_CUES.trunk_anti_rotation;
+  }
   if (pattern === "conditioning") return NSCA_INTENT_CUES.conditioning;
-  return NSCA_INTENT_CUES.accessory;
+  if (pattern === "carry") return NSCA_INTENT_CUES.trunk_carry;
+  return NSCA_INTENT_CUES.secondary;
 }
 
-function exToDay(ex: ExerciseEntry, sets: number, reps: string, rest: string, patternOverride?: MovementPattern): Exercise {
+function exToDay(
+  ex: ExerciseEntry,
+  sets: number,
+  reps: string,
+  rest: string,
+  patternOverride?: MovementPattern,
+  role?: "prep" | "power" | "primary" | "secondary" | "unilateral" | "trunk" | "accessory",
+  sessionType?: "lower" | "upper" | "full"
+): Exercise {
   const pattern = patternOverride ?? ex.pattern;
   return {
     name: ex.name,
-    classification: classifyExercise(pattern),
+    classification: classifyExercise(pattern, role),
     sets,
     reps,
     rest,
-    intent: intentForPattern(pattern),
+    intent: intentForPattern(pattern, role, sessionType),
     notes: ex.notes,
   };
 }
@@ -1918,71 +1999,425 @@ function nscaPrescription(
   return { sets: 3, reps: "10-15", rest: "60 sec" };
 }
 
+// ─── Performance Session Builders (A→G Structure) ──────────────────────────
+
+function buildPrepBlock(sessionType: "lower" | "upper" | "full", sport: string | null): Exercise {
+  const isSoccer = !!sport && (sport.toLowerCase().includes("soccer") || sport.toLowerCase().includes("football"));
+  if (sessionType === "lower") {
+    return {
+      name: isSoccer ? "Hip CAR + Lateral Band Walk + Pogo Hops" : "Hip Mobility + Glute Activation",
+      classification: "Prep",
+      sets: 2,
+      reps: "10 each direction / 15m / 20 reps",
+      rest: "none",
+      intent: NSCA_INTENT_CUES.prep_lower,
+      notes: isSoccer
+        ? "Hip CARs mobilize the joint; lateral band walk activates glute med; pogo hops build ankle stiffness — all three prime soccer-specific demands."
+        : "Activate glutes and prime hip mobility before any bilateral or unilateral lower body loading.",
+    };
+  }
+  if (sessionType === "upper") {
+    return {
+      name: "Band Pull-Apart + Wall Slide",
+      classification: "Prep",
+      sets: 2,
+      reps: "15 / 10 reps",
+      rest: "none",
+      intent: NSCA_INTENT_CUES.prep_upper,
+      notes: "Pull-aparts for rear delt and scapular retraction; wall slides for thoracic mobility and scapular upward rotation.",
+    };
+  }
+  return {
+    name: isSoccer ? "Leg Swing + Hip Circle + Pogo Hop" : "Leg Swing + Inchworm + Hip Circle",
+    classification: "Prep",
+    sets: 1,
+    reps: "10 each / 5 reps / 10 each",
+    rest: "none",
+    intent: NSCA_INTENT_CUES.prep_full,
+    notes: "Perform continuously — this is dynamic neural activation, not static stretching.",
+  };
+}
+
+function buildPowerBlock(goal: GoalType, sport: string | null, dayIndex: number, usedNames: Set<string>): Exercise {
+  const isSoccer = !!sport && (sport.toLowerCase().includes("soccer") || sport.toLowerCase().includes("football"));
+  const sets = goal === "athletic_performance" ? 4 : 3;
+
+  if (isSoccer) {
+    const options: Exercise[] = [
+      {
+        name: "Broad Jump",
+        classification: "Power",
+        sets,
+        reps: "3-4",
+        rest: "2-3 min",
+        intent: NSCA_INTENT_CUES.power_horizontal,
+        notes: "Drive forward with arm swing — this is your acceleration mechanics in gym form. Reset posture and intent between reps.",
+      },
+      {
+        name: "Lateral Bound",
+        classification: "Power",
+        sets,
+        reps: "4 each side",
+        rest: "2-3 min",
+        intent: NSCA_INTENT_CUES.power_lateral,
+        notes: "Stick the landing with full absorption before the next bound — lateral deceleration is the point, not just propulsion.",
+      },
+      {
+        name: "Medicine Ball Overhead Scoop Toss",
+        classification: "Power",
+        sets,
+        reps: "4-5",
+        rest: "2-3 min",
+        intent: NSCA_INTENT_CUES.power_posterior,
+        notes: "Hip hinge loads the posterior chain — the toss is the result of explosive hip extension, not an arm throw.",
+      },
+    ];
+    const option = options[dayIndex % options.length];
+    if (!usedNames.has(option.name)) return option;
+  }
+
+  // General athletic / non-sport
+  const options: Exercise[] = [
+    {
+      name: "Box Jump",
+      classification: "Power",
+      sets,
+      reps: "3-4",
+      rest: "2-3 min",
+      intent: NSCA_INTENT_CUES.power_vertical,
+      notes: "Land softly — step down, do not jump down. Full hip and knee extension at the top.",
+    },
+    {
+      name: "Broad Jump",
+      classification: "Power",
+      sets,
+      reps: "3-4",
+      rest: "2-3 min",
+      intent: NSCA_INTENT_CUES.power_horizontal,
+      notes: "Arm swing initiates the jump — project horizontally. Reset posture before each rep.",
+    },
+    {
+      name: "Medicine Ball Slam",
+      classification: "Power",
+      sets,
+      reps: "4-5",
+      rest: "2 min",
+      intent: NSCA_INTENT_CUES.power_explosive,
+      notes: "Full body extension then aggressive flexion — total effort on every rep.",
+    },
+  ];
+  return options[dayIndex % options.length];
+}
+
+function buildUnilateralBlock(goal: GoalType, sport: string | null, usedNames: Set<string>, dayIndex: number): Exercise {
+  const isSoccer = !!sport && (sport.toLowerCase().includes("soccer") || sport.toLowerCase().includes("football"));
+
+  // Soccer: cycle through RFESS, lateral lunge, step-up for variety across days
+  if (isSoccer) {
+    const options = [
+      {
+        name: "Bulgarian Split Squat",
+        intent: "Single-leg position under load — maintain pelvic neutrality and resist hip drop. This is the stance phase of sprinting and cutting in strength form.",
+        notes: "Front foot placed far enough forward that the shin stays mostly vertical. Drive through the heel.",
+      },
+      {
+        name: "Lateral Lunge",
+        intent: NSCA_INTENT_CUES.unilateral_lateral,
+        notes: "Sit into the hip, keep the chest tall — adductor and frontal-plane loading that directly mirrors lateral cutting mechanics.",
+      },
+      {
+        name: "Step-Up",
+        intent: "Drive through the heel of the elevated leg — unilateral quad and glute force application that transfers to acceleration and hill mechanics.",
+        notes: "Lead with the elevated leg's heel pressing through the box, not the trailing leg pushing off.",
+      },
+    ];
+    const opt = options[dayIndex % options.length];
+    if (!usedNames.has(opt.name)) {
+      return {
+        name: opt.name,
+        classification: "Unilateral",
+        sets: 3,
+        reps: "8-10 each side",
+        rest: "90 sec",
+        intent: opt.intent,
+        notes: opt.notes,
+      };
+    }
+  }
+
+  // General athletic
+  const options = [
+    {
+      name: "Bulgarian Split Squat",
+      intent: NSCA_INTENT_CUES.unilateral_lower,
+      notes: "Front foot far enough forward that shin stays mostly vertical. Drive through the heel at the top.",
+    },
+    {
+      name: "Step-Up",
+      intent: "Drive through the elevated leg — unilateral force application and pelvic control under single-leg load.",
+      notes: "Control the eccentric — don't drop onto the box. Tall posture throughout.",
+    },
+  ];
+  const opt = options[dayIndex % options.length];
+  if (!usedNames.has(opt.name)) {
+    return {
+      name: opt.name,
+      classification: "Unilateral",
+      sets: 3,
+      reps: "8-10 each side",
+      rest: "90 sec",
+      intent: opt.intent,
+      notes: opt.notes,
+    };
+  }
+
+  // Fallback
+  return {
+    name: "Split Squat",
+    classification: "Unilateral",
+    sets: 3,
+    reps: "8-10 each side",
+    rest: "90 sec",
+    intent: NSCA_INTENT_CUES.unilateral_lower,
+  };
+}
+
+function buildTrunkBlock(goal: GoalType, sport: string | null, usedNames: Set<string>, dayIndex: number): Exercise {
+  const isSoccer = !!sport && (sport.toLowerCase().includes("soccer") || sport.toLowerCase().includes("football"));
+  const isAthletic = goal === "athletic_performance" || !!sport;
+
+  // Rotate trunk emphasis across days: anti-rotation → anti-extension → lateral
+  const trunkOptions = isAthletic || isSoccer
+    ? [
+        {
+          name: "Pallof Press",
+          classification: "Trunk" as const,
+          sets: 3,
+          reps: "10 each side",
+          rest: "60 sec",
+          intent: NSCA_INTENT_CUES.trunk_anti_rotation,
+          notes: "Half-kneeling preferred — resist the cable pull and stay tall. Anti-rotation under load is the performance standard here.",
+        },
+        {
+          name: "Dead Bug",
+          classification: "Trunk" as const,
+          sets: 3,
+          reps: "8 each side",
+          rest: "60 sec",
+          intent: NSCA_INTENT_CUES.trunk_anti_extension,
+          notes: "Lower back flat against the floor at all times — if it comes off, that rep is the limit. Quality over quantity.",
+        },
+        isSoccer
+          ? {
+              name: "Copenhagen Plank",
+              classification: "Trunk" as const,
+              sets: 3,
+              reps: "20-30 sec each side",
+              rest: "60 sec",
+              intent: NSCA_INTENT_CUES.trunk_lateral,
+              notes: "Adductor and lateral chain loading — critical for groin resilience in soccer. Keep hips level throughout.",
+            }
+          : {
+              name: "Side Plank",
+              classification: "Trunk" as const,
+              sets: 3,
+              reps: "30-40 sec each side",
+              rest: "60 sec",
+              intent: NSCA_INTENT_CUES.trunk_lateral,
+              notes: "Hips stacked, full body rigid — lateral chain stability that transfers to single-leg and cutting demands.",
+            },
+      ]
+    : [
+        {
+          name: "Dead Bug",
+          classification: "Trunk" as const,
+          sets: 3,
+          reps: "8 each side",
+          rest: "60 sec",
+          intent: NSCA_INTENT_CUES.trunk_anti_extension,
+          notes: "Slow and controlled — lumbar stays flush with the floor on every rep.",
+        },
+        {
+          name: "Pallof Press",
+          classification: "Trunk" as const,
+          sets: 3,
+          reps: "10 each side",
+          rest: "60 sec",
+          intent: NSCA_INTENT_CUES.trunk_anti_rotation,
+          notes: "Stand or kneel — resist the rotation without leaning or shifting hips.",
+        },
+        {
+          name: "Side Plank",
+          classification: "Trunk" as const,
+          sets: 3,
+          reps: "30 sec each side",
+          rest: "60 sec",
+          intent: NSCA_INTENT_CUES.trunk_lateral,
+        },
+      ];
+
+  const idx = dayIndex % trunkOptions.length;
+  const opt = trunkOptions[idx];
+  if (!usedNames.has(opt.name)) return opt;
+  // Try next option
+  return trunkOptions[(idx + 1) % trunkOptions.length];
+}
+
+function buildAthleteFullBodyDayConfigs(
+  sport: string | null,
+  numDays: number,
+  spec: ReturnType<typeof buildTrainingSpec>
+): Array<{ name: string; focus: string; notes: string; primaryPattern: "squat" | "hinge"; secondaryPattern: MovementPattern }> {
+  const isSoccer = !!sport && (sport.toLowerCase().includes("soccer") || sport.toLowerCase().includes("football"));
+
+  if (isSoccer) {
+    const all = [
+      {
+        name: "Lower Force Production + Acceleration Support",
+        focus: "Bilateral squat strength, horizontal power output, and single-leg positional control to build the force that drives sprint and acceleration mechanics.",
+        notes: "This session prioritizes lower-body force production through bilateral squat strength and single-leg positional control. The trunk work reinforces stiffness through the hips under fatigue — directly transferable to acceleration and change-of-direction mechanics.",
+        primaryPattern: "squat" as const,
+        secondaryPattern: "pull_vertical" as MovementPattern,
+      },
+      {
+        name: "Upper Strength + Posterior Chain",
+        focus: "Horizontal press/pull balance, hip hinge force development, and trunk integrity to support athletic posture and force transfer.",
+        notes: "This session develops structural balance — pressing and pulling in equal measure — while the hinge work builds the hip extension strength critical to sprint mechanics. The trunk work at the end supports force transfer between upper and lower body.",
+        primaryPattern: "hinge" as const,
+        secondaryPattern: "push_horizontal" as MovementPattern,
+      },
+      {
+        name: "Full Body Power + Positional Strength",
+        focus: "Lateral power output, compound strength integration, and frontal-plane unilateral control for complete athletic integration.",
+        notes: "This session integrates power, strength, and positional control across the full kinetic chain. The lateral power emphasis develops change-of-direction capacity that transfers directly to field performance. Unilateral work and trunk loading build the single-leg resilience soccer demands.",
+        primaryPattern: "squat" as const,
+        secondaryPattern: "pull_horizontal" as MovementPattern,
+      },
+    ];
+    return all.slice(0, numDays);
+  }
+
+  // General athletic (non-sport-specific)
+  const all = [
+    {
+      name: "Lower Body Force Production + Trunk Stiffness",
+      focus: "Bilateral squat strength, horizontal power output, and anti-rotation trunk work.",
+      notes: "This session prioritizes lower-body force production through bilateral strength and single-leg positional control. Trunk work at the end reinforces the stiffness that transfers to athletic output across all movement demands.",
+      primaryPattern: "squat" as const,
+      secondaryPattern: "pull_vertical" as MovementPattern,
+    },
+    {
+      name: "Upper Strength + Structural Balance",
+      focus: "Pressing and pulling strength, posterior chain support, and shoulder integrity.",
+      notes: "This session develops structural balance — equal push and pull emphasis — alongside posterior chain work that supports athletic posture and trunk-to-limb force transfer.",
+      primaryPattern: "hinge" as const,
+      secondaryPattern: "push_horizontal" as MovementPattern,
+    },
+    {
+      name: "Full Body Power + Integration",
+      focus: "Power output, compound strength integration, and unilateral positional work.",
+      notes: "This session integrates the full chain — power output when the CNS is fresh, followed by compound strength and unilateral control. The goal is complete athletic integration, not single-muscle fatigue.",
+      primaryPattern: "squat" as const,
+      secondaryPattern: "pull_horizontal" as MovementPattern,
+    },
+  ];
+  return all.slice(0, numDays);
+}
+
 function buildFullBodyDays(
   goal: GoalType,
   experience: ReturnType<typeof normalizeExperience>,
   spec: ReturnType<typeof buildTrainingSpec>,
-  baseFilter: Parameters<typeof selectExercises>[0],
-  numDays: number
+  baseFilter: BaseFilter,
+  numDays: number,
+  profile: UserProfile
 ): ProgramDay[] {
-  const dayConfigs = [
-    { name: "Full Body A — Compound Focus", focus: "Primary strength movements across all patterns", isA: true },
-    { name: "Full Body B — Volume Focus", focus: "Higher reps, more total volume", isA: false },
-    { name: "Full Body C — Athletic / Integration", focus: "Explosive work, unilateral, conditioning", isA: true, isC: true },
-  ].slice(0, numDays);
+  const sport = profile.sportFocus ?? null;
+  const isAthletic = goal === "athletic_performance" || !!sport;
+
+  // Get day configs with session identity and neural demand variation
+  const dayConfigs = isAthletic
+    ? buildAthleteFullBodyDayConfigs(sport, numDays, spec)
+    : [
+        {
+          name: "Full Body Strength — Squat Focus",
+          focus: "Squat pattern primary, horizontal push/pull support, full-body integration.",
+          notes: spec.splitRationale,
+          primaryPattern: "squat" as const,
+          secondaryPattern: "pull_vertical" as MovementPattern,
+        },
+        {
+          name: "Full Body Strength — Hinge Focus",
+          focus: "Hinge pattern primary, vertical push/pull support, trunk integrity.",
+          notes: "This session shifts to posterior chain primary work — hinge strength, vertical pulling, and trunk bracing to build complete structural balance.",
+          primaryPattern: "hinge" as const,
+          secondaryPattern: "push_horizontal" as MovementPattern,
+        },
+        {
+          name: "Full Body Power + Conditioning",
+          focus: "Power output, compound integration, and conditioning to close the session.",
+          notes: "This session integrates power, strength, and conditioning — delivering a complete training stimulus and preparing the body for a recovery window before the next training block.",
+          primaryPattern: "squat" as const,
+          secondaryPattern: "pull_horizontal" as MovementPattern,
+        },
+      ].slice(0, numDays);
 
   return dayConfigs.map((cfg, idx) => {
-    const isC = "isC" in cfg && cfg.isC;
-    // NSCA hierarchy: explosive first, then primary compounds, then secondary, then accessories
-    const patterns = isC
-      ? (["power_explosive", "squat", "hinge", "pull_horizontal", "core"] as const)
-      : (["squat", "hinge", "push_horizontal", "pull_vertical", "core"] as const);
-
-    const exercises: Exercise[] = [];
     const usedNames = new Set<string>();
+    const exercises: Exercise[] = [];
+    const sessionType: "lower" | "upper" | "full" = "full";
 
-    // NSCA hierarchy: patterns are already ordered correctly (explosive → primary → secondary → accessory)
-    for (let pIdx = 0; pIdx < patterns.length; pIdx++) {
-      const pattern = patterns[pIdx];
-      const hits = selectExercises({
-        ...baseFilter,
-        patterns: [pattern],
-        excludeNames: [...(baseFilter.excludeNames ?? []), ...usedNames],
-        maxCount: 1,
-      });
+    // A — NEURAL / DYNAMIC PREP
+    const prep = buildPrepBlock(sessionType, sport);
+    exercises.push(prep);
+    usedNames.add(prep.name);
 
-      if (hits.length === 0) continue;
-      const ex = hits[0];
-      usedNames.add(ex.name);
+    // B — POWER / EXPLOSIVE BLOCK (CNS-fresh, before any fatigue)
+    const power = buildPowerBlock(goal, sport, idx, usedNames);
+    exercises.push(power);
+    usedNames.add(power.name);
 
-      // Determine NSCA role by pattern and position in the session
-      const isExplosive = pattern === "power_explosive";
-      const isPrimary = !isExplosive && (pattern === "squat" || pattern === "hinge") && pIdx <= 2;
-      const isAccessory = pattern === "core" || pattern.startsWith("iso_");
-      const role = isExplosive ? "primary" : isPrimary ? "primary" : isAccessory ? "accessory" : "secondary";
-
-      const rx = nscaPrescription(pattern, role, goal);
-      exercises.push(exToDay(ex, rx.sets, rx.reps, rx.rest, pattern));
-    }
-
-    // Conditioning finisher (always last — NSCA rule)
-    const finisher = selectExercises({
+    // C — PRIMARY STRENGTH (pattern rotated across days for neural demand variation)
+    const primaryHits = selectExercises({
       ...baseFilter,
-      patterns: ["carry", "conditioning", "iso_legs"],
-      excludeNames: [...(baseFilter.excludeNames ?? []), ...usedNames],
+      patterns: [cfg.primaryPattern],
+      excludeNames: [...usedNames],
       maxCount: 1,
     });
-    if (finisher.length > 0) {
-      const rx = nscaPrescription(finisher[0].pattern, "accessory", goal);
-      exercises.push(exToDay(finisher[0], rx.sets, rx.reps, rx.rest, finisher[0].pattern));
+    if (primaryHits.length > 0) {
+      const rx = nscaPrescription(cfg.primaryPattern, "primary", goal);
+      exercises.push(exToDay(primaryHits[0], rx.sets, rx.reps, rx.rest, cfg.primaryPattern, "primary", sessionType));
+      usedNames.add(primaryHits[0].name);
     }
+
+    // D — SECONDARY STRENGTH (complements primary)
+    const secondaryHits = selectExercises({
+      ...baseFilter,
+      patterns: [cfg.secondaryPattern],
+      excludeNames: [...usedNames],
+      maxCount: 1,
+    });
+    if (secondaryHits.length > 0) {
+      const rx = nscaPrescription(cfg.secondaryPattern, "secondary", goal);
+      exercises.push(exToDay(secondaryHits[0], rx.sets, rx.reps, rx.rest, cfg.secondaryPattern, "secondary", sessionType));
+      usedNames.add(secondaryHits[0].name);
+    }
+
+    // E — UNILATERAL / POSITIONAL (mandatory for lower and full body days)
+    const unilateral = buildUnilateralBlock(goal, sport, usedNames, idx);
+    exercises.push(unilateral);
+    usedNames.add(unilateral.name);
+
+    // F — TRUNK / INTEGRITY (purposeful — rotated for variety across days)
+    const trunk = buildTrunkBlock(goal, sport, usedNames, idx);
+    exercises.push(trunk);
 
     return {
       dayNumber: idx + 1,
       name: cfg.name,
       focus: cfg.focus,
       exercises,
-      notes: idx === 0 ? `${spec.splitRationale}` : undefined,
+      notes: cfg.notes,
     };
   });
 }
@@ -1991,81 +2426,161 @@ function buildUpperLowerDays(
   goal: GoalType,
   experience: ReturnType<typeof normalizeExperience>,
   spec: ReturnType<typeof buildTrainingSpec>,
-  baseFilter: Parameters<typeof selectExercises>[0]
+  baseFilter: BaseFilter,
+  profile: UserProfile
 ): ProgramDay[] {
+  const sport = profile.sportFocus ?? null;
+  const isSoccer = !!sport && (sport.toLowerCase().includes("soccer") || sport.toLowerCase().includes("football"));
+  const isAthletic = goal === "athletic_performance" || !!sport;
+
   const dayTemplates = [
     {
       dayNumber: 1,
-      name: "Upper A — Push Focus",
-      focus: "Horizontal and vertical push, primary strength",
-      primaryPatterns: ["push_horizontal", "push_vertical"] as const,
-      secondaryPatterns: ["pull_vertical", "iso_shoulders", "iso_arms"] as const,
+      name: isAthletic ? "Lower Force Production + Acceleration Support" : "Lower A — Squat Focus",
+      focus: isAthletic
+        ? "Bilateral squat strength, horizontal power, and single-leg positional control."
+        : "Quad-dominant squat pattern, primary strength, posterior chain support.",
+      sessionType: "lower" as const,
+      primaryPatterns: ["squat"] as const,
+      secondaryPatterns: ["hinge", "pull_vertical"] as const,
+      notes: isAthletic
+        ? "This session builds lower-body force production through bilateral squat strength and single-leg positional control. Trunk work reinforces stiffness under fatigue — directly transferable to sprint and change-of-direction mechanics."
+        : spec.splitRationale,
     },
     {
       dayNumber: 2,
-      name: "Lower A — Squat Dominant",
-      focus: "Quad-dominant, primary squat pattern",
-      primaryPatterns: ["squat"] as const,
-      secondaryPatterns: ["hinge", "iso_legs", "core"] as const,
+      name: isAthletic ? "Upper Strength + Structural Balance" : "Upper A — Press Focus",
+      focus: isAthletic
+        ? "Horizontal press/pull balance, shoulder integrity, and trunk force transfer."
+        : "Horizontal and vertical press, primary strength, pull balance.",
+      sessionType: "upper" as const,
+      primaryPatterns: ["push_horizontal", "pull_horizontal"] as const,
+      secondaryPatterns: ["push_vertical", "pull_vertical"] as const,
+      notes: isAthletic
+        ? "This session develops structural balance through equal push and pull emphasis. Trunk work supports force transfer between upper and lower body."
+        : undefined,
     },
     {
       dayNumber: 3,
-      name: "Upper B — Pull Focus",
-      focus: "Horizontal and vertical pull, volume emphasis",
-      primaryPatterns: ["pull_horizontal", "pull_vertical"] as const,
-      secondaryPatterns: ["push_horizontal", "iso_shoulders", "iso_arms"] as const,
+      name: isAthletic ? "Lower Posterior Chain + Deceleration Capacity" : "Lower B — Hinge Focus",
+      focus: isAthletic
+        ? "Hinge-dominant force application, posterior chain development, and lateral unilateral control."
+        : "Posterior chain, hip-dominant hinge pattern, hamstring and glute emphasis.",
+      sessionType: "lower" as const,
+      primaryPatterns: ["hinge"] as const,
+      secondaryPatterns: ["squat", "pull_horizontal"] as const,
+      notes: isAthletic
+        ? "This session prioritizes posterior chain strength — the hip extension capacity that drives sprint push-off and supports deceleration. Lateral unilateral work adds frontal-plane loading critical for soccer change-of-direction."
+        : undefined,
     },
     {
       dayNumber: 4,
-      name: "Lower B — Hinge Dominant",
-      focus: "Posterior chain, hip-dominant movements",
-      primaryPatterns: ["hinge"] as const,
-      secondaryPatterns: ["squat", "iso_legs", "carry"] as const,
+      name: isAthletic ? "Upper Power + Trunk Integrity" : "Upper B — Pull Focus",
+      focus: isAthletic
+        ? "Upper body power, vertical pulling strength, anti-rotation trunk work."
+        : "Horizontal and vertical pull, volume emphasis, structural balance.",
+      sessionType: "upper" as const,
+      primaryPatterns: ["pull_vertical", "pull_horizontal"] as const,
+      secondaryPatterns: ["push_horizontal", "push_vertical"] as const,
+      notes: isAthletic
+        ? "The second upper session shifts toward pulling volume and power output — building the scapular stability and upper-back strength that supports posture, trunk transfer, and overhead resilience."
+        : undefined,
     },
   ];
 
   return dayTemplates.map((template, dayIdx) => {
     const usedNames = new Set<string>();
     const exercises: Exercise[] = [];
+    const isLowerDay = template.sessionType === "lower";
 
-    // Primary exercises (2) — NSCA primary compound zones
-    for (const pattern of template.primaryPatterns.slice(0, 2)) {
+    // A — NEURAL / DYNAMIC PREP
+    const prep = buildPrepBlock(template.sessionType, sport);
+    exercises.push(prep);
+    usedNames.add(prep.name);
+
+    // B — POWER / EXPLOSIVE (lower days: jumps/bounds; upper days: med ball or push press)
+    if (isLowerDay) {
+      const power = buildPowerBlock(goal, sport, dayIdx, usedNames);
+      exercises.push(power);
+      usedNames.add(power.name);
+    } else {
+      // Upper day power — med ball throw or push press
+      const upperPower: Exercise = {
+        name: dayIdx === 1 ? "Medicine Ball Chest Pass" : "Medicine Ball Rotational Throw",
+        classification: "Power",
+        sets: 3,
+        reps: "4-5",
+        rest: "2 min",
+        intent: dayIdx === 1 ? NSCA_INTENT_CUES.power_explosive : NSCA_INTENT_CUES.power_rotational,
+        notes: dayIdx === 1
+          ? "Explosive horizontal force — full upper body extension into the throw. CNS-fresh output."
+          : "Power from the hips, not the arms — rotate through the thorax. Develops rotational force expression.",
+      };
+      exercises.push(upperPower);
+      usedNames.add(upperPower.name);
+    }
+
+    // C — PRIMARY STRENGTH
+    for (const pattern of template.primaryPatterns.slice(0, 1)) {
       const hits = selectExercises({
         ...baseFilter,
         patterns: [pattern],
-        excludeNames: [...(baseFilter.excludeNames ?? []), ...usedNames],
+        excludeNames: [...usedNames],
         maxCount: 1,
       });
       if (hits.length > 0) {
         usedNames.add(hits[0].name);
         const rx = nscaPrescription(pattern, "primary", goal);
-        exercises.push(exToDay(hits[0], rx.sets, rx.reps, rx.rest, pattern));
+        exercises.push(exToDay(hits[0], rx.sets, rx.reps, rx.rest, pattern, "primary", template.sessionType));
       }
     }
 
-    // Secondary exercises (2-3) — NSCA secondary/accessory zones
-    const secondaryCount = spec.exercisesPerSession.max - exercises.length - 1;
-    for (const pattern of template.secondaryPatterns.slice(0, secondaryCount)) {
-      const isIso = pattern.startsWith("iso_") || pattern === "carry" || pattern === "core";
+    // D — SECONDARY STRENGTH
+    for (const pattern of template.secondaryPatterns.slice(0, 1)) {
       const hits = selectExercises({
         ...baseFilter,
         patterns: [pattern],
-        excludeNames: [...(baseFilter.excludeNames ?? []), ...usedNames],
+        excludeNames: [...usedNames],
         maxCount: 1,
       });
       if (hits.length > 0) {
         usedNames.add(hits[0].name);
-        const rx = nscaPrescription(pattern, isIso ? "accessory" : "secondary", goal);
-        exercises.push(exToDay(hits[0], rx.sets, rx.reps, rx.rest, pattern));
+        const rx = nscaPrescription(pattern, "secondary", goal);
+        exercises.push(exToDay(hits[0], rx.sets, rx.reps, rx.rest, pattern, "secondary", template.sessionType));
       }
     }
+
+    // E — UNILATERAL (lower days only — mandatory)
+    if (isLowerDay) {
+      const unilateral = buildUnilateralBlock(goal, sport, usedNames, dayIdx);
+      exercises.push(unilateral);
+      usedNames.add(unilateral.name);
+    } else {
+      // Upper day: add a second pull or structural accessory instead
+      const accessoryPattern = template.secondaryPatterns[1] ?? "pull_horizontal";
+      const hits = selectExercises({
+        ...baseFilter,
+        patterns: [accessoryPattern],
+        excludeNames: [...usedNames],
+        maxCount: 1,
+      });
+      if (hits.length > 0) {
+        usedNames.add(hits[0].name);
+        const rx = nscaPrescription(accessoryPattern, "secondary", goal);
+        exercises.push(exToDay(hits[0], rx.sets, rx.reps, rx.rest, accessoryPattern, "secondary", template.sessionType));
+      }
+    }
+
+    // F — TRUNK / INTEGRITY
+    const trunk = buildTrunkBlock(goal, sport, usedNames, dayIdx);
+    exercises.push(trunk);
 
     return {
       dayNumber: template.dayNumber,
       name: template.name,
       focus: template.focus,
       exercises,
-      notes: dayIdx === 0 ? spec.splitRationale : undefined,
+      notes: template.notes,
     };
   });
 }
@@ -2074,7 +2589,7 @@ function buildPPLDays(
   goal: GoalType,
   experience: ReturnType<typeof normalizeExperience>,
   spec: ReturnType<typeof buildTrainingSpec>,
-  baseFilter: Parameters<typeof selectExercises>[0],
+  baseFilter: BaseFilter,
   numDays: number
 ): ProgramDay[] {
   const templates = [

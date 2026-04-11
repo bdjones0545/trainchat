@@ -964,17 +964,20 @@ Primary compound work: ${spec.primarySets} sets × ${spec.primaryRepRange} reps 
 Secondary compound/accessory: ${spec.secondarySets} sets × ${spec.secondaryRepRange} reps | Rest: ${spec.secondaryRest}
 Isolation/finishing work: ${spec.accessorySets} sets | Rest: ${spec.accessoryRest}
 
-### MANDATORY SESSION STRUCTURE (A→E) — APPLIES TO EVERY DAY
-Build every training day in this exact sequence:
-A: POWER — jumps, med ball, Olympic lift variation (3–4 sets × 3–5 reps, full rest, CNS-fresh)
-B: PRIMARY STRENGTH — squat, hinge, press, or pull (compound anchor of the session)
-C: SECONDARY STRENGTH — supports or pairs with the primary movement
-D: UNILATERAL / ACCESSORY — at least one single-leg lower body movement per lower/full body day (RFESS, step-up, lateral lunge, single-leg RDL, lateral step-up)
-E: TRUNK / CORE — purposeful only: anti-rotation (Pallof press), anti-extension (dead bug, ab wheel), or bracing (Copenhagen plank, suitcase carry)
+### MANDATORY SESSION STRUCTURE (A→G) — APPLIES TO EVERY DAY
+Build every training day in this exact sequence — this is the non-negotiable performance architecture:
+A: NEURAL / DYNAMIC PREP — purposeful prep connected to the session goal (1–3 movements, 1–2 sets, no rest). Lower body days: hip mobility + glute activation + ankle stiffness pogo series. Upper body days: scapular positioning + thoracic mobility + shoulder activation. Full body / power days: dynamic full-body prep (leg swings, inchworm+reach, hip circles). The prep primes exactly what the session will demand.
+B: POWER / EXPLOSIVE — jumps, med ball throws, Olympic lift variation (3–5 sets × 3–5 reps, full rest, CNS must be completely fresh). Tie every power selection to a reason: broad jumps → horizontal force projection; lateral bound → lateral force and deceleration; med ball scoop toss → posterior chain power; snap-down drill → deceleration mechanics.
+C: PRIMARY STRENGTH — squat, hinge, press, or pull (compound anchor of the session)
+D: SECONDARY STRENGTH — supports or complements the primary — not just another big lift
+E: UNILATERAL / POSITIONAL — at least one single-leg lower body movement per lower/full body day (RFESS, step-up, lateral lunge, single-leg RDL, lateral step-up). Used for position control, asymmetry management, and sport transfer — not just "included."
+F: TRUNK / INTEGRITY — purposeful only: anti-rotation (Pallof press, half-kneeling cable chop), anti-extension (dead bug, ab wheel rollout), bracing (RKC plank, suitcase carry, Copenhagen plank, side plank). Every trunk selection must earn its place.
+G: OPTIONAL TISSUE / RECOVERY FINISHER — only when there is a genuine structural gap AND session density allows. If nothing is genuinely needed, omit it.
 
-Power (A block) is MANDATORY on every day — skip it only if the user has an explicit injury preventing it.
-Unilateral lower body (D block) is MANDATORY in every lower/full body day — bilateral-only programs are incomplete.
-Core (E block) is MANDATORY — never skip, never replace with random crunches.
+Prep (A block) is MANDATORY on every day — connects to the session goal, never a generic checklist.
+Power (B block) is MANDATORY on every day — skip only for explicit injury or in-season minimal-dose sessions.
+Unilateral lower body (E block) is MANDATORY in every lower/full body day — bilateral-only programs are structurally incomplete for athletic goals.
+Trunk (F block) is MANDATORY — never replace with random crunches, sit-ups, or generic "ab finishers."
 
 ### PROGRESSION MODEL
 Model: ${spec.progressionModel}
