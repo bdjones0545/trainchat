@@ -101,6 +101,38 @@ The UI features a dark theme with electric blue accents and the Inter font, cent
 - **Effect on AI programs** (when OpenAI key exists): Neural interpretation is injected as a structured context block in the system prompt. The AI receives node status labels, detected imbalances, and specific programming guidance in coaching language. No raw scores are exposed.
 - **Safety**: Neural loading is wrapped in try/catch. If the profile doesn't exist or fails to load, the route proceeds as normal without bias.
 
+### Conversation Memory + Coaching Personality Layer (Phase 5)
+
+- **`memory.ts`** extended — 4 new memory types added alongside existing 7:
+  - `sport_context` — athlete's sport/activity background (detected from conversation)
+  - `time_constraint` — session duration limits stated by user
+  - `communication_preference` — concise vs. explanatory style preference
+  - `training_preference` — stated emphasis (strength, hypertrophy, athletic)
+  - `conversation` added as new memory source alongside onboarding/feedback/readiness/inferred
+- **`extractMemoriesFromMessage(userId, userMessage)`** — new function in `memory.ts`:
+  - Pattern-matching only (no AI call) — fast, deterministic, silent on failure
+  - Detects: 21 sports, session duration constraints (15-120min), communication style signals, training emphasis language
+  - Uses the same `upsertMemory()` logic — confidence can only grow, never weaken
+  - Called asynchronously on every user message in both `conversations.ts` route handlers
+- **`buildMemoryContext()`** updated: includes all 11 types in priority order (sport_context first, communication_preference last), with labels and evidence stars
+- **Coaching Personality — `ai.ts` base prompt upgraded**:
+  - New `## COACHING PERSONALITY — VOICE AND TONE` section with explicit voice definition and example language patterns from the spec ("We're keeping lower-body volume controlled this week — recovery data supports it.", "You're ready to push intensity here. Let's use that.", etc.)
+  - Explicit avoidance list: generic assistant phrasing, therapeutic softness, excessive politeness, hype, filler confirmations
+  - New `## MEMORY-AWARE COACHING — DO NOT RE-ASK KNOWN CONTEXT` section:
+    - Lists all context types that must NOT be re-asked if in memory (sport, equipment, time, preference, injury, frequency)
+    - Shows how to reference known context directly ("Keeping this around 45 minutes — same structure as before.")
+    - Rule: "Never ask the same question twice. Never pretend you don't know something that's in memory."
+- **`CoachMemoryPanel.tsx`** (new frontend component):
+  - "What TrainChat knows about your training" — categorized, readable
+  - Fetches from existing `GET /api/memories` endpoint
+  - Grouped by 11 memory categories with icons, source badges, confidence indicators
+  - Three states: populated memory list, empty/building state, loading skeleton
+  - Accessible via "Memory" button in desktop TopNav (premium only)
+- **`chat.tsx`** updates:
+  - `Brain` icon imported, `showMemoryPanel` state added
+  - "Memory" button added next to NeuralBadge in desktop TopNav (premium only)
+  - Full-screen backdrop overlay renders `CoachMemoryPanel` — closes on backdrop click or X button
+
 ### Prediction Layer (Phase 4) — Coach Forecast
 
 - **`prediction-service.ts`** (new) — real-time pattern recognition engine, no DB writes, no stored predictions:

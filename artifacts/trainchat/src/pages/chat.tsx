@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import {
   SendHorizontal, Zap, PanelLeftClose, PanelLeft, Activity,
   Menu, Target, CreditCard, LogOut, Dumbbell,
-  MessageSquare, Plus, RotateCcw,
+  MessageSquare, Plus, RotateCcw, Brain,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -36,6 +36,7 @@ import SessionLogModal from "@/components/chat/SessionLogModal";
 import PaywallModal from "@/components/PaywallModal";
 import PricingModal from "@/components/PricingModal";
 import CalibrationModal from "@/components/chat/CalibrationModal";
+import CoachMemoryPanel from "@/components/chat/CoachMemoryPanel";
 import { useStreamMessage } from "@/hooks/useStreamMessage";
 import { clearAuthState, clearGuestSessionCache, markOnboardingComplete, logRouteDecision, readDeviceId, readOnboardingComplete } from "@/lib/routing";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
@@ -149,6 +150,7 @@ export default function Chat() {
   const [messagesUsed, setMessagesUsed] = useState(0);
   const [mobilePanel, setMobilePanel] = useState<SlidePanel>(null);
   const [showCalibration, setShowCalibration] = useState(false);
+  const [showMemoryPanel, setShowMemoryPanel] = useState(false);
   const [calibrationNudgeShown, setCalibrationNudgeShown] = useState(false);
   const [undoChangeLogId, setUndoChangeLogId] = useState<number | null>(null);
   const [isUndoing, setIsUndoing] = useState(false);
@@ -930,6 +932,16 @@ export default function Chat() {
           }}
         />
       )}
+      {showMemoryPanel && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setShowMemoryPanel(false)}
+        >
+          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md">
+            <CoachMemoryPanel onClose={() => setShowMemoryPanel(false)} />
+          </div>
+        </div>
+      )}
 
       {/* ─── Mobile header ─── */}
       <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border bg-background/95 backdrop-blur-sm flex-shrink-0 z-10">
@@ -961,6 +973,16 @@ export default function Chat() {
           extraContent={
             <div className="flex items-center gap-2">
               <StreakBadge streak={currentStreak} />
+              {isPremium && (
+                <button
+                  onClick={() => setShowMemoryPanel(true)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/20 transition-colors border border-transparent hover:border-border/40"
+                  title="Coaching Memory — what TrainChat knows about you"
+                >
+                  <Brain className="w-3 h-3" />
+                  <span className="hidden lg:inline">Memory</span>
+                </button>
+              )}
               <NeuralBadge isPremium={isPremium} />
             </div>
           }

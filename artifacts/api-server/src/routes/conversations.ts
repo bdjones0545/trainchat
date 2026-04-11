@@ -17,7 +17,7 @@ import {
   type TransformRequest,
 } from "../lib/split-transform";
 import { buildAdaptationContext } from "../lib/adaptation";
-import { syncMemoriesFromData, listMemories, buildMemoryContext } from "../lib/memory";
+import { syncMemoriesFromData, listMemories, buildMemoryContext, extractMemoriesFromMessage } from "../lib/memory";
 import { generateInsights, buildInsightPromptHint } from "../lib/insights";
 import { getUserPlanInfo } from "../lib/planGating";
 import { stripeStorage } from "../lib/stripeStorage";
@@ -383,6 +383,7 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
     insightHint = buildInsightPromptHint(insights);
 
     syncMemoriesFromData(userId).catch(() => {});
+    extractMemoriesFromMessage(userId, userMessage.content).catch(() => {});
   }
 
   // Agent-driven conversion hint for free/starter users
@@ -1174,6 +1175,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     const insights = await generateInsights(userId, memories).catch(() => []);
     insightHint = buildInsightPromptHint(insights);
     syncMemoriesFromData(userId).catch(() => {});
+    extractMemoriesFromMessage(userId, userMessage.content).catch(() => {});
   }
 
   let conversionHint = "";

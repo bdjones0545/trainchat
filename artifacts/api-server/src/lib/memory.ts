@@ -18,16 +18,20 @@ import { eq, desc, and } from "drizzle-orm";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type MemoryType =
-  | "exercise_preference"   // prefers or avoids specific exercises/equipment
-  | "pain_pattern"          // recurring discomfort with movement patterns
-  | "session_preference"    // session length, format, structure preferences
-  | "volume_response"       // how user responds to volume and intensity
-  | "split_preference"      // preferred training structure / days
-  | "recovery_pattern"      // sleep and recovery tendencies
-  | "adherence_pattern";    // consistency tendencies
+  | "exercise_preference"      // prefers or avoids specific exercises/equipment
+  | "pain_pattern"             // recurring discomfort with movement patterns
+  | "session_preference"       // session length, format, structure preferences
+  | "volume_response"          // how user responds to volume and intensity
+  | "split_preference"         // preferred training structure / days
+  | "recovery_pattern"         // sleep and recovery tendencies
+  | "adherence_pattern"        // consistency tendencies
+  | "sport_context"            // athlete's sport/activity background
+  | "time_constraint"          // session duration limits
+  | "communication_preference" // how user prefers to receive coaching
+  | "training_preference";     // stated programming emphasis preference
 
 export type MemorySentiment = "positive" | "negative" | "neutral";
-export type MemorySource = "onboarding" | "feedback" | "readiness" | "inferred";
+export type MemorySource = "onboarding" | "feedback" | "readiness" | "inferred" | "conversation";
 
 export interface MemoryEntry {
   id: number;
@@ -449,6 +453,149 @@ async function extractFeedbackMemories(userId: number): Promise<MemoryCandidate[
   return candidates;
 }
 
+// ─── Conversation-level extraction ───────────────────────────────────────────
+
+/**
+ * Extract durable coaching memories from the user's message text.
+ *
+ * Reads the raw message for sport context, time constraints, communication
+ * preferences, and training emphasis — things that a real coach would note
+ * and never ask about again.
+ *
+ * Uses pattern matching only (no AI call). Fast, deterministic, silent on failure.
+ * Confidence starts at 2 (single signal) and grows with repeated mentions.
+ */
+export async function extractMemoriesFromMessage(
+  userId: number,
+  userMessage: string
+): Promise<number> {
+  if (!userMessage || userMessage.trim().length < 4) return 0;
+  const msg = userMessage.toLowerCase();
+  const candidates: MemoryCandidate[] = [];
+
+  // ── Sport context ────────────────────────────────────────────────────────
+  const sports: { pattern: RegExp; name: string }[] = [
+    { pattern: /\b(soccer|football)\b/, name: "soccer" },
+    { pattern: /\bbasketball\b/, name: "basketball" },
+    { pattern: /\bbaseball\b/, name: "baseball" },
+    { pattern: /\btennis\b/, name: "tennis" },
+    { pattern: /\brugby\b/, name: "rugby" },
+    { pattern: /\bvolleyball\b/, name: "volleyball" },
+    { pattern: /\bswimming\b/, name: "swimming" },
+    { pattern: /\bcycling\b/, name: "cycling" },
+    { pattern: /\b(running|track)\b/, name: "running/track" },
+    { pattern: /\bgolf\b/, name: "golf" },
+    { pattern: /\bwrestling\b/, name: "wrestling" },
+    { pattern: /\b(mma|mixed martial arts)\b/, name: "MMA" },
+    { pattern: /\bboxing\b/, name: "boxing" },
+    { pattern: /\bclimbing\b/, name: "climbing" },
+    { pattern: /\browings?\b/, name: "rowing" },
+    { pattern: /\bcrossfit\b/, name: "CrossFit" },
+    { pattern: /\bpowerlifting\b/, name: "powerlifting" },
+    { pattern: /\bweightlifting\b/, name: "weightlifting" },
+    { pattern: /\btriathlon\b/, name: "triathlon" },
+    { pattern: /\blacrosse\b/, name: "lacrosse" },
+    { pattern: /\bhockey\b/, name: "hockey" },
+  ];
+
+  for (const sport of sports) {
+    if (sport.pattern.test(msg)) {
+      candidates.push({
+        type: "sport_context",
+        subject: sport.name,
+        sentiment: "neutral",
+        confidence: 3,
+        source: "conversation",
+        detail: `User is a ${sport.name} athlete. Programs and coaching should reflect ${sport.name}-relevant demands and training context.`,
+      });
+      break; // Only capture one sport per message to avoid conflicts
+    }
+  }
+
+  // ── Time constraints ─────────────────────────────────────────────────────
+  const timeMatch = msg.match(
+    /(?:only\s+have|have\s+(?:about|around|under)?|keep\s+(?:it\s+)?(?:to|under|around)|max(?:imum)?\s+(?:of\s+)?|around|about|under|within)\s+(\d{1,3})\s*(?:to\s+\d{1,3}\s*)?(?:min(?:ute)?s?|hour?s?)\b/
+  );
+  if (timeMatch) {
+    const mins = parseInt(timeMatch[1]);
+    if (mins >= 15 && mins <= 120) {
+      candidates.push({
+        type: "time_constraint",
+        subject: "session duration",
+        sentiment: "neutral",
+        confidence: 3,
+        source: "conversation",
+        detail: `User prefers sessions around ${mins} minutes. Structure programming to fit within this window — prioritize primary and secondary work, compress or remove lower-priority accessories as needed.`,
+      });
+    }
+  }
+
+  // ── Communication preferences ─────────────────────────────────────────────
+  if (
+    /keep\s+(?:it\s+)?(?:short|brief|concise|simple)|(?:don'?t\s+)?(?:over)?explain|less\s+(?:explanation|detail|text)|more\s+(?:direct|concise)|just\s+(?:give\s+me|tell\s+me)\s+(?:the\s+)?(?:program|workout|exercises?)/.test(msg)
+  ) {
+    candidates.push({
+      type: "communication_preference",
+      subject: "concise coaching",
+      sentiment: "positive",
+      confidence: 3,
+      source: "conversation",
+      detail: "User prefers concise, direct coaching. Keep confirmations brief. Act quickly. Avoid lengthy explanations unless specifically asked.",
+    });
+  } else if (
+    /(?:explain|why|reason|help\s+me\s+understand|teach\s+me|more\s+detail|walk\s+me\s+through|want\s+to\s+(?:understand|know\s+why))/.test(msg)
+  ) {
+    candidates.push({
+      type: "communication_preference",
+      subject: "detailed explanations",
+      sentiment: "positive",
+      confidence: 2,
+      source: "conversation",
+      detail: "User appreciates coaching context and explanations — briefly justify programming decisions when appropriate.",
+    });
+  }
+
+  // ── Training emphasis preferences ─────────────────────────────────────────
+  if (
+    /\b(?:strength[\s-]focused|prefer\s+strength|more\s+strength|strength[\s-]first|heavy\s+lifting|low[\s-]rep|powerlifting\s+style|strength\s+training)\b/.test(msg)
+  ) {
+    candidates.push({
+      type: "training_preference",
+      subject: "strength-focused programming",
+      sentiment: "positive",
+      confidence: 3,
+      source: "conversation",
+      detail: "User prefers strength-focused programming. Prioritize compound movements, progressive load, lower rep ranges (1-6), and neural efficiency.",
+    });
+  } else if (
+    /\b(?:hypertrophy|muscle[\s-]building|build\s+(?:muscle|size|mass)|aesthetics|bodybuilding|pump\s+work|more\s+volume)\b/.test(msg)
+  ) {
+    candidates.push({
+      type: "training_preference",
+      subject: "hypertrophy-focused programming",
+      sentiment: "positive",
+      confidence: 3,
+      source: "conversation",
+      detail: "User prefers hypertrophy-focused programming. Prioritize moderate rep ranges (6-15), mechanical tension, volume accumulation, and isolation work.",
+    });
+  } else if (
+    /\b(?:athletic|explosiv|power\s+training|sport[\s-]specific|speed\s+work|agility|conditioning|performance[\s-]based)\b/.test(msg)
+  ) {
+    candidates.push({
+      type: "training_preference",
+      subject: "athletic performance programming",
+      sentiment: "positive",
+      confidence: 3,
+      source: "conversation",
+      detail: "User prefers athletic/performance-oriented programming. Include power, speed, and sport-transfer work alongside strength foundations.",
+    });
+  }
+
+  if (candidates.length === 0) return 0;
+  await Promise.all(candidates.map((c) => upsertMemory(userId, c)));
+  return candidates.length;
+}
+
 // ─── Memory sync ──────────────────────────────────────────────────────────────
 
 /**
@@ -497,16 +644,24 @@ export function buildMemoryContext(memories: MemoryEntry[]): string {
     split_preference: "Schedule & Split Preferences",
     recovery_pattern: "Recovery Patterns",
     adherence_pattern: "Consistency & Adherence",
+    sport_context: "Sport & Athletic Context",
+    time_constraint: "Session Time Constraints",
+    communication_preference: "Communication Style",
+    training_preference: "Training Emphasis",
   };
 
   const order: MemoryType[] = [
+    "sport_context",
     "pain_pattern",
     "exercise_preference",
+    "training_preference",
     "volume_response",
     "recovery_pattern",
     "session_preference",
+    "time_constraint",
     "split_preference",
     "adherence_pattern",
+    "communication_preference",
   ];
 
   for (const type of order) {
