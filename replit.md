@@ -101,6 +101,56 @@ The UI features a dark theme with electric blue accents and the Inter font, cent
 - **Effect on AI programs** (when OpenAI key exists): Neural interpretation is injected as a structured context block in the system prompt. The AI receives node status labels, detected imbalances, and specific programming guidance in coaching language. No raw scores are exposed.
 - **Safety**: Neural loading is wrapped in try/catch. If the profile doesn't exist or fails to load, the route proceeds as normal without bias.
 
+### Program Specialist Decision Layer (Phase 6)
+
+**New file: `artifacts/api-server/src/lib/program-specialist.ts`**
+
+A scoped internal coaching agent for program reasoning. Converts messy natural language into structured, prioritized program adjustments. NOT a general autonomous agent.
+
+**Architecture:**
+- **`classifySpecialistRequest()`** — classifies user requests into 12 intent types with multi-intent support and priority ordering
+- **`decideProgramAdjustment()`** — returns a full `SpecialistDecision` object: `{ primaryIntent, secondaryIntents, biasTarget, coachingMove, preserve[], modify[], explanation, mutations[] }`
+- **`applySpecialistMutations()`** — deterministic mutation applier; iterates the structured mutation list against the live program
+- **`buildSpecialistChangeSummary()`** — generates human-readable change entries for the Changes tab
+
+**12 Intent Types (with priority order):**
+1. `PAIN_ADJUSTMENT` — "knee bothering me", "shoulder hates barbell work"
+2. `READINESS_ADJUSTMENT` — "I'm cooked", "I'm drained", "not feeling it today"
+3. `RECOVERY_SHIFT` — "my legs are smoked", "need to recover", "deload"
+4. `TIME_COMPRESSION` — "only have 30 minutes", "I need this tighter"
+5. `EQUIPMENT_ADJUSTMENT` — "only have dumbbells", "no barbell", "home gym"
+6. `SEASON_SHIFT` — "season starts in 4 weeks", "pre-season", "in-season"
+7. `SPORT_TRANSFER_SHIFT` — "make this more soccer specific", "train for basketball"
+8. `SPLIT_CHANGE` — "make it 4 days", "switch to upper/lower"
+9. `BIAS_SHIFT` — "focus more on endurance", "more strength", "add power", "build my engine"
+10. `VOLUME_CHANGE` — "reduce total volume", "add more sets"
+11. `INTENSITY_CHANGE` — "push intensity", "make it less brutal", "dial it back"
+12. `EXERCISE_SWAP` — "swap bench for dumbbell bench"
+
+**Multi-intent support:** Detects 2-3 concurrent intents, prioritizes by safety/constraint order, layers secondary mutations on top of primary. Example: "my legs are smoked and I've only got 30 minutes" → RECOVERY_SHIFT + TIME_COMPRESSION.
+
+**Natural language patterns:** Handles real phrasing — "my legs are cooked", "I'm done", "keep it athletic", "I want more engine", "make it less brutal", "shoulder hates barbell work", "I've got a game Saturday".
+
+**Structured mutation types:** `update_rest`, `update_rep_range`, `update_sets`, `remove_exercise`, `add_exercise`, `swap_exercise`, `trim_accessories`, `add_explosive_opener`, `add_conditioning_finisher`, `reduce_lower_body_stress`, `compress_session`
+
+**Wire-in to `ai.ts`:**
+- **Fallback path** (`generateFallbackResponse()`): Specialist runs as the PRIMARY handler before the legacy mutation engine. AMBIGUOUS decisions fall through to `applyFallbackMutation()`.
+- **AI path** (`generateAIResponse()`): Specialist classification injected into the system prompt extras as `specialistContextHint` — gives the AI the exact intent type, coaching move, preserve/modify lists, and edit guidance.
+- **`AIResponse`** extended with optional `changeSummary: string[]` field.
+
+**Escalation rules:** When intent is genuinely ambiguous, returns a coaching-voiced follow-up question rather than failing silently. Examples: "Got it — what direction do you want to push it: more strength, more endurance, more explosive, or lower overall fatigue?"
+
+**Observability:** All classifications and decisions logged via pino with `[ProgramSpecialist]` prefix — intent, bias target, mutation count, preserved/modified lists.
+
+### Refinement Input Fix (Phase 6, Step 1 — pre-specialist)
+
+Before building the specialist, three gaps were fixed in the legacy fallback pipeline:
+- **`detectEditIntent()`** extended with 6 new high-confidence patterns for focus shifts → 4 new editTypes: `endurance_bias`, `strength_bias`, `power_bias`, `reduce_volume`
+- **`applyFallbackMutation()`** extended with 4 new mutation cases + `general_modification` (always returns something, never null)
+- **Failure message removed** — "couldn't apply it to the current program state" replaced with a safe pass-through
+- **`getEditTypeGuidance()`** extended with specialist-voiced guidance for all 4 new bias types
+- **Confirmation messages** added for all 4 new bias types in coaching voice ("Got it — shifting your system toward endurance...")
+
 ### Conversation Memory + Coaching Personality Layer (Phase 5)
 
 - **`memory.ts`** extended — 4 new memory types added alongside existing 7:

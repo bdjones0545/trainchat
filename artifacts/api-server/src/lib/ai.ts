@@ -17,6 +17,7 @@ import {
   type ExerciseFilter,
 } from "./training-intelligence";
 import { type IntentResult, buildIntentPromptHint, type ExtractedConstraints, buildConstraintContract } from "./intent";
+import { decideProgramAdjustment, applySpecialistMutations, buildSpecialistChangeSummary } from "./program-specialist";
 import { type ActionDecision, buildPreservationContext } from "./decision";
 import {
   type ResponseMode,
@@ -43,6 +44,7 @@ export interface ChatMessage {
 export interface AIResponse {
   content: string;
   structuredData?: ProgramStructure | null;
+  changeSummary?: string[];
 }
 
 export interface ProgramStructure {
@@ -1352,6 +1354,26 @@ export async function generateAIResponse(
   // Build intent-specific prompt hint (pain, readiness, retrieve, etc.)
   const intentHint = intentResult ? buildIntentPromptHint(intentResult) : null;
 
+  // ── Specialist Decision Context — AI-path enrichment ─────────────────────
+  // Classify the request with the specialist layer and inject a structured
+  // intent hint so the AI knows exactly what type of coaching change is being
+  // requested and what to preserve vs modify.
+  let specialistContextHint: string | null = null;
+  if (currentProgram && isModificationIntent) {
+    try {
+      const sd = decideProgramAdjustment(userMessage, currentProgram, { profile });
+      if (sd.primaryIntent !== "AMBIGUOUS") {
+        const secondaryLine = sd.secondaryIntents.length > 0
+          ? `\nSecondary intents detected: ${sd.secondaryIntents.join(", ")}`
+          : "";
+        const biasLine = sd.biasTarget ? `\nBias target: ${sd.biasTarget}` : "";
+        specialistContextHint = `\n## SPECIALIST DECISION LAYER — COACHING INTENT\nPrimary intent: **${sd.primaryIntent}**${secondaryLine}${biasLine}\nCoaching move: ${sd.coachingMove}\nPreserve: ${sd.preserve.join(", ")}\nModify: ${sd.modify.join(", ")}\n\nApply this specialist decision to the current program. ${getEditTypeGuidance(sd.primaryIntent.toLowerCase(), currentProgram)}`;
+      }
+    } catch {
+      // Specialist context is supplemental — never block the AI path
+    }
+  }
+
   // Build preservation context from decision tree (injected after edit context)
   const preservationContext = actionDecision
     ? buildPreservationContext(actionDecision.preservationRules, actionDecision.actionType)
@@ -1395,7 +1417,7 @@ export async function generateAIResponse(
     logResponseMode(rmCtx);
   }
 
-  const extras = [adaptationContext, memoryContext, insightHint, conversionHint, intentHint, editContext, preservationContext, constraintContract, transformHint, responseModePrompt, neuralContext ?? null]
+  const extras = [adaptationContext, memoryContext, insightHint, conversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, transformHint, responseModePrompt, neuralContext ?? null]
     .filter(Boolean)
     .join("\n\n");
   const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;
@@ -1619,6 +1641,35 @@ function generateFallbackResponse(
       content: `Flagging the ${partLabel} issue before we continue. A few things:\n\n1. If this is acute (recent, sharp, or getting worse) — stop training that area and consult a medical professional before loading it again.\n2. If this is chronic or a familiar pattern — we can program around it. Tell me:\n   - Is it sharp/acute or dull/chronic?\n   - What movements aggravate it?\n   - What range of motion is pain-free?\n\nWith that context, I'll remove the problematic exercises from the program and replace them with appropriate alternatives. The rest of the structure stays intact.`,
       structuredData: null,
     };
+  }
+
+  // ── Program Specialist Decision Layer ────────────────────────────────────
+  // Runs BEFORE the legacy fallback mutation engine.
+  // Handles natural language coaching requests (12 intent types, multi-intent,
+  // messy phrasing) and applies structured mutations to the live program.
+  // Falls through to the legacy engine only if the specialist returns AMBIGUOUS.
+  if (currentProgram) {
+    const specialistDecision = decideProgramAdjustment(userMessage, currentProgram, { profile });
+    if (!specialistDecision.requiresClarification && specialistDecision.primaryIntent !== "AMBIGUOUS" && specialistDecision.mutations.length > 0) {
+      const mutatedProgram = applySpecialistMutations(currentProgram, specialistDecision);
+      const changeSummary = buildSpecialistChangeSummary(specialistDecision);
+      logger.info(
+        { primaryIntent: specialistDecision.primaryIntent, secondaryIntents: specialistDecision.secondaryIntents, changeCount: changeSummary.length },
+        "[ProgramSpecialist] Decision applied — returning specialist response"
+      );
+      return {
+        content: specialistDecision.explanation,
+        structuredData: mutatedProgram,
+        changeSummary,
+      };
+    }
+    if (specialistDecision.requiresClarification) {
+      return {
+        content: specialistDecision.clarificationPrompt ?? specialistDecision.explanation,
+        structuredData: null,
+      };
+    }
+    // AMBIGUOUS or no mutations — fall through to legacy engine below
   }
 
   // ── Edit request with current program (fallback mutation engine) ──

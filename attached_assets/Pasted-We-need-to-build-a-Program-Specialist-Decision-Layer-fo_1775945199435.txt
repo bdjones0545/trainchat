@@ -1,0 +1,340 @@
+We need to build a Program Specialist Decision Layer for TrainChat.
+
+GOAL:
+TrainChat should feel like a specialist coach helping the user vibe code their program in real time.
+
+It should handle a wide range of natural language coaching requests reliably, not just a few hardcoded scenarios.
+
+This is NOT a general autonomous agent.
+This is a scoped internal coaching agent for program reasoning.
+
+--------------------------------------------------
+CORE PURPOSE
+--------------------------------------------------
+
+The Program Specialist Decision Layer should:
+
+1. interpret messy user input
+2. classify the coaching intent
+3. choose the correct type of program adjustment
+4. apply the change to the live program
+5. explain the move in specialist coaching language
+
+The user should feel:
+“The specialist understood exactly what I meant and adjusted my system.”
+
+--------------------------------------------------
+STEP 1: ADD REQUEST CLASSIFICATION LAYER
+
+Create an internal classifier for user refinement requests.
+
+Supported request types:
+
+- BIAS_SHIFT
+- EXERCISE_SWAP
+- PAIN_ADJUSTMENT
+- TIME_COMPRESSION
+- READINESS_ADJUSTMENT
+- SEASON_SHIFT
+- SPORT_TRANSFER_SHIFT
+- SPLIT_CHANGE
+- VOLUME_CHANGE
+- INTENSITY_CHANGE
+- EQUIPMENT_ADJUSTMENT
+- RECOVERY_SHIFT
+- HYBRID / MULTI_INTENT
+
+Examples:
+
+“Make this more endurance based”
+→ BIAS_SHIFT
+
+“Swap barbell bench for dumbbell bench”
+→ EXERCISE_SWAP
+
+“My knee is bothering me”
+→ PAIN_ADJUSTMENT
+
+“I only have 30 minutes tomorrow”
+→ TIME_COMPRESSION
+
+“I feel exhausted”
+→ READINESS_ADJUSTMENT or RECOVERY_SHIFT
+
+“Season starts in 4 weeks”
+→ SEASON_SHIFT
+
+“Make this more soccer specific”
+→ SPORT_TRANSFER_SHIFT
+
+“Make it 4 days instead”
+→ SPLIT_CHANGE
+
+“Reduce total volume this week”
+→ VOLUME_CHANGE
+
+“Push intensity a little”
+→ INTENSITY_CHANGE
+
+“I only have dumbbells”
+→ EQUIPMENT_ADJUSTMENT
+
+“I want to recover better this week”
+→ RECOVERY_SHIFT
+
+--------------------------------------------------
+STEP 2: ADD MULTI-INTENT SUPPORT
+
+User requests may contain more than one valid coaching direction.
+
+Examples:
+
+“I have a game Friday and my legs are smoked”
+→ RECOVERY_SHIFT + READINESS_ADJUSTMENT + SCHEDULE_CONTEXT
+
+“I only have 30 minutes and no barbell”
+→ TIME_COMPRESSION + EQUIPMENT_ADJUSTMENT
+
+“Make this more explosive but easier on my knee”
+→ BIAS_SHIFT + PAIN_ADJUSTMENT
+
+The system should:
+- detect multiple intents
+- prioritize them
+- apply changes in a logical order
+
+Priority suggestion:
+1. pain / safety
+2. readiness / recovery
+3. schedule constraints
+4. equipment
+5. training bias / performance emphasis
+6. volume / intensity fine-tuning
+
+--------------------------------------------------
+STEP 3: CREATE DECISION ENGINE
+
+Build a function like:
+
+decideProgramAdjustment(userMessage, currentProgram, trainingContext)
+
+It should return a structured decision object like:
+
+{
+  primaryIntent: "BIAS_SHIFT",
+  secondaryIntents: ["TIME_COMPRESSION"],
+  coachingMove: "Shift program toward endurance while compressing sessions",
+  preserve: ["main lifts", "3-day structure"],
+  modify: ["rest periods", "rep ranges", "accessory density"],
+  explanation: "I’m increasing density and trimming non-essential work while preserving the core structure."
+}
+
+This function is the core of the specialist layer.
+
+--------------------------------------------------
+STEP 4: CREATE ADJUSTMENT PLAYBOOKS FOR EACH INTENT
+
+For each request type, define exactly what changes are allowed.
+
+BIAS_SHIFT:
+- endurance bias → reduce rest, raise density, increase reps, add conditioning support
+- strength bias → lower reps, increase rest, preserve heavy compound lifts
+- power bias → add explosive openers, lower fatigue-heavy accessory volume
+- hypertrophy bias → add volume, moderate reps, controlled rest
+
+EXERCISE_SWAP:
+- replace exercise while preserving session role, movement pattern, and dosage when possible
+
+PAIN_ADJUSTMENT:
+- remove or replace aggravating movement
+- reduce load/stress if needed
+- preserve training intent where possible
+
+TIME_COMPRESSION:
+- preserve priority blocks
+- cut or reduce low-priority accessory volume
+- tighten rest strategically
+
+READINESS_ADJUSTMENT:
+- maintain structure but reduce stress/load/volume as needed
+- recovery-focused shift if readiness is very low
+
+SEASON_SHIFT:
+- reclassify phase and adjust weekly emphasis
+
+SPORT_TRANSFER_SHIFT:
+- change exercise selection and day intent to better reflect sport demands
+
+SPLIT_CHANGE:
+- change frequency while preserving program identity if possible
+
+VOLUME_CHANGE:
+- increase/decrease sets or accessory density
+
+INTENSITY_CHANGE:
+- increase/decrease loading targets, effort expectations, or rep ranges
+
+EQUIPMENT_ADJUSTMENT:
+- replace movements based on available tools
+
+RECOVERY_SHIFT:
+- lower stress, reduce soreness cost, add recovery-supportive structure
+
+--------------------------------------------------
+STEP 5: PRESERVE THE LIVE SYSTEM WHEN POSSIBLE
+
+The specialist should prefer MODIFY OVER REBUILD.
+
+Default rule:
+- preserve the current structure if the request can be handled with targeted edits
+- only rebuild the whole program if the requested change fundamentally changes the system
+
+Examples:
+
+“swap bench for dumbbell bench”
+→ modify only one exercise
+
+“focus more on endurance”
+→ preserve split, modify training bias
+
+“make this 5 days instead”
+→ likely restructure weekly split
+
+“season starts in 4 weeks”
+→ larger reframe may be needed
+
+--------------------------------------------------
+STEP 6: ADD SPECIALIST RESPONSE STYLE
+
+Every response should feel like a coach making a deliberate move.
+
+Response structure:
+
+1. Acknowledge intent
+2. State the coaching move
+3. Confirm live update
+
+Examples:
+
+“Got it — shifting this toward endurance.
+I’m tightening rest periods, increasing density, and keeping enough strength work to support performance.
+Your system is updated now.”
+
+“Understood — I’m taking stress off the knee without losing the session’s purpose.
+I swapped the aggravating pattern and preserved lower-body strength work.
+Your update is live.”
+
+Never use:
+- “couldn’t apply”
+- “invalid request”
+- “program state mismatch”
+- “regenerating structure” unless completely hidden internally
+
+--------------------------------------------------
+STEP 7: ADD PROGRAM MUTATION OUTPUT
+
+The specialist decision layer must output structured mutation instructions that the live program engine can apply.
+
+Examples:
+
+{
+  mutations: [
+    { type: "update_rest", target: "all_accessories", value: "45-60 sec" },
+    { type: "update_rep_range", target: "secondary_lifts", value: "10-15" },
+    { type: "remove_exercise", target: "lowest_priority_accessory" },
+    { type: "swap_exercise", from: "Barbell Bench Press", to: "Dumbbell Bench Press" }
+  ]
+}
+
+Do not rely on loose text only.
+
+--------------------------------------------------
+STEP 8: ADD VISIBLE CHANGE FEEDBACK
+
+After an adjustment:
+- update Program tab
+- update Changes tab
+- highlight what changed if possible
+- keep the artifact feeling live
+
+Examples in Changes:
+- Shifted program toward endurance emphasis
+- Reduced rest periods across support work
+- Swapped bench press to dumbbell bench
+- Lowered lower-body stress due to knee discomfort
+
+--------------------------------------------------
+STEP 9: ADD ESCALATION RULES
+
+If a request is too broad or ambiguous, the specialist should still respond productively.
+
+Examples:
+
+Input:
+“Make this better”
+
+Response:
+“Got it — what direction do you want to push it: more strength, more endurance, more athletic carryover, or lower fatigue?”
+
+Do not fail silently.
+Do not produce vague error output.
+
+Only ask a follow-up if the direction truly cannot be inferred.
+
+--------------------------------------------------
+STEP 10: SUPPORT NATURAL HUMAN LANGUAGE
+
+The classifier and decision layer must handle real phrasing, not just ideal commands.
+
+Examples it should understand:
+- “my legs are smoked”
+- “I want more engine”
+- “keep it athletic”
+- “make it less brutal”
+- “I’ve got a game Saturday”
+- “I need this tighter”
+- “I’m cooked”
+- “shoulder hates barbell work”
+- “keep the same vibe but more explosive”
+
+This is critical.
+
+--------------------------------------------------
+STEP 11: ADD DEBUGGING / OBSERVABILITY (TEMP)
+
+Temporarily log:
+- classified intent(s)
+- chosen coaching move
+- preserved vs modified program elements
+- final mutations applied
+
+This helps verify the specialist layer is routing correctly.
+
+--------------------------------------------------
+STEP 12: SUCCESS STATE
+
+When a user says something messy but natural, like:
+
+“my legs are cooked and I’ve only got 30 minutes tomorrow”
+
+TrainChat should:
+
+- interpret recovery + time compression
+- preserve session purpose
+- reduce lower-body stress
+- compress low-priority work
+- explain the move like a coach
+- update the live program visibly
+
+User should feel:
+“The specialist got it.”
+
+--------------------------------------------------
+FINAL RULE
+--------------------------------------------------
+
+TrainChat should not feel like a brittle program editor.
+
+It should feel like a specialist who can take natural coaching directions and shape the program live.
+
+Implement this now.
