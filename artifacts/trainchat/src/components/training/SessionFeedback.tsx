@@ -10,6 +10,7 @@
 import { useState } from "react";
 import { X, CheckCircle2, ChevronRight } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
+import NeuralGrowthOverlay, { type NeuralAwardResult } from "@/components/gamification/NeuralGrowthOverlay";
 
 // ─── Rating configs ────────────────────────────────────────────────────────
 
@@ -78,8 +79,10 @@ const STATUS_OPTIONS: { value: SessionStatus; label: string; emoji: string; colo
 
 interface SessionFeedbackProps {
   sessionLabel?: string;
+  streakDays?: number;
   onClose: () => void;
   onSubmitted: () => void;
+  onNeuralResult?: (result: NeuralAwardResult) => void;
 }
 
 interface SessionRecap {
@@ -164,7 +167,7 @@ function SessionRecapCard({ recap, onClose }: { recap: SessionRecap; onClose: ()
         </div>
       )}
       <button
-        onClick={onClose}
+        onClick={handleGotIt}
         className="w-full mt-1 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
       >
         Got it
@@ -176,7 +179,7 @@ function SessionRecapCard({ recap, onClose }: { recap: SessionRecap; onClose: ()
 
 // ─── Main Component ────────────────────────────────────────────────────────
 
-export default function SessionFeedback({ sessionLabel, onClose, onSubmitted }: SessionFeedbackProps) {
+export default function SessionFeedback({ sessionLabel, streakDays, onClose, onSubmitted, onNeuralResult }: SessionFeedbackProps) {
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);
   const [actualDuration, setActualDuration] = useState<number | null>(null);
   const [difficulty, setDifficulty] = useState<number | null>(null);
@@ -187,6 +190,8 @@ export default function SessionFeedback({ sessionLabel, onClose, onSubmitted }: 
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [recap, setRecap] = useState<SessionRecap | null>(null);
+  const [neuralResult, setNeuralResult] = useState<NeuralAwardResult | null>(null);
+  const [showNeuralOverlay, setShowNeuralOverlay] = useState(false);
 
   const isSkipped = sessionStatus === "skipped";
   const showPainAreas = (pain ?? 0) >= 3;
@@ -209,19 +214,31 @@ export default function SessionFeedback({ sessionLabel, onClose, onSubmitted }: 
     if (!canSubmit || submitting) return;
     setSubmitting(true);
     try {
-      const result = await customFetch<{ recap: SessionRecap }>("/api/session-logs", {
-        method: "POST",
-        body: JSON.stringify({
-          sessionStatus,
-          actualDuration: actualDuration ?? undefined,
-          difficultyScore: difficulty ?? undefined,
-          painScore: pain ?? undefined,
-          energyScore: energy ?? undefined,
-          enjoymentScore: enjoyment ?? undefined,
-          painAreas: selectedPainAreas.size > 0 ? Array.from(selectedPainAreas) : undefined,
-          notes: notes.trim() || undefined,
+      const isPerfect = (difficulty ?? 5) <= 2 && (pain ?? 5) === 1 && sessionStatus === "completed";
+      const [result] = await Promise.all([
+        customFetch<{ recap: SessionRecap }>("/api/session-logs", {
+          method: "POST",
+          body: JSON.stringify({
+            sessionStatus,
+            actualDuration: actualDuration ?? undefined,
+            difficultyScore: difficulty ?? undefined,
+            painScore: pain ?? undefined,
+            energyScore: energy ?? undefined,
+            enjoymentScore: enjoyment ?? undefined,
+            painAreas: selectedPainAreas.size > 0 ? Array.from(selectedPainAreas) : undefined,
+            notes: notes.trim() || undefined,
+          }),
         }),
-      });
+        customFetch<NeuralAwardResult>("/api/neural-profile/award", {
+          method: "POST",
+          body: JSON.stringify({
+            sessionStatus,
+            difficultyScore: difficulty ?? undefined,
+            streakDays: streakDays ?? 0,
+            isPerfect,
+          }),
+        }).then((r) => setNeuralResult(r)).catch(() => null),
+      ]);
       setRecap(result.recap ?? null);
       onSubmitted();
     } catch {
@@ -231,6 +248,14 @@ export default function SessionFeedback({ sessionLabel, onClose, onSubmitted }: 
 
   function handleClose() {
     onClose();
+  }
+
+  function handleGotIt() {
+    if (neuralResult) {
+      setShowNeuralOverlay(true);
+    } else {
+      onClose();
+    }
   }
 
   return (
@@ -391,6 +416,19 @@ export default function SessionFeedback({ sessionLabel, onClose, onSubmitted }: 
           </div>
         )}
       </div>
+
+      {/* Neural growth overlay — appears on top after "Got it" */}
+      {showNeuralOverlay && neuralResult && (
+        <NeuralGrowthOverlay
+          result={neuralResult}
+          streakDays={streakDays}
+          onDismiss={() => {
+            setShowNeuralOverlay(false);
+            onNeuralResult?.(neuralResult);
+            onClose();
+          }}
+        />
+      )}
     </div>
   );
 }

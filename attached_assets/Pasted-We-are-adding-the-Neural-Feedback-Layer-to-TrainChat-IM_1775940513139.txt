@@ -1,0 +1,119 @@
+We are adding the Neural Feedback Layer to TrainChat.
+
+IMPORTANT:
+This is NOT traditional gamification.
+
+We are NOT building:
+- XP points
+- levels
+- arcade-style rewards
+
+We ARE building:
+A system that reflects how training affects the nervous system, movement quality, and performance.
+
+--------------------------------------------------
+GOAL
+--------------------------------------------------
+
+After each session or meaningful interaction, the system should provide feedback that feels like:
+
+- a coach interpreting performance
+- a system tracking adaptation
+- a reflection of real training impact
+
+NOT:
+- a game mechanic
+
+--------------------------------------------------
+STEP 1: CREATE NEURAL FEEDBACK OUTPUT
+
+After a completed session, generate a short “Training Feedback” section.
+
+Example:
+
+Training Feedback:
+- Neural output: increased
+- Movement efficiency: improving
+- Force production: reinforced
+
+System Update:
+- Session completed
+- Patterns strengthened
+- Progression ready next session
+
+--------------------------------------------------
+STEP 2: LINK FEEDBACK TO REAL DATA
+
+Base feedback on:
+- session completion
+- progression success
+- readiness
+- exercise performance
+
+Examples:
+
+If user progressed:
+→ “Force output capacity increasing”
+
+If user completed full session:
+→ “Movement patterns reinforced”
+
+If user struggled:
+→ “Load tolerance being challenged — adaptation in progress”
+
+--------------------------------------------------
+STEP 3: KEEP LANGUAGE PERFORMANCE-FOCUSED
+
+Avoid:
+- XP
+- levels
+- gamified wording
+
+Use:
+- neural efficiency
+- movement quality
+- force output
+- coordination
+- adaptation
+
+--------------------------------------------------
+STEP 4: ADD LIGHT VISUAL INDICATOR
+
+Show:
+- small progress bars
+- subtle arrows (↑ ↓)
+- minimal UI feedback
+
+Do NOT:
+- over-design
+- clutter the screen
+
+--------------------------------------------------
+STEP 5: INTEGRATE INTO EXISTING FLOW
+
+After session completion:
+- show feedback card
+- optionally log in Changes tab
+
+Do not create a new complex system yet.
+
+--------------------------------------------------
+STEP 6: KEEP IT SIMPLE
+
+This is Phase 1.
+
+We are validating:
+- does this feel different?
+- does this feel intelligent?
+- does this align with the product?
+
+--------------------------------------------------
+FINAL RULE
+
+TrainChat should feel like:
+a system interpreting training adaptation
+
+NOT:
+a gamified fitness tracker
+
+Implement this now.

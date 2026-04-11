@@ -30,6 +30,8 @@ import ReadinessModal from "@/components/chat/ReadinessModal";
 import FeedbackModal from "@/components/chat/FeedbackModal";
 import ReadinessSummary from "@/components/chat/ReadinessSummary";
 import StreakBadge from "@/components/chat/StreakBadge";
+import NeuralBadge from "@/components/gamification/NeuralBadge";
+import NeuralGrowthOverlay, { type NeuralAwardResult } from "@/components/gamification/NeuralGrowthOverlay";
 import SessionLogModal from "@/components/chat/SessionLogModal";
 import PaywallModal from "@/components/PaywallModal";
 import PricingModal from "@/components/PricingModal";
@@ -143,6 +145,7 @@ export default function Chat() {
   const [showPricing, setShowPricing] = useState(false);
   const [showSessionLog, setShowSessionLog] = useState(false);
   const [sessionLogSubmitting, setSessionLogSubmitting] = useState(false);
+  const [neuralOverlay, setNeuralOverlay] = useState<NeuralAwardResult | null>(null);
   const [messagesUsed, setMessagesUsed] = useState(0);
   const [mobilePanel, setMobilePanel] = useState<SlidePanel>(null);
   const [showCalibration, setShowCalibration] = useState(false);
@@ -602,7 +605,20 @@ export default function Chat() {
       await postSessionLog(data);
       queryClient.invalidateQueries({ queryKey: ["streak"] });
       queryClient.invalidateQueries({ queryKey: ["insights"] });
+      queryClient.invalidateQueries({ queryKey: ["neural-profile"] });
       setShowSessionLog(false);
+      // Award XP and show neural overlay
+      customFetch<NeuralAwardResult>("/api/neural-profile/award", {
+        method: "POST",
+        body: JSON.stringify({
+          sessionStatus: data.sessionStatus ?? "completed",
+          difficultyScore: data.difficultyScore,
+          streakDays: currentStreak,
+          isPerfect: false,
+        }),
+      })
+        .then((result) => setNeuralOverlay(result))
+        .catch(() => null);
     } catch {
       // silently fail
     } finally {
@@ -939,7 +955,15 @@ export default function Chat() {
 
       {/* ─── Desktop TopNav ─── */}
       <div className="hidden md:block">
-        <TopNav userName={userName} extraContent={<StreakBadge streak={currentStreak} />} />
+        <TopNav
+          userName={userName}
+          extraContent={
+            <div className="flex items-center gap-2">
+              <StreakBadge streak={currentStreak} />
+              <NeuralBadge isPremium={isPremium} />
+            </div>
+          }
+        />
       </div>
 
       {/* ─── Main layout ─── */}
@@ -1199,6 +1223,18 @@ export default function Chat() {
           )}
         </div>
       </div>
+
+      {/* ─── Neural growth overlay ─── */}
+      {neuralOverlay && (
+        <NeuralGrowthOverlay
+          result={neuralOverlay}
+          streakDays={currentStreak}
+          onDismiss={() => {
+            setNeuralOverlay(null);
+            queryClient.invalidateQueries({ queryKey: ["neural-profile"] });
+          }}
+        />
+      )}
     </MobileSlideLayout>
   );
 }

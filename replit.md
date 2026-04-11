@@ -68,6 +68,16 @@ The UI features a dark theme with electric blue accents and the Inter font, cent
 - **Admin API**: CRUD endpoints at `/api/admin/knowledge` (GET, POST, PUT/:id, DELETE/:id) — all protected by `requireAdmin`.
 - **Admin UI**: Knowledge Base tab in `/admin` — add, edit, activate/deactivate, and delete coaching knowledge entries with type, sport, goal, body region, and tag filters.
 
+### Gamification — Neural Growth Layer
+- **DB Table**: `neural_profiles` — per-user level, XP, consistency/progression/recovery scores, neural connection count, unlocked milestones (JSONB array), timestamps
+- **Backend Service** (`neural-profile-service.ts`): XP award engine with level computation (formula: each level costs 100 more XP than previous, starting 500 for Level 2), milestone detection (8 milestones: first session, 5/20/50 sessions, 3/7/14/30-day streaks), score computation from real session + exercise + readiness data, `awardXpForSession()`, `getOrCreateProfile()`
+- **API Routes**: `GET /api/neural-profile` (fetch or auto-create profile), `POST /api/neural-profile/award` (award XP for a session — checks status, streak, perfect session detection, milestone unlocks)
+- **NeuralGrowthOverlay** (`gamification/NeuralGrowthOverlay.tsx`): Post-session reward overlay. Slides up from bottom. XP count-up animation, level progress bar, stat chips (streak, sessions, connections), milestone unlock cards. Auto-dismisses at 5s or on tap. Appears after "Got it" in SessionRecapCard.
+- **BrainView** (`gamification/BrainView.tsx`): Full-screen SVG neural network modal. 16 nodes arranged in brain-like cluster, up to 40 glowing edges that activate based on `neuralConnections` count. CSS-animated pulses on active edges. Shows level ring, XP progress bar, three score bars, total sessions and milestones.
+- **NeuralBadge** (`gamification/NeuralBadge.tsx`): Compact circular progress ring badge in TopNav (desktop only, premium only, only after ≥1 session). Ring color evolves with level (blue→purple→gold). Tapping opens BrainView modal. Uses `["neural-profile"]` React Query key.
+- **Wiring**: `SessionFeedback.tsx` calls both `/api/session-logs` and `/api/neural-profile/award` in parallel on submit. Overlay shown after "Got it" button. `handleSessionLog` in `chat.tsx` also awards XP (legacy modal path). `queryClient.invalidateQueries(["neural-profile"])` on dismiss.
+- **Tone**: Performance-driven, scientific, athlete-focused. No gimmicks. Every metric traces to real behavior.
+
 ### Auto-Progression Engine (exercise-logs.ts + progression.ts)
 - **DB Table**: `exercise_logs` — per-exercise performance log (load, reps, sets, RPE, completion status, exercise role)
 - **Progression Service** (`progression.ts`): Computes READY_TO_PROGRESS / HOLD / REGRESS state from recent logs. Goal-differentiated (strength: load, hypertrophy: reps/volume, performance: quality+load). Exercise-role-aware (power: intent only; compound: +5-10 lbs; unilateral: +2.5 lbs; accessory: lowest priority).

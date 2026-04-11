@@ -20,6 +20,7 @@ import trainingSystemHistoryRouter from "./training-system-history";
 import { exercisesRouter } from "./exercises";
 import calibrateRouter from "./calibrate";
 import exerciseLogsRouter from "./exercise-logs";
+import neuralProfileRouter from "./neural-profile";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -54,5 +55,6 @@ router.use(trainingSystemHistoryRouter);
 router.use("/exercises", exercisesRouter);
 router.use(calibrateRouter);
 router.use(exerciseLogsRouter);
+router.use(neuralProfileRouter);
 
 export default router;
