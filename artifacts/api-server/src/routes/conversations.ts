@@ -3,8 +3,8 @@ import { db, conversationsTable, messagesTable } from "@workspace/db";
 import { eq, desc, count } from "drizzle-orm";
 import { CreateConversationBody, GetConversationParams, DeleteConversationParams, ListMessagesParams, SendMessageBody, SendMessageParams } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
-import { generateAIResponse, type ProgramStructure } from "../lib/ai";
-import { classifyIntent, logIntentSummary, type IntentResult } from "../lib/intent";
+import { generateAIResponse, type ProgramStructure, validateProgramAgainstConstraints } from "../lib/ai";
+import { classifyIntent, logIntentSummary, extractConstraints, type IntentResult, type ExtractedConstraints } from "../lib/intent";
 import { resolveAction, logDecisionSummary } from "../lib/decision";
 import {
   selectResponseMode,
@@ -74,6 +74,52 @@ function isVibeEditIntent(intentResult: IntentResult): boolean {
     intentResult.type === "ADJUST_FOR_PAIN" ||
     intentResult.type === "ADJUST_FOR_READINESS"
   );
+}
+
+/**
+ * Builds a meaningful change log summary for the initial program build.
+ * Uses extracted constraints to produce specific, accurate history entries.
+ */
+function buildInitialBuildSummary(
+  program: ProgramStructure,
+  constraints: ExtractedConstraints | null
+): string {
+  const days = program.days.length;
+  const parts: string[] = [];
+
+  parts.push(`Created new program from user request`);
+
+  if (constraints?.primaryGoal) {
+    const goalLabels: Record<string, string> = {
+      strength: "Strength",
+      hypertrophy: "Hypertrophy",
+      athletic_performance: "Athletic Performance",
+      fat_loss: "Fat Loss / Body Composition",
+      general_fitness: "General Fitness",
+    };
+    parts.push(`Goal: ${goalLabels[constraints.primaryGoal] ?? constraints.primaryGoal}`);
+  }
+
+  parts.push(`Frequency: ${days} days/week`);
+
+  if (constraints?.sportFocus) {
+    const sportLabel = constraints.sportFocus.replace(/_/g, " ");
+    parts.push(`Sport context: ${sportLabel.charAt(0).toUpperCase() + sportLabel.slice(1)}`);
+  }
+
+  if (constraints?.sessionDuration) {
+    parts.push(`Session duration: ${constraints.sessionDuration} minutes`);
+  }
+
+  if (constraints?.equipment) {
+    parts.push(`Equipment: ${constraints.equipment}`);
+  }
+
+  if (constraints?.experienceLevel) {
+    parts.push(`Experience level: ${constraints.experienceLevel}`);
+  }
+
+  return parts.join(" · ");
 }
 
 /**
@@ -363,6 +409,25 @@ Keep it helpful and intelligent, never promotional.`;
   });
 
   logIntentSummary(parsed.data.content, intentResult, hasAnyProgram);
+
+  // ── Phase B: Constraint Extraction ────────────────────────────────────────
+  // For new program builds, extract hard constraints from the user's message.
+  // These override profile defaults per priority: explicit input > profile > defaults.
+  let extractedConstraints: ExtractedConstraints | null = null;
+  if (intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM") {
+    extractedConstraints = extractConstraints(parsed.data.content);
+    logger.info(
+      {
+        daysPerWeek: extractedConstraints.daysPerWeek,
+        primaryGoal: extractedConstraints.primaryGoal,
+        sportFocus: extractedConstraints.sportFocus,
+        equipment: extractedConstraints.equipment,
+        experienceLevel: extractedConstraints.experienceLevel,
+        sessionDuration: extractedConstraints.sessionDuration,
+      },
+      "[ConstraintExtraction] Constraints extracted from user message for program build"
+    );
+  }
 
   // ── Decision Tree: resolve action type, preservation rules, and infer-vs-ask ──
   const actionDecision = resolveAction(intentResult, latestStructuredProgram, parsed.data.content);
@@ -693,7 +758,7 @@ Keep it helpful and intelligent, never promotional.`;
     }
   }
 
-  const { content: aiContent, structuredData } = await generateAIResponse(
+  let { content: aiContent, structuredData } = await generateAIResponse(
     parsed.data.content,
     history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
     userId,
@@ -707,12 +772,77 @@ Keep it helpful and intelligent, never promotional.`;
       actionDecision,
       transformHint: transformHint || undefined,
       responseMode,
+      extractedConstraints,
+      userMessage: parsed.data.content,
     }
   );
 
   // Warn if EDIT_PROGRAM was routed but no structured data returned
   if (intentResult.type === "EDIT_PROGRAM" && currentProgram && !structuredData) {
     logger.warn("[IntentRouter] EDIT_PROGRAM intent with program context, but AI did not return updated JSON. Right panel will NOT update.");
+  }
+
+  // ── Constraint Validation & Retry (for new program builds) ─────────────────
+  // If extracted constraints exist and the AI returned a program, validate it.
+  // If validation fails, retry once with a stronger enforcement prompt.
+  if (
+    extractedConstraints &&
+    structuredData &&
+    (intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM")
+  ) {
+    const violations = validateProgramAgainstConstraints(structuredData, extractedConstraints);
+    if (violations.length > 0) {
+      logger.warn(
+        { violations, programName: structuredData.programName, days: structuredData.days.length },
+        "[ConstraintValidation] Program violates constraints — retrying with stronger enforcement"
+      );
+      // Retry once with a reinforced enforcement hint
+      const enforceHint = `\n## CONSTRAINT ENFORCEMENT — RETRY\nThe previous program generation FAILED validation:\n${violations.map(v => `- ${v.field}: expected ${v.expected}, got ${v.actual}`).join("\n")}\n\nThis is your SECOND AND FINAL attempt. The constraints listed above are ABSOLUTE. Correct every violation before outputting JSON.`;
+      const retryResult = await generateAIResponse(
+        parsed.data.content,
+        history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+        userId,
+        {
+          adaptationContext: adaptationCtx || undefined,
+          memoryContext: (hasMemory && memoryCtx) ? memoryCtx : undefined,
+          currentProgram: preTransformedProgram,
+          intentResult,
+          actionDecision,
+          responseMode,
+          extractedConstraints,
+          userMessage: parsed.data.content,
+          transformHint: enforceHint,
+        }
+      ).catch(() => null);
+
+      if (retryResult?.structuredData) {
+        const retryViolations = validateProgramAgainstConstraints(retryResult.structuredData, extractedConstraints);
+        if (retryViolations.length === 0) {
+          logger.info("[ConstraintValidation] Retry succeeded — using corrected program");
+          aiContent = retryResult.content;
+          structuredData = retryResult.structuredData;
+        } else {
+          logger.warn(
+            { retryViolations },
+            "[ConstraintValidation] Retry still invalid — using best-available result"
+          );
+          // Use the retry anyway if the day count is now correct (the most critical constraint)
+          const dayViolation = violations.find(v => v.field === "daysPerWeek");
+          const retryDayViolation = retryViolations.find(v => v.field === "daysPerWeek");
+          if (dayViolation && !retryDayViolation) {
+            logger.info("[ConstraintValidation] Day count fixed in retry — using retry despite remaining violations");
+            aiContent = retryResult.content;
+            structuredData = retryResult.structuredData;
+          }
+          // Otherwise keep the first result — both failed, use first attempt
+        }
+      }
+    } else {
+      logger.info(
+        { programName: structuredData.programName, days: structuredData.days.length },
+        "[ConstraintValidation] Program passed constraint validation"
+      );
+    }
   }
 
   const [assistantMessage] = await db.insert(messagesTable).values({
@@ -774,15 +904,24 @@ Keep it helpful and intelligent, never promotional.`;
           "[AutoSave] New training system created — logging Initial Build version"
         );
         try {
+          // Build a constraint-aware change summary for the Initial Build entry
+          const initialBuildSummary = buildInitialBuildSummary(structuredData, extractedConstraints);
           changeLogId = await createChangeLogEntry({
             userId, trainingSystemId: savedSystem.id, source: "initialize",
             intent: "create_program", scope: "system",
-            changeSummary: `Program "${structuredData.programName}" created — ${structuredData.days.length} training days, ready to go.`,
+            changeSummary: initialBuildSummary,
             requestText: parsed.data.content.slice(0, 300),
             beforeSnapshot: emptySnapshot, afterSnapshot: emptySnapshot,
             fullProgramSnapshot,
             appliedCount: 1, skippedCount: 0,
-            versionOverrides: { isMajorVersion: true, versionLabel: "Initial Build" },
+            versionOverrides: { isMajorVersion: true, versionLabel: "V1 Initial Build" },
+            decisionMetadata: {
+              intentType: intentResult.type,
+              extractedConstraints: extractedConstraints ?? {},
+              programDays: structuredData.days.length,
+              programGoal: extractedConstraints?.primaryGoal ?? null,
+              programSport: extractedConstraints?.sportFocus ?? null,
+            },
           });
         } catch (logErr) {
           logger.warn({ logErr }, "[AutoSave] Failed to write Initial Build log — non-fatal");
@@ -996,6 +1135,20 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
   logIntentSummary(parsed.data.content, intentResult, hasAnyProgram);
 
+  // ── Constraint Extraction ─────────────────────────────────────────────────
+  let extractedConstraints: ExtractedConstraints | null = null;
+  if (intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM") {
+    extractedConstraints = extractConstraints(parsed.data.content);
+    logger.info(
+      {
+        daysPerWeek: extractedConstraints.daysPerWeek,
+        primaryGoal: extractedConstraints.primaryGoal,
+        sportFocus: extractedConstraints.sportFocus,
+      },
+      "[SSE/ConstraintExtraction] Constraints extracted for program build"
+    );
+  }
+
   const actionDecision = resolveAction(intentResult, latestStructuredProgram, parsed.data.content);
   logDecisionSummary(parsed.data.content, intentResult, actionDecision, hasActiveProgram);
 
@@ -1188,7 +1341,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   // Stage 5: Apply Changes — AI generates the program (this is the longest stage)
   emit(buildStageEvent("applying", intentResult.type, actionDecision.actionType));
 
-  const { content: aiContent, structuredData } = await generateAIResponse(
+  let { content: aiContent, structuredData } = await generateAIResponse(
     parsed.data.content,
     history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
     userId,
@@ -1202,8 +1355,57 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       actionDecision,
       transformHint: transformHint || undefined,
       responseMode,
+      extractedConstraints,
+      userMessage: parsed.data.content,
     }
   );
+
+  // ── Constraint Validation & Retry ─────────────────────────────────────────
+  if (
+    extractedConstraints &&
+    structuredData &&
+    (intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM")
+  ) {
+    const violations = validateProgramAgainstConstraints(structuredData, extractedConstraints);
+    if (violations.length > 0) {
+      logger.warn(
+        { violations, programName: structuredData.programName, days: structuredData.days.length },
+        "[SSE/ConstraintValidation] Program violates constraints — retrying"
+      );
+      const enforceHint = `\n## CONSTRAINT ENFORCEMENT — RETRY\nThe previous program generation FAILED validation:\n${violations.map(v => `- ${v.field}: expected ${v.expected}, got ${v.actual}`).join("\n")}\n\nThis is your SECOND AND FINAL attempt. Correct every violation before outputting JSON.`;
+      const retryResult = await generateAIResponse(
+        parsed.data.content,
+        history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+        userId,
+        {
+          currentProgram: preTransformedProgram,
+          intentResult,
+          actionDecision,
+          responseMode,
+          extractedConstraints,
+          userMessage: parsed.data.content,
+          transformHint: enforceHint,
+        }
+      ).catch(() => null);
+
+      if (retryResult?.structuredData) {
+        const retryViolations = validateProgramAgainstConstraints(retryResult.structuredData, extractedConstraints);
+        if (retryViolations.length === 0) {
+          aiContent = retryResult.content;
+          structuredData = retryResult.structuredData;
+          logger.info("[SSE/ConstraintValidation] Retry succeeded");
+        } else {
+          const dayViolation = violations.find(v => v.field === "daysPerWeek");
+          const retryDayViolation = retryViolations.find(v => v.field === "daysPerWeek");
+          if (dayViolation && !retryDayViolation) {
+            aiContent = retryResult.content;
+            structuredData = retryResult.structuredData;
+            logger.info("[SSE/ConstraintValidation] Day count fixed in retry — accepting");
+          }
+        }
+      }
+    }
+  }
 
   // Stage 6: Validate — AI response quality checks done; now persist
   emit(buildStageEvent("validating", intentResult.type, actionDecision.actionType));
@@ -1262,15 +1464,23 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           "[AutoSave:stream] New training system created — logging Initial Build version"
         );
         try {
+          const initialBuildSummary = buildInitialBuildSummary(structuredData, extractedConstraints);
           changeLogId = await createChangeLogEntry({
             userId, trainingSystemId: savedSystem.id, source: "initialize",
             intent: "create_program", scope: "system",
-            changeSummary: `Program "${structuredData.programName}" created — ${structuredData.days.length} training days, ready to go.`,
+            changeSummary: initialBuildSummary,
             requestText: parsed.data.content.slice(0, 300),
             beforeSnapshot: emptySnapshot, afterSnapshot: emptySnapshot,
             fullProgramSnapshot,
             appliedCount: 1, skippedCount: 0,
-            versionOverrides: { isMajorVersion: true, versionLabel: "Initial Build" },
+            versionOverrides: { isMajorVersion: true, versionLabel: "V1 Initial Build" },
+            decisionMetadata: {
+              intentType: intentResult.type,
+              extractedConstraints: extractedConstraints ?? {},
+              programDays: structuredData.days.length,
+              programGoal: extractedConstraints?.primaryGoal ?? null,
+              programSport: extractedConstraints?.sportFocus ?? null,
+            },
           });
         } catch (logErr) {
           logger.warn({ logErr }, "[AutoSave:stream] Failed to write Initial Build log — non-fatal");

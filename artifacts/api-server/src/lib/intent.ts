@@ -6,6 +6,222 @@
 
 import { logger } from "./logger";
 
+// ─── Extracted Constraints ────────────────────────────────────────────────────
+//
+// Structured hard constraints extracted directly from user input.
+// These ALWAYS override profile defaults when present.
+// Priority: explicit user input > stored profile > safe defaults.
+
+export interface ExtractedConstraints {
+  sportFocus: string | null;
+  primaryGoal: string | null;
+  daysPerWeek: number | null;
+  sessionDuration: number | null;
+  equipment: string | null;
+  experienceLevel: string | null;
+  trainingBias: string | null;
+  limitations: string | null;
+  locationContext: string | null;
+}
+
+// ─── Constraint Extractor ─────────────────────────────────────────────────────
+//
+// Extracts hard constraints from a user's message.
+// Called for CREATE_PROGRAM and PROGRAM_MODIFICATION intents before generation.
+
+export function extractConstraints(message: string): ExtractedConstraints {
+  const lower = message.toLowerCase().trim();
+
+  // ── Sport focus ────────────────────────────────────────────────────────────
+  const sportFocus = detectSport(lower);
+
+  // ── Primary goal ──────────────────────────────────────────────────────────
+  let primaryGoal: string | null = null;
+  if (/\b(strength|strong|stronger|powerlifting|power)\b/.test(lower) && !/hypertrophy|muscle|mass|size/.test(lower)) {
+    primaryGoal = "strength";
+  } else if (/\b(hypertrophy|muscle|mass|size|bulk|gains?|build muscle)\b/.test(lower)) {
+    primaryGoal = "hypertrophy";
+  } else if (/\b(athletic|performance|sport|explosive|speed|agility)\b/.test(lower)) {
+    primaryGoal = "athletic_performance";
+  } else if (/\b(fat loss|weight loss|cut|cutting|lean|conditioning|cardio)\b/.test(lower)) {
+    primaryGoal = "fat_loss";
+  } else if (/\b(fitness|general|overall health|stay fit|stay active)\b/.test(lower)) {
+    primaryGoal = "general_fitness";
+  }
+  // If sport is detected and no goal stated, default to athletic performance
+  if (!primaryGoal && sportFocus) {
+    primaryGoal = "athletic_performance";
+  }
+
+  // ── Days per week ─────────────────────────────────────────────────────────
+  let daysPerWeek: number | null = null;
+  const dayPatterns = [
+    /\b(\d)\s*[\-–]?\s*day(?:s)?\s*(?:a|per)\s*week\b/i,
+    /\b(\d)\s*[\-–]?\s*day(?:s)?\s*week(?:ly)?\b/i,
+    /\b(\d)\s*times?\s*(?:a|per)\s*week\b/i,
+    /\b(\d)\s*[\-–]?\s*day\s+(?:program|split|routine|plan)\b/i,
+    /\b(\d)\s*[\-–]?\s*day\s+\w+\s+(?:program|split|routine|plan)\b/i,
+    /\btrain(?:ing)?\s+(\d)\s+days?\b/i,
+    /\b(\d)\s+sessions?\s*(?:a|per)\s*week\b/i,
+  ];
+  for (const pat of dayPatterns) {
+    const m = lower.match(pat);
+    if (m) {
+      const raw = parseInt(m[1], 10);
+      if (raw >= 1 && raw <= 7) {
+        daysPerWeek = raw;
+        break;
+      }
+    }
+  }
+
+  // ── Session duration ──────────────────────────────────────────────────────
+  let sessionDuration: number | null = null;
+  const durMatch = lower.match(/\b(\d{2,3})\s*(?:minute|min|minutes?|mins?)\b/i)
+    ?? lower.match(/\b(\d)\s*hour(?:s)?\b/i);
+  if (durMatch) {
+    const raw = parseInt(durMatch[1], 10);
+    // Convert hours to minutes if needed
+    const isHour = /hour/.test(durMatch[0]);
+    const minutes = isHour ? raw * 60 : raw;
+    if (minutes >= 15 && minutes <= 180) sessionDuration = minutes;
+  }
+
+  // ── Equipment ─────────────────────────────────────────────────────────────
+  let equipment: string | null = null;
+  if (/\b(dumbbells? only|dumbbell only|only dumbbells?)\b/i.test(lower)) {
+    equipment = "dumbbells only";
+  } else if (/\b(home gym|home setup|home equipment|at home)\b/i.test(lower)) {
+    equipment = "home gym";
+  } else if (/\b(full gym|commercial gym|gym access|full access|gym)\b/i.test(lower)) {
+    equipment = "full gym";
+  } else if (/\b(no equipment|bodyweight|no weights?|no gym)\b/i.test(lower)) {
+    equipment = "bodyweight";
+  } else if (/\b(barbell|barbells?|squat rack|power rack)\b/i.test(lower)) {
+    equipment = "barbell and rack";
+  } else if (/\b(resistance bands?|bands? only)\b/i.test(lower)) {
+    equipment = "resistance bands";
+  } else if (/\b(kettlebell)\b/i.test(lower)) {
+    equipment = "kettlebells";
+  }
+
+  // ── Experience level ──────────────────────────────────────────────────────
+  let experienceLevel: string | null = null;
+  if (/\b(beginner|new to (lifting|gym|training)|just started|starting out|novice|never (lifted|trained))\b/i.test(lower)) {
+    experienceLevel = "beginner";
+  } else if (/\b(intermediate|some experience|been (lifting|training|going to gym) for \d+)\b/i.test(lower)) {
+    experienceLevel = "intermediate";
+  } else if (/\b(advanced|experienced|years? of (lifting|training)|elite|competitive)\b/i.test(lower)) {
+    experienceLevel = "advanced";
+  }
+
+  // ── Training bias / style ─────────────────────────────────────────────────
+  let trainingBias: string | null = null;
+  if (/\b(compound|powerlifting|barbell-based|strength-based)\b/i.test(lower)) {
+    trainingBias = "compound_focused";
+  } else if (/\b(unilateral|single.leg|single.arm|asymmetry)\b/i.test(lower)) {
+    trainingBias = "unilateral_focused";
+  } else if (/\b(conditioning|cardio|aerobic|endurance)\b/i.test(lower)) {
+    trainingBias = "conditioning_focused";
+  }
+
+  // ── Limitations / injuries ────────────────────────────────────────────────
+  let limitations: string | null = null;
+  const injuryPatterns = /\b(injury|injured|pain|hurt|avoid|can.t do|no (squats?|deadlifts?|pressing|running)|knee|shoulder|back|hip|wrist|ankle)\b/i;
+  if (injuryPatterns.test(lower)) {
+    // Extract around the keyword
+    const match = lower.match(/([^.!?]*(?:injury|injured|pain|hurt|avoid|can.t do|no \w+|knee|shoulder|back|hip|wrist|ankle)[^.!?]*)/i);
+    if (match) limitations = match[1].trim();
+  }
+
+  // ── Location context ──────────────────────────────────────────────────────
+  let locationContext: string | null = null;
+  if (/\b(hotel|travel|on the road|traveling|away)\b/i.test(lower)) {
+    locationContext = "travel";
+  } else if (/\b(home|house|apartment)\b/i.test(lower)) {
+    locationContext = "home";
+  } else if (/\b(gym|fitness center|studio)\b/i.test(lower)) {
+    locationContext = "gym";
+  } else if (/\b(outdoor|outside|park)\b/i.test(lower)) {
+    locationContext = "outdoor";
+  }
+
+  return {
+    sportFocus,
+    primaryGoal,
+    daysPerWeek,
+    sessionDuration,
+    equipment,
+    experienceLevel,
+    trainingBias,
+    limitations,
+    locationContext,
+  };
+}
+
+// ─── Build Contract Generator ─────────────────────────────────────────────────
+//
+// Generates a mandatory BUILD CONTRACT prompt from extracted constraints.
+// Injected into the AI system prompt for CREATE_PROGRAM intents.
+// This forces the AI to honor explicit user constraints over defaults.
+
+export function buildConstraintContract(
+  constraints: ExtractedConstraints,
+  userMessage: string,
+): string {
+  const parts: string[] = [];
+
+  parts.push(`## MANDATORY BUILD CONTRACT — EXTRACTED FROM USER INPUT`);
+  parts.push(`The following constraints were explicitly stated by the user and MUST be honored. They override ALL profile defaults and template presets.\n`);
+  parts.push(`**Original request:** "${userMessage}"\n`);
+  parts.push(`**Extracted hard constraints:**`);
+
+  if (constraints.daysPerWeek !== null) {
+    parts.push(`- daysPerWeek = ${constraints.daysPerWeek} → The program MUST have exactly ${constraints.daysPerWeek} training days. This is NON-NEGOTIABLE.`);
+  }
+  if (constraints.primaryGoal) {
+    parts.push(`- primaryGoal = ${constraints.primaryGoal} → The program goal MUST be ${constraints.primaryGoal}. Do NOT substitute hypertrophy, fat_loss, or any other goal unless this was explicitly stated.`);
+  }
+  if (constraints.sportFocus) {
+    parts.push(`- sportFocus = ${constraints.sportFocus} → Program MUST be biased for ${constraints.sportFocus} athletic performance. Apply sport-specific programming principles.`);
+  }
+  if (constraints.sessionDuration !== null) {
+    parts.push(`- sessionDuration = ${constraints.sessionDuration} minutes → Sessions MUST fit within this duration.`);
+  }
+  if (constraints.equipment) {
+    parts.push(`- equipment = ${constraints.equipment} → Only use exercises appropriate for this equipment access.`);
+  }
+  if (constraints.experienceLevel) {
+    parts.push(`- experienceLevel = ${constraints.experienceLevel} → Program complexity and volume MUST match this level.`);
+  }
+  if (constraints.limitations) {
+    parts.push(`- limitations = "${constraints.limitations}" → Avoid exercises conflicting with this limitation.`);
+  }
+
+  parts.push(`\n**VALIDATION REQUIREMENTS (check before outputting JSON):**`);
+  if (constraints.daysPerWeek !== null) {
+    parts.push(`☑ days array length === ${constraints.daysPerWeek}`);
+  }
+  if (constraints.primaryGoal) {
+    parts.push(`☑ programName and description reflect "${constraints.primaryGoal}" — NOT a different goal`);
+  }
+  if (constraints.sportFocus) {
+    parts.push(`☑ programName or description references "${constraints.sportFocus}" or sport support`);
+  }
+  parts.push(`☑ NO invented constraints (no hypertrophy if strength was requested, no 4 days if 3 were requested)`);
+
+  parts.push(`\n**BUILD CONTRACT RESPONSE FORMAT:**`);
+  parts.push(`After building, confirm what was actually built. Example:`);
+  if (constraints.sportFocus && constraints.primaryGoal && constraints.daysPerWeek) {
+    parts.push(`"Built a ${constraints.daysPerWeek}-day ${constraints.primaryGoal} program with ${constraints.sportFocus} performance support. Check the Program tab."`);
+  } else if (constraints.daysPerWeek && constraints.primaryGoal) {
+    parts.push(`"Built a ${constraints.daysPerWeek}-day ${constraints.primaryGoal} program. Check the Program tab."`);
+  }
+  parts.push(`\nNEVER describe the wrong program. If you built a strength program, say strength — not hypertrophy.`);
+
+  return parts.join("\n");
+}
+
 // ─── Intent Types ──────────────────────────────────────────────────────────────
 
 export type IntentType =

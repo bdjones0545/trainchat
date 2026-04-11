@@ -15,7 +15,7 @@ import {
   type ExerciseEntry,
   type MovementPattern,
 } from "./training-intelligence";
-import { type IntentResult, buildIntentPromptHint } from "./intent";
+import { type IntentResult, buildIntentPromptHint, type ExtractedConstraints, buildConstraintContract } from "./intent";
 import { type ActionDecision, buildPreservationContext } from "./decision";
 import {
   type ResponseMode,
@@ -791,6 +791,78 @@ You are restructuring the program's architecture. Reference the current program 
   }
 }
 
+// ─── Program Constraint Validation ───────────────────────────────────────────
+//
+// Validates a generated program against extracted constraints.
+// Returns a list of violations (empty = valid).
+
+export interface ConstraintViolation {
+  field: string;
+  expected: string | number;
+  actual: string | number;
+}
+
+export function validateProgramAgainstConstraints(
+  program: ProgramStructure,
+  constraints: ExtractedConstraints,
+): ConstraintViolation[] {
+  const violations: ConstraintViolation[] = [];
+
+  // Check day count
+  if (constraints.daysPerWeek !== null) {
+    const actualDays = program.days.length;
+    if (actualDays !== constraints.daysPerWeek) {
+      violations.push({
+        field: "daysPerWeek",
+        expected: constraints.daysPerWeek,
+        actual: actualDays,
+      });
+    }
+  }
+
+  // Check goal — look for contradictory goal labels
+  if (constraints.primaryGoal) {
+    const programText = `${program.programName} ${program.description} ${program.splitType ?? ""}`.toLowerCase();
+    const goalAliases: Record<string, string[]> = {
+      strength: ["strength", "power", "powerlifting", "strong"],
+      hypertrophy: ["hypertrophy", "muscle", "size", "mass", "bodybuilding", "bulk"],
+      athletic_performance: ["athletic", "performance", "sport", "explosive", "speed"],
+      fat_loss: ["fat loss", "fat-loss", "body comp", "weight loss", "cutting", "lean"],
+      general_fitness: ["fitness", "general", "health"],
+    };
+    const requiredAliases = goalAliases[constraints.primaryGoal] ?? [constraints.primaryGoal];
+    const disallowedGoals = Object.entries(goalAliases)
+      .filter(([k]) => k !== constraints.primaryGoal)
+      .flatMap(([, aliases]) => aliases);
+
+    const hasRequiredGoal = requiredAliases.some((a) => programText.includes(a));
+    const hasDisallowedGoal = disallowedGoals.some((a) => {
+      // Only flag strong false-positives: e.g., if strength was requested but hypertrophy appears prominently
+      if (constraints.primaryGoal === "strength" && ["hypertrophy", "muscle gain", "mass", "bulk"].includes(a)) {
+        return programText.includes(a);
+      }
+      return false;
+    });
+
+    if (!hasRequiredGoal) {
+      violations.push({
+        field: "primaryGoal",
+        expected: constraints.primaryGoal,
+        actual: programText.slice(0, 60),
+      });
+    }
+    if (hasDisallowedGoal) {
+      violations.push({
+        field: "primaryGoal_conflict",
+        expected: `NOT ${disallowedGoals.filter((a) => programText.includes(a)).join(", ")}`,
+        actual: programText.slice(0, 60),
+      });
+    }
+  }
+
+  return violations;
+}
+
 // ─── AI Response Options ─────────────────────────────────────────────────────
 
 export interface AIResponseOptions {
@@ -803,6 +875,8 @@ export interface AIResponseOptions {
   actionDecision?: ActionDecision | null;
   transformHint?: string;
   responseMode?: ResponseMode;
+  extractedConstraints?: ExtractedConstraints | null;
+  userMessage?: string;
 }
 
 // ─── Main entry point ────────────────────────────────────────────────────────
@@ -823,6 +897,8 @@ export async function generateAIResponse(
     actionDecision,
     transformHint,
     responseMode,
+    extractedConstraints,
+    userMessage: userMessageForContract,
   } = options;
 
   const [profile] = await db
@@ -893,6 +969,30 @@ export async function generateAIResponse(
     ? buildPreservationContext(actionDecision.preservationRules, actionDecision.actionType)
     : null;
 
+  // Build constraint contract for new program builds — injected BEFORE response mode
+  // to ensure hard constraints from user message are always honored.
+  let constraintContract: string | null = null;
+  if (
+    extractedConstraints &&
+    userMessageForContract &&
+    (intentResult?.type === "CREATE_PROGRAM" || intentResult?.type === "START_NEW_PROGRAM")
+  ) {
+    const hasAnyConstraint = Object.values(extractedConstraints).some((v) => v !== null);
+    if (hasAnyConstraint) {
+      constraintContract = buildConstraintContract(extractedConstraints, userMessageForContract);
+      logger.info(
+        {
+          daysPerWeek: extractedConstraints.daysPerWeek,
+          primaryGoal: extractedConstraints.primaryGoal,
+          sportFocus: extractedConstraints.sportFocus,
+          equipment: extractedConstraints.equipment,
+          experienceLevel: extractedConstraints.experienceLevel,
+        },
+        "[ConstraintExtraction] Build contract injected — explicit user constraints will override profile defaults"
+      );
+    }
+  }
+
   // Build response mode formatting prompt — always injected last so it takes priority
   let responseModePrompt: string | null = null;
   if (responseMode && actionDecision) {
@@ -907,7 +1007,7 @@ export async function generateAIResponse(
     logResponseMode(rmCtx);
   }
 
-  const extras = [adaptationContext, memoryContext, insightHint, conversionHint, intentHint, editContext, preservationContext, transformHint, responseModePrompt]
+  const extras = [adaptationContext, memoryContext, insightHint, conversionHint, intentHint, editContext, preservationContext, constraintContract, transformHint, responseModePrompt]
     .filter(Boolean)
     .join("\n\n");
   const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;
@@ -920,6 +1020,7 @@ export async function generateAIResponse(
       currentProgram: currentProgram ?? null,
       editIntent: activeEditIntent ?? undefined,
       intentResult: intentResult ?? undefined,
+      extractedConstraints: extractedConstraints ?? null,
     });
   }
 
@@ -968,6 +1069,7 @@ export async function generateAIResponse(
       currentProgram: currentProgram ?? null,
       editIntent: activeEditIntent ?? undefined,
       intentResult: intentResult ?? undefined,
+      extractedConstraints: extractedConstraints ?? null,
     });
   }
 }
@@ -980,6 +1082,7 @@ interface FallbackOptions {
   currentProgram?: ProgramStructure | null;
   editIntent?: EditIntent;
   intentResult?: IntentResult;
+  extractedConstraints?: ExtractedConstraints | null;
 }
 
 function generateFallbackResponse(
@@ -988,7 +1091,7 @@ function generateFallbackResponse(
   profile: UserProfile | null,
   options: FallbackOptions = {}
 ): AIResponse {
-  const { currentProgram, editIntent, intentResult } = options;
+  const { currentProgram, editIntent, intentResult, extractedConstraints } = options;
   const lower = userMessage.toLowerCase();
   const userTurnCount = history.filter((m) => m.role === "user").length;
   const isFirstMessage = userTurnCount === 0;
@@ -1083,14 +1186,49 @@ function generateFallbackResponse(
       };
     }
 
-    const spec = buildTrainingSpec(profile);
+    // Apply extracted constraints on top of profile — user input always wins
+    const effectiveProfile: UserProfile = { ...profile };
+    if (extractedConstraints) {
+      if (extractedConstraints.daysPerWeek !== null) {
+        effectiveProfile.daysPerWeek = extractedConstraints.daysPerWeek;
+      }
+      if (extractedConstraints.primaryGoal) {
+        // Map our internal goal names to profile goal format
+        const goalMap: Record<string, string> = {
+          strength: "strength",
+          hypertrophy: "hypertrophy",
+          athletic_performance: "athletic performance",
+          fat_loss: "fat loss",
+          general_fitness: "general fitness",
+        };
+        effectiveProfile.trainingGoal = goalMap[extractedConstraints.primaryGoal] ?? effectiveProfile.trainingGoal;
+      }
+      if (extractedConstraints.sportFocus) {
+        effectiveProfile.sportFocus = extractedConstraints.sportFocus;
+      }
+      if (extractedConstraints.sessionDuration !== null) {
+        effectiveProfile.sessionDuration = extractedConstraints.sessionDuration;
+      }
+      if (extractedConstraints.equipment) {
+        effectiveProfile.equipmentAccess = extractedConstraints.equipment;
+      }
+      if (extractedConstraints.experienceLevel) {
+        effectiveProfile.experienceLevel = extractedConstraints.experienceLevel;
+      }
+      if (extractedConstraints.limitations) {
+        effectiveProfile.injuries = extractedConstraints.limitations;
+      }
+    }
 
-    // Build the program immediately — no propose-and-ask step
-    const program = buildIntelligentProgram(profile);
-    const goal = normalizeGoal(profile.trainingGoal);
+    // Build the program with effective (constraint-merged) profile
+    const program = buildIntelligentProgram(effectiveProfile);
+    const goal = normalizeGoal(effectiveProfile.trainingGoal);
+
+    // Build a confirmation line that reflects what was actually built
+    const confirmationLine = buildConstraintAwareConfirmation(effectiveProfile, extractedConstraints ?? null);
 
     return {
-      content: getGoalConfirmationLine(goal, profile.daysPerWeek),
+      content: confirmationLine,
       structuredData: program,
     };
   }
@@ -1234,6 +1372,42 @@ function getGoalConfirmationLine(goal: GoalType, daysPerWeek: number): string {
     default:
       return `Built. ${daysPerWeek}-day program is live.\n\nCheck the Program tab — want to adjust anything?`;
   }
+}
+
+// ─── Constraint-aware confirmation builder ───────────────────────────────────
+//
+// Builds a confirmation message that accurately reflects what was actually built.
+// Uses extracted constraints so the response describes the right program.
+
+function buildConstraintAwareConfirmation(
+  effectiveProfile: UserProfile,
+  constraints: ExtractedConstraints | null
+): string {
+  const days = effectiveProfile.daysPerWeek;
+  const goalRaw = effectiveProfile.trainingGoal.toLowerCase();
+  const sport = effectiveProfile.sportFocus ?? constraints?.sportFocus ?? null;
+
+  // Build goal label from what was actually used
+  let goalLabel: string;
+  if (goalRaw.includes("strength") || goalRaw.includes("power")) {
+    goalLabel = "strength";
+  } else if (goalRaw.includes("hypertrophy") || goalRaw.includes("muscle") || goalRaw.includes("mass")) {
+    goalLabel = "hypertrophy";
+  } else if (goalRaw.includes("athletic") || goalRaw.includes("performance")) {
+    goalLabel = "athletic performance";
+  } else if (goalRaw.includes("fat") || goalRaw.includes("body comp") || goalRaw.includes("lean")) {
+    goalLabel = "body composition";
+  } else {
+    goalLabel = goalRaw;
+  }
+
+  // Compose confirmation based on what we know
+  if (sport) {
+    const sportLabel = sport.replace("_", " ");
+    return `Built a ${days}-day ${goalLabel} program with ${sportLabel} performance support. Check the Program tab.`;
+  }
+
+  return `Built a ${days}-day ${goalLabel} program. Check the Program tab — want to adjust anything?`;
 }
 
 // ─── Day builders ─────────────────────────────────────────────────────────────
