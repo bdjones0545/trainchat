@@ -35,6 +35,7 @@ import PaywallModal from "@/components/PaywallModal";
 import PricingModal from "@/components/PricingModal";
 import CalibrationModal from "@/components/chat/CalibrationModal";
 import { useStreamMessage } from "@/hooks/useStreamMessage";
+import { clearAuthState, markOnboardingComplete, logRouteDecision, readDeviceId } from "@/lib/routing";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 
 const SUGGESTION_CHIPS = [
@@ -196,10 +197,20 @@ export default function Chat() {
     return () => clearTimeout(id);
   }, []); // intentionally empty — runs once on mount only
 
-  // FIX 4: only redirect on CONFIRMED auth failure (not during loading or transient errors)
+  // Only redirect on CONFIRMED auth failure (not during loading or transient errors)
   useEffect(() => {
     if (!meLoading && meError && !me) {
-      console.warn("[Chat] auth failure confirmed — redirecting to /start");
+      logRouteDecision({
+        pathname: "/chat",
+        authResolved: true,
+        hasUser: false,
+        authError: true,
+        deviceId: readDeviceId(),
+        guestSessionStatus: null,
+        onboardingComplete: readOnboardingComplete(),
+        target: "/start",
+        reason: "auth failure confirmed — session expired or invalid",
+      });
       setLocation("/start");
     }
   }, [meLoading, meError, me, setLocation]);
@@ -241,14 +252,12 @@ export default function Chat() {
 
     hasCheckedCalibrationNudge.current = true;
 
-    const localDone = (() => {
-      try { return localStorage.getItem("onboardingComplete") === "true"; } catch { return false; }
-    })();
-    console.log("[Chat] calibration nudge check:", { calibrationScore, localDone });
+    const onboardingComplete = readOnboardingComplete();
+    console.log("[Chat] calibration nudge check:", { calibrationScore, onboardingComplete });
 
     // Only show the nudge if calibration is low AND the user is not already
-    // flagged as complete in localStorage (FIX 6: undefined config ≠ force modal)
-    if (calibrationScore < 40 && !localDone) {
+    // flagged as complete in localStorage (undefined config ≠ force modal)
+    if (calibrationScore < 40 && !onboardingComplete) {
       setShowCalibrationNudge(true);
     }
   }, [latestProgram, calibrationScore]);
@@ -518,9 +527,31 @@ export default function Chat() {
     logout.mutate(undefined, {
       onSuccess: () => {
         queryClient.clear();
-        // Fix 3: clear the local onboarding flag so a new user on the same device
-        // doesn't get incorrectly routed to /login via the GuestStart guard.
-        try { localStorage.removeItem("onboardingComplete"); } catch {}
+        /**
+         * Clear ALL auth-derived routing state so the app cannot end up in a
+         * half-guest / half-auth limbo after logout:
+         *
+         *  - localStorage.onboardingComplete  — prevents GuestStart from routing
+         *    a future new user on this device straight to /login
+         *  - sessionStorage.trainchat_guest_session — clears the cached guest
+         *    session so GuestStart does not immediately replay a stale
+         *    "converted" redirect on the very next /start visit
+         *
+         * We intentionally keep localStorage.trainchat_device_id so that
+         * analytics / re-engagement tracking is preserved across sessions.
+         */
+        clearAuthState();
+        logRouteDecision({
+          pathname: "/chat",
+          authResolved: true,
+          hasUser: false,
+          authError: false,
+          deviceId: readDeviceId(),
+          guestSessionStatus: null,
+          onboardingComplete: false,
+          target: "/start",
+          reason: "explicit logout",
+        });
         setLocation("/start");
       },
     });
@@ -541,11 +572,10 @@ export default function Chat() {
     );
   }
 
-  // FIX 9: single source of truth — mark this device as having completed onboarding
-  // once the user reaches the agent screen. Cleared on logout.
-  if (me) {
-    try { localStorage.setItem("onboardingComplete", "true"); } catch {}
-  }
+  // Mark this device as having completed onboarding once the authenticated user
+  // reaches the agent screen. Used by GuestStart to distinguish "session expired,
+  // please log in again" from a brand-new unregistered device. Cleared on logout.
+  if (me) markOnboardingComplete();
 
   const firstName = me?.name?.split(" ")[0] ?? "Athlete";
   const userName = me?.name ?? "User";

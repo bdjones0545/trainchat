@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useGuestSession } from "@/hooks/useGuestSession";
 import { GUEST_CONFIG } from "@/lib/guestConfig";
+import { STORAGE_KEYS, logRouteDecision, readOnboardingComplete, readDeviceId } from "@/lib/routing";
 import { GuestPaywallModal } from "@/components/GuestPaywallModal";
 import logoSrc from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 
@@ -282,14 +283,27 @@ export default function GuestStart() {
     hasInitialized.current = true;
 
     if (guestSession.status === "converted") {
-      // Fix 3: check localStorage before redirecting — if the user was a registered
-      // member but their session expired, send them to /login instead of /chat so
-      // we don't create a /start ↔ /chat redirect loop.
-      const localDone = (() => {
-        try { return localStorage.getItem("onboardingComplete") === "true"; } catch { return false; }
-      })();
-      console.log("[GuestStart] converted session detected:", { localDone });
-      navigate(localDone ? "/login" : "/chat");
+      /**
+       * A "converted" guest session means this deviceId was linked to an account.
+       * The user is NOT authenticated right now (SmartRoot already checked).
+       * Therefore they need to log in — sending them to /chat creates a loop
+       * because /chat immediately bounces unauthenticated users back to /start.
+       *
+       * We ALWAYS send converted sessions to /login regardless of localStorage flags.
+       * localStorage can be cleared at any time; the backend session status is authoritative.
+       */
+      logRouteDecision({
+        pathname: "/start",
+        authResolved: true,
+        hasUser: false,
+        authError: false,
+        deviceId: readDeviceId(),
+        guestSessionStatus: guestSession.status,
+        onboardingComplete: readOnboardingComplete(),
+        target: "/login",
+        reason: "converted guest session — must authenticate before accessing /chat",
+      });
+      navigate("/login");
       return;
     }
 

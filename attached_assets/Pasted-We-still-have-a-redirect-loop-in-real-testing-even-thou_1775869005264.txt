@@ -1,0 +1,83 @@
+We still have a redirect loop in real testing even though the render/loading loop was fixed.
+
+I believe the remaining issue is identity-state conflict between:
+- authenticated user session
+- guest/deviceId session
+- onboardingComplete localStorage flag
+- converted guest state
+- expired session logic
+- route guards for /start, /login, /chat, /agent
+
+Please do a full audit specifically for logout/login and converted guest flows.
+
+What I need fixed:
+1. Establish a single routing authority with strict priority:
+   - If authenticated user exists, routing must be based only on authenticated account state
+   - Guest/deviceId state must never override authenticated routing
+   - Converted guest flags should not redirect authenticated users
+   - Device ID can exist for analytics/history, but not as a routing authority after auth
+
+2. Audit all route guards and redirects for:
+   - /start
+   - /login
+   - /chat
+   - /agent
+   - onboarding/configuration routes
+
+3. On logout:
+   - clear any guest conversion redirect flags
+   - clear temporary onboarding routing flags that can force a bounce
+   - preserve only what is intentionally needed
+   - make sure logout cannot leave the app in a half-guest / half-auth state
+
+4. On login:
+   - if the user account exists, hydrate account state first
+   - do not let deviceId guest state redirect before auth/profile resolution completes
+   - prevent route decisions until auth state is fully resolved
+
+5. Add diagnostic logging for every redirect decision:
+   log:
+   - current pathname
+   - auth status
+   - user id
+   - device id
+   - guest session status
+   - onboardingComplete flag
+   - converted flag
+   - reason for redirect
+   - target route
+
+6. Find any useEffect loops caused by:
+   - redirecting before auth settles
+   - redirecting on both guest and auth state changes
+   - localStorage reads causing re-renders and repeated navigation
+   - deviceId-based fetches running after logout
+
+7. Refactor routing into one centralized decision function, something like:
+   getAppRouteState({
+     authUser,
+     authResolved,
+     profile,
+     profileResolved,
+     guestSession,
+     onboardingComplete,
+     deviceId
+   })
+
+This function should return one final destination only, so we stop competing redirects.
+
+8. Specifically protect against this bug:
+   A user starts as guest on one device, later creates/logs into an account, logs out, then logs back in — and old guest/device flags cause redirect loops.
+
+Deliverables:
+- exact root cause found
+- files changed
+- before/after routing logic
+- all cleared localStorage/sessionStorage keys on logout
+- test matrix for:
+  a) new guest
+  b) guest converted to account
+  c) existing user login
+  d) existing user logout then login again
+  e) expired session with onboardingComplete true
+  f) same device with stale guest state

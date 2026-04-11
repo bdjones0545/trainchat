@@ -1,5 +1,5 @@
 import { Component, type ReactNode } from "react";
-import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
+import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -12,6 +12,7 @@ import AdminDashboard from "@/pages/admin";
 import SystemPage from "@/pages/system";
 import BillingPage from "@/pages/billing";
 import { useGetMe } from "@workspace/api-client-react";
+import { computeRoute, readDeviceId } from "@/lib/routing";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -80,19 +81,17 @@ class ErrorBoundary extends Component<
 }
 
 /**
- * Smart root redirect:
- * - Authenticated → /chat (onboarding happens through the agent, not a form)
- * - Unauthenticated → /start (the agent-first guest experience)
+ * SmartRoot — the single authoritative routing gate for the "/" path.
+ *
+ * Priority: auth state always wins. Guest state is never consulted here.
+ * - Loading      → spinner (never route on unresolved state)
+ * - Authenticated → /chat
+ * - Not authenticated → /start (guest experience)
  */
 function SmartRoot() {
   const { data: me, isLoading, isError } = useGetMe();
+  const [pathname] = useLocation();
 
-  // Fix 6: log resolution so failures are visible in the console
-  if (!isLoading) {
-    console.log("[SmartRoot] user resolved:", { me: !!me, isError });
-  }
-
-  // Fix 1: never make routing decisions until user state is fully loaded
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -101,24 +100,114 @@ function SmartRoot() {
     );
   }
 
-  // Fix 2: treat an undefined/error state as unauthenticated — not as a loop trigger
+  const decision = computeRoute({
+    pathname,
+    authResolved: true,
+    hasUser: !!me,
+    authError: isError,
+    deviceId: readDeviceId(),
+  });
+
   if (me) return <Redirect to="/chat" />;
   return <Redirect to="/start" />;
+}
+
+/**
+ * AuthGuard — wraps authenticated-only routes.
+ * Redirects unauthenticated users to /start without rendering the protected page.
+ * Authenticated users on /login or /register are redirected to /chat.
+ */
+function AuthGuard({ children }: { children: ReactNode }) {
+  const { data: me, isLoading, isError } = useGetMe();
+  const [pathname] = useLocation();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  const decision = computeRoute({
+    pathname,
+    authResolved: true,
+    hasUser: !!me,
+    authError: isError,
+    deviceId: readDeviceId(),
+  });
+
+  if (decision) return <Redirect to={decision.target as any} />;
+  return <>{children}</>;
+}
+
+/**
+ * PublicOnlyGuard — wraps pages that should not be accessible when authenticated.
+ * If the user is already signed in, send them to /chat.
+ */
+function PublicOnlyGuard({ children }: { children: ReactNode }) {
+  const { data: me, isLoading } = useGetMe();
+  const [pathname] = useLocation();
+
+  if (isLoading) return null; // Don't flash the form — stay blank briefly
+
+  if (me) {
+    computeRoute({ pathname, authResolved: true, hasUser: true, authError: false });
+    return <Redirect to="/chat" />;
+  }
+
+  return <>{children}</>;
 }
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={SmartRoot} />
-      <Route path="/start" component={GuestStart} />
-      <Route path="/login" component={Login} />
-      <Route path="/register" component={Register} />
+      <Route path="/start">
+        {() => (
+          <PublicOnlyGuard>
+            <GuestStart />
+          </PublicOnlyGuard>
+        )}
+      </Route>
+      <Route path="/login">
+        {() => (
+          <PublicOnlyGuard>
+            <Login />
+          </PublicOnlyGuard>
+        )}
+      </Route>
+      <Route path="/register">
+        {() => (
+          <PublicOnlyGuard>
+            <Register />
+          </PublicOnlyGuard>
+        )}
+      </Route>
       {/* /onboarding is retired — agent handles onboarding through conversation */}
       <Route path="/onboarding">{() => <Redirect to="/chat" />}</Route>
       <Route path="/chat" component={Chat} />
-      <Route path="/billing" component={BillingPage} />
-      <Route path="/system" component={SystemPage} />
-      <Route path="/admin" component={AdminDashboard} />
+      <Route path="/billing">
+        {() => (
+          <AuthGuard>
+            <BillingPage />
+          </AuthGuard>
+        )}
+      </Route>
+      <Route path="/system">
+        {() => (
+          <AuthGuard>
+            <SystemPage />
+          </AuthGuard>
+        )}
+      </Route>
+      <Route path="/admin">
+        {() => (
+          <AuthGuard>
+            <AdminDashboard />
+          </AuthGuard>
+        )}
+      </Route>
       <Route component={NotFound} />
     </Switch>
   );
