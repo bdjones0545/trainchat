@@ -1,0 +1,212 @@
+We need to fix the behavioral logic of TrainChat’s core loop.
+
+Right now the UI is improving, but the system is still producing incorrect program behavior from clear user inputs.
+
+Example failure:
+User input:
+“I am a soccer player give me a 3 day per week strength program”
+
+Bad output:
+- 4-day hypertrophy split
+- advanced athlete
+- muscle gain
+- 60-minute full gym
+- generic change/history behavior
+
+This is unacceptable because the system ignored explicit user constraints.
+
+## GOAL
+Make TrainChat reliably interpret user input and build or modify programs based on the actual request, not fallback templates.
+
+## STEP 1: ADD MESSAGE INTENT CLASSIFICATION
+Before generating any response or program update, classify each user message into one of these intent types:
+
+- NEW_PROGRAM_BUILD
+- PROGRAM_MODIFICATION
+- PROGRAM_QUESTION
+- GENERAL_COACHING_QUESTION
+- UNCLEAR
+
+Examples:
+“I am a soccer player give me a 3 day per week strength program”
+→ NEW_PROGRAM_BUILD
+
+“Make this 4 days instead”
+→ PROGRAM_MODIFICATION
+
+“Why is Day 2 lower body?”
+→ PROGRAM_QUESTION
+
+“How often should soccer players lift?”
+→ GENERAL_COACHING_QUESTION
+
+If intent is unclear, ask a clarifying question instead of generating the wrong thing.
+
+## STEP 2: EXTRACT HARD CONSTRAINTS FROM USER INPUT
+For NEW_PROGRAM_BUILD and PROGRAM_MODIFICATION, extract structured constraints before program generation.
+
+Required extraction fields:
+- sportFocus
+- primaryGoal
+- daysPerWeek
+- trainingBias
+- sessionDuration
+- equipment
+- experienceLevel
+- limitations
+- locationContext
+
+For the example:
+“I am a soccer player give me a 3 day per week strength program”
+
+Extract:
+- sportFocus = soccer
+- primaryGoal = strength
+- daysPerWeek = 3
+
+Do not invent:
+- hypertrophy
+- 4 days
+- advanced
+- full gym
+- 60 minutes
+
+unless the user explicitly said that or there is existing saved profile data supporting it.
+
+## STEP 3: TREAT EXPLICIT USER INPUT AS HIGHEST PRIORITY
+If the user explicitly states:
+- sport
+- number of days
+- goal
+- equipment
+- time limit
+- injury/pain constraint
+
+these must override defaults and templates.
+
+Defaults should only fill gaps, not replace stated constraints.
+
+Priority order:
+1. explicit user input
+2. stored user profile / saved context
+3. safe defaults
+
+## STEP 4: BLOCK FALLBACK TEMPLATE MISFIRES
+Do not allow the system to silently drop in a generic hypertrophy or upper/lower template if user constraints conflict.
+
+If a template is used, it must be adapted to match:
+- requested frequency
+- requested goal
+- requested sport
+- requested constraints
+
+If adaptation fails, do not generate the program.
+Instead return a safe error or retry generation.
+
+## STEP 5: ADD A BUILD CONTRACT FOR NEW PROGRAMS
+For NEW_PROGRAM_BUILD requests, require the system to generate a program summary that matches extracted constraints before rendering anything.
+
+Validation checks:
+- requested daysPerWeek must equal built daysPerWeek
+- requested primaryGoal must match built goal
+- requested sportFocus must appear in program summary if supplied
+- disallowed invented values should not appear unless user or profile supported them
+
+If validation fails:
+- do not render program
+- retry generation once
+- if still invalid, show fallback message:
+“I understood you want a 3-day soccer strength program, but I wasn’t able to build that correctly yet. Retrying…”
+
+## STEP 6: FIX RESPONSE TEXT CONTRACT
+The assistant response must reflect what was actually built.
+
+Bad:
+“Built. 4-day hypertrophy split is ready.”
+
+Good:
+“Built a 3-day strength program with soccer performance support.”
+or
+“I started a 3-day soccer strength plan. Want me to bias it more toward performance, power, or in-season recovery?”
+
+Never confidently describe the wrong program.
+
+## STEP 7: FIX PROGRAM TAB CONTENT
+The Program tab must accurately reflect the user request.
+
+For the soccer example, the visible summary should look more like:
+- 3 days/week
+- strength focus
+- soccer support or athletic performance bias
+- realistic session duration only if explicitly known or defaulted carefully
+
+Do not label the build as hypertrophy or muscle gain unless explicitly asked.
+
+## STEP 8: FIX CHANGES TAB LOGIC
+The Changes tab should reflect the true event type.
+
+For NEW_PROGRAM_BUILD:
+Show entries like:
+- Created new program from user request
+- Set frequency to 3 days/week
+- Set goal to strength
+- Added soccer performance context
+
+Do not show:
+- “No specific edit identified for that request”
+for a clear build request.
+
+That message should only appear for genuinely ambiguous or unsupported modification requests.
+
+## STEP 9: FIX HISTORY TAB LOGIC
+History should log meaningful versions.
+
+For initial build:
+- V1 Created from user request
+- Goal: Strength
+- Frequency: 3 days/week
+- Sport: Soccer
+
+For later edits:
+- V2 Increased lower-body emphasis
+- V3 Reduced session duration to 45 minutes
+
+History should feel like real version tracking, not generic placeholder cards.
+
+## STEP 10: ADD TEST CASES
+Create automated or manual validation tests for inputs like:
+
+1.
+Input: “I am a soccer player give me a 3 day per week strength program”
+Expected:
+- 3 days/week
+- strength goal
+- soccer context
+- no hypertrophy default
+
+2.
+Input: “Make this 4 days and more lower body”
+Expected:
+- program modified to 4 days
+- lower-body emphasis added
+
+3.
+Input: “Swap barbell bench because I only have dumbbells”
+Expected:
+- equipment constraint applied
+- bench swapped appropriately
+
+4.
+Input: “Reduce this to 45 minutes”
+Expected:
+- session duration reduced
+- low-priority work trimmed
+
+## PRODUCT RULE
+Do not optimize for sounding polished if the system behavior is wrong.
+
+Behavioral accuracy comes first.
+
+The app must feel like it truly understood the user, not like it generated a random polished template.
+
+Implement this now.
