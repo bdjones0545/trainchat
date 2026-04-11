@@ -109,10 +109,13 @@ export default function Chat() {
   const [isUndoing, setIsUndoing] = useState(false);
   const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Fix 4: one-shot guard — onboarding/calibration logic runs at most once per mount
-  const hasCheckedOnboarding = useRef(false);
-  // Fix 5: fail-safe — force the app to render if auth hangs too long
+  // Startup state: fail-safe lets the agent render even if auth hangs
   const [forceReady, setForceReady] = useState(false);
+  // Conversation creation guard: prevents duplicate conversations on fast re-renders
+  const hasAttemptedConvoCreate = useRef(false);
+  // Calibration nudge guard: one-shot, never auto-triggers twice
+  const hasCheckedCalibrationNudge = useRef(false);
+  const [showCalibrationNudge, setShowCalibrationNudge] = useState(false);
 
   const logout = useLogout();
 
@@ -120,7 +123,7 @@ export default function Chat() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: me, isError: meError, isLoading: meLoading } = useGetMe();
-  const { data: profile, isLoading: profileLoading } = useGetProfile({
+  const { data: profile } = useGetProfile({
     query: { enabled: !!me },
   });
   const { data: conversations = [], isLoading: convosLoading } = useListConversations({
@@ -175,35 +178,45 @@ export default function Chat() {
   const currentStreak = streakData?.currentStreak ?? 0;
   const hasActiveSystem = !!activeSystem?.id;
 
-  // Fix 6: log user state on load for debugging
+  // FIX 8: log auth/user state transitions for debugging
   useEffect(() => {
-    console.log("[Chat] user state:", { me, meLoading, meError });
+    console.log("[Chat] auth state:", { hasUser: !!me, meLoading, meError });
   }, [me, meLoading, meError]);
 
-  // Fix 5: fail-safe — if auth is still unresolved after 4s, force the app to show
+  // FIX 7: fail-safe — fires ONCE on mount; if auth is still unresolved after 4s,
+  // force the agent shell to render so the user is never stuck on a spinner.
   useEffect(() => {
     const id = setTimeout(() => {
-      if (meLoading) {
-        console.warn("[Chat] Auth timeout — forcing app render");
-        setForceReady(true);
-      }
+      setForceReady((prev) => {
+        if (prev) return prev;
+        console.warn("[Chat] startup timeout — forcing agent render");
+        return true;
+      });
     }, 4000);
     return () => clearTimeout(id);
-  }, [meLoading]);
+  }, []); // intentionally empty — runs once on mount only
 
-  // Fix 2: only redirect on confirmed auth failure — never on transient errors or undefined state
+  // FIX 4: only redirect on CONFIRMED auth failure (not during loading or transient errors)
   useEffect(() => {
     if (!meLoading && meError && !me) {
-      console.warn("[Chat] Auth error confirmed — redirecting to /start");
+      console.warn("[Chat] auth failure confirmed — redirecting to /start");
       setLocation("/start");
     }
   }, [meLoading, meError, me, setLocation]);
 
+  // Conversation bootstrap: select the first existing convo, or create one.
+  // FIX: hasAttemptedConvoCreate ref prevents creating duplicate conversations on
+  // fast re-renders while the invalidation refetch is in flight.
   useEffect(() => {
     if (!me || convosLoading) return;
-    if (conversations.length > 0 && !activeConvoId) {
-      setActiveConvoId(conversations[0].id);
-    } else if (conversations.length === 0 && !convosLoading && !createConvo.isPending) {
+    if (conversations.length > 0) {
+      if (!activeConvoId) setActiveConvoId(conversations[0].id);
+      return;
+    }
+    // conversations is empty — create one, but only once
+    if (!hasAttemptedConvoCreate.current && !createConvo.isPending) {
+      hasAttemptedConvoCreate.current = true;
+      console.log("[Chat] creating starter conversation");
       createConvo.mutate(
         { data: { title: "New Session" } },
         {
@@ -211,10 +224,34 @@ export default function Chat() {
             queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
             setActiveConvoId(convo.id);
           },
+          onError: () => {
+            // Reset guard on failure so a manual retry can succeed
+            hasAttemptedConvoCreate.current = false;
+          },
         }
       );
     }
   }, [me, conversations, convosLoading, activeConvoId]);
+
+  // FIX 5: calibration nudge — evaluated ONCE after a program is generated.
+  // Uses state, not an IIFE in render, to avoid modifying refs during render phase.
+  useEffect(() => {
+    if (hasCheckedCalibrationNudge.current) return;
+    if (!latestProgram) return;
+
+    hasCheckedCalibrationNudge.current = true;
+
+    const localDone = (() => {
+      try { return localStorage.getItem("onboardingComplete") === "true"; } catch { return false; }
+    })();
+    console.log("[Chat] calibration nudge check:", { calibrationScore, localDone });
+
+    // Only show the nudge if calibration is low AND the user is not already
+    // flagged as complete in localStorage (FIX 6: undefined config ≠ force modal)
+    if (calibrationScore < 40 && !localDone) {
+      setShowCalibrationNudge(true);
+    }
+  }, [latestProgram, calibrationScore]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -489,9 +526,11 @@ export default function Chat() {
     });
   }
 
-  // Fix 1 + 5: loading gate — block UI decisions until user state is fully resolved,
-  // but honour the fail-safe forceReady flag so we never get stuck forever.
-  if ((meLoading || profileLoading) && !forceReady) {
+  // FIX 1: loading gate blocks ONLY on meLoading — the auth check.
+  // profileLoading is intentionally excluded: it starts loading AFTER me resolves,
+  // so including it causes a second flash (gate clears → profileLoading starts → gate flashes again).
+  // Profile data (calibrationScore, etc.) hydrates in the background without blocking the agent.
+  if (meLoading && !forceReady) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex items-center gap-3 text-muted-foreground">
@@ -502,9 +541,8 @@ export default function Chat() {
     );
   }
 
-  // Fix 3: mark the user as onboarding-complete in localStorage once they reach the
-  // chat — this acts as a local fallback so modals are never shown due to a missing
-  // backend flag.
+  // FIX 9: single source of truth — mark this device as having completed onboarding
+  // once the user reaches the agent screen. Cleared on logout.
   if (me) {
     try { localStorage.setItem("onboardingComplete", "true"); } catch {}
   }
@@ -827,41 +865,32 @@ export default function Chat() {
                   />
                 )}
 
-                {/* Calibration nudge — shown once after first program is generated.
-                    Fix 3+4: guard with localStorage flag and one-shot ref so it
-                    never triggers more than once per session. */}
-                {latestProgram && calibrationScore < 40 && !calibrationNudgeShown && (() => {
-                  // Fix 3: if localStorage says onboarding is done, skip the nudge entirely
-                  const localDone = (() => { try { return localStorage.getItem("onboardingComplete") === "true"; } catch { return false; } })();
-                  if (localDone && hasCheckedOnboarding.current) return null;
-
-                  // Fix 4: only evaluate the condition once
-                  if (!hasCheckedOnboarding.current) {
-                    hasCheckedOnboarding.current = true;
-                    // Fix 6: log the trigger condition
-                    console.log("[Chat] calibration nudge check:", { calibrationScore, localDone });
-                  }
-
-                  return (
-                    <div className="flex items-start gap-3 mb-5">
-                      <div className="w-7 h-7 rounded-full bg-card border border-primary/30 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <div className="w-2 h-2 rounded-full bg-primary" />
-                      </div>
-                      <div className="max-w-[90%] px-4 py-3 rounded-2xl rounded-tl-sm bg-card border border-border text-foreground">
-                        <p className="text-sm text-muted-foreground leading-relaxed">
-                          Want me to dial this in more precisely? Tap{" "}
-                          <button
-                            onClick={() => { setShowCalibration(true); setCalibrationNudgeShown(true); }}
-                            className="text-primary font-semibold hover:underline"
-                          >
-                            Improve Accuracy
-                          </button>{" "}
-                          to share your body, limitations, and schedule — I'll optimize the program right after.
-                        </p>
-                      </div>
+                {/* Calibration nudge — shown at most once per session after a program
+                    is generated. State is managed by the useEffect above so this
+                    is a pure conditional render with no side effects. */}
+                {showCalibrationNudge && !calibrationNudgeShown && (
+                  <div className="flex items-start gap-3 mb-5">
+                    <div className="w-7 h-7 rounded-full bg-card border border-primary/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <div className="w-2 h-2 rounded-full bg-primary" />
                     </div>
-                  );
-                })()}
+                    <div className="max-w-[90%] px-4 py-3 rounded-2xl rounded-tl-sm bg-card border border-border text-foreground">
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        Want me to dial this in more precisely? Tap{" "}
+                        <button
+                          onClick={() => {
+                            setShowCalibration(true);
+                            setCalibrationNudgeShown(true);
+                            setShowCalibrationNudge(false);
+                          }}
+                          className="text-primary font-semibold hover:underline"
+                        >
+                          Improve Accuracy
+                        </button>{" "}
+                        to share your training background — I'll sharpen your program right after.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 <div ref={messagesEndRef} />
               </div>

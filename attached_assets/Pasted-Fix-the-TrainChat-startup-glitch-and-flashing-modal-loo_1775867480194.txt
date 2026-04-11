@@ -1,0 +1,227 @@
+Fix the TrainChat startup glitch and flashing modal loop.
+
+CONTEXT:
+We already removed the old onboarding-first flow and changed the app so users go straight to the agent.
+We also replaced onboarding with a lighter “configuration” concept.
+
+The app is still glitching and flashing a modal / loading loop on startup.
+
+This means old onboarding/config gating logic is still running somewhere in the app lifecycle.
+
+GOAL:
+Make app startup stable, agent-first, and impossible to get stuck in a modal/render loop.
+
+--------------------------------------------------
+CORE RULE
+--------------------------------------------------
+
+TrainChat must ALWAYS load the main agent screen first.
+
+Configuration should NEVER block app startup.
+
+Configuration is optional enhancement, not a gate.
+
+--------------------------------------------------
+LIKELY ROOT CAUSE
+--------------------------------------------------
+
+The app likely still has one or more of these issues:
+
+1. legacy onboarding checks still running
+2. config-complete checks firing before user state resolves
+3. modal open state tied to unstable async data
+4. route guards redirecting repeatedly
+5. useEffect dependency loop reopening modal
+6. startup logic treating undefined config as “must open modal now”
+
+Find and remove all of these patterns.
+
+--------------------------------------------------
+FIX 1 — AGENT-FIRST STARTUP
+--------------------------------------------------
+
+On app load:
+
+1. resolve auth/user/device state
+2. load main agent screen
+3. only after main screen is stable, optionally show configuration CTA
+
+Do NOT block initial render behind config checks.
+
+Bad:
+- check config before rendering app
+- redirect to modal before user state stabilizes
+
+Good:
+- render app shell first
+- then hydrate optional config state in background
+
+--------------------------------------------------
+FIX 2 — REMOVE ALL HARD GATES
+--------------------------------------------------
+
+Search the codebase for any logic like:
+
+- if !onboardingComplete
+- if !configComplete
+- redirect('/onboarding')
+- setShowModal(true) on load
+- startup checks that require config before rendering
+
+Remove or rewrite them so they do NOT block entry to the app.
+
+Configuration should be optional and user-invoked.
+
+--------------------------------------------------
+FIX 3 — CONFIG IS NOT A ROUTE GUARD
+--------------------------------------------------
+
+Configuration must not behave like onboarding.
+
+It should be:
+- a button
+- a modal opened by user action
+- or a suggested prompt after program generation
+
+It must NOT:
+- auto-open repeatedly on startup
+- redirect the user away from the agent
+- gate app access
+
+--------------------------------------------------
+FIX 4 — STABILIZE ASYNC USER STATE
+--------------------------------------------------
+
+Do not run config logic until user/device state is fully resolved.
+
+Use a clear startup state:
+
+- isAuthResolved
+- isUserResolved
+- isAppReady
+
+Only after app is ready should any optional config logic be allowed.
+
+Example startup flow:
+- show splash/loading once
+- resolve auth/device/user
+- mount agent screen
+- mark app ready
+- hydrate optional config state in background
+
+--------------------------------------------------
+FIX 5 — PREVENT MODAL REOPEN LOOPS
+--------------------------------------------------
+
+If configuration modal exists, it must have strict open rules.
+
+Rules:
+- only open from explicit user action
+- OR only auto-open once per session at most
+- never reopen automatically after close
+- never reopen during unresolved async state
+
+Add guard state like:
+- hasAttemptedAutoConfigPrompt
+- hasSeenConfigPromptThisSession
+- isConfigModalUserInitiated
+
+Do not let a failed save or undefined state reopen the modal.
+
+--------------------------------------------------
+FIX 6 — HANDLE UNDEFINED CONFIG SAFELY
+--------------------------------------------------
+
+If config data is missing or undefined:
+
+Do NOT interpret that as:
+“force modal now”
+
+Interpret it as:
+“user has not configured yet”
+
+Then:
+- allow full app usage
+- show lightweight CTA only
+
+--------------------------------------------------
+FIX 7 — STARTUP FAILSAFE
+--------------------------------------------------
+
+If startup takes too long or state is inconsistent:
+
+Fallback behavior:
+- load the agent screen anyway
+- suppress modal logic
+- log the error silently for debugging
+
+The app should fail open, not fail closed.
+
+--------------------------------------------------
+FIX 8 — DEBUG LOGGING
+--------------------------------------------------
+
+Add logs for:
+- auth resolved
+- user resolved
+- config state value
+- modal open trigger source
+- route changes on startup
+- render count of main app shell
+
+We need to identify exactly what is retriggering the modal/loading state.
+
+--------------------------------------------------
+FIX 9 — SINGLE SOURCE OF TRUTH
+--------------------------------------------------
+
+Choose ONE source of truth for config status.
+
+Do not mix:
+- localStorage
+- device ID state
+- DB user record
+- temp React state
+
+without reconciliation.
+
+Recommended:
+- agent screen always loads
+- config status is just a non-blocking profile attribute
+
+--------------------------------------------------
+FIX 10 — UX RULE GOING FORWARD
+--------------------------------------------------
+
+The startup experience must be:
+
+1. app opens
+2. agent is visible
+3. user can type immediately
+4. config is optional and non-blocking
+
+Configuration should enhance intelligence, not control access.
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+This is successful if:
+
+1. no flashing modal on startup
+2. no repeated loading loop
+3. agent screen always appears first
+4. users can type immediately
+5. configuration never blocks entry
+6. closing config never causes it to reopen automatically
+7. app remains stable on refresh and revisit
+
+--------------------------------------------------
+FINAL PRINCIPLE
+--------------------------------------------------
+
+TrainChat is agent-first.
+
+Configuration is optional.
+
+Nothing should ever interrupt or block entry into the main agent workspace.
