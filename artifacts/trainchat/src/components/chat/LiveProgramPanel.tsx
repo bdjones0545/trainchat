@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Dumbbell, Save, CheckCircle, Loader2, Lock, Zap, PlayCircle,
@@ -9,6 +9,7 @@ import {
 import { customFetch } from "@workspace/api-client-react";
 import type { ProgramStructure } from "./ChatOutput";
 import type { BuildStage } from "@/hooks/useStreamMessage";
+import ExerciseLogInline, { type ProgressionTarget } from "@/components/training/ExerciseLogInline";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,6 +52,10 @@ interface Props {
   isSaved?: boolean;
   isPremium?: boolean;
   hasActiveSystem?: boolean;
+  /** Saved program ID — used for progression tracking */
+  savedProgramId?: number;
+  /** Training goal — used for goal-differentiated progression */
+  trainingGoal?: string;
   /** Increment when a program edit occurs — auto-navigates to Program tab and highlights change */
   newChangeSignal?: number;
   /** Increment when a new program is built — auto-switches to Program tab */
@@ -423,13 +428,44 @@ function ProgramTab({
   isSaving,
   isSaved,
   isPremium,
+  savedProgramId,
+  trainingGoal,
   changeTargets,
   newChangeSignal,
 }: Omit<Props, "hasActiveSystem">) {
+  const queryClient = useQueryClient();
   const [expandedDay, setExpandedDay] = useState<number | null>(0);
   const prevProgramRef = useRef<ProgramStructure | null>(null);
   const [animatedKeys, setAnimatedKeys] = useState<Map<string, DiffType>>(new Map());
   const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Progression targets ───────────────────────────────────────────────────
+  const allExerciseNames = (program?.days ?? [])
+    .flatMap((d) => d.exercises ?? [])
+    .map((e) => e.name)
+    .filter(Boolean);
+
+  const { data: targetsData, refetch: refetchTargets } = useQuery<{ targets: ProgressionTarget[] }>({
+    queryKey: ["progressionTargets", savedProgramId, allExerciseNames.join(","), trainingGoal],
+    enabled: !!isPremium && !!isSaved && allExerciseNames.length > 0,
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        exerciseNames: allExerciseNames.join(","),
+        ...(savedProgramId ? { programId: String(savedProgramId) } : {}),
+        ...(trainingGoal ? { goal: trainingGoal } : {}),
+      });
+      return customFetch<{ targets: ProgressionTarget[] }>(`/api/exercise-logs/targets?${params.toString()}`);
+    },
+    staleTime: 30000,
+  });
+
+  const targetsMap = new Map<string, ProgressionTarget>(
+    (targetsData?.targets ?? []).map((t) => [t.exerciseName, t]),
+  );
+
+  const handleExerciseLogged = useCallback(() => {
+    setTimeout(() => refetchTargets(), 400);
+  }, [refetchTargets]);
 
   // ── Change-highlight state ────────────────────────────────────────────────
   const [highlightedNames, setHighlightedNames] = useState<Set<string>>(new Set());
@@ -872,6 +908,16 @@ function ProgramTab({
                             {ex.notes && (
                               <p className="text-[10px] text-muted-foreground/70 mt-1.5 italic leading-relaxed">{ex.notes}</p>
                             )}
+                            {isPremium && isSaved && (
+                              <ExerciseLogInline
+                                exerciseName={ex.name}
+                                programId={savedProgramId}
+                                dayNumber={day.dayNumber}
+                                orderIndex={exIdx}
+                                target={targetsMap.get(ex.name)}
+                                onLogged={handleExerciseLogged}
+                              />
+                            )}
                           </div>
                         );
                       })}
@@ -1249,6 +1295,8 @@ export default function LiveProgramPanel({
   isSaved,
   isPremium = false,
   hasActiveSystem = false,
+  savedProgramId,
+  trainingGoal,
   newChangeSignal = 0,
   newProgramSignal = 0,
   changeTargets = [],
@@ -1351,6 +1399,8 @@ export default function LiveProgramPanel({
             isSaving={isSaving}
             isSaved={isSaved}
             isPremium={isPremium}
+            savedProgramId={savedProgramId}
+            trainingGoal={trainingGoal}
             changeTargets={changeTargets}
             newChangeSignal={newChangeSignal}
           />

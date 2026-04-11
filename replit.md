@@ -68,6 +68,14 @@ The UI features a dark theme with electric blue accents and the Inter font, cent
 - **Admin API**: CRUD endpoints at `/api/admin/knowledge` (GET, POST, PUT/:id, DELETE/:id) — all protected by `requireAdmin`.
 - **Admin UI**: Knowledge Base tab in `/admin` — add, edit, activate/deactivate, and delete coaching knowledge entries with type, sport, goal, body region, and tag filters.
 
+### Auto-Progression Engine (exercise-logs.ts + progression.ts)
+- **DB Table**: `exercise_logs` — per-exercise performance log (load, reps, sets, RPE, completion status, exercise role)
+- **Progression Service** (`progression.ts`): Computes READY_TO_PROGRESS / HOLD / REGRESS state from recent logs. Goal-differentiated (strength: load, hypertrophy: reps/volume, performance: quality+load). Exercise-role-aware (power: intent only; compound: +5-10 lbs; unilateral: +2.5 lbs; accessory: lowest priority).
+- **API Routes**: `POST /api/exercise-logs` (log performance), `GET /api/exercise-logs/targets` (get next session targets), `GET /api/exercise-logs/history/:exerciseName` (per-exercise history)
+- **Frontend**: `ExerciseLogInline.tsx` — compact inline component per exercise row (premium+saved only). Quick buttons: Easy/Solid/Hard/Failed. Optional expand for weight + reps. Shows "Last: 185 lbs × 5 → Target: 190 lbs × 5". Auto-refetches targets after log.
+- **Deload Detection**: detectDeload() — triggers systemChangeLog entry if 3+ failed sets or high overload pattern across recent 10 logged exercises.
+- **Changes tab integration**: Deload signals logged as workout_feedback entries in system_change_log.
+
 ### System Design Choices
 - **Database Schema**: Comprehensive tables for users, profiles, conversations, training programs, readiness, feedback, memories, logs, analytics, Stripe data, and coaching_knowledge.
 - **Authentication**: Session-based authentication using `express-session` with a PostgreSQL-backed store, configured for secure operation across environments, including Replit.

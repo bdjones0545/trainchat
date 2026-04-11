@@ -1,0 +1,250 @@
+We need to add INTELLIGENT AUTO-PROGRESSION to TrainChat so programs do not stay static and actually drive results over time.
+
+CURRENT ISSUE:
+Programs can adjust (readiness, swaps), but they do not yet systematically progress.
+
+GOAL:
+Create a progression system that:
+- increases load, reps, or intensity over time
+- adapts to user performance
+- respects fatigue and readiness
+- feels like a real coach managing long-term development
+
+This should feel like:
+“The system knows when to push and when to hold”
+
+--------------------------------------------------
+CORE PRINCIPLE
+--------------------------------------------------
+
+Progression is not random.
+
+It must be:
+- structured
+- responsive
+- individualized
+- sustainable
+
+--------------------------------------------------
+STEP 1: ADD PERFORMANCE TRACKING INPUTS
+
+For each exercise, track:
+
+- load used
+- reps completed
+- RPE (optional but powerful)
+- completion status (completed / struggled / failed)
+
+User should be able to:
+- log quickly after each exercise OR
+- give simple feedback like:
+  “easy”, “solid”, “hard”, “failed”
+
+--------------------------------------------------
+STEP 2: DEFINE PROGRESSION STATES
+
+Each lift/session should fall into one of these:
+
+- READY TO PROGRESS
+- HOLD
+- REGRESS / ADJUST
+
+--------------------------------------------------
+STEP 3: PROGRESSION RULES (SIMPLE + EFFECTIVE)
+
+If:
+- all sets completed
+- reps hit cleanly
+- RPE moderate or below
+→ PROGRESS next session
+
+If:
+- reps hit but effort high
+→ HOLD
+
+If:
+- reps missed OR form breakdown
+→ REGRESS or adjust
+
+--------------------------------------------------
+STEP 4: HOW TO PROGRESS
+
+Primary progression options:
+
+1. Increase load (preferred)
++5–10 lbs depending on lift
+
+2. Increase reps within range
+Example:
+6–8 → move from 6 → 7 → 8
+
+3. Increase quality (tempo, control)
+Used when load increase is not ideal
+
+4. Add set (sparingly)
+
+Do NOT increase everything at once.
+
+--------------------------------------------------
+STEP 5: EXERCISE TYPE PROGRESSION LOGIC
+
+COMPOUND LIFTS:
+- prioritize load progression
+- small increments
+- respect fatigue
+
+UNILATERAL:
+- progress load or control
+- slower tempo if needed
+
+POWER:
+- do NOT chase fatigue
+- maintain quality
+- increase intent, not volume
+
+ACCESSORY:
+- small rep or load increases
+- lowest priority for aggressive progression
+
+--------------------------------------------------
+STEP 6: INTEGRATE READINESS WITH PROGRESSION
+
+If readiness is LOW:
+- delay progression
+- hold or slightly reduce
+
+If readiness is HIGH:
+- allow progression if performance supports it
+
+Progression should NOT happen blindly if athlete is fatigued.
+
+--------------------------------------------------
+STEP 7: ADD WEEKLY PROGRESSION STRUCTURE
+
+Across weeks:
+
+Week 1:
+- baseline
+
+Week 2–3:
+- progressive overload
+
+Week 4:
+- optional deload OR reduced volume
+
+Then repeat cycle.
+
+--------------------------------------------------
+STEP 8: ADD AUTO-DELOAD LOGIC
+
+Trigger deload if:
+- repeated low readiness
+- repeated failed lifts
+- high fatigue signals
+- performance plateau
+
+Deload adjustments:
+- reduce volume (20–40%)
+- reduce intensity slightly
+- maintain movement patterns
+
+--------------------------------------------------
+STEP 9: ADD “PROGRESSION MEMORY”
+
+System should remember:
+- previous loads
+- previous reps
+- past performance
+
+So it can say:
+“Last week you hit 185 for 4x5 — let’s go to 195”
+
+This is critical.
+
+--------------------------------------------------
+STEP 10: SHOW PROGRESSION TO USER
+
+User should see:
+- previous performance
+- current target
+
+Example:
+“Last session: 185 x 5  
+Target today: 190 x 5”
+
+This builds trust and engagement.
+
+--------------------------------------------------
+STEP 11: LOG CHANGES
+
+Changes tab should include:
+
+- Increased squat load from 185 → 195
+- Held bench press due to high effort
+- Reduced volume due to fatigue trend
+- Initiated deload week
+
+--------------------------------------------------
+STEP 12: ADD CHAT-BASED CONTROL
+
+User can say:
+“That felt easy”
+“That was hard”
+“I failed my last set”
+
+System should:
+- interpret
+- adjust progression
+- update next session
+
+--------------------------------------------------
+STEP 13: DIFFERENTIATE BY GOAL
+
+STRENGTH:
+- prioritize load progression
+
+HYPERTROPHY:
+- prioritize volume + rep progression
+
+PERFORMANCE:
+- balance strength + power + fatigue
+
+--------------------------------------------------
+STEP 14: PREVENT OVER-PROGRESSION
+
+Do NOT:
+- increase load every session blindly
+- push through fatigue
+- ignore missed reps
+
+Progression must feel intelligent, not aggressive.
+
+--------------------------------------------------
+STEP 15: FINAL PRODUCT RULE
+
+TrainChat should feel like:
+- a coach tracking your lifts
+- adjusting loads week to week
+- guiding progress intelligently
+
+NOT:
+- a static plan with no evolution
+
+--------------------------------------------------
+SUCCESS STATE
+
+User trains →
+
+Logs performance →
+
+System adjusts next session →
+
+User sees progression →
+
+System manages fatigue →
+
+Progress continues over time
+
+That is the goal.
+
+Implement this now.

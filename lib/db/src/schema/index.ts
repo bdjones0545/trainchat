@@ -10,3 +10,4 @@ export * from "./analytics";
 export * from "./training-system";
 export * from "./exercises";
 export * from "./knowledge";
+export * from "./exercise-logs";

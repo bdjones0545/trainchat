@@ -839,6 +839,7 @@ export default function Chat() {
           isSaved={isInSystem}
           isPremium={isPremium}
           hasActiveSystem={hasActiveSystem || !!latestProgram}
+          trainingGoal={activeSystem?.overarchingGoal ?? undefined}
           newChangeSignal={newChangeSignal}
           newProgramSignal={newProgramSignal}
           changeTargets={changeTargets}
@@ -1178,6 +1179,7 @@ export default function Chat() {
                   isSaved={isInSystem}
                   isPremium={isPremium}
                   hasActiveSystem={hasActiveSystem || !!latestProgram}
+                  trainingGoal={activeSystem?.overarchingGoal ?? undefined}
                   newChangeSignal={newChangeSignal}
                   newProgramSignal={newProgramSignal}
                   changeTargets={changeTargets}
