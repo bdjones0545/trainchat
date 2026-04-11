@@ -1,0 +1,460 @@
+We need to restructure the TrainChat exercise library into a decision-ready movement system.
+
+GOAL:
+The library should not feel like a random list of exercises.
+It should function like a coaching decision engine that supports:
+- smart swaps
+- pain adjustments
+- equipment adjustments
+- time compression
+- sport-specific programming
+- progression / regression logic
+
+The system should reason through:
+PATTERN → CATEGORY → EXERCISE → VARIANTS
+
+NOT just:
+list of exercise names
+
+--------------------------------------------------
+CORE OBJECTIVE
+--------------------------------------------------
+
+Convert the current library into a structured movement map the Program Specialist Decision Layer can use reliably.
+
+This means every exercise should be grouped by:
+- movement pattern
+- role in the session
+- difficulty / stress level
+- equipment needs
+- swap logic
+
+--------------------------------------------------
+STEP 1: CREATE MASTER MOVEMENT BUCKETS
+--------------------------------------------------
+
+Build the library around these core buckets:
+
+1. LOWER BODY — KNEE DOMINANT
+2. LOWER BODY — HIP DOMINANT
+3. UPPER PUSH — HORIZONTAL
+4. UPPER PUSH — VERTICAL
+5. UPPER PULL — HORIZONTAL
+6. UPPER PULL — VERTICAL
+7. POWER / EXPLOSIVE
+8. CORE / TRUNK
+9. ACCESSORY — LOWER
+10. ACCESSORY — UPPER
+11. CONDITIONING / WORK CAPACITY
+12. MOBILITY / PREP / ACTIVATION
+
+--------------------------------------------------
+STEP 2: MAP THE CURRENT LIBRARY INTO THESE BUCKETS
+--------------------------------------------------
+
+Use this structure as the baseline:
+
+LOWER BODY — KNEE DOMINANT
+Primary:
+- Back Squat
+- Front Squat
+
+Regressions:
+- Goblet Squat
+- Bodyweight Squat
+
+Unilateral:
+- RFESS
+- Split Squat
+- Lateral Lunge
+- Step-Up
+
+Joint-Friendly / Constraint Variants:
+- Safety Bar Squat
+- Box Squat
+
+---
+
+LOWER BODY — HIP DOMINANT
+Primary:
+- Conventional Deadlift
+- Romanian Deadlift
+
+Regressions:
+- Dumbbell RDL
+- Hip Hinge Patterning Drill
+
+Unilateral:
+- Single-Leg RDL
+- B-Stance RDL
+
+Joint-Friendly / Constraint Variants:
+- Trap Bar Deadlift
+- Hip Thrust
+
+---
+
+UPPER PUSH — HORIZONTAL
+Primary:
+- Barbell Bench Press
+
+Variants:
+- Dumbbell Bench Press
+- Incline Dumbbell Press
+
+Joint-Friendly:
+- Neutral Grip Dumbbell Press
+- Push-Up
+
+---
+
+UPPER PUSH — VERTICAL
+Primary:
+- Overhead Press
+
+Variants:
+- Dumbbell Shoulder Press
+
+Joint-Friendly / Constraint Variants:
+- Landmine Press
+- Half-Kneeling Press
+
+---
+
+UPPER PULL — HORIZONTAL
+Primary:
+- Barbell Row
+
+Variants:
+- Dumbbell Row
+- Chest-Supported Row
+
+Joint-Friendly / Constraint Variants:
+- Cable Row
+
+---
+
+UPPER PULL — VERTICAL
+Primary:
+- Pull-Up
+
+Variants:
+- Lat Pulldown
+
+Regressions:
+- Assisted Pull-Up
+
+---
+
+POWER / EXPLOSIVE
+Lower / Full Body:
+- Vertical Jump
+- Broad Jump
+- Lateral Bound
+- Alternating Bounds
+- Depth Jump
+
+Upper / Rotational:
+- Med Ball Slam
+- Med Ball Rotational Throw
+- Med Ball Chest Pass
+- Med Ball Overhead Scoop Toss
+
+Olympic / Explosive Strength:
+- Hang High Pull
+- Hang Power Clean
+
+---
+
+CORE / TRUNK
+Anti-Extension:
+- RKC Plank
+- Hollow Hold
+
+Anti-Rotation:
+- Pallof Press
+- Half-Kneeling Pallof Press
+
+Rotation / Transfer:
+- Landmine Rotation
+- Half-Kneeling Cable Chop
+
+Lateral Stability:
+- Side Plank
+- Side Plank with Hip Abduction
+
+Other:
+- Stir-the-Pot
+
+---
+
+ACCESSORY — LOWER
+- Leg Curl
+- Leg Extension
+- Calf Raise
+
+---
+
+ACCESSORY — UPPER
+- Lateral Raise
+- Triceps Pushdown
+- Biceps Curl
+- Face Pull
+
+---
+
+CONDITIONING / WORK CAPACITY
+Add and organize:
+- Sled Push
+- Assault Bike Sprint
+- Tempo Runs
+- Shuttle Runs
+- Low-impact work capacity finisher circuits
+- Carry circuits if available
+
+---
+
+MOBILITY / PREP / ACTIVATION
+Add and organize:
+- Ankle stiffness pogo series
+- Hip mobility drills
+- Glute activation drills
+- Trunk brace prep
+- Scap positioning drills
+- Dynamic warm-up / neural prep drills
+
+--------------------------------------------------
+STEP 3: ADD EXERCISE METADATA (CRITICAL)
+--------------------------------------------------
+
+Every exercise entry must include structured metadata.
+
+Use a schema like:
+
+{
+  id: string,
+  name: string,
+  pattern: string,
+  category: string,
+  role: string,
+  equipment: string[],
+  difficulty: "low" | "moderate" | "high",
+  jointStress: string[],
+  neuralDemand: "low" | "moderate" | "high",
+  timeCost: "low" | "moderate" | "high",
+  sportTransferTags: string[],
+  goalsSupported: string[],
+  swapOptions: string[],
+  regressionOptions: string[],
+  progressionOptions: string[],
+  notes?: string
+}
+
+Example:
+
+{
+  id: "back_squat",
+  name: "Back Squat",
+  pattern: "knee_dominant",
+  category: "lower_body",
+  role: "primary_strength",
+  equipment: ["barbell", "rack"],
+  difficulty: "high",
+  jointStress: ["knee", "spine"],
+  neuralDemand: "high",
+  timeCost: "moderate",
+  sportTransferTags: ["force_production", "lower_body_strength"],
+  goalsSupported: ["strength", "athletic_performance"],
+  swapOptions: ["front_squat", "goblet_squat", "safety_bar_squat", "box_squat"],
+  regressionOptions: ["goblet_squat", "bodyweight_squat"],
+  progressionOptions: ["front_squat", "safety_bar_squat"],
+  notes: "Primary bilateral knee-dominant strength option"
+}
+
+--------------------------------------------------
+STEP 4: ADD SWAP LOGIC FOR EVERY KEY EXERCISE
+--------------------------------------------------
+
+Every important movement needs:
+- equivalent swaps
+- regressions
+- progressions
+- joint-friendly options
+- time-efficient options if possible
+
+Examples:
+
+Back Squat swap tree:
+- Front Squat
+- Goblet Squat
+- Safety Bar Squat
+- Box Squat
+
+Barbell Bench Press swap tree:
+- Dumbbell Bench Press
+- Neutral Grip DB Press
+- Push-Up
+- Landmine Press
+
+Conventional Deadlift swap tree:
+- Trap Bar Deadlift
+- RDL
+- DB RDL
+- Hip Thrust
+
+This is what allows the system to adapt without breaking structure.
+
+--------------------------------------------------
+STEP 5: ADD DECISION-USEFUL TAGS
+--------------------------------------------------
+
+Tag exercises for real reasoning use, such as:
+
+sportTransferTags:
+- acceleration
+- deceleration
+- change_of_direction
+- rotational_power
+- trunk_stability
+- lower_body_force
+- upper_body_force
+- stiffness
+- landing_control
+
+goalsSupported:
+- strength
+- power
+- hypertrophy
+- endurance
+- athletic_performance
+- recovery
+- tissue_tolerance
+- movement_quality
+
+These tags should help the specialist layer make better selections.
+
+--------------------------------------------------
+STEP 6: ADD CONSTRAINT-BASED VARIANTS
+--------------------------------------------------
+
+We need enough depth to handle:
+- limited equipment
+- short sessions
+- joint pain / flare-ups
+- lower readiness
+- beginner regression
+- athletic transfer bias
+
+Priority examples:
+- shoulder-friendly presses
+- knee-friendly lower body options
+- spine-friendly hinge options
+- time-efficient movements
+- low-fatigue power options
+
+--------------------------------------------------
+STEP 7: ADD CONDITIONING / ENDURANCE OPTIONS
+--------------------------------------------------
+
+Right now endurance cannot just mean “higher reps and less rest.”
+
+Add a real conditioning bucket the system can use when shifting toward endurance or work capacity:
+
+Examples:
+- Sled Push
+- Bike Sprint
+- Tempo Run
+- Shuttle Run
+- Circuit Finisher
+- Loaded Carry Circuit
+- Med Ball Conditioning Series
+
+Each conditioning option should also have metadata:
+- impact level
+- time cost
+- conditioning type
+- sport transfer
+
+--------------------------------------------------
+STEP 8: KEEP ACCESSORY WORK LOW PRIORITY
+--------------------------------------------------
+
+Accessory exercises should be tagged as:
+- low_priority
+- removable_when_time_constrained
+
+Examples:
+- biceps curls
+- triceps pushdowns
+- lateral raises
+
+These should be the first things trimmed during time compression or fatigue shifts.
+
+--------------------------------------------------
+STEP 9: ADD PREP / ACTIVATION AS A REAL SYSTEM
+--------------------------------------------------
+
+Do not leave warm-up as generic.
+
+Build a prep library with categories:
+
+- ankle / foot stiffness prep
+- hip mobility
+- glute activation
+- trunk brace prep
+- scap prep
+- dynamic sprint / jump prep
+
+This allows better athletic session quality and more coach-like programming.
+
+--------------------------------------------------
+STEP 10: PRIORITIZE DEPTH OVER RAW COUNT
+--------------------------------------------------
+
+Do NOT add hundreds of random exercises.
+
+Instead:
+- make the top 20–40 movements highly structured
+- give them strong swap logic
+- make them constraint-aware
+- make them decision-ready
+
+The goal is not “more exercises.”
+The goal is:
+“better coaching decisions.”
+
+--------------------------------------------------
+STEP 11: FINAL TARGET
+--------------------------------------------------
+
+The library should allow the system to handle scenarios like:
+
+- “swap barbell bench for dumbbell bench”
+- “my shoulder hates barbell work”
+- “I only have 30 minutes”
+- “make this more soccer specific”
+- “I want more endurance”
+- “my legs are smoked”
+- “season starts in 4 weeks”
+
+WITHOUT rebuilding the whole program from scratch.
+
+The system should mutate intelligently using this library structure.
+
+--------------------------------------------------
+STEP 12: SUCCESS STATE
+--------------------------------------------------
+
+After this refactor:
+
+- every exercise belongs to a movement system
+- every major lift has smart variants
+- every pattern has regressions / progressions
+- the specialist decision layer can swap, compress, bias, or protect training intelligently
+- the library feels like a coaching engine, not a database
+
+FINAL RULE:
+TrainChat does not need the biggest exercise library.
+It needs the smartest one.
+
+Implement this now.
