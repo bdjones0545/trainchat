@@ -1,0 +1,139 @@
+We are fixing how TrainChat handles refinement inputs that change training focus.
+
+PROBLEM:
+The system currently fails or regenerates when a user requests a shift in focus (e.g., endurance).
+
+GOAL:
+All refinement inputs should MODIFY the current system — not fail or reset.
+
+--------------------------------------------------
+STEP 1: REMOVE FAILURE RESPONSE
+
+Remove responses like:
+
+- "couldn't apply it to the current program"
+- "regenerating structure"
+
+These should NEVER appear to the user.
+
+--------------------------------------------------
+STEP 2: ADD FOCUS SHIFT HANDLING
+
+When user input changes training emphasis:
+
+Examples:
+- “focus more on endurance”
+- “more strength”
+- “add power”
+- “reduce volume”
+
+The system should:
+
+1. interpret intent
+2. apply a bias to the current program
+3. update the system
+
+--------------------------------------------------
+STEP 3: CREATE BIAS ADJUSTMENT LOGIC
+
+Add a function:
+
+applyTrainingBias(program, request)
+
+Examples:
+
+ENDURANCE BIAS:
+- increase reps
+- reduce rest
+- add conditioning elements
+- slightly reduce max strength emphasis
+
+STRENGTH BIAS:
+- increase load focus
+- increase rest
+- reduce conditioning
+
+POWER BIAS:
+- add explosive movements
+- reduce fatigue-heavy volume
+
+--------------------------------------------------
+STEP 4: PRESERVE STRUCTURE
+
+Do NOT:
+- delete the entire program
+- rebuild from scratch unless absolutely necessary
+
+Instead:
+- modify sets/reps/rest
+- adjust exercise intent
+- add/remove small elements
+
+--------------------------------------------------
+STEP 5: UPDATE RESPONSE LANGUAGE
+
+Replace system response with:
+
+“Got it — shifting your system toward [focus].”
+
+Then:
+
+- explain 1–2 key changes
+- confirm system updated
+
+Example:
+
+“Got it — shifting your system toward endurance.
+Rest periods reduced and higher-rep work added to improve work capacity.”
+
+--------------------------------------------------
+STEP 6: APPLY CHANGE TO PROGRAM VIEW
+
+Immediately reflect changes in:
+
+- Program tab
+- Changes tab
+
+Ensure:
+- visible differences
+- user can see the update
+
+--------------------------------------------------
+STEP 7: LOG THE CHANGE
+
+Changes tab should show:
+
+“Endurance emphasis added”
+“Reduced rest intervals”
+“Increased volume density”
+
+--------------------------------------------------
+STEP 8: NEVER BREAK FLOW
+
+User should NEVER feel:
+
+- system failed
+- system reset unexpectedly
+- system didn’t understand
+
+Always respond with:
+- control
+- clarity
+- forward movement
+
+--------------------------------------------------
+FINAL RESULT
+
+User inputs refinement →
+
+System modifies program →
+
+User sees change →
+
+User feels:
+“This system adapts to me”
+
+NOT:
+“It broke and restarted”
+
+Implement this now.

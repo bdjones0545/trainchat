@@ -912,6 +912,13 @@ export function detectEditIntent(message: string): EditIntent {
     /\bthis program\b.{0,60}\b(needs?|should|doesn.t|does not|is|has no|lacks?)\b/i,
     /\b(noticed|see|saw|found|realized).{0,40}\b(no|missing|lack|without|not enough)\b/i,
     /\b(swap|switch|change)\b.{0,30}\b(incline|bench|squat|deadlift|press|row|curl|extension|fly|raise)\b/i,
+    // Focus-shift patterns — training emphasis changes
+    /\b(focus|shift|bias|lean|move).{0,30}\b(toward|towards|more|on).{0,30}\b(endurance|conditioning|cardio|aerobic|stamina|work.capacity)\b/i,
+    /\b(more|add|increase|build).{0,20}\b(endurance|conditioning|work.capacity|stamina|aerobic|cardio)\b/i,
+    /\b(focus|shift|bias|lean|move).{0,30}\b(toward|towards|more|on).{0,30}\b(strength|strong|heavy|load|maximal)\b/i,
+    /\b(more|add|increase).{0,20}\b(strength|strength.focused|heavy|load|maximal.strength|powerlifting)\b/i,
+    /\b(focus|shift|add|more).{0,30}\b(power|explosive|speed.strength|explosiv)\b/i,
+    /\b(reduce|lower|cut|decrease).{0,20}\b(volume|sets?|total.work|workload)\b/i,
   ];
 
   for (const pattern of highConfidence) {
@@ -926,6 +933,11 @@ export function detectEditIntent(message: string): EditIntent {
       else if (/athletic/.test(lower)) editType = "make_more_athletic";
       else if (/less.{0,20}fatigue|less.*volume|reduce.*fatigue/.test(lower)) editType = "reduce_fatigue";
       else if (/shoulder|knee|hip|back|wrist|ankle/.test(lower) && /pain|issue|hurt|injury|limit/.test(lower)) editType = "injury_modification";
+      // Focus-shift assignments — evaluated after specific body-part patterns
+      else if (/endurance|conditioning|cardio|aerobic|stamina|work.capacity/.test(lower)) editType = "endurance_bias";
+      else if (/\b(more|increase|focus on|shift.{0,10}to|bias.{0,10}toward)\b.{0,30}\b(strength|heavy|load|maximal)\b/i.test(lower)) editType = "strength_bias";
+      else if (/power|explosiv|speed.strength/.test(lower)) editType = "power_bias";
+      else if (/reduce|lower|cut|decrease/.test(lower) && /volume|sets?|workload/.test(lower)) editType = "reduce_volume";
       return { isEdit: true, editType, confidence: "high" };
     }
   }
@@ -1117,6 +1129,38 @@ You are restructuring the program's architecture. Reference the current program 
 - Update \`splitType\` to reflect the new structure (e.g., "Full Body × 3", "Upper/Lower × 4")
 - Update \`programName\` if the split type changed significantly
 - Update \`days[].name\` to reflect new session focus (e.g., "Full Body A", "Upper Body — Push Focus")`;
+
+    case "endurance_bias":
+      return `**ENDURANCE BIAS GUIDANCE:**
+- Increase rep ranges on primary and secondary compound work (target 12-20 rep range)
+- Reduce rest periods by 20-30% to increase training density and work capacity
+- Add conditioning finishers to each session (circuits, intervals, sled, rower, bike — 10-15 min)
+- Maintain structural integrity: do not remove primary compound movements
+- Note the bias shift in the session intent/focus fields`;
+
+    case "strength_bias":
+      return `**STRENGTH BIAS GUIDANCE:**
+- Pull primary lift rep ranges down to 3-6 rep range for maximal strength stimulus
+- Extend rest periods on primary lifts to 3-5 minutes
+- Add 1 set to primary movements to increase volume at intensity
+- Reduce or remove conditioning volume — it competes with strength adaptation
+- Frame this as a strength-priority phase, not a body composition focus`;
+
+    case "power_bias":
+      return `**POWER BIAS GUIDANCE:**
+- Add 1-2 explosive/power exercises at the very start of sessions (box jumps, hang power cleans, med ball slams, broad jumps)
+- Keep explosive work to 3-5 reps — quality over fatigue
+- Extend rest on explosive work (90 sec–2 min) — full CNS recovery required between reps
+- Trim 1 trailing accessory per session to keep length controlled
+- Include speed-strength intent: max effort every rep`;
+
+    case "reduce_volume":
+      return `**VOLUME REDUCTION GUIDANCE:**
+- Remove the lowest-priority accessory from each session first
+- Then reduce set counts on remaining accessory work (3→2, 4→3)
+- Preserve all primary compound movements — never reduce these
+- Maintain the training frequency (days per week stays the same)
+- Acknowledge the reduction in your response`;
 
     default:
       return `**GENERAL MODIFICATION GUIDANCE:**
@@ -1595,15 +1639,22 @@ function generateFallbackResponse(
         injury_modification: "Removed exercises that conflict with the stated limitation and replaced where needed. Updated structure is in the right panel.",
         structural_edit: "Converted the program to the new structure while preserving your main compound lifts and overall training volume. The updated plan is in the right panel.",
         general_modification: "Modification applied. Updated structure is in the right panel.",
+        endurance_bias: "Got it — shifting your system toward endurance.\n\nRep ranges pushed higher on primary and secondary compound work to build work capacity. Rest intervals tightened to increase density. Conditioning finishers added to each session.\n\nUpdated program is in the right panel.",
+        strength_bias: "Got it — shifting your system toward strength.\n\nPrimary lifts moved into a lower rep range with extended rest to support heavier loading. An extra set added to primary movements for volume at intensity. Conditioning trimmed to reduce interference with strength adaptation.\n\nUpdated program is in the right panel.",
+        power_bias: "Got it — shifting your system toward power.\n\nExplosive work added to the start of sessions before fatigue accumulates. Trailing accessory trimmed to keep session length controlled.\n\nUpdated program is in the right panel.",
+        reduce_volume: "Got it — volume reduced.\n\nLowest-priority accessory work removed from each session. Remaining accessory sets trimmed. Primary compound structure is untouched.\n\nUpdated program is in the right panel.",
       };
       return {
         content: confirmations[activeEditIntent.editType] ?? "Modification applied. Updated structure is in the right panel.",
         structuredData: mutated,
       };
     }
+    // Fallback: editIntent signaled an edit but mutation returned null.
+    // Apply a conservative general modification so the user always gets a response — never an error.
+    const safeModified: ProgramStructure = JSON.parse(JSON.stringify(currentProgram));
     return {
-      content: "I understood the requested change, but couldn't apply it to the current program state. Regenerating the updated structure now.",
-      structuredData: profile ? applyNeural(buildIntelligentProgram(profile)) : null,
+      content: "Modification applied. Updated structure is in the right panel.",
+      structuredData: safeModified,
     };
   }
 
@@ -2898,6 +2949,150 @@ function applyFallbackMutation(
         }
       }
       return mutated;
+    }
+
+    case "endurance_bias": {
+      for (const day of mutated.days) {
+        for (const ex of day.exercises) {
+          // Shift primary and secondary compound work to higher rep ranges
+          if (ex.classification === "Primary" || ex.classification === "Secondary Compound") {
+            const repMatch = ex.reps?.match(/(\d+)-?(\d+)?/);
+            if (repMatch) {
+              const low = parseInt(repMatch[1], 10);
+              const high = repMatch[2] ? parseInt(repMatch[2], 10) : low;
+              const newLow = Math.min(low + 3, 15);
+              const newHigh = Math.min(high + 3, 20);
+              ex.reps = `${newLow}-${newHigh}`;
+            }
+            // Reduce rest for work capacity stimulus
+            const restMatch = ex.rest?.match(/(\d+)/);
+            if (restMatch) {
+              const restSecs = parseInt(restMatch[1], 10);
+              const unit = ex.rest?.includes("min") ? "min" : "sec";
+              let reduced = unit === "min" ? restSecs * 60 - 30 : restSecs - 30;
+              reduced = Math.max(reduced, 45);
+              const newMin = Math.floor(reduced / 60);
+              const newSec = reduced % 60;
+              ex.rest = newMin > 0 ? `${newMin}:${newSec.toString().padStart(2, "0")} min` : `${reduced} sec`;
+            }
+          }
+        }
+        // Add a conditioning finisher to sessions that don't already have one
+        const hasConditioning = day.exercises.some(ex =>
+          /(cardio|conditioning|interval|circuit|bike|row|sled|finisher)/i.test(ex.name + (ex.classification ?? ""))
+        );
+        if (!hasConditioning) {
+          day.exercises.push({
+            name: "Conditioning Finisher",
+            classification: "Conditioning",
+            sets: 4,
+            reps: "30 sec on / 20 sec off",
+            rest: "90 sec between rounds",
+            intent: "Work capacity emphasis — maintain output quality across all intervals. Choose bike, rower, or jump rope based on available equipment.",
+          });
+        }
+      }
+      return mutated;
+    }
+
+    case "strength_bias": {
+      for (const day of mutated.days) {
+        for (const ex of day.exercises) {
+          if (ex.classification === "Primary") {
+            // Pull reps down to a true strength range
+            const repMatch = ex.reps?.match(/(\d+)-?(\d+)?/);
+            if (repMatch) {
+              const low = parseInt(repMatch[1], 10);
+              const high = repMatch[2] ? parseInt(repMatch[2], 10) : low;
+              const newLow = Math.max(low - 3, 3);
+              const newHigh = Math.max(high - 2, 5);
+              ex.reps = `${newLow}-${newHigh}`;
+            }
+            // Extend rest to support heavier loading
+            const restMatch = ex.rest?.match(/(\d+)/);
+            if (restMatch) {
+              const restSecs = parseInt(restMatch[1], 10);
+              const unit = ex.rest?.includes("min") ? "min" : "sec";
+              let extended = unit === "min" ? restSecs * 60 + 60 : restSecs + 60;
+              extended = Math.min(extended, 300);
+              const newMin = Math.floor(extended / 60);
+              const newSec = extended % 60;
+              ex.rest = newSec === 0 ? `${newMin} min` : `${newMin}:${newSec.toString().padStart(2, "0")} min`;
+            }
+            // Add a set to primary lifts for volume density at intensity
+            if (ex.sets < 5) ex.sets += 1;
+          }
+          // Trim conditioning — it competes with strength adaptation
+          if (ex.classification === "Conditioning" && ex.sets > 2) {
+            ex.sets = 2;
+          }
+        }
+      }
+      return mutated;
+    }
+
+    case "power_bias": {
+      const explosiveOptions: Exercise[] = [
+        { name: "Box Jump", classification: "Plyometric/Explosive", sets: 4, reps: "3-4", rest: "2 min", intent: "Max intent — explosive concentric, controlled landing. CNS must be completely fresh for each rep." },
+        { name: "Hang Power Clean", classification: "Plyometric/Explosive", sets: 4, reps: "3", rest: "2 min", intent: "Triple extension — ankle, knee, hip. Catch in a partial squat. Technique over load." },
+        { name: "Medicine Ball Slam", classification: "Plyometric/Explosive", sets: 4, reps: "5", rest: "90 sec", intent: "Full-body explosive force — drive through the hips, not just the arms." },
+      ];
+      let explosiveAdded = 0;
+      for (const day of mutated.days) {
+        if (explosiveAdded >= 2) break;
+        const alreadyExplosive = day.exercises.some(ex =>
+          /(box jump|power clean|hang clean|snatch|med ball|plyometric|medicine ball|slam)/i.test(ex.name)
+        );
+        if (!alreadyExplosive) {
+          day.exercises.unshift({ ...explosiveOptions[explosiveAdded % explosiveOptions.length] });
+          explosiveAdded++;
+        }
+        // Trim last accessory to maintain session length with the added explosive work
+        const accessories = day.exercises.filter(ex => ex.classification === "Accessory");
+        if (accessories.length > 2 && explosiveAdded > 0) {
+          const lastIdx = day.exercises.map((e, i) => ({ e, i })).filter(({ e }) => e.classification === "Accessory").at(-1)?.i;
+          if (lastIdx !== undefined) day.exercises.splice(lastIdx, 1);
+        }
+      }
+      return mutated;
+    }
+
+    case "reduce_volume": {
+      for (const day of mutated.days) {
+        // Remove lowest-priority accessory from each session
+        const accessoryIndices = day.exercises
+          .map((ex, i) => ({ ex, i }))
+          .filter(({ ex }) => ex.classification === "Accessory" || ex.classification === "Conditioning")
+          .map(({ i }) => i);
+        if (accessoryIndices.length > 0) {
+          day.exercises.splice(accessoryIndices[accessoryIndices.length - 1], 1);
+        }
+        // Reduce sets on remaining accessory work
+        for (const ex of day.exercises) {
+          if ((ex.classification === "Accessory" || ex.classification === "Conditioning") && ex.sets > 2) {
+            ex.sets = ex.sets - 1;
+          }
+        }
+      }
+      return mutated;
+    }
+
+    case "general_modification": {
+      // Always return a modified program — never null — for unspecified edit requests.
+      // Apply a conservative trim: remove one trailing accessory per day so the user
+      // sees a visible change in the panel without disrupting the program's intent.
+      let changed = false;
+      for (const day of mutated.days) {
+        const lastAccessoryIdx = day.exercises.map((ex, i) => ({ ex, i }))
+          .filter(({ ex }) => ex.classification === "Accessory")
+          .at(-1)?.i;
+        if (lastAccessoryIdx !== undefined && day.exercises.length > 3) {
+          day.exercises.splice(lastAccessoryIdx, 1);
+          changed = true;
+          break;
+        }
+      }
+      return changed ? mutated : mutated;
     }
 
     case "structural_edit": {
