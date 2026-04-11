@@ -39,12 +39,14 @@ import { clearAuthState, clearGuestSessionCache, markOnboardingComplete, logRout
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 
 const SUGGESTION_CHIPS = [
-  { label: "Build my workout", prompt: "Build me a training program based on my goals" },
-  { label: "Make me a 4-day split", prompt: "Design a 4 day per week training split for me" },
-  { label: "Add athletic work", prompt: "I want to add athletic and explosive training to my program" },
-  { label: "Adjust for pain", prompt: "I have a pain or injury and need to adjust my program" },
-  { label: "Reduce workout time", prompt: "My sessions are too long — help me shorten them to fit my schedule" },
-  { label: "Swap exercises", prompt: "Help me swap some exercises in my program" },
+  { label: "Build a hypertrophy plan", prompt: "Build me a hypertrophy-focused training program based on my goals and schedule" },
+  { label: "Make me a 4-day split", prompt: "Design a 4-day training split for me" },
+  { label: "Add speed and power work", prompt: "I want to add speed, power, and athletic development to my program" },
+  { label: "Adjust around knee pain", prompt: "I have knee pain and need to modify my program to work around it" },
+  { label: "Cut this to 45 minutes", prompt: "My sessions are too long — help me cut them down to 45 minutes" },
+  { label: "Swap for home equipment", prompt: "Help me swap exercises to fit a home gym setup" },
+  { label: "Build around basketball", prompt: "Build a program designed around basketball performance and athleticism" },
+  { label: "Strength without bulk", prompt: "Help me build strength without adding too much size or bulk" },
 ];
 
 async function fetchSubscription() {
@@ -618,7 +620,7 @@ export default function Chat() {
           {calibrationScore > 0 && (
             <button
               onClick={() => setShowCalibration(true)}
-              title="Improve AI Accuracy"
+              title="Refine My Plan"
               className={`flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-lg border transition-all ${
                 calibrationScore >= 70
                   ? "text-green-400 border-green-400/30 bg-green-400/10"
@@ -634,22 +636,8 @@ export default function Chat() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-        {/* Workspace */}
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-3">Workspace</p>
-        <button
-          onClick={() => { handleNewConversation(); setMobilePanel(null); }}
-          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
-        >
-          <Plus className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-          <span>New Chat</span>
-        </button>
-        <button
-          onClick={() => { setLocation("/system"); setMobilePanel(null); }}
-          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
-        >
-          <Target className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-          <span>Saved Programs</span>
-        </button>
+        {/* Training System — primary nav */}
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-3">Training System</p>
         <button
           onClick={() => { setLocation("/system"); setMobilePanel(null); }}
           className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
@@ -661,18 +649,51 @@ export default function Chat() {
           )}
         </button>
         <button
+          onClick={() => { setLocation("/system"); setMobilePanel(null); }}
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+        >
+          <Target className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <span>Saved Programs</span>
+        </button>
+        <button
+          onClick={() => { handleNewConversation(); setMobilePanel(null); }}
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+        >
+          <Plus className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <span>New Builder Session</span>
+        </button>
+
+        {/* Tools */}
+        <div className="my-3 h-px bg-border" />
+        <button
+          onClick={() => { setShowReadiness(true); setMobilePanel(null); }}
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+        >
+          <Activity className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <span>Check-In</span>
+        </button>
+        <button
           onClick={() => { setMobilePanel(null); setLocation("/billing"); }}
           className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
         >
           <CreditCard className="w-4 h-4 text-muted-foreground flex-shrink-0" />
           <span>Settings</span>
         </button>
+        {!isPremium && (
+          <button
+            onClick={() => { setShowPricing(true); setMobilePanel(null); }}
+            className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-primary hover:bg-primary/5 active:bg-primary/10 transition-all text-left"
+          >
+            <Zap className="w-4 h-4 flex-shrink-0" />
+            <span>Upgrade to Pro</span>
+          </button>
+        )}
 
-        {/* Chat History */}
+        {/* Session History — de-emphasized */}
         <div className="my-3 h-px bg-border" />
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-3">Chat History</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-3">Session History</p>
         {conversations.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground/50 px-3 py-2">No conversations yet</p>
+          <p className="text-[11px] text-muted-foreground/50 px-3 py-2">No sessions yet</p>
         ) : (
           conversations.slice(0, 12).map((convo: any) => (
             <button
@@ -685,28 +706,9 @@ export default function Chat() {
               }`}
             >
               <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 opacity-50" />
-              <span className="truncate">{convo.title ?? "Conversation"}</span>
+              <span className="truncate">{convo.title ?? "Session"}</span>
             </button>
           ))
-        )}
-
-        {/* Account */}
-        <div className="my-3 h-px bg-border" />
-        <button
-          onClick={() => { setShowReadiness(true); setMobilePanel(null); }}
-          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
-        >
-          <Activity className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-          <span>Daily Check-In</span>
-        </button>
-        {!isPremium && (
-          <button
-            onClick={() => { setShowPricing(true); setMobilePanel(null); }}
-            className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-primary hover:bg-primary/5 active:bg-primary/10 transition-all text-left"
-          >
-            <Zap className="w-4 h-4 flex-shrink-0" />
-            <span>Upgrade to Pro</span>
-          </button>
         )}
       </div>
 
@@ -822,7 +824,7 @@ export default function Chat() {
               ? "text-primary bg-primary/10 hover:bg-primary/20"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
           } active:bg-muted/80`}
-          aria-label="Open training program"
+          aria-label="View live program"
         >
           <Dumbbell className="w-5 h-5" />
         </button>
@@ -881,10 +883,10 @@ export default function Chat() {
                   <Dumbbell className="w-6 h-6 text-primary" />
                 </div>
                 <h2 className="text-base font-semibold text-foreground mb-1.5">
-                  What do you want to build?
+                  Build your training system
                 </h2>
                 <p className="text-sm text-muted-foreground max-w-xs leading-relaxed mb-8">
-                  Describe your goal, schedule, equipment, or limitations. I'll build it with you.
+                  Tell me your goal, schedule, equipment, and any limitations. I'll structure your program in real time.
                 </p>
                 <div className="flex flex-wrap justify-center gap-2 w-full max-w-md">
                   {SUGGESTION_CHIPS.map((chip) => (
@@ -932,7 +934,7 @@ export default function Chat() {
                           }}
                           className="text-primary font-semibold hover:underline"
                         >
-                          Improve Accuracy
+                          Refine My Plan
                         </button>{" "}
                         to share your training background — I'll sharpen your program right after.
                       </p>
@@ -992,7 +994,7 @@ export default function Chat() {
                     }`}
                   >
                     <Zap className="w-3 h-3" />
-                    {calibrationScore > 0 ? `Accuracy ${calibrationScore}%` : "Improve Accuracy"}
+                    {calibrationScore > 0 ? `${calibrationScore}% Calibrated` : "Refine My Plan"}
                   </button>
                 </div>
                 {hasActiveSystem && (

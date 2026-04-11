@@ -276,14 +276,115 @@ function UpdatingBadge({ phase }: { phase: BuildPhase }) {
 
 function EmptyProgramState() {
   return (
-    <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-      <div className="w-12 h-12 rounded-2xl bg-primary/8 border border-primary/15 flex items-center justify-center mb-5">
-        <Dumbbell className="w-5 h-5 text-primary/40" />
+    <div className="flex flex-col h-full overflow-y-auto p-4">
+      <style>{`
+        @keyframes emptyPulse {
+          0%, 100% { opacity: 0.35; }
+          50% { opacity: 0.6; }
+        }
+      `}</style>
+
+      <div className="mb-4">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30" />
+          <span className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-[0.12em]">
+            Live Program
+          </span>
+        </div>
+        <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
+          Your training system will appear here as you build with the agent.
+        </p>
       </div>
-      <h3 className="text-xs font-semibold text-foreground mb-2">No program built yet</h3>
-      <p className="text-[11px] text-muted-foreground leading-relaxed max-w-[180px]">
-        Your workout system will appear here once you start building with the agent.
-      </p>
+
+      <div className="space-y-2">
+        {/* Weekly Split skeleton */}
+        <div className="bg-card/50 border border-border/30 rounded-xl p-3">
+          <div className="flex items-center gap-2 mb-2.5">
+            <LayoutGrid className="w-3 h-3 text-muted-foreground/25" />
+            <span className="text-[10px] font-semibold text-muted-foreground/35">Weekly Split</span>
+          </div>
+          <div className="flex gap-1.5">
+            {["M", "T", "W", "T", "F"].map((d, i) => (
+              <div
+                key={i}
+                className="flex-1 h-7 bg-muted/15 rounded-lg flex items-center justify-center"
+                style={{ animation: `emptyPulse 2.5s ease-in-out ${i * 120}ms infinite` }}
+              >
+                <span className="text-[9px] text-muted-foreground/25 font-semibold">{d}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Today's Session skeleton */}
+        <div className="bg-card/50 border border-border/30 rounded-xl p-3">
+          <div className="flex items-center gap-2 mb-2.5">
+            <PlayCircle className="w-3 h-3 text-muted-foreground/25" />
+            <span className="text-[10px] font-semibold text-muted-foreground/35">Today's Session</span>
+          </div>
+          <div className="space-y-2">
+            {[72, 56, 64].map((w, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <div
+                  className="h-2 bg-muted/20 rounded-full"
+                  style={{ width: `${w}%`, animation: `emptyPulse 2.5s ease-in-out ${i * 200}ms infinite` }}
+                />
+                <div className="h-2 bg-muted/12 rounded-full w-12 ml-auto" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Exercise Blocks skeleton */}
+        <div className="bg-card/50 border border-border/30 rounded-xl p-3">
+          <div className="flex items-center gap-2 mb-2.5">
+            <Layers className="w-3 h-3 text-muted-foreground/25" />
+            <span className="text-[10px] font-semibold text-muted-foreground/35">Exercise Blocks</span>
+          </div>
+          <div className="space-y-1.5">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex items-center gap-2.5">
+                <div className="w-1 h-1 rounded-full bg-muted/30 flex-shrink-0" />
+                <div
+                  className="h-1.5 bg-muted/18 rounded-full flex-1"
+                  style={{ animation: `emptyPulse 2.5s ease-in-out ${i * 180}ms infinite` }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Progression Strategy skeleton */}
+        <div className="bg-card/50 border border-border/30 rounded-xl p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <TrendingUp className="w-3 h-3 text-muted-foreground/25" />
+            <span className="text-[10px] font-semibold text-muted-foreground/35">Progression Strategy</span>
+          </div>
+          <div className="space-y-1.5">
+            <div className="h-1.5 bg-muted/18 rounded-full w-4/5" style={{ animation: "emptyPulse 2.5s ease-in-out 0ms infinite" }} />
+            <div className="h-1.5 bg-muted/12 rounded-full w-3/5" style={{ animation: "emptyPulse 2.5s ease-in-out 300ms infinite" }} />
+          </div>
+        </div>
+
+        {/* Agent Change Log skeleton */}
+        <div className="bg-card/50 border border-border/30 rounded-xl p-3">
+          <div className="flex items-center gap-2 mb-2.5">
+            <Activity className="w-3 h-3 text-muted-foreground/25" />
+            <span className="text-[10px] font-semibold text-muted-foreground/35">Agent Change Log</span>
+          </div>
+          <div className="space-y-2">
+            {[0, 1].map((i) => (
+              <div key={i} className="flex items-center gap-2">
+                <div className="w-1 h-1 rounded-full bg-muted/25 flex-shrink-0" />
+                <div
+                  className="h-1.5 bg-muted/15 rounded-full flex-1"
+                  style={{ animation: `emptyPulse 2.5s ease-in-out ${i * 220}ms infinite` }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

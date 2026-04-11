@@ -58,11 +58,11 @@ function isSystemPreview(content: string): boolean {
 // ─── Quick-start chips ────────────────────────────────────────────────────────
 
 const QUICK_START = [
-  { label: "Build muscle", icon: "💪" },
-  { label: "Get stronger", icon: "⚡" },
-  { label: "Lose fat & stay athletic", icon: "🔥" },
-  { label: "Athletic performance", icon: "🏆" },
-  { label: "Train around an injury", icon: "🩺" },
+  { label: "Build a hypertrophy plan", icon: "💪" },
+  { label: "Make me a 4-day split", icon: "📅" },
+  { label: "Train for athletic performance", icon: "⚡" },
+  { label: "Adjust around an injury", icon: "🩺" },
+  { label: "Build around home equipment", icon: "🏠" },
 ];
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
