@@ -282,7 +282,14 @@ export default function GuestStart() {
     hasInitialized.current = true;
 
     if (guestSession.status === "converted") {
-      navigate("/chat");
+      // Fix 3: check localStorage before redirecting — if the user was a registered
+      // member but their session expired, send them to /login instead of /chat so
+      // we don't create a /start ↔ /chat redirect loop.
+      const localDone = (() => {
+        try { return localStorage.getItem("onboardingComplete") === "true"; } catch { return false; }
+      })();
+      console.log("[GuestStart] converted session detected:", { localDone });
+      navigate(localDone ? "/login" : "/chat");
       return;
     }
 

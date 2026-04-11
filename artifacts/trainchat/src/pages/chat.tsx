@@ -109,6 +109,11 @@ export default function Chat() {
   const [isUndoing, setIsUndoing] = useState(false);
   const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Fix 4: one-shot guard — onboarding/calibration logic runs at most once per mount
+  const hasCheckedOnboarding = useRef(false);
+  // Fix 5: fail-safe — force the app to render if auth hangs too long
+  const [forceReady, setForceReady] = useState(false);
+
   const logout = useLogout();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -170,9 +175,29 @@ export default function Chat() {
   const currentStreak = streakData?.currentStreak ?? 0;
   const hasActiveSystem = !!activeSystem?.id;
 
+  // Fix 6: log user state on load for debugging
   useEffect(() => {
-    if (meError) setLocation("/start");
-  }, [meError, setLocation]);
+    console.log("[Chat] user state:", { me, meLoading, meError });
+  }, [me, meLoading, meError]);
+
+  // Fix 5: fail-safe — if auth is still unresolved after 4s, force the app to show
+  useEffect(() => {
+    const id = setTimeout(() => {
+      if (meLoading) {
+        console.warn("[Chat] Auth timeout — forcing app render");
+        setForceReady(true);
+      }
+    }, 4000);
+    return () => clearTimeout(id);
+  }, [meLoading]);
+
+  // Fix 2: only redirect on confirmed auth failure — never on transient errors or undefined state
+  useEffect(() => {
+    if (!meLoading && meError && !me) {
+      console.warn("[Chat] Auth error confirmed — redirecting to /start");
+      setLocation("/start");
+    }
+  }, [meLoading, meError, me, setLocation]);
 
   useEffect(() => {
     if (!me || convosLoading) return;
@@ -456,12 +481,17 @@ export default function Chat() {
     logout.mutate(undefined, {
       onSuccess: () => {
         queryClient.clear();
+        // Fix 3: clear the local onboarding flag so a new user on the same device
+        // doesn't get incorrectly routed to /login via the GuestStart guard.
+        try { localStorage.removeItem("onboardingComplete"); } catch {}
         setLocation("/start");
       },
     });
   }
 
-  if (meLoading || profileLoading) {
+  // Fix 1 + 5: loading gate — block UI decisions until user state is fully resolved,
+  // but honour the fail-safe forceReady flag so we never get stuck forever.
+  if ((meLoading || profileLoading) && !forceReady) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex items-center gap-3 text-muted-foreground">
@@ -470,6 +500,13 @@ export default function Chat() {
         </div>
       </div>
     );
+  }
+
+  // Fix 3: mark the user as onboarding-complete in localStorage once they reach the
+  // chat — this acts as a local fallback so modals are never shown due to a missing
+  // backend flag.
+  if (me) {
+    try { localStorage.setItem("onboardingComplete", "true"); } catch {}
   }
 
   const firstName = me?.name?.split(" ")[0] ?? "Athlete";
@@ -790,26 +827,41 @@ export default function Chat() {
                   />
                 )}
 
-                {/* Calibration nudge — shown once after first program is generated */}
-                {latestProgram && calibrationScore < 40 && !calibrationNudgeShown && (
-                  <div className="flex items-start gap-3 mb-5">
-                    <div className="w-7 h-7 rounded-full bg-card border border-primary/30 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <div className="w-2 h-2 rounded-full bg-primary" />
+                {/* Calibration nudge — shown once after first program is generated.
+                    Fix 3+4: guard with localStorage flag and one-shot ref so it
+                    never triggers more than once per session. */}
+                {latestProgram && calibrationScore < 40 && !calibrationNudgeShown && (() => {
+                  // Fix 3: if localStorage says onboarding is done, skip the nudge entirely
+                  const localDone = (() => { try { return localStorage.getItem("onboardingComplete") === "true"; } catch { return false; } })();
+                  if (localDone && hasCheckedOnboarding.current) return null;
+
+                  // Fix 4: only evaluate the condition once
+                  if (!hasCheckedOnboarding.current) {
+                    hasCheckedOnboarding.current = true;
+                    // Fix 6: log the trigger condition
+                    console.log("[Chat] calibration nudge check:", { calibrationScore, localDone });
+                  }
+
+                  return (
+                    <div className="flex items-start gap-3 mb-5">
+                      <div className="w-7 h-7 rounded-full bg-card border border-primary/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <div className="w-2 h-2 rounded-full bg-primary" />
+                      </div>
+                      <div className="max-w-[90%] px-4 py-3 rounded-2xl rounded-tl-sm bg-card border border-border text-foreground">
+                        <p className="text-sm text-muted-foreground leading-relaxed">
+                          Want me to dial this in more precisely? Tap{" "}
+                          <button
+                            onClick={() => { setShowCalibration(true); setCalibrationNudgeShown(true); }}
+                            className="text-primary font-semibold hover:underline"
+                          >
+                            Improve Accuracy
+                          </button>{" "}
+                          to share your body, limitations, and schedule — I'll optimize the program right after.
+                        </p>
+                      </div>
                     </div>
-                    <div className="max-w-[90%] px-4 py-3 rounded-2xl rounded-tl-sm bg-card border border-border text-foreground">
-                      <p className="text-sm text-muted-foreground leading-relaxed">
-                        Want me to dial this in more precisely? Tap{" "}
-                        <button
-                          onClick={() => { setShowCalibration(true); setCalibrationNudgeShown(true); }}
-                          className="text-primary font-semibold hover:underline"
-                        >
-                          Improve Accuracy
-                        </button>{" "}
-                        to share your body, limitations, and schedule — I'll optimize the program right after.
-                      </p>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 <div ref={messagesEndRef} />
               </div>

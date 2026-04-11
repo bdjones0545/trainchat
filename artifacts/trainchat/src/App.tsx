@@ -85,8 +85,14 @@ class ErrorBoundary extends Component<
  * - Unauthenticated → /start (the agent-first guest experience)
  */
 function SmartRoot() {
-  const { data: me, isLoading } = useGetMe();
+  const { data: me, isLoading, isError } = useGetMe();
 
+  // Fix 6: log resolution so failures are visible in the console
+  if (!isLoading) {
+    console.log("[SmartRoot] user resolved:", { me: !!me, isError });
+  }
+
+  // Fix 1: never make routing decisions until user state is fully loaded
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -95,6 +101,7 @@ function SmartRoot() {
     );
   }
 
+  // Fix 2: treat an undefined/error state as unauthenticated — not as a loop trigger
   if (me) return <Redirect to="/chat" />;
   return <Redirect to="/start" />;
 }
