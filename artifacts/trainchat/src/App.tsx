@@ -12,7 +12,7 @@ import AdminDashboard from "@/pages/admin";
 import SystemPage from "@/pages/system";
 import BillingPage from "@/pages/billing";
 import { useGetMe } from "@workspace/api-client-react";
-import { computeRoute, readDeviceId } from "@/lib/routing";
+import { computeRoute, readDeviceId, logRouteDecision, readOnboardingComplete } from "@/lib/routing";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -84,15 +84,35 @@ class ErrorBoundary extends Component<
  * SmartRoot — the single authoritative routing gate for the "/" path.
  *
  * Priority: auth state always wins. Guest state is never consulted here.
- * - Loading      → spinner (never route on unresolved state)
- * - Authenticated → /chat
- * - Not authenticated → /start (guest experience)
+ *
+ * We gate on TWO conditions before deciding:
+ *   1. isLoading — no data in cache yet (first ever visit)
+ *   2. isFetching && !me — a background refetch is in flight and we have no
+ *      confirmed user yet (handles stale error state from a previous 401)
+ *
+ * Without condition 2, a returning user with a stale 401 cache entry would
+ * be immediately sent to /start while their valid session is being confirmed
+ * in the background, causing a flash of the guest experience.
  */
 function SmartRoot() {
-  const { data: me, isLoading, isError } = useGetMe();
+  const { data: me, isLoading, isError, isFetching } = useGetMe();
   const [pathname] = useLocation();
 
-  if (isLoading) {
+  // Wait for definitive auth state before routing.
+  // "isFetching && !me" covers the case where React Query has a stale 401
+  // error in cache and is currently re-confirming it in the background.
+  if (isLoading || (isFetching && !me)) {
+    logRouteDecision({
+      pathname,
+      authResolved: false,
+      hasUser: false,
+      authError: isError,
+      deviceId: readDeviceId(),
+      guestSessionStatus: null,
+      onboardingComplete: readOnboardingComplete(),
+      target: "loading",
+      reason: isLoading ? "initial auth load" : "background refetch in progress — awaiting confirmation",
+    });
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
@@ -100,7 +120,7 @@ function SmartRoot() {
     );
   }
 
-  const decision = computeRoute({
+  computeRoute({
     pathname,
     authResolved: true,
     hasUser: !!me,

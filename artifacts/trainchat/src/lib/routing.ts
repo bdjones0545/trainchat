@@ -12,9 +12,10 @@
 
 export const STORAGE_KEYS = {
   DEVICE_ID: "trainchat_device_id",
-  GUEST_SESSION: "trainchat_guest_session",   // sessionStorage
-  GUEST_CHAT_HISTORY: "trainchat_guest_chat", // localStorage
-  ONBOARDING_COMPLETE: "onboardingComplete",  // localStorage — set once user reaches /chat
+  GUEST_SESSION: "trainchat_guest_session",      // sessionStorage
+  GUEST_CHAT_HISTORY: "trainchat_guest_chat",    // localStorage
+  ONBOARDING_COMPLETE: "onboardingComplete",     // localStorage — set once user reaches /chat
+  ONBOARDING_DRAFT: "trainchat_onboarding_draft",// localStorage — stale key from retired onboarding page
 } as const;
 
 // ─── Diagnostic logger ────────────────────────────────────────────────────────
@@ -122,12 +123,28 @@ export function computeRoute({
 
 /**
  * Full logout cleanup — clears everything auth-related from local and session storage.
- * Call this on explicit logout only, never on session expiry (we keep deviceId always).
+ * Call this on EXPLICIT LOGOUT only.
+ *
+ * Preserved intentionally:
+ *   - DEVICE_ID         — analytics / re-engagement continuity
+ *   - GUEST_CHAT_HISTORY — user's conversation history survives logout
  */
 export function clearAuthState() {
-  // Clear auth-derived flags
+  // Auth-derived flags
   try { localStorage.removeItem(STORAGE_KEYS.ONBOARDING_COMPLETE); } catch {}
-  // Clear cached guest session so GuestStart does not replay a stale "converted" redirect
+  // Retired onboarding page draft — clean up stale key from legacy flow
+  try { localStorage.removeItem(STORAGE_KEYS.ONBOARDING_DRAFT); } catch {}
+  // Cached guest session so GuestStart never replays a stale "converted" redirect
+  clearGuestSessionCache();
+}
+
+/**
+ * Clear only the sessionStorage guest session cache.
+ * Safe to call on session EXPIRY (not just logout) because:
+ *   - We keep localStorage.onboardingComplete (still useful as a returning-user hint)
+ *   - The next /api/guest/session call will return the authoritative status from the DB
+ */
+export function clearGuestSessionCache() {
   try { sessionStorage.removeItem(STORAGE_KEYS.GUEST_SESSION); } catch {}
 }
 

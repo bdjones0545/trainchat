@@ -1,0 +1,110 @@
+The previous loop improved, but the routing is still incorrect.
+
+Current behavior:
+- app opens
+- I see flashes of the old onboarding flow, even though onboarding was replaced by calibration
+- then it falls into the sign-in modal instead of landing on the agent
+- expected behavior is a clean single pass directly to the agent screen for the correct user state
+
+This means we still have stale UI/render conditions plus incorrect route priority during auth hydration.
+
+I need a full audit of startup routing and conditional rendering.
+
+Fix these specific issues:
+
+1. Remove all remaining onboarding render paths
+- Search the entire codebase for any references to:
+  - onboarding
+  - onboardingComplete
+  - hasCheckedOnboarding
+  - showOnboarding
+  - onboarding modal/components/routes
+- If onboarding was replaced by calibration, there must be zero old onboarding UI branches still rendering on startup
+- eliminate any startup flashes from deprecated onboarding components
+
+2. Prevent sign-in modal from opening before startup state is fully resolved
+- The sign-in modal must not appear during the auth/profile/device hydration window
+- Introduce a single startup gate:
+  - authResolved
+  - profileResolved
+  - guest/device routing resolved
+- do not render sign-in modal, calibration, or agent until final startup state is known
+
+3. Centralize startup route decision
+Create one function that decides the startup destination only once, something like:
+
+resolveStartupDestination({
+  authResolved,
+  authUser,
+  profileResolved,
+  profile,
+  guestSession,
+  deviceId,
+  calibrationState,
+  localFlags
+})
+
+This function should return exactly one of:
+- loading
+- sign_in
+- calibration
+- agent
+
+No competing redirects. No multiple components making their own startup decisions.
+
+4. Fix route priority
+Use strict priority:
+- if startup not resolved -> loading only
+- if authenticated and allowed into app -> agent
+- if authenticated but calibration required -> calibration
+- if unauthenticated and auth is truly resolved -> sign in
+- deprecated onboarding state must never win
+
+5. Audit calibration logic
+- make sure calibration is the only replacement for onboarding
+- ensure calibration does not briefly render from stale local state
+- calibration should only appear if explicitly required by current user/app state
+- otherwise go directly to agent
+
+6. Audit modal triggers
+- find every place that can open the sign-in modal automatically
+- log the exact reason each trigger fires
+- prevent automatic modal open during unresolved startup
+- only open sign-in after auth has definitively failed or user is unauthenticated
+
+7. Add startup diagnostics
+For every startup pass log:
+- pathname
+- authResolved
+- authUser id
+- profileResolved
+- guest session status
+- deviceId
+- calibration required true/false
+- any onboarding flags still present
+- sign-in modal trigger reason
+- final destination chosen
+
+8. Clean deprecated state
+If onboarding was replaced by calibration, remove or migrate:
+- old localStorage onboarding keys
+- old sessionStorage onboarding keys
+- old refs/state tied to onboarding
+- old route guards checking onboarding completion
+
+9. Test these flows:
+- fresh unauthenticated visitor
+- returning device with stale onboarding flags
+- returning authenticated user
+- logged out user on same device
+- user with calibration completed
+- user needing calibration
+- expired session on device with old local flags
+
+Deliverables:
+- exact root cause
+- all files changed
+- all old onboarding references removed or migrated
+- final startup routing logic
+- list of storage keys cleared or renamed
+- proof that startup now does one clean pass with no UI flash

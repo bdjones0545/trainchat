@@ -266,7 +266,7 @@ export default function GuestStart() {
   const hasInitialized = useRef(false);
   const landingTracked = useRef(false);
 
-  const { deviceId, guestSession } = useGuestSession(false);
+  const { deviceId, guestSession, error: guestSessionError } = useGuestSession(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -436,6 +436,27 @@ export default function GuestStart() {
     if (id) trackFunnelEvent(id, GUEST_CONFIG.EVENTS.PAYWALL_SIGNIN_CLICKED);
     navigate("/login?from=teaser");
   }, [navigate, deviceId]);
+
+  /**
+   * STARTUP GATE — show a spinner until the guest session is resolved.
+   *
+   * Why this matters:
+   *   - useGuestSession reads sessionStorage and sets state in a useEffect,
+   *     so the very first render always has guestSession = null.
+   *   - Without this gate the chat UI (goal selection + "Let's build your
+   *     training system") would flash briefly before the init effect fires,
+   *     and users who should be redirected (converted sessions) would see
+   *     the guest onboarding UI for a frame before the redirect fires.
+   *   - If the API call fails (guestSessionError is set) we fall through to
+   *     render normally so the user is never permanently stuck on a spinner.
+   */
+  if (!guestSession && !guestSessionError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "hsl(222 47% 7%)" }}>
+        <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      </div>
+    );
+  }
 
   if (isLocked) {
     return (
