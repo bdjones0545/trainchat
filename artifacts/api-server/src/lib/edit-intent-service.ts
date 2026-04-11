@@ -18,6 +18,7 @@ import { buildSwapContext, getProgressions, findExerciseByName } from "./exercis
 export type EditScope = "exercise" | "session" | "week" | "block" | "system";
 
 export type EditChangeType =
+  | "add_exercise"
   | "update_exercise"
   | "replace_exercise"
   | "delete_exercise"
@@ -28,6 +29,16 @@ export type EditChangeType =
 export interface EditChange {
   type: EditChangeType;
   id: number;
+  sessionId?: number;
+  exercise?: {
+    name: string;
+    category?: string;
+    sets?: number;
+    reps?: string;
+    rest?: string;
+    tempo?: string;
+    notes?: string;
+  };
   updates?: Record<string, unknown>;
   replacement?: {
     name: string;
@@ -190,6 +201,7 @@ PRE-EDIT VALIDATION (run internally before producing output):
 Auto-correct any violations before output.
 
 AVAILABLE CHANGE TYPES:
+- add_exercise: insert a NEW exercise into a session (use sessionId — the SESSION [id:N] from the system context). Do NOT use add_exercise to replace an existing one — use replace_exercise for that.
 - update_exercise: change sets, reps, rest, tempo, notes, name, category on an existing exercise
 - replace_exercise: swap one exercise for a new one (provide full replacement details)
 - delete_exercise: remove an exercise entirely
@@ -206,10 +218,17 @@ SCOPE DEFINITIONS:
 
 OUTPUT FORMAT — return ONLY valid JSON, no other text:
 {
-  "intent": "string — brief label like reduce_volume, swap_exercise, change_session_type, etc.",
+  "intent": "string — brief label like reduce_volume, swap_exercise, add_exercise, change_session_type, etc.",
   "scope": "exercise|session|week|block|system",
   "changeSummary": "string — 1-4 sentences, coach-like, explaining what changed and why. Reference past decisions when relevant.",
   "changes": [
+    {
+      "type": "add_exercise",
+      "id": 0,
+      "sessionId": <integer — SESSION [id:N] from system context>,
+      "exercise": { "name": "...", "category": "primary|accessory|warmup", "sets": 3, "reps": "8-10", "rest": "90s", "notes": "..." },
+      "reason": "short string"
+    },
     {
       "type": "update_exercise|replace_exercise|delete_exercise|update_session|update_week|update_phase",
       "id": <integer — the exact ID from the system context>,

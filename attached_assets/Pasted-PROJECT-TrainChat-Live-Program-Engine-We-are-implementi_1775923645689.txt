@@ -1,0 +1,286 @@
+PROJECT: TrainChat Live Program Engine
+
+We are implementing the CORE ENGINE of TrainChat.
+
+This is NOT just UI.
+This is a persistent, structured training system that updates in real time based on user input.
+
+--------------------------------------------------
+
+GOAL
+
+Transform TrainChat from a chat interface into:
+
+“A system where the user and AI build a real, evolving training program together.”
+
+Every user message should:
+1. Trigger AI response
+2. Return structured program updates
+3. Update the program state
+4. Re-render the UI
+5. Log the change
+6. Persist everything
+
+--------------------------------------------------
+
+STEP 1: PROGRAM DATA MODEL
+
+Create a TypeScript interface and database schema for a Program.
+
+Program {
+  programId: string
+  userId: string
+  activeChatId: string
+
+  goal: string
+  subGoal: string
+  scheduleDaysPerWeek: number
+  experienceLevel: string
+  equipment: string[]
+  locationContext: string
+  limitations: string[]
+  timePerSession: number
+  sportFocus: string
+  trainingMode: string
+
+  status: string
+  lastUpdated: Date
+  version: number
+
+  weeklySplit: Day[]
+
+  progressionModel: {
+    type: string
+    rules: string[]
+    deloadLogic: string
+  }
+
+  constraints: {
+    equipmentLimits: string[]
+    painFlags: string[]
+    timeCap: number
+    frequencyCap: number
+  }
+
+  programSummary: string
+  currentPhase: string
+  todayRecommendation: string
+
+  programChangeLog: ChangeLogEntry[]
+  programVersions: ProgramVersion[]
+}
+
+Day {
+  id: string
+  label: string
+  focus: string
+  duration: number
+  notes: string
+  exercises: Exercise[]
+}
+
+Exercise {
+  id: string
+  name: string
+  category: string
+  sets: number
+  reps: string
+  rest: string
+  tempo?: string
+  intensity?: string
+  rir?: string
+  notes?: string
+}
+
+ChangeLogEntry {
+  timestamp: Date
+  version: number
+  changeType: string
+  description: string
+}
+
+--------------------------------------------------
+
+STEP 2: PROGRAM STATE ENGINE
+
+Create:
+
+updateProgramState(currentProgram, changes)
+
+This function MUST:
+- handle add_exercise
+- remove_exercise
+- swap_exercise
+- update_exercise
+- update_split
+- modify_constraint
+- update_duration
+- update_progression
+
+Also:
+- increment version
+- append changeLog
+- update lastUpdated
+
+Return updated program
+
+--------------------------------------------------
+
+STEP 3: AI RESPONSE FORMAT (CRITICAL)
+
+Modify AI prompt so ALL training-related responses return:
+
+1. Natural language explanation
+2. JSON block
+
+Example:
+
+{
+  "programSummary": "4-day hypertrophy split with lower-body emphasis",
+  "changes": [
+    {
+      "type": "update_split",
+      "weeklySplit": [
+        { "label": "Upper 1", "focus": "Hypertrophy", "duration": 45 },
+        { "label": "Lower 1", "focus": "Hypertrophy", "duration": 45 }
+      ]
+    },
+    {
+      "type": "add_exercise",
+      "dayLabel": "Lower 1",
+      "exercise": {
+        "name": "Romanian Deadlift",
+        "sets": 4,
+        "reps": "8",
+        "rest": "90 sec"
+      }
+    }
+  ],
+  "changeLogEntries": [
+    "Updated to 4-day split",
+    "Added Romanian Deadlift to Lower 1"
+  ]
+}
+
+IMPORTANT:
+Frontend MUST parse JSON and apply updates.
+
+--------------------------------------------------
+
+STEP 4: LIVE PROGRAM UI
+
+Render:
+
+1. PROGRAM SUMMARY (top)
+- goal
+- days/week
+- duration
+- focus
+
+2. WEEKLY SPLIT
+- list days
+- label + focus + duration
+
+3. DAY VIEW
+- exercises
+- sets/reps/rest
+
+4. TODAY HIGHLIGHT (optional)
+
+--------------------------------------------------
+
+STEP 5: EMPTY STATE
+
+REMOVE:
+“No program built yet”
+
+REPLACE WITH:
+- skeleton weekly split
+- placeholder exercises
+
+Text:
+“Your training system will build here as you work with the agent.”
+
+--------------------------------------------------
+
+STEP 6: CHANGES TAB
+
+Display programChangeLog as list:
+
+Each item:
+- description
+- timestamp
+- version
+
+Examples:
+- Added squat variation
+- Reduced session time
+- Adjusted volume
+
+--------------------------------------------------
+
+STEP 7: DATABASE (PostgreSQL)
+
+Persist:
+- program
+- changeLog
+- version
+
+On load:
+- fetch program
+- render immediately
+
+--------------------------------------------------
+
+STEP 8: CHAT → PROGRAM FLOW
+
+On user message:
+
+1. send to AI
+2. receive response + JSON
+3. parse JSON
+4. call updateProgramState
+5. update UI
+6. log change
+7. save to DB
+
+This must feel FAST and REAL.
+
+--------------------------------------------------
+
+STEP 9: VERSIONING
+
+Each update:
+- version++
+
+Store snapshots for future (basic structure only)
+
+--------------------------------------------------
+
+FINAL RULE
+
+This is NOT a chatbot.
+
+This is a TRAINING SYSTEM ENGINE.
+
+Every interaction must:
+- change the system
+- improve the program
+- reflect visually
+
+--------------------------------------------------
+
+SUCCESS STATE
+
+User types:
+“Make this 4 days and add more leg work”
+
+Immediately:
+- split updates
+- exercises update
+- change log updates
+- UI reflects changes
+
+That is the product.
+
+Build this now.

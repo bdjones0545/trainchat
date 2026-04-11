@@ -86,9 +86,45 @@ async function snapshotPhase(id: number): Promise<Record<string, unknown> | null
 
 // ─── Apply a single change ────────────────────────────────────────────────────
 
-async function applyChange(change: EditChange): Promise<{ applied: boolean; detail: string }> {
+async function applyChange(change: EditChange): Promise<{ applied: boolean; detail: string; newId?: number }> {
   try {
     switch (change.type) {
+      case "add_exercise": {
+        if (!change.sessionId || !change.exercise?.name) {
+          return { applied: false, detail: `add_exercise missing sessionId or exercise.name` };
+        }
+
+        // Determine the next orderIndex for this session
+        const existing = await db
+          .select({ orderIndex: sessionExercises.orderIndex })
+          .from(sessionExercises)
+          .where(eq(sessionExercises.trainingSessionId, change.sessionId));
+        const maxOrder = existing.reduce((max, r) => Math.max(max, r.orderIndex ?? 0), 0);
+
+        const [inserted] = await db
+          .insert(sessionExercises)
+          .values({
+            trainingSessionId: change.sessionId,
+            name: change.exercise.name,
+            category: (change.exercise.category as any) ?? "accessory",
+            sets: change.exercise.sets ?? 3,
+            reps: change.exercise.reps ?? "8-10",
+            rest: change.exercise.rest ?? "90s",
+            tempo: change.exercise.tempo ?? null,
+            notes: change.exercise.notes ?? null,
+            orderIndex: maxOrder + 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .returning({ id: sessionExercises.id });
+
+        if (!inserted) {
+          return { applied: false, detail: `Failed to insert exercise into session ${change.sessionId}` };
+        }
+
+        return { applied: true, detail: `Added "${change.exercise.name}" to session ${change.sessionId} (new id:${inserted.id})`, newId: inserted.id };
+      }
+
       case "update_exercise": {
         if (!change.updates || Object.keys(change.updates).length === 0) {
           return { applied: false, detail: `No updates for exercise ${change.id}` };
@@ -217,14 +253,17 @@ export interface ChangedIds {
   phases: number[];
 }
 
-function extractChangedIds(plan: EditPlan): ChangedIds {
-  const exercises: number[] = [];
+function extractChangedIds(plan: EditPlan, newExerciseIds: number[] = []): ChangedIds {
+  const exercises: number[] = [...newExerciseIds];
   const sessions: number[] = [];
   const weeks: number[] = [];
   const phases: number[] = [];
 
   for (const change of plan.changes) {
     switch (change.type) {
+      case "add_exercise":
+        if (change.sessionId) sessions.push(change.sessionId);
+        break;
       case "update_exercise":
       case "replace_exercise":
       case "delete_exercise":
@@ -252,6 +291,9 @@ async function captureBeforeSnapshot(plan: EditPlan): Promise<SystemSnapshot> {
 
   for (const change of plan.changes) {
     switch (change.type) {
+      case "add_exercise":
+        // Nothing exists before the insert — no before snapshot needed
+        break;
       case "update_exercise":
       case "replace_exercise":
       case "delete_exercise": {
@@ -319,7 +361,7 @@ export async function applyEditPlan(plan: EditPlan): Promise<EditResult> {
   // Phase 4: Capture state BEFORE applying changes
   const beforeSnapshot = await captureBeforeSnapshot(plan);
 
-  const results: { applied: boolean; detail: string }[] = [];
+  const results: { applied: boolean; detail: string; newId?: number }[] = [];
   for (const change of plan.changes) {
     const result = await applyChange(change);
     results.push(result);
@@ -328,7 +370,10 @@ export async function applyEditPlan(plan: EditPlan): Promise<EditResult> {
 
   const appliedCount = results.filter((r) => r.applied).length;
   const skippedCount = results.filter((r) => !r.applied).length;
-  const changedIds = extractChangedIds(plan);
+
+  // Collect IDs for exercises inserted via add_exercise so they appear in changedIds
+  const newExerciseIds = results.flatMap((r) => (r.newId ? [r.newId] : []));
+  const changedIds = extractChangedIds(plan, newExerciseIds);
 
   // Phase 4: Capture state AFTER applying changes
   const afterSnapshot = await captureAfterSnapshot(changedIds);
