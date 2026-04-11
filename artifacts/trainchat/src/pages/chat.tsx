@@ -150,6 +150,7 @@ export default function Chat() {
   const [undoChangeLogId, setUndoChangeLogId] = useState<number | null>(null);
   const [isUndoing, setIsUndoing] = useState(false);
   const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [newChangeSignal, setNewChangeSignal] = useState(0);
 
   // Startup state: fail-safe lets the agent render even if auth hangs
   const [forceReady, setForceReady] = useState(false);
@@ -477,6 +478,11 @@ export default function Chat() {
       // right panel switches to showing the live DB-backed program
       if (result.systemEdit?.applied) {
         setLatestProgram(null);
+      }
+      // Signal the program panel that a change occurred — only for edits to an existing system
+      // (not on initial program creation, where users should see the Program tab)
+      if (result.systemEdit?.applied || (result.systemSaved && hasActiveSystem)) {
+        setNewChangeSignal((n) => n + 1);
       }
       // Show undo toast for 8 seconds after any program change
       const logId = result.changeLogId ?? result.systemEdit?.changeLogId;
@@ -820,6 +826,7 @@ export default function Chat() {
           isSaved={isInSystem}
           isPremium={isPremium}
           hasActiveSystem={hasActiveSystem}
+          newChangeSignal={newChangeSignal}
         />
       </div>
     </div>
@@ -1152,6 +1159,7 @@ export default function Chat() {
                   isSaved={isInSystem}
                   isPremium={isPremium}
                   hasActiveSystem={hasActiveSystem}
+                  newChangeSignal={newChangeSignal}
                 />
               </div>
             </div>

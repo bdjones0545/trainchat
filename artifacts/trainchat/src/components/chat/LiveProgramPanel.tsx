@@ -44,6 +44,8 @@ interface Props {
   isSaved?: boolean;
   isPremium?: boolean;
   hasActiveSystem?: boolean;
+  /** Increment this to signal a new change occurred — auto-switches to Changes tab */
+  newChangeSignal?: number;
 }
 
 type Tab = "program" | "changes" | "history";
@@ -92,10 +94,21 @@ function getBuildPhase(stage: BuildStage | null): BuildPhase {
 type DiffType = "added" | "swapped" | "volume" | "newday";
 
 function computeProgramDiff(
-  prev: ProgramStructure,
+  prev: ProgramStructure | null,
   next: ProgramStructure,
 ): Map<string, DiffType> {
   const diffs = new Map<string, DiffType>();
+
+  // Initial load — mark all exercises as "added" for a reveal animation
+  if (!prev) {
+    next.days.forEach((day, dIdx) => {
+      diffs.set(`d${dIdx}`, "newday");
+      (day.exercises ?? []).forEach((_, eIdx) => {
+        diffs.set(`d${dIdx}-e${eIdx}`, "added");
+      });
+    });
+    return diffs;
+  }
 
   next.days.forEach((nextDay, dIdx) => {
     const prevDay = prev.days[dIdx];
@@ -407,12 +420,12 @@ function ProgramTab({
 
   useEffect(() => {
     const prev = prevProgramRef.current;
-    if (program && prev && prev !== program) {
+    if (program && prev !== program) {
       const diffs = computeProgramDiff(prev, program);
       if (diffs.size > 0) {
         if (animTimerRef.current) clearTimeout(animTimerRef.current);
         setAnimatedKeys(diffs);
-        animTimerRef.current = setTimeout(() => setAnimatedKeys(new Map()), 1800);
+        animTimerRef.current = setTimeout(() => setAnimatedKeys(new Map()), 2000);
       }
     }
     prevProgramRef.current = program ?? null;
@@ -720,13 +733,33 @@ function ProgramTab({
   );
 }
 
-function ChangesTab({ hasActiveSystem }: { hasActiveSystem?: boolean }) {
+function ChangesTab({ hasActiveSystem, newChangeSignal }: { hasActiveSystem?: boolean; newChangeSignal?: number }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [animateNewest, setAnimateNewest] = useState(false);
+  const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["training-system-history"],
     queryFn: () => customFetch<{ history: ChangeLogEntry[] }>("/api/training-system/history?limit=20"),
     enabled: !!hasActiveSystem,
-    staleTime: 30000,
+    staleTime: 0,
   });
+
+  // Trigger newest-entry animation and scroll to top when a new change arrives.
+  // 600ms delay gives the refetch time to complete before we animate.
+  useEffect(() => {
+    if (!newChangeSignal || newChangeSignal === 0) return;
+    const t1 = setTimeout(() => {
+      setAnimateNewest(true);
+      scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+      if (animTimerRef.current) clearTimeout(animTimerRef.current);
+      animTimerRef.current = setTimeout(() => setAnimateNewest(false), 2200);
+    }, 600);
+    return () => {
+      clearTimeout(t1);
+      if (animTimerRef.current) clearTimeout(animTimerRef.current);
+    };
+  }, [newChangeSignal]);
 
   if (!hasActiveSystem) {
     return (
@@ -779,12 +812,25 @@ function ChangesTab({ hasActiveSystem }: { hasActiveSystem?: boolean }) {
   }
 
   return (
-    <div className="overflow-y-auto h-full">
+    <div ref={scrollRef} className="overflow-y-auto h-full">
+      <style>{`
+        @keyframes change-entry-in {
+          0%   { opacity: 0; transform: translateY(-6px); box-shadow: 0 0 0 1px rgba(99,102,241,0.4) inset; background: rgba(99,102,241,0.08); }
+          30%  { opacity: 1; transform: translateY(0); }
+          70%  { box-shadow: 0 0 0 1px rgba(99,102,241,0.15) inset; background: rgba(99,102,241,0.04); }
+          100% { box-shadow: none; background: transparent; }
+        }
+      `}</style>
       <div className="p-3 space-y-2">
-        {history.map((entry) => {
+        {history.map((entry, idx) => {
           const whyChanged = entry.decisionMetadata?.whyChanged as string | undefined;
+          const isNewest = idx === 0;
           return (
-            <div key={entry.id} className="bg-card border border-border rounded-xl p-3">
+            <div
+              key={entry.id}
+              className="bg-card border border-border rounded-xl p-3"
+              style={isNewest && animateNewest ? { animation: "change-entry-in 1.4s ease forwards" } : undefined}
+            >
               <div className="flex items-start justify-between gap-2 mb-1.5">
                 <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${scopeColor(entry.scope)}`}>
                   {entry.isMajorVersion && entry.versionLabel ? entry.versionLabel : entry.scope}
@@ -954,8 +1000,27 @@ export default function LiveProgramPanel({
   isSaved,
   isPremium = false,
   hasActiveSystem = false,
+  newChangeSignal = 0,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("program");
+  const [hasUnseenChange, setHasUnseenChange] = useState(false);
+  const prevSignalRef = useRef(0);
+
+  // Auto-switch to Changes tab and mark badge when a new change arrives
+  useEffect(() => {
+    if (newChangeSignal > 0 && newChangeSignal !== prevSignalRef.current) {
+      prevSignalRef.current = newChangeSignal;
+      setActiveTab("changes");
+      setHasUnseenChange(false); // we're already switching to the tab
+    }
+  }, [newChangeSignal]);
+
+  // Clear badge when user views Changes tab
+  useEffect(() => {
+    if (activeTab === "changes") {
+      setHasUnseenChange(false);
+    }
+  }, [activeTab]);
 
   // New-program skeleton: show full build animation when no program exists yet
   if (buildingState?.isBuilding && !program) {
@@ -975,11 +1040,12 @@ export default function LiveProgramPanel({
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
+          const showBadge = tab.id === "changes" && hasUnseenChange;
           return (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold border-b-2 transition-all duration-150 ${
+              className={`relative flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold border-b-2 transition-all duration-150 ${
                 isActive
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground"
@@ -987,6 +1053,9 @@ export default function LiveProgramPanel({
             >
               <Icon className="w-3 h-3" />
               {tab.label}
+              {showBadge && (
+                <span className="absolute top-1.5 right-1 w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              )}
             </button>
           );
         })}
@@ -1007,7 +1076,12 @@ export default function LiveProgramPanel({
             isPremium={isPremium}
           />
         )}
-        {activeTab === "changes" && <ChangesTab hasActiveSystem={hasActiveSystem} />}
+        {activeTab === "changes" && (
+          <ChangesTab
+            hasActiveSystem={hasActiveSystem}
+            newChangeSignal={newChangeSignal}
+          />
+        )}
         {activeTab === "history" && <HistoryTab hasActiveSystem={hasActiveSystem} />}
       </div>
     </div>
