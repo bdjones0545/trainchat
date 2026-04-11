@@ -247,9 +247,17 @@ export const EXERCISE_LIBRARY: ExerciseEntry[] = [
   // ── POWER / EXPLOSIVE ──
   { name: "Power Clean", pattern: "power_explosive", equipment: ["barbell"], difficulty: "advanced", jointStress: ["wrist_stress", "spine_load"], goalBias: ["athletic_performance", "strength"], notes: "Maximum intent on every rep — not a cardio exercise" },
   { name: "Hang Power Clean", pattern: "power_explosive", equipment: ["barbell"], difficulty: "intermediate", jointStress: ["wrist_stress"], goalBias: ["athletic_performance", "strength"], notes: "Hips back, violent extension — meet the bar high" },
+  { name: "Hang High Pull", pattern: "power_explosive", equipment: ["barbell"], difficulty: "intermediate", jointStress: ["wrist_stress", "shoulder_dominant"], goalBias: ["athletic_performance", "strength"], notes: "Triple extension is the goal — the pull is just the result" },
   { name: "Box Jump", pattern: "power_explosive", equipment: ["bodyweight"], difficulty: "intermediate", jointStress: ["knee_dominant", "hip_stress"], goalBias: ["athletic_performance"], notes: "Land softly — absorb force through the whole chain" },
+  { name: "Depth Jump", pattern: "power_explosive", equipment: ["bodyweight"], difficulty: "advanced", jointStress: ["knee_dominant", "hip_stress"], goalBias: ["athletic_performance"], notes: "Minimize ground contact time — reactive strength, not just a jump" },
   { name: "Broad Jump", pattern: "power_explosive", equipment: ["bodyweight"], difficulty: "intermediate", jointStress: ["knee_dominant", "hip_stress"], goalBias: ["athletic_performance"], notes: "Horizontal power — arm swing drives the jump" },
+  { name: "Vertical Jump", pattern: "power_explosive", equipment: ["bodyweight"], difficulty: "beginner", jointStress: ["knee_dominant", "hip_stress"], goalBias: ["athletic_performance"], notes: "Max effort each rep — triple extension (ankle, knee, hip)" },
+  { name: "Lateral Bound", pattern: "power_explosive", equipment: ["bodyweight"], difficulty: "intermediate", jointStress: ["knee_dominant", "hip_stress"], goalBias: ["athletic_performance"], notes: "Lateral force production — stick the landing, pause, repeat" },
+  { name: "Alternating Bounds", pattern: "power_explosive", equipment: ["bodyweight"], difficulty: "intermediate", jointStress: ["knee_dominant", "hip_stress"], goalBias: ["athletic_performance"], notes: "Horizontal single-leg power — aggressive arm drive, full extension" },
   { name: "Medicine Ball Slam", pattern: "power_explosive", equipment: ["bodyweight"], difficulty: "beginner", jointStress: ["spine_load"], goalBias: ["athletic_performance", "fat_loss"], notes: "Full body extension then aggressive flexion — total effort" },
+  { name: "Medicine Ball Rotational Throw", pattern: "power_explosive", equipment: ["bodyweight"], difficulty: "intermediate", jointStress: ["spine_load"], goalBias: ["athletic_performance"], notes: "Power from the hips, not the arms — rotate through the thorax" },
+  { name: "Medicine Ball Chest Pass", pattern: "power_explosive", equipment: ["bodyweight"], difficulty: "beginner", jointStress: ["shoulder_dominant"], goalBias: ["athletic_performance", "strength"], notes: "Explosive horizontal force — full upper body extension" },
+  { name: "Medicine Ball Overhead Scoop Toss", pattern: "power_explosive", equipment: ["bodyweight"], difficulty: "intermediate", jointStress: ["spine_load", "shoulder_dominant"], goalBias: ["athletic_performance"], notes: "Hip-driven posterior chain power — extension is everything" },
   { name: "Push Press", pattern: "power_explosive", equipment: ["barbell", "dumbbell"], difficulty: "intermediate", jointStress: ["shoulder_dominant", "knee_dominant"], goalBias: ["athletic_performance", "strength"], notes: "Leg drive loads the bar — press follows the momentum" },
   { name: "Dumbbell Jump Squat", pattern: "power_explosive", equipment: ["dumbbell"], difficulty: "intermediate", jointStress: ["knee_dominant", "spine_load"], goalBias: ["athletic_performance"], notes: "Maximum ground contact — land heel-to-toe and reset" },
 
@@ -276,6 +284,11 @@ export const EXERCISE_LIBRARY: ExerciseEntry[] = [
   { name: "Calf Raise", pattern: "iso_legs", equipment: ["machine", "dumbbell", "bodyweight", "barbell"], difficulty: "beginner", jointStress: ["knee_dominant"], goalBias: ["hypertrophy", "general_fitness"], notes: "Full ROM — all the way down, all the way up. Calves respond to volume" },
   { name: "Nordic Hamstring Curl", pattern: "iso_legs", equipment: ["bodyweight"], difficulty: "advanced", jointStress: ["knee_dominant"], goalBias: ["athletic_performance"], notes: "Extreme eccentric load — builds hamstring resilience for athletes" },
   { name: "Walking Lunge", pattern: "iso_legs", equipment: ["dumbbell", "barbell", "bodyweight"], difficulty: "beginner", jointStress: ["knee_dominant", "hip_stress"], goalBias: ["hypertrophy", "general_fitness", "athletic_performance"], notes: "Knee tracks over the front foot — step length affects muscle emphasis" },
+  { name: "Lateral Lunge", pattern: "iso_legs", equipment: ["dumbbell", "bodyweight", "barbell"], difficulty: "intermediate", jointStress: ["knee_dominant", "hip_stress"], goalBias: ["athletic_performance", "general_fitness"], notes: "Push hips back as you lower — frontal plane loading for COD prep" },
+  { name: "Lateral Step-Up", pattern: "iso_legs", equipment: ["dumbbell", "bodyweight"], difficulty: "intermediate", jointStress: ["knee_dominant", "hip_stress"], goalBias: ["athletic_performance", "general_fitness"], notes: "Drive through the elevated leg — builds single-leg lateral force production" },
+  { name: "Rear-Foot Elevated Split Squat", pattern: "iso_legs", equipment: ["dumbbell", "barbell", "bodyweight"], difficulty: "intermediate", jointStress: ["knee_dominant", "hip_stress"], goalBias: ["athletic_performance", "hypertrophy", "strength"], notes: "Upright torso — glute and quad loading under single-leg demand" },
+  { name: "Curtsy Lunge", pattern: "iso_legs", equipment: ["dumbbell", "bodyweight"], difficulty: "intermediate", jointStress: ["knee_dominant", "hip_stress"], goalBias: ["athletic_performance", "general_fitness"], notes: "Glute med and hip external rotator emphasis — frontal and transverse plane" },
+  { name: "Deficit Split Squat", pattern: "iso_legs", equipment: ["dumbbell", "barbell", "bodyweight"], difficulty: "advanced", jointStress: ["knee_dominant", "hip_stress"], goalBias: ["athletic_performance", "strength", "hypertrophy"], notes: "Increased ROM loads the quad and hip flexor — elite unilateral strength builder" },
 
   // ── CARRY ──
   { name: "Farmer Carry", pattern: "carry", equipment: ["dumbbell", "kettlebell", "barbell"], difficulty: "beginner", jointStress: ["spine_load"], goalBias: ["general_fitness", "athletic_performance", "strength"], notes: "Tall posture, short strides — this is full-body integration" },
@@ -283,10 +296,18 @@ export const EXERCISE_LIBRARY: ExerciseEntry[] = [
 
   // ── CORE ──
   { name: "Plank", pattern: "core", equipment: ["bodyweight"], difficulty: "beginner", jointStress: ["wrist_stress", "spine_load"], goalBias: ["general_fitness", "athletic_performance", "strength"], notes: "Straight line — squeeze glutes, brace the abs" },
-  { name: "Anti-Rotation Press", pattern: "core", equipment: ["cable", "band"], difficulty: "intermediate", jointStress: [], goalBias: ["athletic_performance", "general_fitness"], notes: "Core stability under load — resist the pull" },
+  { name: "RKC Plank", pattern: "core", equipment: ["bodyweight"], difficulty: "intermediate", jointStress: ["wrist_stress", "spine_load"], goalBias: ["athletic_performance", "strength"], notes: "Maximum whole-body tension — squeeze everything, posterior pelvic tilt throughout" },
+  { name: "Pallof Press", pattern: "core", equipment: ["cable", "band"], difficulty: "intermediate", jointStress: [], goalBias: ["athletic_performance", "general_fitness", "strength"], notes: "Anti-rotation under load — resist lateral pull, no trunk rotation" },
+  { name: "Half-Kneeling Pallof Press", pattern: "core", equipment: ["cable", "band"], difficulty: "intermediate", jointStress: ["knee_dominant"], goalBias: ["athletic_performance", "general_fitness"], notes: "Hip stability and anti-rotation combined — key for athletic trunk control" },
   { name: "Dead Bug", pattern: "core", equipment: ["bodyweight"], difficulty: "beginner", jointStress: ["low_back_stress"], goalBias: ["general_fitness", "strength"], notes: "Lower back presses into the floor throughout — no gap" },
   { name: "Ab Wheel Rollout", pattern: "core", equipment: ["bodyweight"], difficulty: "intermediate", jointStress: ["low_back_stress", "wrist_stress"], goalBias: ["strength", "hypertrophy"], notes: "Posterior pelvic tilt first — prevent the low back from loading" },
+  { name: "Stir the Pot", pattern: "core", equipment: ["bodyweight"], difficulty: "intermediate", jointStress: ["wrist_stress", "spine_load"], goalBias: ["athletic_performance", "strength"], notes: "Anti-extension with rotational challenge — dynamic bracing demand" },
   { name: "Copenhagen Plank", pattern: "core", equipment: ["bodyweight"], difficulty: "advanced", jointStress: ["hip_stress"], goalBias: ["athletic_performance"], notes: "Adductor and oblique integration — key for groin health in athletes" },
+  { name: "Landmine Rotation", pattern: "core", equipment: ["barbell"], difficulty: "intermediate", jointStress: ["spine_load", "shoulder_dominant"], goalBias: ["athletic_performance", "strength"], notes: "Rotational power from a stable base — thoracic rotation with loaded resistance" },
+  { name: "Half-Kneeling Cable Chop", pattern: "core", equipment: ["cable", "band"], difficulty: "intermediate", jointStress: [], goalBias: ["athletic_performance", "general_fitness"], notes: "Anti-rotation and rotational power — diagonal force production pattern" },
+  { name: "Hollow Body Hold", pattern: "core", equipment: ["bodyweight"], difficulty: "intermediate", jointStress: ["spine_load"], goalBias: ["athletic_performance", "general_fitness"], notes: "Total anterior chain stiffness — ribs down, lower back pressed to floor" },
+  { name: "Side Plank", pattern: "core", equipment: ["bodyweight"], difficulty: "beginner", jointStress: ["shoulder_dominant"], goalBias: ["general_fitness", "athletic_performance"], notes: "Lateral stability — hip stacked, resist lateral flexion" },
+  { name: "Side Plank with Hip Abduction", pattern: "core", equipment: ["bodyweight"], difficulty: "intermediate", jointStress: ["shoulder_dominant", "hip_stress"], goalBias: ["athletic_performance"], notes: "Combines lateral stability with hip abductor demand — glute med and oblique together" },
 
   // ── CONDITIONING ──
   { name: "Sled Push", pattern: "conditioning", equipment: ["machine"], difficulty: "beginner", jointStress: ["knee_dominant"], goalBias: ["athletic_performance", "fat_loss"], notes: "Drive through the balls of the feet — stay low and powerful" },
@@ -773,7 +794,7 @@ export function buildIntelligenceContext(profile: UserProfile): string {
     : "";
 
   const sportContext = profile.sportFocus
-    ? `\nSPORT CONTEXT: User trains for ${profile.sportFocus}. Program should support athletic demands of this sport — prioritize transferable movement quality, power, and conditioning appropriate for that activity.`
+    ? `\nSPORT CONTEXT: User trains for ${profile.sportFocus}.\nThis is not a generic fitness program — it is a sport performance program. Every element must serve athletic output.\n\nBias the program toward:\n- Acceleration and deceleration mechanics (horizontal and lateral force production)\n- Change of direction resilience (unilateral lower body, frontal plane loading)\n- Trunk stiffness and anti-rotation (Pallof press, Copenhagen plank, landmine rotation)\n- Posterior chain and single-leg stability (single-leg RDL, RFESS, step-up, Nordic curl where applicable)\n- Power development specific to ${profile.sportFocus} demands (jumps, bounds, med ball throws appropriate to the sport)\n\nExercise names, day names, focus notes, and coaching cues must ALL reflect ${profile.sportFocus} performance — not generic fitness language.`
     : "";
 
   return `
@@ -798,12 +819,17 @@ Primary compound work: ${spec.primarySets} sets × ${spec.primaryRepRange} reps 
 Secondary compound/accessory: ${spec.secondarySets} sets × ${spec.secondaryRepRange} reps | Rest: ${spec.secondaryRest}
 Isolation/finishing work: ${spec.accessorySets} sets | Rest: ${spec.accessoryRest}
 
-### EXERCISE ORDERING RULES
-1. Power/explosive work FIRST (when used) — CNS must be fresh
-2. Primary compound lift SECOND — highest priority movement of the session
-3. Secondary compound THIRD — supports primary pattern
-4. Isolation/accessories LAST — no CNS demand, can be done fatigued
-5. Core work: end of session unless it's a warm-up activation pattern
+### MANDATORY SESSION STRUCTURE (A→E) — APPLIES TO EVERY DAY
+Build every training day in this exact sequence:
+A: POWER — jumps, med ball, Olympic lift variation (3–4 sets × 3–5 reps, full rest, CNS-fresh)
+B: PRIMARY STRENGTH — squat, hinge, press, or pull (compound anchor of the session)
+C: SECONDARY STRENGTH — supports or pairs with the primary movement
+D: UNILATERAL / ACCESSORY — at least one single-leg lower body movement per lower/full body day (RFESS, step-up, lateral lunge, single-leg RDL, lateral step-up)
+E: TRUNK / CORE — purposeful only: anti-rotation (Pallof press), anti-extension (dead bug, ab wheel), or bracing (Copenhagen plank, suitcase carry)
+
+Power (A block) is MANDATORY on every day — skip it only if the user has an explicit injury preventing it.
+Unilateral lower body (D block) is MANDATORY in every lower/full body day — bilateral-only programs are incomplete.
+Core (E block) is MANDATORY — never skip, never replace with random crunches.
 
 ### PROGRESSION MODEL
 Model: ${spec.progressionModel}
@@ -852,16 +878,15 @@ export async function buildDBExerciseContext(profile: UserProfile): Promise<stri
     const patterns = [
       "squat", "hinge", "push_horizontal", "push_vertical",
       "pull_horizontal", "pull_vertical", "core", "carry",
+      // power_explosive is included for ALL goals — every session starts with power
+      "power_explosive",
+      // iso_legs always included for unilateral lower body access
+      "iso_legs",
     ];
-
-    // Add power if athletic
-    if (spec.goal === "athletic_performance") {
-      patterns.push("power_explosive");
-    }
 
     // Add iso patterns for hypertrophy
     if (spec.goal === "hypertrophy" || spec.goal === "general_fitness") {
-      patterns.push("iso_chest", "iso_shoulders", "iso_arms", "iso_legs");
+      patterns.push("iso_chest", "iso_shoulders", "iso_arms");
     }
 
     // Add conditioning for fat loss / athletic
