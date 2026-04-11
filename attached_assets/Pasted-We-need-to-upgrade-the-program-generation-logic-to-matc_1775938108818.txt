@@ -1,0 +1,130 @@
+We need to upgrade the program generation logic to match elite strength & conditioning standards, not just general fitness templates.
+
+CURRENT ISSUE:
+Programs are structurally correct but lack true athletic performance intent.
+
+GOAL:
+Programs should feel like they were built by a high-level strength coach for sport performance, not a generic lifting plan.
+
+--------------------------------------------------
+CORE PROGRAMMING RULES
+--------------------------------------------------
+
+1. ALWAYS INCLUDE POWER FIRST
+
+Each training day must start with a power or explosive movement:
+- jumps (broad jump, vertical jump, bounds)
+- med ball throws
+- explosive intent movements
+
+Low volume, high quality.
+
+--------------------------------------------------
+
+2. FOLLOW WITH PRIMARY STRENGTH
+
+After power:
+- compound lift (squat, hinge, press, pull)
+- 3–5 sets
+- strength-based rep ranges
+
+--------------------------------------------------
+
+3. INCLUDE UNILATERAL WORK
+
+Every program must include at least 1 unilateral lower body movement:
+- split squat
+- RFESS
+- step-up
+- lateral movement variation
+
+--------------------------------------------------
+
+4. ADD SPORT CONTEXT LOGIC
+
+If user mentions a sport (ex: soccer):
+
+Bias the program toward:
+- acceleration
+- deceleration
+- change of direction
+- trunk stability
+
+Exercise selection should reflect this.
+
+--------------------------------------------------
+
+5. ADD TRUNK / CORE WITH PURPOSE
+
+Core is not optional.
+
+Include:
+- anti-rotation
+- anti-extension
+- bracing work
+
+NOT just random ab exercises.
+
+--------------------------------------------------
+
+6. STRUCTURE EACH DAY LIKE THIS:
+
+A: Power
+B: Primary Strength
+C: Secondary Strength / Upper or Lower Pairing
+D: Unilateral / Accessory
+E: Trunk / Core
+
+--------------------------------------------------
+
+7. IMPROVE EXERCISE INTENT
+
+Each exercise must include:
+- purpose-based coaching cue
+- not just form, but function
+
+Example:
+“Develops force production for sprint acceleration”
+
+--------------------------------------------------
+
+8. AVOID GENERIC BODYBUILDING SPLITS
+
+Do NOT default to:
+- push/pull hypertrophy structures
+- bodybuilding logic
+
+Unless user explicitly requests hypertrophy.
+
+--------------------------------------------------
+
+9. MATCH USER REQUEST EXACTLY
+
+If user says:
+“3 day program”
+
+It MUST be:
+- 3 days
+- no exceptions
+
+--------------------------------------------------
+
+10. MAKE IT FEEL ELITE
+
+The user should feel:
+“This is something I would get from a real coach”
+
+NOT:
+“This looks like a template”
+
+--------------------------------------------------
+
+FINAL RULE
+
+TrainChat is not a workout generator.
+
+It is a performance system builder.
+
+Every program must reflect that.
+
+Implement this now.
