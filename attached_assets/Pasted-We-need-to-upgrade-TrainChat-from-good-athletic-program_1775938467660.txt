@@ -1,0 +1,336 @@
+We need to upgrade TrainChat from “good athletic programming” to programming that reflects a true high-level coaching philosophy.
+
+CURRENT ISSUE:
+The programs are getting better structurally, but they still feel too generic.
+They do not yet reflect a distinct training philosophy.
+
+GOAL:
+Bake a real performance philosophy into program generation so the output feels like it came from an elite strength coach with a deep understanding of:
+- neuromuscular efficiency
+- motor learning
+- force production
+- movement quality
+- central nervous system readiness
+- athletic transfer
+
+This should feel different from generic S&C templates.
+
+--------------------------------------------------
+CORE PHILOSOPHY TO IMPLEMENT
+--------------------------------------------------
+
+TrainChat should build programs with these beliefs:
+
+1. MOVEMENT QUALITY DRIVES OUTPUT
+- Better movement quality improves force expression
+- Better positions improve recruitment
+- Better coordination improves performance
+
+2. THE CNS MATTERS
+- Programming should respect neural demand
+- High-output work should come early
+- Power, speed, and technically demanding lifts should not be buried late in sessions
+
+3. EFFICIENCY BEFORE EXCESS
+- Do not add junk volume
+- Do not use extra exercises just to make the workout look bigger
+- Every exercise must have a purpose
+
+4. ATHLETES NEED TRANSFER
+- Programs should improve sprinting, change of direction, force application, posture, and stability
+- Not just increase gym numbers
+
+5. TECHNIQUE IS PART OF PERFORMANCE
+- Exercise cues should teach positions, coordination, and intent
+- Not just muscles
+
+--------------------------------------------------
+PROGRAM DESIGN RULES
+--------------------------------------------------
+
+1. SESSION ORDER MUST FOLLOW NEURAL PRIORITY
+
+Default order for athletic programs:
+
+A. Neural prep / dynamic prep
+B. Power / explosive output
+C. Primary strength
+D. Secondary strength
+E. Unilateral / positional work
+F. Trunk / integrity work
+G. Optional tissue / recovery finisher if needed
+
+Do not put high-skill or high-output work late in the session.
+
+--------------------------------------------------
+
+2. ADD A TRUE PREP LAYER
+
+Do not just say “warm-up.”
+
+Build a purposeful prep sequence when relevant:
+- dynamic mobility
+- activation
+- positional prep
+- stiffness/reactivity prep
+
+Examples:
+- ankle stiffness pogo series
+- hip mobility + glute activation
+- trunk brace prep
+- scap positioning work
+
+The prep should connect to the session goal.
+
+--------------------------------------------------
+
+3. POWER MUST HAVE A REASON
+
+When using jumps, throws, or explosive drills:
+- tie them to force production, stiffness, acceleration, or coordination
+- keep volume low and quality high
+
+Examples:
+- broad jumps for horizontal force projection
+- snap-down or landing drills for deceleration mechanics
+- med ball scoop toss for rotational power
+
+Do not add random plyos with no purpose.
+
+--------------------------------------------------
+
+4. PRIMARY LIFTS SHOULD MATCH ATHLETIC INTENT
+
+Choose lifts based on transfer and context:
+- squat patterns
+- hinge patterns
+- press/pull balance
+- unilateral support
+- trunk control
+
+If sport = soccer, bias toward:
+- lower-body force production
+- deceleration capacity
+- single-leg stability
+- trunk control
+- hip strength
+- adductor awareness when relevant
+
+--------------------------------------------------
+
+5. USE UNILATERAL WORK WITH PURPOSE
+
+Unilateral exercises should not just “be included.”
+
+They should be used for:
+- position control
+- pelvis/trunk management
+- force application
+- asymmetry management
+- sport transfer
+
+Examples:
+- split squat
+- rear-foot elevated split squat
+- lateral squat / lateral lunge
+- step-up with control emphasis
+
+--------------------------------------------------
+
+6. BUILD TRUNK WORK AS PERFORMANCE SUPPORT
+
+No generic “ab finisher.”
+
+Use trunk work to improve:
+- bracing
+- anti-rotation
+- anti-extension
+- posture under force
+- transfer between upper and lower body
+
+Examples:
+- dead bug variations
+- Pallof press
+- bear position holds
+- cable lift/chop
+- side plank progressions
+
+--------------------------------------------------
+
+7. IMPROVE EXERCISE CUES
+
+Cues should reflect:
+- position
+- intent
+- transfer
+
+Bad cue:
+“Works quads and glutes”
+
+Better cue:
+“Maintain stacked posture and drive through the floor to improve force transfer.”
+
+Better athletic cue:
+“Project force vertically while keeping trunk position stable.”
+
+Each key exercise should have coaching language that sounds like a real coach.
+
+--------------------------------------------------
+
+8. REDUCE JUNK VOLUME
+
+Do not inflate programs with unnecessary accessories.
+
+Every exercise must pass one of these tests:
+- improves output
+- improves position
+- improves resilience
+- improves transfer
+- fills a real structural gap
+
+If not, remove it.
+
+--------------------------------------------------
+
+9. DISTINGUISH ATHLETES FROM GENERAL FITNESS USERS
+
+If user is an athlete:
+- prioritize transfer
+- prioritize neural freshness
+- prioritize movement quality
+- prioritize power and unilateral support
+
+If user is general fitness:
+- use broader strength/hypertrophy logic
+
+Do not program athletes like bodybuilders unless explicitly requested.
+
+--------------------------------------------------
+
+10. ADD “WHY THIS DAY EXISTS” LOGIC
+
+Each day should have a clear identity.
+
+Examples:
+- Lower force production + acceleration support
+- Upper strength + trunk integrity
+- Full-body power + positional strength
+
+The day title and coach note should explain this.
+
+--------------------------------------------------
+
+11. ADD COACH NOTE INTELLIGENCE
+
+Coach notes should explain the session in a way a serious coach would.
+
+For example:
+“This day prioritizes high-force lower-body output, single-leg control, and trunk stiffness to support sprint mechanics and change of direction.”
+
+Do not use generic notes.
+
+--------------------------------------------------
+
+12. ADD EXERCISE SELECTION FILTERS
+
+When building athlete programs, prefer exercises that support:
+- force production
+- coordination
+- positional control
+- efficient movement
+- field/court transfer
+
+Avoid overly isolated bodybuilding selections unless there is a clear reason.
+
+--------------------------------------------------
+
+13. ADD FATIGUE / READINESS AWARENESS
+
+Do not make every day high-neural-load.
+
+Across a 3-day athletic program:
+- vary stress
+- vary emphasis
+- manage neural demand
+- avoid redundant heavy patterns across all days
+
+The system should understand session balance.
+
+--------------------------------------------------
+
+14. IMPROVE DAY EXAMPLE FOR A 3-DAY SOCCER ATHLETE
+
+A better pattern would look like:
+
+DAY 1
+- Prep
+- Broad Jump
+- Back Squat
+- DB Bench
+- Pull-Up
+- Split Squat
+- Pallof Press
+
+DAY 2
+- Prep
+- Landing / deceleration drill or med ball throw
+- Trap Bar Deadlift or RDL
+- Overhead press or incline press
+- Row
+- Lateral lunge or step-up
+- Side plank / anti-rotation
+
+DAY 3
+- Prep
+- Power movement
+- Front squat or single-leg squat pattern
+- Horizontal press/pull pairing
+- Posterior chain accessory
+- Trunk / carry / brace work
+
+This is the TYPE of structure we want.
+Do not hardcode only this, but match this level of logic.
+
+--------------------------------------------------
+
+15. FINAL PRODUCT RULE
+
+TrainChat should not feel like:
+- ChatGPT made a workout
+
+It should feel like:
+- a serious coach built a performance system
+
+The output should reflect real training thought:
+- why this exercise
+- why this order
+- why this dosage
+- why this day
+
+--------------------------------------------------
+
+16. IMPLEMENTATION REQUIREMENT
+
+Update the generation logic, templates, prompts, and coaching note system so this philosophy is reflected consistently in all athletic builds.
+
+Priority:
+- soccer
+- field sport athletes
+- general athletic performance users
+
+--------------------------------------------------
+
+SUCCESS STATE
+
+When a user asks for a 3-day soccer performance plan, the result should feel like:
+- movement-focused
+- force-focused
+- transfer-aware
+- neurally organized
+- purposeful
+- coach-built
+
+Not generic.
+Not bodybuilding disguised as performance.
+
+Implement this now.
