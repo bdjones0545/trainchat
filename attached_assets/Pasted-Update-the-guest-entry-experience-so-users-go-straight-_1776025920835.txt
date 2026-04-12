@@ -1,0 +1,104 @@
+Update the guest entry experience so users go straight into the TrainChat agent instead of landing in a required onboarding modal.
+
+GOAL:
+The first-time guest experience should feel immediate and conversational.
+Users should be able to start building with the agent instantly, while still having optional guided prompts for people who need help.
+
+----------------------------------------
+1. REMOVE ONBOARDING AS A REQUIRED GATE
+----------------------------------------
+
+Do not show the onboarding modal/page as the primary first screen for guest users.
+
+Instead:
+- route guest users directly into the agent/chat screen
+- keep input box visible immediately
+- allow the user to type their goal right away
+
+----------------------------------------
+2. CONVERT ONBOARDING INTO OPTIONAL STARTER PROMPTS
+----------------------------------------
+
+Take the current onboarding options such as:
+- Build a hypertrophy plan
+- Make me a 4-day split
+- Train for athletic performance
+- Adjust around an injury
+- Build around home equipment
+
+and render them as optional quick-start chips/cards inside the chat screen.
+
+These should:
+- sit below the welcome message or near the input
+- insert a starter prompt when tapped
+- not block free typing
+
+----------------------------------------
+3. KEEP THE AGENT AS THE PRIMARY FOCUS
+----------------------------------------
+
+The first screen should communicate:
+- this is an interactive coach
+- you can just talk to it
+- the system will build with you
+
+Use onboarding content only as support, not as the main flow.
+
+----------------------------------------
+4. SHOW A STRONG EMPTY-STATE WELCOME
+----------------------------------------
+
+Example welcome block:
+“Let’s build your training system.
+Tell me your goal, schedule, equipment, and any limitations — I’ll design it with you.”
+
+Keep the tone premium and direct.
+
+----------------------------------------
+5. KEEP GUEST MODE VISIBLE BUT LIGHT
+----------------------------------------
+
+Show lightweight guest context like:
+- Guest mode
+- 5 free messages remaining
+
+Do not let this dominate the UI.
+
+----------------------------------------
+6. PRESERVE QUICK-START FOR LOW-INTENT USERS
+----------------------------------------
+
+Users who don’t know what to say should still have easy options.
+
+Tapping a starter chip should populate/send a useful prompt, such as:
+- “Build me a hypertrophy plan”
+- “Make me a 4-day split”
+- “Build an athletic performance program”
+- “Help me train around an injury”
+- “Build a plan for home equipment only”
+
+----------------------------------------
+7. REMOVE DUPLICATIVE ONBOARDING LAYERS
+----------------------------------------
+
+Audit and remove any remaining logic where:
+- onboarding modal auto-opens on first guest visit
+- onboarding page replaces the chat screen
+- onboarding must be completed before chatting
+
+----------------------------------------
+8. SUCCESS CRITERIA
+----------------------------------------
+
+For a new guest:
+- app opens
+- agent/chat screen is immediately visible
+- user can type immediately
+- optional quick-start prompts are visible
+- no required onboarding modal appears
+
+DELIVERABLES:
+1. what was changed in routing
+2. where the onboarding content was moved
+3. how the new empty-state agent screen works
+4. confirmation that guests can type immediately without completing onboarding

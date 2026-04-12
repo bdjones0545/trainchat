@@ -56,13 +56,15 @@ function isSystemPreview(content: string): boolean {
 }
 
 // ─── Quick-start chips ────────────────────────────────────────────────────────
+// label   – compact text shown on the chip button
+// prompt  – full conversational sentence sent to the AI when tapped
 
 const QUICK_START = [
-  { label: "Build a hypertrophy plan", icon: "💪" },
-  { label: "Make me a 4-day split", icon: "📅" },
-  { label: "Train for athletic performance", icon: "⚡" },
-  { label: "Adjust around an injury", icon: "🩺" },
-  { label: "Build around home equipment", icon: "🏠" },
+  { label: "Hypertrophy plan",      prompt: "Build me a hypertrophy plan",                icon: "💪" },
+  { label: "4-day split",           prompt: "Make me a 4-day training split",             icon: "📅" },
+  { label: "Athletic performance",  prompt: "Build an athletic performance program",       icon: "⚡" },
+  { label: "Train around an injury",prompt: "Help me train around an injury",             icon: "🩺" },
+  { label: "Home equipment",        prompt: "Build a plan using only home equipment",     icon: "🏠" },
 ];
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
@@ -570,67 +572,68 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
 
         {isBeforeFirstInput ? (
           /* ── Welcome / initial state ─────────────────────────────────── */
-          <div className="flex-1 flex flex-col justify-center px-4 py-6 gap-5">
+          <div className="flex-1 flex flex-col justify-center items-center px-6 py-8 gap-8">
 
-            {/* Opening message */}
-            {messages.length > 0 && (
-              <div className="flex items-start gap-3 animate-in fade-in slide-in-from-bottom-3 duration-400">
-                <AgentAvatar />
-                <div
-                  className="rounded-2xl rounded-tl-sm px-4 py-4 flex-1"
-                  style={{ background: "hsl(222 47% 13%)", border: "1px solid hsl(222 47% 20%)" }}
-                >
-                  <p className="text-lg font-semibold leading-snug" style={{ color: "#f4f4f5" }}>
-                    {messages[0].content}
-                  </p>
-                  <p className="text-xs mt-1.5" style={{ color: "hsl(222 47% 50%)" }}>
-                    Tell me your goal — I'll design it with you.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Quick-start chips */}
+            {/* Agent hero — centered, conversational, input-first tone */}
             <div
-              className="flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-3 duration-500"
-              style={{ animationDelay: "80ms" }}
+              className="flex flex-col items-center text-center gap-4 animate-in fade-in slide-in-from-bottom-3 duration-400 w-full max-w-md"
+            >
+              <div
+                className="w-12 h-12 rounded-2xl flex items-center justify-center"
+                style={{ background: "hsl(199 89% 48%)" }}
+              >
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-xl font-bold leading-snug" style={{ color: "#f4f4f5" }}>
+                  Let's build your training system.
+                </p>
+                <p className="text-sm mt-2 leading-relaxed" style={{ color: "hsl(222 47% 50%)" }}>
+                  Tell me your goal, schedule, equipment, and any limitations —<br className="hidden sm:block" /> I'll design it with you.
+                </p>
+              </div>
+            </div>
+
+            {/* Quick-start chips — horizontal wrapping pills, secondary to input */}
+            <div
+              className="flex flex-wrap gap-2 justify-center animate-in fade-in duration-500 w-full max-w-lg"
+              style={{ animationDelay: "100ms" }}
             >
               {QUICK_START.map((opt) => (
                 <button
                   key={opt.label}
-                  onClick={() => handleSend(opt.label)}
-                  className="flex items-center gap-3 px-4 py-3.5 rounded-2xl text-sm font-medium w-full text-left transition-all duration-150 active:scale-[0.98]"
+                  onClick={() => handleSend(opt.prompt)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium transition-all duration-150 active:scale-[0.97]"
                   style={{
                     background: "hsl(222 47% 11%)",
-                    border: "1px solid hsl(222 47% 20%)",
-                    color: "#d4d4d8",
+                    border: "1px solid hsl(222 47% 22%)",
+                    color: "hsl(222 47% 62%)",
                   }}
                   onMouseEnter={(e) => {
-                    (e.currentTarget).style.borderColor = "hsl(199 89% 48% / 0.6)";
-                    (e.currentTarget).style.background = "hsl(199 89% 48% / 0.06)";
-                    (e.currentTarget).style.color = "#f4f4f5";
+                    (e.currentTarget).style.borderColor = "hsl(199 89% 48% / 0.5)";
+                    (e.currentTarget).style.background = "hsl(199 89% 48% / 0.08)";
+                    (e.currentTarget).style.color = "#e4e4e7";
                   }}
                   onMouseLeave={(e) => {
-                    (e.currentTarget).style.borderColor = "hsl(222 47% 20%)";
+                    (e.currentTarget).style.borderColor = "hsl(222 47% 22%)";
                     (e.currentTarget).style.background = "hsl(222 47% 11%)";
-                    (e.currentTarget).style.color = "#d4d4d8";
+                    (e.currentTarget).style.color = "hsl(222 47% 62%)";
                   }}
                 >
-                  <span className="text-lg w-7 text-center flex-shrink-0">{opt.icon}</span>
+                  <span className="text-sm">{opt.icon}</span>
                   <span>{opt.label}</span>
-                  <svg className="w-4 h-4 ml-auto flex-shrink-0 opacity-25" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
                 </button>
               ))}
             </div>
 
-            {/* Guest mode note — subtle, non-intrusive */}
+            {/* Guest mode note — very subtle, non-intrusive */}
             <p
-              className="text-center text-[11px] animate-in fade-in duration-700"
-              style={{ color: "hsl(222 47% 38%)", animationDelay: "200ms" }}
+              className="text-[11px] animate-in fade-in duration-700"
+              style={{ color: "hsl(222 47% 32%)", animationDelay: "250ms" }}
             >
-              You're in guest mode — start building your program now. {FREE_MESSAGE_LIMIT} free messages included.
+              Guest mode · {FREE_MESSAGE_LIMIT} free messages included
             </p>
           </div>
         ) : (
