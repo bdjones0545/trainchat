@@ -23,13 +23,15 @@ type ExerciseRole = "power" | "compound" | "unilateral" | "accessory" | "prep" |
 
 export interface ProgressionTarget {
   exerciseName: string;
-  progressionState: "ready_to_progress" | "hold" | "regress";
+  progressionType?: string;
+  progressionState: "ready_to_progress" | "hold" | "regress" | "review";
   targetLoad: number | null;
   targetReps: number | null;
   lastLoad: number | null;
   lastReps: number | null;
   reasoning: string;
   coachNote: string;
+  flagForReview?: boolean;
 }
 
 export interface SetLog {
@@ -73,6 +75,8 @@ function stateChip(state: ProgressionTarget["progressionState"]) {
       return { label: "↑ Progress", cls: "text-green-400 bg-green-500/10 border-green-500/25" };
     case "regress":
       return { label: "↓ Reduce", cls: "text-red-400 bg-red-500/10 border-red-500/25" };
+    case "review":
+      return { label: "⚑ Review", cls: "text-red-400 bg-red-500/10 border-red-500/25" };
     default:
       return { label: "→ Hold", cls: "text-amber-400 bg-amber-500/10 border-amber-500/25" };
   }

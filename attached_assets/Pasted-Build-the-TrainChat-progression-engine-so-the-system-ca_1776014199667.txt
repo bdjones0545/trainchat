@@ -1,0 +1,331 @@
+Build the TrainChat progression engine so the system can intelligently adjust future sessions based on logged performance, exercise type, and user feedback.
+
+CURRENT STATE:
+TrainChat can generate sessions, display exercises, allow exercise edits, and collect session feedback. Logging is being improved to support exercise-type-aware inputs.
+
+PROBLEM:
+The system still lacks a real progression engine.
+It can collect data, but it does not yet reliably decide:
+- when to increase load
+- when to hold steady
+- when to reduce volume
+- when to swap or regress an exercise
+- how different exercise types should progress differently
+
+GOAL:
+Create a progression engine that updates future sessions based on:
+1. exercise logging data
+2. session feedback
+3. pain/discomfort signals
+4. exercise type and progression type
+
+----------------------------------------
+1. CREATE PROGRESSION METADATA FOR EACH EXERCISE
+----------------------------------------
+
+Each exercise in the library must include progression metadata:
+
+{
+  name: "Back Squat",
+  category: "strength_lift",
+  role: "Primary",
+  loggingMode: "load_reps",
+  progressionType: "load_based",
+  progressionUnit: "lbs",
+  defaultIncrease: 5,
+  defaultDecrease: 5,
+  minEffectiveChange: 5
+}
+
+Examples:
+
+Back Squat:
+- progressionType: load_based
+
+Broad Jump:
+- progressionType: distance_quality
+
+Box Jump:
+- progressionType: height_quality
+
+Pull-Up:
+- progressionType: reps_based
+
+Pallof Press:
+- progressionType: load_or_control
+
+Leg Swing + Inchworm + Hip Circle:
+- progressionType: completion_only
+
+Medicine Ball Slam:
+- progressionType: velocity_reps or load_quality
+
+Sprint:
+- progressionType: time_speed
+
+Plank:
+- progressionType: duration_based
+
+----------------------------------------
+2. BUILD CENTRAL PROGRESSION ENGINE
+----------------------------------------
+
+Create:
+
+evaluateExerciseProgression(exercise, recentLogs, sessionFeedback)
+
+This function should return:
+
+{
+  status: "progress" | "maintain" | "regress" | "review",
+  recommendation: {},
+  reason: string
+}
+
+Then create:
+
+evaluateSessionProgression(sessionLog, userState)
+
+This should evaluate all exercises and return structured updates for the next programmed session.
+
+----------------------------------------
+3. LOAD-BASED PROGRESSION RULES
+----------------------------------------
+
+For exercises like:
+- squat
+- deadlift
+- RDL
+- split squat
+- DB press
+- row
+
+Rules:
+
+Progress:
+IF all prescribed sets are completed
+AND reps hit top end of target range
+AND user feedback is “too easy” or “challenging”
+AND pain is none/mild
+→ increase next session load
+
+Maintain:
+IF all sets are completed
+AND effort is appropriate
+→ keep load the same
+
+Regress:
+IF reps are missed
+OR user marks “too hard”
+OR pain is moderate/significant
+→ reduce load and/or reduce volume
+
+Review:
+IF severe pain, incomplete session, or repeated failures
+→ flag exercise for coach review or suggest substitution
+
+----------------------------------------
+4. REPS-BASED PROGRESSION RULES
+----------------------------------------
+
+For:
+- pull-up
+- push-up
+- bodyweight rows
+- sit-ups
+
+Rules:
+- increase reps first before adding load
+- when top rep target is achieved consistently, optionally add difficulty or loading
+- missed reps = maintain or regress
+
+----------------------------------------
+5. POWER / JUMP PROGRESSION RULES
+----------------------------------------
+
+For:
+- broad jump
+- box jump
+- med ball throw
+- power drills
+
+Do NOT progress like barbell lifts.
+
+Progression should prioritize:
+- quality
+- output
+- crispness
+- landing mechanics
+- distance/height only when movement quality is good
+
+Rules:
+IF user completes all sets with good quality and normal fatigue
+→ slightly increase distance target, height target, or complexity
+
+IF user reports hard / too hard / poor quality / discomfort
+→ maintain or reduce complexity
+
+Never aggressively progress power movements based on volume alone.
+
+----------------------------------------
+6. TRUNK / MOBILITY / PREP RULES
+----------------------------------------
+
+For:
+- Pallof press
+- dead bug
+- plank
+- warm-up flows
+- activation drills
+
+Progression should prioritize:
+- control
+- position quality
+- completion
+- slight time/rep increases if appropriate
+
+Do not treat these like main strength lifts.
+
+----------------------------------------
+7. PAIN OVERRIDE RULES
+----------------------------------------
+
+Pain and discomfort override progression.
+
+If session pain feedback is:
+- moderate → no progression for relevant exercises
+- significant → regress or modify
+- severe → immediately flag and suggest exercise review/substitution
+
+If user writes notes mentioning:
+- knee pain
+- back pain
+- shoulder pain
+- discomfort on a specific exercise
+
+Then link that note to the most likely exercise(s) and flag them for review.
+
+----------------------------------------
+8. SESSION-LEVEL ADAPTATION RULES
+----------------------------------------
+
+Beyond exercise changes, allow the engine to modify session structure.
+
+Examples:
+- repeated “too hard” + long duration → reduce total sets next session
+- repeated “too easy” + energized → progress one main lift and one accessory
+- partial completion → reduce density or simplify session
+- skipped session → do not auto-progress load
+
+----------------------------------------
+9. WRITE CHANGES INTO PROGRAM STATE
+----------------------------------------
+
+When progression decisions are made, update future sessions in programState.
+
+For each change, store:
+
+{
+  version: 2,
+  sessionId: "...",
+  exerciseId: "...",
+  changeType: "load_increase",
+  previousValue: 185,
+  newValue: 190,
+  reason: "Completed all sets at target reps; user reported right level"
+}
+
+Do not overwrite silently.
+Every progression decision must be traceable.
+
+----------------------------------------
+10. SURFACE CHANGES TO USER
+----------------------------------------
+
+In the Changes tab, display entries like:
+
+V2 UPDATE
+- Increased Back Squat from 185 → 190
+- Reason: all sets completed at target reps
+
+V3 UPDATE
+- Reduced Bulgarian Split Squat volume from 3 sets → 2 sets
+- Reason: session marked too hard and duration too long
+
+V4 UPDATE
+- Flagged Broad Jump for review
+- Reason: user reported pain/discomfort
+
+----------------------------------------
+11. ADD EXERCISE-SPECIFIC PROGRESSION HISTORY
+----------------------------------------
+
+When a user taps an exercise, show:
+- last session performance
+- current prescribed target
+- next session recommendation if available
+
+Example:
+Last session: 185 x 5, 5, 5, 5
+Next target: 190 x 4–6
+Reason: hit target range with stable effort
+
+----------------------------------------
+12. SAFETY / DEFENSIVE LOGIC
+----------------------------------------
+
+Never auto-progress if:
+- session was skipped
+- pain was moderate or worse
+- exercise was partially completed
+- there is missing performance data
+- user gave conflicting signals
+
+In ambiguous cases:
+- maintain
+- or flag for review
+
+Do not hallucinate progression.
+
+----------------------------------------
+13. TEST CASES
+----------------------------------------
+
+Verify these cases:
+
+1. Back Squat
+- completed all sets at top rep range
+- feedback = challenging
+→ increase load next session
+
+2. Broad Jump
+- completed all sets
+- feedback = hard
+→ maintain, do not add weight
+
+3. Pull-Up
+- increased reps from previous week
+→ increase rep target before adding load
+
+4. Pallof Press
+- completed easily
+→ small rep or load progression only
+
+5. Moderate knee pain during lower-body session
+→ no progression on squat/split squat; flag for review
+
+6. Skipped session
+→ do not progress anything automatically
+
+----------------------------------------
+14. DELIVERABLES
+----------------------------------------
+
+After implementation, provide:
+1. progression metadata structure
+2. core progression engine functions
+3. exercise-type-specific progression rules
+4. how session feedback affects progression
+5. how changes are written to programState
+6. how the Changes tab displays progression updates
+7. edge cases still needing review

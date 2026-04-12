@@ -1,10 +1,17 @@
 import { Router, type IRouter } from "express";
-import { db, sessionLogsTable, sessionFeedbackTable, systemChangeLog, trainingSystems, exerciseLogsTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { db, sessionLogsTable, sessionFeedbackTable, systemChangeLog, trainingSystems, exerciseLogsTable, sessionExercises, trainingSessions, trainingWeeks, trainingPhases } from "@workspace/db";
+import { eq, desc, and, ilike } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { z } from "zod";
 import { evaluateWorkoutCompletion } from "../lib/workout-evaluation";
-import { getProgressionTargets } from "../lib/progression";
+import {
+  evaluateSessionProgression,
+  buildProgressionChangeSummary,
+  getProgressionTargets,
+  type PerceivedDifficulty,
+  type PainLevel,
+  type ExerciseLogEntry,
+} from "../lib/progression";
 
 const router: IRouter = Router();
 
@@ -241,11 +248,17 @@ const CompleteSessionBody = z.object({
   dayNumber: z.number().optional(),
   goal: z.string().default("general_fitness"),
   perceivedDifficulty: z.enum(["too_easy", "just_right", "too_hard"]).optional(),
+  /** Pain level for the session overall */
+  painLevel: z.enum(["none", "mild", "moderate", "significant", "severe"]).optional(),
+  /** Free-text pain notes — used to flag relevant exercises */
+  painNotes: z.string().optional(),
   notes: z.string().optional(),
+  sessionWasSkipped: z.boolean().optional(),
   exercises: z.array(
     z.object({
       exerciseName: z.string().min(1).max(200),
       exerciseRole: z.enum(["power", "compound", "unilateral", "accessory", "prep", "trunk"]).optional(),
+      category: z.string().optional(),
       sets: z.array(
         z.object({
           setNumber: z.number(),
@@ -269,6 +282,16 @@ router.post("/session-logs/complete", requireAuth, async (req: any, res): Promis
   const data = parsed.data;
   const now = new Date();
 
+  const perceivedDifficulty = data.perceivedDifficulty as PerceivedDifficulty | undefined;
+  const painLevel = data.painLevel as PainLevel | undefined;
+  const goal = data.goal as any;
+
+  // Map session-level difficulty to per-exercise completionStatus override
+  const sessionCompletionStatus =
+    perceivedDifficulty === "too_easy" ? "easy" :
+    perceivedDifficulty === "too_hard" ? "hard" :
+    "solid";
+
   // ── 1. Insert exercise_logs for all completed sets ─────────────────────────
   const exerciseInserts: Promise<any>[] = [];
 
@@ -287,7 +310,7 @@ router.post("/session-logs/complete", requireAuth, async (req: any, res): Promis
           loadUsed: set.weight,
           repsCompleted: set.reps,
           setsCompleted: 1,
-          completionStatus: "solid",
+          completionStatus: sessionCompletionStatus,
           exerciseRole: ex.exerciseRole ?? null,
         })
       );
@@ -298,9 +321,17 @@ router.post("/session-logs/complete", requireAuth, async (req: any, res): Promis
 
   // ── 2. Create session_log entry ────────────────────────────────────────────
   const difficultyScore =
-    data.perceivedDifficulty === "too_easy" ? 2 :
-    data.perceivedDifficulty === "too_hard" ? 4 :
-    data.perceivedDifficulty === "just_right" ? 3 :
+    perceivedDifficulty === "too_easy" ? 2 :
+    perceivedDifficulty === "too_hard" ? 4 :
+    perceivedDifficulty === "just_right" ? 3 :
+    null;
+
+  const painScore =
+    painLevel === "none" ? 1 :
+    painLevel === "mild" ? 2 :
+    painLevel === "moderate" ? 3 :
+    painLevel === "significant" ? 4 :
+    painLevel === "severe" ? 5 :
     null;
 
   const [sessionLog] = await db
@@ -311,114 +342,212 @@ router.post("/session-logs/complete", requireAuth, async (req: any, res): Promis
       dayNumber: data.dayNumber ?? null,
       sessionType: "workout",
       completedAt: now,
-      sessionStatus: "completed",
+      sessionStatus: data.sessionWasSkipped ? "skipped" : "completed",
       difficultyScore,
+      painScore,
       notes: data.notes ?? null,
     })
     .returning();
 
-  // ── 3. Run progression analysis ────────────────────────────────────────────
+  // ── 3. Fetch 90-day exercise history for progression evaluation ─────────────
   const exerciseNames = data.exercises.map((e) => e.exerciseName);
-  const goal = data.goal as any;
-
-  let targets: Awaited<ReturnType<typeof getProgressionTargets>> | null = null;
-  try {
-    targets = await getProgressionTargets(userId, data.savedProgramId ?? null, exerciseNames, goal, null);
-  } catch {
-    // Non-fatal — return session log without progression
-  }
-
-  // ── 4. Write progression changes to system_change_log ──────────────────────
   const progressions: string[] = [];
 
-  if (targets) {
-    let activeSystemId: number | null = null;
-    try {
-      const activeSystem = await db
-        .select({ id: trainingSystems.id })
-        .from(trainingSystems)
-        .where(eq(trainingSystems.userId, userId))
-        .orderBy(desc(trainingSystems.createdAt))
-        .limit(1)
-        .then((rows) => rows[0] ?? null);
-      activeSystemId = activeSystem?.id ?? null;
-    } catch {
-      // Non-fatal
+  if (data.sessionWasSkipped || exerciseNames.length === 0) {
+    res.status(201).json({
+      sessionLogId: sessionLog.id,
+      completedAt: sessionLog.completedAt.toISOString(),
+      progressions,
+      exercisesLogged: 0,
+    });
+    return;
+  }
+
+  // Fetch recent logs for all exercises
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000);
+  let allLogs: any[] = [];
+  try {
+    const { exerciseLogsTable: elt } = await import("@workspace/db");
+    const { gte: gteOp } = await import("drizzle-orm");
+    allLogs = await db
+      .select()
+      .from(elt)
+      .where(and(eq(elt.userId, userId), gteOp(elt.loggedAt, ninetyDaysAgo)))
+      .orderBy(desc(elt.loggedAt))
+      .limit(300);
+  } catch {
+    // Non-fatal
+  }
+
+  const logsByName = new Map<string, ExerciseLogEntry[]>();
+  for (const log of allLogs) {
+    const name = log.exerciseName.toLowerCase();
+    if (!logsByName.has(name)) logsByName.set(name, []);
+    logsByName.get(name)!.push({
+      id: log.id,
+      loadUsed: log.loadUsed,
+      repsCompleted: log.repsCompleted,
+      setsCompleted: log.setsCompleted,
+      rpe: log.rpe,
+      completionStatus: log.completionStatus as "easy" | "solid" | "hard" | "failed",
+      exerciseRole: log.exerciseRole,
+      loggedAt: log.loggedAt,
+    });
+  }
+
+  // Build session exercise input for evaluator (exclude just-inserted logs)
+  // The newly inserted logs will affect next session's query — for this evaluation
+  // we use the pre-session history so the engine sees what was known before today.
+  const sessionExInputs = data.exercises
+    .filter((ex) => ex.sets.some((s) => s.completed))
+    .map((ex) => ({
+      exerciseName: ex.exerciseName,
+      exerciseRole: (ex.exerciseRole as any) ?? "compound",
+      category: ex.category,
+      setsCompleted: ex.sets.filter((s) => s.completed).length,
+      totalPrescribedSets: ex.sets.length,
+      // Use history BEFORE this session (exclude logs inserted above)
+      logs: (logsByName.get(ex.exerciseName.toLowerCase()) ?? []).filter(
+        (l) => l.loggedAt < now
+      ),
+    }));
+
+  // ── 4. Evaluate progression ────────────────────────────────────────────────
+  let evaluation: Awaited<ReturnType<typeof evaluateSessionProgression>> | null = null;
+  try {
+    evaluation = evaluateSessionProgression(
+      sessionExInputs,
+      goal,
+      null, // readinessScore — not available at session-complete time
+      perceivedDifficulty ?? null,
+      painLevel ?? null,
+      data.sessionWasSkipped ?? false,
+    );
+  } catch {
+    // Non-fatal
+  }
+
+  // ── 5. Find active training system for change log writes ───────────────────
+  let activeSystemId: number | null = null;
+  try {
+    const activeSystem = await db
+      .select({ id: trainingSystems.id })
+      .from(trainingSystems)
+      .where(eq(trainingSystems.userId, userId))
+      .orderBy(desc(trainingSystems.createdAt))
+      .limit(1)
+      .then((rows) => rows[0] ?? null);
+    activeSystemId = activeSystem?.id ?? null;
+  } catch {
+    // Non-fatal
+  }
+
+  // ── 6. Write progression changes to change_log + update program state ──────
+  if (evaluation) {
+    // Session-level deload flag
+    if (evaluation.deloadRecommended && activeSystemId) {
+      try {
+        await db.insert(systemChangeLog).values({
+          userId,
+          trainingSystemId: activeSystemId,
+          source: "workout_feedback",
+          intent: "deload_signal",
+          scope: "block",
+          changeSummary: `Deload recommended: ${evaluation.deloadReason}`,
+          isMajorVersion: false,
+          decisionMetadata: {
+            painLevel,
+            perceivedDifficulty,
+            whyChanged: evaluation.deloadReason,
+          },
+        });
+      } catch { /* Non-fatal */ }
     }
 
-    for (const [exerciseName, target] of targets.entries()) {
-      // Only log exercises that were actually logged this session
-      const sessionEx = data.exercises.find(
-        (e) => e.exerciseName.toLowerCase() === exerciseName.toLowerCase()
-      );
-      if (!sessionEx || sessionEx.sets.filter((s) => s.completed).length === 0) continue;
+    // Per-exercise progression decisions
+    for (const ex of evaluation.exercises) {
+      if (ex.status === "maintain") continue; // No-change — don't clutter the log
 
-      if (target.progressionState === "ready_to_progress") {
-        let msg = "";
-        if (target.targetLoad !== null && target.lastLoad !== null && target.targetLoad !== target.lastLoad) {
-          msg = `${exerciseName}: ${target.lastLoad} lbs → ${target.targetLoad} lbs next session`;
-        } else if (target.targetReps !== null && target.lastReps !== null && target.targetReps !== target.lastReps) {
-          msg = `${exerciseName}: ${target.lastReps} reps → ${target.targetReps} reps next session`;
-        } else if (target.lastLoad !== null) {
-          msg = `${exerciseName}: ready to progress — add a small load increment`;
-        }
+      const summary = buildProgressionChangeSummary(ex);
+      progressions.push(summary);
 
-        if (msg) {
-          progressions.push(msg);
+      if (!activeSystemId) continue;
 
-          if (activeSystemId) {
-            try {
-              await db.insert(systemChangeLog).values({
-                userId,
-                trainingSystemId: activeSystemId,
-                source: "workout_feedback",
-                intent: "auto_progression",
-                scope: "exercise",
-                changeSummary: `Auto-progression: ${msg}`,
-                isMajorVersion: false,
-                decisionMetadata: {
-                  exerciseName,
-                  lastLoad: target.lastLoad,
-                  targetLoad: target.targetLoad,
-                  lastReps: target.lastReps,
-                  targetReps: target.targetReps,
-                  progressionState: target.progressionState,
-                  reasoning: target.reasoning,
-                },
-              });
-            } catch {
-              // Non-fatal
-            }
+      const intent =
+        ex.status === "progress" ? "auto_progression" :
+        ex.status === "regress" ? "load_reduction" :
+        "exercise_review";
+
+      try {
+        await db.insert(systemChangeLog).values({
+          userId,
+          trainingSystemId: activeSystemId,
+          source: "workout_feedback",
+          intent,
+          scope: "exercise",
+          changeSummary: summary,
+          isMajorVersion: false,
+          decisionMetadata: {
+            exerciseName: ex.exerciseName,
+            progressionType: ex.progressionType,
+            status: ex.status,
+            lastLoad: ex.recommendation.targetLoad !== null ? ex.recommendation.targetLoad - (ex.recommendation.loadChange ?? 0) : null,
+            targetLoad: ex.recommendation.targetLoad,
+            lastReps: ex.recommendation.targetReps !== null ? ex.recommendation.targetReps - (ex.recommendation.repsChange ?? 0) : null,
+            targetReps: ex.recommendation.targetReps,
+            loadChange: ex.recommendation.loadChange,
+            repsChange: ex.recommendation.repsChange,
+            painLevel: painLevel ?? null,
+            perceivedDifficulty: perceivedDifficulty ?? null,
+            flagForReview: ex.flagForReview,
+            whyChanged: ex.reason,
+          },
+        });
+      } catch { /* Non-fatal */ }
+
+      // ── Write recommendation into future session_exercises metadata ─────────
+      // Find the next occurrence of this exercise in the program (future sessions)
+      if (data.savedProgramId && (ex.status === "progress" || ex.status === "regress")) {
+        try {
+          // Get all future session_exercises matching this name in the same program's system
+          const futureExercises = await db
+            .select({
+              id: sessionExercises.id,
+              metadata: sessionExercises.metadata,
+            })
+            .from(sessionExercises)
+            .innerJoin(trainingSessions, eq(sessionExercises.trainingSessionId, trainingSessions.id))
+            .innerJoin(trainingWeeks, eq(trainingSessions.trainingWeekId, trainingWeeks.id))
+            .innerJoin(trainingPhases, eq(trainingWeeks.trainingPhaseId, trainingPhases.id))
+            .innerJoin(trainingSystems, eq(trainingPhases.trainingSystemId, trainingSystems.id))
+            .where(
+              and(
+                eq(trainingSystems.userId, userId),
+                ilike(sessionExercises.name, ex.exerciseName),
+              )
+            )
+            .limit(10);
+
+          const progressionTarget = {
+            targetLoad: ex.recommendation.targetLoad,
+            targetReps: ex.recommendation.targetReps,
+            loadChange: ex.recommendation.loadChange,
+            repsChange: ex.recommendation.repsChange,
+            unit: ex.recommendation.unit,
+            reason: ex.reason,
+            status: ex.status,
+            progressionType: ex.progressionType,
+            updatedAt: now.toISOString(),
+          };
+
+          for (const futureEx of futureExercises) {
+            const existingMeta = (futureEx.metadata as Record<string, unknown>) ?? {};
+            await db
+              .update(sessionExercises)
+              .set({ metadata: { ...existingMeta, progressionTarget } })
+              .where(eq(sessionExercises.id, futureEx.id));
           }
-        }
-      } else if (target.progressionState === "regress") {
-        const msg = target.targetLoad !== null
-          ? `${exerciseName}: reduce to ${target.targetLoad} lbs (recovery needed)`
-          : `${exerciseName}: reduce load — recovery needed`;
-        progressions.push(msg);
-
-        if (activeSystemId) {
-          try {
-            await db.insert(systemChangeLog).values({
-              userId,
-              trainingSystemId: activeSystemId,
-              source: "workout_feedback",
-              intent: "load_reduction",
-              scope: "exercise",
-              changeSummary: `Load reduction signal: ${msg}`,
-              isMajorVersion: false,
-              decisionMetadata: {
-                exerciseName,
-                lastLoad: target.lastLoad,
-                targetLoad: target.targetLoad,
-                progressionState: target.progressionState,
-                reasoning: target.reasoning,
-              },
-            });
-          } catch {
-            // Non-fatal
-          }
-        }
+        } catch { /* Non-fatal — program update is best-effort */ }
       }
     }
   }
@@ -430,6 +559,8 @@ router.post("/session-logs/complete", requireAuth, async (req: any, res): Promis
     exercisesLogged: data.exercises.filter(
       (e) => e.sets.some((s) => s.completed)
     ).length,
+    sessionAdaptation: evaluation?.sessionAdaptation ?? null,
+    deloadRecommended: evaluation?.deloadRecommended ?? false,
   });
 });
 

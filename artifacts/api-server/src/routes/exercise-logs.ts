@@ -135,6 +135,7 @@ router.get("/exercise-logs/targets", requireAuth, async (req: any, res): Promise
 
   const payload = Array.from(targets.values()).map((t) => ({
     exerciseName: t.exerciseName,
+    progressionType: t.progressionType,
     progressionState: t.progressionState,
     targetLoad: t.targetLoad,
     targetReps: t.targetReps,
@@ -142,6 +143,7 @@ router.get("/exercise-logs/targets", requireAuth, async (req: any, res): Promise
     lastReps: t.lastReps,
     reasoning: t.reasoning,
     coachNote: t.coachNote,
+    flagForReview: t.flagForReview,
   }));
 
   res.json({ targets: payload, readinessScore });

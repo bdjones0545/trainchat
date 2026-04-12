@@ -414,6 +414,7 @@ function ExerciseLogSection({
 
   const [sets, setSets] = useState<SetLog[]>(() => buildSets(prescribedSets, lastLoad, lastReps));
   const [feedbackTag, setFeedbackTag] = useState<FeedbackTag | null>(null);
+  const [painLevel, setPainLevel] = useState<"none" | "mild" | "moderate" | "significant" | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [progressionMsg, setProgressionMsg] = useState<string | null>(null);
@@ -475,8 +476,10 @@ function ExerciseLogSection({
             feedbackTag === "too_hard" ? "too_hard" :
             feedbackTag === "challenging" ? "just_right" :
             undefined,
+          painLevel: painLevel ?? undefined,
           exercises: [{
             exerciseName,
+            category: exerciseContext.category,
             sets,
           }],
         }),
@@ -543,11 +546,25 @@ function ExerciseLogSection({
     ? { text: "↑ Progress", cls: "text-green-400 bg-green-500/10 border-green-500/20" }
     : target?.progressionState === "regress"
     ? { text: "↓ Reduce", cls: "text-red-400 bg-red-500/10 border-red-500/20" }
+    : target?.progressionState === "review"
+    ? { text: "⚑ Review", cls: "text-red-400 bg-red-500/10 border-red-500/20" }
     : target?.progressionState === "hold"
     ? { text: "→ Hold", cls: "text-amber-400 bg-amber-500/10 border-amber-500/20" }
     : null;
 
   const cfg = getModeConfig(mode);
+
+  // Progression type label for display hint
+  const progressionHints: Record<string, string> = {
+    distance_reps: "Track distance (ft) — quality drives progression",
+    height_reps: "Track height (in) — clean landings before raising the bar",
+    throws_reps: "Track reps — max explosiveness every rep",
+    time_only: "Track hold time — position before duration",
+    distance_time: "Track distance + time — full rest between reps",
+    reps_only: "Track reps — add reps before adding load",
+    mobility_flow: "Completion-based — control and quality count most",
+  };
+  const progressionHint = progressionHints[mode] ?? null;
 
   function formatLastSession() {
     if (!hasHistory) return null;
@@ -576,6 +593,11 @@ function ExerciseLogSection({
           </span>
         )}
       </div>
+
+      {/* Progression type hint */}
+      {progressionHint && (
+        <p className="text-[10px] text-muted-foreground/50 -mt-1">{progressionHint}</p>
+      )}
 
       {/* Last session data */}
       <div className="flex items-center gap-3 flex-wrap">
@@ -656,6 +678,38 @@ function ExerciseLogSection({
               }`}
             >
               {fb.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Pain level selector */}
+      <div>
+        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">
+          Any pain or discomfort?
+        </p>
+        <div className="flex gap-1.5 flex-wrap">
+          {([
+            { value: "none",         label: "None" },
+            { value: "mild",         label: "Mild" },
+            { value: "moderate",     label: "Moderate" },
+            { value: "significant",  label: "Significant" },
+          ] as { value: "none" | "mild" | "moderate" | "significant"; label: string }[]).map((p) => (
+            <button
+              key={p.value}
+              onClick={() => setPainLevel((v) => v === p.value ? null : p.value)}
+              type="button"
+              className={`text-[10px] font-semibold px-2.5 py-1 rounded-lg border transition-all duration-150 ${
+                painLevel === p.value
+                  ? p.value === "none" || p.value === "mild"
+                    ? "text-green-400 border-green-500/30 bg-green-500/10"
+                    : p.value === "moderate"
+                    ? "text-amber-400 border-amber-500/30 bg-amber-500/10"
+                    : "text-red-400 border-red-500/30 bg-red-500/10"
+                  : "bg-muted/20 border-border/40 text-muted-foreground hover:text-foreground hover:border-border"
+              }`}
+            >
+              {p.label}
             </button>
           ))}
         </div>

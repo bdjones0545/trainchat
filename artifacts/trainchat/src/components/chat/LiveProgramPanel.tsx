@@ -1231,6 +1231,50 @@ function ChangesTab({ hasActiveSystem, newChangeSignal }: { hasActiveSystem?: bo
           }
 
           const whyChanged = entry.decisionMetadata?.whyChanged as string | undefined;
+          const isProgression = entry.source === "workout_feedback";
+          const progressionStatus = entry.decisionMetadata?.status as string | undefined;
+          const flagForReview = entry.decisionMetadata?.flagForReview as boolean | undefined;
+
+          // Progression entries get a distinct green/amber/red card
+          if (isProgression) {
+            const badgeColor =
+              flagForReview ? "text-red-400 bg-red-400/10" :
+              progressionStatus === "progress" ? "text-emerald-400 bg-emerald-400/10" :
+              progressionStatus === "regress" ? "text-amber-400 bg-amber-400/10" :
+              progressionStatus === "review" ? "text-red-400 bg-red-400/10" :
+              "text-sky-400 bg-sky-400/10";
+
+            const badgeLabel =
+              flagForReview ? "Flagged" :
+              progressionStatus === "progress" ? "Progressed" :
+              progressionStatus === "regress" ? "Reduced" :
+              progressionStatus === "review" ? "Flagged" :
+              entry.intent === "deload_signal" ? "Deload Signal" :
+              "Auto-Adjust";
+
+            return (
+              <div
+                key={entry.id}
+                className="bg-card border border-border rounded-xl p-3"
+                style={isNewest && animateNewest ? { animation: "change-entry-in 1.4s ease forwards" } : undefined}
+              >
+                <div className="flex items-start justify-between gap-2 mb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${badgeColor}`}>
+                      {badgeLabel}
+                    </span>
+                    <span className="text-[9px] text-muted-foreground/50 font-medium uppercase tracking-wider">from workout</span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatRelative(entry.createdAt)}</span>
+                </div>
+                <p className="text-[11px] text-foreground leading-relaxed font-medium">{entry.changeSummary}</p>
+                {whyChanged && (
+                  <p className="text-[10px] text-muted-foreground/70 mt-1.5 leading-relaxed">↳ {whyChanged}</p>
+                )}
+              </div>
+            );
+          }
+
           return (
             <div
               key={entry.id}
