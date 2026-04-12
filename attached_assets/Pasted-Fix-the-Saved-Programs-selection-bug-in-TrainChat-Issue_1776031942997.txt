@@ -1,0 +1,63 @@
+Fix the Saved Programs selection bug in TrainChat.
+
+Issue:
+When a user taps a program inside the “Saved Programs” section of the sidebar, the app does not actually switch to that saved program. The item appears in the menu, but the main content area stays on the previous program/session.
+
+Goal:
+Selecting a saved program must immediately load that exact program into the main view.
+
+Required behavior:
+- Tapping a saved program sets it as the currently selected program
+- The main content area rerenders using that selected saved program
+- On mobile, the sidebar closes immediately after selection
+- The selected saved program becomes the active viewing context
+- The selected program persists correctly if the app already supports persistence
+- Do not only apply a visual selected state; update the real underlying state
+
+What to fix:
+1. Audit the sidebar Saved Programs list item click handler
+2. Make sure each saved program card/button has a real onClick that:
+   - selects the program by id
+   - updates the shared app state
+   - navigates to the correct program view if routing exists
+3. Ensure the main program display is reading from the same selected/active program state that the sidebar updates
+4. If there are separate concepts like:
+   - current builder session
+   - active program
+   - selected saved program
+   unify the rendering logic so the main panel always prefers the selected saved program when one is chosen
+5. Prevent accordion/dropdown wrappers from swallowing the click
+6. Do not mutate or delete the saved program record when selecting it; just load it into view
+
+Implementation direction:
+- Add or fix a dedicated selection function, for example:
+  - handleSelectSavedProgram(programId)
+- In that function:
+  - find the saved program by id
+  - set it into the app’s active/selected program state
+  - sync any dependent state needed by the main panel
+  - close the mobile sidebar
+  - navigate to the correct screen if this app uses routes
+
+Expected flow:
+- User opens sidebar
+- User expands Saved Programs
+- User taps “Hypertrophy Program — 3-Day”
+- Sidebar closes
+- Main program panel updates to show “Hypertrophy Program — 3-Day”
+- Program title, split, and visible training day all reflect that selected saved program
+- Any paywall logic still works, but now uses the selected saved program instead of the previously active one
+
+Technical checks:
+- Remove duplicate/conflicting local state between sidebar and main view
+- Ensure selectedProgram / activeProgram / currentProgram are not drifting apart
+- If needed, lift state up or move selection into shared/global state
+- If using React, verify dependencies and rerender triggers are correct
+- If using route params, ensure the selected program is loaded from the route id
+- If using Zustand/context/store, make both sidebar and main panel consume the same store values
+
+Please return:
+- What files were changed
+- What state variables/functions were updated
+- Why the bug happened
+- How the new selection flow now works

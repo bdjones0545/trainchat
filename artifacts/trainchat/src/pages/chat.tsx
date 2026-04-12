@@ -599,15 +599,21 @@ export default function Chat() {
     setIsSwitchingProgram(true);
     try {
       await customFetch<any>(`/api/training-system/set-active/${systemId}`, { method: "POST" });
-      queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-library"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
+      // Clear draft state immediately so the panel falls through to dbSystemProgram
       setLatestProgram(null);
       setIsSaved(false);
       setShowProgramLibrary(false);
+      setMobilePanel(null);
+      // Refetch the two queries that drive the main panel display, then
+      // invalidate the rest so they refresh in the background.
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ["training-system-active"] }),
+        queryClient.refetchQueries({ queryKey: ["training-system-week"] }),
+      ]);
+      queryClient.invalidateQueries({ queryKey: ["training-system-library"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
     } catch (err) {
       console.error("[SwitchProgram] Failed:", err);
     } finally {
@@ -798,7 +804,11 @@ export default function Chat() {
             {programLibrary.map((prog: any) => (
               <button
                 key={prog.id}
-                onClick={() => prog.status === "archived" ? handleSwitchProgram(prog.id) : undefined}
+                onClick={() => {
+                  if (prog.status !== "active" && !isSwitchingProgram) {
+                    handleSwitchProgram(prog.id);
+                  }
+                }}
                 disabled={prog.status === "active" || isSwitchingProgram}
                 className={`w-full flex items-start gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all ${
                   prog.status === "active"
