@@ -25,6 +25,7 @@ import type { SystemSnapshot } from "./change-log-service";
 
 const EXERCISE_ALLOWED_FIELDS = new Set([
   "name", "category", "sets", "reps", "tempo", "rest", "rpe", "notes", "orderIndex",
+  // metadata is handled separately via extractPrescriptionUpdates
 ]);
 
 const SESSION_ALLOWED_FIELDS = new Set([
@@ -48,14 +49,47 @@ function filterFields(updates: Record<string, unknown>, allowed: Set<string>): R
   return filtered;
 }
 
+/**
+ * Extracts `__prescription_*` special keys from an updates object.
+ * These keys signal that the value should be merged into `metadata.prescription`
+ * rather than a top-level column.
+ *
+ * Returns { prescriptionPatch, remainingUpdates }
+ */
+function extractPrescriptionUpdates(updates: Record<string, unknown>): {
+  prescriptionPatch: Record<string, unknown> | null;
+  remainingUpdates: Record<string, unknown>;
+} {
+  const patch: Record<string, unknown> = {};
+  const remaining: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(updates)) {
+    if (key.startsWith("__prescription_")) {
+      const fieldName = key.slice("__prescription_".length);
+      patch[fieldName] = value;
+    } else {
+      remaining[key] = value;
+    }
+  }
+
+  return {
+    prescriptionPatch: Object.keys(patch).length > 0 ? patch : null,
+    remainingUpdates: remaining,
+  };
+}
+
 // ─── Snapshot capture helpers ─────────────────────────────────────────────────
 
 async function snapshotExercise(id: number): Promise<Record<string, unknown> | null> {
   const [row] = await db.select().from(sessionExercises).where(eq(sessionExercises.id, id)).limit(1);
   if (!row) return null;
+  const meta = row.metadata as Record<string, unknown> | null;
+  const prescription = meta?.prescription as Record<string, unknown> | undefined;
   return {
     name: row.name, category: row.category, sets: row.sets, reps: row.reps,
     tempo: row.tempo, rest: row.rest, rpe: row.rpe, notes: row.notes, orderIndex: row.orderIndex,
+    // Include structured prescription fields for clean diffs
+    ...(prescription ? { prescriptionLoad: prescription.load, prescriptionHeight: prescription.height, prescriptionDistance: prescription.distance } : {}),
   };
 }
 
@@ -142,7 +176,25 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; deta
           }
         }
 
-        const safeUpdates = filterFields(updatesWithSentinel, EXERCISE_ALLOWED_FIELDS);
+        // Extract __prescription_* keys for metadata merge
+        const { prescriptionPatch, remainingUpdates } = extractPrescriptionUpdates(updatesWithSentinel);
+
+        const safeUpdates = filterFields(remainingUpdates, EXERCISE_ALLOWED_FIELDS);
+
+        // If there are prescription metadata updates, merge them into metadata.prescription
+        if (prescriptionPatch) {
+          const [existing] = await db.select().from(sessionExercises).where(eq(sessionExercises.id, change.id));
+          if (existing) {
+            const currentMeta = (existing.metadata as Record<string, unknown> | null) ?? {};
+            const currentPrescription = (currentMeta.prescription as Record<string, unknown> | null) ?? {};
+            const mergedMeta = {
+              ...currentMeta,
+              prescription: { ...currentPrescription, ...prescriptionPatch },
+            };
+            (safeUpdates as any).metadata = mergedMeta;
+          }
+        }
+
         if (Object.keys(safeUpdates).length === 0) {
           return { applied: false, detail: `No allowed fields in exercise update for ${change.id}` };
         }
@@ -150,7 +202,11 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; deta
           .update(sessionExercises)
           .set({ ...safeUpdates, updatedAt: new Date() } as any)
           .where(eq(sessionExercises.id, change.id));
-        return { applied: true, detail: `Updated exercise ${change.id}: ${Object.keys(safeUpdates).join(", ")}` };
+        const appliedFields = [
+          ...Object.keys(filterFields(remainingUpdates, EXERCISE_ALLOWED_FIELDS)),
+          ...(prescriptionPatch ? Object.keys(prescriptionPatch).map((k) => `prescription.${k}`) : []),
+        ];
+        return { applied: true, detail: `Updated exercise ${change.id}: ${appliedFields.join(", ")}` };
       }
 
       case "replace_exercise": {

@@ -12,6 +12,15 @@
 
 import { logger } from "./logger";
 import { buildSwapContext, getProgressions, findExerciseByName } from "./exercise-service";
+import {
+  classifyExerciseFamily,
+  getExerciseFamilySchema,
+  resolveField,
+  resolutionToUpdates,
+  type LogicalField,
+  type FieldResolution,
+  type FieldForbiddenResult,
+} from "./prescription-schema";
 
 // ─── Edit Plan Types ─────────────────────────────────────────────────────────
 
@@ -502,50 +511,139 @@ interface PrescriptionMutation {
   newValue: string | number;
   summary: string;
   updates: Record<string, unknown>;
+  /** Set when the requested field is forbidden for this exercise type */
+  forbidden?: true;
+  forbiddenMessage?: string;
 }
 
 function parsePrescriptionCommand(request: string, exerciseLabel: string): PrescriptionMutation | null {
   const lower = request.toLowerCase();
-
-  // ── helpers ──
   const eachSide = /\beach\s+side\b|\bper\s+side\b|\beach\s+(leg|arm)\b/.test(lower);
 
-  // ── REPS ─────────────────────────────────────────────────────────────────
-  // Patterns (in priority order):
-  //   "increase/set/change reps to N"
-  //   "make it/this N reps [each side]"
-  //   "do/perform N reps"
-  //   "N reps [each side]" (standalone)
-  //   "make this N each side" (no explicit "reps" word)
-  const repPatterns = [
-    /(?:increase|raise|bump|set|change|make\s+(?:it|this))\s+reps?\s+(?:to|at)\s+(\d+)/i,
-    /(?:increase|raise|bump|set|change|make\s+(?:it|this)?)\s+to\s+(\d+)\s+reps?/i,
-    /(?:make\s+(?:it|this)\s+)?(\d+)\s+reps?(?:\s+each\s+side|\s+per\s+side|\s+each\s+(?:leg|arm))?/i,
-    /(?:do|perform|use)\s+(\d+)\s+reps?/i,
-    /reps?\s+(?:to|at|=)\s+(\d+)/i,
-    // "Make this 12 each side" — N each side without the word "reps"
-    /(?:make\s+(?:it|this)\s+)?(\d+)\s+(?:each\s+side|per\s+side|each\s+(?:leg|arm))/i,
-    // "Make this 12" — bare number after make this (last resort, only if eachSide context)
-    /(?:make\s+(?:it|this)|set\s+(?:it|this)\s+to)\s+(\d+)(?:\s+each\s+side|\s+per\s+side)?$/i,
-  ];
-  for (const re of repPatterns) {
-    const m = request.match(re);
-    if (m) {
-      const n = parseInt(m[1], 10);
-      if (n > 0 && n <= 100) {
-        const val = eachSide ? `${n} each side` : `${n}`;
-        return {
-          intent: "change_reps_exact",
-          field: "reps",
-          newValue: val,
-          summary: `Updated ${exerciseLabel} to ${val} rep${n === 1 ? "" : "s"}${eachSide ? " each side" : ""}.`,
-          updates: { reps: val },
-        };
-      }
+  // ── Internal helper: resolve via schema and build mutation ─────────────────
+  function resolve(
+    logicalField: LogicalField,
+    numericValue: number,
+    rawUnit: string
+  ): PrescriptionMutation | null {
+    if (numericValue <= 0) return null;
+
+    const result = resolveField(logicalField, numericValue, rawUnit, exerciseLabel, eachSide);
+
+    if ("forbidden" in result) {
+      // The field is not valid for this exercise type — return a coach message
+      return {
+        intent: "prescription_blocked",
+        field: logicalField,
+        newValue: `${numericValue} ${rawUnit}`,
+        summary: result.coachMessage,
+        updates: {},
+        forbidden: true,
+        forbiddenMessage: result.coachMessage,
+      };
+    }
+
+    const updates = resolutionToUpdates(result);
+    const displayField = result.logicalField === "repsEachSide" ? "reps each side" : result.logicalField;
+
+    return {
+      intent: `change_${result.logicalField}`,
+      field: result.logicalField,
+      newValue: result.displayValue,
+      summary: buildSummary(exerciseLabel, result.logicalField, result.displayValue),
+      updates,
+    };
+  }
+
+  function buildSummary(label: string, field: LogicalField | string, displayValue: string): string {
+    switch (field) {
+      case "reps": return `Updated ${label} to ${displayValue} reps.`;
+      case "repsEachSide": return `Updated ${label} to ${displayValue}.`;
+      case "sets": return `Updated ${label} to ${displayValue} sets.`;
+      case "rest": return `Changed rest on ${label} to ${displayValue}.`;
+      case "load": return `Set ${label} target load to ${displayValue}.`;
+      case "height": return `Set ${label} box/target height to ${displayValue}.`;
+      case "distance": return `Set ${label} target distance to ${displayValue}.`;
+      case "duration": return `Updated ${label} to a ${displayValue} hold.`;
+      case "tempo": return `Added ${displayValue} tempo to ${label}.`;
+      default: return `Updated ${label} (${field}) to ${displayValue}.`;
     }
   }
 
-  // ── SETS ─────────────────────────────────────────────────────────────────
+  // ── TEMPO (highest priority — explicit pattern like "3-1-X-0") ────────────
+  const tempoMatch = request.match(/(\d)-(\d)-([Xx\d])-(\d)/);
+  if (tempoMatch) {
+    const tempo = `${tempoMatch[1]}-${tempoMatch[2]}-${tempoMatch[3]}-${tempoMatch[4]}`;
+    return { intent: "change_tempo", field: "tempo", newValue: tempo, summary: `Added ${tempo} tempo to ${exerciseLabel}.`, updates: { tempo } };
+  }
+
+  // ── PAUSE ("add a 3-second pause") ───────────────────────────────────────
+  const pauseMatch = request.match(/(?:add\s+a?\s*)?(\d+)[- ]second\s+(?:pause|hold|stop)/i);
+  if (pauseMatch) {
+    const n = parseInt(pauseMatch[1], 10);
+    const tempo = `${n}-1-X-0`;
+    return { intent: "change_tempo", field: "tempo", newValue: tempo, summary: `Added ${n}s pause to ${exerciseLabel} (tempo ${tempo}).`, updates: { tempo } };
+  }
+
+  // ── DURATION / HOLD (before reps — catches "30 seconds" for holds) ────────
+  const durationPatterns = [
+    /(?:make\s+(?:this|it)|hold\s+(?:for)?|do|set(?:\s+(?:to|it))?)\s+(?:a\s+)?(\d+)[- ]*(seconds?|sec|minutes?|min)\s*(?:hold|plank|brace|iso)?/i,
+    /(\d+)[- ]*(seconds?|sec|minutes?|min)\s*(?:hold|plank|brace|iso)/i,
+  ];
+  for (const re of durationPatterns) {
+    const m = request.match(re);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      const unit = (m[2] ?? "sec").toLowerCase();
+      const r = resolve("duration", n, unit);
+      if (r) return r;
+    }
+  }
+
+  // ── HEIGHT ────────────────────────────────────────────────────────────────
+  const heightMatch = request.match(
+    /(?:set\s+(?:height\s+)?to|use\s+(?:a\s+)?|from\s+(?:a\s+)?|jump\s+(?:from|onto|over)\s+(?:a\s+)?)\s*(\d+(?:\.\d+)?)[- ]*(inches?|in|cm|centimeters?)/i
+  );
+  if (heightMatch) {
+    const r = resolve("height", parseFloat(heightMatch[1]), heightMatch[2]);
+    if (r) return r;
+  }
+
+  // ── DISTANCE ─────────────────────────────────────────────────────────────
+  const distMatch = request.match(
+    /(?:set\s+(?:distance\s+)?to|jump\s+(?:for)?|target|do)\s+(\d+(?:\.\d+)?)[- ]*(feet|foot|ft|meters?|m)\b/i
+  );
+  if (distMatch) {
+    const r = resolve("distance", parseFloat(distMatch[1]), distMatch[2]);
+    if (r) return r;
+  }
+
+  // ── LOAD / WEIGHT ─────────────────────────────────────────────────────────
+  const loadMatch = request.match(
+    /(?:use|set|target|try|start\s+(?:at|with)|do)\s+(\d+(?:\.\d+)?)\s*(lbs?|pounds?|kgs?|kilograms?)/i
+  );
+  if (loadMatch) {
+    const r = resolve("load", parseFloat(loadMatch[1]), loadMatch[2]);
+    if (r) return r;
+  }
+
+  // ── REST ──────────────────────────────────────────────────────────────────
+  const restPatterns = [
+    /(?:lower|reduce|cut|change|set|increase|shorten|extend)?\s*(?:the\s+)?rest(?:\s+(?:to|period|time))?\s+(?:to\s+)?(\d+)\s*(sec(?:onds?)?|min(?:utes?)?)?/i,
+    /(\d+)\s*(?:sec(?:onds?)?|min(?:utes?)?)\s+(?:rest|recovery|between)/i,
+    /rest\s+(\d+)\s*(sec(?:onds?)?|min(?:utes?)?)?/i,
+  ];
+  for (const re of restPatterns) {
+    const m = request.match(re);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      const unit = (m[2] ?? "").toLowerCase() || (n <= 10 ? "min" : "sec");
+      const r = resolve("rest", n, unit);
+      if (r) return r;
+    }
+  }
+
+  // ── SETS ──────────────────────────────────────────────────────────────────
   const setPatterns = [
     /(?:make\s+(?:this|it)|do|use|set(?:\s+(?:it|this))?\s+to|change(?:\s+sets?)?\s+to|change\s+(?:it|this)\s+to)\s+(\d+)\s+sets?/i,
     /(\d+)\s+sets?\s*(?:of\b|$)/i,
@@ -556,147 +654,33 @@ function parsePrescriptionCommand(request: string, exerciseLabel: string): Presc
     if (m) {
       const n = parseInt(m[1], 10);
       if (n > 0 && n <= 20) {
-        return {
-          intent: "change_sets",
-          field: "sets",
-          newValue: n,
-          summary: `Updated ${exerciseLabel} to ${n} sets.`,
-          updates: { sets: n },
-        };
+        const r = resolve("sets", n, "count");
+        if (r) return r;
       }
     }
   }
 
-  // ── REST ─────────────────────────────────────────────────────────────────
-  const restPatterns = [
-    /(?:lower|reduce|cut|change|set|increase|shorten|extend)?\s*(?:the\s+)?rest(?:\s+(?:to|period|time))?\s+(?:to\s+)?(\d+)\s*(sec(?:onds?)?|min(?:utes?)?)?/i,
-    /(\d+)\s*(?:sec(?:onds?)?|min(?:utes?)?)\s+(?:rest|recovery|between)/i,
-    /rest\s+(\d+)\s*(sec(?:onds?)?|min(?:utes?)?)?/i,
+  // ── REPS ──────────────────────────────────────────────────────────────────
+  const repPatterns = [
+    /(?:increase|raise|bump|set|change|make\s+(?:it|this))\s+reps?\s+(?:to|at)\s+(\d+)/i,
+    /(?:increase|raise|bump|set|change|make\s+(?:it|this)?)\s+to\s+(\d+)\s+reps?/i,
+    /(?:make\s+(?:it|this)\s+)?(\d+)\s+reps?(?:\s+each\s+side|\s+per\s+side|\s+each\s+(?:leg|arm))?/i,
+    /(?:do|perform|use)\s+(\d+)\s+reps?/i,
+    /reps?\s+(?:to|at|=)\s+(\d+)/i,
+    // "Make this 12 each side" — N each side without the word "reps"
+    /(?:make\s+(?:it|this)\s+)?(\d+)\s+(?:each\s+side|per\s+side|each\s+(?:leg|arm))/i,
+    // "Make this 12" — bare number at end (last resort)
+    /(?:make\s+(?:it|this)|set\s+(?:it|this)\s+to)\s+(\d+)(?:\s+each\s+side|\s+per\s+side)?$/i,
   ];
-  for (const re of restPatterns) {
+  for (const re of repPatterns) {
     const m = request.match(re);
     if (m) {
       const n = parseInt(m[1], 10);
-      const rawUnit = (m[2] ?? "").toLowerCase();
-      // Heuristic: no unit given — values > 10 treated as seconds, ≤ 10 as minutes
-      const isMin = rawUnit.startsWith("min") || (!rawUnit && n <= 10);
-      const seconds = isMin ? n * 60 : n;
-      if (seconds > 0 && seconds <= 600) {
-        const display = seconds >= 60 ? `${Math.round(seconds / 60)} min` : `${seconds}s`;
-        return {
-          intent: "change_rest",
-          field: "rest",
-          newValue: display,
-          summary: `Changed rest on ${exerciseLabel} to ${display}.`,
-          updates: { rest: display },
-        };
+      if (n > 0 && n <= 100) {
+        const r = resolve("reps", n, "count");
+        if (r) return r;
       }
     }
-  }
-
-  // ── LOAD / WEIGHT ────────────────────────────────────────────────────────
-  const loadMatch = request.match(
-    /(?:use|set|target|try|start\s+(?:at|with)|do)\s+(\d+(?:\.\d+)?)\s*(lbs?|pounds?|kgs?|kilograms?)/i
-  );
-  if (loadMatch) {
-    const n = loadMatch[1];
-    const rawUnit = loadMatch[2].toLowerCase();
-    const unit = rawUnit.startsWith("lb") || rawUnit === "pounds" || rawUnit === "pound" ? "lb" : "kg";
-    const display = `${n} ${unit}`;
-    return {
-      intent: "change_load",
-      field: "notes",
-      newValue: display,
-      summary: `Set ${exerciseLabel} target load to ${display}.`,
-      updates: { notes: `Target load: ${display}` },
-    };
-  }
-
-  // ── DURATION / HOLD / TIMED EXERCISE ────────────────────────────────────
-  const durationPatterns = [
-    /(?:make\s+(?:this|it)|hold\s+(?:for)?|do|set(?:\s+(?:to|it))?)\s+(?:a\s+)?(\d+)[- ]*(seconds?|sec|minutes?|min)\s*(?:hold|plank|brace|iso)?/i,
-    /(\d+)[- ]*(seconds?|sec|minutes?|min)\s*(?:hold|plank|brace|iso)/i,
-  ];
-  for (const re of durationPatterns) {
-    const m = request.match(re);
-    if (m) {
-      const n = parseInt(m[1], 10);
-      const rawUnit = (m[2] ?? "").toLowerCase();
-      const isMin = rawUnit.startsWith("min");
-      const display = `${n}${isMin ? "min" : "s"}`;
-      if (n > 0) {
-        return {
-          intent: "change_duration",
-          field: "reps",
-          newValue: display,
-          summary: `Updated ${exerciseLabel} to a ${display} hold.`,
-          updates: { reps: display },
-        };
-      }
-    }
-  }
-
-  // ── DISTANCE ─────────────────────────────────────────────────────────────
-  const distMatch = request.match(
-    /(?:set\s+(?:distance\s+)?to|jump|target|do)\s+(\d+(?:\.\d+)?)\s*(feet|ft|meters?|m)\b/i
-  );
-  if (distMatch) {
-    const n = distMatch[1];
-    const rawUnit = distMatch[2].toLowerCase();
-    const unit = rawUnit.startsWith("f") ? "ft" : "m";
-    const display = `${n} ${unit}`;
-    return {
-      intent: "change_distance",
-      field: "notes",
-      newValue: display,
-      summary: `Set ${exerciseLabel} target distance to ${display}.`,
-      updates: { notes: `Target distance: ${display}` },
-    };
-  }
-
-  // ── HEIGHT ───────────────────────────────────────────────────────────────
-  const heightMatch = request.match(
-    /(?:set\s+(?:height\s+)?to|use\s+(?:a\s+)?|jump\s+(?:from|onto|over)\s+)\s*(\d+(?:\.\d+)?)\s*(inches?|in|cm|centimeters?)\b/i
-  );
-  if (heightMatch) {
-    const n = heightMatch[1];
-    const rawUnit = heightMatch[2].toLowerCase();
-    const unit = rawUnit.startsWith("in") ? "in" : "cm";
-    const display = `${n} ${unit}`;
-    return {
-      intent: "change_height",
-      field: "notes",
-      newValue: display,
-      summary: `Set ${exerciseLabel} box/target height to ${display}.`,
-      updates: { notes: `Target height: ${display}` },
-    };
-  }
-
-  // ── TEMPO (explicit pattern e.g. "3-1-X-0") ─────────────────────────────
-  const tempoMatch = request.match(/(\d)-(\d)-([Xx\d])-(\d)/);
-  if (tempoMatch) {
-    const tempo = `${tempoMatch[1]}-${tempoMatch[2]}-${tempoMatch[3]}-${tempoMatch[4]}`;
-    return {
-      intent: "change_tempo",
-      field: "tempo",
-      newValue: tempo,
-      summary: `Added ${tempo} tempo to ${exerciseLabel}.`,
-      updates: { tempo },
-    };
-  }
-
-  // ── PAUSE (e.g. "add a 3-second pause") ──────────────────────────────────
-  const pauseMatch = request.match(/(?:add\s+a?\s*)?(\d+)[- ]second\s+(?:pause|hold|stop)/i);
-  if (pauseMatch) {
-    const n = parseInt(pauseMatch[1], 10);
-    const tempo = `${n}-1-X-0`;
-    return {
-      intent: "change_tempo",
-      field: "tempo",
-      newValue: tempo,
-      summary: `Added ${n}s pause to ${exerciseLabel} (tempo ${tempo}).`,
-      updates: { tempo },
-    };
   }
 
   return null;
@@ -720,6 +704,16 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
     // never falls into the wrong branch.
     const prescription = parsePrescriptionCommand(userRequest, label);
     if (prescription) {
+      if (prescription.forbidden) {
+        // Field is invalid for this exercise type — surface a coach message,
+        // no database change.
+        return {
+          intent: "prescription_blocked",
+          scope: "exercise",
+          changeSummary: prescription.forbiddenMessage ?? prescription.summary,
+          changes: [],
+        };
+      }
       return {
         intent: prescription.intent,
         scope: "exercise",

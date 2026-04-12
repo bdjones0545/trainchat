@@ -1,0 +1,311 @@
+Build a field-safe prescription schema engine for TrainChat so direct exercise commands mutate the correct structured field instead of falling back to notes or the wrong property.
+
+CURRENT ISSUE:
+The direct command parser is now detecting literal user commands, but field assignment is still wrong.
+
+Observed failures:
+- “Use 25 lbs” → mapped to notes instead of a load field
+- “Set distance to 8 feet” → mapped to notes instead of distance
+- “Set height to 12 inches” → mapped to notes instead of height
+- “Make this 30 seconds” → mapped to reps instead of duration
+
+GOAL:
+Create a field-safe mutation layer that knows, for each exercise type, which prescription fields are:
+- allowed
+- preferred
+- forbidden
+- unit-specific
+
+The system must mutate real structured fields, not notes, unless no valid field exists.
+
+----------------------------------------
+1. CREATE A PRESCRIPTION SCHEMA PER EXERCISE TYPE
+----------------------------------------
+
+Each exercise must have a prescriptionSchema, for example:
+
+{
+  exerciseId: "...",
+  name: "Depth Jump",
+  loggingMode: "height_reps",
+  prescriptionSchema: {
+    allowedFields: ["sets", "reps", "height", "rest", "tempo", "notes"],
+    preferredFields: ["height", "reps", "sets", "rest"],
+    forbiddenFields: ["load", "distance"],
+    fieldUnits: {
+      sets: "count",
+      reps: "count",
+      height: ["in", "cm"],
+      rest: ["sec", "min"]
+    },
+    defaultRepStyle: "standard"
+  }
+}
+
+Another example:
+
+{
+  name: "Broad Jump",
+  loggingMode: "distance_reps",
+  prescriptionSchema: {
+    allowedFields: ["sets", "reps", "distance", "rest", "notes"],
+    preferredFields: ["distance", "reps", "sets"],
+    forbiddenFields: ["load", "height"],
+    fieldUnits: {
+      distance: ["ft", "in", "m", "cm"],
+      reps: "count",
+      rest: ["sec", "min"]
+    }
+  }
+}
+
+----------------------------------------
+2. ADD FIELD MAPPING BY EXERCISE FAMILY
+----------------------------------------
+
+At minimum support these exercise families:
+
+A. load_reps
+Examples:
+- squat
+- bench
+- deadlift
+- split squat
+Allowed:
+- sets
+- reps
+- load
+- rest
+- tempo
+- pause
+
+B. reps_only
+Examples:
+- pull-up
+- push-up
+Allowed:
+- sets
+- reps
+- rest
+- tempo
+
+C. distance_reps
+Examples:
+- broad jump
+- triple broad jump
+- bounds
+Allowed:
+- sets
+- reps
+- distance
+- rest
+
+D. height_reps
+Examples:
+- box jump
+- depth jump
+Allowed:
+- sets
+- reps
+- height
+- rest
+
+E. throws_reps
+Examples:
+- med ball slam
+- rotational throw
+Allowed:
+- sets
+- reps
+- ballLoad(optional)
+- rest
+
+F. time_only / duration_based
+Examples:
+- plank
+- hold
+- iso carry if time-based
+Allowed:
+- sets
+- duration
+- rest
+
+G. mobility_flow
+Examples:
+- hip circles
+- leg swings
+- CARs
+Allowed:
+- rounds
+- reps
+- duration
+- notes
+Forbidden:
+- load unless explicitly tagged
+
+----------------------------------------
+3. BUILD A FIELD RESOLUTION FUNCTION
+----------------------------------------
+
+Create:
+
+resolvePrescriptionField({
+  command,
+  parsedIntent,
+  exercise,
+  prescriptionSchema
+})
+
+This function must decide:
+- which field the user intended
+- whether the field is allowed
+- whether the unit is valid
+- whether a clarification is needed
+
+Examples:
+- “Use 25 lbs” on Back Squat → load
+- “Use 25 lbs” on Broad Jump → invalid, ask clarification
+- “Set distance to 8 feet” on Triple Broad Jump → distance
+- “Set height to 12 inches” on Depth Jump → height
+- “Make this 30 seconds” on Plank → duration
+- “Make this 30 seconds” on Shrimp Squat → likely invalid, ask clarification
+
+----------------------------------------
+4. REMOVE NOTES AS A LAZY FALLBACK
+----------------------------------------
+
+Do NOT map direct numeric prescription commands to notes unless:
+- there is truly no structured field available
+- and the system explicitly tells the user it stored it as a note only
+
+Examples that should NOT go to notes:
+- weight/load commands for load-based lifts
+- distance commands for jump-distance drills
+- height commands for box/depth jumps
+- duration commands for holds
+
+Notes should be last resort, not default escape hatch.
+
+----------------------------------------
+5. ADD UNIT NORMALIZATION
+----------------------------------------
+
+Normalize input units into structured values.
+
+Examples:
+- 25 lbs / 25 lb / 25 pounds → load: 25 lb
+- 60 sec / 60 seconds / 1 min → rest: normalized
+- 8 feet / 8 ft → distance: normalized
+- 12 inches / 12 in → height: normalized
+- 30 seconds / 30 sec → duration: normalized
+
+Store both:
+- normalized numeric value
+- display-friendly string
+
+----------------------------------------
+6. ENFORCE FORBIDDEN FIELD RULES
+----------------------------------------
+
+If user requests a field that is invalid for that exercise, do not silently reroute to notes.
+
+Instead say:
+- “That movement doesn’t use a load field. Do you want to change reps, distance, or swap the exercise?”
+- “Depth Jump uses height/reps, not barbell load.”
+
+This keeps the app intelligent and trustworthy.
+
+----------------------------------------
+7. SUPPORT SIDE-SPECIFIC REP FIELDS
+----------------------------------------
+
+For unilateral exercises like:
+- shrimp squat
+- split squat
+- RFESS
+- lateral lunge
+
+Support:
+- repsEachSide
+- totalReps if explicitly intended
+
+If the user says:
+- “Increase reps to 10”
+and the exercise is unilateral,
+infer:
+- 10 each side if that is the default schema
+
+If ambiguity remains, ask:
+- “Do you want 10 each side or 10 total?”
+
+----------------------------------------
+8. MUTATE REAL STRUCTURED FIELDS
+----------------------------------------
+
+Store mutations like:
+
+{
+  mutationType: "change_height",
+  field: "height",
+  previousValue: "10 in",
+  newValue: "12 in"
+}
+
+or
+
+{
+  mutationType: "change_distance",
+  field: "distance",
+  previousValue: "6 ft",
+  newValue: "8 ft"
+}
+
+or
+
+{
+  mutationType: "change_duration",
+  field: "duration",
+  previousValue: "20 sec",
+  newValue: "30 sec"
+}
+
+Do not store these as notes.
+
+----------------------------------------
+9. UPDATE UI WITH EXACT FIELDS
+----------------------------------------
+
+After mutation, the exercise card and bottom sheet must reflect the exact changed field.
+
+Examples:
+- “Depth Jump updated to 12-inch box.”
+- “Triple Broad Jump distance target updated to 8 ft.”
+- “Shrimp Squat updated to 10 reps each side.”
+- “Plank duration updated to 30 sec.”
+
+----------------------------------------
+10. ADD VALIDATION TEST TABLE
+----------------------------------------
+
+Test these exact cases:
+
+- Back Squat + “Use 25 lbs” → load
+- Shrimp Squat + “Increase reps to 10” → repsEachSide or clarify
+- Broad Jump + “Set distance to 8 feet” → distance
+- Depth Jump + “Set height to 12 inches” → height
+- Plank + “Make this 30 seconds” → duration
+- Pull-Up + “Make this 30 seconds” → invalid, clarify
+- Med Ball Slam + “Use 10 lb ball” → ballLoad if supported
+- Leg Swing Flow + “Use 25 lbs” → invalid, clarify
+
+----------------------------------------
+11. DELIVERABLES
+----------------------------------------
+
+After implementation, provide:
+1. the final prescriptionSchema model
+2. how fields are resolved by exercise family
+3. how forbidden fields are blocked
+4. how unit normalization works
+5. how notes are now prevented as lazy fallback
+6. any remaining ambiguous cases requiring clarification
