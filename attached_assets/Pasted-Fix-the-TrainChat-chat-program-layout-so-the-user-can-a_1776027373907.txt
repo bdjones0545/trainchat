@@ -1,0 +1,195 @@
+Fix the TrainChat chat/program layout so the user can always see the action area and retain lightweight program context without having to scroll back and forth.
+
+CURRENT ISSUE:
+Right now the header/program context is effectively separated from the input area.
+
+What happens:
+- user scrolls up to view the program/program card/header context
+- user scrolls down to use the “Describe the training…” input
+- they cannot meaningfully see both context and action at the same time
+
+This creates friction and breaks the feeling of “live editing” the training system.
+
+GOAL:
+Make TrainChat feel like a live system editor:
+- the input/action area should always be available
+- the user should retain lightweight awareness of what program they’re editing
+- the interface should feel fluid on mobile, especially Safari/iPhone
+- reduce scroll friction between “see current state” and “modify current state”
+
+This is a UX architecture refinement, not a redesign.
+
+----------------------------------------
+1. MAKE THE CHAT INPUT STICKY
+----------------------------------------
+
+The bottom input bar must remain visible while scrolling through chat/program content.
+
+Requirements:
+- input stays pinned to the bottom safe area
+- input remains usable on mobile Safari
+- input does not disappear when the user scrolls up
+- input should feel like the permanent primary action surface
+
+This screen is conversational and iterative.
+The user should always be able to type the next instruction without scrolling to the bottom.
+
+----------------------------------------
+2. CREATE A COMPACT STICKY PROGRAM CONTEXT BAR
+----------------------------------------
+
+Add a lightweight sticky context bar that tells the user what they are editing.
+
+This should remain visible while scrolling, but be much smaller than the current large program card.
+
+Example content:
+- program name
+- goal/sport
+- days per week
+- maybe current block/week
+- a compact “View” or “Open” affordance
+
+Example style concept:
+“Hockey Performance • 3 days/week • Full Body”
+[View Program]
+
+This should sit near the top of the chat area or below the main header.
+
+----------------------------------------
+3. COLLAPSE LARGE PROGRAM CARDS ON SCROLL
+----------------------------------------
+
+If a large program card is visible in the chat thread:
+- allow it to render normally in the conversation
+- but when the user scrolls away, preserve context using the compact sticky bar
+
+Do NOT require the full card to always remain on screen.
+The sticky context bar should handle context persistence.
+
+----------------------------------------
+4. PRIORITIZE ACTION + CONTEXT TOGETHER
+----------------------------------------
+
+At any point in the experience, the user should ideally be able to:
+- see what they’re editing
+- type what they want next
+
+This is the core requirement.
+
+Do not force the user to choose between:
+- seeing the program
+- accessing the input
+
+----------------------------------------
+5. KEEP THE MAIN HEADER LIGHT
+----------------------------------------
+
+The top app header should remain visually clean and not become overly heavy.
+
+Do not make the full header and a giant card and the sticky input all compete for space.
+
+The layout should likely be:
+- main top header
+- compact sticky context bar
+- scrollable chat/program content
+- sticky bottom input
+
+----------------------------------------
+6. MOBILE SAFARI SAFE AREA SUPPORT
+----------------------------------------
+
+Pay special attention to:
+- iPhone Safari bottom controls
+- safe-area-inset-bottom
+- keyboard opening/closing
+- sticky footer not being obscured
+- sticky header/context bar not causing awkward overlap
+
+This must feel clean on mobile web.
+
+----------------------------------------
+7. PREVENT CONTENT FROM BEING HIDDEN
+----------------------------------------
+
+When using sticky header/context and sticky footer input:
+- ensure scrollable content has enough top and bottom padding
+- last messages/cards should not be hidden behind the input bar
+- sticky context bar should not cover thread content awkwardly
+- no clipped elements when keyboard opens
+
+----------------------------------------
+8. TREAT THE INPUT AS THE PRIMARY INTERACTION LAYER
+----------------------------------------
+
+The bottom composer is the most important recurring action.
+
+Refine it so it always feels ready:
+- clearly visible
+- comfortably spaced
+- not too tall
+- not visually cramped with Safari chrome
+
+Keep:
+- Check-In
+- Refine My Plan
+- input field
+if they remain part of the design
+
+But ensure they work cleanly inside the sticky action area.
+
+----------------------------------------
+9. ADD A DYNAMIC CONTEXT STATE
+----------------------------------------
+
+The compact context bar should reflect the current live program.
+
+Examples:
+- if program changes from 3-day to 4-day, the compact bar updates
+- if block changes, the compact bar reflects the latest state
+- if user is editing a specific plan, it should show the correct one
+
+This context bar must be state-driven, not hardcoded.
+
+----------------------------------------
+10. OPTIONAL: MINIMIZE / EXPAND CONTEXT
+----------------------------------------
+
+If helpful, allow the compact context bar to:
+- tap to expand into the full program summary
+or
+- tap “View Program” to open the larger view/modal
+
+This preserves context without taking too much space.
+
+----------------------------------------
+11. DO NOT REDESIGN THE WHOLE CHAT
+----------------------------------------
+
+Keep the current premium TrainChat dark aesthetic and current overall structure.
+
+This is a layout/interaction polish pass focused on:
+- sticky action area
+- persistent lightweight context
+- reduced scroll friction
+
+----------------------------------------
+12. SUCCESS CRITERIA
+----------------------------------------
+
+After implementation:
+- user can always type without scrolling to bottom
+- user retains awareness of what program they’re editing
+- no need to scroll to top just to regain context
+- no need to scroll to bottom just to act
+- mobile Safari experience feels smooth and intentional
+
+----------------------------------------
+13. DELIVERABLES
+----------------------------------------
+
+After implementation, provide:
+1. what was changed to make the input sticky
+2. how the compact sticky context bar works
+3. how large program cards and compact context interact
+4. what safe-area/mobile Safari adjustments were added
+5. any remaining edge cases on very small screens

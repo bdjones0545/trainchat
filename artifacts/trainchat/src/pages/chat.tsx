@@ -997,6 +997,38 @@ export default function Chat() {
             </div>
           )}
 
+          {/* Compact sticky context bar — shows when a program exists */}
+          {displayProgram && (
+            <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 border-b border-border bg-background/90 backdrop-blur-sm">
+              <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+                <div
+                  className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                    buildingState.isBuilding ? "bg-primary animate-pulse" : "bg-green-400"
+                  }`}
+                />
+                <span className="text-[11px] font-semibold text-foreground truncate">
+                  {displayProgram.programName}
+                </span>
+                <span className="text-[10px] text-muted-foreground hidden sm:block flex-shrink-0">
+                  {[
+                    displayProgram.days?.length ? `${displayProgram.days.length} days/wk` : null,
+                    displayProgram.blockLabel ?? null,
+                    displayProgram.weekNumber ? `Week ${displayProgram.weekNumber}` : null,
+                  ].filter(Boolean).join(" · ")}
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  setMobilePanel("right");
+                  setRightPanelOpen(true);
+                }}
+                className="flex-shrink-0 text-[10px] font-semibold text-primary px-2.5 py-1 rounded-lg hover:bg-primary/10 active:bg-primary/15 transition-all ml-2"
+              >
+                View →
+              </button>
+            </div>
+          )}
+
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-4 pt-4 md:pt-12 pb-4">
             {messagesLoading ? (
@@ -1104,8 +1136,11 @@ export default function Chat() {
             error={stream.state.error}
           />
 
-          {/* Input bar */}
-          <div className="flex-shrink-0 px-4 pb-5 pt-3 border-t border-border bg-background/80 backdrop-blur-sm">
+          {/* Input bar — safe-area aware, always visible above Safari chrome */}
+          <div
+            className="flex-shrink-0 px-4 pt-3 border-t border-border bg-background/80 backdrop-blur-sm"
+            style={{ paddingBottom: "max(20px, env(safe-area-inset-bottom))" }}
+          >
             <div className="max-w-2xl mx-auto">
               <div className="flex items-center justify-between mb-2 gap-2">
                 <div className="flex items-center gap-1.5">

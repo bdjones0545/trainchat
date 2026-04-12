@@ -34,7 +34,7 @@ export default function MobileSlideLayout({
   }, [isOpen]);
 
   return (
-    <div className="relative flex flex-col h-screen bg-background overflow-hidden">
+    <div className="relative flex flex-col bg-background overflow-hidden" style={{ height: "100dvh" }}>
       {children}
 
       {/* Backdrop */}
