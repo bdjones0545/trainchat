@@ -437,6 +437,38 @@ export function classifyIntent(
     };
   }
 
+  // ── Priority 4.5: CREATE_PROGRAM (high-confidence explicit signals) ───────
+  // Must run BEFORE edit-program checks because patterns like
+  // "build me a strength-focused program" or "give me an athletic plan" can
+  // accidentally match EDIT_PROGRAM patterns (strength.focus, make.*athletic, etc.)
+  // before reaching the CREATE_PROGRAM check at the old Priority 7.
+  // Explicit creation verb: "build/create/design/generate/write/draft me a program"
+  const explicitCreateVerb =
+    /\b(build|create|design|generate|write|put together|develop|set up|draft)\b.{0,50}\b(program|plan|routine|workout|split|schedule|training)\b/i;
+  // "give me / make me / get me a [new/custom/...] program"
+  const explicitGiveMe =
+    /\b(give me|make me|get me)\b.{0,30}\b(a|an|new|custom|personalized)\b.{0,30}\b(program|plan|routine|workout|split|training)\b/i;
+  // Split-style phrasing: "3-day program", "upper/lower split", "PPL routine", "full body plan"
+  const splitStyleRequest =
+    /\b(\d[\-–]?day|upper[\s\-]?lower|push[\s\-]?pull[\s\-]?legs?|ppl|full[\s\-]?body|bro[\s\-]?split)\b.{0,30}\b(program|plan|routine|split|workout)\b/i;
+  // "I want/need/am looking for a [new] program/plan" — indefinite article signals new, not edit
+  const wantNeedProgram =
+    /\b(i want|i need|i.m looking for|i.m after|looking for|need)\b.{0,30}\b(a|an|new)\b.{0,30}\b(program|plan|routine|workout|training)\b/i;
+  // "can you build/create/make me a program"
+  const canYouBuild =
+    /\b(can you|could you|help me)\b.{0,30}\b(build|create|design|make|write|put together)\b.{0,30}\b(program|plan|routine|workout|training)\b/i;
+
+  if (
+    explicitCreateVerb.test(lower) ||
+    explicitGiveMe.test(lower) ||
+    splitStyleRequest.test(lower) ||
+    wantNeedProgram.test(lower) ||
+    canYouBuild.test(lower)
+  ) {
+    logger.debug("[IntentRouter] → CREATE_PROGRAM (explicit high-confidence signal before edit check)");
+    return { type: "CREATE_PROGRAM", confidence: "high" };
+  }
+
   // ── Priority 5: ADJUST_FOR_READINESS ─────────────────────────────────────
   const readinessResult = matchesReadinessAdjustment(lower);
   if (readinessResult.matched) {
@@ -674,7 +706,7 @@ function matchesEditProgram(lower: string, hasActiveProgram: boolean): {
 } {
   const noMatch = { matched: false, confidence: "low" as const, subtype: "general_modification" as EditSubtype };
 
-  // High-confidence edit patterns
+  // High-confidence edit patterns — context-independent (clearly surgical modifications)
   const highConfidencePatterns: Array<{ pattern: RegExp; subtype: EditSubtype }> = [
     { pattern: /\b(add|include|insert|put in|incorporate|need|missing|no)\b.{0,40}\b(core|abs|abdominal|trunk|anti.?rotation|anti.?extension)\b/i, subtype: "add_core" },
     { pattern: /\b(add|include|more|need|missing|no)\b.{0,40}\b(hamstring|hams|leg curl|nordic|glute.ham|rdl|romanian)\b/i, subtype: "add_hamstrings" },
@@ -690,9 +722,6 @@ function matchesEditProgram(lower: string, hasActiveProgram: boolean): {
     { pattern: /\b(lengthen|make.{0,20}longer|more.{0,20}time|90 min|longer sessions?)\b/i, subtype: "lengthen_sessions" },
     { pattern: /\b(less.{0,20}(fatiguing|fatigue|volume|intense|demanding|grueling|exhausting)|reduce.{0,20}(volume|fatigue|load))\b/i, subtype: "reduce_fatigue" },
     { pattern: /\b(more.{0,20}(volume|sets|work)|increase.{0,20}(volume|sets)|add.{0,20}(sets|volume))\b/i, subtype: "increase_volume" },
-    { pattern: /\b(more athletic|athletic (focus|training|style)|sport(s)?.specific|explosive|power (work|development)|make.*athletic)\b/i, subtype: "make_more_athletic" },
-    { pattern: /\b(more.{0,20}strength|strength.{0,20}focus|heavier|lower reps?|stronger|make.*strength|strength.?based)\b/i, subtype: "make_more_strength" },
-    { pattern: /\b(more.{0,20}(hypertrophy|muscle|gains?|size)|make.*hypertrophy|bodybuilding style|pump)\b/i, subtype: "make_more_hypertrophy" },
     { pattern: /\b(less.{0,20}(days?|frequency|sessions?)|train.{0,20}(less|fewer)|reduce.{0,20}(frequency|days?))\b/i, subtype: "reduce_frequency" },
     { pattern: /\b(more.{0,20}(days?|frequency|sessions?)|train.{0,20}more|increase.{0,20}(frequency|days?))\b/i, subtype: "increase_frequency" },
     { pattern: /\b(i (just got|got|received|have|looking at)).{0,40}(my|the|this).{0,20}(program|plan|routine|workout)\b/i, subtype: "general_modification" },
@@ -703,6 +732,22 @@ function matchesEditProgram(lower: string, hasActiveProgram: boolean): {
   for (const { pattern, subtype } of highConfidencePatterns) {
     if (pattern.test(lower)) {
       return { matched: true, confidence: "high", subtype };
+    }
+  }
+
+  // Goal-shift patterns — only treated as edits when an active program already exists.
+  // Without a program, "make it more athletic" or "strength-focused" is more likely a new
+  // program description that slipped past the CREATE_PROGRAM priority check.
+  if (hasActiveProgram) {
+    const goalShiftPatterns: Array<{ pattern: RegExp; subtype: EditSubtype }> = [
+      { pattern: /\b(more athletic|athletic (focus|training|style)|sport(s)?.specific|explosive|power (work|development)|make.*athletic)\b/i, subtype: "make_more_athletic" },
+      { pattern: /\b(more.{0,20}strength|strength.{0,20}focus|heavier|lower reps?|stronger|make.*strength|strength.?based)\b/i, subtype: "make_more_strength" },
+      { pattern: /\b(more.{0,20}(hypertrophy|muscle|gains?|size)|make.*hypertrophy|bodybuilding style|pump)\b/i, subtype: "make_more_hypertrophy" },
+    ];
+    for (const { pattern, subtype } of goalShiftPatterns) {
+      if (pattern.test(lower)) {
+        return { matched: true, confidence: "high", subtype };
+      }
     }
   }
 

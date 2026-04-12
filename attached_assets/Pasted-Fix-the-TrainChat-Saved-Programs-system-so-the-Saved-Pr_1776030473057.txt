@@ -1,0 +1,186 @@
+Fix the TrainChat Saved Programs system so the Saved Programs dropdown shows all real saved program records, not just one.
+
+CURRENT ISSUE:
+The Saved Programs dropdown only shows one program, even after multiple programs have been created.
+
+This means one of the following is still broken:
+- new program creation is overwriting instead of inserting a new program record
+- old active programs are not being marked/saved correctly
+- the Saved Programs query is only returning one result
+- the UI is still partially treating the app like a single-program system
+
+GOAL:
+Saved Programs must show the full library of the user’s previously created programs.
+
+----------------------------------------
+1. VERIFY THE DATA MODEL
+----------------------------------------
+
+Audit the persistence layer and confirm that each distinct program is stored as its own program record with its own unique ID.
+
+Expected model:
+program = {
+  id,
+  userId,
+  title,
+  goal,
+  sportContext,
+  frequencyPerWeek,
+  structureSummary,
+  status: "active" | "saved" | "archived" | "draft",
+  createdAt,
+  updatedAt,
+  sourceBuilderSessionId
+}
+
+There must be many program records per user, not one mutable master record.
+
+----------------------------------------
+2. FIX CREATE VS UPDATE LOGIC
+----------------------------------------
+
+When the user creates a genuinely new program:
+- INSERT a new program record
+- do NOT overwrite the existing active program record
+
+Only UPDATE an existing program when the intent is clearly:
+- modify current program
+- refine current active program
+- edit a selected saved program
+
+Examples:
+- “Build me a hypertrophy plan” → create new program
+- “Make it 4 days” while editing current plan → update current program
+
+Confirm this distinction in the backend.
+
+----------------------------------------
+3. FIX ACTIVE/SAVED STATUS TRANSITIONS
+----------------------------------------
+
+When a new program becomes active:
+- mark the previous active program as saved
+- do NOT delete it
+- do NOT leave it invisible
+
+Expected rule:
+- exactly one active program
+- zero or more saved programs
+
+If a new active program is created and the previous active program disappears, this logic is broken.
+
+----------------------------------------
+4. AUDIT THE SAVED PROGRAMS QUERY
+----------------------------------------
+
+Check the query used for the Saved Programs dropdown.
+
+Likely bug candidates:
+- returning only the latest record
+- LIMIT 1 still present
+- filtering to active only
+- filtering to current builder session only
+- excluding old programs incorrectly
+- only loading one cached result
+
+Saved Programs should return all relevant saved program records for the current user.
+
+Recommended:
+- fetch all programs where userId matches
+- exclude archived if desired
+- optionally separate active vs saved in UI
+- sort by updatedAt descending
+
+----------------------------------------
+5. DECIDE WHETHER ACTIVE PROGRAM APPEARS IN SAVED PROGRAMS
+----------------------------------------
+
+Choose one of these patterns and implement consistently:
+
+Option A:
+- Active Program shown separately
+- Saved Programs shows all NON-active saved programs
+
+Option B:
+- Saved Programs shows all programs, including active, with an active badge
+
+Either is fine, but it must be intentional and consistent.
+
+Right now the bug makes it look like only one exists.
+
+----------------------------------------
+6. FIX THE UI RENDERING LAYER
+----------------------------------------
+
+Ensure the dropdown component:
+- maps over the full saved programs array
+- does not truncate after one item
+- does not accidentally render only selected/current item
+- correctly handles multiple entries with proper spacing and scroll if needed
+
+Add support for:
+- title
+- summary line (frequency / structure)
+- active badge if needed
+- tap to load/switch active program
+
+----------------------------------------
+7. ADD DEBUG CHECKS TEMPORARILY
+----------------------------------------
+
+Log:
+- total program records for current user
+- active program ID
+- saved program IDs returned by query
+- count of dropdown items rendered
+
+This will reveal whether the issue is:
+- persistence
+- query
+- rendering
+
+----------------------------------------
+8. TEST WITH REAL SCENARIO
+----------------------------------------
+
+Run this exact flow:
+
+1. Create Program A:
+   Hockey Performance 3-Day
+
+2. Start New Builder Session
+   Create Program B:
+   Hypertrophy Program 3-Day
+
+3. Start New Builder Session
+   Create Program C:
+   Home Equipment Plan
+
+Expected result:
+- one program marked active
+- the other two visible in Saved Programs
+- dropdown shows all non-active saved programs (or all, depending on chosen UX)
+
+If only one appears, the bug is still unresolved.
+
+----------------------------------------
+9. PRESERVE PROGRAM SWITCHING
+----------------------------------------
+
+When the user taps a saved program:
+- load that program
+- make it active if that is the intended behavior
+- preserve all other saved programs
+- do not collapse the library into one visible item afterward
+
+----------------------------------------
+10. DELIVERABLES
+----------------------------------------
+
+After implementation, provide:
+1. whether the bug was create-vs-update, query, or UI render related
+2. how many program records now persist per user
+3. the final Saved Programs query behavior
+4. whether active program is included or excluded from Saved Programs
+5. confirmation that multiple created programs now appear in the dropdown
+6. any migration logic needed if old data was overwritten before
