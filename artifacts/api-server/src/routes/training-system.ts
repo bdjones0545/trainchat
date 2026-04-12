@@ -160,6 +160,38 @@ router.post("/training-system/from-chat", requireAuth, async (req, res): Promise
 
     logger.info({ userId, systemId: system.id }, "[training-system] POST /from-chat — Training System created successfully");
 
+    // Create an initial "Version 1" change log entry so the History tab
+    // immediately shows the program build as the first version snapshot.
+    try {
+      const emptySnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
+      const buildParts: string[] = [`Created: ${program.programName}`];
+      if (program.days?.length) buildParts.push(`${program.days.length} training days`);
+      if (program.splitType) buildParts.push(program.splitType);
+      if (program.progressionStrategy) buildParts.push(program.progressionStrategy);
+
+      await createChangeLogEntry({
+        userId,
+        trainingSystemId: system.id,
+        source: "initialize",
+        intent: "initialize",
+        scope: "system",
+        changeSummary: buildParts.join(" · "),
+        beforeSnapshot: emptySnapshot,
+        afterSnapshot: emptySnapshot,
+        fullProgramSnapshot: program as unknown as Record<string, unknown>,
+        appliedCount: program.days?.length ?? 0,
+        skippedCount: 0,
+        versionOverrides: { isMajorVersion: true, versionLabel: "Initial Build" },
+        decisionMetadata: {
+          programGoal: program.description ?? undefined,
+          programDays: program.days?.length ?? 0,
+          splitType: program.splitType ?? undefined,
+        },
+      });
+    } catch (err) {
+      logger.warn({ err }, "[training-system] Could not create initial change log entry (non-fatal)");
+    }
+
     res.status(201).json({
       success: true,
       systemId: system.id,

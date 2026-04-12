@@ -617,6 +617,20 @@ function ProgramTab({
         }
       `}</style>
       {isUpdating && updatePhase && <UpdatingBadge phase={updatePhase} />}
+
+      {/* "Updating..." feedback banner — shown while AI is modifying the program */}
+      {isUpdating && (
+        <div
+          className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-primary/8 border-b border-primary/15"
+          style={{ animation: "fadeSlideIn 0.2s ease both" }}
+        >
+          <Loader2 className="w-3 h-3 animate-spin text-primary flex-shrink-0" />
+          <span className="text-[10px] font-semibold text-primary">
+            Updating your program based on your input…
+          </span>
+        </div>
+      )}
+
       {/* Program header */}
       <div className="p-4 border-b border-border flex-shrink-0">
         {(program.weekNumber || program.blockLabel) && (
@@ -631,9 +645,9 @@ function ProgramTab({
         )}
 
         <div className="flex items-center gap-1.5 mb-1.5">
-          <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" style={{ animationDuration: "3s" }} />
+          <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" style={{ animationDuration: "2s" }} />
           <span className="text-[9px] font-bold text-primary uppercase tracking-[0.12em]">
-            Live Program
+            Live Program (Auto-Updating)
           </span>
           {!isPremium && (
             <span className="ml-auto text-[9px] font-semibold text-amber-400/70 flex items-center gap-1">
@@ -1347,12 +1361,14 @@ export default function LiveProgramPanel({
     return <BuildingFromScratch stage={buildingState.stage} />;
   }
 
-  const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
-    { id: "program", label: "Program", icon: Dumbbell },
-    { id: "changes", label: "Changes", icon: Activity },
-    { id: "history", label: "History", icon: GitBranch },
-    { id: "forecast", label: "Forecast", icon: Zap },
+  const tabs: { id: Tab; label: string; subtitle: string; icon: React.ElementType }[] = [
+    { id: "program", label: "Program", subtitle: "Current build · live", icon: Dumbbell },
+    { id: "changes", label: "Changes", subtitle: "What changed & why", icon: Activity },
+    { id: "history", label: "History", subtitle: "How it evolved", icon: GitBranch },
+    { id: "forecast", label: "Forecast", subtitle: "What's coming next", icon: Zap },
   ];
+
+  const activeTabMeta = tabs.find((t) => t.id === activeTab);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -1390,6 +1406,15 @@ export default function LiveProgramPanel({
           );
         })}
       </div>
+
+      {/* Active tab context strip */}
+      {activeTabMeta && (
+        <div className="flex-shrink-0 px-3 py-1 bg-muted/20 border-b border-border/40">
+          <span className="text-[9px] text-muted-foreground/50 font-medium tracking-wide">
+            {activeTabMeta.subtitle}
+          </span>
+        </div>
+      )}
 
       {/* Tab content */}
       <div className="flex-1 min-h-0 overflow-hidden">

@@ -623,6 +623,12 @@ Keep it helpful and intelligent, never promotional.`;
         );
 
         if (editResult.appliedCount > 0) {
+          // Aggregate the AI's per-change reasons into a single "whyChanged" string
+          const whyChangedParts = editPlan.changes
+            .map((c) => c.reason)
+            .filter((r): r is string => !!r);
+          const whyChanged = whyChangedParts.length > 0 ? whyChangedParts.join("; ") : undefined;
+
           // Log the change to system_change_log
           const changeLogId = await createChangeLogEntry({
             userId,
@@ -636,6 +642,11 @@ Keep it helpful and intelligent, never promotional.`;
             afterSnapshot: editResult.afterSnapshot,
             appliedCount: editResult.appliedCount,
             skippedCount: editResult.skippedCount,
+            decisionMetadata: {
+              whyChanged,
+              intentType: intentResult.type,
+              editSubtype: intentResult.editSubtype ?? undefined,
+            },
           });
 
           // Build coaching response confirming the change
