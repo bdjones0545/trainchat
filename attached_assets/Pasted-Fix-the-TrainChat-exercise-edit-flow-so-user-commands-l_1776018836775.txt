@@ -1,0 +1,291 @@
+Fix the TrainChat exercise edit flow so user commands like “make it harder” trigger a real exercise mutation, not just a generic cue or note.
+
+CURRENT ISSUE:
+Inside the exercise edit/log panel, the user typed:
+“Make it harder”
+
+The system responded as if it succeeded, but it did NOT actually:
+- provide a harder variation
+- replace the exercise
+- modify sets/reps/load meaningfully
+- show the exact change applied
+
+Instead, it added a vague progression cue and returned a success state.
+This is a false completion problem.
+
+GOAL:
+Make exercise editing commands action-bound and mutation-driven.
+If the system says a change was applied, a real change must have occurred in the program state.
+
+----------------------------------------
+1. CREATE A STRICT INTENT PARSER FOR EXERCISE EDITS
+----------------------------------------
+
+When the user submits a custom request inside an exercise panel, parse it into one of these action intents:
+
+- harder_variation
+- easier_variation
+- swap_exercise
+- increase_load
+- decrease_load
+- change_reps
+- change_sets
+- add_tempo_or_pause
+- modify_rest
+- clarify_request
+- add_note_only (rare fallback)
+
+Examples:
+- “Make it harder” → harder_variation OR increase_load
+- “This is too hard” → easier_variation OR decrease_load
+- “Swap this out” → swap_exercise
+- “More reps” → change_reps
+- “Shorter rest” → modify_rest
+
+Do NOT default vague requests to add_note_only if a meaningful action can be inferred.
+
+----------------------------------------
+2. ADD EXERCISE-AWARE INTERPRETATION
+----------------------------------------
+
+The action chosen must depend on the current exercise type.
+
+Example:
+Current exercise = Back Squat
+
+“Make it harder” should resolve to one of:
+- increase load target
+- add pause
+- add tempo
+- move to more demanding squat variation
+- tighten rep target
+
+Current exercise = Broad Jump
+
+“Make it harder” should resolve to one of:
+- increase distance target
+- increase set count slightly
+- change to harder jump variation
+- add reactive demand
+
+Current exercise = Pallof Press
+
+“Make it harder” should resolve to one of:
+- increase load
+- increase lever length
+- increase reps slightly
+- change stance/challenge level
+
+Do not apply the same generic “harder” logic to every exercise.
+
+----------------------------------------
+3. REQUIRE A REAL MUTATION BEFORE SUCCESS
+----------------------------------------
+
+The system must NOT show:
+- “Done”
+- “1 change applied”
+- success messaging
+
+unless a real mutation has occurred in programState.
+
+Valid mutation examples:
+- exercise swapped
+- sets changed
+- reps changed
+- load target changed
+- tempo/paused cue added as structured prescription change
+- rest changed
+- exercise variation changed
+
+Invalid:
+- adding only a motivational note
+- adding only a generic progression sentence
+- adding only a label with no prescription change
+
+----------------------------------------
+4. DEFINE HARDER VARIATION LOGIC
+----------------------------------------
+
+For each exercise, use metadata such as:
+- variationFamily
+- progressionType
+- role
+- movementPattern
+- fatigueCost
+
+Create:
+
+getHarderOptions(exercise)
+
+Example for Back Squat:
+- Pause Back Squat
+- Tempo Back Squat
+- Front Squat
+- Pin Squat
+- Back Squat with increased load target
+
+The system should choose the best harder option based on:
+- session intent
+- exercise role
+- user history
+- available equipment
+- recovery context
+
+----------------------------------------
+5. DISTINGUISH “HARDER SAME EXERCISE” VS “HARDER VARIATION”
+----------------------------------------
+
+If the user says:
+- “Make it harder”
+default to a real harder progression first IF appropriate
+
+If the user says:
+- “Give me a harder variation”
+force exercise replacement within the same movement role/pattern
+
+If both are plausible and confidence is low, show two options:
+A. Harder progression
+B. Harder variation
+
+But do not silently do neither.
+
+----------------------------------------
+6. UPDATE PROGRAM STATE WITH STRUCTURED CHANGE
+----------------------------------------
+
+Every successful edit must write a structured mutation like:
+
+exerciseMutation = {
+  sessionId,
+  exerciseId,
+  mutationType: "harder_variation",
+  previousExercise: "Back Squat",
+  newExercise: "Pause Back Squat",
+  previousPrescription: { sets: 4, reps: "4-6" },
+  newPrescription: { sets: 4, reps: "4-6" },
+  reason: "User requested harder variation"
+}
+
+Or:
+
+exerciseMutation = {
+  sessionId,
+  exerciseId,
+  mutationType: "increase_load_target",
+  previousPrescription: { loadCue: "work to challenging 4-6" },
+  newPrescription: { loadCue: "increase load 5-10 lb when top reps are achieved" },
+  reason: "User requested harder version of current lift"
+}
+
+----------------------------------------
+7. SHOW THE EXACT CHANGE APPLIED
+----------------------------------------
+
+After mutation, the success UI must say exactly what changed.
+
+Good examples:
+- “Changed Back Squat to Pause Back Squat.”
+- “Increased Back Squat difficulty by adding a 2-second pause.”
+- “Updated Back Squat progression target: add 5 lb when 6 reps are achieved across all sets.”
+
+Bad examples:
+- “Progression cue added”
+- “1 change applied”
+- “Done”
+
+The user must know what happened.
+
+----------------------------------------
+8. UPDATE THE SESSION UI IMMEDIATELY
+----------------------------------------
+
+After a successful edit:
+- the session card should refresh
+- the exercise name should update if swapped
+- sets/reps/rest should update if modified
+- the exercise detail panel should show the new current state
+
+Do not require the user to guess whether anything changed.
+
+----------------------------------------
+9. WRITE TO CHANGES TAB / HISTORY
+----------------------------------------
+
+Every successful mutation should appear in Changes.
+
+Example:
+V3 EXERCISE EDIT
+- Back Squat changed to Pause Back Squat
+- Reason: user requested a harder variation
+
+Or:
+V3 EXERCISE EDIT
+- Back Squat intensity increased with pause prescription
+- Reason: user requested a harder version
+
+----------------------------------------
+10. ADD A FALLBACK CLARIFIER ONLY WHEN NEEDED
+----------------------------------------
+
+If the request is truly ambiguous, ask:
+
+“Do you want:
+1. a harder version of this same lift
+2. a harder variation of the movement
+3. more total volume?”
+
+But only ask this if confidence is genuinely low.
+For “make it harder” on a known exercise, the system should usually infer a valid action.
+
+----------------------------------------
+11. FIX THE CURRENT BACK SQUAT CASE
+----------------------------------------
+
+For the exact case shown:
+User request:
+“Make it harder”
+
+Valid system responses include:
+- convert Back Squat → Pause Back Squat
+- convert Back Squat → Front Squat if appropriate
+- add tempo prescription
+- update load progression target in a real structured way
+
+It must NOT only add a generic cue and pretend success.
+
+----------------------------------------
+12. ADD COMMAND TEST CASES
+----------------------------------------
+
+Verify these:
+
+1. Back Squat + “make it harder”
+→ real harder mutation occurs
+
+2. Back Squat + “give me a harder variation”
+→ exercise swaps to a harder squat-family option
+
+3. Pallof Press + “make it harder”
+→ harder trunk progression occurs
+
+4. Broad Jump + “make it harder”
+→ no weight-based mutation; use jump-appropriate progression
+
+5. “Make it easier”
+→ real easier variation or reduced demand
+
+6. “Swap this”
+→ replacement stays within proper role/pattern pool
+
+----------------------------------------
+13. DELIVERABLES
+----------------------------------------
+
+After implementation, provide:
+1. the new exercise edit intent parser
+2. how “make it harder” is resolved by exercise type
+3. how programState stores exercise mutations
+4. how success UI now reflects exact changes
+5. how Changes tab records exercise edits
+6. any remaining ambiguous cases that still require clarification

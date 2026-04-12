@@ -1,0 +1,417 @@
+Build a role-based exercise intelligence system for TrainChat so the architecture engine selects exercises from a structured coaching library instead of a generic exercise list.
+
+GOAL:
+Convert the exercise library into a tagged, coach-aware movement system that supports:
+- weekly architecture
+- session intent
+- CNS flow
+- sport overlay
+- recovery spacing
+- exercise-type-aware logging
+- progression by exercise type
+
+The system must stop treating exercises like flat inventory.
+It must treat them like tools with defined roles, demands, and transfer.
+
+----------------------------------------
+1. CREATE A STRUCTURED EXERCISE METADATA MODEL
+----------------------------------------
+
+Every exercise in the library must have metadata like:
+
+{
+  id: "...",
+  name: "Back Squat",
+  category: "strength_lift",
+  roleCandidates: ["primary", "secondary"],
+  primaryMovementPattern: "squat_bilateral",
+  secondaryMovementPatterns: [],
+  neuralDemand: "high",
+  tissueDemand: "high",
+  planeOfMotion: ["sagittal"],
+  sportTransfer: ["force_production", "acceleration_support"],
+  sessionFit: ["lower_force", "full_body_strength"],
+  equipment: ["barbell", "rack"],
+  difficulty: "intermediate",
+  coachingIntent: "Main bilateral force production lift",
+  loggingMode: "load_reps",
+  progressionType: "load_based",
+  fatigueCost: "high",
+  contraindicationTags: ["low_back_irritation_possible"],
+  preferredPairings: ["box_jump", "pallof_press"],
+  duplicateGroup: "barbell_squat_family",
+  variationFamily: "squat",
+  isWarmupFlow: false,
+  isPowerMovement: false,
+  isMainLift: true,
+  isUnilateral: false,
+  isTrunk: false,
+  isIntegration: false
+}
+
+This metadata should exist for every exercise and drive all selection logic.
+
+----------------------------------------
+2. DEFINE REQUIRED TAG GROUPS
+----------------------------------------
+
+Every exercise must be tagged across these dimensions:
+
+A. ROLE CANDIDATES
+- activation
+- power
+- primary
+- secondary
+- accessory
+- trunk
+- integration
+- conditioning
+- recovery
+
+B. MOVEMENT PATTERN
+- squat_bilateral
+- squat_unilateral
+- hinge_bilateral
+- hinge_unilateral
+- lunge
+- push_horizontal
+- push_vertical
+- pull_horizontal
+- pull_vertical
+- anti_rotation
+- anti_extension
+- anti_lateral_flexion
+- rotation
+- locomotion
+- jump_vertical
+- jump_horizontal
+- jump_lateral
+- throw_rotational
+- throw_linear
+- sprint
+- deceleration
+- mobility_flow
+
+C. NEURAL DEMAND
+- high
+- moderate
+- low
+
+D. TISSUE / FATIGUE COST
+- high
+- moderate
+- low
+
+E. PLANE OF MOTION
+- sagittal
+- frontal
+- transverse
+
+F. SPORT TRANSFER
+Examples:
+- acceleration
+- deceleration
+- lateral_force
+- rotational_power
+- trunk_stiffness
+- single_leg_stability
+- force_production
+- elastic_reactivity
+
+G. SESSION FIT
+Examples:
+- lower_force
+- upper_strength
+- posterior_chain
+- full_body_power
+- trunk_focus
+- recovery_day
+
+H. LOGGING MODE
+- load_reps
+- reps_only
+- distance_reps
+- height_reps
+- throws_reps
+- time_only
+- distance_time
+- mobility_flow
+
+I. PROGRESSION TYPE
+- load_based
+- reps_based
+- duration_based
+- distance_quality
+- height_quality
+- velocity_quality
+- completion_only
+- load_or_control
+
+----------------------------------------
+3. AUTO-TAG THE EXISTING LIBRARY
+----------------------------------------
+
+Audit the current exercise library and auto-assign metadata where possible using:
+- exercise name
+- current category
+- description
+- known movement pattern
+
+Then create a review queue for uncertain exercises.
+
+Rules:
+- do not default uncertain exercises to “primary”
+- do not default all loaded movements to the same role
+- do not default all jumps to weight-based tracking
+- do not default all core work to accessory
+
+If confidence is low, mark:
+needsReview: true
+
+----------------------------------------
+4. BUILD ROLE-BASED EXERCISE POOLS
+----------------------------------------
+
+Instead of one flat exercise list, build filtered pools.
+
+Examples:
+
+powerPool.lower_horizontal
+powerPool.lateral
+primaryPool.lower_force
+secondaryPool.unilateral_lower
+trunkPool.anti_rotation
+accessoryPool.upper_pull
+integrationPool.carry_locomotion
+
+The architecture engine should fill session slots from these pools, not from the whole database.
+
+Example:
+If session intent = “Lower body force production + trunk stiffness”
+then selection order might be:
+1. activationPool.lower_prep
+2. powerPool.horizontal_or_vertical
+3. primaryPool.lower_force
+4. secondaryPool.unilateral_lower
+5. accessoryPool.structural_support
+6. trunkPool.anti_rotation_or_anti_extension
+
+----------------------------------------
+5. BUILD SMART SELECTION RULES
+----------------------------------------
+
+Create:
+
+selectExerciseForSlot({
+  role,
+  sessionIntent,
+  movementNeed,
+  userProfile,
+  recentExerciseHistory,
+  userPerformanceMemory,
+  equipment,
+  sportContext
+})
+
+This function should:
+- choose from the correct pool
+- avoid recent duplicates
+- respect spacing rules
+- respect user pain/history/preferences
+- match equipment
+- match session intent
+- match sport overlay
+
+This is the core of intelligent selection.
+
+----------------------------------------
+6. ADD DUPLICATION AND SPACING INTELLIGENCE
+----------------------------------------
+
+Use metadata fields such as:
+- duplicateGroup
+- variationFamily
+- neuralDemand
+- fatigueCost
+
+Rules:
+- do not place same duplicateGroup on adjacent days unless intentional
+- do not place same exact exercise too frequently
+- monitor high-fatigueCost exercises across week
+- monitor repeated movement families across adjacent sessions
+
+Example:
+Back Squat and Front Squat may be different exercises but same variationFamily.
+Bench Press and Incline Bench may be same push family and need spacing logic.
+
+----------------------------------------
+7. ADD HOCKEY-SPECIFIC EXERCISE BIAS
+----------------------------------------
+
+For hockey programs, bias the library toward:
+- lateral movement
+- unilateral lower-body work
+- rotational power
+- trunk stiffness
+- acceleration/deceleration
+- posterior chain support
+- edge-control-style stability
+
+Examples to prioritize:
+- lateral bounds
+- rotational med ball throws
+- split squat variations
+- rear-foot-elevated split squat
+- skater jumps
+- anti-rotation cable work
+- carries
+- posterior chain work with athletic transfer
+
+Reduce selection bias toward:
+- redundant bilateral volume
+- bodybuilding accessories with low transfer
+- repeated pressing without purpose
+
+----------------------------------------
+8. ADD SESSION TEMPLATE SLOT DEFINITIONS
+----------------------------------------
+
+For each session type, define required slots.
+
+Examples:
+
+lower_force session:
+- activation
+- power
+- primary lower bilateral
+- secondary unilateral lower
+- accessory pull or posterior support
+- trunk
+
+upper_strength session:
+- activation
+- power/throw optional
+- primary upper push or pull
+- secondary upper complement
+- accessory structural support
+- trunk/integration
+
+full_body_power session:
+- dynamic prep
+- explosive movement
+- primary force lift
+- secondary complementary lift
+- integration/trunk
+- optional locomotion/carry
+
+The engine should fill slots, not just append random exercises.
+
+----------------------------------------
+9. SUPPORT EXERCISE SWAPS WITHIN SAME ROLE
+----------------------------------------
+
+When a user taps “swap this exercise,” replacement options should come from the same logical pool.
+
+Example:
+If current exercise = Back Squat
+Possible swaps should come from:
+- primary lower bilateral force pool
+
+Not random unrelated movements.
+
+If current exercise = Pallof Press
+Swaps should come from:
+- trunk anti-rotation pool
+
+This makes swaps feel coach-quality.
+
+----------------------------------------
+10. CONNECT TAGS TO LOGGING + PROGRESSION
+----------------------------------------
+
+Use metadata to control:
+- logger fields
+- progression engine rules
+- mid-session recommendation logic
+- block-level adaptation logic
+
+Examples:
+- Broad Jump → loggingMode distance_reps, progressionType distance_quality
+- Back Squat → loggingMode load_reps, progressionType load_based
+- Pallof Press → loggingMode load_reps or reps_only, progressionType load_or_control
+- Leg Swing + Inchworm + Hip Circle → loggingMode mobility_flow, progressionType completion_only
+
+This metadata should unify the entire system.
+
+----------------------------------------
+11. ADD LIBRARY QA / VALIDATION TOOLS
+----------------------------------------
+
+Create validation functions like:
+
+validateExerciseMetadata(exercise)
+validateExercisePoolCoverage(library)
+validateSessionSlotCoverage(sessionTemplate, library)
+
+Checks:
+- every exercise has required fields
+- every session slot has enough viable exercises
+- hockey overlay pools are sufficiently populated
+- no major category is underrepresented
+- logging mode exists for every exercise
+- progression type exists for every exercise
+
+If gaps exist, report them clearly.
+
+----------------------------------------
+12. BUILD A GAP REPORT
+----------------------------------------
+
+After tagging the library, generate a report showing where the current inventory is weak.
+
+Examples:
+- trunk anti-rotation pool too small
+- lateral power pool too small
+- unilateral posterior chain pool underbuilt
+- upper pull accessory pool adequate
+- recovery/mobility pool underbuilt
+
+This tells us where to strategically add exercises instead of adding random inventory.
+
+----------------------------------------
+13. PRIORITIZE QUALITY OVER QUANTITY
+----------------------------------------
+
+Do NOT bloat the library with redundant exercises.
+
+Prefer:
+- fewer exercises
+- better tags
+- stronger pool coverage
+- cleaner role fit
+
+We want a curated performance library, not a random 1500-exercise dump.
+
+----------------------------------------
+14. APPLY TO CURRENT TRAINCHAT OUTPUT
+----------------------------------------
+
+Use this system to improve current program generation so:
+- sessions are built by role and intent
+- repeated bench on back-to-back days is prevented
+- underbuilt days are prevented
+- hockey-relevant movement selection improves
+- warm-up, power, primary, support, trunk all come from the right pools
+
+----------------------------------------
+15. DELIVERABLES
+----------------------------------------
+
+After implementation, provide:
+1. the final exercise metadata schema
+2. how the current library was auto-tagged
+3. which exercises were marked needsReview
+4. the role-based pool structure
+5. how the architecture engine uses the pools
+6. the library gap report
+7. recommended exercise categories to expand next
