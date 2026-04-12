@@ -36,13 +36,19 @@ export default function TopNav({ userName, extraContent }: Props) {
 
   return (
     <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-background/95 backdrop-blur-sm flex-shrink-0 z-10">
-      {/* Logo */}
-      <img
-        src={trainChatLogo}
-        alt="TrainChat"
-        className="h-7 object-contain"
-        data-testid="img-logo"
-      />
+      {/* Logo — home/agent anchor */}
+      <button
+        onClick={() => setLocation("/chat")}
+        aria-label="Return to TrainChat agent"
+        className="flex items-center justify-center rounded-xl px-2 py-1 transition-all duration-150 active:scale-95 active:opacity-70 hover:opacity-80"
+      >
+        <img
+          src={trainChatLogo}
+          alt="TrainChat"
+          className="h-7 object-contain"
+          data-testid="img-logo"
+        />
+      </button>
 
       {/* Center — primary nav (always visible) */}
       <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2">

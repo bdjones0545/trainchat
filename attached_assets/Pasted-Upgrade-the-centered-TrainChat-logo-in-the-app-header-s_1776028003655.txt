@@ -1,0 +1,196 @@
+Upgrade the centered TrainChat logo in the app header so it is not just branding, but a consistent functional “home / return to agent” control.
+
+CURRENT ISSUE:
+The centered TrainChat logo at the top looks clean, but it currently reads more like a static brand mark than a useful interaction point.
+
+GOAL:
+Make the centered logo a reliable, intentional navigation anchor:
+- tapping it should always return the user to the main agent/chat screen
+- it should feel interactive
+- it should preserve the current live state unless a reset is explicitly required
+- it should help the app feel more cohesive and intuitive
+
+----------------------------------------
+1. MAKE THE CENTER LOGO CLICKABLE
+----------------------------------------
+
+The centered TrainChat logo in the top header must be tappable/clickable.
+
+On tap:
+- navigate to the agent/chat home screen
+- close transient UI layers if needed
+- preserve current user/guest session state
+- preserve current program state unless a reset is explicitly intended elsewhere
+
+This should behave like:
+- “return to the brain”
+- “go back to the core agent”
+- “home base for the app”
+
+----------------------------------------
+2. ALWAYS ROUTE TO THE AGENT
+----------------------------------------
+
+When the centered logo is tapped, route to the main agent view.
+
+Examples:
+- if user is in Today / This Week / Block / History
+  → go to the main chat/agent screen
+- if user is in a modal or sub-view
+  → close/dismiss the transient layer and return to agent
+- if user is already in agent
+  → optionally scroll to latest or just stay there
+
+Important:
+Do NOT reset their whole account or clear their program.
+This is navigation, not destruction.
+
+----------------------------------------
+3. PRESERVE LIVE STATE
+----------------------------------------
+
+Tapping the logo should NOT:
+- log the user out
+- clear guest mode
+- wipe conversation history
+- erase the current program
+- remove unsaved state unless explicitly intended
+
+It should only:
+- return the user to the primary agent interface
+- collapse/remove transient views if needed
+
+----------------------------------------
+4. HANDLE MODALS / SHEETS / OVERLAYS CLEANLY
+----------------------------------------
+
+If a user is in:
+- an exercise editor bottom sheet
+- block editor
+- program modal
+- another overlay or nested route
+
+then tapping the centered logo should:
+1. dismiss those transient layers safely
+2. navigate back to the agent/chat home
+
+This should feel clean and predictable.
+
+----------------------------------------
+5. ADD MICRO INTERACTION
+----------------------------------------
+
+Make the logo feel intentionally interactive.
+
+Add subtle interaction feedback:
+- tap/press scale
+- slight opacity shift
+- optional soft glow or active highlight
+- smooth but restrained animation
+
+Keep it premium and minimal.
+No loud or playful animation.
+
+----------------------------------------
+6. OPTIONAL: USE IT AS A LIGHT STATE ANCHOR
+----------------------------------------
+
+If helpful, the logo can subtly reflect app activity states.
+
+Examples:
+- normal = idle
+- soft pulse/glow while agent is processing
+- mild active emphasis when updates are being applied
+
+This is optional and should remain subtle.
+Do not make it visually noisy.
+
+----------------------------------------
+7. ACCESSIBILITY + HIT TARGET
+----------------------------------------
+
+Ensure:
+- touch target is large enough for mobile
+- it works well on iPhone Safari
+- it has accessible labeling such as:
+  aria-label="Return to TrainChat agent"
+
+It should be easy to tap without feeling fragile.
+
+----------------------------------------
+8. KEEP THE HEADER HIERARCHY CLEAN
+----------------------------------------
+
+Maintain the current premium header layout:
+- left = nav/back context
+- center = TrainChat logo (home/agent anchor)
+- right = utility/menu controls
+
+Do not clutter the center with labels unless absolutely needed.
+
+----------------------------------------
+9. DEFINE EXACT BEHAVIOR
+----------------------------------------
+
+Expected behavior:
+
+CASE A:
+User is in Today tab
+→ tap logo
+→ return to agent/chat screen
+
+CASE B:
+User is in a bottom sheet editor
+→ tap logo
+→ dismiss editor + return to agent/chat
+
+CASE C:
+User is already in agent/chat
+→ tap logo
+→ optionally scroll to latest or keep position stable
+
+CASE D:
+User is guest mode
+→ tap logo
+→ return to guest agent/chat
+→ preserve guest session
+
+CASE E:
+User is authenticated
+→ tap logo
+→ return to authenticated agent/chat
+→ preserve account state
+
+----------------------------------------
+10. DO NOT LET IT FEEL DEAD
+----------------------------------------
+
+The centered logo should never feel like a non-functional decorative asset.
+
+Users should quickly learn:
+“tap the TrainChat mark to get back to the main agent.”
+
+----------------------------------------
+11. TEST CASES
+----------------------------------------
+
+Verify:
+
+1. Today → tap logo → returns to agent
+2. This Week → tap logo → returns to agent
+3. Block editor open → tap logo → closes editor and returns to agent
+4. Guest mode → tap logo → preserves guest state and returns to agent
+5. Authenticated mode → tap logo → preserves account state and returns to agent
+6. Mobile Safari tap target feels good
+7. Logo shows micro tap feedback
+
+----------------------------------------
+12. DELIVERABLES
+----------------------------------------
+
+After implementation, provide:
+1. what route the logo now targets
+2. how transient modals/sheets are handled on tap
+3. what interactive feedback was added
+4. how guest/auth state is preserved
+5. any edge cases where tapping the logo behaves differently

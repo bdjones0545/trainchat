@@ -925,7 +925,14 @@ export default function Chat() {
         >
           <Menu className="w-5 h-5" />
         </button>
-        <img src={trainChatLogo} alt="TrainChat" className="h-6 object-contain" />
+        <button
+          onClick={() => setMobilePanel(null)}
+          aria-label="Return to TrainChat agent"
+          className="flex items-center justify-center rounded-xl px-2 py-1 transition-all duration-150 active:scale-95 active:opacity-70"
+          style={stream.isActive ? { filter: "drop-shadow(0 0 6px hsl(199 89% 48% / 0.55))" } : undefined}
+        >
+          <img src={trainChatLogo} alt="TrainChat" className="h-6 object-contain" />
+        </button>
         <button
           onClick={() => setMobilePanel("right")}
           className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${
