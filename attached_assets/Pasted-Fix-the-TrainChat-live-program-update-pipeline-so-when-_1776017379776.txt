@@ -1,0 +1,296 @@
+Fix the TrainChat live program update pipeline so when the user modifies the program (example: change from 3 days/week to 4 days/week), ALL dependent UI and state layers update consistently.
+
+CURRENT ISSUE:
+The AI successfully rebuilt the program as a 4-day plan, but several areas still show stale 3-day data.
+
+Observed problems:
+- Program summary/header still references “3-Day” in title or description
+- Some descriptive text still says “A 3-day performance program...”
+- Changes tab does not show the update
+- History tab does not show a new version
+- Some card metadata is stale even though the session structure changed
+- The actual exercises/days were regenerated, but the surrounding system did not fully sync
+
+GOAL:
+Make the live program system fully state-driven so any accepted AI modification updates:
+1. the underlying program
+2. the visible summary/header copy
+3. version history
+4. changes log
+5. all dependent views and cards
+
+----------------------------------------
+1. IDENTIFY THE ROOT ISSUE
+----------------------------------------
+
+Audit the update flow for program modifications.
+
+Likely problem:
+- the new program object is being partially replaced
+- but derived display fields are cached, hardcoded, or not recomputed
+- versioning/history is not triggered for refinement mutations
+- summary cards are reading stale state instead of current programState
+
+Find where:
+- title
+- frequency
+- summary description
+- badge data
+- history entries
+- changes entries
+
+are generated and ensure they come from the latest programState, not initial build state.
+
+----------------------------------------
+2. CREATE A SINGLE SOURCE OF TRUTH
+----------------------------------------
+
+All live program UI must derive from one central object, for example:
+
+programState = {
+  version,
+  currentProgram,
+  currentSummary,
+  changes,
+  history,
+  metadata,
+  updatedAt
+}
+
+Where currentProgram includes:
+- frequencyPerWeek
+- title
+- description
+- sessions[]
+- block info
+- goal
+- sport context
+
+Do not allow tabs/components to independently hold stale copies of program metadata.
+
+----------------------------------------
+3. FORCE FULL RECOMPUTE AFTER PROGRAM REFINEMENT
+----------------------------------------
+
+When the user says something like:
+- “Make it a 4 day program”
+- “Shorten the sessions”
+- “Swap deadlifts for trap bar”
+- “Make this more power focused”
+
+The refinement pipeline must:
+
+1. interpret intent
+2. update programState.currentProgram
+3. regenerate summary metadata
+4. increment version
+5. create changes entry
+6. create history snapshot
+7. re-render all dependent tabs
+
+This must happen every time a meaningful program mutation is accepted.
+
+----------------------------------------
+4. FIX PROGRAM HEADER / SUMMARY SYNC
+----------------------------------------
+
+After regeneration, update all visible summary fields including:
+- title
+- frequency
+- description
+- block summary
+- session count
+- badge labels
+
+Example:
+If frequency changed from 3 to 4, update:
+- “Hockey Performance Program — 4-Day”
+- “4 days/week”
+- description text should no longer say “A 3-day performance program...”
+
+Do not let the title and description lag behind the rebuilt sessions.
+
+----------------------------------------
+5. FIX CHANGES TAB
+----------------------------------------
+
+When a refinement occurs, automatically create a new changes entry.
+
+Example for this case:
+
+V2 PROGRAM REFINEMENT
+- Changed frequency from 3 days/week to 4 days/week
+- Redistributed weekly volume across 4 sessions
+- Preserved hockey performance goal and core movement intent
+- Reason: user requested a 4-day structure
+
+The Changes tab should never stay frozen at only V1 if the program was meaningfully modified.
+
+----------------------------------------
+6. FIX HISTORY TAB
+----------------------------------------
+
+When a refinement occurs, create a new version snapshot.
+
+Example:
+
+V2 — Frequency Update
+Tags:
+- Athletic Performance
+- 4d/Wk
+- Hockey
+
+Summary:
+Restructured from 3 sessions to 4 sessions while preserving the program’s core performance intent.
+
+History should show:
+- V1 initial build
+- V2 refined build
+
+The current live version badge should move to the newest version.
+
+----------------------------------------
+7. SNAPSHOT THE FULL PROGRAM ON EACH VERSION
+----------------------------------------
+
+For every meaningful update, store a full snapshot:
+
+historyEntry = {
+  version: 2,
+  title: "Frequency Update",
+  timestamp,
+  tags: ["Athletic Performance", "4d/Wk", "Hockey"],
+  summary: "...",
+  snapshot: fullProgramObject
+}
+
+Do not store only metadata.
+Store the full program so history is real and recoverable.
+
+----------------------------------------
+8. REBUILD DERIVED METADATA AUTOMATICALLY
+----------------------------------------
+
+Create a function like:
+
+deriveProgramMetadata(currentProgram)
+
+It should generate:
+- displayTitle
+- frequencyLabel
+- summaryDescription
+- sessionCount
+- estimatedDuration
+- goal tags
+- sport tags
+
+Every time currentProgram changes, rerun this function.
+
+Do not manually patch strings in scattered components.
+
+----------------------------------------
+9. REMOVE STALE UI CACHING
+----------------------------------------
+
+Audit for:
+- local component state holding old title/frequency
+- props initialized once and never refreshed
+- memoized values missing currentProgram/version as dependency
+- fallback strings from initial build response
+- cards rendering off initial chat artifact instead of live state
+
+Any displayed value related to the active program should depend on:
+- currentProgram
+- version
+- updatedAt
+
+----------------------------------------
+10. APPLY THIS FIX TO THE CURRENT CASE
+----------------------------------------
+
+For the shown hockey program:
+- Update title from 3-Day to 4-Day
+- Update frequency label from 3 days/week to 4 days/week everywhere
+- Rewrite description so it reflects a 4-day structure
+- Add a V2 change entry in Changes
+- Add a V2 history entry in History
+- Ensure all tabs show consistent live state
+
+----------------------------------------
+11. ADD REFINEMENT EVENT TYPE
+----------------------------------------
+
+Differentiate between:
+- initial build
+- refinement update
+- live adjustment
+- progression update
+- block update
+
+Example:
+
+changeType:
+- initial_build
+- refinement
+- progression
+- live_adjustment
+- block_adjustment
+
+This case should be:
+changeType = "refinement"
+
+----------------------------------------
+12. ADD VALIDATION AFTER EACH UPDATE
+----------------------------------------
+
+After any program mutation, run a validation check:
+
+validateProgramSync(programState)
+
+Check that:
+- displayed frequency matches currentProgram frequency
+- displayed title matches session structure
+- history latest version matches current version
+- changes latest entry exists for current version
+- descriptions do not mention outdated frequency or structure
+
+If mismatch detected, log it and repair derived metadata.
+
+----------------------------------------
+13. TEST CASES
+----------------------------------------
+
+Verify these:
+
+1. Change 3-day → 4-day
+- sessions rebuild
+- title updates
+- description updates
+- changes tab shows V2
+- history tab shows V2
+
+2. Change 4-day → 2-day
+- all frequency labels update everywhere
+
+3. Change “full body” → “upper/lower split”
+- title/description reflect new structure
+
+4. Swap a key exercise
+- change entry created
+- history version created if snapshot-worthy
+
+5. Multiple refinements in a row
+- V1, V2, V3 all preserved correctly
+- current live version always reflects most recent program
+
+----------------------------------------
+14. DELIVERABLES
+----------------------------------------
+
+After implementation, provide:
+1. root cause of the stale UI/state issue
+2. updated programState structure
+3. deriveProgramMetadata function behavior
+4. how refinements create version/history/change entries
+5. which components were updated
+6. remaining edge cases to test
