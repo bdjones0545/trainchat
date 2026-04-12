@@ -629,6 +629,8 @@ Keep it helpful and intelligent, never promotional.`;
             .filter((r): r is string => !!r);
           const whyChanged = whyChangedParts.length > 0 ? whyChangedParts.join("; ") : undefined;
 
+          const isStructuralVibeEdit = editPlan.scope === "system" || editPlan.scope === "block";
+
           // Log the change to system_change_log
           const changeLogId = await createChangeLogEntry({
             userId,
@@ -642,6 +644,7 @@ Keep it helpful and intelligent, never promotional.`;
             afterSnapshot: editResult.afterSnapshot,
             appliedCount: editResult.appliedCount,
             skippedCount: editResult.skippedCount,
+            versionOverrides: isStructuralVibeEdit ? { isMajorVersion: true } : undefined,
             decisionMetadata: {
               whyChanged,
               intentType: intentResult.type,
@@ -957,23 +960,30 @@ Keep it helpful and intelligent, never promotional.`;
           { userId, systemId: savedSystem.id, programName: structuredData.programName },
           "[ChangeEngine] Active program updated in place"
         );
-        if (structuredData.whatChanged) {
-          try {
-            changeLogId = await createChangeLogEntry({
-              userId, trainingSystemId: savedSystem.id, source: "ai_edit",
-              intent: intentResult.editSubtype ?? intentResult.type.toLowerCase(),
-              scope: "system", changeSummary: structuredData.whatChanged,
-              requestText: parsed.data.content.slice(0, 300),
-              beforeSnapshot: emptySnapshot, afterSnapshot: emptySnapshot,
-              fullProgramSnapshot,
-              appliedCount: 1, skippedCount: 0,
-              decisionMetadata: structuredData.whyChanged
-                ? { whyChanged: structuredData.whyChanged, intentType: intentResult.type }
-                : { intentType: intentResult.type },
-            });
-          } catch (logErr) {
-            logger.warn({ logErr }, "[ChangeEngine] Failed to write AI change log entry — non-fatal");
-          }
+        try {
+          const updateSummary = structuredData.whatChanged
+            ?? `Program updated: ${structuredData.days.length} days/week · ${structuredData.programName}`;
+          const updateMeta: Record<string, unknown> = {
+            intentType: intentResult.type,
+            editSubtype: intentResult.editSubtype ?? undefined,
+            programDays: structuredData.days.length,
+            programGoal: extractedConstraints?.primaryGoal ?? null,
+            programSport: extractedConstraints?.sportFocus ?? null,
+          };
+          if (structuredData.whyChanged) updateMeta.whyChanged = structuredData.whyChanged;
+          changeLogId = await createChangeLogEntry({
+            userId, trainingSystemId: savedSystem.id, source: "ai_edit",
+            intent: intentResult.editSubtype ?? intentResult.type.toLowerCase(),
+            scope: "system", changeSummary: updateSummary,
+            requestText: parsed.data.content.slice(0, 300),
+            beforeSnapshot: emptySnapshot, afterSnapshot: emptySnapshot,
+            fullProgramSnapshot,
+            appliedCount: 1, skippedCount: 0,
+            versionOverrides: { isMajorVersion: true },
+            decisionMetadata: updateMeta,
+          });
+        } catch (logErr) {
+          logger.warn({ logErr }, "[ChangeEngine] Failed to write AI change log entry — non-fatal");
         }
       } else {
         logger.info(
@@ -1343,12 +1353,22 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           // Stage 7: Save Program State
           emit(buildStageEvent("saving", intentResult.type, actionDecision.actionType));
 
+          const isStructuralVibeEdit = editPlan.scope === "system" || editPlan.scope === "block";
+          const whyChangedParts = editPlan.changes.map((c: any) => c.reason).filter((r: any): r is string => !!r);
+          const vibeWhyChanged = whyChangedParts.length > 0 ? whyChangedParts.join("; ") : undefined;
+
           const changeLogId = await createChangeLogEntry({
             userId, trainingSystemId: activeSystem!.id, source: "ai_edit",
             intent: editPlan.intent, scope: editPlan.scope,
             changeSummary: editResult.changeSummary, requestText: parsed.data.content,
             beforeSnapshot: editResult.beforeSnapshot, afterSnapshot: editResult.afterSnapshot,
             appliedCount: editResult.appliedCount, skippedCount: editResult.skippedCount,
+            versionOverrides: isStructuralVibeEdit ? { isMajorVersion: true } : undefined,
+            decisionMetadata: {
+              whyChanged: vibeWhyChanged,
+              intentType: intentResult.type,
+              editSubtype: intentResult.editSubtype ?? undefined,
+            },
           });
 
           const coachingContent = buildVibeEditCoachingResponse(editResult);
@@ -1376,7 +1396,14 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
               userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo,
               intentResultVal: intentResult, systemSavedVal: false,
             }),
-            systemEdit: { applied: true, changeSummary: editResult.changeSummary, changedIds: editResult.changedIds, systemId: activeSystem!.id, changeLogId },
+            systemEdit: {
+              applied: true,
+              changeSummary: editResult.changeSummary,
+              changedIds: editResult.changedIds,
+              changeTargets: editResult.changeTargets,
+              systemId: activeSystem!.id,
+              changeLogId,
+            },
           });
           return;
         }
@@ -1534,23 +1561,30 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           { userId, systemId: savedSystem.id, programName: structuredData.programName },
           "[ChangeEngine:stream] Active program updated in place"
         );
-        if (structuredData.whatChanged) {
-          try {
-            changeLogId = await createChangeLogEntry({
-              userId, trainingSystemId: savedSystem.id, source: "ai_edit",
-              intent: intentResult.editSubtype ?? intentResult.type.toLowerCase(),
-              scope: "system", changeSummary: structuredData.whatChanged,
-              requestText: parsed.data.content.slice(0, 300),
-              beforeSnapshot: emptySnapshot, afterSnapshot: emptySnapshot,
-              fullProgramSnapshot,
-              appliedCount: 1, skippedCount: 0,
-              decisionMetadata: structuredData.whyChanged
-                ? { whyChanged: structuredData.whyChanged, intentType: intentResult.type }
-                : { intentType: intentResult.type },
-            });
-          } catch (logErr) {
-            logger.warn({ logErr }, "[ChangeEngine:stream] Failed to write AI change log — non-fatal");
-          }
+        try {
+          const updateSummary = structuredData.whatChanged
+            ?? `Program updated: ${structuredData.days.length} days/week · ${structuredData.programName}`;
+          const updateMeta: Record<string, unknown> = {
+            intentType: intentResult.type,
+            editSubtype: intentResult.editSubtype ?? undefined,
+            programDays: structuredData.days.length,
+            programGoal: extractedConstraints?.primaryGoal ?? null,
+            programSport: extractedConstraints?.sportFocus ?? null,
+          };
+          if (structuredData.whyChanged) updateMeta.whyChanged = structuredData.whyChanged;
+          changeLogId = await createChangeLogEntry({
+            userId, trainingSystemId: savedSystem.id, source: "ai_edit",
+            intent: intentResult.editSubtype ?? intentResult.type.toLowerCase(),
+            scope: "system", changeSummary: updateSummary,
+            requestText: parsed.data.content.slice(0, 300),
+            beforeSnapshot: emptySnapshot, afterSnapshot: emptySnapshot,
+            fullProgramSnapshot,
+            appliedCount: 1, skippedCount: 0,
+            versionOverrides: { isMajorVersion: true },
+            decisionMetadata: updateMeta,
+          });
+        } catch (logErr) {
+          logger.warn({ logErr }, "[ChangeEngine:stream] Failed to write AI change log — non-fatal");
         }
       } else {
         logger.info(

@@ -1,0 +1,244 @@
+Fix the TrainChat program refinement engine so when a user changes training frequency (example: 3 days/week to 4 days/week), the regenerated program follows real program design constraints instead of just redistributing exercises loosely.
+
+CURRENT ISSUE:
+After changing a 3-day hockey performance program to a 4-day program, the rebuild created structural quality problems:
+- one of the new days only has 3 exercises
+- barbell bench press appears on back-to-back days
+- session distribution appears uneven
+- movement spacing/recovery logic is weak
+- the rebuild changed frequency but did not preserve strong programming architecture
+
+GOAL:
+Make program refinements frequency-aware AND architecture-aware so a rebuilt plan remains coherent, balanced, and coach-quality.
+
+----------------------------------------
+1. ADD REFINEMENT CONSTRAINTS FOR FREQUENCY CHANGES
+----------------------------------------
+
+When changing weekly frequency, do NOT simply split the old program across more days.
+
+Instead, rebuild according to real program design rules.
+
+Create a frequency refinement engine that:
+- preserves the core goal
+- preserves sport context
+- redistributes volume intelligently
+- rebuilds session themes
+- enforces spacing and recovery rules
+- enforces minimum viable session quality
+
+----------------------------------------
+2. ENFORCE MINIMUM SESSION QUALITY
+----------------------------------------
+
+Each session must meet minimum structure requirements.
+
+For a normal 4-day athletic performance session:
+- minimum 5 exercises unless explicitly intended as a lighter/recovery session
+- should usually include:
+  - warm-up / activation
+  - power or neural element when appropriate
+  - main strength lift
+  - secondary/support lift
+  - accessory / trunk / integration work
+
+Do not allow a session to accidentally degrade into:
+- only 3 generic lifts
+- no warm-up
+- no trunk/accessory balance
+- no clear session identity
+
+If a session is intentionally lighter, it must be labeled clearly as:
+- recovery
+- primer
+- neural reset
+- low-volume technique day
+
+----------------------------------------
+3. ENFORCE EXERCISE SPACING RULES
+----------------------------------------
+
+Do not place the same main exercise or same major movement pattern on back-to-back days unless explicitly intended.
+
+Examples:
+- barbell bench press should not appear on consecutive days
+- heavy back squat should not appear on consecutive days
+- conventional deadlift and heavy squat should be spaced appropriately
+- repeated high-neural-demand movements need recovery logic
+
+Create spacing rules like:
+- same exact exercise: minimum 1 full session gap unless low-load technique version
+- same primary pattern: monitor weekly exposure and adjacent-day fatigue risk
+
+----------------------------------------
+4. ENFORCE MOVEMENT BALANCE ACROSS THE WEEK
+----------------------------------------
+
+When rebuilding a 4-day week, ensure the plan distributes:
+- lower-body bilateral work
+- unilateral work
+- upper push
+- upper pull
+- trunk
+- power / elastic elements
+- accessory support
+
+Do not let the rebuild become:
+- too much pressing
+- too much squat pattern repetition
+- too little pull volume
+- too little trunk work
+- too little variety in movement intent
+
+----------------------------------------
+5. CREATE SESSION IDENTITY RULES
+----------------------------------------
+
+Each day in the rebuilt program should have a clear identity.
+
+Examples for a 4-day athletic performance structure:
+- Day 1: lower force + trunk stiffness
+- Day 2: upper strength + structural balance
+- Day 3: lower unilateral / posterior chain + power
+- Day 4: upper power + integration or full-body integration
+
+Or another valid architecture, but every day must have:
+- a purpose
+- a movement emphasis
+- a recovery-aware place in the week
+
+Do not label everything “Full Body” if the content is not meaningfully differentiated.
+
+----------------------------------------
+6. ADD REFINEMENT ARCHITECTURE VALIDATION
+----------------------------------------
+
+After rebuilding, run:
+
+validateProgramArchitecture(program)
+
+Checks should include:
+- no same main lift on back-to-back days
+- no repeated exact upper push on adjacent days
+- minimum session exercise count met
+- all sessions have a clear purpose
+- weekly movement balance passes threshold
+- trunk/accessory support exists across week
+- power elements are distributed appropriately
+- no accidental empty/light sessions unless intentional
+
+If validation fails:
+- regenerate or repair before showing the program to the user
+
+----------------------------------------
+7. ADD SESSION BUILD TEMPLATES BY FREQUENCY
+----------------------------------------
+
+When user changes frequency, use a template appropriate for that weekly structure.
+
+Example:
+If going from 3d → 4d, use a 4-day template rather than naively splitting the 3-day layout.
+
+Possible 4-day templates:
+- upper/lower hybrid performance split
+- lower/upper/lower/upper with power integrated
+- full-body alternating emphasis with recovery-aware spacing
+
+Choose template based on:
+- goal
+- sport
+- training age
+- available time
+- equipment
+- current block
+
+----------------------------------------
+8. FIX THE CURRENT EXAMPLE SPECIFICALLY
+----------------------------------------
+
+For the current hockey performance 4-day rebuild:
+- remove barbell bench press from back-to-back days
+- ensure the final day does not only contain 3 exercises unless intentionally labeled as a lighter day
+- give each of the 4 sessions a distinct purpose
+- maintain hockey performance emphasis
+- redistribute volume and movement patterns more intelligently
+- ensure proper push/pull/lower/trunk balance across the whole week
+
+----------------------------------------
+9. DIFFERENTIATE MAIN LIFT, SUPPORT LIFT, ACCESSORY, TRUNK
+----------------------------------------
+
+Every session should be built with role-aware distribution.
+
+Example structure:
+- Warm-Up / Activation
+- Power / Neural
+- Main Lift
+- Secondary Lift
+- Accessory
+- Trunk / Integration
+
+Do not allow a rebuilt program to become a flat list of random compound lifts.
+
+----------------------------------------
+10. ADD A REFINEMENT SUMMARY RESPONSE
+----------------------------------------
+
+When the AI rebuilds the program, make it explain:
+- what changed
+- why it changed
+- what stayed the same
+
+Example:
+“Updated to 4 days/week. Weekly volume was redistributed into 4 distinct sessions to improve recovery spacing and preserve hockey performance intent. Main compound lifts were kept, but adjacent-day duplication was removed.”
+
+This summary should also feed the Changes tab.
+
+----------------------------------------
+11. ADD STRONGER CHANGES TAB ENTRY FOR REFINEMENTS
+----------------------------------------
+
+Example:
+
+V2 PROGRAM REFINEMENT
+- Changed frequency from 3 to 4 days/week
+- Rebuilt weekly structure into 4 distinct sessions
+- Redistributed volume to improve spacing and recovery
+- Removed adjacent-day duplication of major lifts
+- Preserved hockey performance intent
+
+----------------------------------------
+12. TEST CASES
+----------------------------------------
+
+Verify:
+
+1. 3-day → 4-day conversion
+- no back-to-back identical lifts
+- all sessions meet minimum quality
+- weekly structure is balanced
+
+2. 4-day → 3-day conversion
+- volume compresses intelligently without random deletion
+
+3. 3-day → 5-day conversion
+- added sessions are purpose-driven, not underbuilt filler days
+
+4. upper-body pressing movements
+- not duplicated on adjacent days unless intentionally low-load variation
+
+5. all rebuilt sessions
+- include enough work to feel complete and intentional
+
+----------------------------------------
+13. DELIVERABLES
+----------------------------------------
+
+After implementation, provide:
+1. root cause of weak refinement architecture
+2. the validation rules added
+3. the session-template logic for frequency changes
+4. how adjacent-day duplication is prevented
+5. how minimum session quality is enforced
+6. how the current 4-day hockey plan was repaired
+7. any remaining edge cases to test

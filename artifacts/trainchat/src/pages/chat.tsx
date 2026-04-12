@@ -502,6 +502,11 @@ export default function Chat() {
         }
         setNewChangeSignal((n) => n + 1);
       }
+      // After any AI rebuild (systemSaved) that produced a change log entry,
+      // also animate the Changes tab so the new entry is visible
+      if (result.systemSaved && !result.systemEdit?.applied && result.changeLogId) {
+        setNewChangeSignal((n) => n + 1);
+      }
       // Show undo toast for 8 seconds after any program change
       const logId = result.changeLogId ?? result.systemEdit?.changeLogId;
       if (logId) {

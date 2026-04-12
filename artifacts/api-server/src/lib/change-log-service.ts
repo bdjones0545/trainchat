@@ -48,6 +48,16 @@ const MAJOR_INTENTS = new Set([
   "increase_intensity",
   "increase_weekly_volume",
   "restore",
+  // Structural rebuild / frequency change intents
+  "refinement",
+  "structural_rebuild",
+  "change_frequency",
+  "frequency_update",
+  "program_refinement",
+  "edit_program",
+  "adjust_for_pain",
+  "adjust_for_readiness",
+  "start_new_program",
 ]);
 
 export function classifyEdit(
@@ -70,6 +80,15 @@ export function classifyEdit(
     increase_intensity: "High Intensity Phase",
     increase_weekly_volume: "Volume Accumulation Phase",
     restore: "Restored Prior Version",
+    refinement: "Program Refinement",
+    structural_rebuild: "Structural Rebuild",
+    change_frequency: "Frequency Update",
+    frequency_update: "Frequency Update",
+    program_refinement: "Program Refinement",
+    edit_program: "Program Update",
+    adjust_for_pain: "Pain / Injury Adaptation",
+    adjust_for_readiness: "Readiness Adaptation",
+    start_new_program: "Program Reset",
   };
 
   const label = overrides?.versionLabel ?? (isMajor ? (labelMap[intent] ?? undefined) : undefined);

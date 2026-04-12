@@ -51,7 +51,7 @@ export interface CompleteEvent {
   systemId?: number;
   changeLogId?: number;
   intentDebug?: { type: string; confidence: string; editSubtype: string | null };
-  systemEdit?: { applied: boolean; changeSummary?: string; changedIds?: { exercises: number[]; sessions: number[]; weeks: number[]; phases: number[] }; systemId?: number; changeLogId?: number };
+  systemEdit?: { applied: boolean; changeSummary?: string; changedIds?: { exercises: number[]; sessions: number[]; weeks: number[]; phases: number[] }; changeTargets?: Array<{ type: string; id: number; label: string }>; systemId?: number; changeLogId?: number };
 }
 
 export interface StreamErrorEvent {

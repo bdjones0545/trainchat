@@ -1,0 +1,259 @@
+Build a Program Architecture Engine for TrainChat that generates training programs using CNS-driven, movement-based coaching logic instead of generic exercise selection.
+
+This system must think like an elite strength & conditioning coach focused on:
+- neuromuscular efficiency
+- motor recruitment
+- movement quality
+- force production
+- transfer to sport (especially hockey)
+
+DO NOT generate exercises first.
+
+The system must follow a strict hierarchy:
+1. Define weekly architecture
+2. Define session intent
+3. Allocate movement patterns
+4. Sequence CNS flow
+5. THEN select exercises
+
+----------------------------------------
+1. DEFINE WEEKLY ARCHITECTURE FIRST
+----------------------------------------
+
+Before selecting any exercises, determine:
+
+- training days per week
+- total weekly volume targets
+- distribution of stress across the week
+- recovery spacing between high CNS sessions
+
+Example logic:
+
+If 4 days/week:
+- Day 1 = lower force production (high CNS)
+- Day 2 = upper structural strength
+- Day 3 = unilateral + posterior chain + elastic
+- Day 4 = integration / full-body power
+
+The week must:
+- alternate neural demand
+- avoid stacking high CNS days back-to-back
+- distribute lower vs upper stress
+- balance bilateral vs unilateral work
+
+----------------------------------------
+2. DEFINE SESSION INTENT (MANDATORY)
+----------------------------------------
+
+Each session must have a clear purpose before exercises are chosen.
+
+Example intents:
+- “Lower body force production + trunk stiffness”
+- “Upper strength + structural balance”
+- “Posterior chain + unilateral control”
+- “Full body power + integration”
+
+Store this as:
+
+session.intent
+
+No session is allowed to be “generic full body”.
+
+----------------------------------------
+3. ALLOCATE MOVEMENT PATTERNS ACROSS WEEK
+----------------------------------------
+
+Before exercise selection, allocate:
+
+- squat patterns (bilateral/unilateral)
+- hinge patterns
+- upper push
+- upper pull
+- trunk (anti-extension, anti-rotation)
+- power (vertical, horizontal, rotational)
+- locomotion / athletic transfer
+
+Create a weekly map:
+
+movementAllocation = {
+  squat: X,
+  hinge: X,
+  unilateral: X,
+  push: X,
+  pull: X,
+  trunk: X,
+  power: X
+}
+
+Ensure:
+- no overuse of one pattern
+- no underdevelopment of key patterns
+- sport-specific emphasis (hockey = lateral, rotational, acceleration)
+
+----------------------------------------
+4. BUILD CNS FLOW INSIDE EACH SESSION
+----------------------------------------
+
+Each session MUST follow this structure:
+
+1. Activation / neural prep
+2. Power / explosive work
+3. Primary force production (main lift)
+4. Secondary strength
+5. Accessory / structural support
+6. Trunk / integration
+
+This is non-negotiable.
+
+The system must understand:
+- order affects output
+- neural freshness matters
+- fatigue changes motor recruitment
+
+----------------------------------------
+5. ENFORCE EXERCISE ROLE CLASSIFICATION
+----------------------------------------
+
+Every exercise must be labeled:
+
+exercise.role:
+- activation
+- power
+- primary
+- secondary
+- accessory
+- trunk
+- integration
+
+Do NOT allow:
+- random ordering
+- multiple “primary” lifts stacked poorly
+- missing trunk/integration work
+
+----------------------------------------
+6. ENFORCE RECOVERY + SPACING RULES
+----------------------------------------
+
+Hard constraints:
+
+- No same primary lift on consecutive days
+- No heavy squat + heavy hinge back-to-back without intent
+- No repeated high CNS output days without lower-intensity buffer
+- Upper push/pull must be balanced across the week
+
+----------------------------------------
+7. APPLY SPORT-SPECIFIC OVERLAY (HOCKEY)
+----------------------------------------
+
+For hockey programs, bias toward:
+
+- lateral force production
+- rotational trunk work
+- acceleration/deceleration patterns
+- single-leg stability
+- anti-rotation strength
+- elastic/reactive power
+
+Reduce:
+- unnecessary hypertrophy-only work
+- redundant bilateral volume
+
+----------------------------------------
+8. ENFORCE MINIMUM SESSION QUALITY
+----------------------------------------
+
+Each session must:
+
+- have at least 5 meaningful exercises (unless intentional low day)
+- include trunk work
+- include a clear power or neural component (when appropriate)
+- reflect its stated intent
+
+If a session falls below standard:
+→ regenerate it
+
+----------------------------------------
+9. PREVENT DUPLICATION + LAZY SELECTION
+----------------------------------------
+
+Avoid:
+- repeating same exercises across multiple days
+- repeating same movement pattern too frequently
+- defaulting to barbell lifts every session
+
+Prefer:
+- variation with intent
+- movement diversity with purpose
+
+----------------------------------------
+10. GENERATE PROGRAM ONLY AFTER ALL ABOVE IS DEFINED
+----------------------------------------
+
+Final output must include:
+
+- weekly structure (clear day breakdown)
+- session intent for each day
+- properly sequenced exercises
+- roles assigned to each exercise
+- balanced movement distribution
+- sport-specific relevance
+
+----------------------------------------
+11. VALIDATE BEFORE OUTPUT
+----------------------------------------
+
+Run:
+
+validateProgram(program)
+
+Check:
+- session intent exists
+- CNS flow is correct
+- no duplicate primary lifts across days
+- movement balance across week
+- trunk work included
+- no underbuilt sessions
+- no back-to-back pattern conflicts
+
+If any fail:
+→ regenerate
+
+----------------------------------------
+12. EXPLAIN LIKE A COACH
+----------------------------------------
+
+After building the program, include a short explanation:
+
+- why the week is structured this way
+- how recovery is managed
+- how it supports the sport goal
+
+Keep it concise but intelligent.
+
+----------------------------------------
+13. CORE PRINCIPLE
+----------------------------------------
+
+The system must prioritize:
+
+“Better movement and neural output over more weight or more volume.”
+
+Programs should reflect:
+- efficiency
+- coordination
+- motor unit recruitment
+- transferable strength
+
+NOT bodybuilding-style programming.
+
+----------------------------------------
+DELIVERABLES
+----------------------------------------
+
+After implementation, return:
+1. how weekly architecture is determined
+2. how session intent is generated
+3. how movement allocation works
+4. how CNS flow is enforced
+5. how validation prevents bad programs
+6. example output of a corrected 4-day hockey program
