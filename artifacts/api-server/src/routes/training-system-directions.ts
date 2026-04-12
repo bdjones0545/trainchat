@@ -86,12 +86,15 @@ router.post("/training-system/directions", requireAuth, async (req, res): Promis
     logger.info(
       {
         userId,
+        userRequest,
         shouldSkipDirections: result.shouldSkipDirections,
         directionsCount: result.directions?.length ?? 0,
         hasContinuityPrompt: !!result.continuityPrompt,
         targetType: targetContext?.type,
+        targetLabel: targetContext?.label,
+        routedTo: result.shouldSkipDirections ? "parser" : "chooser",
       },
-      "Directions generated"
+      "[CommandPriority] Route outcome"
     );
 
     res.json(result);

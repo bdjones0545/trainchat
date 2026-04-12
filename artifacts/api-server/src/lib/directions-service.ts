@@ -1,5 +1,5 @@
 /**
- * Directions Service — Phase A + Phase B
+ * Directions Service — Phase A + Phase B + Phase D (Command Priority System)
  *
  * Interprets a user's edit intent and returns either:
  * - 2–4 intelligent direction options for the user to choose from, OR
@@ -12,6 +12,12 @@
  * Phase C: Expanded direct-command detection — named exercise requests and
  * common coaching shorthand are now recognised as highly specific and skip
  * the chooser modal entirely.
+ *
+ * Phase D (Command Priority System): Global isDirectUserCommand() enforced
+ * before ANY chooser modal is triggered. Direct commands ALWAYS win — they
+ * bypass the chooser, bypass the AI fallback, and never open a modal.
+ * If a direct command cannot be applied, a coaching message is returned
+ * instead of a chooser. Full debug logging added at every routing decision.
  */
 
 import { logger } from "./logger";
@@ -229,6 +235,76 @@ function isDirectPrescriptionChange(request: string): boolean {
     /\bmore\s+rest\b/i,
     /\bless\s+rest\b/i,
   ].some((p) => p.test(lower));
+}
+
+// ─── Global Command Priority Detector ────────────────────────────────────────
+//
+// isDirectUserCommand() is the single global gate that must be checked BEFORE
+// any chooser modal is triggered — at every entry point in the system.
+//
+// Returns true when the input is specific, actionable, and maps to a known
+// field mutation or block operation. Direct commands ALWAYS win over choosers.
+//
+// Covers BOTH:
+//   - exercise-level edits (reps, sets, rest, load, swap, harder/easier)
+//   - block-level edits (power, hypertrophy, strength, volume, intensity)
+
+export function isDirectUserCommand(request: string): boolean {
+  // 1. Direct prescription change (number + field keyword) — exercise level
+  if (isDirectPrescriptionChange(request)) return true;
+
+  // 2. Named exercise command (substitute/replace/swap X with Y)
+  if (detectNamedExerciseCommand(request)) return true;
+
+  // 3. Block-level intent patterns — run unconditionally (not gated on targetContext)
+  //    These are always specific enough to bypass the chooser.
+  const lower = request.toLowerCase();
+  for (const { patterns } of BLOCK_INTENT_PATTERNS) {
+    for (const pattern of patterns) {
+      if (pattern.test(lower)) return true;
+    }
+  }
+
+  // 4. Clear verb + known training concept combinations
+  const directCommandPatterns = [
+    // "increase/reduce/add/cut X to/by N"
+    /\b(increase|decrease|add|remove|reduce|lower|raise|boost|cut|drop)\s+(reps?|sets?|rest|load|volume|intensity|frequency|weight)\b/i,
+    // "focus/bias/shift toward X"
+    /\b(focus|bias|shift|move|lean)\s+(more\s+)?(on|toward|to|into)\s+(power|strength|hypertrophy|speed|conditioning|athletic|explosive)/i,
+    // "more X" where X is a clear training quality
+    /\bmore\s+(power|strength|hypertrophy|speed|explosive|conditioning|athletic|volume|intensity)\b/i,
+    // "X bias/focus/emphasis" where X is a clear quality
+    /\b(power|strength|hypertrophy|speed|explosive|athletic|conditioning)\s+(bias|focus|emphasis|work)\b/i,
+    // "reduce/less X body volume/work/emphasis"
+    /\b(reduce|less|cut|lower|drop)\s+(lower|upper)[- ]body\s+(volume|work|emphasis|focus|stress)\b/i,
+    // "make this N weeks" / "shorten to N weeks" etc.
+    /\b(make|shorten|cut|reduce|extend|lengthen|add)\s+.{0,20}\d+\s*weeks?\b/i,
+    // "I want to focus on X" / "I want more X"
+    /\bi\s+want\s+(to\s+)?(focus\s+on|more)\s+(power|strength|hypertrophy|speed|conditioning|volume)\b/i,
+    // "substitute with X" (mid-sentence, not just start-anchored)
+    /\bsubstitute\s+(this\s+)?with\s+\w+/i,
+    // "swap this for X" / "replace this with X" (mid-sentence)
+    /\b(swap|replace|switch)\s+(this|it|the\s+exercise)\s+(for|with|to)\s+\w+/i,
+  ];
+
+  return directCommandPatterns.some((p) => p.test(lower));
+}
+
+// ─── Structured Command Priority Log ─────────────────────────────────────────
+// Emits a consistent log entry at every routing decision point.
+// Format: { input, isDirect, context, routedTo, reason }
+
+function logCommandRouting(
+  input: string,
+  isDirect: boolean,
+  context: "exercise" | "block" | "session" | "week" | "unknown",
+  routedTo: "parser" | "chooser" | "ai" | "coaching_message",
+  reason: string
+): void {
+  logger.info(
+    { input, isDirect, context, routedTo, reason },
+    "[CommandPriority]"
+  );
 }
 
 // ─── Block-Level Intent Parser ────────────────────────────────────────────────
@@ -487,41 +563,80 @@ function checkBlockSpecificity(
 /**
  * Returns { isSpecific, directEditRequest } when the request should skip
  * the directions chooser and go straight to the edit engine.
+ *
+ * Priority order (Command Priority System — Phase D):
+ * 1. Global isDirectUserCommand() gate — if true, ALWAYS bypass chooser
+ * 2. Block-level target context with matched block intent
+ * 3. Direct prescription change (number + field)
+ * 4. Named exercise command
+ *
+ * Direct commands NEVER lose to chooser modals.
  */
 function checkSpecificity(
   request: string,
   targetContext?: TargetContext
 ): { isSpecific: true; directEditRequest: string } | { isSpecific: false } {
-  // ── Block-level target: check block intents FIRST ──────────────────────────
-  // Block requests like "I want to focus more on power" are specific block
-  // mutations, not vague requests — they must bypass the chooser entirely.
-  if (targetContext?.type === "phase") {
-    const blockMatch = checkBlockSpecificity(request, targetContext);
+  const context = targetContext?.type ?? "unknown";
+
+  // ── PRIORITY 0: Global Command Priority Gate ───────────────────────────────
+  // isDirectUserCommand() is checked FIRST, unconditionally, regardless of
+  // target context. This is the single source of truth for "is this a direct
+  // command?" — it covers exercise-level and block-level commands.
+  if (isDirectUserCommand(request)) {
+    // ── Block-level target: generate structured block edit request ───────────
+    if (targetContext?.type === "phase") {
+      const blockMatch = checkBlockSpecificity(request, targetContext);
+      if (blockMatch) {
+        logCommandRouting(request, true, "block", "parser", `block intent: ${blockMatch.intent}`);
+        return { isSpecific: true, directEditRequest: blockMatch.directEditRequest };
+      }
+      // Command is direct + target is phase but no specific pattern matched
+      // Still bypass the chooser — send request as-is to the edit engine
+      logCommandRouting(request, true, "block", "parser", "direct block command — no pattern match, passing through");
+      return { isSpecific: true, directEditRequest: request };
+    }
+
+    // ── Block-level command WITHOUT a phase target context ───────────────────
+    // User may be in an exercise/session drawer but phrasing a block-level
+    // intent (e.g. "I want to focus more on power"). Check if request matches
+    // block intent patterns independent of targetContext.
+    const blockLabel = targetContext?.parentLabel ?? targetContext?.label ?? "this block";
+    const dummyPhaseContext: TargetContext = {
+      type: "phase",
+      id: targetContext?.id ?? 0,
+      label: blockLabel,
+      parentLabel: targetContext?.parentLabel,
+    };
+    const blockMatch = checkBlockSpecificity(request, dummyPhaseContext);
     if (blockMatch) {
+      logCommandRouting(request, true, "block", "parser", `block intent without phase context: ${blockMatch.intent}`);
       return { isSpecific: true, directEditRequest: blockMatch.directEditRequest };
     }
-    // For phase targets that don't match known block intents, still fall
-    // through to the AI to handle (with updated block-aware prompt below).
-  }
 
-  // 1. Direct prescription change patterns
-  if (isDirectPrescriptionChange(request)) {
+    // ── Named exercise command ───────────────────────────────────────────────
+    const namedCommand = detectNamedExerciseCommand(request);
+    if (namedCommand) {
+      const exerciseName = targetContext?.label ?? "this exercise";
+      const editRequest = `Replace ${exerciseName} with ${namedCommand.targetExercise}`;
+      logCommandRouting(request, true, "exercise", "parser", `named exercise swap: ${namedCommand.targetExercise}`);
+      return { isSpecific: true, directEditRequest: editRequest };
+    }
+
+    // ── Direct prescription change ───────────────────────────────────────────
+    if (isDirectPrescriptionChange(request)) {
+      logCommandRouting(request, true, context as any, "parser", "direct prescription command");
+      return { isSpecific: true, directEditRequest: request };
+    }
+
+    // ── Direct command caught by general patterns ────────────────────────────
+    // isDirectUserCommand() returned true but no sub-check claimed it —
+    // route to edit engine as-is (general direct command).
+    logCommandRouting(request, true, context as any, "parser", "direct command — general pattern match");
     return { isSpecific: true, directEditRequest: request };
   }
 
-  // 2. Named exercise command (most common source of false positives before this fix)
-  const namedCommand = detectNamedExerciseCommand(request);
-  if (namedCommand) {
-    const exerciseName = targetContext?.label ?? "this exercise";
-    // Build a clean, unambiguous edit request so the edit engine gets full context
-    const editRequest = `Replace ${exerciseName} with ${namedCommand.targetExercise}`;
-    logger.info(
-      { original: request, resolved: namedCommand.targetExercise, editRequest },
-      "Direct named-exercise command detected — skipping directions"
-    );
-    return { isSpecific: true, directEditRequest: editRequest };
-  }
-
+  // ── Not a direct command — allow AI to decide ────────────────────────────
+  logCommandRouting(request, false, context as any, "ai", "no direct command pattern matched — routing to AI");
   return { isSpecific: false };
 }
 
@@ -811,6 +926,33 @@ function buildFallbackDirections(
   };
 }
 
+// ─── Coaching Fail-Safe Messages ─────────────────────────────────────────────
+// When a direct command is detected but cannot be routed to a specific engine,
+// return a coaching message instead of a chooser modal.
+
+function buildCoachingFailSafe(
+  request: string,
+  targetContext?: TargetContext
+): DirectionsResponse {
+  const label = targetContext?.label ?? "this exercise";
+  const lower = request.toLowerCase();
+
+  // Explosive/plyometric constraint
+  if (/\b(depth jump|hurdle jump|box jump|broad jump)\b/i.test(label) && /\b(reps?|increase)\b/.test(lower) && /\d/.test(lower)) {
+    return {
+      shouldSkipDirections: true,
+      directEditRequest: request,
+      coachMessage: `${label} typically stays under 5 reps to maintain explosiveness and protect landing mechanics. Want to increase height or distance instead?`,
+    };
+  }
+
+  // Generic coaching fallback for direct commands that can't be parsed further
+  return {
+    shouldSkipDirections: true,
+    directEditRequest: request,
+  };
+}
+
 // ─── Main Export ──────────────────────────────────────────────────────────────
 
 export async function generateDirections(
@@ -821,14 +963,36 @@ export async function generateDirections(
   decisionMemoryContext?: string,
   continuityPrompt?: string | null
 ): Promise<DirectionsResponse> {
-  // Fast path: rule-based specificity check (expanded Phase C)
+  const contextType = (targetContext?.type ?? "unknown") as "exercise" | "block" | "session" | "week" | "unknown";
+
+  // ── COMMAND PRIORITY SYSTEM — Phase D ─────────────────────────────────────
+  // isDirectUserCommand() is checked FIRST, before any AI call or fallback.
+  // If true: the request bypasses ALL chooser modals, period.
+  // The AI and fallback are NOT allowed to override this.
+  const isDirect = isDirectUserCommand(userRequest);
+
+  // Fast path: rule-based specificity check
   const specificity = checkSpecificity(userRequest, targetContext);
   if (specificity.isSpecific) {
+    logCommandRouting(userRequest, true, contextType, "parser", "checkSpecificity returned isSpecific — fast path bypass");
     return {
       shouldSkipDirections: true,
       directEditRequest: specificity.directEditRequest,
     };
   }
+
+  // If direct command detected but not caught by specificity rules,
+  // still bypass chooser — send to edit engine directly.
+  if (isDirect) {
+    logCommandRouting(userRequest, true, contextType, "parser", "isDirectUserCommand=true but specificity=false — forcing bypass");
+    return {
+      shouldSkipDirections: true,
+      directEditRequest: userRequest,
+    };
+  }
+
+  // Not a direct command — try AI
+  logCommandRouting(userRequest, false, contextType, "ai", "non-direct command — calling AI for directions");
 
   const systemContext = serializeSystemForPrompt(fullSystem);
 
@@ -841,30 +1005,58 @@ export async function generateDirections(
   );
 
   if (!aiResult) {
+    // ── FAIL SAFE: AI unavailable ─────────────────────────────────────────
+    // If the command was direct but specificity missed it (edge case),
+    // return coaching message — NEVER show chooser for a direct command.
+    if (isDirect) {
+      logCommandRouting(userRequest, true, contextType, "coaching_message", "AI unavailable, direct command — coaching fail-safe");
+      return { ...buildCoachingFailSafe(userRequest, targetContext), continuityPrompt: continuityPrompt ?? null };
+    }
+    // Genuinely non-direct command with no AI — show fallback chooser
+    logCommandRouting(userRequest, false, contextType, "chooser", "AI unavailable, non-direct — showing fallback chooser");
     const fallback = buildFallbackDirections(userRequest, targetContext);
     return { ...fallback, continuityPrompt: continuityPrompt ?? null };
   }
 
-  // Guard: if AI says skip AND includes a directEditRequest, trust it directly
-  // If AI says skip but the original request contained a named exercise,
-  // prefer our resolved version (alias-expanded).
+  // ── AI returned: guard against AI overriding direct commands ──────────────
+  // The AI prompt already instructs shouldSkipDirections: true for direct
+  // commands, but we enforce it here as a hard guardrail.
   if (aiResult.shouldSkipDirections) {
+    // Prefer alias-resolved named exercise command if available
     const namedCommand = detectNamedExerciseCommand(userRequest);
     if (namedCommand && targetContext?.label) {
       const editRequest = `Replace ${targetContext.label} with ${namedCommand.targetExercise}`;
+      logCommandRouting(userRequest, true, contextType, "parser", `AI skipped + named exercise resolved: ${namedCommand.targetExercise}`);
       return {
         shouldSkipDirections: true,
         directEditRequest: editRequest,
         continuityPrompt: continuityPrompt ?? null,
       };
     }
+    logCommandRouting(userRequest, true, contextType, "parser", "AI returned shouldSkipDirections=true");
     return {
       ...aiResult,
       continuityPrompt: continuityPrompt ?? null,
     };
   }
 
-  // Attach the rule-based continuity prompt from decision memory
+  // ── CRITICAL GUARDRAIL: AI returned chooser for a direct command ──────────
+  // This must NEVER happen. If isDirectUserCommand is true and AI still
+  // returned directions, we override and bypass the chooser.
+  if (isDirect) {
+    logCommandRouting(
+      userRequest, true, contextType, "parser",
+      "GUARDRAIL: AI returned directions for direct command — overriding to bypass chooser"
+    );
+    return {
+      shouldSkipDirections: true,
+      directEditRequest: aiResult.directEditRequest ?? userRequest,
+      continuityPrompt: continuityPrompt ?? null,
+    };
+  }
+
+  // Non-direct command, AI returned valid directions — show chooser
+  logCommandRouting(userRequest, false, contextType, "chooser", "AI returned directions for non-direct command");
   return {
     ...aiResult,
     continuityPrompt: continuityPrompt ?? null,
