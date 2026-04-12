@@ -57,6 +57,7 @@ import EditDrawer, {
   type EditTarget,
   type EditResult,
   type ChangedIds,
+  type ExerciseContext,
 } from "@/components/training/EditDrawer";
 import ChangeDetailDrawer from "@/components/training/ChangeDetailDrawer";
 import ReadinessCheckIn from "@/components/training/ReadinessCheckIn";
@@ -1365,6 +1366,7 @@ export default function SystemPage() {
   const [activeTab, setActiveTab] = useState<TabId>("today");
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const [editPrefill, setEditPrefill] = useState<string | undefined>(undefined);
+  const [editExerciseContext, setEditExerciseContext] = useState<ExerciseContext | undefined>(undefined);
   const [recentEdits, setRecentEdits] = useState<EditRecord[]>([]);
   const [highlightedIds, setHighlightedIds] = useState<HighlightedIds>({
     exercises: new Set(),
@@ -1423,6 +1425,11 @@ export default function SystemPage() {
   function openExerciseEdit(exercise: any, sessionLabel: string) {
     setEditTarget({ type: "exercise", id: exercise.id, label: exercise.name, parentLabel: sessionLabel });
     setEditPrefill(undefined);
+    setEditExerciseContext({
+      prescribedSets: exercise.sets ? parseInt(String(exercise.sets), 10) || 3 : 3,
+      savedProgramId: activeSystem?.savedProgramId ?? undefined,
+      trainingGoal: activeSystem?.trainingGoal ?? activeSystem?.goal ?? undefined,
+    });
   }
 
   function openSessionEdit(session: any, weekLabel?: string) {
@@ -1940,7 +1947,8 @@ export default function SystemPage() {
         <EditDrawer
           target={editTarget}
           prefillRequest={editPrefill}
-          onClose={() => setEditTarget(null)}
+          exerciseContext={editTarget.type === "exercise" ? editExerciseContext : undefined}
+          onClose={() => { setEditTarget(null); setEditExerciseContext(undefined); }}
           onEditComplete={handleEditComplete}
         />
       )}

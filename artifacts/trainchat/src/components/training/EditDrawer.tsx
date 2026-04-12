@@ -1,17 +1,20 @@
 /**
  * EditDrawer — Phase A: Collaborative Decision Layer
  *
- * Multi-phase interaction:
- *   1. Input       — user describes what they want
- *   2. Directions  — AI presents 2-4 coach-curated direction cards
- *   3. Executing   — AI applies the chosen direction
- *   4. Success     — change summary
+ * For exercise targets, shows a "Log Performance" section first:
+ *   1. Last session data
+ *   2. Per-set weight/reps inputs with quick +/- controls
+ *   3. Feedback buttons (Too Easy / Challenging / Too Hard)
+ *   4. "Complete Exercise" save action
  *
- * Highly specific requests (e.g. "swap bench for dumbbell") skip Phase 2 and
- * execute directly.
+ * Then the existing AI edit flow:
+ *   5. Quick Actions
+ *   6. Custom Request (AI)
  */
 
 import { useState, useRef, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import {
   X,
   Dumbbell,
@@ -27,9 +30,14 @@ import {
   ArrowLeft,
   Clock,
   MessageCircle,
+  TrendingUp,
+  Plus,
+  Minus,
+  Check,
+  Copy,
 } from "lucide-react";
-import { useMutation } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
+import type { ProgressionTarget, SetLog } from "./ExerciseLogInline";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -73,6 +81,16 @@ export interface DirectionsResponse {
   coachMessage?: string;
   directions?: DirectionOption[];
   directEditRequest?: string;
+  memoryCallout?: string;
+  continuityPrompt?: string;
+}
+
+/** Extra context provided when the drawer is opened for an exercise target */
+export interface ExerciseContext {
+  prescribedSets?: number;
+  savedProgramId?: number;
+  dayNumber?: number;
+  trainingGoal?: string;
 }
 
 interface EditDrawerProps {
@@ -80,9 +98,11 @@ interface EditDrawerProps {
   onClose: () => void;
   onEditComplete: (result: EditResult) => void;
   prefillRequest?: string;
+  exerciseContext?: ExerciseContext;
 }
 
 type DrawerPhase = "input" | "directions" | "executing" | "success" | "error";
+type FeedbackTag = "too_easy" | "challenging" | "too_hard";
 
 // ─── Contextual Suggestions ───────────────────────────────────────────────────
 
@@ -221,9 +241,392 @@ async function submitTargetedEdit(
   });
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Performance logging helpers ──────────────────────────────────────────────
 
-export default function EditDrawer({ target, onClose, onEditComplete, prefillRequest }: EditDrawerProps) {
+function buildSets(count: number, lastLoad: number | null, lastReps: number | null): SetLog[] {
+  return Array.from({ length: count }, (_, i) => ({
+    setNumber: i + 1,
+    weight: lastLoad,
+    reps: lastReps,
+    completed: false,
+  }));
+}
+
+function clampWeight(v: number) {
+  return Math.max(0, Math.min(2000, Math.round(v * 4) / 4));
+}
+
+function clampReps(v: number) {
+  return Math.max(0, Math.min(100, Math.round(v)));
+}
+
+// ─── Inline set row ───────────────────────────────────────────────────────────
+
+function SetRow({ set, onChange, onSave }: {
+  set: SetLog;
+  onChange: (patch: Partial<SetLog>) => void;
+  onSave: () => void;
+}) {
+  function adjW(d: number) {
+    onChange({ weight: clampWeight((set.weight ?? 0) + d) });
+  }
+  function adjR(d: number) {
+    onChange({ reps: clampReps((set.reps ?? 0) + d) });
+  }
+  function toggle() {
+    const next = !set.completed;
+    onChange({ completed: next });
+    if (next) onSave();
+  }
+
+  return (
+    <div
+      className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-colors ${
+        set.completed
+          ? "bg-green-500/8 border border-green-500/20"
+          : "bg-muted/20 border border-border/40"
+      }`}
+    >
+      {/* Set label */}
+      <span className="text-[10px] font-bold text-muted-foreground/50 w-6 flex-shrink-0">
+        S{set.setNumber}
+      </span>
+
+      {/* Weight */}
+      <div className="flex items-center gap-1 bg-background/60 border border-border/60 rounded-lg px-2 py-1">
+        <button onClick={() => adjW(-2.5)} type="button" className="text-muted-foreground/60 hover:text-foreground">
+          <Minus className="w-3 h-3" />
+        </button>
+        <input
+          type="number"
+          inputMode="decimal"
+          value={set.weight ?? ""}
+          onChange={(e) => {
+            const n = parseFloat(e.target.value);
+            onChange({ weight: isNaN(n) ? null : clampWeight(n) });
+          }}
+          placeholder="lbs"
+          className="w-12 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/40 focus:outline-none tabular-nums text-center"
+          step={2.5}
+        />
+        <span className="text-[9px] text-muted-foreground/40 flex-shrink-0">lb</span>
+        <button onClick={() => adjW(2.5)} type="button" className="text-muted-foreground/60 hover:text-foreground">
+          <Plus className="w-3 h-3" />
+        </button>
+      </div>
+
+      {/* Quick +5/+10 */}
+      <div className="flex gap-0.5">
+        {[5, 10].map((d) => (
+          <button
+            key={d}
+            onClick={() => adjW(d)}
+            type="button"
+            className="text-[9px] font-bold text-muted-foreground/50 hover:text-primary px-1.5 py-1 rounded-md bg-muted/10 hover:bg-primary/10 transition-colors"
+          >
+            +{d}
+          </button>
+        ))}
+      </div>
+
+      {/* Reps */}
+      <div className="flex items-center gap-1 bg-background/60 border border-border/60 rounded-lg px-2 py-1">
+        <button onClick={() => adjR(-1)} type="button" className="text-muted-foreground/60 hover:text-foreground">
+          <Minus className="w-3 h-3" />
+        </button>
+        <input
+          type="number"
+          inputMode="numeric"
+          value={set.reps ?? ""}
+          onChange={(e) => {
+            const n = parseInt(e.target.value, 10);
+            onChange({ reps: isNaN(n) ? null : clampReps(n) });
+          }}
+          placeholder="reps"
+          className="w-8 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/40 focus:outline-none tabular-nums text-center"
+        />
+        <button onClick={() => adjR(1)} type="button" className="text-muted-foreground/60 hover:text-foreground">
+          <Plus className="w-3 h-3" />
+        </button>
+      </div>
+
+      {/* Completed toggle */}
+      <button
+        onClick={toggle}
+        type="button"
+        className={`ml-auto w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+          set.completed
+            ? "bg-green-500 border-green-500"
+            : "border-border/60 hover:border-green-500/60"
+        }`}
+      >
+        {set.completed && <Check className="w-3 h-3 text-white" />}
+      </button>
+    </div>
+  );
+}
+
+// ─── Performance logging section ──────────────────────────────────────────────
+
+function ExerciseLogSection({
+  exerciseName,
+  exerciseContext,
+  onLogComplete,
+}: {
+  exerciseName: string;
+  exerciseContext: ExerciseContext;
+  onLogComplete: (tag: FeedbackTag | null) => void;
+}) {
+  const prescribedSets = exerciseContext.prescribedSets ?? 3;
+
+  // Fetch last session data / progression target
+  const { data: targetData } = useQuery<{ targets: ProgressionTarget[] }>({
+    queryKey: ["progressionTarget", exerciseName, exerciseContext.savedProgramId, exerciseContext.trainingGoal],
+    queryFn: async () => {
+      const params = new URLSearchParams({ exerciseNames: exerciseName });
+      if (exerciseContext.savedProgramId) params.set("programId", String(exerciseContext.savedProgramId));
+      if (exerciseContext.trainingGoal) params.set("goal", exerciseContext.trainingGoal);
+      return customFetch<{ targets: ProgressionTarget[] }>(`/api/exercise-logs/targets?${params.toString()}`);
+    },
+    staleTime: 30000,
+  });
+
+  const target = targetData?.targets?.[0] ?? null;
+  const lastLoad = target?.lastLoad ?? null;
+  const lastReps = target?.lastReps ?? null;
+  const hasHistory = lastLoad !== null || lastReps !== null;
+
+  const [sets, setSets] = useState<SetLog[]>(() => buildSets(prescribedSets, lastLoad, lastReps));
+  const [feedbackTag, setFeedbackTag] = useState<FeedbackTag | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [progressionMsg, setProgressionMsg] = useState<string | null>(null);
+
+  // Re-init when target loads
+  useEffect(() => {
+    if (lastLoad !== null || lastReps !== null) {
+      setSets((prev) => {
+        const blank = prev.every((s) => s.weight === null && s.reps === null && !s.completed);
+        return blank ? buildSets(prescribedSets, lastLoad, lastReps) : prev;
+      });
+    }
+  }, [lastLoad, lastReps, prescribedSets]);
+
+  function updateSet(i: number, patch: Partial<SetLog>) {
+    setSets((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
+  }
+
+  async function autoSaveSet(i: number) {
+    const s = sets[i];
+    try {
+      await customFetch("/api/exercise-logs", {
+        method: "POST",
+        body: JSON.stringify({
+          exerciseName,
+          programId: exerciseContext.savedProgramId,
+          dayNumber: exerciseContext.dayNumber,
+          orderIndex: s.setNumber - 1,
+          completionStatus: "solid",
+          loadUsed: s.weight ?? undefined,
+          repsCompleted: s.reps ?? undefined,
+          setsCompleted: 1,
+        }),
+      });
+    } catch {
+      // best-effort
+    }
+  }
+
+  function fillFromLast() {
+    setSets((prev) => prev.map((s) => ({ ...s, weight: lastLoad, reps: lastReps })));
+  }
+
+  async function handleComplete() {
+    if (saving || saved) return;
+    setSaving(true);
+
+    const completedSets = sets.filter((s) => s.completed);
+
+    try {
+      const result = await customFetch<{ progressions: string[] }>("/api/session-logs/complete", {
+        method: "POST",
+        body: JSON.stringify({
+          savedProgramId: exerciseContext.savedProgramId,
+          dayNumber: exerciseContext.dayNumber,
+          goal: exerciseContext.trainingGoal ?? "general_fitness",
+          perceivedDifficulty:
+            feedbackTag === "too_easy" ? "too_easy" :
+            feedbackTag === "too_hard" ? "too_hard" :
+            feedbackTag === "challenging" ? "just_right" :
+            undefined,
+          exercises: [{
+            exerciseName,
+            sets,
+          }],
+        }),
+      });
+
+      const progression = result.progressions?.[0] ?? null;
+      setProgressionMsg(progression);
+      setSaved(true);
+      setTimeout(() => onLogComplete(feedbackTag), 1200);
+    } catch {
+      setSaving(false);
+    }
+  }
+
+  if (saved) {
+    return (
+      <div className="px-5 py-4 space-y-2">
+        <div className="flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0" />
+          <span className="text-sm font-semibold text-green-400">Exercise logged!</span>
+        </div>
+        {progressionMsg && (
+          <div className="flex items-start gap-2 bg-primary/8 border border-primary/20 rounded-xl px-3 py-2.5">
+            <TrendingUp className="w-3.5 h-3.5 text-primary/70 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-primary/80 leading-relaxed">{progressionMsg}</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const completedCount = sets.filter((s) => s.completed).length;
+  const stateLabel = target?.progressionState === "ready_to_progress"
+    ? { text: "↑ Progress", cls: "text-green-400 bg-green-500/10 border-green-500/20" }
+    : target?.progressionState === "regress"
+    ? { text: "↓ Reduce", cls: "text-red-400 bg-red-500/10 border-red-500/20" }
+    : target?.progressionState === "hold"
+    ? { text: "→ Hold", cls: "text-amber-400 bg-amber-500/10 border-amber-500/20" }
+    : null;
+
+  return (
+    <div className="px-5 pt-4 pb-2 space-y-3">
+      {/* Section title */}
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+          Log Performance
+        </p>
+        {stateLabel && (
+          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${stateLabel.cls}`}>
+            {stateLabel.text}
+          </span>
+        )}
+      </div>
+
+      {/* Last session data */}
+      <div className="flex items-center gap-3 flex-wrap">
+        {hasHistory ? (
+          <>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span>Last session:</span>
+              <span className="font-semibold text-foreground">
+                {lastLoad !== null ? `${lastLoad} lbs` : ""}
+                {lastLoad !== null && lastReps !== null ? " × " : ""}
+                {lastReps !== null ? `${lastReps} reps` : ""}
+              </span>
+            </div>
+            {target?.targetLoad !== null && target?.targetLoad !== lastLoad && (
+              <div className="flex items-center gap-1 text-xs">
+                <TrendingUp className="w-3 h-3 text-primary/60" />
+                <span className="text-primary font-semibold">
+                  Target: {target?.targetLoad} lbs
+                </span>
+              </div>
+            )}
+            <button
+              onClick={fillFromLast}
+              type="button"
+              className="flex items-center gap-1 text-[10px] font-semibold text-primary/60 hover:text-primary transition-colors ml-auto"
+            >
+              <Copy className="w-3 h-3" /> Same as last
+            </button>
+          </>
+        ) : (
+          <p className="text-xs text-muted-foreground/60 italic">First time performing this exercise</p>
+        )}
+      </div>
+
+      {/* Per-set rows */}
+      <div className="space-y-1.5">
+        {sets.map((set, i) => (
+          <SetRow
+            key={set.setNumber}
+            set={set}
+            onChange={(patch) => updateSet(i, patch)}
+            onSave={() => autoSaveSet(i)}
+          />
+        ))}
+      </div>
+
+      {/* Progress bar */}
+      {completedCount > 0 && (
+        <div className="flex items-center gap-2">
+          <div className="flex-1 h-1 bg-muted/30 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-green-500/70 rounded-full transition-all duration-300"
+              style={{ width: `${(completedCount / sets.length) * 100}%` }}
+            />
+          </div>
+          <span className="text-[9px] font-bold text-muted-foreground/60">
+            {completedCount}/{sets.length}
+          </span>
+        </div>
+      )}
+
+      {/* Feedback tags */}
+      <div>
+        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">
+          How did it feel?
+        </p>
+        <div className="flex gap-2">
+          {([
+            { value: "too_easy",    label: "Too Easy",    cls: "text-sky-400 border-sky-500/30 bg-sky-500/10" },
+            { value: "challenging", label: "Challenging", cls: "text-green-400 border-green-500/30 bg-green-500/10" },
+            { value: "too_hard",    label: "Too Hard",    cls: "text-red-400 border-red-500/30 bg-red-500/10" },
+          ] as { value: FeedbackTag; label: string; cls: string }[]).map((fb) => (
+            <button
+              key={fb.value}
+              onClick={() => setFeedbackTag((v) => v === fb.value ? null : fb.value)}
+              type="button"
+              className={`flex-1 text-xs font-semibold py-2 rounded-xl border transition-all duration-150 ${
+                feedbackTag === fb.value
+                  ? fb.cls
+                  : "bg-muted/20 border-border/40 text-muted-foreground hover:text-foreground hover:border-border"
+              }`}
+            >
+              {fb.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Complete Exercise button */}
+      <button
+        onClick={handleComplete}
+        disabled={saving || completedCount === 0}
+        type="button"
+        className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        {saving ? (
+          <><span className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" /> Saving…</>
+        ) : (
+          <><CheckCircle2 className="w-4 h-4" /> Complete Exercise</>
+        )}
+      </button>
+      {completedCount === 0 && (
+        <p className="text-[10px] text-muted-foreground/50 text-center -mt-1">
+          Mark at least one set complete to save
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ─── Main component ────────────────────────────────────────────────────────────
+
+export default function EditDrawer({ target, onClose, onEditComplete, prefillRequest, exerciseContext }: EditDrawerProps) {
   const [input, setInput] = useState(prefillRequest ?? "");
   const [visible, setVisible] = useState(false);
   const [phase, setPhase] = useState<DrawerPhase>("input");
@@ -231,6 +634,7 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
   const [editResult, setEditResult] = useState<EditResult | null>(null);
   const [selectedDirectionId, setSelectedDirectionId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [loggedFeedback, setLoggedFeedback] = useState<FeedbackTag | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -238,6 +642,7 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
   const config = TARGET_CONFIG[target.type];
   const Icon = config.icon;
   const suggestions = SUGGESTIONS[target.type];
+  const isExercise = target.type === "exercise";
 
   // Animate in
   useEffect(() => {
@@ -245,19 +650,18 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
     return () => cancelAnimationFrame(t);
   }, []);
 
-  // Focus textarea when in input phase
+  // Focus textarea when in input phase (only when logging section is not shown)
   useEffect(() => {
-    if (visible && phase === "input") {
+    if (visible && phase === "input" && !isExercise) {
       setTimeout(() => textareaRef.current?.focus(), 200);
     }
-  }, [visible, phase]);
+  }, [visible, phase, isExercise]);
 
   // ── Directions fetch mutation ──
   const directionsMutation = useMutation({
     mutationFn: (request: string) => fetchDirections(request, target),
     onSuccess: (data) => {
       if (data.shouldSkipDirections) {
-        // Go straight to execution
         setPhase("executing");
         editMutation.mutate(data.directEditRequest ?? input.trim());
       } else {
@@ -277,7 +681,6 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
     onSuccess: (data) => {
       setEditResult(data);
       setPhase("success");
-      // Notify parent after a short delay so user sees success state
       setTimeout(() => onEditComplete(data), 800);
     },
     onError: () => {
@@ -295,12 +698,11 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
     if (e.target === backdropRef.current) animateClose();
   }
 
-  // Step 1: user submits their request → fetch directions
   function handleSubmit() {
     const trimmed = input.trim();
     if (!trimmed || directionsMutation.isPending) return;
     setErrorMsg(null);
-    setPhase("executing"); // show loading state immediately
+    setPhase("executing");
     directionsMutation.mutate(trimmed);
   }
 
@@ -317,7 +719,6 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
     setTimeout(() => textareaRef.current?.focus(), 50);
   }
 
-  // Step 2: user picks a direction → execute edit
   function handleSelectDirection(direction: DirectionOption) {
     setSelectedDirectionId(direction.id);
     setPhase("executing");
@@ -329,6 +730,16 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
     setDirections(null);
     setSelectedDirectionId(null);
     setErrorMsg(null);
+  }
+
+  function handleLogComplete(tag: FeedbackTag | null) {
+    setLoggedFeedback(tag);
+    // If user marked "too easy" or "too hard" auto-fill the AI request
+    if (tag === "too_easy") {
+      setInput("Increase weight — I rated this too easy");
+    } else if (tag === "too_hard") {
+      setInput("Reduce load — I rated this too hard");
+    }
   }
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -348,7 +759,7 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
         style={{
           transform: visible ? "translateY(0)" : "translateY(100%)",
           transition: "transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)",
-          maxHeight: "88vh",
+          maxHeight: "92vh",
         }}
       >
         {/* Drag handle */}
@@ -360,7 +771,6 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
         <div className="px-5 pt-3 pb-4 border-b border-border flex-shrink-0">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3 min-w-0">
-              {/* Back button — visible on directions phase */}
               {phase === "directions" && (
                 <button
                   onClick={handleBackToInput}
@@ -383,7 +793,7 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
                   </span>
                   <span className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
                     <Sparkles className="w-3 h-3" />
-                    {phase === "directions" ? "Choose Direction" : "Edit with Coach"}
+                    {phase === "directions" ? "Choose Direction" : isExercise ? "Log + Edit" : "Edit with Coach"}
                   </span>
                 </div>
                 <h3 className="font-bold text-base text-foreground leading-tight truncate">
@@ -408,8 +818,21 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
 
         {/* ── Phase: Input ────────────────────────────────────────── */}
         {phase === "input" && (
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Suggestions */}
+          <div className="flex-1 flex flex-col overflow-y-auto">
+
+            {/* ── Performance logging section (exercise only) ──────── */}
+            {isExercise && exerciseContext && (
+              <>
+                <ExerciseLogSection
+                  exerciseName={target.label}
+                  exerciseContext={exerciseContext}
+                  onLogComplete={handleLogComplete}
+                />
+                <div className="mx-5 border-t border-border" />
+              </>
+            )}
+
+            {/* ── Quick Actions ──── */}
             <div className="px-5 pt-4 pb-3 flex-shrink-0">
               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2.5">
                 Quick Actions
@@ -429,11 +852,17 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
 
             <div className="mx-5 border-t border-border flex-shrink-0" />
 
-            {/* Text input */}
+            {/* ── Custom Request ──── */}
             <div className="px-5 pt-4 pb-6 flex-shrink-0">
               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2.5">
                 Custom Request
               </p>
+              {loggedFeedback && (
+                <div className="mb-3 flex items-center gap-2 text-[10px] text-primary/70 bg-primary/5 border border-primary/15 rounded-lg px-3 py-2">
+                  <Sparkles className="w-3 h-3 flex-shrink-0" />
+                  <span>Performance logged — coach suggestion pre-filled below</span>
+                </div>
+              )}
               <div className="flex gap-2.5 items-end">
                 <textarea
                   ref={textareaRef}
@@ -459,7 +888,6 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
         {/* ── Phase: Directions ───────────────────────────────────── */}
         {phase === "directions" && directions && (
           <div className="flex-1 flex flex-col overflow-y-auto">
-            {/* Memory callout — subtle reference to past decisions */}
             {directions.memoryCallout && (
               <div className="mx-5 mt-4 mb-0 flex items-start gap-2.5 bg-primary/5 border border-primary/15 rounded-xl px-4 py-3">
                 <Clock className="w-3.5 h-3.5 text-primary/60 flex-shrink-0 mt-0.5" />
@@ -469,7 +897,6 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
               </div>
             )}
 
-            {/* Coach message */}
             {directions.coachMessage && (
               <div className="px-5 pt-4 pb-3 flex-shrink-0">
                 <p className="text-sm text-foreground/80 leading-relaxed font-medium">
@@ -478,7 +905,6 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
               </div>
             )}
 
-            {/* Direction cards */}
             <div className="px-5 pb-4 flex flex-col gap-3">
               {(directions.directions ?? []).map((dir, i) => {
                 const colors = DIRECTION_COLORS[i % DIRECTION_COLORS.length];
@@ -490,7 +916,6 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-3 min-w-0">
-                        {/* Letter badge */}
                         <div className={`w-7 h-7 rounded-lg ${colors.bg} border ${colors.border} flex items-center justify-center flex-shrink-0 mt-0.5`}>
                           <span className={`text-xs font-bold ${colors.accent}`}>{dir.id}</span>
                         </div>
@@ -511,7 +936,6 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
               })}
             </div>
 
-            {/* Continuity prompt — coach check-in question */}
             {directions.continuityPrompt && (
               <div className="mx-5 mb-6 mt-1">
                 <div className="flex items-start gap-2.5 bg-muted/40 border border-border rounded-xl px-4 py-3">

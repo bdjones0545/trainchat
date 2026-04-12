@@ -1,0 +1,213 @@
+Fix the TrainChat exercise classification system so exercises are labeled according to real training function, not generic placeholder tags.
+
+CURRENT ISSUE:
+The current exercise labels such as “Primary” and “Accessory” are not being assigned correctly.
+
+Examples from the current hockey lower body force production session:
+- Leg Swing + Inchworm + Hip Circle is labeled Primary, but it should be Warm-Up / Activation
+- Bulgarian Split Squat is labeled Primary, but it should usually be Secondary
+- Pallof Press is labeled Primary, but it should be Accessory / Trunk
+- Pull-Up is correctly closer to Accessory
+- Back Squat should be Primary
+- Box Jump should be Primary or Neural / Power depending on the label system
+
+GOAL:
+Create a proper exercise role classification system based on exercise purpose inside the session.
+
+----------------------------------------
+1. REPLACE CURRENT LABEL LOGIC
+----------------------------------------
+
+Do not assign labels randomly, by position alone, or by generic fallback defaults.
+
+Instead classify each exercise by training role.
+
+Use these roles:
+
+- Warm-Up
+- Activation
+- Primary
+- Secondary
+- Accessory
+- Trunk
+- Conditioning
+- Recovery
+
+Optional if needed:
+- Power
+- Mobility
+
+If you want to keep the UI simple, combine some of these visually, but the backend classification should still be correct.
+
+----------------------------------------
+2. CLASSIFICATION RULES
+----------------------------------------
+
+Use exercise intent, movement type, load, and session purpose to determine the role.
+
+Suggested rules:
+
+Warm-Up:
+- dynamic prep
+- mobility flow
+- low-load movement prep
+- examples: leg swings, hip circles, inchworms, band walks
+
+Activation:
+- glute activation
+- neural prep
+- low-load prep for key patterns
+
+Primary:
+- main lift or highest neural demand movement
+- big force / power / strength emphasis
+- examples: back squat, front squat, deadlift, trap bar deadlift, heavy bench, primary jump/throw
+
+Secondary:
+- important support lift but not the centerpiece
+- unilateral strength
+- moderate loading after main lift
+- examples: Bulgarian split squat, RDL after main squat, DB press after main bench
+
+Accessory:
+- supporting hypertrophy / structural balance / upper back / arm / smaller movement
+- examples: pull-up, row, curl, face pull, hamstring curl
+
+Trunk:
+- anti-rotation, anti-extension, core stiffness
+- examples: Pallof press, dead bug, rollout, side plank
+
+Conditioning:
+- energy system work
+- circuits, bike, sled intervals
+
+Recovery:
+- cooldown, breathing, restoration work
+
+Power:
+- explosive movement that may appear before a primary strength lift
+- examples: box jump, med ball throw, broad jump
+
+----------------------------------------
+3. SESSION-AWARE LABELING
+----------------------------------------
+
+The classification must consider the session goal.
+
+Example:
+Session goal = Lower Body Force Production + Trunk Stiffness
+
+Correct classification for this session:
+- Leg Swing + Inchworm + Hip Circle → Warm-Up
+- Box Jump → Power
+- Back Squat → Primary
+- Pull-Up → Accessory
+- Bulgarian Split Squat → Secondary
+- Pallof Press → Trunk
+
+Do not label every important movement “Primary.”
+
+There should usually only be 1 true main strength lift, with possibly 1 power movement preceding it.
+
+----------------------------------------
+4. SUPPORT DISPLAY LOGIC
+----------------------------------------
+
+Update the UI so role badges reflect the corrected logic.
+
+Example badge colors/titles:
+- Warm-Up
+- Power
+- Primary
+- Secondary
+- Accessory
+- Trunk
+
+Make them visually distinct and easy to scan on mobile.
+
+----------------------------------------
+5. ORDER EXERCISES BY ROLE
+----------------------------------------
+
+Inside the session, order exercises using a proper training flow:
+
+1. Warm-Up / Activation
+2. Power
+3. Primary
+4. Secondary
+5. Accessory
+6. Trunk
+7. Conditioning / Recovery
+
+Do not just render in arbitrary order.
+
+----------------------------------------
+6. UPDATE PROGRAM GENERATION LOGIC
+----------------------------------------
+
+When the AI builds a program, it must assign each exercise:
+- role
+- purpose
+- placement order
+
+Each exercise object should include something like:
+
+{
+  name: "Back Squat",
+  role: "Primary",
+  purpose: "Main bilateral force production lift",
+  order: 3
+}
+
+----------------------------------------
+7. UPDATE EXERCISE QUICK ACTIONS
+----------------------------------------
+
+When a user taps an exercise, the bottom sheet should show the role clearly.
+
+Example:
+Exercise
+Role: Secondary
+Function: Unilateral lower-body strength and positional control
+
+This helps the app feel more intelligent and coach-like.
+
+----------------------------------------
+8. ADD DEFENSIVE LOGIC
+----------------------------------------
+
+If role classification is uncertain, do not default to “Primary.”
+
+Safe fallback hierarchy:
+- Warm-Up for prep drills
+- Accessory for non-main movements
+- Trunk for core-specific drills
+- Secondary for loaded support lifts
+
+Use “Primary” only when clearly justified.
+
+----------------------------------------
+9. APPLY TO EXISTING SESSION SHOWN
+----------------------------------------
+
+Correct the current session roles to:
+
+- Leg Swing + Inchworm + Hip Circle → Warm-Up
+- Box Jump → Power
+- Back Squat → Primary
+- Pull-Up → Accessory
+- Bulgarian Split Squat → Secondary
+- Pallof Press → Trunk
+
+Also make sure the session order reflects that structure.
+
+----------------------------------------
+10. DELIVERABLES
+----------------------------------------
+
+After implementation:
+1. Explain what caused the mislabeling
+2. Show the updated classification logic
+3. Show corrected roles for the current hockey session
+4. Show any files/components updated
+5. List edge cases to test for future sessions

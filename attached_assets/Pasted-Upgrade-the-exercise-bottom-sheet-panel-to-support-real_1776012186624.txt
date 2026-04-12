@@ -1,0 +1,198 @@
+Upgrade the exercise bottom sheet panel to support real performance logging and connect it to the adaptive system.
+
+CURRENT STATE:
+The panel supports:
+- swap exercise
+- easier / harder variation
+- custom AI request
+
+PROBLEM:
+There is no way to log:
+- weight used
+- reps completed
+- actual performance
+
+This prevents:
+- progression tracking
+- intelligent adaptation
+- real coaching behavior
+
+GOAL:
+Turn this panel into a combined:
+- performance logger
+- quick adjustment tool
+- AI feedback trigger
+
+----------------------------------------
+1. ADD "PERFORMANCE LOGGING" SECTION
+----------------------------------------
+
+Inside the bottom sheet, add a new section ABOVE Quick Actions:
+
+Title:
+“Log Performance”
+
+For each set, display:
+
+Set 1:
+[ Weight: ___ ] [ Reps: ___ ] ✅
+
+Set 2:
+[ Weight: ___ ] [ Reps: ___ ] ⬜
+
+Features:
+- auto-fill based on program prescription
+- tap to copy previous set
+- +/- buttons for quick weight changes
+- mobile optimized inputs
+
+----------------------------------------
+2. ADD "LAST SESSION DATA"
+----------------------------------------
+
+Above logging inputs, show:
+
+“Last session: 185 lbs x 5”
+
+If no data:
+“First time performing this exercise”
+
+This creates continuity and intelligence.
+
+----------------------------------------
+3. ADD QUICK FEEDBACK BUTTONS (VERY IMPORTANT)
+----------------------------------------
+
+Below logging:
+
+Buttons:
+- “Too Easy”
+- “Challenging”
+- “Too Hard”
+
+These should:
+- tag the session
+- trigger future program adjustments
+
+----------------------------------------
+4. ADD "SAVE SET / COMPLETE EXERCISE"
+----------------------------------------
+
+Add button:
+
+“Complete Exercise”
+
+When clicked:
+- saves all sets
+- updates sessionLog
+- updates programState
+
+----------------------------------------
+5. CONNECT TO SYSTEM (BACKEND)
+----------------------------------------
+
+When exercise is completed:
+
+Store:
+
+exerciseLog = {
+  exerciseId,
+  date,
+  sets: [
+    { weight, reps }
+  ],
+  feedback: "easy" | "challenging" | "hard"
+}
+
+Append to:
+
+programState.exerciseHistory
+
+----------------------------------------
+6. TRIGGER ADAPTATION LOGIC
+----------------------------------------
+
+After saving:
+
+Run:
+
+analyzeExercisePerformance(exerciseLog)
+
+Rules:
+
+IF:
+- all reps hit + “too easy”
+→ increase weight next session
+
+IF:
+- reps missed OR “too hard”
+→ reduce load or volume
+
+IF:
+- consistent success over sessions
+→ progress intensity or complexity
+
+----------------------------------------
+7. UPDATE PROGRAM AUTOMATICALLY
+----------------------------------------
+
+If adjustment triggered:
+
+- update programState.program
+- increment version
+- log in Changes tab
+
+Example:
+
+V2 UPDATE
+- Increased back squat from 185 → 195
+- Reason: Completed all sets + user marked “too easy”
+
+----------------------------------------
+8. KEEP EXISTING QUICK ACTIONS
+----------------------------------------
+
+Do NOT remove:
+- Swap
+- Easier / Harder
+- Custom request
+
+These are still important.
+
+But now they sit alongside real performance logging.
+
+----------------------------------------
+9. UX PRIORITY ORDER
+----------------------------------------
+
+Reorder panel sections:
+
+1. Exercise Title
+2. Last Session Data
+3. Log Performance (NEW)
+4. Feedback Buttons (NEW)
+5. Complete Exercise Button (NEW)
+6. Quick Actions (existing)
+7. Custom Request
+
+----------------------------------------
+10. FINAL RULE
+----------------------------------------
+
+Every exercise interaction should:
+- capture real data
+- influence future sessions
+- feel fast and intuitive
+
+If logging does not change the program over time, the system fails.
+
+----------------------------------------
+DELIVERABLES
+----------------------------------------
+
+After implementation:
+1. Show updated bottom sheet UI
+2. Show exerciseLog structure
+3. Show how logging updates programState
+4. Show how progression logic modifies program
+5. Show how Changes tab reflects these updates
