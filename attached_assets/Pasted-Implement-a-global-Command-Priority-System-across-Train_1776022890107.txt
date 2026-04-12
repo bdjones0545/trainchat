@@ -1,0 +1,175 @@
+Implement a global Command Priority System across TrainChat that guarantees all clear user instructions are executed immediately, without being routed to chooser modals.
+
+CURRENT ISSUE:
+Across exercise editing and block editing:
+
+- Users give clear instructions:
+  - “Increase reps to 10”
+  - “Substitute with triple broad jump”
+  - “I want to focus more on power”
+  - “Reduce lower body volume”
+
+- The system sometimes:
+  - ignores the instruction
+  - routes to chooser modals
+  - falls back to generic direction flows
+
+This breaks user trust and makes the system feel inconsistent.
+
+----------------------------------------
+GOAL
+----------------------------------------
+
+Create a global rule:
+
+IF a command is:
+- specific
+- actionable
+- mapped to a known field or block mutation
+
+THEN:
+→ execute immediately
+→ DO NOT route to chooser
+→ DO NOT ask for clarification
+→ DO NOT show modal
+
+----------------------------------------
+1. CREATE isDirectUserCommand()
+----------------------------------------
+
+This must work for BOTH:
+- exercise-level edits
+- block-level edits
+
+Return true if:
+- contains a number + field (reps, sets, rest, load, etc)
+- contains a clear verb + known concept:
+  - increase / reduce / switch / focus / bias / shorten / replace
+- contains known programming keywords:
+  - power, hypertrophy, strength, speed, volume, intensity
+
+Examples that MUST return true:
+- “Increase reps to 10”
+- “Use 25 lbs”
+- “Substitute with triple broad jump”
+- “Focus more on power”
+- “Reduce lower body volume”
+- “Make this 3 weeks”
+
+----------------------------------------
+2. GLOBAL PRIORITY RULE
+----------------------------------------
+
+Before ANY chooser modal is triggered:
+
+if (isDirectUserCommand(input)) {
+    bypassChooser = true
+    routeToParser = true
+}
+
+Chooser modals must NEVER appear if this is true.
+
+----------------------------------------
+3. SPLIT ROUTING BY CONTEXT
+----------------------------------------
+
+If direct command:
+
+IF exercise context:
+→ route to prescription engine
+
+IF block context:
+→ route to block mutation engine
+
+DO NOT mix the two.
+
+----------------------------------------
+4. REMOVE FALLBACK OVERRIDES
+----------------------------------------
+
+Find any logic where:
+- fallback intent
+- low-confidence classification
+- generic routing
+
+can override a direct command
+
+REMOVE that priority.
+
+Direct commands always win.
+
+----------------------------------------
+5. ADD DEBUG LOGGING
+----------------------------------------
+
+For every user command, log:
+
+{
+  input,
+  isDirect: true/false,
+  context: exercise | block,
+  routedTo: parser | chooser,
+  reason
+}
+
+This is critical to trace failures.
+
+----------------------------------------
+6. FAIL SAFE (IMPORTANT)
+----------------------------------------
+
+If a command is direct BUT cannot be applied:
+
+DO NOT:
+- send to chooser
+
+INSTEAD:
+return a coaching message:
+
+Example:
+“Depth jumps typically stay under 5 reps to maintain explosiveness. Want to increase height instead?”
+
+----------------------------------------
+7. APPLY TO CURRENT BUGS
+----------------------------------------
+
+Fix these immediately:
+
+CASE 1:
+“I want to focus more on power”
+→ must mutate block
+→ NOT open chooser
+
+CASE 2:
+“Increase reps to 10”
+→ must update reps
+→ NOT open modal
+
+CASE 3:
+“Substitute with triple broad jump”
+→ must swap exercise
+→ NOT open chooser
+
+----------------------------------------
+8. SUCCESS CRITERIA
+----------------------------------------
+
+After fix:
+
+User input → ALWAYS results in ONE of:
+1. immediate change applied
+2. intelligent coaching feedback (if invalid)
+
+NEVER:
+- chooser modal for clear commands
+- ignored input
+- generic fallback
+
+----------------------------------------
+DELIVERABLE
+----------------------------------------
+
+1. isDirectUserCommand() logic
+2. where it sits in global routing
+3. list of all chooser entry points updated
+4. before/after examples of routing behavior
