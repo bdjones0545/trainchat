@@ -49,10 +49,11 @@ export function readDeviceId(): string | null {
 // ─── Routing decision ─────────────────────────────────────────────────────────
 
 type PublicOnlyRoute = "/start" | "/login" | "/register";
-type ProtectedRoute = "/chat" | "/billing" | "/system" | "/admin";
+type ProtectedRoute = "/billing" | "/system" | "/admin";
 
 const PUBLIC_ONLY: PublicOnlyRoute[] = ["/start", "/login", "/register"];
-const PROTECTED: ProtectedRoute[] = ["/chat", "/billing", "/system", "/admin"];
+// /chat is intentionally excluded — it serves both authenticated and guest users
+const PROTECTED: ProtectedRoute[] = ["/billing", "/system", "/admin"];
 
 export interface RoutingDecision {
   target: string;
@@ -108,7 +109,7 @@ export function computeRoute({
 
   // Not authenticated
   if (PROTECTED.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
-    const target = "/start";
+    const target = "/chat";
     const reason = authError
       ? "auth error — session likely expired"
       : "unauthenticated on protected page";

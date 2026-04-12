@@ -14,10 +14,48 @@ import BillingPage from "@/pages/billing";
 import { useGetMe } from "@workspace/api-client-react";
 import { computeRoute, readDeviceId, logRouteDecision, readOnboardingComplete } from "@/lib/routing";
 
+/**
+ * ChatPage — universal entry point for /chat.
+ *
+ * Renders the full authenticated Chat when a user session is confirmed.
+ * Renders the GuestStart experience for unauthenticated visitors so they
+ * can use the agent immediately without being forced to sign up first.
+ *
+ * Auth resolution is gated before either branch renders to avoid flashing
+ * the wrong UI (a brief spinner is shown during the auth check).
+ */
+function ChatPage() {
+  const { data: me, isLoading } = useGetMe();
+
+  // Only block on the very first load (no cached value yet).
+  // Once we have a definitive answer — authenticated or not — branch immediately.
+  // For unauthenticated users, a 401 resolves quickly and we show the guest
+  // agent without waiting for React Query's retry cycle to complete.
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  // Authenticated: full agent experience
+  if (me) return <Chat />;
+
+  // Unauthenticated: guest agent experience (no signup required)
+  return <GuestStart />;
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,
+      // Don't retry on 401/403 — these are definitive auth failures.
+      // Retrying 401 adds a ~1s delay before guest mode can render.
+      retry: (failureCount, error: any) => {
+        const status = error?.status ?? error?.response?.status;
+        if (status === 401 || status === 403) return false;
+        return failureCount < 1;
+      },
       staleTime: 30_000,
     },
   },
@@ -83,24 +121,15 @@ class ErrorBoundary extends Component<
 /**
  * SmartRoot — the single authoritative routing gate for the "/" path.
  *
- * Priority: auth state always wins. Guest state is never consulted here.
- *
- * We gate on TWO conditions before deciding:
- *   1. isLoading — no data in cache yet (first ever visit)
- *   2. isFetching && !me — a background refetch is in flight and we have no
- *      confirmed user yet (handles stale error state from a previous 401)
- *
- * Without condition 2, a returning user with a stale 401 cache entry would
- * be immediately sent to /start while their valid session is being confirmed
- * in the background, causing a flash of the guest experience.
+ * All visitors (authenticated or not) are routed to /chat.
+ * /chat handles both modes: authenticated users get the full agent,
+ * unauthenticated users get the guest agent — no forced signup wall.
  */
 function SmartRoot() {
   const { data: me, isLoading, isError, isFetching } = useGetMe();
   const [pathname] = useLocation();
 
-  // Wait for definitive auth state before routing.
-  // "isFetching && !me" covers the case where React Query has a stale 401
-  // error in cache and is currently re-confirming it in the background.
+  // Wait for definitive auth state before routing so we don't flash the wrong UI.
   if (isLoading || (isFetching && !me)) {
     logRouteDecision({
       pathname,
@@ -120,16 +149,8 @@ function SmartRoot() {
     );
   }
 
-  computeRoute({
-    pathname,
-    authResolved: true,
-    hasUser: !!me,
-    authError: isError,
-    deviceId: readDeviceId(),
-  });
-
-  if (me) return <Redirect to="/chat" />;
-  return <Redirect to="/start" />;
+  // Everyone goes to /chat — ChatPage decides what to render based on auth state
+  return <Redirect to="/chat" />;
 }
 
 /**
@@ -183,13 +204,8 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={SmartRoot} />
-      <Route path="/start">
-        {() => (
-          <PublicOnlyGuard>
-            <GuestStart />
-          </PublicOnlyGuard>
-        )}
-      </Route>
+      {/* /start redirects to /chat — agent is now accessible without login */}
+      <Route path="/start">{() => <Redirect to="/chat" />}</Route>
       <Route path="/login">
         {() => (
           <PublicOnlyGuard>
@@ -206,7 +222,8 @@ function Router() {
       </Route>
       {/* /onboarding is retired — agent handles onboarding through conversation */}
       <Route path="/onboarding">{() => <Redirect to="/chat" />}</Route>
-      <Route path="/chat" component={Chat} />
+      {/* /chat serves both authenticated (full agent) and guest (limited agent) users */}
+      <Route path="/chat" component={ChatPage} />
       <Route path="/billing">
         {() => (
           <AuthGuard>

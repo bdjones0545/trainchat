@@ -38,7 +38,7 @@ import PricingModal from "@/components/PricingModal";
 import CalibrationModal from "@/components/chat/CalibrationModal";
 import CoachMemoryPanel from "@/components/chat/CoachMemoryPanel";
 import { useStreamMessage } from "@/hooks/useStreamMessage";
-import { clearAuthState, clearGuestSessionCache, markOnboardingComplete, logRouteDecision, readDeviceId, readOnboardingComplete } from "@/lib/routing";
+import { clearAuthState, markOnboardingComplete, logRouteDecision, readDeviceId, readOnboardingComplete } from "@/lib/routing";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 
 const SUGGESTION_CHIPS = [
@@ -273,41 +273,9 @@ export default function Chat() {
     return () => clearTimeout(id);
   }, []); // intentionally empty — runs once on mount only
 
-  // Only redirect on CONFIRMED auth failure (not during loading, fetching, or transient errors).
-  // The `!meFetching` guard prevents acting on a stale error cache entry while a
-  // background refetch (triggered by login) is still in flight.
-  useEffect(() => {
-    if (!meLoading && !meFetching && meError && !me) {
-      /**
-       * Clear the sessionStorage guest session cache before redirecting to /start.
-       * This ensures GuestStart always fetches the authoritative status from the
-       * API rather than replaying a potentially stale sessionStorage cache.
-       *
-       * We clear the guest session cache (not the full auth state) because:
-       *   - We keep localStorage.onboardingComplete so GuestStart has a hint
-       *     that this device has been used by a registered user before.
-       *   - The guest session API will return the true "converted" status which
-       *     GuestStart uses to redirect to /login rather than showing the
-       *     guest onboarding experience.
-       *
-       * We do NOT clear localStorage.onboardingComplete here because that is
-       * only cleared on explicit logout.
-       */
-      clearGuestSessionCache();
-      logRouteDecision({
-        pathname: "/chat",
-        authResolved: true,
-        hasUser: false,
-        authError: true,
-        deviceId: readDeviceId(),
-        guestSessionStatus: null,
-        onboardingComplete: readOnboardingComplete(),
-        target: "/start",
-        reason: "auth failure confirmed — session expired or invalid",
-      });
-      setLocation("/start");
-    }
-  }, [meLoading, meFetching, meError, me, setLocation]);
+  // Auth failure is handled by the ChatPage wrapper in App.tsx which re-renders
+  // GuestStart when me is null. No redirect needed here — Chat only renders
+  // when the user is confirmed authenticated.
 
   // Conversation bootstrap: select the first existing convo, or create one.
   // FIX: hasAttemptedConvoCreate ref prevents creating duplicate conversations on
@@ -688,10 +656,10 @@ export default function Chat() {
           deviceId: readDeviceId(),
           guestSessionStatus: null,
           onboardingComplete: false,
-          target: "/start",
-          reason: "explicit logout",
+          target: "/chat",
+          reason: "explicit logout — guest mode will render",
         });
-        setLocation("/start");
+        setLocation("/chat");
       },
     });
   }

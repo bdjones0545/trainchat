@@ -477,8 +477,33 @@ export default function GuestStart() {
         className="flex-shrink-0 flex items-center justify-between px-4 py-3"
         style={{ borderBottom: "1px solid hsl(222 47% 12%)" }}
       >
-        <img src={logoSrc} alt="TrainChat" className="h-6" />
+        {/* Left: logo + guest mode badge */}
+        <div className="flex items-center gap-2.5">
+          <img src={logoSrc} alt="TrainChat" className="h-6" />
+          <span
+            className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-widest"
+            style={{ background: "hsl(222 47% 14%)", color: "hsl(222 47% 55%)", border: "1px solid hsl(222 47% 20%)" }}
+          >
+            Guest
+          </span>
+        </div>
+
+        {/* Right: inputs remaining + auth links */}
         <div className="flex items-center gap-3">
+          {/* Free inputs remaining counter — shown once the user has started chatting */}
+          {messageCount > 0 && messageCount < FREE_MESSAGE_LIMIT && (
+            <span
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium"
+              style={{
+                background: messageCount >= FREE_MESSAGE_LIMIT - 1 ? "hsl(25 95% 53% / 0.1)" : "hsl(222 47% 13%)",
+                color: messageCount >= FREE_MESSAGE_LIMIT - 1 ? "hsl(25 95% 63%)" : "hsl(222 47% 55%)",
+                border: messageCount >= FREE_MESSAGE_LIMIT - 1 ? "1px solid hsl(25 95% 53% / 0.25)" : "1px solid hsl(222 47% 20%)",
+              }}
+            >
+              <span className="hidden sm:inline">{FREE_MESSAGE_LIMIT - messageCount} free {FREE_MESSAGE_LIMIT - messageCount === 1 ? "message" : "messages"} left</span>
+              <span className="sm:hidden">{FREE_MESSAGE_LIMIT - messageCount} left</span>
+            </span>
+          )}
           <a
             href="/login"
             className="text-xs font-medium transition-colors"
@@ -557,6 +582,14 @@ export default function GuestStart() {
                 </button>
               ))}
             </div>
+
+            {/* Guest mode note — subtle, non-intrusive */}
+            <p
+              className="text-center text-[11px] animate-in fade-in duration-700"
+              style={{ color: "hsl(222 47% 38%)", animationDelay: "200ms" }}
+            >
+              You're in guest mode — start building your program now. {FREE_MESSAGE_LIMIT} free messages included.
+            </p>
           </div>
         ) : (
           /* ── Conversation view ───────────────────────────────────────── */
