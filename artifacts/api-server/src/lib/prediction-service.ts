@@ -12,6 +12,14 @@
  * Maximum 3 signals returned, sorted by priority.
  *
  * Tone: coach-like, not diagnostic. Anticipatory, not alarming.
+ *
+ * FORECAST GATING:
+ *   no_data    → 0 completed workouts AND 0 check-ins
+ *   warming_up → 1–2 completed workouts OR exactly 1 check-in
+ *   active     → ≥3 completed workouts AND ≥2 check-ins
+ *
+ * Only the active state runs prediction logic. no_data and warming_up
+ * return an empty forecastItems array with a structured status message.
  */
 
 import { db, readinessEntriesTable, sessionLogsTable, exerciseLogsTable, neuralProfilesTable } from "@workspace/db";
@@ -28,6 +36,10 @@ export type PredictionType =
 
 export type PredictionSeverity = "low" | "medium" | "high";
 
+export type ForecastStatus = "no_data" | "warming_up" | "active";
+
+export type ForecastConfidence = "none" | "low" | "medium" | "high";
+
 export interface PredictionSignal {
   id: string;
   type: PredictionType;
@@ -42,8 +54,39 @@ export interface PredictionSignal {
 }
 
 export interface PredictionResult {
+  status: ForecastStatus;
+  confidence: ForecastConfidence;
+  message: string;
   predictions: PredictionSignal[];
   generatedAt: Date;
+  // Debug metadata — logged server-side, also surfaced to clients for transparency
+  _debug: {
+    completedWorkouts: number;
+    checkIns: number;
+    trainingHistoryCount: number;
+    confidenceLevel: ForecastConfidence;
+    forecastStatus: ForecastStatus;
+  };
+}
+
+// ─── Eligibility helpers ──────────────────────────────────────────────────────
+
+function determineForecastStatus(completedWorkouts: number, checkIns: number): ForecastStatus {
+  if (completedWorkouts === 0 && checkIns === 0) return "no_data";
+  if (completedWorkouts >= 3 && checkIns >= 2) return "active";
+  return "warming_up";
+}
+
+function determineForecastConfidence(
+  status: ForecastStatus,
+  completedWorkouts: number,
+  checkIns: number,
+): ForecastConfidence {
+  if (status === "no_data") return "none";
+  if (status === "warming_up") return "low";
+  // Active state: scale medium → high based on volume
+  if (completedWorkouts >= 6 && checkIns >= 5) return "high";
+  return "medium";
 }
 
 // ─── Severity rank for sorting ────────────────────────────────────────────────
@@ -51,7 +94,6 @@ export interface PredictionResult {
 const SEVERITY_RANK: Record<PredictionSeverity, number> = { high: 3, medium: 2, low: 1 };
 
 function prioritySort(a: PredictionSignal, b: PredictionSignal): number {
-  // Positive types (opportunity) rank lower than risk signals at same severity
   const aIsPositive = a.type === "PROGRESSION_OPPORTUNITY";
   const bIsPositive = b.type === "PROGRESSION_OPPORTUNITY";
   if (SEVERITY_RANK[b.severity] !== SEVERITY_RANK[a.severity]) {
@@ -64,6 +106,7 @@ function prioritySort(a: PredictionSignal, b: PredictionSignal): number {
 
 // ─── Trend helpers ────────────────────────────────────────────────────────────
 
+/** Returns 0 for empty arrays — callers must guard against empty input */
 function avg(values: number[]): number {
   return values.length === 0 ? 0 : values.reduce((s, v) => s + v, 0) / values.length;
 }
@@ -82,7 +125,6 @@ function trendDirection(values: number[]): number {
 export async function generatePredictions(userId: number): Promise<PredictionResult> {
   const now = new Date();
   const fourteenDaysAgo = new Date(now.getTime() - 14 * 86400000);
-  const sevenDaysAgo = new Date(now.getTime() - 7 * 86400000);
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000);
 
   // Fetch all data in parallel
@@ -100,31 +142,96 @@ export async function generatePredictions(userId: number): Promise<PredictionRes
       .where(eq(neuralProfilesTable.userId, userId)).limit(1),
   ]);
 
+  // ── Eligibility gating ─────────────────────────────────────────────────────
+  const completedWorkouts = sessionRows.filter((s) => s.sessionStatus === "completed").length;
+  const checkIns = readinessRows.length;
+  const trainingHistoryCount = exerciseRows.length;
+
+  const status = determineForecastStatus(completedWorkouts, checkIns);
+  const confidence = determineForecastConfidence(status, completedWorkouts, checkIns);
+
+  const debugMeta = {
+    completedWorkouts,
+    checkIns,
+    trainingHistoryCount,
+    confidenceLevel: confidence,
+    forecastStatus: status,
+  };
+
+  // Log for server-side debugging
+  console.log(`[ForecastGate] userId=${userId}`, debugMeta);
+
+  // Return early if user does not have enough real data
+  if (status === "no_data") {
+    return {
+      status: "no_data",
+      confidence: "none",
+      message: "Not enough training data to generate a forecast yet.",
+      predictions: [],
+      generatedAt: now,
+      _debug: debugMeta,
+    };
+  }
+
+  if (status === "warming_up") {
+    return {
+      status: "warming_up",
+      confidence: "low",
+      message: "We're still learning this user's patterns.",
+      predictions: [],
+      generatedAt: now,
+      _debug: debugMeta,
+    };
+  }
+
+  // ── Active state — run full prediction logic ────────────────────────────────
   const neuralProfile = neuralRows[0] ?? null;
   const signals: PredictionSignal[] = [];
 
   // ── 1. FATIGUE RISK ────────────────────────────────────────────────────────
   {
     const recentReadiness = readinessRows.slice(0, 7);
-    const sleepScores = recentReadiness.map((r) => r.sleepScore ?? 3).filter(Boolean);
-    const sorenessScores = recentReadiness.map((r) => r.sorenessScore ?? 2).filter(Boolean);
-    const energyScores = recentReadiness.map((r) => r.energyScore ?? 3).filter(Boolean);
 
-    const avgSleep = avg(sleepScores);
-    const avgSoreness = avg(sorenessScores);
-    const avgEnergy = avg(energyScores);
+    // Only compute averages when there is real data — never fall back to 0
+    const sleepScores = recentReadiness
+      .map((r) => r.sleepScore)
+      .filter((v): v is number => v != null && v > 0);
+    const sorenessScores = recentReadiness
+      .map((r) => r.sorenessScore)
+      .filter((v): v is number => v != null && v > 0);
+    const energyScores = recentReadiness
+      .map((r) => r.energyScore)
+      .filter((v): v is number => v != null && v > 0);
+
+    // Require at least 2 data points per metric before evaluating — avoids
+    // false signals from a single outlier check-in.
+    const avgSleep = sleepScores.length >= 2 ? avg(sleepScores) : null;
+    const avgSoreness = sorenessScores.length >= 2 ? avg(sorenessScores) : null;
+    const avgEnergy = energyScores.length >= 2 ? avg(energyScores) : null;
 
     const recentSessions = sessionRows.slice(0, 5);
-    const hardSessions = recentSessions.filter((s) => (s.difficultyScore ?? 3) >= 4);
+    const hardSessions = recentSessions.filter((s) => (s.difficultyScore ?? 0) >= 4);
     const consecutiveHard = hardSessions.length;
 
     const fatigueTriggers: string[] = [];
     let fatigueScore = 0;
 
-    if (avgSoreness >= 3.5) { fatigueTriggers.push(`elevated soreness (avg ${avgSoreness.toFixed(1)}/5)`); fatigueScore += 2; }
-    if (avgSleep <= 2.5) { fatigueTriggers.push(`poor sleep (avg ${avgSleep.toFixed(1)}/5)`); fatigueScore += 2; }
-    if (avgEnergy <= 2.5) { fatigueTriggers.push(`low energy (avg ${avgEnergy.toFixed(1)}/5)`); fatigueScore += 1; }
-    if (consecutiveHard >= 3) { fatigueTriggers.push(`${consecutiveHard} recent high-effort sessions`); fatigueScore += 2; }
+    if (avgSoreness !== null && avgSoreness >= 3.5) {
+      fatigueTriggers.push(`elevated soreness (avg ${avgSoreness.toFixed(1)}/5)`);
+      fatigueScore += 2;
+    }
+    if (avgSleep !== null && avgSleep <= 2.5) {
+      fatigueTriggers.push(`poor sleep (avg ${avgSleep.toFixed(1)}/5)`);
+      fatigueScore += 2;
+    }
+    if (avgEnergy !== null && avgEnergy <= 2.5) {
+      fatigueTriggers.push(`low energy (avg ${avgEnergy.toFixed(1)}/5)`);
+      fatigueScore += 1;
+    }
+    if (consecutiveHard >= 3) {
+      fatigueTriggers.push(`${consecutiveHard} recent high-effort sessions`);
+      fatigueScore += 2;
+    }
 
     if (fatigueScore >= 2 && fatigueTriggers.length > 0) {
       const severity: PredictionSeverity = fatigueScore >= 4 ? "high" : "medium";
@@ -176,7 +283,6 @@ export async function generatePredictions(userId: number): Promise<PredictionRes
 
   // ── 3. PLATEAU RISK ───────────────────────────────────────────────────────
   {
-    // Group exercise logs by exercise name and check for load stagnation
     const exerciseMap = new Map<string, typeof exerciseRows>();
     exerciseRows.forEach((log) => {
       const existing = exerciseMap.get(log.exerciseName) ?? [];
@@ -185,10 +291,10 @@ export async function generatePredictions(userId: number): Promise<PredictionRes
     });
 
     let stalledCount = 0;
-    let stalledExercises: string[] = [];
+    const stalledExercises: string[] = [];
 
     exerciseMap.forEach((logs, name) => {
-      if (logs.length < 3) return; // Need at least 3 data points
+      if (logs.length < 3) return;
       const recent = logs.slice(0, 4);
       const loads = recent.map((l) => l.loadUsed ?? 0).filter((l) => l > 0);
       const hasLoad = loads.length >= 3;
@@ -223,9 +329,18 @@ export async function generatePredictions(userId: number): Promise<PredictionRes
   {
     const recentReadiness = readinessRows.slice(0, 5);
     const recentSessions = sessionRows.slice(0, 5);
-    const completedSessions = recentSessions.filter((s) => s.sessionStatus === "completed");
-    // Composite readiness estimate: avg of energy + motivation (both 1-5 scales)
-    const avgReadiness = avg(recentReadiness.map((r) => (r.energyScore + r.motivationScore) / 2));
+    const completedRecentSessions = recentSessions.filter((s) => s.sessionStatus === "completed");
+
+    // Only compute readiness when we have entries with both fields populated
+    const readinessValues = recentReadiness
+      .map((r) => {
+        const energy = r.energyScore;
+        const motivation = r.motivationScore;
+        return energy != null && motivation != null ? (energy + motivation) / 2 : null;
+      })
+      .filter((v): v is number => v !== null);
+
+    const avgReadiness = readinessValues.length >= 2 ? avg(readinessValues) : null;
 
     const recentLogs = exerciseRows.slice(0, 15);
     const easyOrSolid = recentLogs.filter((l) => l.completionStatus === "easy" || l.completionStatus === "solid");
@@ -234,23 +349,23 @@ export async function generatePredictions(userId: number): Promise<PredictionRes
     const avgDifficulty = avg(recentSessions.map((s) => s.difficultyScore ?? 3));
 
     const isOpportunity =
-      completedSessions.length >= 3 &&
+      completedRecentSessions.length >= 3 &&
+      avgReadiness !== null &&
       avgReadiness >= 3.8 &&
       qualityRate >= 0.65 &&
       avgDifficulty <= 3.2 &&
-      // Don't surface opportunity if fatigue risk is already detected
       !signals.find((s) => s.type === "FATIGUE_RISK");
 
-    if (isOpportunity) {
-      const confidence = Math.min(0.9, 0.55 + qualityRate * 0.3 + (avgReadiness - 3) * 0.1);
+    if (isOpportunity && avgReadiness !== null) {
+      const opportunityConfidence = Math.min(0.9, 0.55 + qualityRate * 0.3 + (avgReadiness - 3) * 0.1);
       signals.push({
         id: "progression_opportunity",
         type: "PROGRESSION_OPPORTUNITY",
         severity: avgReadiness >= 4.2 ? "medium" : "low",
-        confidence,
+        confidence: opportunityConfidence,
         title: "Progression opportunity",
         explanation: "Readiness and session quality signal capacity to push forward.",
-        evidence: `${completedSessions.length} of ${recentSessions.length} recent sessions completed. Readiness avg ${avgReadiness.toFixed(1)}/5. ${Math.round(qualityRate * 100)}% of recent reps rated solid or easy — conditions are right to increase load.`,
+        evidence: `${completedRecentSessions.length} of ${recentSessions.length} recent sessions completed. Readiness avg ${avgReadiness.toFixed(1)}/5. ${Math.round(qualityRate * 100)}% of recent reps rated solid or easy — conditions are right to increase load.`,
         suggestedAction: "Increase primary lift load by the standard increment next session.",
         actionPrompt: "My recent sessions have been consistently completed with good readiness. Can you progress my primary lifts — I think I'm ready to add load?",
       });
@@ -259,46 +374,59 @@ export async function generatePredictions(userId: number): Promise<PredictionRes
 
   // ── 5. RECOVERY DIP RISK ──────────────────────────────────────────────────
   {
-    // Only surface if fatigue risk is not already present (overlapping signal)
     const hasFatigue = signals.find((s) => s.type === "FATIGUE_RISK");
     if (!hasFatigue) {
       const recentReadiness = readinessRows.slice(0, 7);
-      const sleepTrend = trendDirection(recentReadiness.map((r) => r.sleepScore ?? 3).reverse());
-      const stressTrend = trendDirection(recentReadiness.map((r) => r.stressScore ?? 3).reverse());
 
-      const avgSleep = avg(recentReadiness.map((r) => r.sleepScore ?? 3));
-      const avgStress = avg(recentReadiness.map((r) => r.stressScore ?? 3));
+      // Require at least 3 check-ins before evaluating trend
+      if (recentReadiness.length >= 3) {
+        const sleepValues = recentReadiness
+          .map((r) => r.sleepScore)
+          .filter((v): v is number => v != null && v > 0);
+        const stressValues = recentReadiness
+          .map((r) => r.stressScore)
+          .filter((v): v is number => v != null && v > 0);
 
-      const isDecliningSleep = sleepTrend < -0.4 && avgSleep <= 3.2;
-      const isRisingStress = stressTrend > 0.4 && avgStress >= 3.0;
+        const sleepTrend = sleepValues.length >= 3 ? trendDirection([...sleepValues].reverse()) : 0;
+        const stressTrend = stressValues.length >= 3 ? trendDirection([...stressValues].reverse()) : 0;
 
-      const recoveryTriggers: string[] = [];
-      let recoveryScore = 0;
+        const avgSleep = sleepValues.length >= 2 ? avg(sleepValues) : null;
+        const avgStress = stressValues.length >= 2 ? avg(stressValues) : null;
 
-      if (isDecliningSleep) { recoveryTriggers.push("sleep quality declining"); recoveryScore += 2; }
-      if (isRisingStress) { recoveryTriggers.push("stress trending higher"); recoveryScore += 2; }
+        const isDecliningSleep = avgSleep !== null && sleepTrend < -0.4 && avgSleep <= 3.2;
+        const isRisingStress = avgStress !== null && stressTrend > 0.4 && avgStress >= 3.0;
 
-      if (recoveryScore >= 2 && recentReadiness.length >= 3) {
-        signals.push({
-          id: "recovery_dip_risk",
-          type: "RECOVERY_DIP_RISK",
-          severity: "medium",
-          confidence: Math.min(0.8, 0.5 + recoveryScore * 0.1),
-          title: "Recovery quality slipping",
-          explanation: `${recoveryTriggers.join(" and ")} — worth adjusting before it compounds.`,
-          evidence: `Over your last ${recentReadiness.length} check-ins: ${isDecliningSleep ? `sleep dropped toward ${avgSleep.toFixed(1)}/5` : ""}${isDecliningSleep && isRisingStress ? ", " : ""}${isRisingStress ? `stress trending toward ${avgStress.toFixed(1)}/5` : ""}. Addressing early prevents deeper fatigue accumulation.`,
-          suggestedAction: "Shift your next session toward lower-stress movements and add a recovery emphasis.",
-          actionPrompt: "My sleep has been declining and stress is rising. Can you adjust my next session to be lower stress — reduce the intensity and focus more on recovery-friendly movements?",
-        });
+        const recoveryTriggers: string[] = [];
+        let recoveryScore = 0;
+
+        if (isDecliningSleep) { recoveryTriggers.push("sleep quality declining"); recoveryScore += 2; }
+        if (isRisingStress) { recoveryTriggers.push("stress trending higher"); recoveryScore += 2; }
+
+        if (recoveryScore >= 2 && recoveryTriggers.length > 0) {
+          signals.push({
+            id: "recovery_dip_risk",
+            type: "RECOVERY_DIP_RISK",
+            severity: "medium",
+            confidence: Math.min(0.8, 0.5 + recoveryScore * 0.1),
+            title: "Recovery quality slipping",
+            explanation: `${recoveryTriggers.join(" and ")} — worth adjusting before it compounds.`,
+            evidence: `Over your last ${recentReadiness.length} check-ins: ${isDecliningSleep && avgSleep !== null ? `sleep dropped toward ${avgSleep.toFixed(1)}/5` : ""}${isDecliningSleep && isRisingStress ? ", " : ""}${isRisingStress && avgStress !== null ? `stress trending toward ${avgStress.toFixed(1)}/5` : ""}. Addressing early prevents deeper fatigue accumulation.`,
+            suggestedAction: "Shift your next session toward lower-stress movements and add a recovery emphasis.",
+            actionPrompt: "My sleep has been declining and stress is rising. Can you adjust my next session to be lower stress — reduce the intensity and focus more on recovery-friendly movements?",
+          });
+        }
       }
     }
   }
 
-  // Sort by priority and cap at 3
   const sorted = signals.sort(prioritySort).slice(0, 3);
 
   return {
+    status: "active",
+    confidence,
+    message: "Forecast generated from real training data.",
     predictions: sorted,
     generatedAt: now,
+    _debug: debugMeta,
   };
 }

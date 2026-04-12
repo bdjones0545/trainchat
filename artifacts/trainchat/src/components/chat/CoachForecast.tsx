@@ -7,6 +7,11 @@
  * "Show Why" expands the evidence inline — building trust in the prediction.
  * Action buttons dispatch a pre-written coaching message to the AI.
  *
+ * FORECAST STATES:
+ *   no_data    → New user, zero real data. Shows "No Forecast Yet" empty state.
+ *   warming_up → Some data but below active threshold. Shows "Forecast Warming Up".
+ *   active     → Sufficient data. Shows real prediction cards.
+ *
  * Tone: anticipatory, coach-like, never alarming or robotic.
  * Design: minimal, clear, performance-oriented.
  */
@@ -15,7 +20,8 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import {
-  TrendingDown, TrendingUp, Zap, AlertTriangle, ChevronDown, ChevronUp, ArrowRight
+  TrendingDown, TrendingUp, Zap, AlertTriangle, ChevronDown, ChevronUp,
+  ArrowRight, ClipboardList, BarChart2,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -28,6 +34,10 @@ type PredictionType =
   | "RECOVERY_DIP_RISK";
 
 type PredictionSeverity = "low" | "medium" | "high";
+
+type ForecastStatus = "no_data" | "warming_up" | "active";
+
+type ForecastConfidence = "none" | "low" | "medium" | "high";
 
 interface PredictionSignal {
   id: string;
@@ -42,8 +52,18 @@ interface PredictionSignal {
 }
 
 interface PredictionResult {
+  status: ForecastStatus;
+  confidence: ForecastConfidence;
+  message: string;
   predictions: PredictionSignal[];
   generatedAt: string;
+  _debug?: {
+    completedWorkouts: number;
+    checkIns: number;
+    trainingHistoryCount: number;
+    confidenceLevel: ForecastConfidence;
+    forecastStatus: ForecastStatus;
+  };
 }
 
 interface Props {
@@ -102,6 +122,13 @@ const SEVERITY_BADGE: Record<PredictionSeverity, { label: string; color: string 
   low:    { label: "Low",    color: "bg-muted/30 text-muted-foreground" },
 };
 
+const CONFIDENCE_BADGE: Record<ForecastConfidence, { label: string; color: string } | null> = {
+  none:   null,
+  low:    { label: "Low Confidence",    color: "bg-amber-500/12 text-amber-400/80 border border-amber-500/20" },
+  medium: { label: "Medium Confidence", color: "bg-primary/10 text-primary/70 border border-primary/20" },
+  high:   { label: "High Confidence",   color: "bg-emerald-500/12 text-emerald-400/80 border border-emerald-500/20" },
+};
+
 // ─── Prediction card ──────────────────────────────────────────────────────────
 
 function PredictionCard({
@@ -115,7 +142,6 @@ function PredictionCard({
   const cfg = TYPE_CONFIG[signal.type];
   const severity = SEVERITY_BADGE[signal.severity];
   const Icon = cfg.icon;
-
   const isPositive = signal.type === "PROGRESSION_OPPORTUNITY";
 
   return (
@@ -158,7 +184,6 @@ function PredictionCard({
 
       {/* Actions */}
       <div className={`flex items-center gap-0 border-t ${cfg.borderColor}/60 divide-x divide-border/30`}>
-        {/* Show Why toggle */}
         <button
           onClick={() => setShowWhy((v) => !v)}
           className="flex items-center gap-1.5 px-3 py-2 text-[10px] text-muted-foreground hover:text-foreground transition-colors flex-1 justify-center"
@@ -166,8 +191,6 @@ function PredictionCard({
           {showWhy ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
           {showWhy ? "Hide" : "Show why"}
         </button>
-
-        {/* Primary action */}
         <button
           onClick={() => onAction(signal.actionPrompt)}
           className={`flex items-center gap-1.5 px-3 py-2 text-[10px] font-semibold transition-colors flex-1 justify-center ${
@@ -184,9 +207,69 @@ function PredictionCard({
   );
 }
 
-// ─── Empty state ──────────────────────────────────────────────────────────────
+// ─── No Data state ────────────────────────────────────────────────────────────
 
-function EmptyForecast() {
+function NoDataState({ onSendMessage }: { onSendMessage?: (msg: string) => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
+      <div className="w-10 h-10 rounded-full bg-muted/12 border border-border/25 flex items-center justify-center mb-3">
+        <BarChart2 className="w-4 h-4 text-muted-foreground/25" />
+      </div>
+      <p className="text-[11px] font-bold text-foreground mb-1.5">No Forecast Yet</p>
+      <p className="text-[10px] text-muted-foreground leading-relaxed max-w-[220px] mb-4">
+        Your Coach Forecast activates after you log training sessions and check-ins. Once TrainChat has enough real data, it will begin detecting recovery and fatigue trends.
+      </p>
+      {onSendMessage && (
+        <button
+          onClick={() => onSendMessage("I'd like to log my first training session.")}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-[10px] font-semibold text-primary hover:bg-primary/15 transition-colors"
+        >
+          <ClipboardList className="w-3 h-3" />
+          Log First Session
+        </button>
+      )}
+      <p className="text-[9px] text-muted-foreground/40 mt-3 max-w-[200px]">
+        We need real inputs before generating personalised coaching forecasts.
+      </p>
+    </div>
+  );
+}
+
+// ─── Warming Up state ─────────────────────────────────────────────────────────
+
+function WarmingUpState({ onSendMessage }: { onSendMessage?: (msg: string) => void }) {
+  const badge = CONFIDENCE_BADGE["low"]!;
+
+  return (
+    <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
+      <div className="w-10 h-10 rounded-full bg-amber-500/8 border border-amber-500/15 flex items-center justify-center mb-3">
+        <Zap className="w-4 h-4 text-amber-400/50" />
+      </div>
+      <div className="flex items-center justify-center gap-1.5 mb-2">
+        <p className="text-[11px] font-bold text-foreground">Forecast Warming Up</p>
+        <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${badge.color}`}>
+          {badge.label}
+        </span>
+      </div>
+      <p className="text-[10px] text-muted-foreground leading-relaxed max-w-[220px] mb-4">
+        We're starting to learn your training patterns. Keep logging sessions and check-ins to unlock higher-confidence coaching insights.
+      </p>
+      {onSendMessage && (
+        <button
+          onClick={() => onSendMessage("I'd like to complete a readiness check-in.")}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[10px] font-semibold text-amber-400 hover:bg-amber-500/15 transition-colors"
+        >
+          <ClipboardList className="w-3 h-3" />
+          Complete Another Check-In
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── All clear state ──────────────────────────────────────────────────────────
+
+function AllClearState() {
   return (
     <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
       <div className="w-10 h-10 rounded-full bg-primary/8 border border-primary/15 flex items-center justify-center mb-3">
@@ -200,29 +283,13 @@ function EmptyForecast() {
   );
 }
 
-// ─── No data state ────────────────────────────────────────────────────────────
-
-function InsufficientData() {
-  return (
-    <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
-      <div className="w-10 h-10 rounded-full bg-muted/15 border border-border/30 flex items-center justify-center mb-3">
-        <Zap className="w-4 h-4 text-muted-foreground/30" />
-      </div>
-      <p className="text-[11px] font-semibold text-foreground mb-1">Building your pattern</p>
-      <p className="text-[10px] text-muted-foreground leading-relaxed max-w-[210px]">
-        Forecasts appear after a few sessions and check-ins. Log readiness before training to activate this feature.
-      </p>
-    </div>
-  );
-}
-
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function CoachForecast({ onSendMessage }: Props) {
   const { data, isLoading, error } = useQuery<PredictionResult>({
     queryKey: ["predictions"],
     queryFn: () => customFetch<PredictionResult>("/api/predictions"),
-    staleTime: 10 * 60 * 1000, // 10 minutes — predictions don't change per minute
+    staleTime: 10 * 60 * 1000,
     retry: false,
   });
 
@@ -230,6 +297,69 @@ export default function CoachForecast({ onSendMessage }: Props) {
     if (onSendMessage) {
       onSendMessage(prompt);
     }
+  };
+
+  // Determine what to render based on forecast status
+  const renderContent = () => {
+    if (isLoading) {
+      return (
+        <div className="flex flex-col gap-2.5">
+          {[1, 2].map((i) => (
+            <div key={i} className="h-28 rounded-xl bg-muted/10 border border-border/20 animate-pulse" />
+          ))}
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <p className="text-[10px] text-muted-foreground text-center py-8">
+          Unable to load forecast right now.
+        </p>
+      );
+    }
+
+    if (!data) {
+      return <NoDataState onSendMessage={onSendMessage} />;
+    }
+
+    // Gate rendering on forecast status — never show cards unless status is "active"
+    if (data.status === "no_data") {
+      return <NoDataState onSendMessage={onSendMessage} />;
+    }
+
+    if (data.status === "warming_up") {
+      return <WarmingUpState onSendMessage={onSendMessage} />;
+    }
+
+    // Active state — show real predictions
+    if (data.predictions.length === 0) {
+      return <AllClearState />;
+    }
+
+    const confidenceBadge = data.confidence ? CONFIDENCE_BADGE[data.confidence] : null;
+
+    return (
+      <>
+        {data.predictions.map((signal) => (
+          <PredictionCard
+            key={signal.id}
+            signal={signal}
+            onAction={handleAction}
+          />
+        ))}
+        <div className="flex items-center justify-center gap-2 pt-1">
+          {confidenceBadge && (
+            <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${confidenceBadge.color}`}>
+              {confidenceBadge.label}
+            </span>
+          )}
+          <p className="text-[9px] text-muted-foreground/40">
+            Forecast updates as you train and log check-ins
+          </p>
+        </div>
+      </>
+    );
   };
 
   return (
@@ -247,44 +377,7 @@ export default function CoachForecast({ onSendMessage }: Props) {
 
       {/* Content */}
       <div className="flex-1 px-4 pb-4 space-y-2.5">
-        {isLoading && (
-          <div className="flex flex-col gap-2.5">
-            {[1, 2].map((i) => (
-              <div key={i} className="h-28 rounded-xl bg-muted/10 border border-border/20 animate-pulse" />
-            ))}
-          </div>
-        )}
-
-        {error && (
-          <p className="text-[10px] text-muted-foreground text-center py-8">
-            Unable to load forecast right now.
-          </p>
-        )}
-
-        {!isLoading && !error && data && (
-          <>
-            {data.predictions.length === 0 ? (
-              <EmptyForecast />
-            ) : data.predictions.length > 0 && data.predictions[0].confidence < 0.3 ? (
-              <InsufficientData />
-            ) : (
-              <>
-                {data.predictions.map((signal) => (
-                  <PredictionCard
-                    key={signal.id}
-                    signal={signal}
-                    onAction={handleAction}
-                  />
-                ))}
-                <p className="text-[9px] text-muted-foreground/40 text-center pt-1">
-                  Forecast updates as you train and log check-ins
-                </p>
-              </>
-            )}
-          </>
-        )}
-
-        {!isLoading && !error && !data && <InsufficientData />}
+        {renderContent()}
       </div>
     </div>
   );
