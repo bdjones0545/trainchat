@@ -1,0 +1,207 @@
+Polish the TrainChat guest-first agent entry screen for smaller screens (especially phones and Safari), remove all debug UI, and tighten the mobile experience so it feels premium, compact, and immediately interactive.
+
+CURRENT STATE:
+The guest-first flow is now working correctly:
+- users land directly in the agent experience
+- quick-start chips are visible
+- guest mode works
+- free messages are tracked
+
+CURRENT ISSUES:
+- debug overlay is still visible in the bottom-left
+- the hero area feels a bit tall on small screens
+- the layout should be tighter and more polished for mobile Safari
+- the screen should feel more like an active agent and less like a static landing page
+
+GOAL:
+Create a polished, production-ready mobile-first entry screen that:
+- removes debug/dev UI
+- feels clean and premium on small screens
+- keeps the input area accessible and inviting
+- preserves quick-start prompts without taking over the page
+
+----------------------------------------
+1. REMOVE DEBUG / DEV UI
+----------------------------------------
+
+Remove the bottom-left debug overlay from production UI.
+
+This includes any display of:
+- userMode
+- route
+- guestDeviceId
+- guestSession
+- msg usage debug block
+- any internal state labels
+
+If needed, keep this behind a dev-only flag that never renders in production.
+
+----------------------------------------
+2. TIGHTEN THE MOBILE HERO
+----------------------------------------
+
+On small screens:
+- reduce excessive top/bottom spacing around the hero
+- keep the icon, title, and subtitle more compact
+- reduce line length and improve readability
+- make the first screen feel tighter and faster
+
+Current hero content is good, but should be optimized for phone screens.
+
+Target:
+- icon slightly smaller or better spaced
+- heading still strong, but not oversized
+- subtitle easier to scan
+- less dead vertical space before the input area
+
+----------------------------------------
+3. PRIORITIZE THE INPUT AREA
+----------------------------------------
+
+The input box should feel like the primary action.
+
+On smaller screens:
+- move the input area visually higher when possible
+- ensure it is visible without excessive scrolling
+- keep the screen feeling like “start typing now”
+
+The quick-start chips should support the input, not compete with it.
+
+----------------------------------------
+4. IMPROVE QUICK-START CHIP LAYOUT
+----------------------------------------
+
+Refine the starter prompt chips for mobile:
+- make wrapping cleaner
+- keep spacing tight but touch-friendly
+- avoid awkward line breaks
+- ensure chips do not feel oversized on smaller screens
+
+Recommended:
+- consistent height
+- balanced horizontal padding
+- nice wrapping behavior in 2-column / flowing layout as appropriate
+
+Maintain:
+- Hypertrophy plan
+- 4-day split
+- Athletic performance
+- Train around an injury
+- Home equipment
+
+----------------------------------------
+5. SAFARI / MOBILE SAFE AREA CLEANUP
+----------------------------------------
+
+Optimize specifically for iPhone/mobile Safari:
+- respect safe areas
+- ensure the bottom input area is not cramped by browser chrome
+- prevent the layout from feeling cut off near the bottom
+- ensure sticky/footer input remains usable above Safari controls
+
+Pay attention to:
+- viewport height handling
+- bottom padding
+- safe-area insets
+- keyboard behavior if relevant
+
+----------------------------------------
+6. REFINE HEADER AREA
+----------------------------------------
+
+The top bar with:
+- logo
+- Sign in
+- Get started free
+
+should be slightly tighter and cleaner on small screens.
+
+Recommendations:
+- keep “Sign in” visible but lightweight
+- keep primary CTA strong
+- ensure spacing and touch targets are polished
+- avoid too much vertical consumption in the nav
+
+----------------------------------------
+7. MAKE THE SCREEN FEEL MORE LIKE AN AGENT
+----------------------------------------
+
+Reduce the feeling of a marketing landing page.
+
+Keep the welcome copy, but bias the screen toward interaction:
+- input box should feel central
+- quick-start chips should feel like prompts for the agent
+- visual hierarchy should reinforce “talk to your coach now”
+
+Optional refinement:
+Consider a subtle label above the input like:
+- “Start with a goal”
+or
+- “Tell your coach what you want”
+
+----------------------------------------
+8. POLISH GUEST MODE MESSAGING
+----------------------------------------
+
+Keep guest/free message context, but make it subtle and premium.
+
+Example:
+- “Guest mode · 5 free messages”
+- smaller text
+- low visual weight
+- supportive, not distracting
+
+Do not let this feel like a warning banner.
+
+----------------------------------------
+9. RESPONSIVE RULES
+----------------------------------------
+
+Tune layout for:
+- small iPhones
+- medium phones
+- mobile Safari portrait
+
+Ensure:
+- hero doesn’t become too tall
+- chips don’t overflow awkwardly
+- CTA/input remains visible and usable
+- no dev overlays remain
+
+----------------------------------------
+10. VISUAL POLISH PASS
+----------------------------------------
+
+Without redesigning the whole screen, improve:
+- spacing rhythm
+- alignment
+- text hierarchy
+- chip consistency
+- perceived quality
+
+Keep the existing premium dark TrainChat aesthetic.
+
+This is a refinement pass, not a redesign.
+
+----------------------------------------
+11. SUCCESS CRITERIA
+----------------------------------------
+
+After the polish:
+- no debug overlay is visible
+- the screen looks clean on a phone
+- the user feels invited to type immediately
+- the hero is tighter and less tall
+- starter chips feel polished
+- Safari bottom controls do not interfere with usability
+
+----------------------------------------
+12. DELIVERABLES
+----------------------------------------
+
+After implementation, provide:
+1. what debug/dev UI was removed
+2. what mobile spacing/layout changes were made
+3. what Safari-specific adjustments were added
+4. how the input area was prioritized
+5. any remaining edge cases on very small screens

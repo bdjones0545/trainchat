@@ -486,154 +486,139 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
   const canSend = inputText.trim().length > 0 && !isTyping;
 
   return (
-    <div className="h-screen flex flex-col" style={{ background: "hsl(222 47% 7%)" }}>
+    /* 100dvh instead of 100vh — accounts for Safari's collapsible address bar */
+    <div className="flex flex-col" style={{ background: "hsl(222 47% 7%)", height: "100dvh" }}>
 
-      {/* ── Dev-mode debug overlay ──────────────────────────────────────────── */}
-      {import.meta.env.DEV && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: 12,
-            left: 12,
-            zIndex: 9999,
-            background: "rgba(0,0,0,0.85)",
-            color: "#a3e635",
-            fontFamily: "monospace",
-            fontSize: 10,
-            padding: "6px 10px",
-            borderRadius: 6,
-            lineHeight: 1.6,
-            pointerEvents: "none",
-            border: "1px solid rgba(163,230,53,0.25)",
-          }}
-        >
-          <div>userMode: <strong>{userMode}</strong></div>
-          <div>route: /chat → GuestStart</div>
-          <div>guestDeviceId: <strong>{deviceId ? "yes" : "no"}</strong></div>
-          <div>guestSession: <strong>{guestSession ? `yes (${guestSession.status})` : "no"}</strong></div>
-          <div>screen: <strong>{isInitialized ? (isLocked ? "locked" : showPaywall ? "paywall" : "agent") : "spinner"}</strong></div>
-          <div>msgs used: <strong>{messageCount}</strong> / {FREE_MESSAGE_LIMIT}</div>
-        </div>
-      )}
-
-      {/* ── Top nav ────────────────────────────────────────────────────────── */}
+      {/* ── Top nav — tight, touch-friendly ────────────────────────────────── */}
       <div
-        className="flex-shrink-0 flex items-center justify-between px-4 py-3"
-        style={{ borderBottom: "1px solid hsl(222 47% 12%)" }}
+        className="flex-shrink-0 flex items-center justify-between px-4 py-2"
+        style={{ borderBottom: "1px solid hsl(222 47% 11%)" }}
       >
-        {/* Left: logo + guest mode badge */}
-        <div className="flex items-center gap-2.5">
-          <img src={logoSrc} alt="TrainChat" className="h-6" />
+        {/* Left: logo + subtle guest badge */}
+        <div className="flex items-center gap-2">
+          <img src={logoSrc} alt="TrainChat" className="h-5" />
           <span
-            className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-widest"
-            style={{ background: "hsl(222 47% 14%)", color: "hsl(222 47% 55%)", border: "1px solid hsl(222 47% 20%)" }}
+            className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-widest"
+            style={{ background: "hsl(222 47% 13%)", color: "hsl(222 47% 48%)", border: "1px solid hsl(222 47% 18%)" }}
           >
             Guest
           </span>
         </div>
 
-        {/* Right: inputs remaining + auth links */}
-        <div className="flex items-center gap-3">
-          {/* Free inputs remaining counter — shown once the user has started chatting */}
+        {/* Right: message counter (after first message) + auth links */}
+        <div className="flex items-center gap-2.5">
           {messageCount > 0 && messageCount < FREE_MESSAGE_LIMIT && (
             <span
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium"
+              className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium"
               style={{
-                background: messageCount >= FREE_MESSAGE_LIMIT - 1 ? "hsl(25 95% 53% / 0.1)" : "hsl(222 47% 13%)",
-                color: messageCount >= FREE_MESSAGE_LIMIT - 1 ? "hsl(25 95% 63%)" : "hsl(222 47% 55%)",
-                border: messageCount >= FREE_MESSAGE_LIMIT - 1 ? "1px solid hsl(25 95% 53% / 0.25)" : "1px solid hsl(222 47% 20%)",
+                background: messageCount >= FREE_MESSAGE_LIMIT - 1 ? "hsl(25 95% 53% / 0.1)" : "hsl(222 47% 12%)",
+                color: messageCount >= FREE_MESSAGE_LIMIT - 1 ? "hsl(25 95% 63%)" : "hsl(222 47% 50%)",
+                border: messageCount >= FREE_MESSAGE_LIMIT - 1 ? "1px solid hsl(25 95% 53% / 0.2)" : "1px solid hsl(222 47% 18%)",
               }}
             >
-              <span className="hidden sm:inline">{FREE_MESSAGE_LIMIT - messageCount} free {FREE_MESSAGE_LIMIT - messageCount === 1 ? "message" : "messages"} left</span>
+              <span className="hidden sm:inline">{FREE_MESSAGE_LIMIT - messageCount} {FREE_MESSAGE_LIMIT - messageCount === 1 ? "message" : "messages"} left</span>
               <span className="sm:hidden">{FREE_MESSAGE_LIMIT - messageCount} left</span>
             </span>
           )}
           <button
             onClick={handleSignIn}
-            className="text-xs font-medium transition-colors"
-            style={{ color: "hsl(222 47% 50%)" }}
+            className="text-[11px] font-medium transition-colors min-h-[36px] px-1 flex items-center"
+            style={{ color: "hsl(222 47% 48%)" }}
             onMouseEnter={(e) => ((e.currentTarget).style.color = "#e4e4e7")}
-            onMouseLeave={(e) => ((e.currentTarget).style.color = "hsl(222 47% 50%)")}
+            onMouseLeave={(e) => ((e.currentTarget).style.color = "hsl(222 47% 48%)")}
           >
             Sign in
           </button>
           <button
             onClick={handleRegister}
-            className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-            style={{ background: "hsl(199 89% 48% / 0.15)", border: "1px solid hsl(199 89% 48% / 0.3)", color: "hsl(199 89% 68%)" }}
+            className="px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all min-h-[32px] flex items-center"
+            style={{ background: "hsl(199 89% 48% / 0.14)", border: "1px solid hsl(199 89% 48% / 0.28)", color: "hsl(199 89% 65%)" }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.background = "hsl(199 89% 48% / 0.22)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.background = "hsl(199 89% 48% / 0.14)";
+            }}
           >
             Get started free
           </button>
         </div>
       </div>
 
-      {/* ── Chat area ─────────────────────────────────────────────────────── */}
+      {/* ── Chat area — fills remaining viewport height ─────────────────────── */}
       <div className="flex-1 overflow-hidden flex flex-col max-w-2xl w-full mx-auto">
 
         {isBeforeFirstInput ? (
           /* ── Welcome / initial state ─────────────────────────────────── */
-          <div className="flex-1 flex flex-col justify-center items-center px-6 py-8 gap-8">
+          /*
+           * Layout: hero + chips pushed toward the input at the bottom, with
+           * open space above (premium, focused feeling). Same pattern as
+           * ChatGPT / Claude empty state. On very small phones the chips stay
+           * just above the input without any scrolling.
+           */
+          <div className="flex-1 flex flex-col justify-end items-center px-5 pb-6 sm:pb-10 gap-4 sm:gap-5">
 
-            {/* Agent hero — centered, conversational, input-first tone */}
+            {/* Agent hero — compact on phones, slightly larger on sm+ */}
             <div
-              className="flex flex-col items-center text-center gap-4 animate-in fade-in slide-in-from-bottom-3 duration-400 w-full max-w-md"
+              className="flex flex-col items-center text-center gap-3 w-full max-w-sm animate-in fade-in slide-in-from-bottom-2 duration-350"
             >
               <div
-                className="w-12 h-12 rounded-2xl flex items-center justify-center"
+                className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center flex-shrink-0"
                 style={{ background: "hsl(199 89% 48%)" }}
               >
-                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
               <div>
-                <p className="text-xl font-bold leading-snug" style={{ color: "#f4f4f5" }}>
+                <p className="text-lg sm:text-xl font-bold leading-snug" style={{ color: "#f4f4f5" }}>
                   Let's build your training system.
                 </p>
-                <p className="text-sm mt-2 leading-relaxed" style={{ color: "hsl(222 47% 50%)" }}>
-                  Tell me your goal, schedule, equipment, and any limitations —<br className="hidden sm:block" /> I'll design it with you.
+                <p className="text-xs sm:text-sm mt-1.5 leading-relaxed" style={{ color: "hsl(222 47% 48%)" }}>
+                  Tell me your goal, schedule, equipment,<br className="hidden xs:block" /> and any limitations — I'll design it with you.
                 </p>
               </div>
             </div>
 
-            {/* Quick-start chips — horizontal wrapping pills, secondary to input */}
+            {/* Quick-start chips — compact pills, wrap cleanly on all widths */}
             <div
-              className="flex flex-wrap gap-2 justify-center animate-in fade-in duration-500 w-full max-w-lg"
-              style={{ animationDelay: "100ms" }}
+              className="flex flex-wrap gap-1.5 justify-center w-full max-w-md animate-in fade-in duration-400"
+              style={{ animationDelay: "80ms" }}
             >
               {QUICK_START.map((opt) => (
                 <button
                   key={opt.label}
                   onClick={() => handleSend(opt.prompt)}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium transition-all duration-150 active:scale-[0.97]"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all duration-150 active:scale-[0.96]"
                   style={{
-                    background: "hsl(222 47% 11%)",
-                    border: "1px solid hsl(222 47% 22%)",
-                    color: "hsl(222 47% 62%)",
+                    background: "hsl(222 47% 10%)",
+                    border: "1px solid hsl(222 47% 20%)",
+                    color: "hsl(222 47% 58%)",
+                    minHeight: "30px",
                   }}
                   onMouseEnter={(e) => {
-                    (e.currentTarget).style.borderColor = "hsl(199 89% 48% / 0.5)";
-                    (e.currentTarget).style.background = "hsl(199 89% 48% / 0.08)";
+                    (e.currentTarget).style.borderColor = "hsl(199 89% 48% / 0.45)";
+                    (e.currentTarget).style.background = "hsl(199 89% 48% / 0.07)";
                     (e.currentTarget).style.color = "#e4e4e7";
                   }}
                   onMouseLeave={(e) => {
-                    (e.currentTarget).style.borderColor = "hsl(222 47% 22%)";
-                    (e.currentTarget).style.background = "hsl(222 47% 11%)";
-                    (e.currentTarget).style.color = "hsl(222 47% 62%)";
+                    (e.currentTarget).style.borderColor = "hsl(222 47% 20%)";
+                    (e.currentTarget).style.background = "hsl(222 47% 10%)";
+                    (e.currentTarget).style.color = "hsl(222 47% 58%)";
                   }}
                 >
-                  <span className="text-sm">{opt.icon}</span>
+                  <span className="text-xs">{opt.icon}</span>
                   <span>{opt.label}</span>
                 </button>
               ))}
             </div>
 
-            {/* Guest mode note — very subtle, non-intrusive */}
+            {/* Guest mode note — very dim, supportive, non-distracting */}
             <p
-              className="text-[11px] animate-in fade-in duration-700"
-              style={{ color: "hsl(222 47% 32%)", animationDelay: "250ms" }}
+              className="text-[10px] tracking-wide animate-in fade-in duration-600"
+              style={{ color: "hsl(222 47% 28%)", animationDelay: "200ms" }}
             >
-              Guest mode · {FREE_MESSAGE_LIMIT} free messages included
+              Guest mode · {FREE_MESSAGE_LIMIT} free messages
             </p>
           </div>
         ) : (
@@ -659,19 +644,31 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
           </div>
         )}
 
-        {/* ── Input bar ─────────────────────────────────────────────────── */}
+        {/* ── Input bar — safe-area aware, always above Safari chrome ────── */}
         <div
-          className="flex-shrink-0 px-4 pb-6 pt-3"
-          style={{ borderTop: "1px solid hsl(222 47% 13%)" }}
+          className="flex-shrink-0 px-3 pt-2"
+          style={{
+            borderTop: "1px solid hsl(222 47% 11%)",
+            paddingBottom: "max(16px, env(safe-area-inset-bottom))",
+          }}
         >
+          {/* Subtle prompt label on empty state */}
+          {isBeforeFirstInput && (
+            <p
+              className="text-[10px] font-medium mb-1.5 px-1"
+              style={{ color: "hsl(222 47% 35%)" }}
+            >
+              Tell your coach what you want →
+            </p>
+          )}
           <div
             className="flex items-end gap-2 rounded-2xl transition-all duration-200"
             style={{
               background: "hsl(222 47% 11%)",
-              border: "1px solid hsl(222 47% 22%)",
+              border: "1px solid hsl(222 47% 20%)",
             }}
-            onFocusCapture={(e) => (e.currentTarget.style.borderColor = "hsl(199 89% 48% / 0.5)")}
-            onBlurCapture={(e) => (e.currentTarget.style.borderColor = "hsl(222 47% 22%)")}
+            onFocusCapture={(e) => (e.currentTarget.style.borderColor = "hsl(199 89% 48% / 0.45)")}
+            onBlurCapture={(e) => (e.currentTarget.style.borderColor = "hsl(222 47% 20%)")}
           >
             <textarea
               ref={inputRef}
@@ -679,9 +676,9 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyDown}
               rows={1}
-              placeholder={isBeforeFirstInput ? "Describe your goal..." : "Message TrainChat..."}
-              className="flex-1 resize-none bg-transparent px-4 py-3.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none leading-relaxed"
-              style={{ minHeight: "50px", maxHeight: "120px" }}
+              placeholder="Describe your goal..."
+              className="flex-1 resize-none bg-transparent px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:outline-none leading-relaxed"
+              style={{ minHeight: "46px", maxHeight: "120px" }}
               onInput={(e) => {
                 const t = e.target as HTMLTextAreaElement;
                 t.style.height = "auto";
@@ -693,8 +690,8 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
               disabled={!canSend}
               className="m-2 p-2 rounded-xl text-white transition-all duration-150 active:scale-95 flex-shrink-0"
               style={{
-                background: canSend ? "hsl(199 89% 48%)" : "hsl(222 47% 18%)",
-                opacity: canSend ? 1 : 0.4,
+                background: canSend ? "hsl(199 89% 48%)" : "hsl(222 47% 17%)",
+                opacity: canSend ? 1 : 0.35,
               }}
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
