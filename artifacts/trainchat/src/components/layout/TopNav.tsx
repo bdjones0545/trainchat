@@ -88,6 +88,7 @@ export default function TopNav({ userName, extraContent }: Props) {
       {/* Right side */}
       <div className="flex items-center gap-2">
         <button
+          onClick={() => setLocation("/billing")}
           className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-all duration-150"
           title="Settings"
         >

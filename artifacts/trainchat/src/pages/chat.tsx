@@ -614,6 +614,7 @@ export default function Chat() {
       queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
+      setLocation("/system");
     } catch (err) {
       console.error("[SwitchProgram] Failed:", err);
     } finally {
@@ -790,9 +791,9 @@ export default function Chat() {
         >
           <Library className="w-4 h-4 text-muted-foreground flex-shrink-0" />
           <span>Saved Programs</span>
-          {programLibrary.filter((p: any) => p.status === "archived").length > 0 && (
+          {programLibrary.length > 0 && (
             <span className="ml-auto text-[10px] bg-muted rounded-full px-1.5 py-0.5 text-muted-foreground flex-shrink-0">
-              {programLibrary.filter((p: any) => p.status === "archived").length}
+              {programLibrary.length}
             </span>
           )}
           {showProgramLibrary ? (
@@ -801,6 +802,11 @@ export default function Chat() {
             <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
           )}
         </button>
+        {showProgramLibrary && programLibrary.length === 0 && (
+          <div className="ml-2 px-3 py-3">
+            <p className="text-[11px] text-muted-foreground/60">No saved programs yet</p>
+          </div>
+        )}
         {showProgramLibrary && programLibrary.length > 0 && (
           <div className="ml-2 space-y-0.5 mb-1">
             {programLibrary.map((prog: any) => (
@@ -809,13 +815,17 @@ export default function Chat() {
                 type="button"
                 style={{ touchAction: "manipulation" }}
                 onClick={() => {
-                  if (prog.status !== "active" && !isSwitchingProgram) {
+                  if (prog.status === "active") {
+                    setLocation("/system");
+                    setMobilePanel(null);
+                  } else if (!isSwitchingProgram) {
                     handleSwitchProgram(prog.id);
                   }
                 }}
+                disabled={isSwitchingProgram && prog.status !== "active"}
                 className={`w-full flex items-start gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all ${
                   prog.status === "active"
-                    ? "bg-primary/8 border border-primary/20 cursor-default opacity-70"
+                    ? "bg-primary/8 border border-primary/20 hover:bg-primary/12 cursor-pointer"
                     : isSwitchingProgram
                     ? "opacity-50 cursor-default"
                     : "hover:bg-muted/60 active:bg-muted/80 cursor-pointer"
@@ -829,12 +839,17 @@ export default function Chat() {
                     )}
                   </div>
                   <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
-                    {prog.weeklyFrequency}x/week · {prog.trainingStyle}
+                    {[prog.weeklyFrequency ? `${prog.weeklyFrequency}x/week` : null, prog.trainingStyle].filter(Boolean).join(" · ")}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+                    {new Date(prog.updatedAt).toLocaleDateString([], { month: "short", day: "numeric" })}
                   </p>
                 </div>
-                {prog.status === "archived" && !isSwitchingProgram && (
+                {prog.status === "active" ? (
+                  <span className="text-[9px] text-primary/70 flex-shrink-0 mt-0.5">View</span>
+                ) : !isSwitchingProgram ? (
                   <span className="text-[9px] text-primary/70 flex-shrink-0 mt-0.5">Load</span>
-                )}
+                ) : null}
               </button>
             ))}
           </div>

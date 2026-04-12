@@ -46,6 +46,7 @@ import {
   CreditCard,
   LogOut,
   Lock,
+  Library,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useGetMe } from "@workspace/api-client-react";
@@ -1515,6 +1516,8 @@ export default function SystemPage() {
   const [showReadinessCheckIn, setShowReadinessCheckIn] = useState(false);
   const [showSessionFeedback, setShowSessionFeedback] = useState(false);
   const [feedbackSessionLabel, setFeedbackSessionLabel] = useState<string | undefined>(undefined);
+  const [showProgramLibrary, setShowProgramLibrary] = useState(false);
+  const [isSwitchingProgram, setIsSwitchingProgram] = useState(false);
 
   const queryClient = useQueryClient();
   const { data: me } = useGetMe();
@@ -1535,6 +1538,33 @@ export default function SystemPage() {
   });
 
   const isPremium = subscription?.plan === "pro" || subscription?.plan === "elite";
+
+  const { data: programLibrary = [] } = useQuery({
+    queryKey: ["training-system-library"],
+    queryFn: () => customFetch<any[]>("/api/training-system/library").catch(() => []),
+    enabled: !!me,
+    staleTime: 30000,
+  });
+
+  async function handleSwitchProgramInSystem(systemId: number) {
+    if (isSwitchingProgram) return;
+    setIsSwitchingProgram(true);
+    try {
+      await customFetch<any>(`/api/training-system/set-active/${systemId}`, { method: "POST" });
+      setShowProgramLibrary(false);
+      setMobilePanel(null);
+      await queryClient.refetchQueries({ queryKey: ["training-system-active"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-library"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
+    } catch (err) {
+      console.error("[SwitchProgram] Failed:", err);
+    } finally {
+      setIsSwitchingProgram(false);
+    }
+  }
 
   function handleUpgrade() {
     setLocation("/billing");
@@ -1757,16 +1787,89 @@ export default function SystemPage() {
         )}
 
         <div className="my-3 h-px bg-border" />
+        <button
+          type="button"
+          style={{ touchAction: "manipulation" }}
+          onClick={() => setShowProgramLibrary((v) => !v)}
+          className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+        >
+          <Library className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <span>Saved Programs</span>
+          {programLibrary.length > 0 && (
+            <span className="ml-auto text-[10px] bg-muted rounded-full px-1.5 py-0.5 text-muted-foreground flex-shrink-0">
+              {programLibrary.length}
+            </span>
+          )}
+          {showProgramLibrary ? (
+            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+          ) : (
+            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+          )}
+        </button>
+        {showProgramLibrary && programLibrary.length === 0 && (
+          <div className="ml-2 px-3 py-2">
+            <p className="text-[11px] text-muted-foreground/60">No saved programs yet</p>
+          </div>
+        )}
+        {showProgramLibrary && programLibrary.length > 0 && (
+          <div className="ml-2 space-y-0.5 mb-1">
+            {(programLibrary as any[]).map((prog) => (
+              <button
+                key={prog.id}
+                type="button"
+                style={{ touchAction: "manipulation" }}
+                onClick={() => {
+                  if (prog.status === "active") {
+                    setShowProgramLibrary(false);
+                    setMobilePanel(null);
+                  } else if (!isSwitchingProgram) {
+                    handleSwitchProgramInSystem(prog.id);
+                  }
+                }}
+                disabled={isSwitchingProgram && prog.status !== "active"}
+                className={`w-full flex items-start gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all ${
+                  prog.status === "active"
+                    ? "bg-primary/8 border border-primary/20 cursor-default"
+                    : isSwitchingProgram
+                    ? "opacity-50 cursor-default"
+                    : "hover:bg-muted/60 active:bg-muted/80 cursor-pointer"
+                }`}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-[11px] font-semibold text-foreground truncate">{prog.name}</p>
+                    {prog.status === "active" && (
+                      <CheckCircle2 className="w-3 h-3 text-green-400 flex-shrink-0" />
+                    )}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
+                    {[prog.weeklyFrequency ? `${prog.weeklyFrequency}x/week` : null, prog.trainingStyle].filter(Boolean).join(" · ")}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+                    {new Date(prog.updatedAt).toLocaleDateString([], { month: "short", day: "numeric" })}
+                  </p>
+                </div>
+                {prog.status === "active" ? (
+                  <span className="text-[9px] text-green-400/80 flex-shrink-0 mt-0.5">Active</span>
+                ) : !isSwitchingProgram ? (
+                  <span className="text-[9px] text-primary/70 flex-shrink-0 mt-0.5">Load</span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="my-3 h-px bg-border" />
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-3">Account</p>
         <button
-          onClick={() => setMobilePanel(null)}
+          onClick={() => { setLocation("/billing"); setMobilePanel(null); }}
           className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
         >
           <Settings className="w-4 h-4 text-muted-foreground flex-shrink-0" />
           <span>Settings</span>
         </button>
         <button
-          onClick={() => setMobilePanel(null)}
+          onClick={() => { setLocation("/billing"); setMobilePanel(null); }}
           className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
         >
           <CreditCard className="w-4 h-4 text-muted-foreground flex-shrink-0" />
