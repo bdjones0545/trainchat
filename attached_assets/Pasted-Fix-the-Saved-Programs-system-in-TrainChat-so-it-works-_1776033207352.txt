@@ -1,0 +1,157 @@
+Fix the Saved Programs system in TrainChat so it works like a true multi-program library per user and per chat context.
+
+GOAL
+Users must be able to create multiple training programs over time, save them independently, see all of them in the Saved Programs dropdown/list, and tap any saved program to open that exact program. Creating a new chat or a new program must NEVER overwrite or erase older saved programs.
+
+CORE ISSUES TO FIX
+1. Creating a new program is replacing the previous saved program instead of creating a new saved entry.
+2. The Saved Programs dropdown only shows one program instead of all saved programs.
+3. Tapping a saved program does not reliably navigate to that saved program.
+4. Tapping Settings is causing wrong navigation/state behavior.
+5. Selecting an active or saved program should open that program’s system/state, not a generic current state.
+6. Saved program selection should load the full correct program object from storage/database and route the UI to that program.
+7. The TrainChat logo at the top should always navigate back to the main agent screen.
+8. The app must preserve program history across chats, sessions, refreshes, and mobile Safari.
+
+WHAT I WANT BUILT
+
+A. DATA MODEL
+Create a real SavedProgram model. Each saved program needs its own unique ID and must not depend on the current active chat state.
+
+Each saved program should store at minimum:
+- id
+- userId
+- title
+- createdAt
+- updatedAt
+- sourceChatId (optional)
+- programType (strength, speed, hypertrophy, fat loss, etc. if available)
+- status ("active", "saved", "archived")
+- summary / description
+- fullProgramData
+- trainingDays
+- exercises
+- setsRepsRestNotes
+- progressionNotes
+- paywallPreviewData if needed
+- lastViewedAt
+
+IMPORTANT:
+Do not store only one “currentProgram” object for the user.
+Store an array/table/collection of programs.
+Every newly generated program must create a NEW record unless explicitly updating an existing program.
+
+B. STATE MANAGEMENT FIX
+Refactor the front-end state so selected program state is separate from generated draft state.
+
+Need these concepts separated cleanly:
+- activeProgramId
+- selectedSavedProgramId
+- currentDraftProgram
+- savedPrograms[]
+- currentChatId
+- currentView ("agent", "program_detail", "settings", etc.)
+
+Do NOT let a new draft overwrite savedPrograms.
+Do NOT let switching chats clear savedPrograms.
+Do NOT let selecting a saved program depend on transient local component state.
+
+C. SAVE FLOW
+When a user generates a new program:
+- create a new program record
+- assign a unique program ID
+- save it to database/storage
+- append it to savedPrograms
+- make it viewable in Saved Programs immediately
+
+When a user edits an existing program:
+- update only that program by ID
+- do not overwrite any other saved program
+
+D. LOAD FLOW
+When app loads:
+- fetch all saved programs for the current user
+- sort by updatedAt descending
+- populate Saved Programs menu/dropdown/list with all programs
+- restore the most recent activeProgramId if applicable, otherwise default to agent screen
+
+When a user taps a saved program:
+- fetch the exact program by ID
+- hydrate the UI from that saved program
+- set activeProgramId = selected program ID
+- navigate to program detail screen
+- display that program’s actual training structure
+- if paywall logic exists, show the correct preview/full access behavior for THAT program only
+
+E. ROUTING / NAVIGATION FIX
+Implement clean navigation rules:
+- Tap TrainChat logo => always navigate to main agent screen
+- Tap Saved Program => navigate to that program detail screen
+- Tap Settings => navigate only to settings screen, never corrupt program state
+- Returning from settings should preserve active program state
+- New chat should create a new chat context, but MUST NOT delete or replace previous saved programs
+
+F. UI FOR SAVED PROGRAMS
+Upgrade the Saved Programs dropdown/panel so it shows all saved programs clearly.
+
+For each saved program show:
+- program title
+- goal/type
+- updated date
+- maybe number of training days if available
+
+Add:
+- loading state
+- empty state (“No saved programs yet”)
+- active program highlight
+- tap target optimized for mobile
+- no debug text anywhere
+
+G. PROGRAM DETAIL BEHAVIOR
+When opening a saved program, it should go to the system of that specific program.
+
+That means:
+- show the correct week/day structure
+- show the correct exercises
+- show the correct reasoning/progression/notes for that program
+- show the correct paywall preview if user is unpaid
+- do not show some other program from current memory
+- do not default to the first day of a different program unless that is the selected program’s first day
+
+H. DATABASE / STORAGE SAFETY
+Audit the code for any logic that:
+- uses one shared currentProgram field
+- replaces program arrays instead of appending
+- keys by userId only instead of programId
+- loads from chat state instead of saved program state
+- mutates savedPrograms in place incorrectly
+- resets program state on new chat, sign in, sign out, or refresh
+
+Fix all of that.
+
+I. DEBUG + QA
+Add temporary console logging only if needed during development, then remove all debug UI from production.
+
+Verify these test cases:
+1. User creates Program A → it saves
+2. User creates Program B in a new chat → Program A still exists
+3. Saved Programs list shows Program A and Program B
+4. Tapping Program A loads Program A exactly
+5. Tapping Program B loads Program B exactly
+6. Refresh app → both still exist
+7. Open Settings → no corruption of selected program
+8. Tap TrainChat logo → returns to agent
+9. Mobile Safari works properly
+10. No saved program is overwritten unless intentionally editing that exact program
+
+J. IMPLEMENTATION REQUIREMENT
+Please make the actual code changes, not just suggestions.
+After coding, provide:
+1. A short summary of what was changed
+2. The root cause of why only one saved program was showing
+3. The root cause of why tapping a saved program did not open the correct program
+4. Any schema/state changes that require migration
+5. Any manual QA steps I should test in the UI
+
+PRIORITY
+This needs to behave like a real program library for TrainChat. The saved program a user taps should always open THAT exact program and never be overwritten by a newly created one.
