@@ -55,13 +55,16 @@ export default function MobileSlideLayout({
           <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
             <span className="text-sm font-bold text-foreground">Menu</span>
             <button
+              type="button"
               onClick={onPanelClose}
               className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto">
+          {/* No overflow-y-auto here — chatLeftPanel owns its own scroll container.
+              Nesting two overflow-y-auto elements causes iOS to swallow inner taps. */}
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
             {leftPanel}
           </div>
         </div>

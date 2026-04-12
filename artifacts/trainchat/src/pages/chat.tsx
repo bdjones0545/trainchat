@@ -783,6 +783,8 @@ export default function Chat() {
           )}
         </button>
         <button
+          type="button"
+          style={{ touchAction: "manipulation" }}
           onClick={() => setShowProgramLibrary((v) => !v)}
           className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
         >
@@ -804,15 +806,18 @@ export default function Chat() {
             {programLibrary.map((prog: any) => (
               <button
                 key={prog.id}
+                type="button"
+                style={{ touchAction: "manipulation" }}
                 onClick={() => {
                   if (prog.status !== "active" && !isSwitchingProgram) {
                     handleSwitchProgram(prog.id);
                   }
                 }}
-                disabled={prog.status === "active" || isSwitchingProgram}
                 className={`w-full flex items-start gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all ${
                   prog.status === "active"
-                    ? "bg-primary/8 border border-primary/20 cursor-default"
+                    ? "bg-primary/8 border border-primary/20 cursor-default opacity-70"
+                    : isSwitchingProgram
+                    ? "opacity-50 cursor-default"
                     : "hover:bg-muted/60 active:bg-muted/80 cursor-pointer"
                 }`}
               >

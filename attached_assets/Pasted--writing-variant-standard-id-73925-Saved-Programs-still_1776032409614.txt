@@ -1,0 +1,158 @@
+:::writing{variant=“standard” id=“73925”}
+Saved Programs still do not respond to taps on mobile. Fix this with a full debug + hard repair.
+
+Issue:
+Tapping a saved program in the sidebar does absolutely nothing. No navigation, no state change, no UI update. This means either:
+	•	the click/touch event is not firing
+	•	the handler is missing
+	•	the event is being blocked
+	•	or the main app is ignoring the selected program state
+
+You must diagnose and fix the real cause.
+
+⸻
+
+STEP 1: VERIFY CLICK/TAP IS FIRING
+
+In the Saved Programs item component, add logs:
+
+console.log(”[SavedPrograms] render”, program.id)
+
+Add BOTH handlers:
+onClick={() => {
+console.log(”[SavedPrograms] CLICK”, program.id);
+handleSelectSavedProgram(program.id);
+}}
+
+onTouchEnd={(e) => {
+e.preventDefault();
+console.log(”[SavedPrograms] TOUCH”, program.id);
+handleSelectSavedProgram(program.id);
+}}
+
+If these logs do NOT fire → the element is not actually receiving input.
+
+⸻
+
+STEP 2: MAKE ITEM DEFINITELY CLICKABLE
+
+Ensure each saved program is rendered as:
+
+<button
+type=“button”
+className=“w-full text-left cursor-pointer”
+onClick={…}
+onTouchEnd={…}
+
+
+
+…program content…
+
+
+DO NOT use a plain div without handlers.
+
+⸻
+
+STEP 3: FIX TOUCH BLOCKING (VERY LIKELY ISSUE)
+
+Check for overlays blocking taps:
+	•	sidebar container
+	•	modal/sheet backdrop
+	•	header layer
+	•	invisible divs
+
+Fix with:
+	•	remove any unnecessary absolute layers
+	•	ensure clickable element has:
+position: relative;
+z-index: 10;
+	•	ensure no parent has:
+pointer-events: none (unless intentional)
+	•	ensure no overlay ABOVE it has:
+pointer-events: auto
+
+If needed, temporarily set:
+outline: 2px solid red;
+on the button to visually confirm tap area.
+
+⸻
+
+STEP 4: FIX ACCORDION / DROPDOWN INTERFERENCE
+
+If Saved Programs is inside an accordion:
+	•	make sure ONLY the header toggles the accordion
+	•	child items must NOT be inside the trigger
+	•	ensure child items have independent click handlers
+
+⸻
+
+STEP 5: IMPLEMENT REAL SELECTION FUNCTION
+
+Create or fix:
+
+function handleSelectSavedProgram(programId) {
+console.log(”[SavedPrograms] selecting”, programId);
+
+const program = savedPrograms.find(p => p.id === programId);
+
+if (!program) {
+console.log(”[SavedPrograms] program not found”);
+return;
+}
+
+setActiveProgram(program); // or correct global state
+setSelectedProgram(program); // if separate
+
+console.log(”[SavedPrograms] active set”, program.id);
+
+// close sidebar on mobile
+setIsSidebarOpen(false);
+
+// if routing exists:
+// navigate(/app/program/${program.id});
+}
+
+⸻
+
+STEP 6: FIX MAIN VIEW BINDING (CRITICAL)
+
+The main program view MUST read from:
+	•	selectedProgram OR activeProgram
+
+NOT just current builder session.
+
+Update render logic:
+
+const programToDisplay =
+selectedProgram || activeProgram || builderProgram;
+
+If this is wrong, taps will work but UI will not change.
+
+⸻
+
+STEP 7: VERIFY FULL FLOW
+
+After fix:
+	1.	Tap saved program
+	2.	Console shows CLICK or TOUCH log
+	3.	“selecting program” log appears
+	4.	active/selected state updates
+	5.	sidebar closes
+	6.	main content switches to selected program
+	7.	program title + split + days update correctly
+
+⸻
+
+STEP 8: RETURN DEBUG SUMMARY
+
+Return:
+	•	Did click/touch logs fire?
+	•	Was the issue:
+(a) no handler
+(b) blocked touch
+(c) accordion swallowing clicks
+(d) wrong state binding
+	•	What files were changed
+	•	What state now controls the main program view
+
+Do NOT say “fixed” unless tapping the saved program actually switches the main program view on mobile
