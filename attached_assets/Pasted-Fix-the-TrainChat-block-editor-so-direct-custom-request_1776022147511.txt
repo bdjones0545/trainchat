@@ -1,0 +1,272 @@
+Fix the TrainChat block editor so direct custom requests are interpreted as real block-level mutations instead of being routed into a generic chooser modal.
+
+CURRENT ISSUE:
+When the user edits a block and types a direct request such as:
+- “I want to focus more on power”
+- “Make this more hypertrophy-focused”
+- “Reduce lower-body volume”
+- “Make this more hockey-specific”
+- “Shorten this block to 3 weeks”
+
+the system does NOT execute the request directly.
+
+Instead, it routes the user into a generic block chooser modal such as:
+- Reduce Load
+- Push Forward
+
+This makes it feel like the system ignored the actual instruction.
+
+GOAL:
+Inside the block edit context, direct user language must be parsed as a block mutation first.
+The chooser modal should only appear for genuinely vague requests.
+
+----------------------------------------
+1. ADD A BLOCK-SPECIFIC INTENT PARSER
+----------------------------------------
+
+Create a dedicated parser for block edit commands.
+
+Use full context:
+
+context = {
+  currentBlock,
+  blockGoal,
+  sportContext,
+  weekCount,
+  currentPhase,
+  currentVolumeBias,
+  currentIntensityBias,
+  sessionArchitecture,
+  userPerformanceMemory,
+  fatigueSignals,
+  painSignals
+}
+
+Supported block-level intents:
+- increase_power_bias
+- increase_strength_bias
+- increase_hypertrophy_bias
+- increase_speed_bias
+- increase_sport_specificity
+- reduce_volume
+- increase_volume
+- reduce_intensity
+- increase_intensity
+- shorten_block
+- lengthen_block
+- simplify_sessions
+- redistribute_weekly_stress
+- modify_session_frequency
+- adjust_lower_body_emphasis
+- adjust_upper_body_emphasis
+- clarify_request
+- fallback_generic_block_edit
+
+Examples:
+- “I want to focus more on power” → increase_power_bias
+- “Shift toward hypertrophy” → increase_hypertrophy_bias
+- “Make week 1 easier” → reduce_intensity or reduce_volume on week 1
+- “Make this more hockey-specific” → increase_sport_specificity
+
+----------------------------------------
+2. PRIORITIZE DIRECT BLOCK COMMANDS
+----------------------------------------
+
+If the user gives a clear block-level instruction, do NOT route to the chooser first.
+
+Processing order:
+1. parse the exact block instruction
+2. validate whether it is compatible with current block
+3. create a structured block mutation
+4. apply it
+5. show exact summary of what changed
+
+Only use chooser when the request is vague, such as:
+- “Change this”
+- “Make this better”
+- “Something else”
+- “Adjust the block”
+
+----------------------------------------
+3. CREATE BLOCK MUTATION TYPES
+----------------------------------------
+
+Store mutations like:
+
+blockMutation = {
+  blockId,
+  mutationType: "increase_power_bias",
+  previousBlockState: {
+    emphasis: "foundation_strength"
+  },
+  newBlockState: {
+    emphasis: "strength_power_hybrid"
+  },
+  userCommand: "I want to focus more on power",
+  reason: "Direct block-level request"
+}
+
+Other examples:
+- reduce_volume
+- shorten_block
+- increase_sport_specificity
+- redistribute_session_intent
+
+----------------------------------------
+4. DEFINE WHAT “FOCUS MORE ON POWER” ACTUALLY DOES
+----------------------------------------
+
+For a strength-oriented block, “focus more on power” must create real structured changes such as:
+
+- increase number of power/reactive slots across the week
+- reduce some lower-priority hypertrophy or general accessory density
+- bias exercise pools toward jumps, throws, reactive and explosive work
+- adjust session intents to include more force expression and elastic work
+- maintain enough strength work to preserve the block’s integrity unless fully changed
+
+Example outcomes:
+- Day 1: lower force + acceleration mechanics
+- Day 2: upper structural + rotational power
+- Day 3: posterior chain + unilateral + elastic
+- Day 4: full-body integration + power expression
+
+Do not just label the block differently.
+Change the architecture.
+
+----------------------------------------
+5. UPDATE BLOCK SUMMARY + ROADMAP IMMEDIATELY
+----------------------------------------
+
+After mutation, update:
+- block title if needed
+- block description
+- roadmap subtitle
+- block emphasis tags
+- week/session summaries
+- session templates downstream
+
+Example:
+From:
+“Build foundational strength across primary movement patterns”
+To:
+“Build foundational strength while increasing force-expression and explosive transfer”
+
+----------------------------------------
+6. SHOW EXACT SUCCESS CONFIRMATION
+----------------------------------------
+
+Good:
+- “Updated the block to emphasize power.”
+- “Reduced some general strength density and increased explosive work across the week.”
+- “Block emphasis changed from Foundation Strength to Strength + Power.”
+
+Bad:
+- “Done”
+- “1 change applied”
+- sending user to Reduce Load / Push Forward chooser
+
+The user must know exactly what changed.
+
+----------------------------------------
+7. ONLY USE CHOOSER MODAL FOR TRUE DIRECTIONAL REQUESTS
+----------------------------------------
+
+The block chooser modal should only appear when the request is broad and not explicitly mappable.
+
+Okay to use chooser:
+- “Adjust this block”
+- “Make a change here”
+- “Not sure about this”
+- “Can we go another direction?”
+
+Not okay to use chooser:
+- “I want to focus more on power”
+- “Make this more hypertrophy-focused”
+- “Shorten this to 3 weeks”
+- “Reduce lower-body volume”
+
+----------------------------------------
+8. SUPPORT BLOCK-SAFE VALIDATION
+----------------------------------------
+
+Before applying a block mutation, validate that it is coherent.
+
+Examples:
+- if increasing power bias, maintain enough strength support
+- if increasing hypertrophy bias, don’t remove all power work if sport still requires it
+- if shortening block, redistribute weekly progression appropriately
+- if reducing lower-body volume, protect sport-specific needs
+
+If a request conflicts with the block’s purpose, do not ignore it.
+Instead return:
+- a safe adjusted version
+- or a tight clarification
+
+----------------------------------------
+9. WRITE TO CHANGES TAB / HISTORY
+----------------------------------------
+
+Every valid block mutation should create a clear entry.
+
+Example:
+V5 BLOCK EDIT
+- Shifted block emphasis toward power
+- Increased explosive work across weekly sessions
+- Reduced some nonessential strength density
+- Reason: user requested more power focus
+
+History should also capture a new snapshot if the block structure changed meaningfully.
+
+----------------------------------------
+10. APPLY TO CURRENT CASE
+----------------------------------------
+
+For the shown case:
+Block: Foundation Strength Block
+User request: “I want to focus more on power”
+
+Correct behavior:
+- parse as increase_power_bias
+- apply real block mutation
+- adjust block summary and downstream session architecture
+- show exact success message
+
+It must NOT route to:
+- Reduce Load
+- Push Forward
+
+----------------------------------------
+11. TEST CASES
+----------------------------------------
+
+Verify:
+
+1. “I want to focus more on power”
+→ increase_power_bias mutation
+
+2. “Make this more hypertrophy-focused”
+→ increase_hypertrophy_bias mutation
+
+3. “Reduce lower-body volume”
+→ lower-body volume change
+
+4. “Shorten this block to 3 weeks”
+→ shorten_block mutation
+
+5. “Make this more hockey-specific”
+→ increase_sport_specificity mutation
+
+6. “Adjust this block”
+→ chooser modal allowed
+
+----------------------------------------
+12. DELIVERABLES
+----------------------------------------
+
+After implementation, provide:
+1. the new block intent parser
+2. how direct block commands are mapped to mutation types
+3. what “increase_power_bias” changes structurally
+4. how block UI updates after mutation
+5. when the chooser modal still appears
+6. how changes/history entries are created
