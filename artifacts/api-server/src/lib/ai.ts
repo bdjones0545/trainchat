@@ -33,6 +33,7 @@ import {
   type TransformRequest,
 } from "./split-transform";
 import { retrieveRelevantKnowledge } from "./knowledge-retrieval";
+import { buildArchitectureBrief, validateProgramArchitecture, extractSportFromRequest } from "./program-architecture-engine";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -1417,7 +1418,37 @@ export async function generateAIResponse(
     logResponseMode(rmCtx);
   }
 
-  const extras = [adaptationContext, memoryContext, insightHint, conversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, transformHint, responseModePrompt, neuralContext ?? null]
+  // ── Program Architecture Engine — CNS-driven blueprint ───────────────────
+  // Inject a movement-based, neural-demand-aware architecture brief for all
+  // new program builds and structural rebuilds. This ensures the AI builds
+  // programs using the correct weekly rhythm, session identities, CNS flow
+  // sequencing, and sport-specific overlays BEFORE selecting exercises.
+  let architectureBriefText: string | null = null;
+  const isBuildIntent =
+    intentResult?.type === "CREATE_PROGRAM" ||
+    intentResult?.type === "START_NEW_PROGRAM" ||
+    actionDecision?.actionType === "STRUCTURAL_REBUILD";
+
+  if (isBuildIntent) {
+    // For structural rebuilds, also check the intent metadata for targetDays
+    const metaDays = (intentResult?.metadata as { targetDays?: number | null } | undefined)?.targetDays ?? null;
+    const days = extractedConstraints?.daysPerWeek ?? metaDays ?? null;
+    const sport = extractSportFromRequest(userMessage, extractedConstraints?.sportFocus ?? null);
+    const goal = extractedConstraints?.primaryGoal ?? null;
+    try {
+      architectureBriefText = buildArchitectureBrief(days, sport, goal, userMessage);
+      if (architectureBriefText) {
+        logger.info(
+          { days, sport, goal, intentType: intentResult?.type },
+          "[ArchitectureEngine] Architecture brief injected into prompt"
+        );
+      }
+    } catch (archErr) {
+      logger.warn({ archErr }, "[ArchitectureEngine] Failed to build brief — continuing without it");
+    }
+  }
+
+  const extras = [adaptationContext, memoryContext, insightHint, conversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, architectureBriefText, transformHint, responseModePrompt, neuralContext ?? null]
     .filter(Boolean)
     .join("\n\n");
   const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;
