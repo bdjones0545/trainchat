@@ -1,0 +1,312 @@
+Build the next layer of TrainChat: block-level intelligence that adjusts the week and training block based on accumulated user performance, fatigue, pain, compliance, and session outcomes.
+
+CURRENT STATE:
+TrainChat can:
+- generate training programs
+- display Today / This Week / Block / History
+- log exercise performance
+- collect post-session feedback
+- apply progression logic
+- deliver mid-session recommendations
+
+PROBLEM:
+The system can react at the exercise and session level, but it does not yet make intelligent decisions across the whole week or block.
+
+GOAL:
+Create a block-level coaching engine that evaluates trends across multiple sessions and updates:
+- the rest of the current week
+- the next week
+- the current training block
+- deload / progression timing
+- exercise selection and session density
+
+This should make TrainChat feel like a real adaptive training system, not just a session-by-session responder.
+
+----------------------------------------
+1. CREATE A BLOCK INTELLIGENCE ENGINE
+----------------------------------------
+
+Create:
+
+evaluateBlockState({
+  userId,
+  currentBlock,
+  recentSessions,
+  sessionFeedback,
+  exerciseHistory,
+  liveAdjustments,
+  checkIns,
+  painFlags,
+  complianceData
+})
+
+Return:
+
+{
+  blockStatus: "progressing" | "stable" | "fatigued" | "underrecovered" | "inconsistent" | "needs_deload" | "needs_review",
+  recommendations: [],
+  confidence: "low" | "medium" | "high",
+  summary: string
+}
+
+----------------------------------------
+2. TRACK WEEKLY / BLOCK-LEVEL SIGNALS
+----------------------------------------
+
+Build rolling signals across the current week and block:
+
+- completion rate
+- skipped / partial sessions
+- exercise progression trend
+- fatigue trend
+- pain trend
+- session difficulty trend
+- session duration trend
+- post-session feeling trend
+- enjoyment / adherence trend
+- live adjustment frequency
+
+Create derived metrics such as:
+
+weeklyComplianceScore
+weeklyFatigueScore
+painRiskScore
+progressMomentumScore
+blockReadinessScore
+
+----------------------------------------
+3. DEFINE BLOCK-LEVEL STATES
+----------------------------------------
+
+Examples:
+
+Progressing:
+- sessions completed
+- loads/reps trending positively
+- fatigue manageable
+- pain low
+
+Stable:
+- no strong positive or negative trend
+- appropriate training tolerance
+- maintain block plan
+
+Fatigued:
+- multiple hard sessions
+- rising duration and difficulty
+- more mid-session reductions
+- performance flattening
+
+Underrecovered:
+- poor check-ins
+- tired/drained post-session trend
+- difficulty increasing faster than progress
+
+Inconsistent:
+- missed or partial sessions
+- unreliable training exposure
+- do not aggressively progress
+
+Needs Deload:
+- sustained fatigue
+- repeated hard/too hard sessions
+- performance decline
+- pain flags rising
+
+Needs Review:
+- repeated pain
+- severe fatigue
+- contradictory signals
+- possible bad exercise fit or block mismatch
+
+----------------------------------------
+4. ADJUST THE REST OF THE CURRENT WEEK
+----------------------------------------
+
+Use block logic to modify the remaining sessions in the current week.
+
+Examples:
+- reduce accessory volume if fatigue is accumulating
+- hold main lift loads steady if readiness is down
+- reduce power drill volume if output quality is declining
+- swap aggravating exercises if pain trend appears
+- simplify Friday session if Monday and Wednesday both ran long and hard
+
+Do not wait until next week if the week is already clearly trending badly.
+
+----------------------------------------
+5. ADJUST THE NEXT WEEK OF THE BLOCK
+----------------------------------------
+
+The engine should update the next week’s structure when enough evidence exists.
+
+Examples:
+- progress Week 2 loads if Week 1 was completed cleanly
+- maintain Week 2 if signals are mixed
+- reduce Week 2 volume if fatigue is trending high
+- insert lighter week or deload if red flags accumulate
+- replace exercises with better-tolerated variations when pain patterns repeat
+
+----------------------------------------
+6. BUILD DELOAD / PIVOT LOGIC
+----------------------------------------
+
+Create rules for when the system should:
+- continue progressing
+- hold steady
+- deload
+- pivot exercise selection
+
+Possible triggers for deload:
+- 2+ sessions marked hard/too hard in a row
+- fatigue + poor recovery + longer durations
+- multiple live load reductions
+- declining performance in main lifts
+- repeated pain signals
+
+Possible triggers for pivot:
+- same exercise repeatedly causes discomfort
+- repeated session failure on same pattern
+- poor compliance due to exercise mismatch
+
+----------------------------------------
+7. SUPPORT SESSION DENSITY ADJUSTMENTS
+----------------------------------------
+
+The system should be able to modify:
+- number of sets
+- number of accessories
+- rest prescriptions
+- total session length targets
+
+Examples:
+- reduce a 6-exercise day to 5 exercises
+- remove one accessory on overloaded weeks
+- add rest for main lifts
+- shorten lower-priority work if adherence is suffering
+
+----------------------------------------
+8. WRITE ALL BLOCK CHANGES TO PROGRAM STATE
+----------------------------------------
+
+Any block-level change must be written clearly into programState.
+
+Example:
+
+blockAdjustment = {
+  version: 7,
+  scope: "week" | "block",
+  affectedSessions: ["fri_session_id"],
+  changeType: "volume_reduction",
+  previousValue: "6 exercises",
+  newValue: "5 exercises",
+  reason: "Fatigue trend elevated across first 2 sessions"
+}
+
+All block changes must be traceable.
+
+----------------------------------------
+9. SURFACE BLOCK INTELLIGENCE IN THE UI
+----------------------------------------
+
+In This Week / Block tabs, surface a compact coaching summary like:
+
+“Block Status: Progressing”
+or
+“Block Status: Fatigue Rising”
+
+Example supporting text:
+- “You are adapting well. Week 2 can progress as planned.”
+- “Recovery signals are down. Friday volume has been reduced.”
+- “Repeated knee discomfort detected. Lower-body loading has been modified.”
+
+Keep this premium, short, and useful.
+
+----------------------------------------
+10. UPDATE CHANGES TAB WITH BLOCK-LEVEL EVENTS
+----------------------------------------
+
+Examples:
+
+V7 BLOCK UPDATE
+- Reduced Friday accessory volume from 3 exercises to 2
+- Reason: fatigue trend increased after first 2 sessions
+
+V8 BLOCK UPDATE
+- Held Week 2 squat load steady
+- Reason: performance stable, but recovery trend declined
+
+V9 BLOCK UPDATE
+- Replaced Bulgarian Split Squat with Rear-Foot-Elevated Split Squat regression
+- Reason: repeated discomfort noted in session feedback
+
+----------------------------------------
+11. ADD BLOCK COACH INSIGHTS
+----------------------------------------
+
+Create a summary layer that explains the block in human terms.
+
+Examples:
+- “You are handling the block well. Main lift progression remains on track.”
+- “This week is becoming dense. We reduced lower-priority work to protect output.”
+- “Recovery is lagging. The next session is being simplified to preserve quality.”
+
+This should make the system feel coach-like, not robotic.
+
+----------------------------------------
+12. SAFETY AND DEFENSIVE LOGIC
+----------------------------------------
+
+Never progress the whole block aggressively if:
+- compliance is low
+- pain is trending upward
+- session completion is inconsistent
+- performance data is incomplete
+- fatigue signals conflict with positive reps/load data
+
+In ambiguous cases:
+- hold steady
+- reduce slightly
+- or flag for review
+
+----------------------------------------
+13. TEST CASES
+----------------------------------------
+
+Verify:
+
+1. Strong Week
+- all sessions completed
+- loads progressing
+- feedback mostly “right level”
+→ progress next week
+
+2. Fatigue Week
+- repeated hard sessions
+- durations increasing
+- tired/drained post-session
+→ reduce remaining week volume and hold next week steady
+
+3. Pain Week
+- moderate pain on repeated lower-body sessions
+→ modify exercises and stop progression on affected pattern
+
+4. Inconsistent Week
+- one skipped, one partial, one completed
+→ do not progress aggressively
+
+5. Mid-session reductions across multiple days
+→ block flagged as underrecovered or needs deload
+
+----------------------------------------
+14. DELIVERABLES
+----------------------------------------
+
+After implementation, provide:
+1. block intelligence state structure
+2. weekly and block-level metrics used
+3. deload / pivot logic
+4. how the current week gets adjusted
+5. how the next week gets adjusted
+6. how block updates appear in UI and Changes tab
+7. any remaining edge cases needing review

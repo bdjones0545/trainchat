@@ -53,6 +53,7 @@ import { customFetch } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import TopNav from "@/components/layout/TopNav";
 import MobileSlideLayout, { type SlidePanel } from "@/components/layout/MobileSlideLayout";
+import BlockStatusCard from "@/components/training/BlockStatusCard";
 import EditDrawer, {
   type EditTarget,
   type EditResult,
@@ -587,6 +588,9 @@ function WeekView({ highlightedIds, onEditExercise, onEditSession, onEditWeek }:
 
   return (
     <div className="space-y-5">
+      {/* Block intelligence — compact in week view */}
+      <BlockStatusCard compact />
+
       {/* Week summary card */}
       <div className={`rounded-2xl bg-gradient-to-br from-card to-muted/30 border border-border p-5 transition-all duration-500 ${weekHighlight}`}>
         <div className="flex items-start justify-between gap-3 mb-3">
@@ -754,6 +758,9 @@ function BlockView({ highlightedIds, onEditPhase, onEditWeek }: BlockViewProps) 
 
   return (
     <div className="space-y-5">
+      {/* Block intelligence — full view in block tab */}
+      <BlockStatusCard />
+
       {/* Current block hero */}
       {currentPhase && (
         <div className={`rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/20 p-5 transition-all duration-500 ${phaseHighlight}`}>

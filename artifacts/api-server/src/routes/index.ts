@@ -22,6 +22,7 @@ import calibrateRouter from "./calibrate";
 import exerciseLogsRouter from "./exercise-logs";
 import neuralProfileRouter from "./neural-profile";
 import predictionsRouter from "./predictions";
+import blockIntelligenceRouter from "./block-intelligence";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -58,5 +59,6 @@ router.use(calibrateRouter);
 router.use(exerciseLogsRouter);
 router.use(neuralProfileRouter);
 router.use(predictionsRouter);
+router.use(blockIntelligenceRouter);
 
 export default router;

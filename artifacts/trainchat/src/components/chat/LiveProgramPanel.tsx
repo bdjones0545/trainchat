@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
 import type { ProgramStructure } from "./ChatOutput";
+import BlockStatusCard from "@/components/training/BlockStatusCard";
 import type { BuildStage } from "@/hooks/useStreamMessage";
 import ExerciseLogInline, { type ProgressionTarget, type SetLog } from "@/components/training/ExerciseLogInline";
 import CoachForecast from "./CoachForecast";
@@ -1207,6 +1208,10 @@ function ChangesTab({ hasActiveSystem, newChangeSignal }: { hasActiveSystem?: bo
 
   return (
     <div ref={scrollRef} className="overflow-y-auto h-full">
+      {/* Block status — compact row at top of changes */}
+      <div className="px-3 pt-3">
+        <BlockStatusCard compact />
+      </div>
       <style>{`
         @keyframes change-entry-in {
           0%   { opacity: 0; transform: translateY(-6px); box-shadow: 0 0 0 1px rgba(99,102,241,0.4) inset; background: rgba(99,102,241,0.08); }
