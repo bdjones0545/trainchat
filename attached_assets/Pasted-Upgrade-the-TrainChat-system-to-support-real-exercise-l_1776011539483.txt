@@ -1,0 +1,218 @@
+Upgrade the TrainChat system to support real exercise logging with weight tracking, and connect it to the adaptive coaching engine.
+
+GOAL:
+Users must be able to log:
+- weight used
+- reps completed
+- sets completed
+- perceived difficulty (optional)
+
+This data must:
+1. persist per exercise
+2. influence future program adjustments
+3. feed the forecast system (when enabled)
+
+----------------------------------------
+1. ADD WEIGHT LOGGING TO EXERCISE UI
+----------------------------------------
+
+In the Today → Exercise Plan view:
+
+For EACH exercise card, add an inline logging section:
+
+Fields per set:
+- Weight (numeric input)
+- Reps (numeric input)
+- Completed checkbox
+
+Example UI per exercise:
+
+Set 1:
+[ Weight: ___ ] [ Reps: ___ ] ✅
+
+Set 2:
+[ Weight: ___ ] [ Reps: ___ ] ⬜
+
+Allow:
+- quick tap to duplicate previous set values
+- +/- buttons for fast adjustment (mobile optimized)
+
+----------------------------------------
+2. ADD "LOG SESSION" STATE
+----------------------------------------
+
+At the session level:
+
+Add a button:
+“Start Session”
+
+When clicked:
+- unlocks all logging inputs
+- activates session tracking mode
+
+At end:
+“Complete Session”
+
+On completion:
+- save all exercise logs
+- timestamp the session
+- update programState
+
+----------------------------------------
+3. STORE DATA STRUCTURE (BACKEND)
+----------------------------------------
+
+Create a session log model:
+
+sessionLog = {
+  id,
+  userId,
+  date,
+  exercises: [
+    {
+      exerciseId,
+      name,
+      sets: [
+        {
+          setNumber,
+          weight,
+          reps,
+          completed
+        }
+      ]
+    }
+  ],
+  notes,
+  perceivedDifficulty (optional),
+  createdAt
+}
+
+Persist this in your database.
+
+----------------------------------------
+4. CONNECT TO PROGRAM STATE ENGINE
+----------------------------------------
+
+When a session is completed:
+
+Update:
+
+programState = {
+  ...
+  lastSession: sessionLog,
+  totalSessionsCompleted: number,
+  exerciseHistory: {
+    exerciseId: [
+      { date, weight, reps }
+    ]
+  }
+}
+
+----------------------------------------
+5. ENABLE PROGRESSION LOGIC (VERY IMPORTANT)
+----------------------------------------
+
+After each completed session:
+
+Run:
+
+analyzeProgression(exerciseHistory)
+
+Basic rules:
+
+IF:
+- all sets completed at top rep range
+→ suggest weight increase next session
+
+IF:
+- reps missed or incomplete sets
+→ maintain or reduce load
+
+IF:
+- user logs “too easy”
+→ increase intensity
+
+IF:
+- user logs “too hard”
+→ reduce volume or load
+
+----------------------------------------
+6. UPDATE PROGRAM AUTOMATICALLY
+----------------------------------------
+
+When progression logic triggers:
+
+- update programState.program
+- increment version
+- log in Changes tab
+
+Example:
+
+V2 UPDATE
+- Increased back squat from 185 → 195
+- Reason: All sets completed at target reps
+
+----------------------------------------
+7. DISPLAY PREVIOUS WEIGHT (UX BOOST)
+----------------------------------------
+
+On each exercise card, show:
+
+“Last session: 185 lbs x 5”
+
+This is HUGE for usability and retention.
+
+----------------------------------------
+8. CONNECT TO FORECAST (WHEN ENABLED)
+----------------------------------------
+
+Weight + volume data should feed:
+
+- fatigue estimation
+- load trends
+- recovery suggestions
+
+BUT ONLY if sufficient data exists (respect gating system).
+
+----------------------------------------
+9. ADD QUICK ACTIONS
+----------------------------------------
+
+On each exercise:
+
+Allow:
+- “Same as last session” button
+- auto-fill previous weights
+- quick increment (+5, +10)
+
+----------------------------------------
+10. KEEP MOBILE UX FAST
+----------------------------------------
+
+Requirements:
+- minimal typing
+- tap-based adjustments
+- auto-save inputs
+- no lag when entering data
+
+----------------------------------------
+11. FINAL RULE
+----------------------------------------
+
+Weight logging must:
+- feel fast
+- feel useful immediately
+- clearly impact future sessions
+
+If logging does not change the program, the feature fails.
+
+----------------------------------------
+DELIVERABLES
+----------------------------------------
+
+After implementation:
+1. Show updated exercise UI with weight inputs
+2. Show sessionLog structure
+3. Show how progression logic updates program
+4. Show how Changes tab logs weight-based updates
+5. Show how previous weights are displayed
