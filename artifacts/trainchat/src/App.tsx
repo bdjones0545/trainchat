@@ -1,4 +1,4 @@
-import { Component, type ReactNode } from "react";
+import { Component, useRef, type ReactNode } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -12,25 +12,33 @@ import AdminDashboard from "@/pages/admin";
 import SystemPage from "@/pages/system";
 import BillingPage from "@/pages/billing";
 import { useGetMe } from "@workspace/api-client-react";
-import { computeRoute, readDeviceId, logRouteDecision, readOnboardingComplete } from "@/lib/routing";
+import { computeRoute, readDeviceId } from "@/lib/routing";
 
 /**
  * ChatPage — universal entry point for /chat.
  *
- * Renders the full authenticated Chat when a user session is confirmed.
- * Renders the GuestStart experience for unauthenticated visitors so they
- * can use the agent immediately without being forced to sign up first.
+ * Single decision point for the entire app: one of three outcomes:
+ *   1. Spinner  — auth check is still in flight (first load only)
+ *   2. <Chat /> — user is confirmed authenticated
+ *   3. <GuestStart /> — user is not authenticated (guest mode)
  *
- * Auth resolution is gated before either branch renders to avoid flashing
- * the wrong UI (a brief spinner is shown during the auth check).
+ * A `hadUser` ref handles the edge case where a previously-authenticated
+ * user's session expires mid-use: instead of quietly switching them to
+ * the guest experience, we send them to /login for an explicit re-auth.
+ *
+ * GuestStart has its own three-stage bootstrap gate so it will NEVER
+ * flash the guest UI before its initialization is complete.
  */
 function ChatPage() {
   const { data: me, isLoading } = useGetMe();
+  // Track whether this page instance ever had an authenticated user.
+  // If `me` later becomes undefined (session expired), redirect to /login
+  // rather than silently switching to guest mode.
+  const hadUser = useRef(false);
+  if (me && !hadUser.current) hadUser.current = true;
 
-  // Only block on the very first load (no cached value yet).
-  // Once we have a definitive answer — authenticated or not — branch immediately.
-  // For unauthenticated users, a 401 resolves quickly and we show the guest
-  // agent without waiting for React Query's retry cycle to complete.
+  // Only block on the very first load (isLoading = true means no cached value yet).
+  // For unauthenticated users, 401 resolves with no retry so this clears fast.
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -39,10 +47,16 @@ function ChatPage() {
     );
   }
 
+  // Session expired mid-use: send to login rather than dropping into guest mode
+  if (!me && hadUser.current) {
+    return <Redirect to="/login" />;
+  }
+
   // Authenticated: full agent experience
   if (me) return <Chat />;
 
   // Unauthenticated: guest agent experience (no signup required)
+  // GuestStart has its own three-stage gate to prevent any UI flash.
   return <GuestStart />;
 }
 
@@ -121,35 +135,12 @@ class ErrorBoundary extends Component<
 /**
  * SmartRoot — the single authoritative routing gate for the "/" path.
  *
- * All visitors (authenticated or not) are routed to /chat.
- * /chat handles both modes: authenticated users get the full agent,
- * unauthenticated users get the guest agent — no forced signup wall.
+ * All visitors (authenticated or not) are routed to /chat immediately.
+ * ChatPage is the single decision point that renders the correct experience
+ * based on auth state. No auth check is needed here — ChatPage handles it.
+ * A spinner at "/" would only add latency without providing any value.
  */
 function SmartRoot() {
-  const { data: me, isLoading, isError, isFetching } = useGetMe();
-  const [pathname] = useLocation();
-
-  // Wait for definitive auth state before routing so we don't flash the wrong UI.
-  if (isLoading || (isFetching && !me)) {
-    logRouteDecision({
-      pathname,
-      authResolved: false,
-      hasUser: false,
-      authError: isError,
-      deviceId: readDeviceId(),
-      guestSessionStatus: null,
-      onboardingComplete: readOnboardingComplete(),
-      target: "loading",
-      reason: isLoading ? "initial auth load" : "background refetch in progress — awaiting confirmation",
-    });
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-      </div>
-    );
-  }
-
-  // Everyone goes to /chat — ChatPage decides what to render based on auth state
   return <Redirect to="/chat" />;
 }
 

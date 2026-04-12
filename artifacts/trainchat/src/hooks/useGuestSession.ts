@@ -113,7 +113,14 @@ export function useGuestSession(isAuthenticated: boolean): GuestSessionState {
       const cached = sessionStorage.getItem(GUEST_SESSION_KEY);
       if (cached) {
         const parsed: GuestSession = JSON.parse(cached);
-        if (parsed.deviceId === id && parsed.status !== "blocked") {
+        // Skip "converted" sessions from cache — they require a live API check
+        // so the authoritative status is always used for routing decisions.
+        // Also skip "blocked" sessions.
+        if (
+          parsed.deviceId === id &&
+          parsed.status !== "blocked" &&
+          parsed.status !== "converted"
+        ) {
           setGuestSession(parsed);
           return;
         }

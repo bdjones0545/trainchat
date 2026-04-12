@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Redirect } from "wouter";
 import { useGuestSession } from "@/hooks/useGuestSession";
 import { GUEST_CONFIG } from "@/lib/guestConfig";
 import { STORAGE_KEYS, logRouteDecision, readOnboardingComplete, readDeviceId } from "@/lib/routing";
@@ -260,6 +260,10 @@ export default function GuestStart() {
   const [showPaywall, setShowPaywall] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [currentTurn, setCurrentTurn] = useState(0);
+  // Bootstrap gate: prevents main UI from rendering before the initialization
+  // useEffect has run. This eliminates the one-frame flash where the empty
+  // chat shell appears before we know the session status.
+  const [isInitialized, setIsInitialized] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -285,15 +289,13 @@ export default function GuestStart() {
     if (guestSession.status === "converted") {
       /**
        * A "converted" guest session means this deviceId was linked to an account.
-       * The user is NOT authenticated right now (SmartRoot already checked).
-       * Therefore they need to log in — sending them to /chat creates a loop
-       * because /chat immediately bounces unauthenticated users back to /start.
-       *
-       * We ALWAYS send converted sessions to /login regardless of localStorage flags.
-       * localStorage can be cleared at any time; the backend session status is authoritative.
+       * The user is NOT authenticated right now (auth already failed).
+       * We log the decision here but do NOT navigate — the render path handles
+       * the redirect synchronously via <Redirect to="/login" /> so there is
+       * zero flash of the guest chat UI before navigation fires.
        */
       logRouteDecision({
-        pathname: "/start",
+        pathname: "/chat",
         authResolved: true,
         hasUser: false,
         authError: false,
@@ -301,9 +303,10 @@ export default function GuestStart() {
         guestSessionStatus: guestSession.status,
         onboardingComplete: readOnboardingComplete(),
         target: "/login",
-        reason: "converted guest session — must authenticate before accessing /chat",
+        reason: "converted guest session — render-path redirect to /login (no flash)",
       });
-      navigate("/login");
+      // isInitialized intentionally stays false — the render path returns
+      // <Redirect to="/login" /> before reaching the main UI gate.
       return;
     }
 
@@ -319,6 +322,8 @@ export default function GuestStart() {
       } else {
         setIsLocked(true);
       }
+      // Show the paywall/locked UI (isInitialized unlocks the gate)
+      setIsInitialized(true);
       return;
     }
 
@@ -328,15 +333,17 @@ export default function GuestStart() {
       if (deviceId) {
         trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.GUEST_RETURNED);
       }
-      return;
+    } else {
+      // Fresh start — the opening line sets the tone for the entire experience
+      setMessages([{
+        role: "assistant",
+        content: "Let's build your training system.",
+      }]);
     }
 
-    // Fresh start — the opening line sets the tone for the entire experience
-    setMessages([{
-      role: "assistant",
-      content: "Let's build your training system.",
-    }]);
-  }, [guestSession, deviceId, navigate]);
+    // Unlock the main UI now that everything is initialized
+    setIsInitialized(true);
+  }, [guestSession, deviceId]);
 
   const handleSend = useCallback(async (text?: string) => {
     const content = (text ?? inputText).trim();
@@ -438,19 +445,44 @@ export default function GuestStart() {
   }, [navigate, deviceId]);
 
   /**
-   * STARTUP GATE — show a spinner until the guest session is resolved.
+   * BOOTSTRAP GATES — three layers to guarantee zero UI flash at startup.
    *
-   * Why this matters:
-   *   - useGuestSession reads sessionStorage and sets state in a useEffect,
-   *     so the very first render always has guestSession = null.
-   *   - Without this gate the chat UI (goal selection + "Let's build your
-   *     training system") would flash briefly before the init effect fires,
-   *     and users who should be redirected (converted sessions) would see
-   *     the guest onboarding UI for a frame before the redirect fires.
-   *   - If the API call fails (guestSessionError is set) we fall through to
-   *     render normally so the user is never permanently stuck on a spinner.
+   * Gate 1: guestSession not yet loaded (null) and no error.
+   *   → Show spinner. useGuestSession is still resolving from sessionStorage
+   *     or waiting for the API response.
+   *
+   * Gate 2: guestSession loaded with status === "converted".
+   *   → Return <Redirect to="/login" /> synchronously IN the render path.
+   *     This is critical: returning a Redirect here means the main chat UI
+   *     is NEVER included in the render output, so there is zero one-frame
+   *     flash before the navigation fires. The navigate() call in useEffect
+   *     would fire one render cycle later — too late to prevent the flash.
+   *
+   * Gate 3: guestSession loaded but initialization useEffect has not yet run.
+   *   → Show spinner. The useEffect sets messages, counts, locked state, etc.
+   *     before setting isInitialized=true. Without this gate the empty chat
+   *     shell (no messages, wrong counts) renders for one frame.
+   *
+   * If guestSessionError is set we bypass all gates and render normally so
+   * the user is never permanently stuck on a loading screen.
    */
+
+  // Gate 1 — waiting for session from sessionStorage/API
   if (!guestSession && !guestSessionError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "hsl(222 47% 7%)" }}>
+        <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  // Gate 2 — converted session: user signed up before, must log back in
+  if (guestSession?.status === "converted") {
+    return <Redirect to="/login" />;
+  }
+
+  // Gate 3 — session loaded but initialization useEffect hasn't run yet
+  if (!isInitialized && !guestSessionError) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "hsl(222 47% 7%)" }}>
         <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
@@ -504,15 +536,15 @@ export default function GuestStart() {
               <span className="sm:hidden">{FREE_MESSAGE_LIMIT - messageCount} left</span>
             </span>
           )}
-          <a
-            href="/login"
+          <button
+            onClick={handleSignIn}
             className="text-xs font-medium transition-colors"
             style={{ color: "hsl(222 47% 50%)" }}
             onMouseEnter={(e) => ((e.currentTarget).style.color = "#e4e4e7")}
             onMouseLeave={(e) => ((e.currentTarget).style.color = "hsl(222 47% 50%)")}
           >
             Sign in
-          </a>
+          </button>
           <button
             onClick={handleRegister}
             className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"

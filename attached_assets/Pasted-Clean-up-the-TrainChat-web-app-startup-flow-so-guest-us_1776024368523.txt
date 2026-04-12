@@ -1,0 +1,257 @@
+Clean up the TrainChat web app startup flow so guest users go directly into the agent without flashing the old onboarding or being redirected into the sign up / login modal.
+
+CURRENT ISSUE:
+The guest/device-ID flow partially works, but only for a moment.
+On app load:
+- the app briefly shows the correct guest experience
+- then the old onboarding flashes
+- then the sign up / login modal appears
+
+This means multiple startup flows are still competing.
+
+GOAL:
+Create a single clean startup pipeline with one source of truth for entry routing.
+
+The app must:
+- restore guest or authenticated state first
+- decide the correct route once
+- render only the correct experience
+- never flash old onboarding
+- never show auth modal unless truly required
+
+----------------------------------------
+1. IDENTIFY THE ROOT PROBLEM
+----------------------------------------
+
+Audit startup for competing logic in:
+- auth guards
+- route guards
+- useEffect redirects
+- onboarding checks
+- login modal triggers
+- guest device bootstrap
+- session restore code
+
+Likely problem:
+- guest state initializes after first render
+- old onboarding logic still runs before guest restore finishes
+- auth-required modal still fires from legacy code
+- route guards are acting independently instead of using one central decision
+
+----------------------------------------
+2. CREATE A SINGLE APP ENTRY DECISION
+----------------------------------------
+
+Build one startup resolver such as:
+
+resolveAppEntryState()
+
+Possible results:
+- loading
+- authenticated_agent
+- guest_agent
+- auth_required
+- onboarding_required
+- paywall_required
+
+Only ONE result may be active at startup.
+
+Do not let multiple parts of the app independently decide where to go.
+
+----------------------------------------
+3. ADD A TRUE BOOTSTRAP GATE
+----------------------------------------
+
+Before rendering app routes/modals, block UI until startup state is resolved.
+
+Example:
+appStartupState = {
+  isBootstrapping: true,
+  userMode: null,
+  entryRoute: null
+}
+
+During bootstrap:
+- show splash / loading state only
+- do NOT render old onboarding
+- do NOT render login/signup modal
+- do NOT render protected route redirects
+
+Only render main app after bootstrap is complete.
+
+----------------------------------------
+4. BOOTSTRAP ORDER (STRICT)
+----------------------------------------
+
+Startup must run in this order:
+
+1. check authenticated session
+2. if authenticated:
+   - restore user state
+   - set entryRoute = authenticated_agent
+3. if not authenticated:
+   - restore or create guestDeviceId
+   - fetch guest session / free inputs / guest program state
+   - set entryRoute = guest_agent
+4. only if guest access is truly not allowed:
+   - set entryRoute = auth_required
+
+This order must complete before the app decides what to show.
+
+----------------------------------------
+5. REMOVE LEGACY ONBOARDING FROM STARTUP
+----------------------------------------
+
+Audit all code paths that still trigger the old onboarding flow.
+
+Examples:
+- onboarding modals opening on initial mount
+- route redirects to onboarding page
+- local state like hasCompletedOnboarding checked before guest restore
+- stale “new user” logic from previous flow
+
+Old onboarding must NOT run for:
+- guest users entering the agent
+- users restored via device ID
+- returning authenticated users already routed into the app
+
+If onboarding still exists, it should only appear intentionally in the correct new flow, not as a startup flash.
+
+----------------------------------------
+6. REMOVE AUTH MODAL AUTO-FIRE
+----------------------------------------
+
+Find all places where login/signup modal opens automatically on mount or route change.
+
+This modal should only appear when:
+- guest free inputs exhausted
+- user explicitly taps sign in
+- user tries to access account-only feature
+- merge-account / save-account flow is triggered
+
+It must NOT auto-open just because user is unauthenticated at startup.
+
+----------------------------------------
+7. CENTRALIZE ROUTE GUARDS
+----------------------------------------
+
+Any route guard or protected route logic must use the centralized startup decision.
+
+Bad:
+- one component says “show agent”
+- another says “show login”
+- another says “show onboarding”
+
+Good:
+- everything reads from entryRoute decided by resolveAppEntryState()
+
+----------------------------------------
+8. PREVENT UI FLASH / FLICKER
+----------------------------------------
+
+Do not render intermediate screens while state is unresolved.
+
+During bootstrap:
+- render only a branded loading screen / splash
+- no old onboarding DOM
+- no login modal DOM
+- no redirect flicker
+
+This is critical.
+
+----------------------------------------
+9. CLEAN UP STATE SOURCES
+----------------------------------------
+
+Audit for stale sources of truth such as:
+- local hasSeenOnboarding flags
+- old onboarding completion flags
+- authRequired booleans
+- login modal defaults
+- device ID being created too late
+- route params triggering old flow
+
+Consolidate these into one startup store or context.
+
+----------------------------------------
+10. ADD DEBUG LOGGING
+----------------------------------------
+
+Add temporary startup logs:
+
+{
+  step: "restore_auth" | "restore_guest" | "entry_resolved" | "modal_trigger_blocked",
+  isAuthenticated,
+  guestDeviceId,
+  entryRoute,
+  onboardingTriggered,
+  authModalTriggered,
+  source
+}
+
+This is to catch which legacy branch is still firing after the correct guest route loads.
+
+----------------------------------------
+11. APPLY TO CURRENT EXPECTED FLOW
+----------------------------------------
+
+Desired startup behavior for a new web visitor:
+- app loads
+- splash/loader briefly appears
+- guestDeviceId restored or created
+- agent opens directly
+- no onboarding flash
+- no auth modal
+
+Desired startup behavior for returning guest:
+- app loads
+- guest session restored
+- same agent/program state restored
+- no onboarding flash
+- no auth modal unless free limit reached
+
+Desired startup behavior for authenticated user:
+- app loads
+- account restored
+- app opens directly in authenticated experience
+
+----------------------------------------
+12. TEST CASES
+----------------------------------------
+
+Verify:
+
+1. brand-new visitor
+→ no login modal
+→ no onboarding flash
+→ direct guest agent access
+
+2. returning guest with stored device ID
+→ guest session restored
+→ no onboarding flash
+→ no login modal
+
+3. authenticated returning user
+→ authenticated state restored cleanly
+
+4. guest with free inputs exhausted
+→ agent can load, then paywall/auth shown intentionally
+not as startup flicker
+
+5. refresh page repeatedly
+→ no race-condition flicker
+
+6. slow network
+→ still no old onboarding/auth modal flash during bootstrap
+
+----------------------------------------
+13. DELIVERABLES
+----------------------------------------
+
+After implementation, provide:
+1. root cause of the flicker/race condition
+2. the final startup flow order
+3. which old onboarding/auth triggers were removed
+4. where entryRoute is now decided
+5. what loading/splash state is shown during bootstrap
+6. any remaining startup edge cases
