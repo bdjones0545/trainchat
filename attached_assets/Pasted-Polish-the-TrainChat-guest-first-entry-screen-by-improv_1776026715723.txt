@@ -1,0 +1,240 @@
+Polish the TrainChat guest-first entry screen by improving text color hierarchy, contrast, chip clarity, and input prominence so the screen feels more premium, readable, and interactive on mobile.
+
+CURRENT ISSUE:
+The overall structure is strong, but the screen still feels visually soft because too many text elements and surfaces sit at similar low-contrast values.
+
+Problems:
+- the main headline does not pop enough
+- the supporting text is slightly too dim
+- the quick-start chips feel too inactive / low contrast
+- the guest mode text is competing too much or not cleanly tiered
+- the input box blends into the background too much
+- the whole screen needs a stronger visual hierarchy
+
+GOAL:
+Keep the same layout and premium dark TrainChat aesthetic, but improve the color/contrast system so the screen feels:
+- sharper
+- more premium
+- easier to scan
+- more clearly interactive
+
+This is a polish pass, not a redesign.
+
+----------------------------------------
+1. ESTABLISH A CLEAR TEXT HIERARCHY
+----------------------------------------
+
+Use a consistent hierarchy for all text on this screen:
+
+Primary text:
+- near-white
+- strong contrast
+- used for the main headline and high-priority labels
+
+Secondary text:
+- softer but still readable
+- used for supporting description text
+
+Tertiary text:
+- subtle
+- used for helper text like guest mode/free messages
+
+Suggested contrast targets:
+- Primary text: rgba(255,255,255,0.9 to 0.95)
+- Secondary text: rgba(255,255,255,0.62 to 0.72)
+- Tertiary text: rgba(255,255,255,0.4 to 0.5)
+
+Apply this consistently.
+
+----------------------------------------
+2. IMPROVE THE MAIN HEADLINE
+----------------------------------------
+
+The main headline:
+“Let’s build your training system.”
+
+should feel more confident and premium.
+
+Adjust:
+- brighter text color
+- slightly tighter visual weight if needed
+- optional subtle tracking/letter-spacing refinement
+
+Target:
+- strong visual anchor
+- should be the first thing users read after the icon
+
+----------------------------------------
+3. IMPROVE THE SUPPORTING SUBTEXT
+----------------------------------------
+
+The supporting copy:
+“Tell me your goal, schedule, equipment, and any limitations — I’ll design it with you.”
+
+should be clearly secondary, but still easy to read.
+
+Right now it is too washed.
+Increase contrast slightly while keeping it softer than the headline.
+
+It should feel helpful, not faded.
+
+----------------------------------------
+4. MAKE QUICK-START CHIPS FEEL MORE INTERACTIVE
+----------------------------------------
+
+Current chips need more clarity and contrast.
+
+Adjust chips so they feel tappable and alive:
+- slightly brighter surface/background
+- more visible border
+- stronger text color
+- cleaner hover/tap/active state
+
+Suggested visual direction:
+- background: subtle elevated dark surface
+- border: slightly more visible than current
+- text: brighter than current, close to primary-secondary range
+
+Hover/tap state should feel intentional:
+- a subtle blue-tinted active state is okay
+- keep it premium, not loud
+
+Do NOT redesign the chip layout.
+Only improve color/contrast/interaction polish.
+
+----------------------------------------
+5. IMPROVE THE INPUT BOX PROMINENCE
+----------------------------------------
+
+The input is the most important interaction point and should feel more elevated.
+
+Adjust:
+- background slightly brighter than surrounding page
+- border more visible
+- typed text high contrast
+- placeholder text readable but softer
+
+Suggested hierarchy:
+- typed text: near-white
+- placeholder: mid-contrast
+- border/surface: enough separation from page background to feel usable immediately
+
+The input should visually read as:
+“start here”
+
+----------------------------------------
+6. TUNE THE “TELL YOUR COACH WHAT YOU WANT” LABEL
+----------------------------------------
+
+This helper label above the input is useful, but it should sit in a clean secondary/tertiary tier.
+
+Make it slightly more legible and aligned with the hierarchy system.
+
+It should support the input without competing with the headline.
+
+----------------------------------------
+7. REFINE THE GUEST MODE / FREE MESSAGE TEXT
+----------------------------------------
+
+The line:
+“Guest mode · 5 free messages”
+
+should be subtle and premium.
+
+It should:
+- not compete with the main content
+- still be readable
+- feel like a lightweight status note
+
+Reduce its visual weight if necessary while keeping it legible.
+
+----------------------------------------
+8. KEEP CTA BUTTONS CONSISTENT
+----------------------------------------
+
+Review:
+- “Sign in”
+- “Get started free”
+
+Ensure the top-right CTA hierarchy feels intentional:
+- primary CTA remains strong
+- secondary action stays lighter
+- spacing and color feel balanced with the rest of the polished screen
+
+Do not redesign placement unless needed.
+Just improve visual consistency.
+
+----------------------------------------
+9. IMPROVE OVERALL SURFACE CONTRAST
+----------------------------------------
+
+Review all:
+- card/chip surfaces
+- borders
+- separators
+- input container
+
+Ensure surfaces do not all sit at nearly the same contrast level.
+
+We want a subtle but noticeable depth system:
+- page background
+- elevated chips
+- elevated input
+- top bar elements
+
+Keep it dark and premium.
+Do not add noisy shadows or heavy gradients unless they are extremely subtle.
+
+----------------------------------------
+10. MOBILE POLISH
+----------------------------------------
+
+Make sure all text and contrast updates look good on:
+- small iPhones
+- mobile Safari
+- narrow portrait screens
+
+Check that:
+- headline still feels strong
+- subtext is readable
+- chips remain legible
+- guest/free text doesn’t disappear into the background
+- input remains clearly visible
+
+----------------------------------------
+11. DO NOT CHANGE THE CORE LAYOUT
+----------------------------------------
+
+Keep:
+- icon
+- headline
+- subtext
+- quick-start chips
+- guest/free line
+- input area
+
+This is not a redesign.
+It is a premium contrast/hierarchy polish pass.
+
+----------------------------------------
+12. VISUAL SUCCESS CRITERIA
+----------------------------------------
+
+After the polish:
+- the headline should pop immediately
+- subtext should be easier to read
+- chips should feel obviously tappable
+- guest mode should feel subtle and clean
+- input should feel like the primary place to begin
+- the screen should feel more premium and less washed
+
+----------------------------------------
+13. DELIVERABLES
+----------------------------------------
+
+After implementation, provide:
+1. which text colors were adjusted
+2. which chip/input surface styles were updated
+3. how the text hierarchy is now defined
+4. any mobile-specific visual tweaks that were added
+5. any remaining visual weak points you still see

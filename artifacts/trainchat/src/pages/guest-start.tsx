@@ -492,14 +492,14 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
       {/* ── Top nav — tight, touch-friendly ────────────────────────────────── */}
       <div
         className="flex-shrink-0 flex items-center justify-between px-4 py-2"
-        style={{ borderBottom: "1px solid hsl(222 47% 11%)" }}
+        style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}
       >
         {/* Left: logo + subtle guest badge */}
         <div className="flex items-center gap-2">
           <img src={logoSrc} alt="TrainChat" className="h-5" />
           <span
             className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-widest"
-            style={{ background: "hsl(222 47% 13%)", color: "hsl(222 47% 48%)", border: "1px solid hsl(222 47% 18%)" }}
+            style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.35)", border: "1px solid rgba(255,255,255,0.09)" }}
           >
             Guest
           </span>
@@ -511,9 +511,9 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
             <span
               className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium"
               style={{
-                background: messageCount >= FREE_MESSAGE_LIMIT - 1 ? "hsl(25 95% 53% / 0.1)" : "hsl(222 47% 12%)",
-                color: messageCount >= FREE_MESSAGE_LIMIT - 1 ? "hsl(25 95% 63%)" : "hsl(222 47% 50%)",
-                border: messageCount >= FREE_MESSAGE_LIMIT - 1 ? "1px solid hsl(25 95% 53% / 0.2)" : "1px solid hsl(222 47% 18%)",
+                background: messageCount >= FREE_MESSAGE_LIMIT - 1 ? "hsl(25 95% 53% / 0.12)" : "rgba(255,255,255,0.05)",
+                color: messageCount >= FREE_MESSAGE_LIMIT - 1 ? "hsl(25 95% 68%)" : "rgba(255,255,255,0.50)",
+                border: messageCount >= FREE_MESSAGE_LIMIT - 1 ? "1px solid hsl(25 95% 53% / 0.25)" : "1px solid rgba(255,255,255,0.09)",
               }}
             >
               <span className="hidden sm:inline">{FREE_MESSAGE_LIMIT - messageCount} {FREE_MESSAGE_LIMIT - messageCount === 1 ? "message" : "messages"} left</span>
@@ -523,21 +523,23 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
           <button
             onClick={handleSignIn}
             className="text-[11px] font-medium transition-colors min-h-[36px] px-1 flex items-center"
-            style={{ color: "hsl(222 47% 48%)" }}
-            onMouseEnter={(e) => ((e.currentTarget).style.color = "#e4e4e7")}
-            onMouseLeave={(e) => ((e.currentTarget).style.color = "hsl(222 47% 48%)")}
+            style={{ color: "rgba(255,255,255,0.42)" }}
+            onMouseEnter={(e) => ((e.currentTarget).style.color = "rgba(255,255,255,0.88)")}
+            onMouseLeave={(e) => ((e.currentTarget).style.color = "rgba(255,255,255,0.42)")}
           >
             Sign in
           </button>
           <button
             onClick={handleRegister}
             className="px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all min-h-[32px] flex items-center"
-            style={{ background: "hsl(199 89% 48% / 0.14)", border: "1px solid hsl(199 89% 48% / 0.28)", color: "hsl(199 89% 65%)" }}
+            style={{ background: "hsl(199 89% 48% / 0.16)", border: "1px solid hsl(199 89% 48% / 0.35)", color: "hsl(199 89% 72%)" }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.background = "hsl(199 89% 48% / 0.22)";
+              (e.currentTarget as HTMLButtonElement).style.background = "hsl(199 89% 48% / 0.24)";
+              (e.currentTarget as HTMLButtonElement).style.color = "hsl(199 89% 82%)";
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.background = "hsl(199 89% 48% / 0.14)";
+              (e.currentTarget as HTMLButtonElement).style.background = "hsl(199 89% 48% / 0.16)";
+              (e.currentTarget as HTMLButtonElement).style.color = "hsl(199 89% 72%)";
             }}
           >
             Get started free
@@ -571,16 +573,18 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
                 </svg>
               </div>
               <div>
-                <p className="text-lg sm:text-xl font-bold leading-snug" style={{ color: "#f4f4f5" }}>
+                {/* Primary — strongest text on the screen */}
+                <p className="text-lg sm:text-xl font-bold leading-snug" style={{ color: "rgba(255,255,255,0.93)" }}>
                   Let's build your training system.
                 </p>
-                <p className="text-xs sm:text-sm mt-1.5 leading-relaxed" style={{ color: "hsl(222 47% 48%)" }}>
-                  Tell me your goal, schedule, equipment,<br className="hidden xs:block" /> and any limitations — I'll design it with you.
+                {/* Secondary — readable, clearly supporting the headline */}
+                <p className="text-xs sm:text-sm mt-1.5 leading-relaxed" style={{ color: "rgba(255,255,255,0.60)" }}>
+                  Tell me your goal, schedule, equipment, and any limitations — I'll design it with you.
                 </p>
               </div>
             </div>
 
-            {/* Quick-start chips — compact pills, wrap cleanly on all widths */}
+            {/* Quick-start chips — clearly tappable, elevated surface */}
             <div
               className="flex flex-wrap gap-1.5 justify-center w-full max-w-md animate-in fade-in duration-400"
               style={{ animationDelay: "80ms" }}
@@ -591,20 +595,20 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
                   onClick={() => handleSend(opt.prompt)}
                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all duration-150 active:scale-[0.96]"
                   style={{
-                    background: "hsl(222 47% 10%)",
-                    border: "1px solid hsl(222 47% 20%)",
-                    color: "hsl(222 47% 58%)",
+                    background: "rgba(255,255,255,0.06)",
+                    border: "1px solid rgba(255,255,255,0.13)",
+                    color: "rgba(255,255,255,0.65)",
                     minHeight: "30px",
                   }}
                   onMouseEnter={(e) => {
-                    (e.currentTarget).style.borderColor = "hsl(199 89% 48% / 0.45)";
-                    (e.currentTarget).style.background = "hsl(199 89% 48% / 0.07)";
-                    (e.currentTarget).style.color = "#e4e4e7";
+                    (e.currentTarget).style.borderColor = "hsl(199 89% 48% / 0.55)";
+                    (e.currentTarget).style.background = "hsl(199 89% 48% / 0.10)";
+                    (e.currentTarget).style.color = "rgba(255,255,255,0.92)";
                   }}
                   onMouseLeave={(e) => {
-                    (e.currentTarget).style.borderColor = "hsl(222 47% 20%)";
-                    (e.currentTarget).style.background = "hsl(222 47% 10%)";
-                    (e.currentTarget).style.color = "hsl(222 47% 58%)";
+                    (e.currentTarget).style.borderColor = "rgba(255,255,255,0.13)";
+                    (e.currentTarget).style.background = "rgba(255,255,255,0.06)";
+                    (e.currentTarget).style.color = "rgba(255,255,255,0.65)";
                   }}
                 >
                   <span className="text-xs">{opt.icon}</span>
@@ -613,10 +617,10 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
               ))}
             </div>
 
-            {/* Guest mode note — very dim, supportive, non-distracting */}
+            {/* Guest mode note — tertiary, subtle status line */}
             <p
               className="text-[10px] tracking-wide animate-in fade-in duration-600"
-              style={{ color: "hsl(222 47% 28%)", animationDelay: "200ms" }}
+              style={{ color: "rgba(255,255,255,0.30)", animationDelay: "200ms" }}
             >
               Guest mode · {FREE_MESSAGE_LIMIT} free messages
             </p>
@@ -648,27 +652,28 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
         <div
           className="flex-shrink-0 px-3 pt-2"
           style={{
-            borderTop: "1px solid hsl(222 47% 11%)",
+            borderTop: "1px solid rgba(255,255,255,0.07)",
             paddingBottom: "max(16px, env(safe-area-inset-bottom))",
           }}
         >
-          {/* Subtle prompt label on empty state */}
+          {/* Tertiary prompt label — guides without competing with headline */}
           {isBeforeFirstInput && (
             <p
               className="text-[10px] font-medium mb-1.5 px-1"
-              style={{ color: "hsl(222 47% 35%)" }}
+              style={{ color: "rgba(255,255,255,0.38)" }}
             >
               Tell your coach what you want →
             </p>
           )}
+          {/* Input container — visibly elevated above page, clear focus ring */}
           <div
             className="flex items-end gap-2 rounded-2xl transition-all duration-200"
             style={{
-              background: "hsl(222 47% 11%)",
-              border: "1px solid hsl(222 47% 20%)",
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.14)",
             }}
-            onFocusCapture={(e) => (e.currentTarget.style.borderColor = "hsl(199 89% 48% / 0.45)")}
-            onBlurCapture={(e) => (e.currentTarget.style.borderColor = "hsl(222 47% 20%)")}
+            onFocusCapture={(e) => (e.currentTarget.style.borderColor = "hsl(199 89% 48% / 0.55)")}
+            onBlurCapture={(e) => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.14)")}
           >
             <textarea
               ref={inputRef}
@@ -677,8 +682,12 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
               onKeyDown={handleKeyDown}
               rows={1}
               placeholder="Describe your goal..."
-              className="flex-1 resize-none bg-transparent px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:outline-none leading-relaxed"
-              style={{ minHeight: "46px", maxHeight: "120px" }}
+              className="flex-1 resize-none bg-transparent px-4 py-3 text-sm focus:outline-none leading-relaxed placeholder:text-zinc-500"
+              style={{
+                minHeight: "46px",
+                maxHeight: "120px",
+                color: "rgba(255,255,255,0.92)",
+              }}
               onInput={(e) => {
                 const t = e.target as HTMLTextAreaElement;
                 t.style.height = "auto";
@@ -690,8 +699,8 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
               disabled={!canSend}
               className="m-2 p-2 rounded-xl text-white transition-all duration-150 active:scale-95 flex-shrink-0"
               style={{
-                background: canSend ? "hsl(199 89% 48%)" : "hsl(222 47% 17%)",
-                opacity: canSend ? 1 : 0.35,
+                background: canSend ? "hsl(199 89% 48%)" : "rgba(255,255,255,0.07)",
+                opacity: canSend ? 1 : 0.4,
               }}
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
