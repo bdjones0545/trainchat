@@ -1,0 +1,130 @@
+Add a Training Constraint Engine to TrainChat that evaluates whether a valid prescription change is also physiologically and programmatically appropriate before applying it.
+
+CURRENT STATE:
+- Parser correctly detects commands
+- Schema correctly maps fields
+- Fields are safely mutated
+
+PROBLEM:
+The system blindly applies correct field changes even when they violate training principles.
+
+GOAL:
+Add a constraint validation layer that ensures all prescription updates respect:
+- CNS demand
+- exercise intent
+- power vs hypertrophy rules
+- movement category best practices
+
+----------------------------------------
+1. CREATE CONSTRAINT PROFILES PER EXERCISE FAMILY
+----------------------------------------
+
+Example:
+
+Depth Jump:
+{
+  repRange: [2, 5],
+  intent: "max_power",
+  cnsDemand: "high",
+  allowHighReps: false
+}
+
+Back Squat:
+{
+  repRange: [3, 12],
+  intent: "strength_hypertrophy",
+  cnsDemand: "moderate_high",
+  allowHighReps: true
+}
+
+Plank:
+{
+  durationRange: [15, 90],
+  intent: "isometric_control",
+  cnsDemand: "low"
+}
+
+----------------------------------------
+2. BUILD validateTrainingConstraints()
+----------------------------------------
+
+Input:
+- exercise
+- requestedChange
+- newValue
+
+Output:
+{
+  valid: boolean,
+  reason?: string,
+  suggestions?: string[]
+}
+
+----------------------------------------
+3. HANDLE THREE OUTCOMES
+----------------------------------------
+
+A) VALID → apply immediately
+
+B) SUBOPTIMAL → apply but warn
+
+C) INVALID → block + suggest alternatives
+
+----------------------------------------
+4. ADD SMART SUGGESTIONS
+----------------------------------------
+
+Examples:
+
+If user increases reps on a power movement:
+→ suggest:
+- increase height
+- add reactive variation
+- switch to repeated effort drill
+
+If user lowers rest too much on strength:
+→ suggest:
+- keep rest
+- reduce load instead
+
+----------------------------------------
+5. UPDATE UI RESPONSE
+----------------------------------------
+
+Instead of silent mutation:
+
+Return coaching feedback like:
+
+“Adjusted to 10 reps. Note: this may reduce power output for this movement.”
+
+OR
+
+“Depth jumps are best kept under 5 reps. Want to increase height instead?”
+
+----------------------------------------
+6. DO NOT BREAK DIRECT COMMAND FLOW
+----------------------------------------
+
+This layer must:
+- NOT send user to modal
+- NOT block simple valid edits
+- ONLY intervene when necessary
+
+----------------------------------------
+7. PRIORITY RULE
+----------------------------------------
+
+Hierarchy:
+1. Schema validity
+2. Constraint validity
+3. User intent
+
+Never violate schema.
+Only challenge user when constraint is clearly broken.
+
+----------------------------------------
+DELIVERABLE:
+- constraint profiles
+- validation function
+- integration point before mutation
+- examples of blocked vs allowed vs warned edits

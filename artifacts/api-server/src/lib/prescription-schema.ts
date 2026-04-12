@@ -412,6 +412,262 @@ function formatLoad(value: number, unit: string): string {
   return `${value} ${normalizeLoadUnit(unit)}`;
 }
 
+// ─── Training Constraint Engine ──────────────────────────────────────────────
+//
+// Validates prescription changes against physiological + programming principles
+// AFTER schema validity has already been confirmed.
+//
+// Three outcomes:
+//   VALID      → apply immediately, no coaching note
+//   SUBOPTIMAL → apply but append a warning to the change summary
+//   INVALID    → block the change, surface alternative suggestions
+
+export type ConstraintOutcomeType = "valid" | "suboptimal" | "invalid";
+
+export interface ConstraintOutcome {
+  outcome: ConstraintOutcomeType;
+  /** Full coaching message (used when blocking an invalid change) */
+  message: string;
+  /** Short appended note shown alongside a suboptimal but applied change */
+  warningNote?: string;
+  suggestions?: string[];
+}
+
+interface ConstraintProfile {
+  cnsDemand: "low" | "moderate" | "high";
+  /** Human-readable movement intent, used in coach messages */
+  intent: string;
+  /** [min, max] rep range before anything is flagged */
+  repRange?: [number, number];
+  /** Reps above this → SUBOPTIMAL */
+  repSuboptimalThreshold?: number;
+  /** Reps above this → INVALID */
+  repInvalidThreshold?: number;
+  /** [min, max] sets range */
+  setsRange?: [number, number];
+  /** Duration (seconds) above this → SUBOPTIMAL */
+  durationSuboptimalSeconds?: number;
+  /** Duration (seconds) above this → INVALID */
+  durationInvalidSeconds?: number;
+  /** Rest (seconds) below this → SUBOPTIMAL */
+  restSuboptimalSeconds?: number;
+  /** Suggestions keyed by logical field, shown when constraints fire */
+  suggestions?: Partial<Record<string, string[]>>;
+}
+
+const FAMILY_CONSTRAINTS: Record<ExerciseFamily, ConstraintProfile> = {
+  height_reps: {
+    cnsDemand: "high",
+    intent: "max power",
+    repRange: [2, 5],
+    repSuboptimalThreshold: 3,
+    repInvalidThreshold: 5,
+    setsRange: [3, 6],
+    restSuboptimalSeconds: 90,
+    suggestions: {
+      reps: [
+        "increase the box or hurdle height for greater power demand",
+        "add a reactive component (e.g. continuous jumps)",
+        "try a repeated effort drill instead",
+      ],
+    },
+  },
+  distance_reps: {
+    cnsDemand: "high",
+    intent: "horizontal power",
+    repRange: [2, 8],
+    repSuboptimalThreshold: 6,
+    repInvalidThreshold: 10,
+    setsRange: [3, 6],
+    restSuboptimalSeconds: 60,
+    suggestions: {
+      reps: [
+        "increase the target distance for more power demand",
+        "focus on maximum effort per rep rather than volume",
+      ],
+    },
+  },
+  throws_reps: {
+    cnsDemand: "moderate",
+    intent: "explosive power",
+    repRange: [3, 12],
+    repSuboptimalThreshold: 12,
+    repInvalidThreshold: 20,
+    setsRange: [2, 5],
+  },
+  load_reps: {
+    cnsDemand: "moderate",
+    intent: "strength / hypertrophy",
+    repRange: [3, 20],
+    repSuboptimalThreshold: 15,
+    repInvalidThreshold: 30,
+    setsRange: [2, 6],
+    restSuboptimalSeconds: 45,
+    suggestions: {
+      rest: [
+        "keep rest at 90s or more to support strength output",
+        "reduce load instead if fatigue is the concern",
+      ],
+    },
+  },
+  reps_only: {
+    cnsDemand: "moderate",
+    intent: "bodyweight strength",
+    repRange: [3, 25],
+    repSuboptimalThreshold: 25,
+    repInvalidThreshold: 40,
+    setsRange: [2, 6],
+  },
+  unilateral: {
+    cnsDemand: "moderate",
+    intent: "strength / stability",
+    repRange: [4, 15],
+    repSuboptimalThreshold: 15,
+    repInvalidThreshold: 25,
+    setsRange: [2, 5],
+  },
+  time_only: {
+    cnsDemand: "low",
+    intent: "isometric control",
+    setsRange: [2, 5],
+    durationSuboptimalSeconds: 90,
+    durationInvalidSeconds: 180,
+    suggestions: {
+      duration: [
+        "break it into multiple shorter sets with rest",
+        "try a harder variation instead (e.g. RKC plank, hollow hold)",
+      ],
+    },
+  },
+  mobility_flow: {
+    cnsDemand: "low",
+    intent: "mobility / activation",
+    setsRange: [1, 4],
+  },
+  conditioning: {
+    cnsDemand: "moderate",
+    intent: "conditioning",
+  },
+  generic: {
+    cnsDemand: "moderate",
+    intent: "general training",
+  },
+};
+
+/** Convert a numeric rest/duration value + unit string to canonical seconds */
+function toCanonicalSeconds(value: number, unit: string): number {
+  return unit.toLowerCase().trim().startsWith("min") ? value * 60 : value;
+}
+
+/**
+ * Validate that a prescription change respects physiological + programming
+ * principles for the exercise's family.
+ *
+ * Must be called AFTER schema validity is confirmed (resolveField returned a
+ * FieldResolution, not FieldForbiddenResult).
+ */
+export function validateTrainingConstraints(
+  exerciseName: string,
+  logicalField: LogicalField,
+  numericValue: number,
+  unit: string
+): ConstraintOutcome {
+  const family = classifyExerciseFamily(exerciseName);
+  const profile = FAMILY_CONSTRAINTS[family];
+
+  // ── REPS / REPS EACH SIDE ─────────────────────────────────────────────────
+  if (logicalField === "reps" || logicalField === "repsEachSide") {
+    const eachSideLabel = logicalField === "repsEachSide" ? " each side" : "";
+    const repSuggestions = profile.suggestions?.reps ?? [];
+
+    if (profile.repInvalidThreshold !== undefined && numericValue > profile.repInvalidThreshold) {
+      const rangeLabel = profile.repRange ? ` Best range: ${profile.repRange[0]}–${profile.repRange[1]} reps.` : "";
+      const sug = repSuggestions.length ? ` Consider: ${repSuggestions.join("; ")}.` : "";
+      return {
+        outcome: "invalid",
+        message: `${numericValue}${eachSideLabel} reps is too high for ${exerciseName} (${profile.intent}).${rangeLabel}${sug}`.trim(),
+        suggestions: repSuggestions,
+      };
+    }
+
+    if (profile.repSuboptimalThreshold !== undefined && numericValue > profile.repSuboptimalThreshold) {
+      const rangeStr = profile.repRange
+        ? `${profile.repRange[0]}–${profile.repSuboptimalThreshold}`
+        : `under ${profile.repSuboptimalThreshold}`;
+      return {
+        outcome: "suboptimal",
+        message: `${numericValue}${eachSideLabel} reps is above the recommended range for ${exerciseName}.`,
+        warningNote: `Note: ${numericValue}${eachSideLabel} reps may reduce ${profile.intent} quality — optimal range is ${rangeStr}.`,
+        suggestions: repSuggestions,
+      };
+    }
+  }
+
+  // ── SETS ──────────────────────────────────────────────────────────────────
+  if (logicalField === "sets" && profile.setsRange) {
+    const [minSets, maxSets] = profile.setsRange;
+
+    if (numericValue < 1) {
+      return { outcome: "invalid", message: `Sets must be at least 1.` };
+    }
+    if (numericValue > maxSets + 2) {
+      return {
+        outcome: "invalid",
+        message: `${numericValue} sets is excessive for ${exerciseName}. Recommended: ${minSets}–${maxSets} sets.`,
+      };
+    }
+    if (numericValue > maxSets) {
+      return {
+        outcome: "suboptimal",
+        message: `${numericValue} sets is above the usual range for ${exerciseName}.`,
+        warningNote: `Note: ${numericValue} sets is high for this movement — typical range is ${minSets}–${maxSets}.`,
+      };
+    }
+  }
+
+  // ── DURATION (time-based exercises) ───────────────────────────────────────
+  if (logicalField === "duration") {
+    const seconds = toCanonicalSeconds(numericValue, unit);
+    const durSuggestions = profile.suggestions?.duration ?? [];
+
+    if (profile.durationInvalidSeconds !== undefined && seconds > profile.durationInvalidSeconds) {
+      const sug = durSuggestions.length ? ` Try: ${durSuggestions.join("; ")}.` : "";
+      return {
+        outcome: "invalid",
+        message: `${seconds}s is too long for ${exerciseName} — quality tends to break down past ${profile.durationInvalidSeconds}s.${sug}`.trim(),
+        suggestions: durSuggestions,
+      };
+    }
+
+    if (profile.durationSuboptimalSeconds !== undefined && seconds > profile.durationSuboptimalSeconds) {
+      return {
+        outcome: "suboptimal",
+        message: `${seconds}s is on the longer side for ${exerciseName}.`,
+        warningNote: `Note: holds beyond ${profile.durationSuboptimalSeconds}s tend to lose quality — consider shorter sets with rest.`,
+        suggestions: durSuggestions,
+      };
+    }
+  }
+
+  // ── REST ──────────────────────────────────────────────────────────────────
+  if (logicalField === "rest") {
+    const seconds = toCanonicalSeconds(numericValue, unit);
+    const restSuggestions = profile.suggestions?.rest ?? [];
+
+    if (profile.restSuboptimalSeconds !== undefined && seconds < profile.restSuboptimalSeconds) {
+      const fallback = [`Consider keeping rest at ${profile.restSuboptimalSeconds}s or more`];
+      return {
+        outcome: "suboptimal",
+        message: `${seconds}s rest may not be enough recovery for ${exerciseName} (${profile.intent}).`,
+        warningNote: `Note: ${exerciseName} benefits from at least ${profile.restSuboptimalSeconds}s rest — shorter rest may reduce output.`,
+        suggestions: restSuggestions.length ? restSuggestions : fallback,
+      };
+    }
+  }
+
+  return { outcome: "valid", message: "Valid prescription change." };
+}
+
 // ─── Build DB updates from resolution ────────────────────────────────────────
 
 /**

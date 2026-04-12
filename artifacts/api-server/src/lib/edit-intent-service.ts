@@ -17,9 +17,11 @@ import {
   getExerciseFamilySchema,
   resolveField,
   resolutionToUpdates,
+  validateTrainingConstraints,
   type LogicalField,
   type FieldResolution,
   type FieldForbiddenResult,
+  type ConstraintOutcome,
 } from "./prescription-schema";
 
 // ─── Edit Plan Types ─────────────────────────────────────────────────────────
@@ -514,6 +516,10 @@ interface PrescriptionMutation {
   /** Set when the requested field is forbidden for this exercise type */
   forbidden?: true;
   forbiddenMessage?: string;
+  /** Raw numeric value before formatting — used by constraint validator */
+  rawNumericValue?: number;
+  /** Raw unit string before normalization — used by constraint validator */
+  rawUnit?: string;
 }
 
 function parsePrescriptionCommand(request: string, exerciseLabel: string): PrescriptionMutation | null {
@@ -544,7 +550,6 @@ function parsePrescriptionCommand(request: string, exerciseLabel: string): Presc
     }
 
     const updates = resolutionToUpdates(result);
-    const displayField = result.logicalField === "repsEachSide" ? "reps each side" : result.logicalField;
 
     return {
       intent: `change_${result.logicalField}`,
@@ -552,6 +557,8 @@ function parsePrescriptionCommand(request: string, exerciseLabel: string): Presc
       newValue: result.displayValue,
       summary: buildSummary(exerciseLabel, result.logicalField, result.displayValue),
       updates,
+      rawNumericValue: result.numericValue,
+      rawUnit: result.unit,
     };
   }
 
@@ -714,10 +721,41 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
           changes: [],
         };
       }
+
+      // ── Constraint validation (runs after schema is confirmed valid) ─────
+      // Checks physiological / programming principles and returns one of:
+      //   valid      → apply without any coaching note
+      //   suboptimal → apply, but append a warning to the change summary
+      //   invalid    → block the change, surface suggestions
+      const constraint: ConstraintOutcome = validateTrainingConstraints(
+        label,
+        prescription.field as LogicalField,
+        prescription.rawNumericValue ?? 0,
+        prescription.rawUnit ?? "count"
+      );
+
+      if (constraint.outcome === "invalid") {
+        const sug = constraint.suggestions?.length
+          ? ` Alternatives: ${constraint.suggestions.join("; ")}.`
+          : "";
+        return {
+          intent: "prescription_blocked",
+          scope: "exercise",
+          changeSummary: `${constraint.message}${sug}`.trim(),
+          changes: [],
+        };
+      }
+
+      // Suboptimal: apply the change but append the coaching note
+      const changeSummary =
+        constraint.outcome === "suboptimal" && constraint.warningNote
+          ? `${prescription.summary} ${constraint.warningNote}`
+          : prescription.summary;
+
       return {
         intent: prescription.intent,
         scope: "exercise",
-        changeSummary: prescription.summary,
+        changeSummary,
         changes: [{
           type: "update_exercise",
           id: exerciseId,
