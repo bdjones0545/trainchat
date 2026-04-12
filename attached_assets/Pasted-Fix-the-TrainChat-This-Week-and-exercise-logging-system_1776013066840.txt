@@ -1,0 +1,332 @@
+Fix the TrainChat “This Week” and exercise logging system so it behaves correctly by session type and exercise type.
+
+CURRENT ISSUES:
+
+1. In the “This Week” tab, tapping “+ more exercises” does not expand the card to reveal the rest of the session.
+2. The same warm-up is being repeated for every training day, even when the sessions are different.
+3. The exercise logger assumes every exercise uses weight, which is incorrect for jumps, throws, med ball work, sprint drills, mobility work, carries, timed work, and bodyweight movements.
+4. Example bug: Broad Jump is prompting for weight entry instead of distance or reps.
+5. The current system is treating exercise logging as a uniform strength-lift template instead of matching the actual exercise type.
+
+GOAL:
+Fix the “This Week” card expansion behavior, diversify warm-up generation by day/session intent, and make exercise logging dynamic based on exercise category.
+
+----------------------------------------
+1. FIX “+ MORE EXERCISES” CARD EXPANSION
+----------------------------------------
+
+In the “This Week” tab:
+
+When the user taps “+ more exercises” on a session card:
+- the card should expand inline OR open a proper session detail view
+- the hidden exercises should render immediately
+- the expanded state should be tracked per session card
+- tapping again should collapse it if inline expansion is used
+
+Requirements:
+- no dead tap targets
+- smooth mobile behavior
+- preserve current styling
+- expansion state should be unique per day/session
+
+Suggested state shape:
+expandedWeekCards = {
+  [sessionId]: true | false
+}
+
+If inline expansion is too messy, route to a dedicated session detail sheet/modal/page.
+
+----------------------------------------
+2. FIX WARM-UP GENERATION LOGIC
+----------------------------------------
+
+Do not reuse the exact same warm-up for every session unless the session intent truly matches.
+
+Warm-up generation must be session-aware.
+
+Use session focus to generate the warm-up:
+- Lower body force day → lower body mobility, dynamic prep, ankle/hip activation, landing mechanics
+- Upper body strength day → T-spine, scap activation, shoulder prep, trunk stiffness
+- Full body power day → dynamic total-body prep, sprint/jump/throw readiness, elastic prep
+
+Warm-up rules:
+- Each day should have its own warm-up template based on session goal
+- Some overlap is okay, but not identical copy/paste warm-ups across all sessions
+- Warm-up should include a role label like:
+  - Warm-Up
+  - Activation
+  - Movement Prep
+
+Example:
+Lower day:
+- leg swings
+- hip circles
+- inchworms
+- glute bridge
+- lateral band walk
+
+Upper day:
+- band pull-apart
+- wall slide
+- shoulder CARs
+- push-up plus
+- dead bug
+
+Power day:
+- pogo jumps
+- A-skips
+- med ball prep
+- snap-down
+- dynamic mobility
+
+----------------------------------------
+3. FIX EXERCISE LOGGING BY EXERCISE TYPE
+----------------------------------------
+
+CRITICAL:
+Do not show “weight” logging for every exercise.
+
+Create exercise-type-aware logging.
+
+Each exercise must have a logging mode based on its category.
+
+Supported logging modes:
+
+A. load_reps
+Use for:
+- squat
+- deadlift
+- bench
+- RDL
+- split squat
+- rows
+- presses
+Fields:
+- weight
+- reps
+- completed
+
+B. reps_only
+Use for:
+- bodyweight pull-up
+- push-up
+- chin-up
+- sit-up
+- bodyweight accessory work
+Fields:
+- reps
+- completed
+
+C. distance_reps
+Use for:
+- broad jump
+- bounding
+- sled push/pull if distance-based
+Fields:
+- distance
+- reps
+- completed
+
+D. height_reps
+Use for:
+- box jump
+- hurdle jump
+- depth jump to box
+Fields:
+- height (optional if prescribed)
+- reps
+- completed
+
+E. throws_reps
+Use for:
+- med ball slam
+- rotational med ball throw
+- chest pass
+Fields:
+- ball weight (optional)
+- reps
+- completed
+
+F. time_only
+Use for:
+- plank
+- isometric hold
+- bike interval
+- carry if time-based
+Fields:
+- time
+- completed
+
+G. distance_time
+Use for:
+- sprint
+- run
+- carry
+- sled work
+Fields:
+- distance
+- time
+- completed
+
+H. mobility_flow
+Use for:
+- leg swing
+- hip circles
+- inchworms
+- mobility sequences
+Fields:
+- completed only
+Optional:
+- reps or duration if needed
+
+----------------------------------------
+4. ADD EXERCISE METADATA
+----------------------------------------
+
+Every exercise in the library should include metadata like:
+
+{
+  name: "Broad Jump",
+  category: "jump",
+  role: "Power",
+  loggingMode: "distance_reps",
+  primaryMetric: "distance",
+  secondaryMetric: "reps"
+}
+
+Example mappings:
+
+Broad Jump:
+- category: jump
+- loggingMode: distance_reps
+
+Box Jump:
+- category: jump
+- loggingMode: height_reps OR reps_only
+
+Back Squat:
+- category: strength_lift
+- loggingMode: load_reps
+
+Pallof Press:
+- category: trunk
+- loggingMode: load_reps or reps_only depending on setup
+
+Leg Swing + Inchworm + Hip Circle:
+- category: warmup_flow
+- loggingMode: mobility_flow
+
+Medicine Ball Slam:
+- category: throw
+- loggingMode: throws_reps
+
+----------------------------------------
+5. RENDER THE LOGGER DYNAMICALLY
+----------------------------------------
+
+In the exercise bottom sheet / logging UI:
+
+Render fields conditionally based on loggingMode.
+
+Examples:
+
+For Broad Jump:
+Show:
+- distance input
+- reps input
+- complete toggle
+Do NOT show weight
+
+For Leg Swing + Inchworm + Hip Circle:
+Show:
+- completed toggle
+Optional:
+- performed as prescribed checkbox
+Do NOT show weight
+
+For Back Squat:
+Show:
+- weight
+- reps
+- complete toggle
+
+For plank:
+Show:
+- time
+- complete toggle
+
+----------------------------------------
+6. FIX CURRENT EXAMPLES IMMEDIATELY
+----------------------------------------
+
+Apply these fixes to the currently shown week:
+
+Lower Body Force Production session:
+- warm-up should be lower-body specific
+- Box Jump should not ask for weight
+- Back Squat should ask for weight/reps
+- warm-up flow should not log like a loaded lift
+
+Upper Strength + Structural Balance session:
+- remove duplicated lower-body warm-up
+- Broad Jump should log distance/reps, not weight
+- Conventional Deadlift should log weight/reps
+
+Full Body Power + Integration session:
+- use a unique power-oriented warm-up
+- Medicine Ball Slam should not default to barbell-style weight logging
+
+----------------------------------------
+7. FALLBACK LOGIC
+----------------------------------------
+
+If exercise metadata is missing:
+- do NOT default to weight logging
+- infer safest logging mode from exercise category/name
+- safe fallback order:
+  1. mobility_flow for prep drills
+  2. reps_only for bodyweight work
+  3. distance_reps for jumps/bounds
+  4. time_only for holds
+  5. load_reps only for obvious loaded strength lifts
+
+Never default everything to load_reps.
+
+----------------------------------------
+8. IMPROVE WEEK CARD UX
+----------------------------------------
+
+For each session card in “This Week”:
+- allow tapping the card header to open full session detail
+- allow “+ more exercises” to expand/collapse inline
+- preserve exercise previews
+- keep edit icon functional
+
+Optional:
+show a chevron that rotates on expand/collapse.
+
+----------------------------------------
+9. TEST CASES TO VERIFY
+----------------------------------------
+
+Test and confirm:
+- “+ more exercises” expands correctly on all days
+- each day gets a distinct warm-up tied to session goal
+- Broad Jump logs distance/reps
+- Box Jump does not ask for weight
+- mobility flows log as completed, not loaded
+- Back Squat still logs weight/reps correctly
+- Medicine Ball Slam does not use barbell logging
+- no dead UI taps in This Week
+
+----------------------------------------
+10. DELIVERABLES
+----------------------------------------
+
+After implementation, provide:
+1. what caused the +more exercises expansion bug
+2. what caused warm-up duplication
+3. how loggingMode is assigned per exercise
+4. the updated metadata structure for exercises
+5. which components/files were updated
+6. any remaining edge cases to test

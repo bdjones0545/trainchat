@@ -552,6 +552,12 @@ interface WeekViewProps {
 }
 
 function WeekView({ highlightedIds, onEditExercise, onEditSession, onEditWeek }: WeekViewProps) {
+  const [expandedCards, setExpandedCards] = useState<Record<number, boolean>>({});
+
+  function toggleCard(sessionId: number) {
+    setExpandedCards((prev) => ({ ...prev, [sessionId]: !prev[sessionId] }));
+  }
+
   const { data: week, isLoading, error } = useQuery({
     queryKey: ["training-system-week"],
     queryFn: fetchCurrentWeek,
@@ -670,7 +676,7 @@ function WeekView({ highlightedIds, onEditExercise, onEditSession, onEditWeek }:
               {session.exercises?.length > 0 && (
                 <div className="border-t border-border px-4 pb-4 pt-3">
                   <div className="space-y-2">
-                    {session.exercises.slice(0, 3).map((ex: any, exIdx: number) => (
+                    {(expandedCards[session.id] ? session.exercises : session.exercises.slice(0, 3)).map((ex: any, exIdx: number) => (
                       <div key={ex.id} className={`flex items-center gap-3 rounded-md px-1 py-0.5 transition-all duration-500 ${highlightedIds.exercises.has(ex.id) ? "bg-primary/5 ring-1 ring-primary/30" : ""}`}>
                         <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground flex-shrink-0">{exIdx + 1}</div>
                         <span className="text-xs text-foreground/80 flex-1 truncate">{ex.name}</span>
@@ -688,7 +694,22 @@ function WeekView({ highlightedIds, onEditExercise, onEditSession, onEditWeek }:
                       </div>
                     ))}
                     {session.exercises.length > 3 && (
-                      <p className="text-xs text-muted-foreground pl-8">+{session.exercises.length - 3} more exercises</p>
+                      <button
+                        onClick={() => toggleCard(session.id)}
+                        className="flex items-center gap-1.5 pl-8 pt-1 text-xs text-primary/70 hover:text-primary transition-colors"
+                      >
+                        {expandedCards[session.id] ? (
+                          <>
+                            <ChevronUp className="w-3 h-3" />
+                            <span>Show less</span>
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown className="w-3 h-3" />
+                            <span>+{session.exercises.length - 3} more exercises</span>
+                          </>
+                        )}
+                      </button>
                     )}
                   </div>
                 </div>
@@ -1439,6 +1460,7 @@ export default function SystemPage() {
       prescribedSets: exercise.sets ? parseInt(String(exercise.sets), 10) || 3 : 3,
       savedProgramId: activeSystem?.savedProgramId ?? undefined,
       trainingGoal: activeSystem?.trainingGoal ?? activeSystem?.goal ?? undefined,
+      category: exercise.category ?? undefined,
     });
   }
 

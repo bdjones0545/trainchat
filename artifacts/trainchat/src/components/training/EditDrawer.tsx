@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
 import type { ProgressionTarget, SetLog } from "./ExerciseLogInline";
+import { inferLoggingMode, getModeConfig, type LoggingMode } from "@/lib/loggingMode";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -91,6 +92,7 @@ export interface ExerciseContext {
   savedProgramId?: number;
   dayNumber?: number;
   trainingGoal?: string;
+  category?: string;
 }
 
 interface EditDrawerProps {
@@ -262,15 +264,20 @@ function clampReps(v: number) {
 
 // ─── Inline set row ───────────────────────────────────────────────────────────
 
-function SetRow({ set, onChange, onSave }: {
+function SetRow({ set, mode, onChange, onSave }: {
   set: SetLog;
+  mode: LoggingMode;
   onChange: (patch: Partial<SetLog>) => void;
   onSave: () => void;
 }) {
-  function adjW(d: number) {
-    onChange({ weight: clampWeight((set.weight ?? 0) + d) });
+  const cfg = getModeConfig(mode);
+
+  function adjPrimary(d: number) {
+    const step = Math.abs(d) < 2 ? 1 : cfg.primaryDelta;
+    const next = (set.weight ?? 0) + (d > 0 ? step : -step);
+    onChange({ weight: Math.max(0, Math.round(next * 10) / 10) });
   }
-  function adjR(d: number) {
+  function adjSecondary(d: number) {
     onChange({ reps: clampReps((set.reps ?? 0) + d) });
   }
   function toggle() {
@@ -292,63 +299,70 @@ function SetRow({ set, onChange, onSave }: {
         S{set.setNumber}
       </span>
 
-      {/* Weight */}
-      <div className="flex items-center gap-1 bg-background/60 border border-border/60 rounded-lg px-2 py-1">
-        <button onClick={() => adjW(-2.5)} type="button" className="text-muted-foreground/60 hover:text-foreground">
-          <Minus className="w-3 h-3" />
-        </button>
-        <input
-          type="number"
-          inputMode="decimal"
-          value={set.weight ?? ""}
-          onChange={(e) => {
-            const n = parseFloat(e.target.value);
-            onChange({ weight: isNaN(n) ? null : clampWeight(n) });
-          }}
-          placeholder="lbs"
-          className="w-12 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/40 focus:outline-none tabular-nums text-center"
-          step={2.5}
-        />
-        <span className="text-[9px] text-muted-foreground/40 flex-shrink-0">lb</span>
-        <button onClick={() => adjW(2.5)} type="button" className="text-muted-foreground/60 hover:text-foreground">
-          <Plus className="w-3 h-3" />
-        </button>
-      </div>
-
-      {/* Quick +5/+10 */}
-      <div className="flex gap-0.5">
-        {[5, 10].map((d) => (
-          <button
-            key={d}
-            onClick={() => adjW(d)}
-            type="button"
-            className="text-[9px] font-bold text-muted-foreground/50 hover:text-primary px-1.5 py-1 rounded-md bg-muted/10 hover:bg-primary/10 transition-colors"
-          >
-            +{d}
+      {/* Primary field (weight / distance / height / time) */}
+      {cfg.showPrimary && (
+        <div className="flex items-center gap-1 bg-background/60 border border-border/60 rounded-lg px-2 py-1">
+          <button onClick={() => adjPrimary(-1)} type="button" className="text-muted-foreground/60 hover:text-foreground">
+            <Minus className="w-3 h-3" />
           </button>
-        ))}
-      </div>
+          <input
+            type="number"
+            inputMode="decimal"
+            value={set.weight ?? ""}
+            onChange={(e) => {
+              const n = parseFloat(e.target.value);
+              onChange({ weight: isNaN(n) ? null : Math.max(0, n) });
+            }}
+            placeholder={cfg.primaryPlaceholder}
+            className="w-12 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/40 focus:outline-none tabular-nums text-center"
+            step={cfg.primaryStep}
+          />
+          <span className="text-[9px] text-muted-foreground/40 flex-shrink-0">{cfg.primaryLabel}</span>
+          <button onClick={() => adjPrimary(1)} type="button" className="text-muted-foreground/60 hover:text-foreground">
+            <Plus className="w-3 h-3" />
+          </button>
+        </div>
+      )}
 
-      {/* Reps */}
-      <div className="flex items-center gap-1 bg-background/60 border border-border/60 rounded-lg px-2 py-1">
-        <button onClick={() => adjR(-1)} type="button" className="text-muted-foreground/60 hover:text-foreground">
-          <Minus className="w-3 h-3" />
-        </button>
-        <input
-          type="number"
-          inputMode="numeric"
-          value={set.reps ?? ""}
-          onChange={(e) => {
-            const n = parseInt(e.target.value, 10);
-            onChange({ reps: isNaN(n) ? null : clampReps(n) });
-          }}
-          placeholder="reps"
-          className="w-8 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/40 focus:outline-none tabular-nums text-center"
-        />
-        <button onClick={() => adjR(1)} type="button" className="text-muted-foreground/60 hover:text-foreground">
-          <Plus className="w-3 h-3" />
-        </button>
-      </div>
+      {/* Quick +5/+10 — load_reps only */}
+      {cfg.showQuickJumps && (
+        <div className="flex gap-0.5">
+          {[5, 10].map((d) => (
+            <button
+              key={d}
+              onClick={() => onChange({ weight: clampWeight((set.weight ?? 0) + d) })}
+              type="button"
+              className="text-[9px] font-bold text-muted-foreground/50 hover:text-primary px-1.5 py-1 rounded-md bg-muted/10 hover:bg-primary/10 transition-colors"
+            >
+              +{d}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Secondary field (reps / time) */}
+      {cfg.showSecondary && (
+        <div className="flex items-center gap-1 bg-background/60 border border-border/60 rounded-lg px-2 py-1">
+          <button onClick={() => adjSecondary(-1)} type="button" className="text-muted-foreground/60 hover:text-foreground">
+            <Minus className="w-3 h-3" />
+          </button>
+          <input
+            type="number"
+            inputMode="numeric"
+            value={set.reps ?? ""}
+            onChange={(e) => {
+              const n = parseInt(e.target.value, 10);
+              onChange({ reps: isNaN(n) ? null : clampReps(n) });
+            }}
+            placeholder={cfg.secondaryPlaceholder}
+            className="w-10 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/40 focus:outline-none tabular-nums text-center"
+          />
+          <span className="text-[9px] text-muted-foreground/40 flex-shrink-0">{cfg.secondaryLabel}</span>
+          <button onClick={() => adjSecondary(1)} type="button" className="text-muted-foreground/60 hover:text-foreground">
+            <Plus className="w-3 h-3" />
+          </button>
+        </div>
+      )}
 
       {/* Completed toggle */}
       <button
@@ -377,7 +391,9 @@ function ExerciseLogSection({
   exerciseContext: ExerciseContext;
   onLogComplete: (tag: FeedbackTag | null) => void;
 }) {
-  const prescribedSets = exerciseContext.prescribedSets ?? 3;
+  const mode = inferLoggingMode(exerciseName, exerciseContext.category);
+  const isMobilityFlow = mode === "mobility_flow";
+  const prescribedSets = isMobilityFlow ? 1 : (exerciseContext.prescribedSets ?? 3);
 
   // Fetch last session data / progression target
   const { data: targetData } = useQuery<{ targets: ProgressionTarget[] }>({
@@ -492,6 +508,36 @@ function ExerciseLogSection({
     );
   }
 
+  // ── Mobility / warm-up flow — simple "Done" UI ────────────────────────────
+  if (isMobilityFlow) {
+    const done = sets[0]?.completed ?? false;
+    return (
+      <div className="px-5 pt-4 pb-2 space-y-3">
+        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+          Warm-Up / Prep
+        </p>
+        <button
+          onClick={async () => {
+            updateSet(0, { completed: true });
+            await autoSaveSet(0);
+            await handleComplete();
+          }}
+          disabled={saving || done}
+          type="button"
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-border text-sm font-semibold text-muted-foreground hover:border-green-500/40 hover:text-green-400 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {saving ? (
+            <><span className="w-4 h-4 border-2 border-green-400/30 border-t-green-400 rounded-full animate-spin" /> Saving…</>
+          ) : done ? (
+            <><CheckCircle2 className="w-4 h-4 text-green-400" /> Done</>
+          ) : (
+            <><Check className="w-4 h-4" /> Mark as Done</>
+          )}
+        </button>
+      </div>
+    );
+  }
+
   const completedCount = sets.filter((s) => s.completed).length;
   const stateLabel = target?.progressionState === "ready_to_progress"
     ? { text: "↑ Progress", cls: "text-green-400 bg-green-500/10 border-green-500/20" }
@@ -500,6 +546,22 @@ function ExerciseLogSection({
     : target?.progressionState === "hold"
     ? { text: "→ Hold", cls: "text-amber-400 bg-amber-500/10 border-amber-500/20" }
     : null;
+
+  const cfg = getModeConfig(mode);
+
+  function formatLastSession() {
+    if (!hasHistory) return null;
+    const parts: string[] = [];
+    if (lastLoad !== null) {
+      const label = cfg.primaryLabel || "units";
+      parts.push(`${lastLoad} ${label}`);
+    }
+    if (lastReps !== null) {
+      const label = cfg.secondaryLabel === "s" ? "sec" : "reps";
+      parts.push(`${lastReps} ${label}`);
+    }
+    return parts.join(" × ");
+  }
 
   return (
     <div className="px-5 pt-4 pb-2 space-y-3">
@@ -521,13 +583,9 @@ function ExerciseLogSection({
           <>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <span>Last session:</span>
-              <span className="font-semibold text-foreground">
-                {lastLoad !== null ? `${lastLoad} lbs` : ""}
-                {lastLoad !== null && lastReps !== null ? " × " : ""}
-                {lastReps !== null ? `${lastReps} reps` : ""}
-              </span>
+              <span className="font-semibold text-foreground">{formatLastSession()}</span>
             </div>
-            {target?.targetLoad !== null && target?.targetLoad !== lastLoad && (
+            {mode === "load_reps" && target?.targetLoad !== null && target?.targetLoad !== lastLoad && (
               <div className="flex items-center gap-1 text-xs">
                 <TrendingUp className="w-3 h-3 text-primary/60" />
                 <span className="text-primary font-semibold">
@@ -554,6 +612,7 @@ function ExerciseLogSection({
           <SetRow
             key={set.setNumber}
             set={set}
+            mode={mode}
             onChange={(patch) => updateSet(i, patch)}
             onSave={() => autoSaveSet(i)}
           />

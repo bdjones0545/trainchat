@@ -627,16 +627,57 @@ function getSystemName(goal: string, style: string): string {
 
 function getWarmupNotes(sessionType: string, emphasis: string): string {
   if (sessionType === "rest") return "";
-  if (emphasis.toLowerCase().includes("squat") || emphasis.toLowerCase().includes("lower") || emphasis.toLowerCase().includes("leg")) {
-    return "5 min: hip circles, leg swings, bodyweight squats, glute bridges × 10, band walks × 10 each direction";
+  const e = emphasis.toLowerCase();
+
+  // Power / explosive / reactive / speed sessions
+  if (
+    e.includes("power") || e.includes("explos") || e.includes("plyometric") ||
+    e.includes("acceleration") || e.includes("reactive") || e.includes("speed") ||
+    e.includes("jump") || e.includes("sprint")
+  ) {
+    return "10 min: pogo jumps × 20, A-skips 2 × 20m, snap-downs × 5, hip circles × 10 each, ankle circles × 15, dynamic hip CARs × 5 each";
   }
-  if (emphasis.toLowerCase().includes("push") || emphasis.toLowerCase().includes("press") || emphasis.toLowerCase().includes("chest")) {
-    return "5 min: shoulder circles, band pull-aparts × 15, wall slides × 10, light band press × 15";
+
+  // Full body / integration / total body
+  if (e.includes("full body") || e.includes("integration") || e.includes("total body") || e.includes("full-body")) {
+    return "8 min: inchworms × 5, hip circles × 10, arm swings × 10, glute bridge × 12, pogo hops × 20, band pull-apart × 10";
   }
-  if (emphasis.toLowerCase().includes("pull") || emphasis.toLowerCase().includes("row") || emphasis.toLowerCase().includes("back")) {
-    return "5 min: thoracic rotation, band pull-aparts × 15, face pulls × 15, dead hang or scapular pulls × 10";
+
+  // Lower body force / squat / deadlift / hip / leg
+  if (
+    e.includes("lower") || e.includes("leg") || e.includes("squat") ||
+    e.includes("force production") || e.includes("hip") || e.includes("deadlift") ||
+    e.includes("hinge") || e.includes("glute")
+  ) {
+    return "8 min: leg swings × 10 each, hip circles × 10, inchworms × 5, glute bridge × 12, lateral band walk × 10 each direction, bodyweight squat × 10";
   }
-  return "5 min: dynamic stretching, joint circles, activation movements for primary muscle groups";
+
+  // Upper body — push / press / chest / shoulder
+  if (
+    e.includes("upper") || e.includes("push") || e.includes("press") ||
+    e.includes("chest") || e.includes("shoulder") || e.includes("structural balance") ||
+    e.includes("bench")
+  ) {
+    return "6 min: band pull-apart × 15, wall slides × 10, shoulder CARs × 5 each, push-up plus × 10, scapular pull × 10";
+  }
+
+  // Pull / row / back / scap
+  if (e.includes("pull") || e.includes("row") || e.includes("back") || e.includes("scap") || e.includes("lat")) {
+    return "6 min: thoracic rotation × 10 each, band pull-apart × 15, dead hang × 20 sec, face pull × 15, arm circles × 10";
+  }
+
+  // Trunk / core / stability / integrity
+  if (e.includes("trunk") || e.includes("core") || e.includes("stability") || e.includes("integrity")) {
+    return "5 min: dead bug × 5 each side, cat-cow × 10, bird dog × 10 each, 90-90 breathing × 5 breaths, hip flexor stretch × 30 sec each";
+  }
+
+  // Conditioning / metabolic / circuit
+  if (e.includes("condition") || e.includes("metabolic") || e.includes("circuit") || e.includes("finisher") || e.includes("endurance")) {
+    return "5 min: light jog in place × 90 sec, leg swings × 10 each, arm circles × 10, high knees × 20m, dynamic lateral shuffle × 20m";
+  }
+
+  // Generic fallback
+  return "5 min: dynamic stretching, joint circles, activation movements — tailor to today's session focus";
 }
 
 function getCoachingNotes(goal: string, weekIndex: number, dayLabel: string): string {

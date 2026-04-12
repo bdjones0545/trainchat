@@ -14,6 +14,7 @@
 import { useState, useEffect } from "react";
 import { Check, TrendingUp, Plus, Minus, Copy, ChevronDown, ChevronUp } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
+import { inferLoggingMode, getModeConfig } from "@/lib/loggingMode";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -141,19 +142,24 @@ function NumInput({
 
 function SetRow({
   set,
+  mode,
   onChange,
   onAutoSave,
 }: {
   set: SetLog;
+  mode: ReturnType<typeof getModeConfig>["mode"];
   onChange: (patch: Partial<SetLog>) => void;
   onAutoSave: () => void;
 }) {
-  function adjustWeight(delta: number) {
-    const base = set.weight ?? 0;
-    onChange({ weight: clampWeight(base + delta) });
+  const cfg = getModeConfig(mode);
+
+  function adjustPrimary(delta: number) {
+    const step = cfg.primaryDelta;
+    const next = Math.max(0, (set.weight ?? 0) + delta * step);
+    onChange({ weight: Math.round(next * 10) / 10 });
   }
 
-  function adjustReps(delta: number) {
+  function adjustSecondary(delta: number) {
     const base = set.reps ?? 0;
     onChange({ reps: clampReps(base + delta) });
   }
@@ -177,73 +183,79 @@ function SetRow({
         S{set.setNumber}
       </span>
 
-      {/* Weight section */}
-      <div className="flex items-center gap-1 bg-muted/20 border border-border/40 rounded-md px-1.5 py-0.5">
-        <button
-          onClick={() => adjustWeight(-2.5)}
-          className="text-muted-foreground/60 hover:text-foreground transition-colors"
-          type="button"
-        >
-          <Minus className="w-2.5 h-2.5" />
-        </button>
-        <NumInput
-          value={set.weight}
-          onChange={(v) => onChange({ weight: v !== null ? clampWeight(v) : null })}
-          placeholder="lbs"
-          step={2.5}
-          wide
-        />
-        <span className="text-[9px] text-muted-foreground/40 flex-shrink-0">lb</span>
-        <button
-          onClick={() => adjustWeight(2.5)}
-          className="text-muted-foreground/60 hover:text-foreground transition-colors"
-          type="button"
-        >
-          <Plus className="w-2.5 h-2.5" />
-        </button>
-      </div>
+      {/* Primary field (weight / distance / height / time) */}
+      {cfg.showPrimary && (
+        <div className="flex items-center gap-1 bg-muted/20 border border-border/40 rounded-md px-1.5 py-0.5">
+          <button
+            onClick={() => adjustPrimary(-1)}
+            className="text-muted-foreground/60 hover:text-foreground transition-colors"
+            type="button"
+          >
+            <Minus className="w-2.5 h-2.5" />
+          </button>
+          <NumInput
+            value={set.weight}
+            onChange={(v) => onChange({ weight: v !== null ? Math.max(0, v) : null })}
+            placeholder={cfg.primaryPlaceholder}
+            step={cfg.primaryStep}
+            wide
+          />
+          <span className="text-[9px] text-muted-foreground/40 flex-shrink-0">{cfg.primaryLabel}</span>
+          <button
+            onClick={() => adjustPrimary(1)}
+            className="text-muted-foreground/60 hover:text-foreground transition-colors"
+            type="button"
+          >
+            <Plus className="w-2.5 h-2.5" />
+          </button>
+        </div>
+      )}
 
-      {/* Quick +5/+10 */}
-      <div className="flex gap-0.5">
-        <button
-          onClick={() => adjustWeight(5)}
-          className="text-[8px] font-bold text-muted-foreground/50 hover:text-primary transition-colors px-1 py-0.5 rounded bg-muted/10 hover:bg-primary/10"
-          type="button"
-        >
-          +5
-        </button>
-        <button
-          onClick={() => adjustWeight(10)}
-          className="text-[8px] font-bold text-muted-foreground/50 hover:text-primary transition-colors px-1 py-0.5 rounded bg-muted/10 hover:bg-primary/10"
-          type="button"
-        >
-          +10
-        </button>
-      </div>
+      {/* Quick +5/+10 — load_reps only */}
+      {cfg.showQuickJumps && (
+        <div className="flex gap-0.5">
+          <button
+            onClick={() => onChange({ weight: clampWeight((set.weight ?? 0) + 5) })}
+            className="text-[8px] font-bold text-muted-foreground/50 hover:text-primary transition-colors px-1 py-0.5 rounded bg-muted/10 hover:bg-primary/10"
+            type="button"
+          >
+            +5
+          </button>
+          <button
+            onClick={() => onChange({ weight: clampWeight((set.weight ?? 0) + 10) })}
+            className="text-[8px] font-bold text-muted-foreground/50 hover:text-primary transition-colors px-1 py-0.5 rounded bg-muted/10 hover:bg-primary/10"
+            type="button"
+          >
+            +10
+          </button>
+        </div>
+      )}
 
-      {/* Reps */}
-      <div className="flex items-center gap-1 bg-muted/20 border border-border/40 rounded-md px-1.5 py-0.5">
-        <button
-          onClick={() => adjustReps(-1)}
-          className="text-muted-foreground/60 hover:text-foreground transition-colors"
-          type="button"
-        >
-          <Minus className="w-2.5 h-2.5" />
-        </button>
-        <NumInput
-          value={set.reps}
-          onChange={(v) => onChange({ reps: v !== null ? clampReps(v) : null })}
-          placeholder="reps"
-        />
-        <span className="text-[9px] text-muted-foreground/40 flex-shrink-0">rp</span>
-        <button
-          onClick={() => adjustReps(1)}
-          className="text-muted-foreground/60 hover:text-foreground transition-colors"
-          type="button"
-        >
-          <Plus className="w-2.5 h-2.5" />
-        </button>
-      </div>
+      {/* Secondary field (reps / time) */}
+      {cfg.showSecondary && (
+        <div className="flex items-center gap-1 bg-muted/20 border border-border/40 rounded-md px-1.5 py-0.5">
+          <button
+            onClick={() => adjustSecondary(-1)}
+            className="text-muted-foreground/60 hover:text-foreground transition-colors"
+            type="button"
+          >
+            <Minus className="w-2.5 h-2.5" />
+          </button>
+          <NumInput
+            value={set.reps}
+            onChange={(v) => onChange({ reps: v !== null ? clampReps(v) : null })}
+            placeholder={cfg.secondaryPlaceholder}
+          />
+          <span className="text-[9px] text-muted-foreground/40 flex-shrink-0">{cfg.secondaryLabel}</span>
+          <button
+            onClick={() => adjustSecondary(1)}
+            className="text-muted-foreground/60 hover:text-foreground transition-colors"
+            type="button"
+          >
+            <Plus className="w-2.5 h-2.5" />
+          </button>
+        </div>
+      )}
 
       {/* Completed checkbox */}
       <button
@@ -386,6 +398,8 @@ export default function ExerciseLogInline({
   // SESSION MODE UI
   // ═══════════════════════════════════════════════════════════════════════════
 
+  const mode = inferLoggingMode(exerciseName, exerciseRole);
+
   if (sessionActive) {
     const completedCount = sets.filter((s) => s.completed).length;
     const allDone = completedCount === sets.length;
@@ -450,6 +464,7 @@ export default function ExerciseLogInline({
             <SetRow
               key={set.setNumber}
               set={set}
+              mode={mode}
               onChange={(patch) => updateSet(i, patch)}
               onAutoSave={() => autoSaveSet(i)}
             />
