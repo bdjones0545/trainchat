@@ -1,0 +1,148 @@
+Fix the TrainChat “Coach Forecast” system so it never generates a forecast for a brand new user with no real data.
+
+Problem:
+A newly created account with zero inputs, zero check-ins, and zero completed sessions is still seeing a forecast card like “Fatigue accumulating.” This breaks trust because the system is making training predictions without user-specific evidence.
+
+Goal:
+Add strict forecast gating and confidence states so the feature only shows real insights when enough real user data exists.
+
+What to change:
+
+1. Add forecast eligibility logic
+Create a single source of truth function for forecast readiness.
+
+Example logic:
+- No Data State:
+  - completedWorkouts === 0
+  - AND checkIns === 0
+  - AND no training history exists
+- Low Confidence State:
+  - completedWorkouts is 1–2
+  - OR checkIns is 1
+- Active Forecast State:
+  - completedWorkouts >= 3
+  - AND checkIns >= 2
+
+2. Prevent hallucinated/default forecast generation
+Do not allow any forecast card such as:
+- Fatigue accumulating
+- Recovery dropping
+- Load spike coming
+unless the user is in Active Forecast State.
+
+If the user does not meet the data threshold, the forecast engine must not generate training-risk conclusions.
+
+3. Replace current output with proper empty states
+
+A. No Data State UI
+Title:
+“No Forecast Yet”
+
+Body:
+“Your Coach Forecast activates after you log training sessions and check-ins. Once TrainChat has enough real data, it will begin detecting recovery and fatigue trends.”
+
+CTA button:
+“Log First Session”
+
+Optional subtext:
+“We need real inputs before generating personalized coaching forecasts.”
+
+B. Low Confidence State UI
+Title:
+“Forecast Warming Up”
+
+Body:
+“We’re starting to learn your training patterns. Keep logging sessions and check-ins to unlock higher-confidence coaching insights.”
+
+Badge:
+“Low Confidence”
+
+Optional CTA:
+“Complete Another Check-In”
+
+C. Active Forecast State UI
+Only here should the normal forecast cards appear.
+
+4. Add confidence scoring
+Create a simple confidence system:
+- none
+- low
+- medium
+- high
+
+Suggested logic:
+- none = 0 workouts and 0 check-ins
+- low = early data only
+- medium = minimum threshold reached
+- high = enough ongoing data over multiple sessions/check-ins
+
+Display the confidence level in the forecast UI and use it to determine whether forecast cards can render.
+
+5. Add defensive backend logic
+Even if the frontend tries to request a forecast, the backend/API should return a safe structured response when insufficient data exists.
+
+Example response shape:
+{
+  "status": "no_data",
+  "confidence": "none",
+  "message": "Not enough training data to generate a forecast yet.",
+  "forecastItems": []
+}
+
+For low confidence:
+{
+  "status": "warming_up",
+  "confidence": "low",
+  "message": "We’re still learning this user’s patterns.",
+  "forecastItems": []
+}
+
+Only return real forecastItems when status is “active”.
+
+6. Audit all fallback/default seeds
+Search the codebase for any hardcoded default forecast content, seeded fatigue messages, mock risk cards, placeholder data, or demo values that may be leaking into live user accounts.
+Remove them from production behavior.
+If demo data is needed, make sure it is only shown in explicit demo mode.
+
+7. Add conditional rendering in the forecast tab
+Update the top-right menu forecast tab so it renders based on forecast state:
+- no_data → empty state card
+- warming_up → low confidence card
+- active → real forecast cards
+
+8. Add telemetry/debug logging
+Log what source data the forecast is using:
+- completed workout count
+- check-in count
+- training history count
+- confidence level
+- forecast status
+
+This is for debugging so we can verify the forecast is not being shown incorrectly for new users.
+
+9. Make the copy feel premium
+Keep the visual design aligned with TrainChat’s premium dark UI.
+Do not make the empty state feel like an error.
+It should feel intelligent, deliberate, and trustworthy.
+
+10. Important rule
+The system must never imply:
+- fatigue
+- overtraining
+- recovery issues
+- load management recommendations
+without real user-specific data.
+
+Deliverables:
+- Implement the forecast eligibility logic
+- Update backend/API response handling
+- Update frontend rendering states
+- Remove fake/default forecast outputs for new users
+- Ensure a brand new account shows “No Forecast Yet” instead of a fabricated insight
+
+After implementation:
+Provide a summary of:
+1. what was causing the issue
+2. what files were changed
+3. how the new forecast gating works
+4. any remaining edge cases to test
