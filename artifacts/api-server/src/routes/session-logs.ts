@@ -13,6 +13,7 @@ import {
   type ExerciseLogEntry,
 } from "../lib/progression";
 import { runBlockEvaluationAndLog } from "./block-intelligence";
+import { syncMemoriesFromData } from "../lib/memory";
 
 const router: IRouter = Router();
 
@@ -568,6 +569,10 @@ router.post("/session-logs/complete", requireAuth, async (req: any, res): Promis
   // ── 7. Run block-level evaluation (non-blocking — fires in background) ──────
   // Do not await — this is best-effort and must not delay the response.
   runBlockEvaluationAndLog(userId).catch(() => {});
+
+  // ── 7b. Sync long-term coach memory (non-blocking — must not delay response) ─
+  // Extracts session-level performance patterns and updates the memory store.
+  syncMemoriesFromData(userId).catch(() => {});
 
   // ── 8. Write accepted live adjustments to change log ───────────────────────
   if (data.liveAdjustments && data.liveAdjustments.length > 0 && activeSystemId) {

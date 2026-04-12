@@ -1,0 +1,334 @@
+Build the next layer of TrainChat: coach memory and user-specific adaptation.
+
+CURRENT STATE:
+TrainChat can:
+- generate training programs
+- organize training into Today / This Week / Block / History
+- classify exercises by role and logging type
+- log objective and subjective session data
+- apply progression logic by exercise type
+- give mid-session recommendations
+- make week/block-level adjustments
+
+PROBLEM:
+The system can react to data, but it does not yet develop a real memory of the individual user.
+It still behaves too generically across time.
+
+GOAL:
+Create a coach memory system that learns user-specific tendencies, tolerances, preferences, and recurring issues, then uses that memory to personalize future programming and coaching decisions.
+
+This should allow TrainChat to learn things like:
+- user under-recovers when lower-body volume gets too high
+- user responds well to unilateral work
+- user dislikes long sessions
+- user consistently rates heavy deadlift days as too hard
+- user tolerates power before strength better than the reverse
+- user gets knee discomfort with certain squat patterns
+- user prefers dumbbells over barbells
+- user is more compliant with 45-minute sessions than 75-minute sessions
+
+----------------------------------------
+1. CREATE A USER PERFORMANCE MEMORY MODEL
+----------------------------------------
+
+Create a persistent user memory object such as:
+
+userPerformanceMemory = {
+  userId,
+  trainingProfile: {
+    preferredSessionLength,
+    preferredTrainingDays,
+    equipmentConstraints,
+    goalPriority,
+    compliancePattern
+  },
+  tolerancePatterns: {
+    lowerBodyVolumeTolerance,
+    upperBodyVolumeTolerance,
+    powerTolerance,
+    sessionDensityTolerance,
+    recoveryCapacity
+  },
+  progressionPatterns: {
+    respondsToLoadProgression,
+    respondsToRepProgression,
+    stallsOnCertainPatterns,
+    bestProgressionStyle
+  },
+  movementPatterns: {
+    toleratedExercises: [],
+    aggravatingExercises: [],
+    preferredVariations: [],
+    weakLinks: []
+  },
+  recoveryPatterns: {
+    fatigueTrend,
+    postSessionEnergyTrend,
+    sorenessTrend,
+    deloadFrequencyNeed
+  },
+  adherencePatterns: {
+    skipRiskByDay,
+    averageCompletionRate,
+    averageSessionDuration,
+    enjoymentTrend
+  },
+  updatedAt
+}
+
+This memory should evolve over time.
+
+----------------------------------------
+2. BUILD MEMORY EXTRACTION LOGIC
+----------------------------------------
+
+Create functions such as:
+
+updateUserPerformanceMemory({
+  recentSessions,
+  exerciseHistory,
+  checkIns,
+  painFlags,
+  blockAdjustments,
+  feedbackHistory
+})
+
+This should identify recurring patterns, not just one-off events.
+
+Examples:
+- if lower-body sessions repeatedly become too hard when total volume exceeds a threshold, store that
+- if user repeatedly skips the third weekly session, store likely adherence issue
+- if user consistently reports good energy after shorter sessions, store preferred session density
+
+----------------------------------------
+3. DISTINGUISH SIGNAL STRENGTH
+----------------------------------------
+
+Do not treat one session like a permanent memory.
+
+Add confidence tiers:
+- low confidence = one or two observations
+- medium confidence = repeated recent observations
+- high confidence = consistent pattern over time
+
+Example:
+memoryEntry = {
+  pattern: "lower_body_volume_tolerance_low",
+  confidence: "high",
+  evidenceCount: 6,
+  lastObservedAt: timestamp
+}
+
+Only high-confidence patterns should strongly shape future programming.
+
+----------------------------------------
+4. USE MEMORY DURING PROGRAM GENERATION
+----------------------------------------
+
+When generating new sessions, weeks, or blocks, consult userPerformanceMemory first.
+
+Examples:
+- if preferredSessionLength is 45 min, avoid repeatedly generating 75-minute sessions
+- if aggravatingExercises includes conventional deadlift, prefer trap bar or RDL
+- if bestProgressionStyle is reps-first, use that before load jumps
+- if user responds well to unilateral lower-body work, bias those choices appropriately
+- if skipRiskByDay is high for Friday, build a shorter Friday session
+
+This should make initial generation smarter, not just later adaptation.
+
+----------------------------------------
+5. USE MEMORY DURING MID-SESSION COACHING
+----------------------------------------
+
+Mid-session recommendations should also consult memory.
+
+Examples:
+- if user historically under-recovers on high lower-body loads, be more conservative
+- if user usually finishes strong on upper-body work, do not reduce too early
+- if a certain exercise has repeatedly caused issues, suggest a swap faster
+
+This will make coaching feel personalized rather than generic.
+
+----------------------------------------
+6. USE MEMORY DURING BLOCK INTELLIGENCE
+----------------------------------------
+
+Block-level decisions should incorporate learned tendencies.
+
+Examples:
+- deload slightly earlier for users with repeated fatigue accumulation
+- keep exercise variety lower for users who adhere better with familiarity
+- bias toward shorter sessions for low-adherence profiles
+- progress more slowly on patterns that historically stall
+
+----------------------------------------
+7. ADD EXERCISE PREFERENCE MEMORY
+----------------------------------------
+
+Track exercise-specific sentiment and performance.
+
+For each exercise, store:
+- average completion success
+- average difficulty rating
+- pain/discomfort association
+- enjoyment
+- progression success
+- swap frequency
+
+Example:
+exerciseMemory = {
+  exerciseId,
+  successRate,
+  averageDifficulty,
+  painAssociation,
+  enjoymentScore,
+  progressionSuccess,
+  wasSwappedOften
+}
+
+Use this to decide:
+- keep
+- progress
+- regress
+- replace
+
+----------------------------------------
+8. ADD ADHERENCE MEMORY
+----------------------------------------
+
+Track what actually keeps the user consistent.
+
+Examples:
+- best-performing training days
+- average completed sessions per week
+- average time to complete
+- dropout risk by session length or density
+
+Use this to make the program more executable, not just theoretically ideal.
+
+The system should learn:
+“the best plan is the one this user will actually do.”
+
+----------------------------------------
+9. ADD RECOVERY MEMORY
+----------------------------------------
+
+Track:
+- how often user reports drained/tired
+- how long fatigue lasts after lower vs upper sessions
+- how often hard sessions are followed by partial/skipped sessions
+- whether the user needs more rest after certain session types
+
+Use this to influence:
+- deload timing
+- weekly spacing
+- accessory volume
+- progression aggressiveness
+
+----------------------------------------
+10. BUILD MEMORY-AWARE DECISION LAYER
+----------------------------------------
+
+Create a wrapper such as:
+
+getPersonalizedRecommendation({
+  baseRecommendation,
+  userPerformanceMemory,
+  currentContext
+})
+
+This should modify generic coaching logic based on known user patterns.
+
+Example:
+Base recommendation:
+- increase squat load next week
+
+Memory-aware override:
+- user has low tolerance for lower-body volume and showed fatigue after 2 straight load progressions
+→ hold load steady and reduce accessory work instead
+
+----------------------------------------
+11. SURFACE MEMORY INSIGHTS TO THE USER
+----------------------------------------
+
+Create premium, coach-like insights such as:
+
+- “You tend to perform better with shorter, denser sessions.”
+- “Your lower-body fatigue rises when weekly volume gets too high, so this block stays tighter.”
+- “You respond well to unilateral lower-body work, so that pattern is being emphasized.”
+- “Friday adherence drops when sessions run too long, so the week is front-loaded.”
+
+These should be short and useful, not creepy or overly technical.
+
+----------------------------------------
+12. WRITE MEMORY UPDATES INTO HISTORY
+----------------------------------------
+
+When a meaningful memory pattern is formed, log it internally and optionally surface it in History / Changes as a coach insight.
+
+Example:
+COACH MEMORY UPDATED
+- Learned that user tolerates 45–60 min sessions better than 75+ min sessions
+- Confidence: medium
+- Evidence: 5 recent sessions
+
+Or:
+COACH MEMORY UPDATED
+- Repeated discomfort detected with conventional deadlift
+- Future lower-body pull selections will bias safer alternatives
+
+----------------------------------------
+13. ADD SAFETY + DECAY LOGIC
+----------------------------------------
+
+Memory should not become permanently rigid.
+
+Add decay / re-evaluation rules:
+- stale patterns lose confidence over time
+- new evidence can override old assumptions
+- one better week does not erase a consistent trend, but should reduce certainty if repeated
+
+This keeps the system adaptive.
+
+----------------------------------------
+14. TEST CASES
+----------------------------------------
+
+Verify:
+
+1. Session Length Preference
+- user completes 45-minute sessions consistently but skips long ones
+→ future sessions get shorter
+
+2. Lower-Body Fatigue Pattern
+- user repeatedly gets drained after high lower-body volume
+→ future lower-body days tighten volume earlier
+
+3. Exercise Aggravation Pattern
+- conventional deadlift repeatedly associated with discomfort
+→ engine prefers alternative hinges
+
+4. Positive Exercise Response
+- user progresses well on Bulgarian split squats and rates them well
+→ maintain or emphasize them
+
+5. Friday Adherence Issue
+- user often skips Friday
+→ Friday becomes shorter and simpler
+
+6. Pattern Decay
+- old fatigue pattern weakens after several successful weeks
+→ confidence lowers appropriately
+
+----------------------------------------
+15. DELIVERABLES
+----------------------------------------
+
+After implementation, provide:
+1. the userPerformanceMemory structure
+2. the memory extraction/update functions
+3. confidence logic for learned patterns
+4. how memory changes generation, coaching, and block decisions
+5. how memory updates are surfaced in UI/history
+6. decay/re-evaluation rules
+7. edge cases still needing review

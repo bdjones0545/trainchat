@@ -12,8 +12,8 @@
  * - insights.ts               → proactive suggestions from combined signals
  */
 
-import { db, userMemoriesTable, userProfilesTable, readinessEntriesTable, sessionFeedbackTable } from "@workspace/db";
-import { eq, desc, and } from "drizzle-orm";
+import { db, userMemoriesTable, userProfilesTable, readinessEntriesTable, sessionFeedbackTable, sessionLogsTable, exerciseLogsTable, systemChangeLog } from "@workspace/db";
+import { eq, desc, and, gte, lt, asc } from "drizzle-orm";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -596,6 +596,297 @@ export async function extractMemoriesFromMessage(
   return candidates.length;
 }
 
+// ─── Session-log memory extraction ───────────────────────────────────────────
+
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/** Keywords to detect lower-body exercise names */
+const LOWER_BODY_KEYWORDS = [
+  "squat", "deadlift", "rdl", "leg press", "lunge", "split squat", "step up",
+  "hip thrust", "glute bridge", "hamstring curl", "calf raise", "leg extension",
+  "broad jump", "box jump", "broad jump", "bound", "hop",
+];
+
+function isLowerBodyExercise(name: string): boolean {
+  const n = name.toLowerCase();
+  return LOWER_BODY_KEYWORDS.some((kw) => n.includes(kw));
+}
+
+/**
+ * Extract long-term coaching patterns from session logs and exercise logs.
+ * Surfaces patterns that the profile/readiness/feedback extractors don't catch:
+ *   - Session length tolerance (from actual logged durations)
+ *   - Day-of-week compliance (which days are skipped most)
+ *   - Lower-body volume sensitivity (hard sessions with many lower-body exercises)
+ *   - Exercise-specific pain associations (from exercise log completion + session pain)
+ *   - Progression stall patterns (from systemChangeLog regression frequency)
+ */
+async function extractSessionLogMemories(userId: number): Promise<MemoryCandidate[]> {
+  const since = new Date(Date.now() - 56 * 24 * 60 * 60 * 1000); // 8 weeks
+
+  const [recentSessions, recentExerciseLogs, recentChangeLogs] = await Promise.all([
+    db.select().from(sessionLogsTable)
+      .where(and(eq(sessionLogsTable.userId, userId), gte(sessionLogsTable.completedAt, since)))
+      .orderBy(desc(sessionLogsTable.completedAt))
+      .limit(30),
+    db.select().from(exerciseLogsTable)
+      .where(and(eq(exerciseLogsTable.userId, userId), gte(exerciseLogsTable.createdAt, since)))
+      .orderBy(desc(exerciseLogsTable.createdAt))
+      .limit(150),
+    db.select({ intent: systemChangeLog.intent, decisionMetadata: systemChangeLog.decisionMetadata, createdAt: systemChangeLog.createdAt })
+      .from(systemChangeLog)
+      .where(and(eq(systemChangeLog.userId, userId), gte(systemChangeLog.createdAt, since)))
+      .orderBy(desc(systemChangeLog.createdAt))
+      .limit(50),
+  ]);
+
+  if (recentSessions.length < 3) return [];
+
+  const candidates: MemoryCandidate[] = [];
+  const attended = recentSessions.filter((s) => s.sessionStatus === "completed" || s.sessionStatus === "partial");
+
+  // ── Session length preference ─────────────────────────────────────────────
+  const sessionsWithDuration = attended.filter((s) => s.actualDuration != null);
+  if (sessionsWithDuration.length >= 4) {
+    const durations = sessionsWithDuration.map((s) => s.actualDuration!);
+    const avgDuration = durations.reduce((a, b) => a + b, 0) / durations.length;
+
+    // Cross with difficulty: do shorter sessions correlate with better outcomes?
+    const shortSessions = sessionsWithDuration.filter((s) => s.actualDuration! <= 50);
+    const longSessions = sessionsWithDuration.filter((s) => s.actualDuration! >= 65);
+    const shortAvgDiff = shortSessions.length >= 2
+      ? shortSessions.filter((s) => s.difficultyScore != null).reduce((a, s) => a + s.difficultyScore!, 0) / shortSessions.filter((s) => s.difficultyScore != null).length
+      : null;
+    const longAvgDiff = longSessions.length >= 2
+      ? longSessions.filter((s) => s.difficultyScore != null).reduce((a, s) => a + s.difficultyScore!, 0) / longSessions.filter((s) => s.difficultyScore != null).length
+      : null;
+
+    if (avgDuration <= 52) {
+      // User's actual sessions run short — they may prefer brevity
+      const conf: 1|2|3|4|5 = sessionsWithDuration.length >= 8 ? 4 : 3;
+      candidates.push({
+        type: "session_preference",
+        subject: "shorter session format",
+        sentiment: "positive",
+        confidence: conf,
+        source: "inferred",
+        detail: `User's sessions consistently run ${Math.round(avgDuration)} minutes on average. Programs should stay within 45–55 minutes to match their natural session length.`,
+      });
+    } else if (avgDuration >= 70) {
+      const conf: 1|2|3|4|5 = sessionsWithDuration.length >= 8 ? 3 : 2;
+      candidates.push({
+        type: "session_preference",
+        subject: "longer session tolerance",
+        sentiment: "positive",
+        confidence: conf,
+        source: "inferred",
+        detail: `User consistently completes sessions averaging ${Math.round(avgDuration)} minutes. They tolerate longer training without dropout — fuller session structures are appropriate.`,
+      });
+    }
+
+    // If short sessions → lower difficulty AND long sessions → higher difficulty, store that
+    if (shortAvgDiff !== null && longAvgDiff !== null && longAvgDiff - shortAvgDiff >= 1.0) {
+      candidates.push({
+        type: "adherence_pattern",
+        subject: "session length fatigue correlation",
+        sentiment: "negative",
+        confidence: 3,
+        source: "inferred",
+        detail: `User rates longer sessions significantly harder than shorter ones (avg difficulty: ${longAvgDiff.toFixed(1)} vs ${shortAvgDiff.toFixed(1)}). Prefer concise sessions — cut lower-priority accessories before extending core work.`,
+      });
+    }
+  }
+
+  // ── Day-of-week compliance ────────────────────────────────────────────────
+  if (recentSessions.length >= 6) {
+    const daySkips: Record<number, number> = {};
+    const dayAttends: Record<number, number> = {};
+    for (const s of recentSessions) {
+      const dow = new Date(s.completedAt).getDay();
+      if (s.sessionStatus === "skipped") {
+        daySkips[dow] = (daySkips[dow] ?? 0) + 1;
+      } else {
+        dayAttends[dow] = (dayAttends[dow] ?? 0) + 1;
+      }
+    }
+    // Find a day with notably high skip rate (≥ 2 skips, >50% of appearances)
+    for (let d = 0; d < 7; d++) {
+      const skips = daySkips[d] ?? 0;
+      const attends = dayAttends[d] ?? 0;
+      const total = skips + attends;
+      if (total < 2 || skips < 2) continue;
+      const skipRate = skips / total;
+      if (skipRate >= 0.5) {
+        const conf: 1|2|3|4|5 = skipRate >= 0.7 ? 4 : 3;
+        candidates.push({
+          type: "adherence_pattern",
+          subject: `${DAY_NAMES[d]} compliance`,
+          sentiment: "negative",
+          confidence: conf,
+          source: "inferred",
+          detail: `User skips ${DAY_NAMES[d]} sessions at a high rate (${Math.round(skipRate * 100)}% of the time). ${DAY_NAMES[d]} sessions should be shorter and optional, or moved to a different day.`,
+        });
+        break; // One flagged day at a time
+      }
+    }
+  }
+
+  // ── Lower-body volume sensitivity ─────────────────────────────────────────
+  if (recentExerciseLogs.length >= 10) {
+    // Group exercise logs by session date (approximate — use day bucket)
+    const lowerBodySessionDates = new Set<string>();
+    for (const log of recentExerciseLogs) {
+      if (isLowerBodyExercise(log.exerciseName)) {
+        const dateKey = new Date(log.createdAt).toDateString();
+        lowerBodySessionDates.add(dateKey);
+      }
+    }
+
+    // Find sessions on those dates with high difficulty
+    const lbHardSessions = recentSessions.filter((s) => {
+      const dateKey = new Date(s.completedAt).toDateString();
+      return lowerBodySessionDates.has(dateKey) && (s.difficultyScore ?? 0) >= 4;
+    });
+    const lbSessions = recentSessions.filter((s) => {
+      const dateKey = new Date(s.completedAt).toDateString();
+      return lowerBodySessionDates.has(dateKey);
+    });
+
+    if (lbSessions.length >= 3 && lbHardSessions.length >= 2) {
+      const hardRate = lbHardSessions.length / lbSessions.length;
+      if (hardRate >= 0.5) {
+        const conf: 1|2|3|4|5 = lbHardSessions.length >= 4 ? 4 : 3;
+        candidates.push({
+          type: "volume_response",
+          subject: "lower body volume sensitivity",
+          sentiment: "negative",
+          confidence: conf,
+          source: "inferred",
+          detail: `User's lower-body sessions frequently rate very difficult (${Math.round(hardRate * 100)}% of lower-body sessions rated hard). Reduce lower-body volume and keep accessory work light on heavy leg days.`,
+        });
+      }
+    }
+  }
+
+  // ── Exercise-specific stall / pain patterns ───────────────────────────────
+  // Use systemChangeLog load_reduction events to find stalling exercises
+  const regressionsByExercise: Record<string, number> = {};
+  for (const log of recentChangeLogs) {
+    if (log.intent === "load_reduction") {
+      const meta = log.decisionMetadata as Record<string, unknown> | null;
+      const name = meta?.exerciseName as string | undefined;
+      if (name) {
+        regressionsByExercise[name] = (regressionsByExercise[name] ?? 0) + 1;
+      }
+    }
+  }
+  // Exercises with 3+ regressions in 8 weeks = stall pattern
+  for (const [exerciseName, count] of Object.entries(regressionsByExercise)) {
+    if (count >= 3) {
+      const conf: 1|2|3|4|5 = count >= 5 ? 4 : 3;
+      candidates.push({
+        type: "exercise_preference",
+        subject: `${exerciseName} progression stall`,
+        sentiment: "negative",
+        confidence: conf,
+        source: "inferred",
+        detail: `User has repeatedly required load reductions on ${exerciseName} (${count} times in recent weeks). Consider using a regression or alternative movement. Do not aggressively progress this pattern.`,
+      });
+    }
+  }
+
+  // Also check for progression successes
+  const progressionsByExercise: Record<string, number> = {};
+  for (const log of recentChangeLogs) {
+    if (log.intent === "auto_progression") {
+      const meta = log.decisionMetadata as Record<string, unknown> | null;
+      const name = meta?.exerciseName as string | undefined;
+      if (name) {
+        progressionsByExercise[name] = (progressionsByExercise[name] ?? 0) + 1;
+      }
+    }
+  }
+  for (const [exerciseName, count] of Object.entries(progressionsByExercise)) {
+    if (count >= 3 && !regressionsByExercise[exerciseName]) {
+      // Clean progressions with no regressions = good exercise fit
+      candidates.push({
+        type: "exercise_preference",
+        subject: `${exerciseName} positive response`,
+        sentiment: "positive",
+        confidence: Math.min(5, 2 + Math.floor(count / 2)) as 1|2|3|4|5,
+        source: "inferred",
+        detail: `User progresses cleanly on ${exerciseName} (${count} consecutive progressions). Maintain this movement in future programs — it is well-matched to their profile.`,
+      });
+    }
+  }
+
+  // ── Compliance trend ──────────────────────────────────────────────────────
+  const completedCount = attended.length;
+  const totalCount = recentSessions.length;
+  const complianceRate = totalCount > 0 ? completedCount / totalCount : 0;
+
+  if (complianceRate >= 0.85 && totalCount >= 6) {
+    candidates.push({
+      type: "adherence_pattern",
+      subject: "high training compliance",
+      sentiment: "positive",
+      confidence: Math.min(5, 2 + Math.floor(totalCount / 4)) as 1|2|3|4|5,
+      source: "inferred",
+      detail: `User demonstrates high training compliance (${Math.round(complianceRate * 100)}% completion rate over ${totalCount} sessions). Progression can be planned confidently — they show up reliably.`,
+    });
+  } else if (complianceRate <= 0.55 && totalCount >= 6) {
+    candidates.push({
+      type: "adherence_pattern",
+      subject: "inconsistent compliance",
+      sentiment: "negative",
+      confidence: 3,
+      source: "inferred",
+      detail: `User's training compliance is inconsistent (${Math.round(complianceRate * 100)}% over ${totalCount} sessions). Build simpler, shorter programs that are more executable. Avoid complex periodization until consistency improves.`,
+    });
+  }
+
+  return candidates;
+}
+
+// ─── Memory decay ─────────────────────────────────────────────────────────────
+
+/**
+ * Reduce confidence of stale memories that haven't been reinforced.
+ * - Memories not updated in 30+ days lose 1 confidence point
+ * - Only applies to inferred memories (not onboarding / conversation)
+ * - Never reduces below 1
+ * - Only applies if there's recent positive contradicting evidence
+ */
+export async function decayStaleMemories(userId: number): Promise<void> {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+
+  // Only decay inferred memories that haven't been updated recently
+  const stale = await db
+    .select()
+    .from(userMemoriesTable)
+    .where(
+      and(
+        eq(userMemoriesTable.userId, userId),
+        eq(userMemoriesTable.source, "inferred"),
+        lt(userMemoriesTable.updatedAt, thirtyDaysAgo),
+      ),
+    );
+
+  for (const m of stale) {
+    if (m.confidence <= 1) continue;
+    const newConf = Math.max(1, m.confidence - 1) as 1|2|3|4|5;
+    // If 60+ days old and confidence is now 1, consider deleting
+    if (m.confidence <= 2 && m.updatedAt < sixtyDaysAgo) {
+      await db.delete(userMemoriesTable).where(eq(userMemoriesTable.id, m.id));
+    } else {
+      await db.update(userMemoriesTable)
+        .set({ confidence: newConf, updatedAt: new Date() })
+        .where(eq(userMemoriesTable.id, m.id));
+    }
+  }
+}
+
 // ─── Memory sync ──────────────────────────────────────────────────────────────
 
 /**
@@ -604,14 +895,19 @@ export async function extractMemoriesFromMessage(
  * and on each AI message (non-blocking, awaited in parallel with AI call).
  */
 export async function syncMemoriesFromData(userId: number): Promise<number> {
-  const [profileCandidates, readinessCandidates, feedbackCandidates] = await Promise.all([
+  const [profileCandidates, readinessCandidates, feedbackCandidates, sessionCandidates] = await Promise.all([
     extractProfileMemories(userId),
     extractReadinessMemories(userId),
     extractFeedbackMemories(userId),
+    extractSessionLogMemories(userId),
   ]);
 
-  const all = [...profileCandidates, ...readinessCandidates, ...feedbackCandidates];
+  const all = [...profileCandidates, ...readinessCandidates, ...feedbackCandidates, ...sessionCandidates];
   await Promise.all(all.map((c) => upsertMemory(userId, c)));
+
+  // Decay stale inferred memories (non-blocking best-effort)
+  decayStaleMemories(userId).catch(() => {});
+
   return all.length;
 }
 

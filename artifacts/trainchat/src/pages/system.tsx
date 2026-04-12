@@ -54,6 +54,7 @@ import { useLocation } from "wouter";
 import TopNav from "@/components/layout/TopNav";
 import MobileSlideLayout, { type SlidePanel } from "@/components/layout/MobileSlideLayout";
 import BlockStatusCard from "@/components/training/BlockStatusCard";
+import CoachMemoryInsights from "@/components/training/CoachMemoryInsights";
 import EditDrawer, {
   type EditTarget,
   type EditResult,
@@ -760,6 +761,9 @@ function BlockView({ highlightedIds, onEditPhase, onEditWeek }: BlockViewProps) 
     <div className="space-y-5">
       {/* Block intelligence — full view in block tab */}
       <BlockStatusCard />
+
+      {/* Coach memory insights — what your coach has learned about you */}
+      <CoachMemoryInsights />
 
       {/* Current block hero */}
       {currentPhase && (
