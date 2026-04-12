@@ -4,9 +4,19 @@
  * RULES:
  * 1. Auth state always wins. If the user is authenticated, guest state is irrelevant.
  * 2. Guest/deviceId state is for analytics only after auth — never for routing after login.
- * 3. A "converted" guest session means the user has an account → they must log in.
+ * 3. Unauthenticated ≠ blocked. Guest is a first-class valid app state.
+ *    "converted" sessions (previously signed up) get guest access; they sign in voluntarily.
  * 4. No routing decision is made before auth is fully resolved.
  */
+
+/**
+ * Explicit app access modes — separates authentication from access rights.
+ *
+ *   "authenticated"  – valid session, full feature set
+ *   "guest"          – no session; device ID entitles limited free access (incl. converted)
+ *   "auth_required"  – session expired mid-use; must re-authenticate
+ */
+export type UserMode = "authenticated" | "guest" | "auth_required";
 
 // ─── Storage keys (centralised so nothing drifts) ────────────────────────────
 

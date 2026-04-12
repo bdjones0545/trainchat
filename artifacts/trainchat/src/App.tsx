@@ -12,34 +12,40 @@ import AdminDashboard from "@/pages/admin";
 import SystemPage from "@/pages/system";
 import BillingPage from "@/pages/billing";
 import { useGetMe } from "@workspace/api-client-react";
-import { computeRoute, readDeviceId } from "@/lib/routing";
+import { computeRoute, readDeviceId, type UserMode } from "@/lib/routing";
+
+export type { UserMode };
 
 /**
  * ChatPage — universal entry point for /chat.
  *
- * Single decision point for the entire app: one of three outcomes:
- *   1. Spinner  — auth check is still in flight (first load only)
- *   2. <Chat /> — user is confirmed authenticated
- *   3. <GuestStart /> — user is not authenticated (guest mode)
+ * Derives UserMode from auth state and renders the correct experience:
+ *   • spinner        — auth check still in flight (first load only)
+ *   • authenticated  → <Chat />
+ *   • auth_required  → <Redirect to="/login" />  (session expired mid-use)
+ *   • guest          → <GuestStart />            (no signup required)
  *
- * A `hadUser` ref handles the edge case where a previously-authenticated
- * user's session expires mid-use: instead of quietly switching them to
- * the guest experience, we send them to /login for an explicit re-auth.
- *
- * GuestStart has its own three-stage bootstrap gate so it will NEVER
- * flash the guest UI before its initialization is complete.
+ * This is the ONLY place in the app that decides which experience renders.
+ * GuestStart has its own two-stage gate so it NEVER flashes an empty shell.
  */
 function ChatPage() {
   const { data: me, isLoading } = useGetMe();
+
   // Track whether this page instance ever had an authenticated user.
-  // If `me` later becomes undefined (session expired), redirect to /login
-  // rather than silently switching to guest mode.
+  // If me later becomes undefined (session expired), set mode to auth_required
+  // rather than silently switching them to guest mode.
   const hadUser = useRef(false);
   if (me && !hadUser.current) hadUser.current = true;
 
-  // Only block on the very first load (isLoading = true means no cached value yet).
-  // For unauthenticated users, 401 resolves with no retry so this clears fast.
-  if (isLoading) {
+  const userMode: UserMode | "loading" = isLoading
+    ? "loading"
+    : me
+      ? "authenticated"
+      : hadUser.current
+        ? "auth_required"
+        : "guest";
+
+  if (userMode === "loading") {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
@@ -47,17 +53,14 @@ function ChatPage() {
     );
   }
 
-  // Session expired mid-use: send to login rather than dropping into guest mode
-  if (!me && hadUser.current) {
-    return <Redirect to="/login" />;
-  }
+  if (userMode === "auth_required") return <Redirect to="/login" />;
+  if (userMode === "authenticated") return <Chat />;
 
-  // Authenticated: full agent experience
-  if (me) return <Chat />;
-
-  // Unauthenticated: guest agent experience (no signup required)
-  // GuestStart has its own three-stage gate to prevent any UI flash.
-  return <GuestStart />;
+  // userMode === "guest": unauthenticated AND no prior session in this page instance.
+  // Guest is a valid, first-class app state — no redirect to login.
+  // Includes "converted" sessions (previously signed up, now unauthenticated):
+  // they get full guest access; the nav "Sign in" button lets them return voluntarily.
+  return <GuestStart userMode={userMode} />;
 }
 
 const queryClient = new QueryClient({

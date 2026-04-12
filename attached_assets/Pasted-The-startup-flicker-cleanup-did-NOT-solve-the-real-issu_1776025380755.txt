@@ -1,0 +1,241 @@
+The startup flicker cleanup did NOT solve the real issue.
+
+Current behavior:
+- bootstrap/spinner is cleaner
+- but after bootstrap completes, the app still renders the full Sign in screen
+
+This means the problem is NOT just a loading race anymore.
+The actual issue is that downstream routing/render logic still treats unauthenticated users as auth-required instead of valid guest users.
+
+GOAL:
+Make guest mode a first-class valid app state that can access the agent/chat page directly.
+The app must NOT route or render the sign-in page when a valid guest session/device ID exists.
+
+----------------------------------------
+1. FIND THE REAL AUTH ENFORCER
+----------------------------------------
+
+Audit every place that can still force sign-in after bootstrap:
+
+- ProtectedRoute wrappers
+- route guards
+- page-level redirects
+- useEffect navigate("/login") calls
+- conditional rendering like:
+  if (!user) return <SignIn />
+- chat/agent page guards requiring authenticated user
+- auth context defaults that treat guest as null/unauthorized
+- server/session loaders that reject guest mode
+
+We already cleaned startup flicker.
+Now find the code that still says:
+“no authenticated user = sign in page”
+
+That logic is wrong for guest mode.
+
+----------------------------------------
+2. MAKE GUEST A VALID USER MODE
+----------------------------------------
+
+Create explicit app access modes:
+
+type UserMode =
+  | "authenticated"
+  | "guest"
+  | "auth_required"
+
+A restored guestDeviceId + guest session should set:
+userMode = "guest"
+
+Guest mode must be treated as valid access for:
+- agent
+- chat
+- program building
+- limited free editing
+
+It must NOT be treated as null auth.
+
+----------------------------------------
+3. SEPARATE AUTHENTICATION FROM ACCESS
+----------------------------------------
+
+Right now logic is probably:
+if (!user) => sign in
+
+Replace with:
+if (userMode === "auth_required") => sign in
+if (userMode === "guest") => allow app
+if (userMode === "authenticated") => allow app
+
+Important:
+Unauthenticated does NOT automatically mean blocked.
+Guest access is allowed.
+
+----------------------------------------
+4. FIX PROTECTED ROUTES
+----------------------------------------
+
+Any protected route currently requiring authenticated user must be updated.
+
+Example bad logic:
+- <ProtectedRoute requiresAuth>{chat}</ProtectedRoute>
+
+Replace with guest-aware logic:
+- allow authenticated
+- allow guest for agent/chat
+- only block account-only routes
+
+Examples that guest should access:
+- /app
+- /agent
+- /chat
+- initial program builder
+- guest program state
+
+Examples that may still require auth:
+- billing
+- account settings
+- cross-device sync
+- saved account history if account-specific
+
+----------------------------------------
+5. FIX CHAT / AGENT PAGE RENDER LOGIC
+----------------------------------------
+
+Audit the actual page that is showing sign in.
+
+There is likely code like:
+if (!currentUser) return <SignInPage />
+
+Replace with:
+if (userMode === "auth_required") return <SignInPage />
+else return <AgentPage />
+
+If guest session exists, the agent page must render.
+
+----------------------------------------
+6. CHECK FOR POST-BOOTSTRAP REDIRECTS
+----------------------------------------
+
+Search for:
+- navigate("/login")
+- navigate("/signin")
+- setShowAuth(true)
+- redirectToAuth()
+- return <Redirect ... />
+- auth modal open triggers on mount
+
+Especially after:
+- bootstrap complete
+- guest restore complete
+- query error/fallback states
+
+One of these is likely firing after the spinner disappears.
+
+----------------------------------------
+7. VERIFY GUEST SESSION STATE IS ACTUALLY BEING SET
+----------------------------------------
+
+Do not assume guest bootstrap succeeded just because spinner logic ran.
+
+After bootstrap, log:
+
+{
+  guestDeviceId,
+  guestSessionExists,
+  freeInputsRemaining,
+  userMode,
+  resolvedRoute,
+  renderedScreen
+}
+
+Need to confirm:
+- guestDeviceId exists
+- guest session API returns usable state
+- userMode becomes "guest"
+- route resolves to agent/chat
+- sign-in page is NOT selected
+
+----------------------------------------
+8. DO NOT FALL BACK TO SIGN-IN ON GUEST SESSION ERROR
+----------------------------------------
+
+If guest session fetch fails temporarily, do NOT immediately show sign in.
+
+Safer fallback:
+- create local guest state
+- allow limited guest entry
+- retry backend sync silently
+
+The sign-in page should only appear when:
+- guest mode is explicitly disallowed
+- free inputs exhausted and auth/paywall is required
+- user explicitly chooses sign in
+- protected account-only page is accessed
+
+----------------------------------------
+9. APPLY THIS RULE GLOBALLY
+----------------------------------------
+
+Global rule:
+If a guest device ID exists or can be created, and guest mode is enabled, the app should open into the agent — not sign in.
+
+Only show the sign-in screen if:
+- user intentionally navigates there
+- account-only route requested
+- guest mode disabled by config
+- paywall/auth requirement intentionally triggered
+
+----------------------------------------
+10. ADD A TEMP DEBUG OVERLAY
+----------------------------------------
+
+Temporarily render a tiny debug badge during testing showing:
+
+userMode: guest/authenticated/auth_required
+route: ...
+guestDeviceId: yes/no
+guestSession: yes/no
+screen: spinner/agent/signin
+
+This will make it obvious which branch is still hijacking the app.
+
+----------------------------------------
+11. TEST CASES
+----------------------------------------
+
+Verify:
+
+1. brand-new visitor
+→ guestDeviceId created
+→ userMode = guest
+→ agent renders
+→ no sign-in page
+
+2. returning guest
+→ guest restored
+→ userMode = guest
+→ agent renders
+→ no sign-in page
+
+3. authenticated user
+→ userMode = authenticated
+→ app renders normally
+
+4. guest session backend fails
+→ still allow fallback guest entry
+→ do not show sign-in by default
+
+5. billing/settings route as guest
+→ auth can be requested there
+
+----------------------------------------
+12. DELIVERABLES
+----------------------------------------
+
+After implementation, provide:
+1. the exact file/component that was still forcing sign-in
+2. how userMode is now determined
+3. which protected routes were made guest-safe
+4. what logic was changed from “!user => sign in” to guest-aware access
+5. screenshot or trace showing userMode=guest and agent rendering

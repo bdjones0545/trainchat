@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useLocation, Redirect } from "wouter";
+import { useLocation } from "wouter";
 import { useGuestSession } from "@/hooks/useGuestSession";
 import { GUEST_CONFIG } from "@/lib/guestConfig";
-import { STORAGE_KEYS, logRouteDecision, readOnboardingComplete, readDeviceId } from "@/lib/routing";
+import { STORAGE_KEYS, logRouteDecision, readOnboardingComplete, readDeviceId, type UserMode } from "@/lib/routing";
 import { GuestPaywallModal } from "@/components/GuestPaywallModal";
 import logoSrc from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 
@@ -250,7 +250,7 @@ function LockedScreen({ onUnlock, onSignIn }: { onUnlock: () => void; onSignIn: 
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function GuestStart() {
+export default function GuestStart({ userMode }: { userMode: UserMode }) {
   const [, navigate] = useLocation();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -286,29 +286,21 @@ export default function GuestStart() {
     if (hasInitialized.current || !guestSession) return;
     hasInitialized.current = true;
 
-    if (guestSession.status === "converted") {
-      /**
-       * A "converted" guest session means this deviceId was linked to an account.
-       * The user is NOT authenticated right now (auth already failed).
-       * We log the decision here but do NOT navigate — the render path handles
-       * the redirect synchronously via <Redirect to="/login" /> so there is
-       * zero flash of the guest chat UI before navigation fires.
-       */
-      logRouteDecision({
-        pathname: "/chat",
-        authResolved: true,
-        hasUser: false,
-        authError: false,
-        deviceId: readDeviceId(),
-        guestSessionStatus: guestSession.status,
-        onboardingComplete: readOnboardingComplete(),
-        target: "/login",
-        reason: "converted guest session — render-path redirect to /login (no flash)",
-      });
-      // isInitialized intentionally stays false — the render path returns
-      // <Redirect to="/login" /> before reaching the main UI gate.
-      return;
-    }
+    // "converted" sessions (previously signed up, now unauthenticated) are
+    // treated as valid guest sessions. The backend allows them to chat as
+    // long as teaserUsesCount < TEASER_TOTAL_LIMIT. The "Sign in" button in
+    // the nav gives them a path back to their account — we never force it.
+    logRouteDecision({
+      pathname: "/chat",
+      authResolved: true,
+      hasUser: false,
+      authError: false,
+      deviceId: readDeviceId(),
+      guestSessionStatus: guestSession.status,
+      onboardingComplete: readOnboardingComplete(),
+      target: "guest_agent",
+      reason: `guest session status=${guestSession.status} — allowing guest access`,
+    });
 
     const savedCount = guestSession.teaserUsesCount ?? 0;
     setMessageCount(savedCount);
@@ -322,7 +314,6 @@ export default function GuestStart() {
       } else {
         setIsLocked(true);
       }
-      // Show the paywall/locked UI (isInitialized unlocks the gate)
       setIsInitialized(true);
       return;
     }
@@ -334,14 +325,12 @@ export default function GuestStart() {
         trackFunnelEvent(deviceId, GUEST_CONFIG.EVENTS.GUEST_RETURNED);
       }
     } else {
-      // Fresh start — the opening line sets the tone for the entire experience
       setMessages([{
         role: "assistant",
         content: "Let's build your training system.",
       }]);
     }
 
-    // Unlock the main UI now that everything is initialized
     setIsInitialized(true);
   }, [guestSession, deviceId]);
 
@@ -445,25 +434,23 @@ export default function GuestStart() {
   }, [navigate, deviceId]);
 
   /**
-   * BOOTSTRAP GATES — three layers to guarantee zero UI flash at startup.
+   * BOOTSTRAP GATES — two layers to guarantee zero UI flash at startup.
    *
    * Gate 1: guestSession not yet loaded (null) and no error.
    *   → Show spinner. useGuestSession is still resolving from sessionStorage
    *     or waiting for the API response.
    *
-   * Gate 2: guestSession loaded with status === "converted".
-   *   → Return <Redirect to="/login" /> synchronously IN the render path.
-   *     This is critical: returning a Redirect here means the main chat UI
-   *     is NEVER included in the render output, so there is zero one-frame
-   *     flash before the navigation fires. The navigate() call in useEffect
-   *     would fire one render cycle later — too late to prevent the flash.
-   *
-   * Gate 3: guestSession loaded but initialization useEffect has not yet run.
+   * Gate 2: guestSession loaded but initialization useEffect has not yet run.
    *   → Show spinner. The useEffect sets messages, counts, locked state, etc.
    *     before setting isInitialized=true. Without this gate the empty chat
    *     shell (no messages, wrong counts) renders for one frame.
    *
-   * If guestSessionError is set we bypass all gates and render normally so
+   * NOTE: "converted" sessions (previously signed up) are treated as valid
+   * guest sessions. The backend does NOT block them from chatting — only the
+   * teaserUsesCount limit applies. The "Sign in" button in the nav lets them
+   * recover their account voluntarily. We never force them to the login page.
+   *
+   * If guestSessionError is set we bypass both gates and render normally so
    * the user is never permanently stuck on a loading screen.
    */
 
@@ -476,12 +463,7 @@ export default function GuestStart() {
     );
   }
 
-  // Gate 2 — converted session: user signed up before, must log back in
-  if (guestSession?.status === "converted") {
-    return <Redirect to="/login" />;
-  }
-
-  // Gate 3 — session loaded but initialization useEffect hasn't run yet
+  // Gate 2 — session loaded but initialization useEffect hasn't run yet
   if (!isInitialized && !guestSessionError) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "hsl(222 47% 7%)" }}>
@@ -503,6 +485,34 @@ export default function GuestStart() {
 
   return (
     <div className="h-screen flex flex-col" style={{ background: "hsl(222 47% 7%)" }}>
+
+      {/* ── Dev-mode debug overlay ──────────────────────────────────────────── */}
+      {import.meta.env.DEV && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 12,
+            left: 12,
+            zIndex: 9999,
+            background: "rgba(0,0,0,0.85)",
+            color: "#a3e635",
+            fontFamily: "monospace",
+            fontSize: 10,
+            padding: "6px 10px",
+            borderRadius: 6,
+            lineHeight: 1.6,
+            pointerEvents: "none",
+            border: "1px solid rgba(163,230,53,0.25)",
+          }}
+        >
+          <div>userMode: <strong>{userMode}</strong></div>
+          <div>route: /chat → GuestStart</div>
+          <div>guestDeviceId: <strong>{deviceId ? "yes" : "no"}</strong></div>
+          <div>guestSession: <strong>{guestSession ? `yes (${guestSession.status})` : "no"}</strong></div>
+          <div>screen: <strong>{isInitialized ? (isLocked ? "locked" : showPaywall ? "paywall" : "agent") : "spinner"}</strong></div>
+          <div>msgs used: <strong>{messageCount}</strong> / {FREE_MESSAGE_LIMIT}</div>
+        </div>
+      )}
 
       {/* ── Top nav ────────────────────────────────────────────────────────── */}
       <div
