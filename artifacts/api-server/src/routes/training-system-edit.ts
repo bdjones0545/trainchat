@@ -142,7 +142,8 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       appliedCount: editResult.appliedCount,
       skippedCount: editResult.skippedCount,
       changedIds: editResult.changedIds,
-      changeLogId,    // Phase 4: let frontend know which log entry was created
+      changeTargets: editResult.changeTargets,
+      changeLogId,
       updatedData: { today, week, block },
     });
   } catch (err) {

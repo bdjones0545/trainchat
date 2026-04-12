@@ -352,6 +352,8 @@ export interface ChangeTarget {
   originalExercise?: string;
   newExercise: string;
   exerciseId: number;
+  /** Human-readable description of what specifically changed, e.g. "tempo: → 3-1-X-0" */
+  changeDetail?: string;
 }
 
 export interface EditResult {
@@ -404,11 +406,26 @@ export async function applyEditPlan(plan: EditPlan): Promise<EditResult> {
       const before = beforeSnapshot.exercises[String(change.id)];
       const after = afterSnapshot.exercises[String(change.id)];
       if (after?.name) {
+        // Build a specific change detail string from before/after diff
+        const changeDetails: string[] = [];
+        if (after.tempo && after.tempo !== before?.tempo) {
+          changeDetails.push(`tempo → ${after.tempo}`);
+        }
+        if (after.reps && after.reps !== before?.reps) {
+          changeDetails.push(`reps: ${before?.reps ?? "?"} → ${after.reps}`);
+        }
+        if (after.sets !== undefined && after.sets !== before?.sets) {
+          changeDetails.push(`sets: ${before?.sets ?? "?"} → ${after.sets}`);
+        }
+        if (after.rest && after.rest !== before?.rest) {
+          changeDetails.push(`rest: ${before?.rest ?? "?"} → ${after.rest}`);
+        }
         changeTargets.push({
           type: "exercise_update",
           originalExercise: before?.name as string | undefined,
           newExercise: after.name as string,
           exerciseId: change.id,
+          changeDetail: changeDetails.length > 0 ? changeDetails.join(", ") : undefined,
         });
       }
     }

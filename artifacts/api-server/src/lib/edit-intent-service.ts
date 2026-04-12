@@ -136,7 +136,7 @@ function buildEditSystemPrompt(
     : "";
 
   const swapSection = exerciseSwapContext
-    ? `\nEXERCISE SWAP INTELLIGENCE:\n${exerciseSwapContext}\nWhen performing a swap/replace, you MUST choose an exercise from the SWAP CANDIDATES list above. Use the exact name as shown. If no candidate perfectly fits, pick the closest one. Do not invent exercise names.\n`
+    ? `\nEXERCISE SWAP INTELLIGENCE:\n${exerciseSwapContext}\nWhen performing a swap/replace, you MUST choose an exercise from the SWAP CANDIDATES or PROGRESSION OPTIONS list above. Use the exact name as shown. If no candidate perfectly fits, pick the closest one. Do not invent exercise names.\n`
     : "";
 
   return `You are an elite performance architect editing a user's structured training system. You program according to NSCA strength & conditioning principles.
@@ -162,6 +162,18 @@ RULES:
   directly relevant (e.g. "Building on the volume reduction we did last week..."). Use "we",
   "let's". Never say "here is your new program". Be concise but human.
 - Reference injury flags or pain patterns from decision history when they are relevant.
+
+CRITICAL — HARDER / EASIER REQUESTS (exercise level):
+When the user says "make it harder", "harder variation", "make it easier", "easier variation", or similar:
+- You MUST produce a real prescription change. A notes-only update is NOT acceptable.
+- Valid "harder" mutations: replace_exercise with a harder variation, add a tempo (e.g. "3-1-X-0"), tighten reps, add a pause prescription, or increase set count.
+- Valid "easier" mutations: replace_exercise with an easier variation, widen reps, add a note about reducing load + lighter tempo.
+- For explosive/plyometric exercises (jumps, broad jumps, bounds): NEVER add load-based progressions — use distance/height targets, set count, or variation changes.
+- For trunk/core exercises (Pallof press, plank, bird dog): use lever length, pause duration, or stance changes.
+- For strength primaries (squat, deadlift, bench, press): use replace_exercise to a harder variation first; if no variation available, add eccentric tempo (e.g. "3-1-X-0").
+- The changeSummary MUST state exactly what changed: name if swapped, tempo if added, reps if changed. Be specific.
+- Example good changeSummary: "Changed Back Squat to Pause Back Squat — same sets and reps, but the 2-second pause at the bottom eliminates the stretch reflex and forces you to generate force from a dead stop."
+- Example bad changeSummary: "Progression cue added." or "1 change applied."
 
 NSCA STANDARDS — PRESERVE THESE IN EVERY EDIT:
 
@@ -300,6 +312,172 @@ async function interpretWithAI(
   }
 }
 
+// ─── Exercise-Aware Harder / Easier Mutation Builders ────────────────────────
+// These produce REAL prescription changes, never note-only mutations.
+
+function classifyExercise(name: string): "explosive" | "trunk" | "primary_strength" | "accessory" {
+  const n = name.toLowerCase();
+  if (/jump|broad jump|box jump|bound|sprint|plyometric|med ball|medicine ball|hurdle/i.test(n)) return "explosive";
+  if (/pallof|anti.rotation|plank|bird.dog|dead.bug|hollow|ab wheel|landmine rot/i.test(n)) return "trunk";
+  if (/squat|deadlift|bench press|barbell press|overhead press|chin.up|pull.up|dip|row|rdl|romanian/i.test(n)) return "primary_strength";
+  return "accessory";
+}
+
+function buildHarderMutation(exerciseId: number, exerciseName: string): EditPlan {
+  const kind = classifyExercise(exerciseName);
+
+  if (kind === "explosive") {
+    return {
+      intent: "harder_variation",
+      scope: "exercise",
+      changeSummary: `${exerciseName} difficulty increased: rep target tightened to 4 quality reps with complete recovery between sets. Each attempt must be maximal — don't accumulate fatigue.`,
+      changes: [{
+        type: "update_exercise",
+        id: exerciseId,
+        updates: { reps: "4", notes: "Harder: each rep must be a true max-effort attempt. Full 90–120 sec rest between sets. Prioritise distance/height over volume." },
+        reason: "User requested harder explosive variation — increased effort demand",
+      }],
+    };
+  }
+
+  if (kind === "trunk") {
+    return {
+      intent: "harder_variation",
+      scope: "exercise",
+      changeSummary: `${exerciseName} made harder: 3-second isometric hold at end range added. Full bracing required — no counter-rotation allowed.`,
+      changes: [{
+        type: "update_exercise",
+        id: exerciseId,
+        updates: { tempo: "3-0-3-0", notes: "Harder: 3-second hold at full extension/end range. Maintain complete anti-rotation throughout. Zero momentum." },
+        reason: "User requested harder trunk variation — added isometric pause",
+      }],
+    };
+  }
+
+  if (kind === "primary_strength") {
+    return {
+      intent: "harder_variation",
+      scope: "exercise",
+      changeSummary: `${exerciseName} made harder with a 3-1-X-0 tempo: 3-second eccentric, 1-second pause at the bottom, then drive hard. Same load — this eliminates the stretch reflex and increases time under tension significantly.`,
+      changes: [{
+        type: "update_exercise",
+        id: exerciseId,
+        updates: { tempo: "3-1-X-0", notes: "Harder: 3-sec eccentric, 1-sec dead-stop pause, explosive concentric. Keep the same load — the tempo makes it dramatically harder. Maintain controlled form throughout." },
+        reason: "User requested harder variation — applied eccentric tempo prescription",
+      }],
+    };
+  }
+
+  // Accessory: add controlled tempo and tighten reps
+  return {
+    intent: "harder_variation",
+    scope: "exercise",
+    changeSummary: `${exerciseName} made harder with a 2-1-1-0 tempo: slow concentric, 1-second hold at peak contraction, controlled return. Eliminate all momentum — full ROM, full tension.`,
+    changes: [{
+      type: "update_exercise",
+      id: exerciseId,
+      updates: { tempo: "2-1-1-0", notes: "Harder: 2-sec concentric, 1-sec squeeze at peak, 1-sec eccentric. No momentum. Full ROM every rep." },
+      reason: "User requested harder accessory variation — applied tempo to eliminate momentum",
+    }],
+  };
+}
+
+function buildEasierMutation(exerciseId: number, exerciseName: string): EditPlan {
+  const kind = classifyExercise(exerciseName);
+
+  if (kind === "explosive") {
+    return {
+      intent: "easier_variation",
+      scope: "exercise",
+      changeSummary: `${exerciseName} adjusted to a lower-demand version: increased rest and reduced rep count. Focus on landing mechanics and full recovery between efforts.`,
+      changes: [{
+        type: "update_exercise",
+        id: exerciseId,
+        updates: { reps: "3", rest: "2 min", notes: "Easier: reduce distance or height target by 20%. Prioritise landing quality — soft knees, controlled stop. Full rest between sets." },
+        reason: "User requested easier explosive variation — reduced demand",
+      }],
+    };
+  }
+
+  if (kind === "trunk") {
+    return {
+      intent: "easier_variation",
+      scope: "exercise",
+      changeSummary: `${exerciseName} regressed: shorter hold duration and reduced leverage. Build position stability before progressing lever length or load.`,
+      changes: [{
+        type: "update_exercise",
+        id: exerciseId,
+        updates: { tempo: "1-0-1-0", reps: "8-10", notes: "Easier: reduce lever or load. 1-second hold only. Prioritise perfect position over duration. Stop if you feel any rotation or compensation." },
+        reason: "User requested easier trunk variation — reduced hold demand",
+      }],
+    };
+  }
+
+  if (kind === "primary_strength") {
+    return {
+      intent: "easier_variation",
+      scope: "exercise",
+      changeSummary: `${exerciseName} adjusted to a higher rep, lower intensity zone. Rep range widened to 6–8 — keep loads moderate and focus on movement quality.`,
+      changes: [{
+        type: "update_exercise",
+        id: exerciseId,
+        updates: { reps: "6-8", notes: "Easier: use a load that allows clean reps at 3+ RIR. Focus on technique and controlled eccentric. No grinding reps." },
+        reason: "User requested easier variation — shifted to higher rep / lower intensity zone",
+      }],
+    };
+  }
+
+  // Accessory: slow tempo for quality
+  return {
+    intent: "easier_variation",
+    scope: "exercise",
+    changeSummary: `${exerciseName} adjusted to a quality-focused prescription: lighter load, wider rep range, controlled pace. Build movement competency before increasing intensity.`,
+    changes: [{
+      type: "update_exercise",
+      id: exerciseId,
+      updates: { reps: "12-15", notes: "Easier: reduce load by 20-30%. Full ROM, controlled pace. Focus on muscle connection over weight moved." },
+      reason: "User requested easier accessory variation — higher rep quality zone",
+    }],
+  };
+}
+
+// ─── Progression-Based Fallback Plan Builder ──────────────────────────────────
+// Used when AI fails and we have library progression data available.
+// Produces a real replace_exercise mutation from the exercise library.
+
+function buildProgressionFallbackPlan(
+  targetContext: TargetContext,
+  progressions: { easier: any[]; harder: any[] },
+  direction: "harder" | "easier"
+): EditPlan | null {
+  const candidates = direction === "harder" ? progressions.harder : progressions.easier;
+  if (candidates.length === 0) return null;
+
+  const exerciseId = targetContext.id;
+  const exerciseName = targetContext.label ?? "the exercise";
+  const best = candidates[0];
+  const newName = best.name as string;
+
+  return {
+    intent: direction === "harder" ? "harder_variation" : "easier_variation",
+    scope: "exercise",
+    changeSummary: direction === "harder"
+      ? `Changed ${exerciseName} to ${newName} — a more demanding variation in the same movement pattern. Sets and reps carried over.`
+      : `Changed ${exerciseName} to ${newName} — a less demanding variation to build quality volume. Sets and reps carried over.`,
+    changes: [{
+      type: "replace_exercise",
+      id: exerciseId,
+      replacement: {
+        name: newName,
+        notes: direction === "harder"
+          ? `Progression from ${exerciseName}. Maintain the same sets/reps — the movement demand is higher. Control the eccentric.`
+          : `Regression from ${exerciseName}. Build movement quality and confidence here before returning to the original.`,
+      },
+      reason: `User requested ${direction} variation — library match: ${newName}`,
+    }],
+  };
+}
+
 // ─── Rule-Based Fallback Interpreter ────────────────────────────────────────
 
 function interpretWithRules(userRequest: string, system: any, targetContext?: TargetContext): EditPlan {
@@ -385,21 +563,11 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
     }
 
     if (wantsEasier) {
-      return {
-        intent: "easier_variation",
-        scope: "exercise",
-        changeSummary: `${label} adjusted to a less demanding prescription. Use this opportunity to build movement quality and accumulate clean volume.`,
-        changes: [{ type: "update_exercise", id: exerciseId, updates: { notes: "Regressed: use lighter load, higher reps, shorter ROM or machine variation as needed. Prioritize quality over intensity." }, reason: "User requested easier variation" }],
-      };
+      return buildEasierMutation(exerciseId, label);
     }
 
     if (wantsHarder) {
-      return {
-        intent: "harder_variation",
-        scope: "exercise",
-        changeSummary: `${label} progression cue added. Increase load or shift to a more demanding variation when your current prescription feels submaximal.`,
-        changes: [{ type: "update_exercise", id: exerciseId, updates: { notes: "Progression: load is ready to increase when you can hit the top of the rep range at 2+ RIR for 2 consecutive sessions." }, reason: "User requested harder progression cue" }],
-      };
+      return buildHarderMutation(exerciseId, label);
     }
 
     return {
@@ -811,6 +979,9 @@ export async function interpretEditRequest(
 
   // ── Exercise Intelligence: inject swap candidates or progressions ──────────
   let exerciseSwapContext: string | undefined;
+  // Hold onto progressions so rule-based fallback can produce a real library swap
+  let fetchedProgressions: { easier: any[]; harder: any[] } | null = null;
+  let resolvedSwapIntent: "swap" | "easier" | "harder" | null = null;
 
   const swapIntent = detectSwapIntent(userRequest);
   if (swapIntent && targetContext?.type === "exercise" && targetContext.label) {
@@ -823,6 +994,8 @@ export async function interpretEditRequest(
           : "full_gym")
       : "full_gym";
 
+    resolvedSwapIntent = swapIntent;
+
     try {
       if (swapIntent === "swap") {
         exerciseSwapContext = await buildSwapContext({
@@ -833,14 +1006,16 @@ export async function interpretEditRequest(
       } else {
         // Easier or harder — use progressions
         const progressions = await getProgressions(exerciseName);
+        fetchedProgressions = progressions;
         const target = swapIntent === "easier" ? progressions.easier : progressions.harder;
         if (target.length > 0) {
           const label = swapIntent === "easier" ? "REGRESSION OPTIONS" : "PROGRESSION OPTIONS";
-          exerciseSwapContext = `${label} for "${exerciseName}" (prefer these):\n${target.map((ex) => `  - ${ex.name} (${(ex.equipment as string[]).join("/")}, ${ex.difficultyLevel})`).join("\n")}`;
+          exerciseSwapContext = `${label} for "${exerciseName}" (prefer these — use replace_exercise with one of these exact names):\n${target.map((ex) => `  - ${ex.name} (${(ex.equipment as string[]).join("/")}, ${ex.difficultyLevel})`).join("\n")}`;
           logger.info({ exerciseName, swapIntent, count: target.length }, "Injecting progression context from exercise library");
         } else {
-          // Fallback to cluster-based swap
+          // Fallback to cluster-based swap when no direct progressions
           exerciseSwapContext = await buildSwapContext({ exerciseName, equipmentLevel });
+          logger.info({ exerciseName, swapIntent }, "No direct progressions — injecting cluster swap context");
         }
       }
     } catch (err) {
@@ -857,11 +1032,37 @@ export async function interpretEditRequest(
     exerciseSwapContext
   );
 
-  if (aiPlan && Array.isArray(aiPlan.changes)) {
-    logger.info({ intent: aiPlan.intent, scope: aiPlan.scope, changes: aiPlan.changes.length }, "AI edit plan generated");
-    return aiPlan;
+  if (aiPlan && Array.isArray(aiPlan.changes) && aiPlan.changes.length > 0) {
+    // Guard: if AI produced a harder/easier intent but only changed notes, reject it and use our fallback
+    const isProgressionIntent = /harder_variation|easier_variation|increase_difficulty|decrease_difficulty/i.test(aiPlan.intent);
+    const onlyNotesChange = aiPlan.changes.every((c) => {
+      if (c.type !== "update_exercise") return false;
+      const keys = Object.keys(c.updates ?? {});
+      return keys.length === 1 && keys[0] === "notes";
+    });
+
+    if (isProgressionIntent && onlyNotesChange) {
+      logger.warn({ intent: aiPlan.intent, changes: aiPlan.changes.length }, "AI produced note-only mutation for progression request — rejecting, using real mutation fallback");
+    } else {
+      logger.info({ intent: aiPlan.intent, scope: aiPlan.scope, changes: aiPlan.changes.length }, "AI edit plan generated");
+      return aiPlan;
+    }
   }
 
+  // ── Fallback: progression-aware plan using library data ──────────────────
+  if (
+    (resolvedSwapIntent === "harder" || resolvedSwapIntent === "easier") &&
+    fetchedProgressions &&
+    targetContext?.type === "exercise"
+  ) {
+    const libFallback = buildProgressionFallbackPlan(targetContext, fetchedProgressions, resolvedSwapIntent);
+    if (libFallback) {
+      logger.info({ intent: libFallback.intent, exercise: targetContext.label, direction: resolvedSwapIntent }, "Using library progression fallback plan");
+      return libFallback;
+    }
+  }
+
+  // ── Final fallback: exercise-aware rule-based mutation ────────────────────
   logger.info("Falling back to rule-based edit interpretation");
   return interpretWithRules(userRequest, system, targetContext);
 }

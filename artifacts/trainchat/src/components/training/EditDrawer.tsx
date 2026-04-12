@@ -64,6 +64,14 @@ export interface ChangedIds {
   phases: number[];
 }
 
+export interface ChangeTarget {
+  type: "exercise_swap" | "exercise_update" | "exercise_added";
+  originalExercise?: string;
+  newExercise: string;
+  exerciseId: number;
+  changeDetail?: string;
+}
+
 export interface EditResult {
   intent: string;
   scope: string;
@@ -71,6 +79,7 @@ export interface EditResult {
   appliedCount: number;
   skippedCount: number;
   changedIds: ChangedIds;
+  changeTargets?: ChangeTarget[];
   updatedData: { today: any; week: any; block: any };
   changeLogId?: number;
 }
@@ -1221,24 +1230,47 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
 
         {/* ── Phase: Success ──────────────────────────────────────── */}
         {phase === "success" && editResult && (
-          <div className="flex-1 flex flex-col items-center justify-center px-6 py-10 text-center gap-4">
+          <div className="flex-1 flex flex-col items-center justify-center px-6 py-8 text-center gap-4">
             <div className="w-14 h-14 rounded-full bg-green-500/10 border border-green-500/20 flex items-center justify-center">
               <CheckCircle2 className="w-7 h-7 text-green-400" />
             </div>
-            <div>
-              <p className="font-bold text-foreground text-base mb-2">Done</p>
-              <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
-                {editResult.changeSummary}
-              </p>
-            </div>
-            {editResult.appliedCount > 0 && (
-              <div className="flex items-center gap-2 bg-green-500/5 border border-green-500/15 rounded-lg px-4 py-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
-                <span className="text-xs font-semibold text-green-400">
-                  {editResult.appliedCount} change{editResult.appliedCount !== 1 ? "s" : ""} applied
-                </span>
+
+            {/* Exact mutation badges */}
+            {editResult.changeTargets && editResult.changeTargets.length > 0 && (
+              <div className="w-full space-y-2">
+                {editResult.changeTargets.map((ct, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-center gap-2 bg-green-500/5 border border-green-500/15 rounded-xl px-4 py-2.5"
+                  >
+                    {ct.type === "exercise_swap" ? (
+                      <>
+                        <span className="text-xs font-semibold text-foreground/80 truncate max-w-[120px]">{ct.originalExercise}</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
+                        <span className="text-xs font-bold text-green-400 truncate max-w-[120px]">{ct.newExercise}</span>
+                      </>
+                    ) : ct.type === "exercise_added" ? (
+                      <>
+                        <span className="text-[10px] font-bold text-green-400 uppercase tracking-wider">Added</span>
+                        <span className="text-xs font-semibold text-green-400 truncate max-w-[160px]">{ct.newExercise}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-[10px] font-bold text-primary/70 uppercase tracking-wider flex-shrink-0">Updated</span>
+                        <span className="text-xs font-semibold text-foreground/80 truncate max-w-[100px]">{ct.newExercise}</span>
+                        {ct.changeDetail && (
+                          <span className="text-[10px] text-primary/60 font-mono truncate max-w-[100px]">({ct.changeDetail})</span>
+                        )}
+                      </>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
+
+            <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
+              {editResult.changeSummary}
+            </p>
           </div>
         )}
 
