@@ -3,7 +3,8 @@ import { useLocation } from "wouter";
 import {
   SendHorizontal, Zap, PanelLeftClose, PanelLeft, Activity,
   Menu, Target, CreditCard, LogOut, Dumbbell,
-  MessageSquare, Plus, RotateCcw, Brain,
+  MessageSquare, Plus, RotateCcw, Brain, ChevronDown, ChevronRight,
+  CheckCircle2, Library,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -81,6 +82,14 @@ async function fetchCurrentWeek() {
     return await customFetch<any>("/api/training-system/week");
   } catch {
     return null;
+  }
+}
+
+async function fetchProgramLibrary() {
+  try {
+    return await customFetch<any[]>("/api/training-system/library");
+  } catch {
+    return [];
   }
 }
 
@@ -163,6 +172,8 @@ export default function Chat() {
     newExercise: string;
     exerciseId: number;
   }>>([]);
+  const [showProgramLibrary, setShowProgramLibrary] = useState(false);
+  const [isSwitchingProgram, setIsSwitchingProgram] = useState(false);
 
   // Startup state: fail-safe lets the agent render even if auth hangs
   const [forceReady, setForceReady] = useState(false);
@@ -214,6 +225,13 @@ export default function Chat() {
     queryFn: fetchActiveSystem,
     enabled: !!me,
     staleTime: 60000,
+  });
+
+  const { data: programLibrary = [] } = useQuery({
+    queryKey: ["training-system-library"],
+    queryFn: fetchProgramLibrary,
+    enabled: !!me,
+    staleTime: 30000,
   });
 
   const { data: weekData } = useQuery({
@@ -451,6 +469,7 @@ export default function Chat() {
       queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-library"] });
       if (result.systemSaved) {
         setIsSaved(true);
       }
@@ -563,6 +582,7 @@ export default function Chat() {
       queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-library"] });
 
       setIsSaving(false);
       setIsSaved(true);
@@ -571,6 +591,27 @@ export default function Chat() {
     } catch (err) {
       console.error("[SaveProgram] Failed:", err);
       setIsSaving(false);
+    }
+  }
+
+  async function handleSwitchProgram(systemId: number) {
+    if (isSwitchingProgram) return;
+    setIsSwitchingProgram(true);
+    try {
+      await customFetch<any>(`/api/training-system/set-active/${systemId}`, { method: "POST" });
+      queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-library"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
+      setLatestProgram(null);
+      setIsSaved(false);
+      setShowProgramLibrary(false);
+    } catch (err) {
+      console.error("[SwitchProgram] Failed:", err);
+    } finally {
+      setIsSwitchingProgram(false);
     }
   }
 
@@ -736,12 +777,53 @@ export default function Chat() {
           )}
         </button>
         <button
-          onClick={() => { setLocation("/system"); setMobilePanel(null); }}
+          onClick={() => setShowProgramLibrary((v) => !v)}
           className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
         >
-          <Target className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <Library className="w-4 h-4 text-muted-foreground flex-shrink-0" />
           <span>Saved Programs</span>
+          {programLibrary.filter((p: any) => p.status === "archived").length > 0 && (
+            <span className="ml-auto text-[10px] bg-muted rounded-full px-1.5 py-0.5 text-muted-foreground flex-shrink-0">
+              {programLibrary.filter((p: any) => p.status === "archived").length}
+            </span>
+          )}
+          {showProgramLibrary ? (
+            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+          ) : (
+            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+          )}
         </button>
+        {showProgramLibrary && programLibrary.length > 0 && (
+          <div className="ml-2 space-y-0.5 mb-1">
+            {programLibrary.map((prog: any) => (
+              <button
+                key={prog.id}
+                onClick={() => prog.status === "archived" ? handleSwitchProgram(prog.id) : undefined}
+                disabled={prog.status === "active" || isSwitchingProgram}
+                className={`w-full flex items-start gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all ${
+                  prog.status === "active"
+                    ? "bg-primary/8 border border-primary/20 cursor-default"
+                    : "hover:bg-muted/60 active:bg-muted/80 cursor-pointer"
+                }`}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-[11px] font-semibold text-foreground truncate">{prog.name}</p>
+                    {prog.status === "active" && (
+                      <CheckCircle2 className="w-3 h-3 text-green-400 flex-shrink-0" />
+                    )}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
+                    {prog.weeklyFrequency}x/week · {prog.trainingStyle}
+                  </p>
+                </div>
+                {prog.status === "archived" && !isSwitchingProgram && (
+                  <span className="text-[9px] text-primary/70 flex-shrink-0 mt-0.5">Load</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
         <button
           onClick={() => { handleNewConversation(); setMobilePanel(null); }}
           className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"

@@ -937,18 +937,31 @@ Keep it helpful and intelligent, never promotional.`;
     .where(eq(conversationsTable.id, params.data.id));
 
   // ── Auto-save / Auto-update program (Change Engine) ───────────────────────
-  // When the AI returns a valid program, persist it via upsert:
-  //   • first program → creates a new training system
-  //   • existing program → updates the system IN PLACE (same ID, change logged)
-  // This is the core of the Change Engine: the program is a living state,
-  // not regenerated from scratch on each message.
+  // Routing rules:
+  //   • CREATE_PROGRAM / START_NEW_PROGRAM → always create a NEW training system.
+  //     This archives the existing active program (preserving it) and creates fresh.
+  //   • All edit intents (EDIT_PROGRAM, ADJUST_FOR_PAIN, ADJUST_FOR_READINESS) →
+  //     update the existing system IN PLACE (same ID, change logged).
+  // This separates "new program builds" from "edits to the current program" so
+  // a new builder session never silently overwrites an existing saved program.
   let systemSaved = false;
   let autoSavedSystemId: number | undefined;
   let changeLogId: number | undefined;
 
   if (structuredData && Array.isArray(structuredData.days) && structuredData.days.length > 0) {
     try {
-      const { system: savedSystem, isUpdate } = await upsertTrainingSystemFromProgram(userId, structuredData);
+      const isNewProgramBuild =
+        intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM";
+      let savedSystem: { id: number; [key: string]: any };
+      let isUpdate: boolean;
+      if (isNewProgramBuild) {
+        savedSystem = await createTrainingSystemFromProgram(userId, structuredData);
+        isUpdate = false;
+      } else {
+        const result = await upsertTrainingSystemFromProgram(userId, structuredData);
+        savedSystem = result.system;
+        isUpdate = result.isUpdate;
+      }
       systemSaved = true;
       autoSavedSystemId = savedSystem.id;
 
@@ -1543,13 +1556,27 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
 
   // ── Auto-save / Change Engine ─────────────────────────────────────────────
+  // Same routing as non-streaming path:
+  //   • CREATE_PROGRAM / START_NEW_PROGRAM → create NEW system (archive existing)
+  //   • Edit intents → update in place
   let systemSaved = false;
   let autoSavedSystemId: number | undefined;
   let changeLogId: number | undefined;
 
   if (structuredData && Array.isArray(structuredData.days) && structuredData.days.length > 0) {
     try {
-      const { system: savedSystem, isUpdate } = await upsertTrainingSystemFromProgram(userId, structuredData);
+      const isNewProgramBuildSSE =
+        intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM";
+      let savedSystem: { id: number; [key: string]: any };
+      let isUpdate: boolean;
+      if (isNewProgramBuildSSE) {
+        savedSystem = await createTrainingSystemFromProgram(userId, structuredData);
+        isUpdate = false;
+      } else {
+        const result = await upsertTrainingSystemFromProgram(userId, structuredData);
+        savedSystem = result.system;
+        isUpdate = result.isUpdate;
+      }
       systemSaved = true;
       autoSavedSystemId = savedSystem.id;
 

@@ -1,5 +1,8 @@
 import { Router, type IRouter } from "express";
 import { requireAuth } from "../middlewares/auth";
+import { db } from "@workspace/db";
+import { trainingSystems } from "@workspace/db";
+import { eq, and, desc } from "drizzle-orm";
 import {
   getActiveTrainingSystem,
   getFullTrainingSystem,
@@ -296,6 +299,83 @@ router.post("/training-system/restore/:changeId", requireAuth, async (req, res):
   } catch (err) {
     logger.error({ err }, "[training-system] POST /restore error");
     res.status(500).json({ error: "Failed to restore program version" });
+  }
+});
+
+// ─── GET /training-system/library ────────────────────────────────────────────
+// Returns ALL training systems for the user (active + archived) as a program library.
+// This is how the "Saved Programs" sidebar section gets its data.
+router.get("/training-system/library", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const userId = req.session.userId!;
+    const systems = await db
+      .select()
+      .from(trainingSystems)
+      .where(eq(trainingSystems.userId, userId))
+      .orderBy(desc(trainingSystems.updatedAt));
+
+    res.json(
+      systems.map((s) => ({
+        id: s.id,
+        name: s.name,
+        overarchingGoal: s.overarchingGoal,
+        trainingStyle: s.trainingStyle,
+        weeklyFrequency: s.weeklyFrequency,
+        status: s.status,
+        createdAt: s.createdAt.toISOString(),
+        updatedAt: s.updatedAt.toISOString(),
+      }))
+    );
+  } catch (err) {
+    logger.error({ err }, "[training-system] GET /library error");
+    res.status(500).json({ error: "Failed to load program library" });
+  }
+});
+
+// ─── POST /training-system/set-active/:id ────────────────────────────────────
+// Switches the active training system: archives the current active one and
+// activates the specified system. This is how the user switches between saved programs.
+router.post("/training-system/set-active/:id", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const userId = req.session.userId!;
+    const id = parseInt(req.params.id, 10);
+
+    if (isNaN(id)) {
+      res.status(400).json({ error: "Invalid training system id" });
+      return;
+    }
+
+    const [target] = await db
+      .select()
+      .from(trainingSystems)
+      .where(and(eq(trainingSystems.id, id), eq(trainingSystems.userId, userId)));
+
+    if (!target) {
+      res.status(404).json({ error: "Training system not found" });
+      return;
+    }
+
+    if (target.status === "active") {
+      res.json({ success: true, systemId: id, message: "Already the active program" });
+      return;
+    }
+
+    await db
+      .update(trainingSystems)
+      .set({ status: "archived" })
+      .where(and(eq(trainingSystems.userId, userId), eq(trainingSystems.status, "active")));
+
+    await db
+      .update(trainingSystems)
+      .set({ status: "active" })
+      .where(eq(trainingSystems.id, id));
+
+    logger.info({ userId, systemId: id }, "[training-system] POST /set-active — program switched");
+
+    res.json({ success: true, systemId: id });
+  } catch (err) {
+    logger.error({ err }, "[training-system] POST /set-active error");
+    res.status(500).json({ error: "Failed to switch active program" });
   }
 });
 
