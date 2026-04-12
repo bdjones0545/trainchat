@@ -1,0 +1,207 @@
+Upgrade the TrainChat "Live Program System" to behave like a real-time adaptive training agent (vibe coding for training), not a static generator.
+
+CURRENT ISSUE:
+The Program, Changes, History, and Forecast tabs behave like separate static features instead of a connected evolving system.
+
+GOAL:
+Transform this into a unified “Live Adaptive System” where:
+- The program updates dynamically
+- Changes reflect real decisions made by the AI
+- History shows evolution over time
+- Forecast is tied to actual usage data
+
+----------------------------------------
+1. CREATE A CENTRAL "PROGRAM STATE ENGINE"
+----------------------------------------
+
+Create a single source of truth:
+
+programState = {
+  version: number,
+  createdAt: timestamp,
+  lastUpdated: timestamp,
+  inputs: [],
+  program: {},
+  changes: [],
+  history: [],
+  forecast: {},
+  confidence: "none" | "low" | "medium" | "high"
+}
+
+All tabs (Program, Changes, History, Forecast) must pull from this.
+
+----------------------------------------
+2. FIX "PROGRAM" TAB (MAKE IT LIVE)
+----------------------------------------
+
+Current problem:
+Program is static after generation.
+
+Fix:
+- Every new user message should be evaluated for:
+  - intent to modify program
+  - constraints (equipment, fatigue, time, sport changes)
+
+If modification detected:
+→ Update programState.program
+→ Increment version
+→ Push change to changes log
+
+Add label:
+“LIVE PROGRAM (AUTO-UPDATING)”
+
+----------------------------------------
+3. FIX "CHANGES" TAB (MAKE IT INTELLIGENT)
+----------------------------------------
+
+Current problem:
+It only logs initial build.
+
+Fix:
+Changes must ONLY log real system decisions.
+
+Each change entry should include:
+- version number
+- timestamp
+- reason (AI reasoning)
+- what changed
+
+Example:
+V2 UPDATE
+- Reduced volume on lower body day
+- Reason: User reported fatigue / high neural demand
+
+DO NOT log fake or generic events.
+
+----------------------------------------
+4. BUILD REAL "HISTORY" (VERSION SNAPSHOTS)
+----------------------------------------
+
+Current problem:
+History is likely empty or redundant.
+
+Fix:
+- Store full program snapshots at each version
+
+history = [
+  { version: 1, programSnapshot, timestamp },
+  { version: 2, programSnapshot, timestamp }
+]
+
+UI:
+Allow user to:
+- View past versions
+- Compare versions (future feature)
+- Restore previous version (optional)
+
+----------------------------------------
+5. FIX "FORECAST" (CONNECT TO REAL DATA)
+----------------------------------------
+
+CRITICAL RULE:
+Forecast must NOT run without real data.
+
+Add gating:
+
+IF:
+- no workouts logged
+- no check-ins
+→ status = "no_data"
+
+IF:
+- 1–2 interactions only
+→ status = "low_confidence"
+
+ONLY IF:
+- workouts >= 3 AND check-ins >= 2
+→ status = "active"
+
+Forecast must use:
+- training frequency
+- volume trends
+- user feedback (if available)
+
+Otherwise show:
+“No Forecast Yet”
+
+----------------------------------------
+6. CONNECT CHAT → SYSTEM (THIS IS THE BIG ONE)
+----------------------------------------
+
+Right now chat builds once.
+
+Fix:
+Every user message should run through:
+
+analyzeUserIntent(message) → {
+  type: "build" | "modify" | "question"
+}
+
+IF "modify":
+- update program
+- log change
+- update version
+- update lastUpdated
+
+This is what makes it feel like Replit-style vibe coding.
+
+----------------------------------------
+7. ADD "SYSTEM THINKING FEEDBACK"
+----------------------------------------
+
+When AI updates program, show:
+
+“Updating your program based on your input…”
+
+Then reflect actual changes.
+
+This makes it feel alive.
+
+----------------------------------------
+8. REMOVE ALL FAKE / DEFAULT DATA
+----------------------------------------
+
+Audit and REMOVE:
+- default forecast messages
+- placeholder fatigue warnings
+- fake change logs
+- demo values leaking into production
+
+Everything must be tied to real user actions.
+
+----------------------------------------
+9. UX IMPROVEMENTS
+----------------------------------------
+
+Top right tabs should behave like:
+
+Program → Current build (live)
+Changes → What just changed and why
+History → How it evolved
+Forecast → What’s coming next (ONLY with data)
+
+Make it feel like:
+“You and the AI are co-building this system in real time.”
+
+----------------------------------------
+10. FINAL RULE (MOST IMPORTANT)
+----------------------------------------
+
+The system must NEVER:
+- pretend it updated something when it didn’t
+- show insights without data
+- log fake reasoning
+
+Everything must be:
+REAL → TRACEABLE → USER-DRIVEN
+
+----------------------------------------
+DELIVERABLES
+----------------------------------------
+
+After implementation:
+1. Explain how programState is structured
+2. Show how versioning works
+3. Show how chat modifies the program
+4. Show how forecast gating is enforced
+5. List any remaining limitations
