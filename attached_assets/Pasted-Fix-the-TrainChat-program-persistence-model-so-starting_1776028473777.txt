@@ -1,0 +1,240 @@
+Fix the TrainChat program persistence model so starting a new builder/chat session does NOT erase the previously created program.
+
+CURRENT ISSUE:
+When a user starts a new chat and creates a new program, the previously created program disappears or gets overwritten.
+
+This is wrong.
+
+The app already has a “Saved Programs” concept, and that section should preserve previous programs instead of letting each new build replace the old one.
+
+GOAL:
+Separate:
+1. active program
+2. saved programs
+3. builder/chat sessions
+
+A new builder session should be able to create a new program without deleting or overwriting existing saved programs unless the user explicitly chooses to replace one.
+
+----------------------------------------
+1. DEFINE THE CORE DATA MODEL
+----------------------------------------
+
+Create clear distinction between:
+
+A. Active Program
+- the currently selected/live program shown in Today / This Week / Block / History
+
+B. Saved Programs
+- all previously created programs for the user
+- each program should persist independently
+
+C. Builder Session / Chat Session
+- the conversational thread used to create or refine a program
+- may create a new program or modify an existing one
+
+These must not be treated as the same object.
+
+----------------------------------------
+2. NEW BUILDER SESSION SHOULD NOT OVERWRITE EXISTING PROGRAMS
+----------------------------------------
+
+When the user taps:
+- New Builder Session
+or starts a brand-new chat-based program build
+
+the system should:
+- create a new builder session
+- create a new program draft/record when a real program is generated
+- preserve all previous saved programs
+
+It must NOT automatically wipe or replace the previously active/saved program.
+
+----------------------------------------
+3. CREATE A PROGRAM LIBRARY MODEL
+----------------------------------------
+
+Each program should have its own record, for example:
+
+program = {
+  id,
+  userId,
+  title,
+  goal,
+  sportContext,
+  frequencyPerWeek,
+  status: "active" | "saved" | "archived" | "draft",
+  createdAt,
+  updatedAt,
+  blockState,
+  weekState,
+  history,
+  changes,
+  sessions,
+  sourceBuilderSessionId
+}
+
+There can be many program records per user.
+
+----------------------------------------
+4. ONLY ONE ACTIVE PROGRAM AT A TIME
+----------------------------------------
+
+Allow multiple saved programs, but only one should be marked as active at once.
+
+Rules:
+- when a new program is created, ask or decide whether it becomes the active program
+- previous active program should become saved, not deleted
+- switching active program should not delete other programs
+
+Example:
+User has:
+- Hockey Performance 3-Day
+- Hypertrophy 4-Day
+- Home Equipment Plan
+
+Only one powers the live Today / This Week / Block / History view at a time.
+
+----------------------------------------
+5. CONNECT SAVED PROGRAMS TO REAL PROGRAM RECORDS
+----------------------------------------
+
+The “Saved Programs” section should list actual persistent program records, not just chat history or labels.
+
+Each saved program should show useful metadata like:
+- title
+- goal/sport
+- frequency
+- last updated
+- active badge if applicable
+
+Tapping a saved program should:
+- load it
+- optionally set it active
+- open its corresponding live state
+
+----------------------------------------
+6. DO NOT CONFUSE CHAT HISTORY WITH PROGRAM HISTORY
+----------------------------------------
+
+Session History / Builder history is not the same as Saved Programs.
+
+A chat message like:
+“I play hockey build a 3 day training program”
+should not itself be the saved program.
+It may be the source conversation, but the actual saved program should be a separate structured program object.
+
+Keep these separate:
+- chat sessions
+- saved programs
+- active program state
+
+----------------------------------------
+7. SUPPORT TWO PATHS FOR NEW BUILDS
+----------------------------------------
+
+When creating a new program from chat, support:
+
+A. Create New Program
+- creates a brand-new program record
+- preserves existing programs
+
+B. Update Existing Active Program
+- mutates the currently active program
+- should only happen when the user intent clearly means modify current program
+
+Examples:
+- “Make it a 4 day program” → likely modify current active program
+- “Build me a hypertrophy-focused plan” → likely create new program unless clearly linked to current one
+
+----------------------------------------
+8. ADD EXPLICIT PROGRAM CREATION VS PROGRAM MODIFICATION LOGIC
+----------------------------------------
+
+Intent layer must distinguish:
+
+- create_new_program
+- modify_existing_program
+- switch_active_program
+
+Do NOT assume every new chat means overwrite current program.
+
+Examples:
+- “Build me a new hypertrophy plan” → create_new_program
+- “Adjust this current hockey plan” → modify_existing_program
+- “Open my hockey program” → switch_active_program
+
+----------------------------------------
+9. FIX THE CURRENT MENU BEHAVIOR
+----------------------------------------
+
+The sidebar/menu should support:
+
+- Active Program
+- Saved Programs
+- New Builder Session
+- Session History
+
+Expected behavior:
+- New Builder Session starts fresh conversation, but does not erase saved programs
+- Saved Programs shows previous programs as durable program records
+- Active Program indicates the one currently loaded into system views
+
+----------------------------------------
+10. MIGRATE CURRENT BROKEN STATE IF POSSIBLE
+----------------------------------------
+
+If the app currently stores only one live program object, migrate toward:
+- one active program pointer
+- many saved program records
+
+If there is existing data, try to preserve it rather than wiping.
+
+----------------------------------------
+11. UX BEHAVIOR WHEN NEW PROGRAM IS CREATED
+----------------------------------------
+
+After generating a new program in a fresh builder session:
+- save it as a new program record
+- optionally make it active
+- keep the previous active program in Saved Programs
+
+Good behavior:
+“Created a new program and set it as active. Your previous program is محفوظ in Saved Programs.”
+(Use app language appropriate to the UI, in English.)
+
+----------------------------------------
+12. TEST CASES
+----------------------------------------
+
+Verify:
+
+1. User creates hockey program
+→ saved as Program A
+→ active = Program A
+
+2. User starts New Builder Session and creates hypertrophy plan
+→ saved as Program B
+→ Program A still exists in Saved Programs
+
+3. User switches back to Program A
+→ Program A becomes active
+→ Program B remains saved
+
+4. User says “Make it 4 days”
+while Program A is active
+→ modifies Program A only
+→ does not create Program C unless intended
+
+5. Session history remains separate from saved program library
+
+----------------------------------------
+13. DELIVERABLES
+----------------------------------------
+
+After implementation, provide:
+1. updated program data model
+2. how active vs saved vs builder session are separated
+3. how Saved Programs now loads real program records
+4. how new builder sessions avoid overwriting prior programs
+5. how modification vs new program creation is determined
+6. any migration notes for existing single-program state
