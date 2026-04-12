@@ -231,6 +231,257 @@ function isDirectPrescriptionChange(request: string): boolean {
   ].some((p) => p.test(lower));
 }
 
+// ─── Block-Level Intent Parser ────────────────────────────────────────────────
+// Detects specific block-level mutation commands when the target is a phase.
+// Returns a structured directEditRequest for the edit engine, bypassing the chooser.
+
+interface BlockIntentMatch {
+  intent: string;
+  directEditRequest: string;
+}
+
+/**
+ * Maps of known block-level intents with their detection patterns and
+ * the structured edit request to send to the edit engine.
+ */
+const BLOCK_INTENT_PATTERNS: Array<{
+  intent: string;
+  patterns: RegExp[];
+  buildRequest: (blockLabel: string, match?: RegExpMatchArray) => string;
+}> = [
+  // ── Power bias ─────────────────────────────────────────────────────────────
+  {
+    intent: "increase_power_bias",
+    patterns: [
+      /\bmore\s+power\b/i,
+      /\bfocus\s+(more\s+)?on\s+power\b/i,
+      /\bpower.focused\b/i,
+      /\bpower\s+bias\b/i,
+      /\bshift\s+(toward|to|into)\s+power\b/i,
+      /\bmore\s+(explosive|reactive|force\s*express)/i,
+      /\bexplosive\s+(focus|emphasis|bias|work)\b/i,
+      /\bstrength[\s-]power\b/i,
+    ],
+    buildRequest: (label) =>
+      `Increase power bias for the ${label}: add more explosive/reactive work (jumps, throws, force-expression) across the week, reduce nonessential hypertrophy or general accessory density, bias session intents toward elastic and force-expression work while maintaining enough strength work to support power output`,
+  },
+  // ── Hypertrophy bias ───────────────────────────────────────────────────────
+  {
+    intent: "increase_hypertrophy_bias",
+    patterns: [
+      /\bhypertrophy.focused\b/i,
+      /\bmore\s+hypertrophy\b/i,
+      /\bshift\s+(toward|to|into)\s+hypertrophy\b/i,
+      /\bhypertrophy\s+bias\b/i,
+      /\bmore\s+(muscle|size|volume)\b/i,
+      /\bmuscle[\s-]building\s+(bias|focus|emphasis)\b/i,
+    ],
+    buildRequest: (label) =>
+      `Shift ${label} toward hypertrophy: increase rep ranges to 8-12+ on compound movements, add accessory volume targeting key muscle groups, extend time under tension where appropriate, reduce low-rep max strength work unless it supports hypertrophy goals`,
+  },
+  // ── Strength bias ──────────────────────────────────────────────────────────
+  {
+    intent: "increase_strength_bias",
+    patterns: [
+      /\bmore\s+strength\b/i,
+      /\bstrength.focused\b/i,
+      /\bstrength\s+bias\b/i,
+      /\bshift\s+(toward|to|into)\s+strength\b/i,
+      /\blow.rep\s+(focus|emphasis|bias)\b/i,
+      /\bmaximal\s+strength\b/i,
+    ],
+    buildRequest: (label) =>
+      `Shift ${label} toward maximal strength: move primary lifts into 3-6 rep zones, increase rest periods to 3-5 min on compound work, reduce accessory volume and prioritize primary movement quality and intensity`,
+  },
+  // ── Speed / acceleration bias ──────────────────────────────────────────────
+  {
+    intent: "increase_speed_bias",
+    patterns: [
+      /\bmore\s+speed\b/i,
+      /\bspeed.focused\b/i,
+      /\bspeed\s+bias\b/i,
+      /\bacceleration\s+(focus|emphasis|bias|work)\b/i,
+      /\bshift\s+(toward|to|into)\s+speed\b/i,
+      /\bvelocity.based\b/i,
+    ],
+    buildRequest: (label) =>
+      `Increase speed and acceleration emphasis in ${label}: add sprint-based or velocity-based work, prioritize acceleration mechanics, reduce slow-tempo hypertrophy work, ensure power development is sequenced before fatigue-heavy volume`,
+  },
+  // ── Sport specificity ──────────────────────────────────────────────────────
+  {
+    intent: "increase_sport_specificity",
+    patterns: [
+      /\bmore\s+sport.specific\b/i,
+      /\bsport.specific\s+(emphasis|focus|bias|work)\b/i,
+      /\bhockey.specific\b/i,
+      /\bmake\s+this\s+more\s+hockey\b/i,
+      /\bfootball.specific\b/i,
+      /\bbasketball.specific\b/i,
+      /\bsoccer.specific\b/i,
+      /\bbaseball.specific\b/i,
+      /\brugby.specific\b/i,
+      /\blacrosse.specific\b/i,
+      /\bfield.sport\s+(emphasis|focus|bias)\b/i,
+      /\bcourt.sport\s+(emphasis|focus|bias)\b/i,
+      /\bmore\s+(?:hockey|football|basketball|soccer|baseball|rugby|lacrosse|sport)\b.*\bspecific\b/i,
+    ],
+    buildRequest: (label) =>
+      `Increase sport specificity in ${label}: bias exercise selection toward movements that transfer directly to sport demands (lateral power, rotational strength, acceleration, deceleration, multi-directional loading), reduce non-transferable isolation work, add rotational and reactive elements to sessions`,
+  },
+  // ── Reduce volume ──────────────────────────────────────────────────────────
+  {
+    intent: "reduce_volume",
+    patterns: [
+      /\breduce\s+(overall\s+)?volume\b/i,
+      /\bless\s+(overall\s+)?volume\b/i,
+      /\blower\s+(the\s+)?volume\b/i,
+      /\bcut\s+(?:back\s+)?(?:on\s+)?volume\b/i,
+      /\bpull\s+back\s+(the\s+)?volume\b/i,
+      /\bdial\s+back\s+(the\s+)?volume\b/i,
+    ],
+    buildRequest: (label) =>
+      `Reduce overall training volume in ${label}: pull back accessory sets first, trim finishers where appropriate, reduce secondary compound volume while protecting primary lift integrity. Redistribute stress more manageably across the week`,
+  },
+  // ── Increase volume ────────────────────────────────────────────────────────
+  {
+    intent: "increase_volume",
+    patterns: [
+      /\bmore\s+(overall\s+)?volume\b/i,
+      /\bincrease\s+(overall\s+)?volume\b/i,
+      /\badd\s+(more\s+)?volume\b/i,
+      /\bmore\s+total\s+work\b/i,
+    ],
+    buildRequest: (label) =>
+      `Increase total training volume in ${label}: add accessory sets to existing sessions, extend session density where recovery allows, progressively build weekly volume while maintaining movement quality and session structure`,
+  },
+  // ── Reduce intensity ───────────────────────────────────────────────────────
+  {
+    intent: "reduce_intensity",
+    patterns: [
+      /\breduce\s+(overall\s+)?intensity\b/i,
+      /\blower\s+(the\s+)?intensity\b/i,
+      /\bless\s+intensity\b/i,
+      /\bback\s+off\s+(the\s+)?intensity\b/i,
+      /\bdial\s+back\s+(the\s+)?intensity\b/i,
+      /\bless\s+heavy\b/i,
+      /\blighter\s+loads?\b/i,
+    ],
+    buildRequest: (label) =>
+      `Reduce intensity in ${label}: shift primary lifts to higher rep ranges with lighter loads, increase RIR targets, reduce heavy loading days, prioritize technique and volume quality over maximum intensity`,
+  },
+  // ── Increase intensity ─────────────────────────────────────────────────────
+  {
+    intent: "increase_intensity",
+    patterns: [
+      /\bincrease\s+(overall\s+)?intensity\b/i,
+      /\bmore\s+intensity\b/i,
+      /\bheavier\s+loads?\b/i,
+      /\bmore\s+challenging\b/i,
+      /\bmore\s+demanding\b/i,
+      /\bpush\s+(the\s+)?intensity\b/i,
+    ],
+    buildRequest: (label) =>
+      `Increase intensity in ${label}: move primary lifts toward lower rep zones, increase load targets, tighten RIR, ensure high-effort sets on compound work. Maintain recovery structure to support increased loading`,
+  },
+  // ── Shorten block ──────────────────────────────────────────────────────────
+  {
+    intent: "shorten_block",
+    patterns: [
+      /\bshorten\s+(this\s+)?(block|phase)\b/i,
+      /\bshorter\s+(block|phase)\b/i,
+      /\b(\d+)[- ]weeks?\s+(long|only|total)\b/i,
+      /\breduce\s+(to\s+)?(\d+)\s+weeks?\b/i,
+      /\bshorten\s+(to\s+)?(\d+)\s+weeks?\b/i,
+      /\bmake\s+(it\s+)?(\d+)\s+weeks?\b/i,
+      /\bcut\s+(it\s+)?to\s+(\d+)\s+weeks?\b/i,
+    ],
+    buildRequest: (label, match?) => {
+      const weekMatch = match?.[0]?.match(/(\d+)\s*weeks?/i);
+      const weekCount = weekMatch ? weekMatch[1] : null;
+      return weekCount
+        ? `Shorten ${label} to ${weekCount} weeks: redistribute the weekly progression to fit ${weekCount} weeks, compress volume and intensity progression proportionally, ensure the block still builds meaningfully toward its goal`
+        : `Shorten ${label}: reduce the number of weeks and redistribute weekly progression proportionally. Compress volume and intensity buildup to complete the block's goal in fewer weeks`;
+    },
+  },
+  // ── Lengthen block ─────────────────────────────────────────────────────────
+  {
+    intent: "lengthen_block",
+    patterns: [
+      /\blengthen\s+(this\s+)?(block|phase)\b/i,
+      /\blonger\s+(block|phase)\b/i,
+      /\bextend\s+(this\s+)?(block|phase)\b/i,
+      /\badd\s+(more\s+)?weeks?\b/i,
+      /\bmore\s+weeks?\b/i,
+    ],
+    buildRequest: (label) =>
+      `Extend ${label}: add weeks to allow more gradual progression, spread volume and intensity buildup across additional weeks, ensure each added week builds logically from the previous`,
+  },
+  // ── Reduce lower-body volume / emphasis ───────────────────────────────────
+  {
+    intent: "adjust_lower_body_emphasis",
+    patterns: [
+      /\breduce\s+lower.body\s+(volume|work|emphasis|focus|stress)\b/i,
+      /\bless\s+lower.body\s+(volume|work|emphasis|focus)\b/i,
+      /\bcut\s+(back\s+)?lower.body\b/i,
+      /\blow\s+lower.body\s+(volume|work|emphasis)\b/i,
+      /\bdeload\s+lower.body\b/i,
+    ],
+    buildRequest: (label) =>
+      `Reduce lower-body volume in ${label}: decrease sets on squat and hinge patterns, replace high-demand lower sessions with lighter technical work or upper-body emphasis, protect sport-specific lower body needs while reducing total stress`,
+  },
+  // ── Reduce upper-body volume / emphasis ───────────────────────────────────
+  {
+    intent: "adjust_upper_body_emphasis",
+    patterns: [
+      /\breduce\s+upper.body\s+(volume|work|emphasis|focus|stress)\b/i,
+      /\bless\s+upper.body\s+(volume|work|emphasis|focus)\b/i,
+      /\bcut\s+(back\s+)?upper.body\b/i,
+    ],
+    buildRequest: (label) =>
+      `Reduce upper-body volume in ${label}: decrease pressing and pulling volume, trim accessory upper work, shift session emphasis toward lower body or full-body integration`,
+  },
+  // ── Simplify sessions ──────────────────────────────────────────────────────
+  {
+    intent: "simplify_sessions",
+    patterns: [
+      /\bsimplify\b/i,
+      /\bsimpler\b/i,
+      /\bless\s+complex\b/i,
+      /\bfewer\s+exercises?\b/i,
+      /\bstreamline\b/i,
+    ],
+    buildRequest: (label) =>
+      `Simplify ${label}: reduce exercise variety, focus on fewer high-quality movements per session, eliminate lower-priority accessories, keep the core movement patterns and remove complexity that isn't driving the primary goal`,
+  },
+];
+
+/**
+ * Detects specific block-level mutation commands when the target is a phase.
+ * Returns a structured directEditRequest when the intent is clear and specific.
+ */
+function checkBlockSpecificity(
+  request: string,
+  targetContext: TargetContext
+): BlockIntentMatch | null {
+  const blockLabel = targetContext.label ?? "this block";
+
+  for (const { patterns, intent, buildRequest } of BLOCK_INTENT_PATTERNS) {
+    for (const pattern of patterns) {
+      const match = request.match(pattern);
+      if (match) {
+        const directEditRequest = buildRequest(blockLabel, match);
+        logger.info(
+          { original: request, intent, blockLabel, directEditRequest },
+          "Block-level intent detected — skipping directions chooser"
+        );
+        return { intent, directEditRequest };
+      }
+    }
+  }
+
+  return null;
+}
+
 // ─── Specificity Check (combined) ────────────────────────────────────────────
 
 /**
@@ -241,6 +492,18 @@ function checkSpecificity(
   request: string,
   targetContext?: TargetContext
 ): { isSpecific: true; directEditRequest: string } | { isSpecific: false } {
+  // ── Block-level target: check block intents FIRST ──────────────────────────
+  // Block requests like "I want to focus more on power" are specific block
+  // mutations, not vague requests — they must bypass the chooser entirely.
+  if (targetContext?.type === "phase") {
+    const blockMatch = checkBlockSpecificity(request, targetContext);
+    if (blockMatch) {
+      return { isSpecific: true, directEditRequest: blockMatch.directEditRequest };
+    }
+    // For phase targets that don't match known block intents, still fall
+    // through to the AI to handle (with updated block-aware prompt below).
+  }
+
   // 1. Direct prescription change patterns
   if (isDirectPrescriptionChange(request)) {
     return { isSpecific: true, directEditRequest: request };
@@ -291,6 +554,8 @@ Your job is to interpret their edit request and either:
 2. Recognize it as open-ended → generate 2-4 direction options (shouldSkipDirections: false)
 
 DECISION RULES — HIGHLY SPECIFIC (always skip directions):
+
+For EXERCISE targets:
 - Request names a specific exercise to swap TO: "use X", "try X instead", "swap to X", "change to X"
 - Request names BOTH exercises: "swap bench for dumbbell press"
 - Request specifies a clear variation: "make this a pause squat", "add a 2-second pause"
@@ -298,12 +563,24 @@ DECISION RULES — HIGHLY SPECIFIC (always skip directions):
 - Request names a known exercise abbreviation: RFESS, RDL, SSB, etc.
 - Any request where the TARGET of the change is unambiguous — even if only one exercise is named
 
+For BLOCK / PHASE targets — these are ALWAYS highly specific and must skip directions:
+- Training quality bias: "more power", "focus on power", "power-focused", "shift toward hypertrophy", "hypertrophy bias", "more strength", "strength-focused", "more speed", "velocity-based"
+- Sport specificity: "more hockey-specific", "more sport-specific", "football-specific", "field sport emphasis" — any request naming a specific sport or sport quality
+- Volume changes: "reduce volume", "more volume", "less volume", "increase volume", "cut volume"
+- Intensity changes: "reduce intensity", "more intensity", "heavier loads", "lighter loads"
+- Block length: "shorten this block", "shorten to 3 weeks", "longer block", "extend this phase", "X weeks only"
+- Lower/upper body emphasis: "reduce lower-body volume", "less upper body work"
+- Structural simplification: "simplify sessions", "fewer exercises", "less complex"
+
 DECISION RULES — OPEN-ENDED (show directions):
 - User states a vague goal: "make this better", "I don't like this", "change this", "something else"
 - User asks for a direction without naming a specific change: "more variety", "can we try something new"
-- Request is ambiguous and multiple interpretations are plausible
+- For blocks: "adjust this block", "make a change here", "something different", "not sure about this"
+- Request is ambiguous and multiple interpretations are plausible with NO clear training quality named
 
-IMPORTANT: err toward shouldSkipDirections: true when ANY specific exercise name, variation, or prescription detail appears. Only show directions when the request contains NO specific target.
+IMPORTANT:
+- For exercise targets: err toward shouldSkipDirections: true when ANY specific exercise name, variation, or prescription detail appears.
+- For block/phase targets: err toward shouldSkipDirections: true when ANY specific training quality, bias, emphasis, duration, or structural change is named. Block requests are almost always specific.
 
 FOR OPEN-ENDED REQUESTS:
 Generate 2-4 meaningful directions. Each must:
@@ -469,6 +746,44 @@ function buildFallbackDirections(
           whatWillChange: "Session type changed, exercises lightened",
           whyItMatters: "Sometimes the best training decision is to move well, not hard",
           editRequest: `Convert ${label} to an active recovery session`,
+        },
+      ],
+    };
+  }
+
+  // Phase / block fallback — show block-appropriate options
+  if (type === "phase") {
+    return {
+      shouldSkipDirections: false,
+      coachMessage: `Let's figure out the best direction for ${label}. Here are a few ways we can evolve this block:`,
+      directions: [
+        {
+          id: "A",
+          label: "More Power Focus",
+          whatWillChange: "Add explosive/reactive work, reduce non-essential accessory density",
+          whyItMatters: "Increases force-expression capacity and athletic transfer",
+          editRequest: `Increase power bias for ${label}: add more explosive and reactive work, bias session architecture toward force-expression`,
+        },
+        {
+          id: "B",
+          label: "Shift to Hypertrophy",
+          whatWillChange: "Rep ranges pushed to 8-12+, more accessory volume added",
+          whyItMatters: "Builds muscle base that underpins long-term strength and power gains",
+          editRequest: `Shift ${label} toward hypertrophy: increase rep ranges, add accessory volume, extend time under tension`,
+        },
+        {
+          id: "C",
+          label: "Reduce Overall Load",
+          whatWillChange: "Volume and intensity pulled back, accessory work trimmed",
+          whyItMatters: "Prevents overreaching and allows better recovery and long-term progress",
+          editRequest: `Reduce overall volume and intensity in ${label}: pull back accessory sets, lower intensity targets`,
+        },
+        {
+          id: "D",
+          label: "Simplify the Block",
+          whatWillChange: "Fewer exercises per session, cleaner movement focus",
+          whyItMatters: "Reduces complexity and keeps training sustainable over the full block",
+          editRequest: `Simplify ${label}: reduce exercise variety, focus on fewer high-quality movements per session`,
         },
       ],
     };

@@ -187,6 +187,61 @@ When the user states an explicit numeric or field change — reps, sets, rest, l
 The changeSummary MUST confirm exactly what changed: field name + old value (if known) + new value.
 Good: "Updated Shrimp Squat to 10 reps each side." Bad: "Done" or "1 change applied."
 
+CRITICAL — BLOCK / PHASE MUTATION REQUESTS (highest priority after prescription commands):
+When the target is a PHASE and the request contains a block-level mutation intent, you MUST make REAL structural changes to the sessions and exercises — not just update the phase label or notes. A phase update-only response is NOT acceptable.
+
+BLOCK MUTATION RULES:
+
+1. INCREASE_POWER_BIAS — "focus more on power", "more explosive work", "power bias":
+   - Add 1-2 explosive/plyometric exercises (jumps, bounds, medicine ball throws) to the first slot of each lower or full-body session
+   - Replace 1-2 hypertrophy/accessory sets with force-expression work (e.g., replace a leg curl set with a broad jump or box jump)
+   - Update session emphasis fields to reflect power/force-expression focus
+   - Update phase goal and emphasis to reflect the shift (e.g., from "Foundation Strength" to "Strength + Power")
+   - Keep primary compound strength work — do NOT remove squats, deadlifts, or presses
+   - changeSummary must name specific exercises added/changed and sessions affected
+
+2. INCREASE_HYPERTROPHY_BIAS — "shift toward hypertrophy", "more muscle focus", "hypertrophy bias":
+   - Move rep ranges on secondary compound exercises to 8-12+
+   - Add 1-2 accessory exercises (isolation work) targeting key muscle groups in relevant sessions
+   - Reduce heavy low-rep primary work slightly (but don't eliminate it)
+   - Update phase emphasis and session coaching notes
+   - changeSummary must name what changed in rep zones and what was added
+
+3. INCREASE_SPORT_SPECIFICITY — "more hockey-specific", "sport-specific emphasis":
+   - Add rotational, lateral, and multi-directional exercises (lateral bounds, rotational med ball throws, change-of-direction patterns)
+   - Include deceleration and reactive elements in session architecture
+   - Replace non-transferable isolation accessories with sport-transfer movements
+   - Update session emphasis to reflect sport demand
+   - changeSummary must name specific sport-transfer exercises added and which accessories were replaced
+
+4. REDUCE_VOLUME — "reduce volume", "less total work":
+   - Remove 1-2 sets from accessory exercises across the week (not primary lifts)
+   - Trim finisher/conditioning work first
+   - Reduce secondary compound volume before touching primary lifts
+   - Update week volumeLevel fields if appropriate
+   - changeSummary must name what was trimmed and from which sessions
+
+5. SHORTEN_BLOCK — "shorten to 3 weeks", "shorter block":
+   - Update phase name/notes to reflect the shorter duration
+   - Update week labels to indicate compressed progression
+   - changeSummary must describe the new timeline and how progression was adjusted
+
+6. INCREASE_SPORT_SPECIFICITY (any named sport):
+   - Identify the sport from the request (hockey, football, basketball, etc.)
+   - Add appropriate sport-transfer work (lateral mechanics for hockey/basketball, rotational power for baseball, collision prep for football/rugby)
+   - changeSummary must name the sport and list the specific exercises added
+
+BLOCK MUTATION — SCOPE AND CHANGES:
+- Use scope: "block" for all block mutations
+- Include update_phase change to update phase name, goal, emphasis, and notes
+- Include update_session changes for session emphasis fields
+- Include update_exercise / add_exercise / replace_exercise / delete_exercise for actual structural exercise changes
+- Include update_week changes for volumeLevel where appropriate
+- changeSummary MUST describe the structural changes made, not just "block updated"
+
+Good changeSummary for power bias: "Shifted the Foundation Strength Block toward strength + power. Added Box Jumps to Day 1 (lower force session) and Medicine Ball Rotational Throws to Day 2. Replaced the leg curl accessory set on Day 3 with Lateral Bounds. Updated session emphases to reflect force-expression focus while keeping all primary lifts intact."
+Bad changeSummary: "Block updated to increase power focus." or "Done."
+
 CRITICAL — HARDER / EASIER REQUESTS (exercise level):
 When the user says "make it harder", "harder variation", "make it easier", "easier variation", or similar:
 - You MUST produce a real prescription change. A notes-only update is NOT acceptable.
