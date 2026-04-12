@@ -1,17 +1,18 @@
 /**
  * ExerciseLogInline
  *
- * Compact per-exercise performance logging UI rendered inside each exercise row.
- * Two-part UX:
- *   1. Quick feedback chips (Easy / Solid / Hard / Failed) — always visible
- *   2. Optional expandable section for weight + reps input
+ * Per-exercise logging UI inside each exercise row.
  *
- * Shows progression context when available:
- *   "Last: 185 × 5  →  Target: 190 × 5"
+ * Two modes:
+ *  - IDLE (sessionActive=false):   Shows last/target context + quick-feedback chips.
+ *  - SESSION (sessionActive=true): Shows per-set grid with weight/reps/completed,
+ *                                  "Same as last" auto-fill, and +5/+10 increment buttons.
+ *
+ * Auto-saves each completed set immediately so data is never lost.
  */
 
-import { useState } from "react";
-import { ChevronDown, ChevronUp, TrendingUp, Minus, Check } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Check, TrendingUp, Plus, Minus, Copy, ChevronDown, ChevronUp } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -30,14 +31,24 @@ export interface ProgressionTarget {
   coachNote: string;
 }
 
+export interface SetLog {
+  setNumber: number;
+  weight: number | null;
+  reps: number | null;
+  completed: boolean;
+}
+
 interface ExerciseLogInlineProps {
   exerciseName: string;
   exerciseRole?: ExerciseRole;
   programId?: number;
   dayNumber?: number;
   orderIndex?: number;
+  prescribedSets?: number;
   target?: ProgressionTarget;
+  sessionActive?: boolean;
   onLogged?: () => void;
+  onSetsChange?: (sets: SetLog[]) => void;
 }
 
 // ─── Status chips config ──────────────────────────────────────────────────────
@@ -50,10 +61,10 @@ const STATUS_CHIPS: {
   { value: "easy",   label: "Easy",   activeClass: "bg-sky-500/15 border-sky-500/40 text-sky-400" },
   { value: "solid",  label: "Solid",  activeClass: "bg-green-500/15 border-green-500/40 text-green-400" },
   { value: "hard",   label: "Hard",   activeClass: "bg-amber-500/15 border-amber-500/40 text-amber-400" },
-  { value: "failed", label: "Failed", activeClass: "bg-red-500/15 border-red-500/40 text-red-400" },
+  { value: "failed", label: "Failed", activeClass: "bg-red-500/15 border-red-500/40 text-reded-400" },
 ];
 
-// ─── Progression state color ──────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function stateChip(state: ProgressionTarget["progressionState"]) {
   switch (state) {
@@ -66,6 +77,190 @@ function stateChip(state: ProgressionTarget["progressionState"]) {
   }
 }
 
+function clampWeight(v: number) {
+  return Math.max(0, Math.min(2000, Math.round(v * 4) / 4));
+}
+
+function clampReps(v: number) {
+  return Math.max(0, Math.min(100, Math.round(v)));
+}
+
+function buildDefaultSets(count: number, lastLoad: number | null, lastReps: number | null): SetLog[] {
+  return Array.from({ length: count }, (_, i) => ({
+    setNumber: i + 1,
+    weight: lastLoad,
+    reps: lastReps,
+    completed: false,
+  }));
+}
+
+// ─── NumInput ─────────────────────────────────────────────────────────────────
+
+function NumInput({
+  value,
+  onChange,
+  placeholder,
+  step = 1,
+  wide = false,
+}: {
+  value: number | null;
+  onChange: (v: number | null) => void;
+  placeholder: string;
+  step?: number;
+  wide?: boolean;
+}) {
+  const [raw, setRaw] = useState(value !== null ? String(value) : "");
+
+  useEffect(() => {
+    setRaw(value !== null ? String(value) : "");
+  }, [value]);
+
+  return (
+    <input
+      type="number"
+      inputMode="decimal"
+      placeholder={placeholder}
+      value={raw}
+      onChange={(e) => {
+        setRaw(e.target.value);
+        const n = parseFloat(e.target.value);
+        onChange(isNaN(n) ? null : n);
+      }}
+      onBlur={() => {
+        if (value !== null) setRaw(String(value));
+        else setRaw("");
+      }}
+      step={step}
+      min={0}
+      className={`bg-transparent text-[10px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none tabular-nums ${wide ? "w-14" : "w-10"}`}
+    />
+  );
+}
+
+// ─── SetRow ───────────────────────────────────────────────────────────────────
+
+function SetRow({
+  set,
+  onChange,
+  onAutoSave,
+}: {
+  set: SetLog;
+  onChange: (patch: Partial<SetLog>) => void;
+  onAutoSave: () => void;
+}) {
+  function adjustWeight(delta: number) {
+    const base = set.weight ?? 0;
+    onChange({ weight: clampWeight(base + delta) });
+  }
+
+  function adjustReps(delta: number) {
+    const base = set.reps ?? 0;
+    onChange({ reps: clampReps(base + delta) });
+  }
+
+  function toggleCompleted() {
+    const next = !set.completed;
+    onChange({ completed: next });
+    if (next) onAutoSave();
+  }
+
+  return (
+    <div
+      className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors ${
+        set.completed
+          ? "bg-green-500/8 border border-green-500/20"
+          : "bg-muted/15 border border-border/30"
+      }`}
+    >
+      {/* Set badge */}
+      <span className="text-[9px] font-bold text-muted-foreground/50 w-8 flex-shrink-0">
+        S{set.setNumber}
+      </span>
+
+      {/* Weight section */}
+      <div className="flex items-center gap-1 bg-muted/20 border border-border/40 rounded-md px-1.5 py-0.5">
+        <button
+          onClick={() => adjustWeight(-2.5)}
+          className="text-muted-foreground/60 hover:text-foreground transition-colors"
+          type="button"
+        >
+          <Minus className="w-2.5 h-2.5" />
+        </button>
+        <NumInput
+          value={set.weight}
+          onChange={(v) => onChange({ weight: v !== null ? clampWeight(v) : null })}
+          placeholder="lbs"
+          step={2.5}
+          wide
+        />
+        <span className="text-[9px] text-muted-foreground/40 flex-shrink-0">lb</span>
+        <button
+          onClick={() => adjustWeight(2.5)}
+          className="text-muted-foreground/60 hover:text-foreground transition-colors"
+          type="button"
+        >
+          <Plus className="w-2.5 h-2.5" />
+        </button>
+      </div>
+
+      {/* Quick +5/+10 */}
+      <div className="flex gap-0.5">
+        <button
+          onClick={() => adjustWeight(5)}
+          className="text-[8px] font-bold text-muted-foreground/50 hover:text-primary transition-colors px-1 py-0.5 rounded bg-muted/10 hover:bg-primary/10"
+          type="button"
+        >
+          +5
+        </button>
+        <button
+          onClick={() => adjustWeight(10)}
+          className="text-[8px] font-bold text-muted-foreground/50 hover:text-primary transition-colors px-1 py-0.5 rounded bg-muted/10 hover:bg-primary/10"
+          type="button"
+        >
+          +10
+        </button>
+      </div>
+
+      {/* Reps */}
+      <div className="flex items-center gap-1 bg-muted/20 border border-border/40 rounded-md px-1.5 py-0.5">
+        <button
+          onClick={() => adjustReps(-1)}
+          className="text-muted-foreground/60 hover:text-foreground transition-colors"
+          type="button"
+        >
+          <Minus className="w-2.5 h-2.5" />
+        </button>
+        <NumInput
+          value={set.reps}
+          onChange={(v) => onChange({ reps: v !== null ? clampReps(v) : null })}
+          placeholder="reps"
+        />
+        <span className="text-[9px] text-muted-foreground/40 flex-shrink-0">rp</span>
+        <button
+          onClick={() => adjustReps(1)}
+          className="text-muted-foreground/60 hover:text-foreground transition-colors"
+          type="button"
+        >
+          <Plus className="w-2.5 h-2.5" />
+        </button>
+      </div>
+
+      {/* Completed checkbox */}
+      <button
+        onClick={toggleCompleted}
+        className={`ml-auto w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+          set.completed
+            ? "bg-green-500 border-green-500"
+            : "border-border/60 hover:border-green-500/60"
+        }`}
+        type="button"
+      >
+        {set.completed && <Check className="w-2.5 h-2.5 text-white" />}
+      </button>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function ExerciseLogInline({
@@ -74,21 +269,90 @@ export default function ExerciseLogInline({
   programId,
   dayNumber,
   orderIndex,
+  prescribedSets = 3,
   target,
+  sessionActive = false,
   onLogged,
+  onSetsChange,
 }: ExerciseLogInlineProps) {
-  const [status, setStatus] = useState<CompletionStatus | null>(null);
+  const lastLoad = target?.lastLoad ?? null;
+  const lastReps = target?.lastReps ?? null;
+
+  const [sets, setSets] = useState<SetLog[]>(() =>
+    buildDefaultSets(prescribedSets, lastLoad, lastReps)
+  );
+
+  // Re-initialize sets when target loads in (first time we get real last data)
+  useEffect(() => {
+    if (lastLoad !== null || lastReps !== null) {
+      setSets((prev) => {
+        const allBlank = prev.every((s) => s.weight === null && s.reps === null && !s.completed);
+        if (!allBlank) return prev;
+        return buildDefaultSets(prescribedSets, lastLoad, lastReps);
+      });
+    }
+  }, [lastLoad, lastReps, prescribedSets]);
+
+  // Notify parent whenever sets change
+  useEffect(() => {
+    onSetsChange?.(sets);
+  }, [sets]);
+
+  // ── Quick-log state (idle mode) ─────────────────────────────────────────────
+  const [quickStatus, setQuickStatus] = useState<CompletionStatus | null>(null);
+  const [quickSubmitting, setQuickSubmitting] = useState(false);
+  const [quickSubmitted, setQuickSubmitted] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [load, setLoad] = useState<string>("");
-  const [reps, setReps] = useState<string>("");
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [load, setLoad] = useState("");
+  const [reps, setReps] = useState("");
 
-  async function handleLog(overrideStatus?: CompletionStatus) {
-    const finalStatus = overrideStatus ?? status;
-    if (!finalStatus || submitting || submitted) return;
+  // ── Session mode helpers ────────────────────────────────────────────────────
 
-    setSubmitting(true);
+  function updateSet(index: number, patch: Partial<SetLog>) {
+    setSets((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
+  }
+
+  function fillFromLast() {
+    setSets((prev) =>
+      prev.map((s) => ({
+        ...s,
+        weight: lastLoad,
+        reps: lastReps,
+      }))
+    );
+  }
+
+  async function autoSaveSet(index: number) {
+    const s = sets[index];
+    if (!s) return;
+    try {
+      await customFetch("/api/exercise-logs", {
+        method: "POST",
+        body: JSON.stringify({
+          exerciseName,
+          exerciseRole,
+          programId,
+          dayNumber,
+          orderIndex,
+          completionStatus: "solid",
+          loadUsed: s.weight ?? undefined,
+          repsCompleted: s.reps ?? undefined,
+          setsCompleted: 1,
+        }),
+      });
+      onLogged?.();
+    } catch {
+      // best-effort
+    }
+  }
+
+  // ── Quick-log (idle mode) ───────────────────────────────────────────────────
+
+  async function handleQuickLog(overrideStatus?: CompletionStatus) {
+    const finalStatus = overrideStatus ?? quickStatus;
+    if (!finalStatus || quickSubmitting || quickSubmitted) return;
+
+    setQuickSubmitting(true);
     try {
       await customFetch("/api/exercise-logs", {
         method: "POST",
@@ -103,33 +367,128 @@ export default function ExerciseLogInline({
           repsCompleted: reps ? parseInt(reps, 10) : undefined,
         }),
       });
-      setSubmitted(true);
+      setQuickSubmitted(true);
       onLogged?.();
     } catch {
-      // Silent — log is best-effort
+      // silent
     } finally {
-      setSubmitting(false);
+      setQuickSubmitting(false);
     }
   }
 
   function handleStatusClick(s: CompletionStatus) {
-    if (submitted) return;
-    setStatus(s);
-    if (!expanded) {
-      handleLog(s);
-    }
+    if (quickSubmitted) return;
+    setQuickStatus(s);
+    if (!expanded) handleQuickLog(s);
   }
 
-  if (submitted) {
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SESSION MODE UI
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  if (sessionActive) {
+    const completedCount = sets.filter((s) => s.completed).length;
+    const allDone = completedCount === sets.length;
+
+    const chip = target ? stateChip(target.progressionState) : null;
+    const hasLast = lastLoad !== null || lastReps !== null;
+    const hasTarget = target && (target.targetLoad !== null || target.targetReps !== null);
+
+    return (
+      <div className="mt-2 space-y-2">
+        {/* Previous + target context */}
+        {(hasLast || hasTarget) && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {chip && (
+              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${chip.cls}`}>
+                {chip.label}
+              </span>
+            )}
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              {hasLast && (
+                <span>
+                  Last:{" "}
+                  <span className="text-foreground font-semibold">
+                    {lastLoad !== null ? `${lastLoad} lbs` : ""}
+                    {lastLoad !== null && lastReps !== null ? " × " : ""}
+                    {lastReps !== null ? `${lastReps}` : ""}
+                  </span>
+                </span>
+              )}
+              {hasLast && hasTarget && <span className="text-muted-foreground/30">→</span>}
+              {hasTarget && (
+                <span className="flex items-center gap-1">
+                  <TrendingUp className="w-2.5 h-2.5 text-primary/60" />
+                  <span>
+                    Target:{" "}
+                    <span className="text-primary font-semibold">
+                      {target!.targetLoad !== null ? `${target!.targetLoad} lbs` : ""}
+                      {target!.targetLoad !== null && target!.targetReps !== null ? " × " : ""}
+                      {target!.targetReps !== null ? `${target!.targetReps}` : ""}
+                    </span>
+                  </span>
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* "Same as last" quick-fill */}
+        {hasLast && (
+          <button
+            onClick={fillFromLast}
+            className="flex items-center gap-1 text-[9px] font-semibold text-primary/60 hover:text-primary transition-colors"
+            type="button"
+          >
+            <Copy className="w-2.5 h-2.5" /> Same as last session
+          </button>
+        )}
+
+        {/* Per-set rows */}
+        <div className="space-y-1.5">
+          {sets.map((set, i) => (
+            <SetRow
+              key={set.setNumber}
+              set={set}
+              onChange={(patch) => updateSet(i, patch)}
+              onAutoSave={() => autoSaveSet(i)}
+            />
+          ))}
+        </div>
+
+        {/* Progress indicator */}
+        <div className="flex items-center gap-2">
+          <div className="flex-1 h-1 bg-muted/30 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-green-500/70 rounded-full transition-all duration-300"
+              style={{ width: `${(completedCount / sets.length) * 100}%` }}
+            />
+          </div>
+          <span className={`text-[9px] font-bold ${allDone ? "text-green-400" : "text-muted-foreground/60"}`}>
+            {completedCount}/{sets.length}
+            {allDone && " ✓"}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // IDLE MODE UI (compact chips)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  if (quickSubmitted) {
     return (
       <div className="mt-2 flex items-center gap-1.5">
         <Check className="w-3 h-3 text-green-400 flex-shrink-0" />
         <span className="text-[10px] text-green-400 font-medium">Logged</span>
-        {status && (
-          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
-            STATUS_CHIPS.find((c) => c.value === status)?.activeClass ?? ""
-          }`}>
-            {status}
+        {quickStatus && (
+          <span
+            className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
+              STATUS_CHIPS.find((c) => c.value === quickStatus)?.activeClass ?? ""
+            }`}
+          >
+            {quickStatus}
           </span>
         )}
       </div>
@@ -161,9 +520,7 @@ export default function ExerciseLogInline({
                 </span>
               </span>
             )}
-            {hasLast && hasTarget && (
-              <span className="text-muted-foreground/40">→</span>
-            )}
+            {hasLast && hasTarget && <span className="text-muted-foreground/40">→</span>}
             {hasTarget && (
               <span className="flex items-center gap-1">
                 <TrendingUp className="w-2.5 h-2.5 text-primary/60" />
@@ -183,22 +540,21 @@ export default function ExerciseLogInline({
 
       {/* Quick-log row */}
       <div className="flex items-center gap-1.5 flex-wrap">
-        {STATUS_CHIPS.map((chip) => (
+        {STATUS_CHIPS.map((c) => (
           <button
-            key={chip.value}
-            onClick={() => handleStatusClick(chip.value)}
-            disabled={submitting}
+            key={c.value}
+            onClick={() => handleStatusClick(c.value)}
+            disabled={quickSubmitting}
             className={`text-[9px] font-bold px-2 py-1 rounded-full border transition-all duration-150 ${
-              status === chip.value
-                ? chip.activeClass
+              quickStatus === c.value
+                ? c.activeClass
                 : "bg-muted/20 border-border/40 text-muted-foreground hover:border-border hover:text-foreground"
             }`}
           >
-            {chip.label}
+            {c.label}
           </button>
         ))}
 
-        {/* Expand for weight/reps */}
         <button
           onClick={() => setExpanded((v) => !v)}
           className="ml-auto text-[9px] text-muted-foreground/60 hover:text-muted-foreground flex items-center gap-0.5 transition-colors"
@@ -240,13 +596,13 @@ export default function ExerciseLogInline({
             />
             <span className="text-[9px] text-muted-foreground/60">reps</span>
           </div>
-          {status && (
+          {quickStatus && (
             <button
-              onClick={() => handleLog()}
-              disabled={submitting}
+              onClick={() => handleQuickLog()}
+              disabled={quickSubmitting}
               className="text-[9px] font-bold px-2.5 py-1 rounded-full bg-primary/15 border border-primary/30 text-primary hover:bg-primary/25 transition-all"
             >
-              {submitting ? "Saving…" : "Log it"}
+              {quickSubmitting ? "Saving…" : "Log it"}
             </button>
           )}
         </div>

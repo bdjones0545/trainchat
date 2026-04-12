@@ -9,7 +9,7 @@ import {
 import { customFetch } from "@workspace/api-client-react";
 import type { ProgramStructure } from "./ChatOutput";
 import type { BuildStage } from "@/hooks/useStreamMessage";
-import ExerciseLogInline, { type ProgressionTarget } from "@/components/training/ExerciseLogInline";
+import ExerciseLogInline, { type ProgressionTarget, type SetLog } from "@/components/training/ExerciseLogInline";
 import CoachForecast from "./CoachForecast";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -442,6 +442,57 @@ function ProgramTab({
   const [animatedKeys, setAnimatedKeys] = useState<Map<string, DiffType>>(new Map());
   const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ── Session mode ─────────────────────────────────────────────────────────
+  type SessionMode = "idle" | "active" | "completed";
+  const [sessionMode, setSessionMode] = useState<SessionMode>("idle");
+  const [sessionLogs, setSessionLogs] = useState<Map<string, SetLog[]>>(new Map());
+  const [sessionCompleting, setSessionCompleting] = useState(false);
+  const [sessionResult, setSessionResult] = useState<{ progressions: string[] } | null>(null);
+
+  function handleSetsChange(exerciseName: string, sets: SetLog[]) {
+    setSessionLogs((prev) => {
+      const next = new Map(prev);
+      next.set(exerciseName, sets);
+      return next;
+    });
+  }
+
+  async function completeSession() {
+    if (sessionCompleting) return;
+    setSessionCompleting(true);
+
+    const exercises = Array.from(sessionLogs.entries()).map(([exerciseName, sets]) => ({
+      exerciseName,
+      sets,
+    }));
+
+    try {
+      const result = await customFetch<{ progressions: string[] }>("/api/session-logs/complete", {
+        method: "POST",
+        body: JSON.stringify({
+          savedProgramId: savedProgramId ?? undefined,
+          dayNumber: expandedDay !== null ? (program?.days[expandedDay]?.dayNumber ?? expandedDay + 1) : undefined,
+          exercises,
+          goal: trainingGoal ?? "general_fitness",
+        }),
+      });
+      setSessionResult(result);
+      setSessionMode("completed");
+      setTimeout(() => refetchTargets(), 600);
+      queryClient.invalidateQueries({ queryKey: ["training-system-history", "changes"] });
+    } catch {
+      setSessionCompleting(false);
+    } finally {
+      setSessionCompleting(false);
+    }
+  }
+
+  function resetSession() {
+    setSessionMode("idle");
+    setSessionLogs(new Map());
+    setSessionResult(null);
+  }
+
   // ── Progression targets ───────────────────────────────────────────────────
   const allExerciseNames = (program?.days ?? [])
     .flatMap((d) => d.exercises ?? [])
@@ -546,6 +597,15 @@ function ProgramTab({
       setExpandedDay(dayIdx);
     }
   }, [program]);
+
+  // Reset session when user switches to a different day
+  const prevExpandedDay = useRef<number | null>(null);
+  useEffect(() => {
+    if (expandedDay !== prevExpandedDay.current) {
+      prevExpandedDay.current = expandedDay;
+      if (sessionMode !== "idle") resetSession();
+    }
+  }, [expandedDay]);
 
   useEffect(() => {
     const prev = prevProgramRef.current;
@@ -854,6 +914,64 @@ function ProgramTab({
 
                   {isExpanded && (
                     <div className="border-t border-border divide-y divide-border/50">
+                      {/* Session banner — Start / Active / Completed */}
+                      {isPremium && isSaved && (
+                        <div className="px-3 py-2.5">
+                          {sessionMode === "idle" && (
+                            <button
+                              onClick={() => setSessionMode("active")}
+                              className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-green-500/30 text-green-400 text-[11px] font-semibold hover:bg-green-500/10 transition-all duration-150"
+                            >
+                              <PlayCircle className="w-3.5 h-3.5" /> Start Session
+                            </button>
+                          )}
+                          {sessionMode === "active" && (
+                            <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                                <span className="text-[10px] font-semibold text-green-400">Session active</span>
+                              </div>
+                              <button
+                                onClick={completeSession}
+                                disabled={sessionCompleting}
+                                className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/15 border border-green-500/30 text-green-400 text-[11px] font-semibold hover:bg-green-500/25 transition-all disabled:opacity-50"
+                              >
+                                {sessionCompleting ? (
+                                  <><Loader2 className="w-3 h-3 animate-spin" /> Saving…</>
+                                ) : (
+                                  <><CheckCircle className="w-3 h-3" /> Complete Session</>
+                                )}
+                              </button>
+                            </div>
+                          )}
+                          {sessionMode === "completed" && (
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <CheckCircle className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
+                                <span className="text-[11px] font-semibold text-green-400">Session logged!</span>
+                                <button
+                                  onClick={resetSession}
+                                  className="ml-auto text-[9px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+                                >
+                                  Reset
+                                </button>
+                              </div>
+                              {sessionResult && sessionResult.progressions.length > 0 && (
+                                <div className="space-y-1">
+                                  {sessionResult.progressions.map((p, i) => (
+                                    <div key={i} className="flex items-start gap-1.5">
+                                      <TrendingUp className="w-2.5 h-2.5 text-primary/60 mt-0.5 flex-shrink-0" />
+                                      <p className="text-[10px] text-primary/80 leading-relaxed">{p}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Exercise rows */}
                       {(day.exercises ?? []).map((ex, exIdx) => {
                         const exKey = `d${idx}-e${exIdx}`;
                         const exDiff = animatedKeys.get(exKey);
@@ -931,8 +1049,11 @@ function ProgramTab({
                                 programId={savedProgramId}
                                 dayNumber={day.dayNumber}
                                 orderIndex={exIdx}
+                                prescribedSets={ex.sets > 0 ? ex.sets : 3}
                                 target={targetsMap.get(ex.name)}
+                                sessionActive={sessionMode === "active"}
                                 onLogged={handleExerciseLogged}
+                                onSetsChange={(sets) => handleSetsChange(ex.name, sets)}
                               />
                             )}
                           </div>
