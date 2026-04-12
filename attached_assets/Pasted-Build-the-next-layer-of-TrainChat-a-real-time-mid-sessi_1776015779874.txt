@@ -1,0 +1,356 @@
+Build the next layer of TrainChat: a real-time mid-session coaching engine that reacts while the user is training.
+
+CURRENT STATE:
+TrainChat can:
+- generate a program
+- display sessions
+- allow exercise edits
+- log sets by exercise type
+- collect post-session feedback
+- begin adapting future sessions with progression logic
+
+PROBLEM:
+All meaningful adaptation still happens after the session.
+The system does not yet coach the user during the workout itself.
+
+GOAL:
+Create a mid-session intelligence layer that monitors exercise logging in real time and delivers coaching recommendations during the workout.
+
+This layer should:
+1. react to performance as sets are logged
+2. adjust upcoming sets when needed
+3. warn against pushing when fatigue/pain patterns appear
+4. make the workout feel like a live coaching system
+
+----------------------------------------
+1. CREATE A MID-SESSION ENGINE
+----------------------------------------
+
+Create a central function:
+
+evaluateLiveSetPerformance({
+  exercise,
+  setLog,
+  previousSets,
+  sessionState,
+  userCheckIn,
+  currentFeedback
+})
+
+Return:
+
+{
+  status: "on_track" | "adjust_load" | "adjust_volume" | "adjust_rest" | "review_form" | "stop_exercise",
+  recommendation: {
+    action: string,
+    value?: string | number,
+    message: string
+  },
+  confidence: "low" | "medium" | "high",
+  reason: string
+}
+
+This should run every time the user logs a set.
+
+----------------------------------------
+2. ADD REAL-TIME DECISION RULES
+----------------------------------------
+
+A. LOAD-BASED LIFTS
+For exercises like:
+- squat
+- deadlift
+- RDL
+- DB press
+- row
+- split squat
+
+Rules:
+
+IF first 1–2 sets are much easier than expected
+AND reps are comfortably achieved
+→ suggest slight load increase for next set
+
+IF reps drop sharply early
+OR user logs “too hard”
+→ suggest small load reduction for remaining sets
+
+IF form breakdown is likely based on missed reps + difficulty trend
+→ suggest holding or reducing load
+
+Example messages:
+- “You are moving well. Add 5 lb for the next set if technique stays sharp.”
+- “Performance dropped early. Reduce load 5–10% for remaining sets.”
+
+----------------------------------------
+3. POWER / JUMP LIVE RULES
+----------------------------------------
+
+For:
+- broad jump
+- box jump
+- med ball throw
+- power movements
+
+Do NOT treat like strength lifts.
+
+Rules:
+- prioritize quality over output
+- if performance drops or user reports hard / too hard early, reduce total sets or maintain target
+- if landing/contact quality likely declines, advise stopping progression
+
+Example messages:
+- “Keep jump height the same. Prioritize crisp takeoff and clean landings.”
+- “Power output appears to be dropping. Stop at this set count or extend rest.”
+
+----------------------------------------
+4. TRUNK / PREP / MOBILITY LIVE RULES
+----------------------------------------
+
+For:
+- Pallof press
+- plank
+- dead bug
+- warm-up flows
+- activation drills
+
+Rules:
+- recommend slowing tempo, maintaining control, or reducing complexity
+- do not aggressively progress mid-session
+
+Example:
+- “Stay at this level and focus on control.”
+- “Reduce range slightly and keep trunk position strong.”
+
+----------------------------------------
+5. ADD REST-TIME RECOMMENDATIONS
+----------------------------------------
+
+The engine should also recommend rest changes.
+
+Rules:
+IF output is dropping too quickly on strength/power sets
+→ suggest more rest
+
+IF effort is far below expected and session intent is power/strength
+→ suggest maintaining or slightly shortening rest only if appropriate
+
+Example:
+- “Take 3 minutes before the next squat set.”
+- “Rest another 60 seconds before the next jump set.”
+
+----------------------------------------
+6. PAIN / DISCOMFORT OVERRIDE
+----------------------------------------
+
+If the user logs pain or writes pain-related notes during the session:
+
+- mild → caution and monitor
+- moderate → suggest load reduction or exercise modification
+- significant/severe → suggest stopping or swapping the exercise
+
+Create:
+
+evaluatePainOverride({
+  painLevel,
+  exercise,
+  notes
+})
+
+Example outputs:
+- “Reduce range and load on the next set.”
+- “Stop this exercise and swap to a safer variation.”
+- “Do not progress this movement today.”
+
+Pain signals override normal progression logic.
+
+----------------------------------------
+7. BUILD SESSION STATE TRACKING
+----------------------------------------
+
+Create live session state:
+
+sessionState = {
+  startedAt,
+  completedExercises,
+  currentExerciseId,
+  currentSetNumber,
+  liveFatigueScore,
+  livePerformanceTrend,
+  painFlags,
+  recommendationHistory: []
+}
+
+Update this continuously as the user logs sets.
+
+----------------------------------------
+8. ADD LIVE FATIGUE ESTIMATION
+----------------------------------------
+
+Create a lightweight fatigue model using:
+- rep drop-off
+- increased difficulty selections
+- rising pain/discomfort
+- longer-than-expected completion time
+- declining performance on power movements
+
+Output:
+liveFatigueScore = low | moderate | high
+
+Use this to influence mid-session recommendations.
+
+Example:
+- low fatigue → continue as planned
+- moderate fatigue → maintain or extend rest
+- high fatigue → reduce volume, simplify, or stop the movement
+
+----------------------------------------
+9. SURFACE MID-SESSION COACH MESSAGES
+----------------------------------------
+
+Create a compact in-session coach message UI.
+
+Show messages:
+- after a set is logged
+- above the next set
+- inside exercise bottom sheet
+- optionally as a “Coach Insight” card during the session
+
+Examples:
+- “On track — keep the same load.”
+- “Add 5 lb if the next set feels the same.”
+- “Reduce load 10% for the remaining sets.”
+- “Take extra rest before the next set.”
+- “Swap this movement if knee discomfort continues.”
+
+Do not make the UI intrusive.
+It should feel premium, lightweight, and useful.
+
+----------------------------------------
+10. ALLOW USER TO ACCEPT OR IGNORE RECOMMENDATIONS
+----------------------------------------
+
+For mid-session suggestions, allow:
+- Apply recommendation
+- Keep current plan
+- Ask coach why
+
+If user accepts:
+- update remaining sets live
+
+If user ignores:
+- continue tracking without forcing changes
+
+This is important so the app feels collaborative, not controlling.
+
+----------------------------------------
+11. SUPPORT LIVE MODIFICATION OF REMAINING SETS
+----------------------------------------
+
+If a recommendation is accepted, update the remaining exercise prescription in real time.
+
+Examples:
+- Set 3 and 4 squat load reduced from 195 → 185
+- Remaining jump sets reduced from 4 total → 3 total
+- Rest interval increased from 90 sec → 2 min
+
+Track these as live modifications:
+
+liveAdjustment = {
+  exerciseId,
+  changeType,
+  oldValue,
+  newValue,
+  reason,
+  acceptedByUser: true
+}
+
+----------------------------------------
+12. WRITE MID-SESSION CHANGES TO HISTORY
+----------------------------------------
+
+Any accepted live adjustment should be written into:
+- sessionState.recommendationHistory
+- Changes tab
+- future progression logic context
+
+Example:
+V5 LIVE ADJUSTMENT
+- Reduced Back Squat from 195 → 185 for remaining sets
+- Reason: early rep drop-off and user-selected “too hard”
+
+----------------------------------------
+13. ADD “ASK COACH DURING SESSION” CONTEXT
+----------------------------------------
+
+If the user types something mid-session like:
+- “This feels too heavy”
+- “My knee hurts on this”
+- “Can I swap this?”
+- “Should I keep the same weight?”
+
+The coach should answer with knowledge of:
+- current exercise
+- current set number
+- logged performance so far
+- session goal
+- pain/difficulty context
+
+Do not answer these in a generic way.
+Use live workout context.
+
+----------------------------------------
+14. ADD SAFETY GUARDRAILS
+----------------------------------------
+
+Never recommend:
+- aggressive load jumps mid-session
+- pushing through significant or severe pain
+- increasing power exercise complexity when quality is dropping
+- progression when user has incomplete/conflicting data
+
+In ambiguous cases:
+- maintain
+- reduce slightly
+- or prompt a safer option
+
+----------------------------------------
+15. TEST CASES
+----------------------------------------
+
+Verify:
+
+1. Back Squat
+- user logs first 2 sets easily
+→ suggest +5 lb next set
+
+2. Back Squat
+- first set okay, second set major rep drop
+→ suggest reducing load 5–10%
+
+3. Broad Jump
+- output declines by set 3
+→ suggest keeping distance the same or ending the drill early
+
+4. Pallof Press
+- user marks too easy
+→ suggest slower tempo or slight progression, not aggressive load jump
+
+5. Knee pain during split squat
+→ suggest swap/regression immediately
+
+6. Long session + rising difficulty
+→ reduce later accessory volume
+
+----------------------------------------
+16. DELIVERABLES
+----------------------------------------
+
+After implementation, provide:
+1. the live session state structure
+2. the core mid-session evaluation functions
+3. the rule system by exercise type
+4. how recommendations are shown in the UI
+5. how accepted recommendations modify remaining sets
+6. how live adjustments are logged into system history
+7. edge cases still needing review

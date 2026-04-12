@@ -269,6 +269,18 @@ const CompleteSessionBody = z.object({
       ),
     })
   ),
+  /** Accepted mid-session live adjustments — recorded in change log */
+  liveAdjustments: z.array(
+    z.object({
+      exerciseName: z.string(),
+      changeType: z.enum(["load_reduction", "load_increase", "volume_reduction", "rest_increase", "stop_exercise"]),
+      oldValue: z.union([z.string(), z.number()]).nullable(),
+      newValue: z.union([z.string(), z.number()]).nullable(),
+      reason: z.string(),
+      setAppliedAt: z.number(),
+      acceptedByUser: z.boolean(),
+    })
+  ).optional(),
 });
 
 router.post("/session-logs/complete", requireAuth, async (req: any, res): Promise<void> => {
@@ -549,6 +561,43 @@ router.post("/session-logs/complete", requireAuth, async (req: any, res): Promis
           }
         } catch { /* Non-fatal — program update is best-effort */ }
       }
+    }
+  }
+
+  // ── 7. Write accepted live adjustments to change log ───────────────────────
+  if (data.liveAdjustments && data.liveAdjustments.length > 0 && activeSystemId) {
+    for (const adj of data.liveAdjustments) {
+      if (!adj.acceptedByUser) continue;
+      const summary = adj.changeType === "load_reduction"
+        ? `LIVE ADJUSTMENT — ${adj.exerciseName}: load reduced from ${adj.oldValue} → ${adj.newValue} lbs (set ${adj.setAppliedAt})`
+        : adj.changeType === "load_increase"
+        ? `LIVE ADJUSTMENT — ${adj.exerciseName}: load increased from ${adj.oldValue} → ${adj.newValue} lbs (set ${adj.setAppliedAt})`
+        : adj.changeType === "volume_reduction"
+        ? `LIVE ADJUSTMENT — ${adj.exerciseName}: volume reduced (${adj.oldValue} → ${adj.newValue})`
+        : adj.changeType === "rest_increase"
+        ? `LIVE ADJUSTMENT — ${adj.exerciseName}: extended rest applied (${adj.newValue})`
+        : `LIVE ADJUSTMENT — ${adj.exerciseName}: exercise stopped early`;
+
+      try {
+        await db.insert(systemChangeLog).values({
+          userId,
+          trainingSystemId: activeSystemId,
+          source: "workout_feedback",
+          intent: adj.changeType === "load_increase" ? "auto_progression" : "load_reduction",
+          scope: "exercise",
+          changeSummary: summary,
+          isMajorVersion: false,
+          decisionMetadata: {
+            exerciseName: adj.exerciseName,
+            changeType: adj.changeType,
+            oldValue: adj.oldValue,
+            newValue: adj.newValue,
+            setAppliedAt: adj.setAppliedAt,
+            whyChanged: adj.reason,
+            source: "mid_session_engine",
+          },
+        });
+      } catch { /* Non-fatal */ }
     }
   }
 

@@ -39,6 +39,12 @@ import {
 import { customFetch } from "@workspace/api-client-react";
 import type { ProgressionTarget, SetLog } from "./ExerciseLogInline";
 import { inferLoggingMode, getModeConfig, type LoggingMode } from "@/lib/loggingMode";
+import {
+  evaluateLiveSetPerformance,
+  type LiveRecommendation,
+  type LiveAdjustment,
+} from "@/lib/midSessionEngine";
+import CoachInsightCard from "./CoachInsightCard";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -419,6 +425,11 @@ function ExerciseLogSection({
   const [saved, setSaved] = useState(false);
   const [progressionMsg, setProgressionMsg] = useState<string | null>(null);
 
+  // Mid-session coaching state
+  const [coachInsight, setCoachInsight] = useState<LiveRecommendation | null>(null);
+  const [liveAdjustments, setLiveAdjustments] = useState<LiveAdjustment[]>([]);
+  const [lastInsightSetIndex, setLastInsightSetIndex] = useState<number | null>(null);
+
   // Re-init when target loads
   useEffect(() => {
     if (lastLoad !== null || lastReps !== null) {
@@ -452,6 +463,113 @@ function ExerciseLogSection({
     } catch {
       // best-effort
     }
+
+    // Run mid-session evaluation after saving (non-blocking)
+    // Use a tiny delay so the UI reflects the completed set state first
+    setTimeout(() => {
+      const currentSets = sets.map((set, idx) => ({
+        setNumber: set.setNumber,
+        weight: set.weight,
+        reps: set.reps,
+        completed: idx === i ? true : set.completed,
+      }));
+
+      const rec = evaluateLiveSetPerformance({
+        exerciseName,
+        category: exerciseContext.category,
+        currentSetIndex: i,
+        allSets: currentSets,
+        totalPrescribedSets: prescribedSets,
+        targetLoad: target?.targetLoad ?? null,
+        targetReps: target?.targetReps ?? null,
+        lastSessionLoad: lastLoad,
+        lastSessionReps: lastReps,
+        perceivedDifficulty: feedbackTag === "too_easy" ? "too_easy" : feedbackTag === "too_hard" ? "too_hard" : feedbackTag === "challenging" ? "just_right" : null,
+        painLevel: painLevel ?? "none",
+      });
+
+      // Only surface non-trivial insights (skip on_track for first set unless there's something interesting)
+      const isFirstSet = i === 0;
+      if (!isFirstSet || rec.status !== "on_track") {
+        setCoachInsight(rec);
+        setLastInsightSetIndex(i);
+      }
+    }, 120);
+  }
+
+  function applyRecommendation(rec: LiveRecommendation) {
+    const setIndex = lastInsightSetIndex ?? 0;
+    const remaining = sets.filter((_, i) => i > setIndex && !sets[i].completed);
+
+    if (rec.status === "stop_exercise") {
+      // Remove remaining uncompleted sets — keep only completed
+      setSets((prev) => prev.filter((_, i) => i <= setIndex || prev[i].completed));
+      setLiveAdjustments((prev) => [
+        ...prev,
+        {
+          exerciseName,
+          changeType: "volume_reduction",
+          oldValue: `${sets.length} sets`,
+          newValue: `${setIndex + 1} sets (stopped early)`,
+          reason: rec.reason,
+          setAppliedAt: setIndex + 1,
+          acceptedByUser: true,
+        },
+      ]);
+    } else if (rec.status === "adjust_load" && rec.adjustedLoad !== null) {
+      const newLoad = rec.adjustedLoad;
+      setSets((prev) =>
+        prev.map((s, i) =>
+          i > setIndex && !s.completed ? { ...s, weight: newLoad } : s,
+        ),
+      );
+      const oldLoad = sets[setIndex]?.weight ?? null;
+      setLiveAdjustments((prev) => [
+        ...prev,
+        {
+          exerciseName,
+          changeType: rec.adjustedLoad! > (oldLoad ?? 0) ? "load_increase" : "load_reduction",
+          oldValue: oldLoad,
+          newValue: newLoad,
+          reason: rec.reason,
+          setAppliedAt: setIndex + 1,
+          acceptedByUser: true,
+        },
+      ]);
+    } else if (rec.status === "adjust_volume" && remaining.length > 0) {
+      // Remove last remaining set
+      const lastRemainingIndex = sets.map((s, i) => (!s.completed && i > setIndex ? i : -1)).filter((x) => x >= 0).pop();
+      if (lastRemainingIndex !== undefined) {
+        setSets((prev) => prev.filter((_, i) => i !== lastRemainingIndex));
+        setLiveAdjustments((prev) => [
+          ...prev,
+          {
+            exerciseName,
+            changeType: "volume_reduction",
+            oldValue: `${sets.length} sets`,
+            newValue: `${sets.length - 1} sets`,
+            reason: rec.reason,
+            setAppliedAt: setIndex + 1,
+            acceptedByUser: true,
+          },
+        ]);
+      }
+    } else if (rec.status === "adjust_rest") {
+      setLiveAdjustments((prev) => [
+        ...prev,
+        {
+          exerciseName,
+          changeType: "rest_increase",
+          oldValue: null,
+          newValue: rec.extraRestSec ? `+${rec.extraRestSec}s rest` : "extended rest",
+          reason: rec.reason,
+          setAppliedAt: setIndex + 1,
+          acceptedByUser: true,
+        },
+      ]);
+    }
+
+    setCoachInsight(null);
   }
 
   function fillFromLast() {
@@ -482,6 +600,7 @@ function ExerciseLogSection({
             category: exerciseContext.category,
             sets,
           }],
+          liveAdjustments: liveAdjustments.length > 0 ? liveAdjustments : undefined,
         }),
       });
 
@@ -628,17 +747,31 @@ function ExerciseLogSection({
         )}
       </div>
 
-      {/* Per-set rows */}
+      {/* Per-set rows with inline coach insight */}
       <div className="space-y-1.5">
-        {sets.map((set, i) => (
-          <SetRow
-            key={set.setNumber}
-            set={set}
-            mode={mode}
-            onChange={(patch) => updateSet(i, patch)}
-            onSave={() => autoSaveSet(i)}
-          />
-        ))}
+        {sets.map((set, i) => {
+          const isLastCompleted = set.completed && (i === sets.length - 1 || !sets[i + 1]?.completed);
+          return (
+            <div key={set.setNumber}>
+              <SetRow
+                set={set}
+                mode={mode}
+                onChange={(patch) => updateSet(i, patch)}
+                onSave={() => autoSaveSet(i)}
+              />
+              {/* Coach insight appears right after the last completed set */}
+              {isLastCompleted && coachInsight && lastInsightSetIndex === i && (
+                <div className="mt-2">
+                  <CoachInsightCard
+                    recommendation={coachInsight}
+                    onApply={applyRecommendation}
+                    onDismiss={() => setCoachInsight(null)}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Progress bar */}
