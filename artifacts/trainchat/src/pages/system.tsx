@@ -45,6 +45,7 @@ import {
   Settings,
   CreditCard,
   LogOut,
+  Lock,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useGetMe } from "@workspace/api-client-react";
@@ -72,6 +73,9 @@ import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_17752640
 
 async function fetchActiveSystem() {
   return customFetch<any>("/api/training-system/active");
+}
+async function fetchSubscription() {
+  try { return await customFetch<any>("/api/subscription"); } catch { return null; }
 }
 async function fetchBlockSummary() {
   return customFetch<any>("/api/training-system/block");
@@ -551,9 +555,11 @@ interface WeekViewProps {
   onEditExercise: (exercise: any, sessionLabel: string) => void;
   onEditSession: (session: any, weekLabel?: string) => void;
   onEditWeek: (week: any) => void;
+  isPremium?: boolean;
+  onUpgrade?: () => void;
 }
 
-function WeekView({ highlightedIds, onEditExercise, onEditSession, onEditWeek }: WeekViewProps) {
+function WeekView({ highlightedIds, onEditExercise, onEditSession, onEditWeek, isPremium = false, onUpgrade }: WeekViewProps) {
   const [expandedCards, setExpandedCards] = useState<Record<number, boolean>>({});
 
   function toggleCard(sessionId: number) {
@@ -636,11 +642,38 @@ function WeekView({ highlightedIds, onEditExercise, onEditSession, onEditWeek }:
 
       {/* Session cards */}
       <div className="space-y-3">
-        {week.sessions?.map((session: any, idx: number) => {
+        {(() => {
+          let trainingSessionCount = 0;
+          return week.sessions?.map((session: any, idx: number) => {
+          const isRestDay = session.isRestDay;
+          if (!isRestDay) trainingSessionCount++;
+          const isLocked = !isPremium && !isRestDay && trainingSessionCount > 1;
           const isToday = session.dayOfWeek === todayDow;
           const sessionHighlight = highlightedIds.sessions.has(session.id)
             ? "ring-2 ring-primary/50 ring-offset-1 ring-offset-background"
             : "";
+
+          if (isLocked) {
+            return (
+              <div
+                key={session.id}
+                className="rounded-xl border border-border/30 bg-card/50 overflow-hidden opacity-50"
+              >
+                <div className="px-4 py-3.5 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                      <Lock className="w-4 h-4 text-muted-foreground/40" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="font-semibold text-sm text-muted-foreground/70 truncate block">{session.label}</span>
+                      {session.emphasis && <p className="text-xs text-muted-foreground/50 truncate mt-0.5">{session.emphasis}</p>}
+                    </div>
+                  </div>
+                  <Lock className="w-3.5 h-3.5 text-muted-foreground/30 flex-shrink-0" />
+                </div>
+              </div>
+            );
+          }
 
           return (
             <div
@@ -721,8 +754,32 @@ function WeekView({ highlightedIds, onEditExercise, onEditSession, onEditWeek }:
               )}
             </div>
           );
-        })}
+          });
+        })()}
       </div>
+
+      {/* Upgrade CTA for non-premium after locked sessions */}
+      {!isPremium && week.sessions?.filter((s: any) => !s.isRestDay).length > 1 && (
+        <div className="rounded-xl border border-primary/20 bg-card p-5 text-center">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-3 mx-auto">
+            <Lock className="w-4 h-4 text-primary" />
+          </div>
+          <h4 className="text-sm font-bold text-foreground mb-1">
+            Unlock the rest of your training week
+          </h4>
+          <p className="text-[11px] text-muted-foreground mb-4 leading-relaxed">
+            See all training days, block progression, and live adaptations.
+          </p>
+          {onUpgrade && (
+            <button
+              onClick={onUpgrade}
+              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-primary text-primary-foreground text-[12px] font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all"
+            >
+              <Zap className="w-3.5 h-3.5" /> Unlock Full Program
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1392,6 +1449,39 @@ function intentToHistoryLabel(intent: string): string {
   return map[intent] ?? intent.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+// ─── Preview-only locked state ────────────────────────────────────────────────
+
+function PreviewLockedView({
+  title,
+  description,
+  onUpgrade,
+}: {
+  title: string;
+  description: string;
+  onUpgrade?: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+      <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-5">
+        <Lock className="w-7 h-7 text-primary" />
+      </div>
+      <h3 className="text-base font-bold text-foreground mb-2">{title}</h3>
+      <p className="text-sm text-muted-foreground mb-2 max-w-xs leading-relaxed">{description}</p>
+      <p className="text-xs text-muted-foreground/60 mb-6 max-w-xs">
+        Upgrade to unlock the rest of your program.
+      </p>
+      {onUpgrade && (
+        <button
+          onClick={onUpgrade}
+          className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 active:scale-[0.98] transition-all"
+        >
+          <Zap className="w-4 h-4" /> Unlock Full Program
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -1436,6 +1526,19 @@ export default function SystemPage() {
     queryFn: fetchActiveSystem,
     retry: false,
   });
+
+  const { data: subscription } = useQuery({
+    queryKey: ["subscription"],
+    queryFn: fetchSubscription,
+    enabled: !!me,
+    staleTime: 60000,
+  });
+
+  const isPremium = subscription?.plan === "pro" || subscription?.plan === "elite";
+
+  function handleUpgrade() {
+    setLocation("/billing");
+  }
 
   // Phase 5: fetch today's readiness entry (to show check-in prompt if missing)
   const { data: readinessToday, refetch: refetchReadiness } = useQuery({
@@ -1947,20 +2050,38 @@ export default function SystemPage() {
                   onEditExercise={openExerciseEdit}
                   onEditSession={openSessionEdit}
                   onEditWeek={openWeekEdit}
+                  isPremium={isPremium}
+                  onUpgrade={handleUpgrade}
                 />
               )}
               {activeTab === "block" && (
-                <BlockView
-                  highlightedIds={highlightedIds}
-                  onEditPhase={openPhaseEdit}
-                  onEditWeek={openWeekEdit}
-                />
+                !isPremium ? (
+                  <PreviewLockedView
+                    title="Block progression is a Pro feature"
+                    description="See your full training block roadmap, phase structure, and week-by-week progression plan."
+                    onUpgrade={handleUpgrade}
+                  />
+                ) : (
+                  <BlockView
+                    highlightedIds={highlightedIds}
+                    onEditPhase={openPhaseEdit}
+                    onEditWeek={openWeekEdit}
+                  />
+                )
               )}
               {activeTab === "history" && (
-                <HistoryView
-                  onOpenDetail={setChangeDetailId}
-                  onRestored={handleRestored}
-                />
+                !isPremium ? (
+                  <PreviewLockedView
+                    title="Change history is a Pro feature"
+                    description="Track every AI edit, view before/after comparisons, and restore any previous version of your program."
+                    onUpgrade={handleUpgrade}
+                  />
+                ) : (
+                  <HistoryView
+                    onOpenDetail={setChangeDetailId}
+                    onRestored={handleRestored}
+                  />
+                )
               )}
             </>
           )}
@@ -1969,25 +2090,51 @@ export default function SystemPage() {
 
       {/* ─── Desktop VibeBar (desktop only) ─── */}
       {hasSystem && activeTab !== "history" && (
-        <div className="hidden md:block">
-          <VibeBar
-            onEditComplete={handleGlobalEditComplete}
-            onUndone={handleRestored}
-          />
-        </div>
+        isPremium ? (
+          <div className="hidden md:block">
+            <VibeBar
+              onEditComplete={handleGlobalEditComplete}
+              onUndone={handleRestored}
+            />
+          </div>
+        ) : (
+          <div className="hidden md:flex items-center gap-3 px-4 py-3 border-t border-border bg-background/98">
+            <div className="flex-1 flex items-center gap-3 bg-card border border-border/40 rounded-2xl px-4 py-3 opacity-50 cursor-not-allowed">
+              <Lock className="w-4 h-4 text-muted-foreground/40 flex-shrink-0" />
+              <span className="flex-1 text-left text-sm text-muted-foreground/40">AI program edits require Pro</span>
+            </div>
+            <button
+              onClick={handleUpgrade}
+              className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-primary text-primary-foreground text-xs font-semibold whitespace-nowrap hover:bg-primary/90 active:scale-[0.98] transition-all"
+            >
+              <Zap className="w-3.5 h-3.5" /> Upgrade
+            </button>
+          </div>
+        )
       )}
 
       {/* ─── Mobile coach bar (mobile only) ─── */}
       {hasSystem && activeTab !== "history" && (
         <div className="md:hidden border-t border-border bg-background/98 backdrop-blur-sm flex-shrink-0 px-4 py-3 safe-area-bottom">
-          <button
-            onClick={() => setMobilePanel("bottom")}
-            className="w-full flex items-center gap-3 bg-card border border-border rounded-2xl px-4 py-3.5 hover:border-primary/40 active:scale-[0.98] transition-all duration-150"
-          >
-            <Sparkles className="w-4 h-4 text-primary/70 flex-shrink-0" />
-            <span className="flex-1 text-left text-sm text-muted-foreground/60">Ask your coach or give a command…</span>
-            <ChevronUp className="w-4 h-4 text-muted-foreground/40 flex-shrink-0" />
-          </button>
+          {isPremium ? (
+            <button
+              onClick={() => setMobilePanel("bottom")}
+              className="w-full flex items-center gap-3 bg-card border border-border rounded-2xl px-4 py-3.5 hover:border-primary/40 active:scale-[0.98] transition-all duration-150"
+            >
+              <Sparkles className="w-4 h-4 text-primary/70 flex-shrink-0" />
+              <span className="flex-1 text-left text-sm text-muted-foreground/60">Ask your coach or give a command…</span>
+              <ChevronUp className="w-4 h-4 text-muted-foreground/40 flex-shrink-0" />
+            </button>
+          ) : (
+            <button
+              onClick={handleUpgrade}
+              className="w-full flex items-center gap-3 bg-card border border-primary/20 rounded-2xl px-4 py-3.5 hover:border-primary/40 active:scale-[0.98] transition-all duration-150"
+            >
+              <Lock className="w-4 h-4 text-primary/70 flex-shrink-0" />
+              <span className="flex-1 text-left text-sm text-muted-foreground/60">Unlock AI coaching edits</span>
+              <span className="text-[11px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full">Pro</span>
+            </button>
+          )}
         </div>
       )}
 

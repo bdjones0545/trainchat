@@ -1469,6 +1469,30 @@ function HistoryTab({ hasActiveSystem }: { hasActiveSystem?: boolean }) {
   );
 }
 
+// ─── Tab locked state (preview-only users) ────────────────────────────────────
+
+function TabLockedView({ message, onUpgrade }: { message: string; onUpgrade?: () => void }) {
+  return (
+    <div className="flex flex-col h-full items-center justify-center p-8 text-center">
+      <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-4 mx-auto">
+        <Lock className="w-6 h-6 text-primary" />
+      </div>
+      <h4 className="text-sm font-bold text-foreground mb-2">Pro feature</h4>
+      <p className="text-[11px] text-muted-foreground leading-relaxed mb-5 max-w-[180px]">
+        {message}
+      </p>
+      {onUpgrade && (
+        <button
+          onClick={onUpgrade}
+          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-[12px] font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all"
+        >
+          <Zap className="w-3.5 h-3.5" /> Upgrade to Pro
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function LiveProgramPanel({
@@ -1606,13 +1630,38 @@ export default function LiveProgramPanel({
           />
         )}
         {activeTab === "changes" && (
-          <ChangesTab
-            hasActiveSystem={hasActiveSystem}
-            newChangeSignal={newChangeSignal}
-          />
+          !isPremium ? (
+            <TabLockedView
+              message="Track every AI edit and adaptation in your program's live change log."
+              onUpgrade={onUpgrade}
+            />
+          ) : (
+            <ChangesTab
+              hasActiveSystem={hasActiveSystem}
+              newChangeSignal={newChangeSignal}
+            />
+          )
         )}
-        {activeTab === "history" && <HistoryTab hasActiveSystem={hasActiveSystem} />}
-        {activeTab === "forecast" && <CoachForecast onSendMessage={onSendMessage} />}
+        {activeTab === "history" && (
+          !isPremium ? (
+            <TabLockedView
+              message="View and restore any previous version of your training program."
+              onUpgrade={onUpgrade}
+            />
+          ) : (
+            <HistoryTab hasActiveSystem={hasActiveSystem} />
+          )
+        )}
+        {activeTab === "forecast" && (
+          !isPremium ? (
+            <TabLockedView
+              message="See upcoming sessions, predicted progressions, and adaptation timelines."
+              onUpgrade={onUpgrade}
+            />
+          ) : (
+            <CoachForecast onSendMessage={onSendMessage} />
+          )
+        )}
       </div>
     </div>
   );
