@@ -1,0 +1,216 @@
+Fix the TrainChat free/guest program access behavior so selecting an active or saved program does NOT reveal the full program for unpaid users.
+
+CURRENT ISSUE:
+When a free/guest user selects an active or saved program, the app currently shows the full program structure (multiple days/sessions) instead of limiting access.
+
+This leaks too much product value before the paywall.
+
+GOAL:
+For free/guest users:
+- allow them to preview the program
+- show enough value to demonstrate quality
+- but restrict access to the full program until upgrade/signup/paywall conditions are met
+
+The intended behavior is:
+- show program summary
+- show Day 1 fully or mostly
+- lock/blur the remaining days and deeper system views
+- present a clear upgrade CTA
+
+----------------------------------------
+1. DEFINE ACCESS LEVELS
+----------------------------------------
+
+Create explicit access tiers such as:
+
+- guest_preview
+- free_preview
+- full_access
+
+Behavior:
+- guest_preview / free_preview:
+  limited access only
+- full_access:
+  full program access
+
+Do not rely on vague auth state alone.
+Access control should be feature-level.
+
+----------------------------------------
+2. RESTRICT PROGRAM VIEWS FOR PREVIEW USERS
+----------------------------------------
+
+When a guest/free-preview user opens an active or saved program:
+
+Allowed:
+- program title
+- goal / sport / frequency
+- summary card
+- Day 1 (or first session) preview
+- maybe one or two visible exercises in later days as teaser
+
+Restricted:
+- full week/session list
+- full block roadmap
+- full history
+- full adaptation views
+- complete multi-day program visibility
+
+Do NOT show the entire week by default.
+
+----------------------------------------
+3. DAY 1 PREVIEW MODEL
+----------------------------------------
+
+Recommended preview behavior:
+
+- Day 1 visible
+- remaining days locked or blurred
+- show visual tease for additional days without full detail
+
+Example:
+Day 1 → fully visible
+Day 2+ → locked cards with blur overlay and upgrade CTA
+
+This should preserve the value demonstration while protecting the premium experience.
+
+----------------------------------------
+4. APPLY PAYWALL LOGIC TO ACTIVE + SAVED PROGRAM LOAD
+----------------------------------------
+
+When a free/guest user selects:
+- Active Program
+- any item from Saved Programs
+
+the app should load the program in preview mode, not full-access mode.
+
+Important:
+Selecting a saved program must not bypass preview restrictions.
+
+----------------------------------------
+5. ADD FEATURE GATING BY TAB
+----------------------------------------
+
+For free/guest preview users:
+
+Today:
+- allow limited Day 1/session preview
+
+This Week:
+- lock or partially preview after Day 1
+
+Block:
+- summary only or blurred roadmap
+
+History:
+- restricted or teaser only
+
+Do not let tab navigation expose the full system.
+
+----------------------------------------
+6. LOCK REMAINING DAYS VISUALLY
+----------------------------------------
+
+Use premium gating UX:
+- blurred content
+- locked cards
+- faded continuation
+- upgrade CTA
+
+Example:
+“Unlock the rest of your program”
+“See all training days, block progression, and live adaptations”
+
+Avoid ugly hard walls.
+Use aspirational gating.
+
+----------------------------------------
+7. KEEP ENOUGH VALUE VISIBLE
+----------------------------------------
+
+Do not hide everything.
+
+Free users should still feel:
+- the program is real
+- the quality is high
+- the system understands their goal
+
+Recommended visible elements:
+- title
+- frequency
+- high-level structure
+- first day/session
+- premium system teasers
+
+----------------------------------------
+8. DO NOT ALLOW SAVED PROGRAMS TO BYPASS ACCESS CONTROL
+----------------------------------------
+
+Saved Programs should be a library entry point, not a loophole.
+
+If user is guest/free:
+- saved program opens in preview mode
+- not full mode
+
+If user is full-access:
+- saved program opens fully
+
+----------------------------------------
+9. DEFINE PAYWALL TRIGGERS
+----------------------------------------
+
+Trigger upgrade/paywall when preview user attempts to:
+- open Day 2+
+- open full week
+- access full block view
+- access full history/adaptation
+- switch deeply into saved program details
+
+The user should understand:
+“I can preview, but I need to upgrade to unlock the full system.”
+
+----------------------------------------
+10. PRESERVE FULL ACCESS FOR ELIGIBLE USERS
+----------------------------------------
+
+Do not break the experience for:
+- subscribed users
+- full-access authenticated users
+- authorized premium accounts
+
+They should still see the full program immediately.
+
+----------------------------------------
+11. TEST CASES
+----------------------------------------
+
+Verify:
+
+1. Guest opens newly created program
+→ sees summary + Day 1 preview only
+→ remaining days locked
+
+2. Guest selects a saved program
+→ still preview-only
+→ no full week leak
+
+3. Paid user selects saved program
+→ sees full program
+
+4. Guest tries to open Day 2 in This Week
+→ upgrade/paywall shown
+
+5. Guest tries to open Block
+→ summary only or locked state
+
+----------------------------------------
+12. DELIVERABLES
+----------------------------------------
+
+After implementation, provide:
+1. the access-tier model
+2. which views are preview vs full
+3. how Saved Programs now respects preview mode
+4. how Day 1 preview is implemented
+5. where paywall triggers now occur
+6. any edge cases where full content could still leak
