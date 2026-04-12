@@ -1,0 +1,247 @@
+Fix the TrainChat in-exercise custom command system so direct user requests are parsed and executed as real exercise edits instead of being routed into a generic fallback modal.
+
+CURRENT ISSUE:
+When the user is inside an exercise edit panel and types a specific command such as:
+- “Substitute with triple broad jump”
+- “Swap this for RFESS”
+- “Make this a pause squat”
+- “Replace with rotational med ball throw”
+
+the system does NOT recognize the direct command properly.
+
+Instead, it routes the user into a generic modal such as:
+- Easier variation
+- Harder progression
+- Swap exercise
+
+This makes it feel like the system ignored the actual request.
+
+GOAL:
+Inside the exercise edit context, direct user commands must be interpreted as in-context exercise mutations first, not generic intent hints.
+
+----------------------------------------
+1. ADD CONTEXT-AWARE EXERCISE COMMAND PARSER
+----------------------------------------
+
+When the user types inside the custom request field of an exercise panel, parse with full context:
+
+context = {
+  currentExercise,
+  currentSession,
+  sessionIntent,
+  exerciseRole,
+  movementPattern,
+  variationFamily,
+  userProfile,
+  recentPainFlags,
+  equipment,
+  sportContext
+}
+
+Create command intents such as:
+- direct_swap_to_named_exercise
+- direct_variation_request
+- direct_progression_request
+- direct_regression_request
+- direct_prescription_change
+- clarification_needed
+- fallback_generic_edit
+
+Examples:
+- “Substitute with triple broad jump” → direct_swap_to_named_exercise
+- “Make this a pause squat” → direct_variation_request
+- “Add another set” → direct_prescription_change
+- “Make this harder” → direct_progression_request
+
+Do NOT send specific commands into a generic chooser unless parsing confidence is low.
+
+----------------------------------------
+2. PRIORITIZE DIRECT COMMAND EXECUTION
+----------------------------------------
+
+If the user explicitly names an exercise or variation, the system should try to execute that request immediately.
+
+Examples:
+- “Substitute with triple broad jump”
+- “Swap this for split squat”
+- “Change this to trap bar deadlift”
+- “Make this a lateral bound instead”
+
+Processing order:
+1. identify requested target exercise/variation
+2. validate it against session role and intent
+3. execute if valid
+4. only ask clarification if invalid or ambiguous
+
+----------------------------------------
+3. VALIDATE WITHIN ROLE + SESSION INTENT
+----------------------------------------
+
+Before applying the change, validate:
+
+- Is the requested exercise compatible with the current role slot?
+- Is it appropriate for the current session intent?
+- Is it acceptable given movement pattern logic?
+- Is equipment available?
+- Does it violate pain/restriction rules?
+
+Example:
+Current exercise: Depth Jump
+Requested: Triple Broad Jump
+
+Validation:
+- same power slot? yes
+- compatible with lower power / horizontal projection? yes
+- hockey transfer reasonable? yes
+- logging mode available? yes
+
+→ apply swap directly
+
+----------------------------------------
+4. ONLY USE GENERIC MODAL AS TRUE FALLBACK
+----------------------------------------
+
+The Easier / Harder / Swap chooser modal should only appear when:
+- the request is too vague
+- the parser cannot determine the intended action
+- the requested target is invalid and alternatives are needed
+
+Examples where fallback is okay:
+- “Change this”
+- “I don’t like this”
+- “Can we do something else here?”
+
+Examples where fallback is NOT okay:
+- “Substitute with triple broad jump”
+- “Swap to front squat”
+- “Make this a pause squat”
+
+----------------------------------------
+5. ADD EXPLICIT NAMED-EXERCISE MATCHING
+----------------------------------------
+
+Build matching logic for:
+- exact exercise name
+- close alias
+- common abbreviations
+- common coaching shorthand
+
+Examples:
+- RFESS → Rear Foot Elevated Split Squat
+- triple broad jump
+- med ball rotational throw
+- pause squat
+- trap bar deadlift
+- RDL
+
+If the user names a known exercise, treat that as a strong execution signal.
+
+----------------------------------------
+6. APPLY REAL MUTATION TO PROGRAM STATE
+----------------------------------------
+
+When a direct command is valid, create a real mutation:
+
+exerciseMutation = {
+  sessionId,
+  previousExerciseId,
+  previousExerciseName,
+  newExerciseId,
+  newExerciseName,
+  mutationType: "direct_swap",
+  userCommand: "Substitute with triple broad jump",
+  reason: "User explicitly requested named exercise substitution"
+}
+
+Then update:
+- session exercise list
+- logging mode
+- coaching cue
+- progression type if needed
+- exercise detail UI
+- Changes tab
+
+----------------------------------------
+7. UPDATE LOGGING + METADATA AFTER SWAP
+----------------------------------------
+
+If the exercise changes, also update all dependent behavior:
+
+Example:
+Depth Jump → Triple Broad Jump
+
+Must update:
+- loggingMode: height_reps → distance_reps
+- progressionType: height_quality → distance_quality
+- coaching cue
+- role if needed
+- displayed prescription metadata
+
+Do not keep old exercise logging behavior after swap.
+
+----------------------------------------
+8. SHOW EXACT SUCCESS MESSAGE
+----------------------------------------
+
+After execution, show exactly what changed.
+
+Good:
+- “Replaced Depth Jump with Triple Broad Jump.”
+- “Updated the power slot to Triple Broad Jump and switched logging to distance/reps.”
+
+Bad:
+- “1 change applied”
+- “Done”
+- “Progression cue added”
+
+The user should never have to guess what happened.
+
+----------------------------------------
+9. HANDLE INVALID REQUESTS INTELLIGENTLY
+----------------------------------------
+
+If the requested exercise is not valid for the current slot, do not jump to generic modal immediately.
+
+Instead say something like:
+“Triple Broad Jump is not the best fit for this slot as currently structured. Want me to:
+1. replace it with a similar horizontal power movement
+2. move Triple Broad Jump into a better-matched power slot
+3. show closest valid alternatives?”
+
+This keeps the system contextual and coach-like.
+
+----------------------------------------
+10. ADD TEST CASES
+----------------------------------------
+
+Verify:
+
+1. Depth Jump + “Substitute with triple broad jump”
+→ direct swap executed
+
+2. Back Squat + “Make this pause squat”
+→ variation change executed
+
+3. Pull-Up + “Swap this for chest-supported row”
+→ direct swap executed if role-compatible
+
+4. Pallof Press + “Replace with cable chop”
+→ direct swap executed if trunk/rotation fit is valid
+
+5. “Make this harder”
+→ can still use harder flow if no specific named target is provided
+
+6. “Change this”
+→ fallback chooser allowed
+
+----------------------------------------
+11. DELIVERABLES
+----------------------------------------
+
+After implementation, provide:
+1. the new context-aware parser flow
+2. how named exercise requests are matched
+3. how direct swaps are validated
+4. how programState stores the mutation
+5. how the UI now confirms exact changes
+6. when the generic chooser still appears

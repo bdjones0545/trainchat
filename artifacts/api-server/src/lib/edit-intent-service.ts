@@ -136,7 +136,7 @@ function buildEditSystemPrompt(
     : "";
 
   const swapSection = exerciseSwapContext
-    ? `\nEXERCISE SWAP INTELLIGENCE:\n${exerciseSwapContext}\nWhen performing a swap/replace, you MUST choose an exercise from the SWAP CANDIDATES or PROGRESSION OPTIONS list above. Use the exact name as shown. If no candidate perfectly fits, pick the closest one. Do not invent exercise names.\n`
+    ? `\nEXERCISE SWAP INTELLIGENCE:\n${exerciseSwapContext}\nWhen performing a swap/replace:\n- If the user's request EXPLICITLY names a specific target exercise (e.g. "replace X with Pause Back Squat"), use EXACTLY that name — do not substitute with a candidate from the list.\n- If the user does NOT name a specific target (e.g. "swap this for something harder"), choose from the SWAP CANDIDATES or PROGRESSION OPTIONS list above.\n- Never invent exercise names not present in either the user's request or the candidates list.\n`
     : "";
 
   return `You are an elite performance architect editing a user's structured training system. You program according to NSCA strength & conditioning principles.
@@ -491,7 +491,17 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
     const exerciseId = targetContext.id;
     const label = targetContext.label ?? "the exercise";
 
-    const swapTo = lower.match(/(?:swap|replace|change|switch)\s+(?:this\s+)?(?:for|with|to)\s+(.+)/i)?.[1]?.trim();
+    // Match "swap/replace/change/switch [this|it|out|anything] for/with/to [target]"
+    // OR "substitute/sub [this|it] with [target]"
+    // OR "use/do [target] instead"
+    // OR "try [target]"
+    // Covers both "swap this for X" and "replace Back Squat with X" formats.
+    const swapTo = (
+      userRequest.match(/(?:swap|replace|change|switch|substitute|sub)\s+.+?\s+(?:for|with|to)\s+(.+)$/i)?.[1]?.trim() ||
+      userRequest.match(/(?:swap|replace|change|switch|substitute|sub)\s+(?:this|it|out)?\s*(?:for|with|to)\s+(.+)$/i)?.[1]?.trim() ||
+      userRequest.match(/(?:use|do)\s+(.+?)\s+instead$/i)?.[1]?.trim() ||
+      userRequest.match(/^try\s+(.+?)(?:\s+instead)?$/i)?.[1]?.trim()
+    );
     const wantsEasier = lower.match(/easier|simpler|lighter|beginner|reduce/);
     const wantsHarder = lower.match(/harder|heavier|advanced|progress/);
     const wantsExplosive = lower.match(/explosive|power|speed|fast/);
@@ -962,7 +972,7 @@ function findCurrentSession(system: any): any | null {
 
 function detectSwapIntent(userRequest: string): "swap" | "easier" | "harder" | null {
   const lower = userRequest.toLowerCase();
-  if (lower.match(/\bswap\b|\breplace\b|\bsubstitute\b|\bswitch\b|\balternative\b|\bother.*exercise\b|\bdifferent.*exercise\b/)) return "swap";
+  if (lower.match(/\bswap\b|\breplace\b|\bsubstitute\b|\bsub\b|\bswitch\b|\balternative\b|\bother.*exercise\b|\bdifferent.*exercise\b|\buse\b.*\binstead\b|\btry\b|\bconvert\b|\bchange.*to\b/)) return "swap";
   if (lower.match(/\beasier\b|\bsimpler\b|\bregress\b|\btoo hard\b|\btoo difficult\b/)) return "easier";
   if (lower.match(/\bharder\b|\bprogress\b|\badvance\b|\bmore.*difficult\b|\btoo easy\b/)) return "harder";
   return null;

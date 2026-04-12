@@ -8,6 +8,10 @@
  * Phase B: Injects decision memory + long-term memories into the AI prompt so
  * generated directions reference past decisions naturally. Also returns a
  * continuityPrompt for the UI to surface check-in questions.
+ *
+ * Phase C: Expanded direct-command detection — named exercise requests and
+ * common coaching shorthand are now recognised as highly specific and skip
+ * the chooser modal entirely.
  */
 
 import { logger } from "./logger";
@@ -30,6 +34,204 @@ export interface DirectionsResponse {
   directEditRequest?: string;
   continuityPrompt?: string | null;
   memoryCallout?: string | null;
+}
+
+// ─── Common Exercise Aliases / Shorthand ──────────────────────────────────────
+// Maps common abbreviations and coaching shorthand to canonical exercise names.
+// Used so the edit engine receives a recognisable name even when the user
+// types shorthand.
+
+const EXERCISE_ALIASES: Record<string, string> = {
+  "rfess": "Rear Foot Elevated Split Squat",
+  "rear foot elevated split squat": "Rear Foot Elevated Split Squat",
+  "rdl": "Romanian Deadlift",
+  "trap bar deadlift": "Trap Bar Deadlift",
+  "hex bar deadlift": "Trap Bar Deadlift",
+  "ssb squat": "Safety Bar Squat",
+  "safety squat": "Safety Bar Squat",
+  "cgbp": "Close-Grip Bench Press",
+  "close grip bench": "Close-Grip Bench Press",
+  "db bench": "Dumbbell Bench Press",
+  "db press": "Dumbbell Bench Press",
+  "db row": "Dumbbell Row",
+  "db rdl": "Dumbbell Romanian Deadlift",
+  "db split squat": "Dumbbell Split Squat",
+  "kb swing": "Kettlebell Swing",
+  "kb goblet": "Kettlebell Goblet Squat",
+  "pause squat": "Pause Back Squat",
+  "pause bench": "Pause Bench Press",
+  "pause deadlift": "Pause Deadlift",
+  "tempo squat": "Tempo Back Squat",
+  "tempo deadlift": "Tempo Deadlift",
+  "pin squat": "Pin Squat",
+  "box squat": "Box Squat",
+  "front squat": "Front Squat",
+  "goblet squat": "Goblet Squat",
+  "split squat": "Split Squat",
+  "bulgarian split squat": "Rear Foot Elevated Split Squat",
+  "single leg rdl": "Single-Leg Romanian Deadlift",
+  "sl rdl": "Single-Leg Romanian Deadlift",
+  "hip thrust": "Barbell Hip Thrust",
+  "glute bridge": "Glute Bridge",
+  "nordic curl": "Nordic Hamstring Curl",
+  "nordic": "Nordic Hamstring Curl",
+  "ghr": "Glute Ham Raise",
+  "broad jump": "Broad Jump",
+  "triple broad jump": "Triple Broad Jump",
+  "box jump": "Box Jump",
+  "depth jump": "Depth Jump",
+  "hurdle jump": "Hurdle Jump",
+  "lateral bound": "Lateral Bound",
+  "med ball throw": "Medicine Ball Rotational Throw",
+  "rotational throw": "Medicine Ball Rotational Throw",
+  "rotational med ball throw": "Medicine Ball Rotational Throw",
+  "med ball rotational throw": "Medicine Ball Rotational Throw",
+  "pallof press": "Pallof Press",
+  "cable chop": "Cable Chop",
+  "half kneeling chop": "Half-Kneeling Cable Chop",
+  "landmine press": "Landmine Press",
+  "landmine row": "Landmine Row",
+  "landmine rotation": "Landmine Rotation",
+  "chest-supported row": "Chest-Supported Row",
+  "chest supported row": "Chest-Supported Row",
+  "incline row": "Chest-Supported Row",
+  "pendlay row": "Pendlay Row",
+  "ring row": "Ring Row",
+  "trx row": "TRX Row",
+  "face pull": "Face Pull",
+  "band pull apart": "Band Pull Apart",
+};
+
+/**
+ * Normalise a user-typed exercise name: resolve aliases, title-case common shorthand.
+ */
+function resolveAlias(raw: string): string {
+  const lower = raw.toLowerCase().trim();
+  return EXERCISE_ALIASES[lower] ?? raw.trim();
+}
+
+// ─── Direct Command Detection ──────────────────────────────────────────────────
+// Returns the resolved exercise name if the request is a direct command,
+// otherwise returns null.
+
+// Words that are NOT exercise names — prevent false positives in "make this harder/easier/better"
+const EXCLUDED_INTENT_WORDS = new Set([
+  "harder", "easier", "heavier", "lighter", "simpler", "better", "worse",
+  "harder variation", "easier variation", "different", "something else",
+  "more challenging", "less challenging", "more difficult", "less difficult",
+  "shoulder-friendly", "shoulder friendly", "a variation", "an alternative",
+  "a progression", "a regression", "explosive", "powerful",
+]);
+
+/**
+ * Detect requests where the user explicitly names a target exercise.
+ * Covers patterns like:
+ *  - "substitute with X"
+ *  - "replace with X" / "replace this with X" / "replace [name] with X"
+ *  - "swap [this] for X" / "swap [this] to X"
+ *  - "change [this] to X" / "change to X"
+ *  - "switch to X" / "switch [this] for X"
+ *  - "make this a X" / "make it a X" / "make this [into] X"
+ *  - "use X instead" / "do X instead"
+ *  - "convert to X" / "convert [this] to X"
+ */
+function detectNamedExerciseCommand(request: string): { verb: string; targetExercise: string } | null {
+  const r = request.trim();
+
+  const patterns: Array<{ re: RegExp; verbGroup: number; nameGroup: number }> = [
+    // "substitute [this/it] with X" / "substitute with X"
+    { re: /^substitute(?:\s+(?:this|it))?\s+with\s+(.+)$/i, verbGroup: -1, nameGroup: 1 },
+    // "sub [this] with X" / "sub with X"
+    { re: /^sub(?:\s+(?:this|it))?\s+with\s+(.+)$/i, verbGroup: -1, nameGroup: 1 },
+    // "replace [this/it/name] with X"
+    { re: /^replace(?:\s+\S+)?\s+with\s+(.+)$/i, verbGroup: -1, nameGroup: 1 },
+    // "swap [this/it] for X" / "swap [this/it] with X" / "swap [this/it] to X"
+    { re: /^swap(?:\s+(?:this|it|out))?\s+(?:for|with|to)\s+(.+)$/i, verbGroup: -1, nameGroup: 1 },
+    // "swap X for Y" (naming both — already handled but capture Y)
+    { re: /^swap\s+.+\s+for\s+(.+)$/i, verbGroup: -1, nameGroup: 1 },
+    // "change [this] to X" / "change to X"
+    { re: /^change(?:\s+(?:this|it|the\s+exercise))?\s+to\s+(.+)$/i, verbGroup: -1, nameGroup: 1 },
+    // "switch [this] to X" / "switch [this] for X"
+    { re: /^switch(?:\s+(?:this|it|out))?\s+(?:to|for|with)\s+(.+)$/i, verbGroup: -1, nameGroup: 1 },
+    // "make this a X" / "make it a X" / "make this into X"
+    { re: /^make\s+(?:this|it)\s+(?:a|an|into|a\s+)?(.+)$/i, verbGroup: -1, nameGroup: 1 },
+    // "use X instead" / "do X instead"
+    { re: /^(?:use|do)\s+(.+?)\s+instead$/i, verbGroup: -1, nameGroup: 1 },
+    // "convert [this] to X" / "convert to X"
+    { re: /^convert(?:\s+(?:this|it))?\s+to\s+(.+)$/i, verbGroup: -1, nameGroup: 1 },
+    // "try X" / "try X instead"
+    { re: /^try\s+(.+?)(?:\s+instead)?$/i, verbGroup: -1, nameGroup: 1 },
+  ];
+
+  for (const { re, nameGroup } of patterns) {
+    const match = r.match(re);
+    if (match) {
+      const rawName = match[nameGroup]?.trim();
+      if (rawName && rawName.length >= 3 && rawName.length <= 80) {
+        // Reject common intent adjectives that are NOT exercise names
+        if (EXCLUDED_INTENT_WORDS.has(rawName.toLowerCase())) continue;
+        const resolved = resolveAlias(rawName);
+        return { verb: "swap", targetExercise: resolved };
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Detect direct prescription changes (e.g. "add a set", "change reps to 5").
+ */
+function isDirectPrescriptionChange(request: string): boolean {
+  const lower = request.toLowerCase();
+  return [
+    /\badd\s+a?\s+set\b/i,
+    /\b(remove|drop|cut)\s+a?\s+set\b/i,
+    /\bmore\s+sets?\b/i,
+    /\bfewer\s+sets?\b/i,
+    /\bone\s+more\s+set\b/i,
+    /\bchange\s+(the\s+)?reps?\s+(range\s+)?to\s+\d/i,
+    /\bchange\s+(the\s+)?sets?\s+to\s+\d/i,
+    /\bchange\s+(the\s+)?rest\s+to\b/i,
+    /\bmake\s+it\s+shoulder.?friendly\b/i,
+    /\badd\s+explosive\s+cue\b/i,
+    /\bremove\s+(the\s+)?(exercise|this)\b/i,
+    /\bdelete\s+(the\s+)?(exercise|this)\b/i,
+    /\bshorten(er)?\s+(the\s+)?rest\b/i,
+    /\bmore\s+rest\b/i,
+    /\bless\s+rest\b/i,
+  ].some((p) => p.test(lower));
+}
+
+// ─── Specificity Check (combined) ────────────────────────────────────────────
+
+/**
+ * Returns { isSpecific, directEditRequest } when the request should skip
+ * the directions chooser and go straight to the edit engine.
+ */
+function checkSpecificity(
+  request: string,
+  targetContext?: TargetContext
+): { isSpecific: true; directEditRequest: string } | { isSpecific: false } {
+  // 1. Direct prescription change patterns
+  if (isDirectPrescriptionChange(request)) {
+    return { isSpecific: true, directEditRequest: request };
+  }
+
+  // 2. Named exercise command (most common source of false positives before this fix)
+  const namedCommand = detectNamedExerciseCommand(request);
+  if (namedCommand) {
+    const exerciseName = targetContext?.label ?? "this exercise";
+    // Build a clean, unambiguous edit request so the edit engine gets full context
+    const editRequest = `Replace ${exerciseName} with ${namedCommand.targetExercise}`;
+    logger.info(
+      { original: request, resolved: namedCommand.targetExercise, editRequest },
+      "Direct named-exercise command detected — skipping directions"
+    );
+    return { isSpecific: true, directEditRequest: editRequest };
+  }
+
+  return { isSpecific: false };
 }
 
 // ─── Prompt Builder ───────────────────────────────────────────────────────────
@@ -57,13 +259,23 @@ function buildDirectionsSystemPrompt(
 You know this athlete. You have worked with them before and remember the decisions you've made together.
 ${targetFocus}${adaptationSection}${decisionMemorySection}
 Your job is to interpret their edit request and either:
-1. Recognize it as highly specific (e.g. "swap bench for dumbbell press") → execute directly
-2. Recognize it as open-ended (e.g. "make this better", "reduce fatigue") → generate 2-4 direction options
+1. Recognize it as highly specific → execute directly (shouldSkipDirections: true)
+2. Recognize it as open-ended → generate 2-4 direction options (shouldSkipDirections: false)
 
-DECISION RULES:
-- "Highly specific" means the request names EXACTLY what to change AND exactly how (swap X for Y, change reps to Z, remove exercise X).
-- "Open-ended" means the user states a goal or direction without specifying exact changes.
-- When in doubt, offer directions — collaboration > automation.
+DECISION RULES — HIGHLY SPECIFIC (always skip directions):
+- Request names a specific exercise to swap TO: "use X", "try X instead", "swap to X", "change to X"
+- Request names BOTH exercises: "swap bench for dumbbell press"
+- Request specifies a clear variation: "make this a pause squat", "add a 2-second pause"
+- Request specifies an exact prescription: "change to 5 reps", "add a set", "shorten rest to 90s"
+- Request names a known exercise abbreviation: RFESS, RDL, SSB, etc.
+- Any request where the TARGET of the change is unambiguous — even if only one exercise is named
+
+DECISION RULES — OPEN-ENDED (show directions):
+- User states a vague goal: "make this better", "I don't like this", "change this", "something else"
+- User asks for a direction without naming a specific change: "more variety", "can we try something new"
+- Request is ambiguous and multiple interpretations are plausible
+
+IMPORTANT: err toward shouldSkipDirections: true when ANY specific exercise name, variation, or prescription detail appears. Only show directions when the request contains NO specific target.
 
 FOR OPEN-ENDED REQUESTS:
 Generate 2-4 meaningful directions. Each must:
@@ -105,7 +317,7 @@ For open-ended requests:
 For highly specific requests:
 {
   "shouldSkipDirections": true,
-  "directEditRequest": "the user's request, cleaned up if needed"
+  "directEditRequest": "the user's request, cleaned up if needed — preserve the specific exercise name or detail"
 }
 
 CURRENT TRAINING SYSTEM:
@@ -165,26 +377,6 @@ async function callDirectionsAI(
   }
 }
 
-// ─── Rule-Based Specificity Check ─────────────────────────────────────────────
-
-function isHighlySpecific(request: string): boolean {
-  const lower = request.toLowerCase();
-  const specificPatterns = [
-    /swap .+ for .+/i,
-    /replace .+ with .+/i,
-    /change .+ to .+/i,
-    /add a set/i,
-    /remove a set/i,
-    /remove .+ exercise/i,
-    /delete .+ exercise/i,
-    /change (the )?reps? (range )?to \d/i,
-    /change (the )?sets? to \d/i,
-    /make it shoulder.?friendly/i,
-    /add explosive cue/i,
-  ];
-  return specificPatterns.some((p) => p.test(lower));
-}
-
 // ─── Fallback Directions ──────────────────────────────────────────────────────
 
 function buildFallbackDirections(
@@ -202,14 +394,14 @@ function buildFallbackDirections(
         {
           id: "A",
           label: "Easier Variation",
-          whatWillChange: "Regression cue added, lighter load guidance",
+          whatWillChange: "Regression applied — lighter load guidance or simpler variation",
           whyItMatters: "Builds movement quality without accumulating unnecessary fatigue",
           editRequest: `Make ${label} an easier variation`,
         },
         {
           id: "B",
           label: "Harder Progression",
-          whatWillChange: "Progression trigger added, intensity cue updated",
+          whatWillChange: "Harder variation or tempo prescription applied",
           whyItMatters: "Pushes adaptation when the current stimulus is no longer challenging",
           editRequest: `Make ${label} a harder variation`,
         },
@@ -286,9 +478,13 @@ export async function generateDirections(
   decisionMemoryContext?: string,
   continuityPrompt?: string | null
 ): Promise<DirectionsResponse> {
-  // Fast path: rule-based specificity check
-  if (isHighlySpecific(userRequest)) {
-    return { shouldSkipDirections: true, directEditRequest: userRequest };
+  // Fast path: rule-based specificity check (expanded Phase C)
+  const specificity = checkSpecificity(userRequest, targetContext);
+  if (specificity.isSpecific) {
+    return {
+      shouldSkipDirections: true,
+      directEditRequest: specificity.directEditRequest,
+    };
   }
 
   const systemContext = serializeSystemForPrompt(fullSystem);
@@ -306,8 +502,26 @@ export async function generateDirections(
     return { ...fallback, continuityPrompt: continuityPrompt ?? null };
   }
 
+  // Guard: if AI says skip AND includes a directEditRequest, trust it directly
+  // If AI says skip but the original request contained a named exercise,
+  // prefer our resolved version (alias-expanded).
+  if (aiResult.shouldSkipDirections) {
+    const namedCommand = detectNamedExerciseCommand(userRequest);
+    if (namedCommand && targetContext?.label) {
+      const editRequest = `Replace ${targetContext.label} with ${namedCommand.targetExercise}`;
+      return {
+        shouldSkipDirections: true,
+        directEditRequest: editRequest,
+        continuityPrompt: continuityPrompt ?? null,
+      };
+    }
+    return {
+      ...aiResult,
+      continuityPrompt: continuityPrompt ?? null,
+    };
+  }
+
   // Attach the rule-based continuity prompt from decision memory
-  // (only if AI didn't already embed it in the coach message)
   return {
     ...aiResult,
     continuityPrompt: continuityPrompt ?? null,
