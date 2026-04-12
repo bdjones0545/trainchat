@@ -180,19 +180,47 @@ function detectNamedExerciseCommand(request: string): { verb: string; targetExer
 }
 
 /**
- * Detect direct prescription changes (e.g. "add a set", "change reps to 5").
+ * Detect direct prescription changes — any request that names a specific
+ * field (reps, sets, rest, load, duration, distance, tempo) together with
+ * a concrete value.  These should bypass the chooser modal entirely.
  */
 function isDirectPrescriptionChange(request: string): boolean {
   const lower = request.toLowerCase();
+
+  // Any mention of a number + a prescription field keyword = direct command
+  const hasNumber = /\d/.test(lower);
+
+  if (hasNumber) {
+    const fieldKeywords = [
+      /\breps?(\s+each\s+side|\s+per\s+side|\s+each\s+(leg|arm))?\b/i,
+      /\bsets?\b/i,
+      /\brest\b/i,
+      /\b(seconds?|sec|minutes?|min)\b/i,
+      /\b(lbs?|pounds?|kg)\b/i,
+      /\b(feet|ft|meters?)\b/i,
+      /\b(inches?|in)\b/i,
+      /\btempo\b/i,
+      /\bpause\b/i,
+      /\bhold\b/i,
+      /\bduration\b/i,
+      /\bdistance\b/i,
+      /\bheight\b/i,
+      /\beach\s+side\b/i,
+      /\bper\s+side\b/i,
+    ];
+    if (fieldKeywords.some((p) => p.test(lower))) return true;
+  }
+
+  // Tempo pattern like "3-1-X-0"
+  if (/\d[-]\d[-][Xx\d][-]\d/.test(request)) return true;
+
+  // Explicit set/rep delta words (no number required)
   return [
     /\badd\s+a?\s+set\b/i,
     /\b(remove|drop|cut)\s+a?\s+set\b/i,
+    /\bone\s+more\s+set\b/i,
     /\bmore\s+sets?\b/i,
     /\bfewer\s+sets?\b/i,
-    /\bone\s+more\s+set\b/i,
-    /\bchange\s+(the\s+)?reps?\s+(range\s+)?to\s+\d/i,
-    /\bchange\s+(the\s+)?sets?\s+to\s+\d/i,
-    /\bchange\s+(the\s+)?rest\s+to\b/i,
     /\bmake\s+it\s+shoulder.?friendly\b/i,
     /\badd\s+explosive\s+cue\b/i,
     /\bremove\s+(the\s+)?(exercise|this)\b/i,

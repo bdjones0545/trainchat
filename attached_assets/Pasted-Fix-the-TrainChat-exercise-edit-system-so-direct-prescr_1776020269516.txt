@@ -1,0 +1,298 @@
+Fix the TrainChat exercise edit system so direct prescription commands are executed immediately in place, instead of being routed to the generic easier/harder/swap modal.
+
+CURRENT ISSUE:
+When the user is inside a specific exercise panel and types a literal instruction such as:
+- “Increase reps to 10”
+- “Make this 3 sets”
+- “Lower rest to 60 sec”
+- “Use 25 lb”
+- “Make this 8 reps each side”
+
+the system still routes the user into the generic modal:
+- Easier variation
+- Harder progression
+- Swap exercise
+
+This is wrong.
+
+These are not vague edit requests.
+They are direct prescription mutation commands and should be applied immediately.
+
+GOAL:
+Build a direct prescription mutation layer that takes priority over the generic edit chooser.
+
+If the user gives a literal numeric or prescription change command, the system must:
+1. parse it
+2. validate it
+3. mutate the exercise prescription
+4. confirm exactly what changed
+5. update the session UI immediately
+
+----------------------------------------
+1. ADD A HIGH-PRIORITY PRESCRIPTION PARSER
+----------------------------------------
+
+Inside the exercise custom request field, first parse for direct prescription edits before any generic edit routing.
+
+Create intent types such as:
+- change_reps_exact
+- change_reps_range
+- change_sets
+- change_rest
+- change_load
+- change_each_side_reps
+- change_duration
+- change_distance
+- change_height
+- change_tempo
+- change_pause
+- change_hold
+- direct_swap_to_named_exercise
+- generic_variation_request
+- fallback_generic_edit
+
+Examples:
+- “Increase reps to 10” → change_reps_exact
+- “Make this 3 sets” → change_sets
+- “Rest 60 sec” → change_rest
+- “Use 20 pounds” → change_load
+- “Make this 8 reps each side” → change_each_side_reps
+
+This parser must run BEFORE easier/harder/swap routing.
+
+----------------------------------------
+2. EXECUTE DIRECT COMMANDS IN PLACE
+----------------------------------------
+
+If the command is explicit and valid, apply the mutation directly.
+
+Example:
+Current exercise: shrimp squat
+Current reps: 6–8 each side
+User input: “Increase reps to 10”
+
+Expected result:
+- reps become 10 each side (or 10 if single-side field rules apply)
+- exercise stays the same
+- no modal redirect
+- success confirmation shows exact change
+
+Do NOT open a chooser for explicit prescription commands.
+
+----------------------------------------
+3. ADD PRESCRIPTION FIELD AWARENESS
+----------------------------------------
+
+The system must know which prescription fields exist for the current exercise type.
+
+Examples:
+
+Shrimp squat:
+- sets
+- reps or reps each side
+- optional load
+- optional rest
+
+Broad jump:
+- reps
+- distance
+- sets
+- optional rest
+NOT load
+
+Plank:
+- time
+- sets
+NOT reps unless explicitly supported
+
+Depth jump:
+- height
+- reps
+- sets
+NOT barbell-style load
+
+Use exercise metadata + loggingMode + prescriptionSchema to validate what can be changed.
+
+----------------------------------------
+4. CREATE A STRUCTURED PRESCRIPTION MUTATION OBJECT
+----------------------------------------
+
+Store edits like:
+
+prescriptionMutation = {
+  sessionId,
+  exerciseId,
+  mutationType: "change_reps_exact",
+  field: "reps",
+  previousValue: "6-8 each side",
+  newValue: "10 each side",
+  userCommand: "Increase reps to 10",
+  reason: "Direct user prescription edit"
+}
+
+Or:
+
+prescriptionMutation = {
+  mutationType: "change_rest",
+  field: "rest",
+  previousValue: "90 sec",
+  newValue: "60 sec"
+}
+
+These must update programState immediately.
+
+----------------------------------------
+5. UPDATE UI IMMEDIATELY AFTER MUTATION
+----------------------------------------
+
+After a successful direct mutation:
+- refresh the current exercise card
+- refresh the session list
+- refresh any expanded detail panel
+- show the exact new prescription
+
+Do not require user to leave and re-open the session to verify the change.
+
+----------------------------------------
+6. SHOW EXACT SUCCESS MESSAGING
+----------------------------------------
+
+Good examples:
+- “Updated shrimp squat to 10 reps each side.”
+- “Changed rest from 90 sec to 60 sec.”
+- “Updated depth jump to 4 reps from a 12-inch box.”
+- “Set barbell row to 3 sets of 8.”
+
+Bad examples:
+- “Done”
+- “1 change applied”
+- “Let’s figure out the best way”
+- sending the user into generic edit modal
+
+----------------------------------------
+7. GENERIC MODAL SHOULD ONLY APPEAR FOR NON-LITERAL REQUESTS
+----------------------------------------
+
+The easier/harder/swap chooser should ONLY appear when the request is conceptual rather than explicit.
+
+Okay to use chooser:
+- “Make this better”
+- “Change this”
+- “I don’t like this”
+- “Something else here”
+
+NOT okay to use chooser:
+- “Increase reps to 10”
+- “Make it 3 sets”
+- “Rest 45 sec”
+- “Switch to RFESS”
+- “Replace with triple broad jump”
+
+----------------------------------------
+8. HANDLE AMBIGUITY TIGHTLY
+----------------------------------------
+
+If the user command is explicit but still ambiguous, ask a small clarification.
+
+Example:
+“Increase reps to 10”
+If exercise currently has “6–8 each side” and system is unsure whether to set:
+- 10 total
+or
+- 10 each side
+
+Ask:
+“Do you want 10 total reps or 10 each side?”
+
+But do NOT send to generic easier/harder/swap flow.
+
+----------------------------------------
+9. SUPPORT NATURAL LANGUAGE NUMERIC COMMANDS
+----------------------------------------
+
+The parser should understand:
+- increase reps to 10
+- make it 10 reps
+- set reps at 10
+- make this 3 sets
+- lower rest to 60 seconds
+- use 15 pounds
+- make it 8 each side
+- make this a 20-second hold
+
+Support common units:
+- lb / lbs / pounds
+- sec / seconds
+- min / minutes
+- inches / in
+- feet / ft
+
+----------------------------------------
+10. APPLY TO THE CURRENT CASE
+----------------------------------------
+
+For the shown case:
+Exercise: shrimp squat
+User command: “Increase reps to 10”
+
+Correct behavior:
+- parse as direct rep edit
+- apply updated rep target
+- preserve exercise
+- show exact confirmation:
+  “Updated shrimp squat reps to 10.”
+or
+  “Updated shrimp squat to 10 reps each side.”
+depending on schema
+
+The system must NOT route to the easier/harder/swap modal.
+
+----------------------------------------
+11. WRITE CHANGES TO CHANGES TAB / HISTORY
+----------------------------------------
+
+Direct prescription edits should also be logged clearly.
+
+Example:
+V4 EXERCISE EDIT
+- Shrimp squat reps changed from 6–8 each side to 10 each side
+- Reason: user requested higher reps
+
+----------------------------------------
+12. TEST CASES
+----------------------------------------
+
+Verify:
+
+1. Shrimp squat + “Increase reps to 10”
+→ direct rep mutation
+
+2. Back squat + “Make this 3 sets”
+→ direct set mutation
+
+3. Broad jump + “Set distance to 8 feet”
+→ direct distance mutation
+
+4. Pallof press + “Make this 12 each side”
+→ direct rep mutation
+
+5. Plank + “Make this 30 seconds”
+→ direct duration mutation
+
+6. “Make this harder”
+→ generic conceptual flow allowed
+
+7. “Swap this for RFESS”
+→ direct named exercise swap, not generic chooser
+
+----------------------------------------
+13. DELIVERABLES
+----------------------------------------
+
+After implementation, provide:
+1. the new high-priority prescription parser flow
+2. how direct prescription commands are executed
+3. how prescriptionSchema is enforced by exercise type
+4. how mutations update programState and UI
+5. when generic edit chooser still appears
+6. remaining ambiguous edge cases
