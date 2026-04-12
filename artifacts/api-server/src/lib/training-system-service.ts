@@ -21,15 +21,41 @@ import { logger } from "./logger";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+export type ExerciseCategory =
+  | "warmup"
+  | "activation"
+  | "power"
+  | "primary"
+  | "secondary"
+  | "accessory"
+  | "trunk"
+  | "conditioning"
+  | "recovery"
+  | "finisher";
+
 export interface ExerciseTemplate {
   name: string;
-  category: "warmup" | "primary" | "accessory" | "conditioning" | "finisher";
+  category: ExerciseCategory;
   sets: number;
   reps: string;
   rest: string;
   tempo?: string;
   notes?: string;
 }
+
+// Canonical training-flow order — lower index = appears earlier in session
+export const CATEGORY_ORDER: Record<ExerciseCategory, number> = {
+  warmup:      0,
+  activation:  1,
+  power:       2,
+  primary:     3,
+  secondary:   4,
+  accessory:   5,
+  trunk:       6,
+  conditioning: 7,
+  recovery:    8,
+  finisher:    9,
+};
 
 export interface SessionTemplate {
   label: string;
@@ -166,24 +192,24 @@ const exerciseLibrary: Record<string, Record<string, ExerciseTemplate[][]>> = {
     ],
     athletic: [
       [
+        { name: "Single-Leg Box Jump", category: "power", sets: 3, reps: "5 each", rest: "90 sec" },
         { name: "Box Squat", category: "primary", sets: 5, reps: "3", rest: "3 min", notes: "Explosive concentric" },
-        { name: "Power Clean", category: "primary", sets: 4, reps: "3", rest: "3 min" },
-        { name: "Romanian Deadlift", category: "accessory", sets: 3, reps: "8", rest: "90 sec" },
+        { name: "Romanian Deadlift", category: "secondary", sets: 3, reps: "8", rest: "90 sec" },
         { name: "Nordic Curl or Leg Curl", category: "accessory", sets: 3, reps: "8-10", rest: "90 sec" },
-        { name: "Single-Leg Box Jump", category: "conditioning", sets: 3, reps: "5 each", rest: "90 sec" },
+        { name: "Pallof Press", category: "trunk", sets: 3, reps: "10 each", rest: "60 sec" },
       ],
       [
+        { name: "Med Ball Slam", category: "power", sets: 3, reps: "8-10", rest: "90 sec" },
         { name: "Bench Press", category: "primary", sets: 4, reps: "5", rest: "3 min" },
-        { name: "Pull-Up", category: "primary", sets: 4, reps: "6-8", rest: "2 min" },
-        { name: "Push Press", category: "accessory", sets: 3, reps: "5", rest: "2 min" },
+        { name: "Push Press", category: "secondary", sets: 3, reps: "5", rest: "2 min" },
+        { name: "Pull-Up", category: "accessory", sets: 4, reps: "6-8", rest: "2 min" },
         { name: "Dumbbell Row", category: "accessory", sets: 3, reps: "8 each", rest: "60 sec" },
-        { name: "Med Ball Slam", category: "conditioning", sets: 3, reps: "8-10", rest: "60 sec" },
       ],
       [
+        { name: "Broad Jump", category: "power", sets: 4, reps: "5", rest: "90 sec" },
         { name: "Trap Bar Deadlift", category: "primary", sets: 4, reps: "4-5", rest: "3-4 min" },
-        { name: "Front Squat", category: "primary", sets: 3, reps: "5", rest: "3 min" },
-        { name: "Hip Thrust", category: "accessory", sets: 3, reps: "8-10", rest: "90 sec" },
-        { name: "Broad Jump", category: "conditioning", sets: 4, reps: "5", rest: "90 sec" },
+        { name: "Front Squat", category: "secondary", sets: 3, reps: "5", rest: "3 min" },
+        { name: "Hip Thrust", category: "secondary", sets: 3, reps: "8-10", rest: "90 sec" },
         { name: "Sled Push or Sprint Interval", category: "conditioning", sets: 4, reps: "20m", rest: "2 min" },
       ],
     ],
@@ -899,25 +925,29 @@ export async function initializeTrainingSystem(userId: number): Promise<typeof t
       });
 
       // Deload: keep only the first 60% of exercises (primary + one secondary)
-      const exercisesToInsert = isDeload
+      const rawCoachExercises = isDeload
         ? coachExercises.slice(0, Math.max(Math.ceil(coachExercises.length * 0.6), 2))
         : coachExercises;
 
-      for (let exIdx = 0; exIdx < exercisesToInsert.length; exIdx++) {
-        const ex = exercisesToInsert[exIdx];
-
-        // Map CoachExercise role to the DB's category enum
-        const category: ExerciseTemplate["category"] =
-          ex.role === "explosive" ? "warmup" :
-          ex.role === "primary"   ? "primary" :
-          ex.role === "secondary" ? "accessory" :
+      // Map CoachExercise role to DB category, then sort into training-flow order
+      const mappedExercises = rawCoachExercises.map((ex) => {
+        const category: ExerciseCategory =
+          ex.role === "explosive"    ? "power" :
+          ex.role === "primary"      ? "primary" :
+          ex.role === "secondary"    ? "secondary" :
           ex.role === "conditioning" ? "conditioning" :
           "accessory";
+        return { ...ex, category };
+      });
+      const orderedExercises = sortExercisesByCategory(mappedExercises);
+
+      for (let exIdx = 0; exIdx < orderedExercises.length; exIdx++) {
+        const ex = orderedExercises[exIdx];
 
         await db.insert(sessionExercises).values({
           trainingSessionId: session.id,
           name: ex.name,
-          category,
+          category: ex.category,
           sets: ex.sets,
           reps: ex.reps,
           rest: ex.rest,
@@ -960,20 +990,67 @@ export interface ChatProgram {
   days: ChatProgramDay[];
 }
 
-// Maps the AI's exercise classification string to the DB category enum
-function mapClassificationToCategory(
-  classification?: string
-): "warmup" | "primary" | "accessory" | "conditioning" | "finisher" {
-  if (!classification) return "primary";
+// Maps the AI's exercise classification string to the DB category enum.
+// Order of checks matters — most specific first.
+function mapClassificationToCategory(classification?: string): ExerciseCategory {
+  if (!classification) return "accessory";
   const c = classification.toLowerCase();
-  if (c.includes("plyometric") || c.includes("explosive")) return "warmup";
-  if (c.includes("olympic")) return "primary";
-  if (c.includes("primary")) return "primary";
-  if (c.includes("secondary")) return "accessory";
-  if (c.includes("accessory") || c.includes("isolation")) return "accessory";
-  if (c.includes("conditioning") || c.includes("metabolic")) return "conditioning";
-  if (c.includes("finisher")) return "finisher";
-  return "primary";
+
+  // Warm-up / prep
+  if (c.includes("warm") || c.includes("warm-up") || c.includes("warmup") ||
+      c.includes("prep") || c.includes("mob") || c.includes("dynamic") || c.includes("movement prep"))
+    return "warmup";
+
+  // Activation — glute, neural, low-load prep
+  if (c.includes("activat") || c.includes("glute") || c.includes("neural prep") ||
+      c.includes("band walk") || c.includes("monster walk"))
+    return "activation";
+
+  // Power — explosive, plyometric, olympic
+  if (c.includes("power") || c.includes("explos") || c.includes("plyometric") ||
+      c.includes("olympic") || c.includes("jump") || c.includes("med ball") ||
+      c.includes("broad jump") || c.includes("box jump") || c.includes("sprint"))
+    return "power";
+
+  // Primary — main strength lift
+  if (c.includes("primary") || c.includes("main lift") || c.includes("main") && c.includes("strength"))
+    return "primary";
+
+  // Secondary — important support lift, not the centerpiece
+  if (c.includes("secondary") || c.includes("unilateral") || c.includes("support lift"))
+    return "secondary";
+
+  // Trunk — anti-rotation, anti-extension, core stiffness
+  if (c.includes("trunk") || c.includes("core") || c.includes("anti-rot") ||
+      c.includes("anti-ext") || c.includes("pallof") || c.includes("dead bug") ||
+      c.includes("rollout") || c.includes("plank") || c.includes("stiffness"))
+    return "trunk";
+
+  // Accessory — hypertrophy, isolation, upper back, smaller movements
+  if (c.includes("accessory") || c.includes("isolation") || c.includes("hypertrophy") ||
+      c.includes("curl") || c.includes("row") || c.includes("pull-up") || c.includes("face pull"))
+    return "accessory";
+
+  // Conditioning / metabolic
+  if (c.includes("condition") || c.includes("metabolic") || c.includes("finisher") ||
+      c.includes("circuit") || c.includes("interval") || c.includes("cardio"))
+    return "conditioning";
+
+  // Recovery
+  if (c.includes("recovery") || c.includes("cooldown") || c.includes("restoration") ||
+      c.includes("breathing"))
+    return "recovery";
+
+  // Safe fallback: if the classification string suggests a single movement pattern,
+  // treat as secondary (conservative — don't inflate to primary)
+  return "accessory";
+}
+
+// Sorts a list of exercises into canonical training-flow order.
+function sortExercisesByCategory(exercises: { category: ExerciseCategory; [key: string]: any }[]) {
+  return [...exercises].sort(
+    (a, b) => (CATEGORY_ORDER[a.category] ?? 5) - (CATEGORY_ORDER[b.category] ?? 5)
+  );
 }
 
 // Assigns sensible day-of-week values based on number of sessions
@@ -1119,18 +1196,24 @@ export async function createTrainingSystemFromProgram(
       }).returning();
 
       // For deload weeks, use a reduced subset of exercises
-      const exercises = isDeload
+      const rawExercises = isDeload
         ? day.exercises.slice(0, Math.max(Math.ceil(day.exercises.length * 0.6), 2))
         : day.exercises;
 
+      // Classify then sort into proper training-flow order
+      const classifiedExercises = rawExercises.map((ex) => ({
+        ...ex,
+        category: mapClassificationToCategory(ex.classification),
+      }));
+      const exercises = sortExercisesByCategory(classifiedExercises);
+
       for (let exIdx = 0; exIdx < exercises.length; exIdx++) {
         const ex = exercises[exIdx];
-        const category = mapClassificationToCategory(ex.classification);
 
         await db.insert(sessionExercises).values({
           trainingSessionId: session.id,
           name: ex.name,
-          category,
+          category: ex.category,
           sets: typeof ex.sets === "number" ? ex.sets : null,
           reps: ex.reps ?? null,
           rest: ex.rest ?? null,
@@ -1263,18 +1346,24 @@ export async function upsertTrainingSystemFromProgram(
         orderIndex: dayIdx,
       }).returning();
 
-      const exercises = isDeload
+      const rawExercises = isDeload
         ? day.exercises.slice(0, Math.max(Math.ceil(day.exercises.length * 0.6), 2))
         : day.exercises;
 
+      // Classify then sort into proper training-flow order
+      const classifiedExercises = rawExercises.map((ex) => ({
+        ...ex,
+        category: mapClassificationToCategory(ex.classification),
+      }));
+      const exercises = sortExercisesByCategory(classifiedExercises);
+
       for (let exIdx = 0; exIdx < exercises.length; exIdx++) {
         const ex = exercises[exIdx];
-        const category = mapClassificationToCategory(ex.classification);
 
         await db.insert(sessionExercises).values({
           trainingSessionId: session.id,
           name: ex.name,
-          category,
+          category: ex.category,
           sets: typeof ex.sets === "number" ? ex.sets : null,
           reps: ex.reps ?? null,
           rest: ex.rest ?? null,

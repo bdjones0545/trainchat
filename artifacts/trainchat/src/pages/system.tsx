@@ -167,20 +167,30 @@ function ExerciseCard({ exercise, index, sessionLabel, highlightedIds, onEdit, o
   const [swapLoading, setSwapLoading] = useState(false);
 
   const categoryColors: Record<string, string> = {
-    warmup: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-    primary: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-    accessory: "bg-purple-500/10 text-purple-400 border-purple-500/20",
-    conditioning: "bg-green-500/10 text-green-400 border-green-500/20",
-    finisher: "bg-red-500/10 text-red-400 border-red-500/20",
+    warmup:      "bg-sky-500/10 text-sky-400 border-sky-500/20",
+    activation:  "bg-teal-500/10 text-teal-400 border-teal-500/20",
+    power:       "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
+    primary:     "bg-orange-500/10 text-orange-400 border-orange-500/20",
+    secondary:   "bg-amber-500/10 text-amber-400 border-amber-500/20",
+    accessory:   "bg-purple-500/10 text-purple-400 border-purple-500/20",
+    trunk:       "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
+    conditioning:"bg-green-500/10 text-green-400 border-green-500/20",
+    recovery:    "bg-blue-500/10 text-blue-400 border-blue-500/20",
+    finisher:    "bg-red-500/10 text-red-400 border-red-500/20",
   };
   const categoryLabel: Record<string, string> = {
-    warmup: "Warm-up",
-    primary: "Primary",
-    accessory: "Accessory",
+    warmup:       "Warm-Up",
+    activation:   "Activation",
+    power:        "Power",
+    primary:      "Primary",
+    secondary:    "Secondary",
+    accessory:    "Accessory",
+    trunk:        "Trunk",
     conditioning: "Conditioning",
-    finisher: "Finisher",
+    recovery:     "Recovery",
+    finisher:     "Finisher",
   };
-  const colorClass = categoryColors[exercise.category] ?? categoryColors.primary;
+  const colorClass = categoryColors[exercise.category] ?? categoryColors.accessory;
 
   const quickMutation = useMutation({
     mutationFn: ({ req, chip }: { req: string; chip: string }) => {

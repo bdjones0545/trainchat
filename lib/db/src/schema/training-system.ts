@@ -180,7 +180,7 @@ export const sessionExercises = pgTable("session_exercises", {
 
   name: text("name").notNull(),
   category: text("category", {
-    enum: ["warmup", "primary", "accessory", "conditioning", "finisher"],
+    enum: ["warmup", "activation", "power", "primary", "secondary", "accessory", "trunk", "conditioning", "recovery", "finisher"],
   })
     .notNull()
     .default("primary"),
