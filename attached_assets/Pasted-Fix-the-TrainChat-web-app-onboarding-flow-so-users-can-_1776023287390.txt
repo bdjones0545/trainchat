@@ -1,0 +1,262 @@
+Fix the TrainChat web app onboarding flow so users can access the agent immediately without being forced to sign up or log in first, while still enforcing free input limits using a device-based guest identity.
+
+CURRENT ISSUE:
+When users open the web app, they are prompted to either sign up or log in before they can use the agent.
+
+This creates too much friction and breaks the core product promise of instant conversational program building.
+
+GOAL:
+Allow unauthenticated users to access the agent immediately as guest users, while using a persistent device-based guest identity to:
+- track free input usage
+- prevent easy abuse of free trials
+- preserve guest progress locally / server-side
+- transition smoothly into signup/paywall later
+
+----------------------------------------
+1. CREATE A GUEST DEVICE IDENTITY SYSTEM
+----------------------------------------
+
+On first web app load:
+
+- check for existing guest device ID in local storage / secure browser storage
+- if none exists, generate a new device-based guest ID
+- persist it locally
+- use it as the primary identity for unauthenticated usage
+
+Example fields:
+{
+  guestDeviceId,
+  createdAt,
+  lastSeenAt,
+  freeInputsUsed,
+  freeInputsRemaining,
+  guestProgramStateId,
+  isAuthenticated: false
+}
+
+This guest identity must load BEFORE auth gating.
+
+----------------------------------------
+2. BYPASS FORCED LOGIN ON FIRST AGENT ACCESS
+----------------------------------------
+
+When the user enters the app:
+
+- do NOT show login/signup modal first
+- do NOT block access to the agent
+- route them directly to the agent experience
+- let them immediately type to the coach
+
+The auth wall should only appear later when appropriate.
+
+----------------------------------------
+3. TIE FREE USAGE TO DEVICE ID
+----------------------------------------
+
+All guest inputs must be counted against the guestDeviceId.
+
+Example:
+- 5 free inputs for new device
+- decrement after each meaningful user-agent interaction
+- store usage server-side if possible, not just client-side
+
+Rules:
+- guest user can use the agent immediately
+- guest input count is enforced
+- once free inputs run out, show signup/paywall prompt
+
+----------------------------------------
+4. PREVENT EASY ABUSE
+----------------------------------------
+
+Do not rely only on client-side local storage.
+
+Recommended:
+- create a guest session record in backend tied to guestDeviceId
+- also store:
+  - hashed browser fingerprint signals if available
+  - firstSeenAt
+  - lastSeenAt
+  - IP-based abuse flags if needed
+  - user agent metadata if appropriate
+
+Goal:
+Make it harder to repeatedly clear local storage and instantly reset the trial.
+
+Do this carefully:
+- do not make it creepy
+- do not block legitimate new users too aggressively
+
+----------------------------------------
+5. CREATE GUEST SESSION BOOTSTRAP FLOW
+----------------------------------------
+
+On app load:
+
+1. try to restore authenticated user session
+2. if not authenticated:
+   - restore guestDeviceId
+   - fetch guest session state from backend
+   - load freeInputsRemaining
+   - load guest program state if it exists
+   - open agent immediately
+
+This should feel seamless.
+
+----------------------------------------
+6. SUPPORT GUEST PROGRAM BUILDING
+----------------------------------------
+
+Guest users should still be able to:
+- talk to the agent
+- build a program
+- make limited edits
+- see the immediate value of the app
+
+Store guest program state either:
+- server-side tied to guestDeviceId
+or
+- hybrid local + backend
+
+Do NOT force signup before the user sees the product work.
+
+----------------------------------------
+7. SHOW PAYWALL / AUTH AT THE RIGHT MOMENT
+----------------------------------------
+
+Only prompt sign up or login when:
+- free inputs are exhausted
+- user wants to save permanently
+- user wants syncing across devices
+- user tries to unlock premium features
+
+Recommended message:
+“Your free build session is almost up. Create your account to keep training, save your plan, and unlock full adaptation.”
+
+Do not interrupt too early.
+
+----------------------------------------
+8. MERGE GUEST STATE INTO REAL ACCOUNT
+----------------------------------------
+
+When a guest user signs up or logs in:
+
+- merge guest program state into the authenticated account
+- merge conversation/program history when appropriate
+- preserve current live program and block state
+- preserve changes/history if possible
+
+The user should not lose what they built as a guest.
+
+----------------------------------------
+9. ADD CLEAR STATE DISTINCTION
+----------------------------------------
+
+Support two user modes:
+
+A. Guest mode
+- device-based
+- limited free inputs
+- temporary but usable
+- immediate access
+
+B. Authenticated mode
+- account-based
+- persistent
+- full feature access depending on plan
+
+The app should handle both cleanly.
+
+----------------------------------------
+10. UI / UX REQUIREMENTS
+----------------------------------------
+
+On first load:
+- open directly into the agent
+- optionally show subtle text like:
+  “You’re in guest mode — start building your program now”
+
+Show free inputs remaining in a lightweight way:
+- small badge or counter
+- not intrusive
+- visible enough to set expectations
+
+When inputs run low:
+- show soft warning before hard paywall
+
+----------------------------------------
+11. REMOVE AUTH-FIRST BOTTLENECK
+----------------------------------------
+
+Audit current routing and remove any logic where:
+- unauthenticated users are redirected to login before agent access
+- onboarding is blocked behind auth
+- device ID is created too late in the flow
+- guest state is not restored until after modal display
+
+The guest identity bootstrap must happen before auth gating.
+
+----------------------------------------
+12. ADD BACKEND SUPPORT
+----------------------------------------
+
+Create backend endpoints/services for:
+- create guest session
+- restore guest session by device ID
+- increment free input usage
+- fetch guest program state
+- merge guest session into authenticated account
+
+Suggested models:
+guest_sessions
+guest_program_state
+guest_usage_events
+
+----------------------------------------
+13. ADD ABUSE GUARDRAILS
+----------------------------------------
+
+Support reasonable protections such as:
+- free input limit per guestDeviceId
+- suspicious reset detection
+- optional cooldown or stricter checks for repeated abuse patterns
+- backend verification before granting more free inputs
+
+But do NOT punish normal users who simply refresh or reopen the browser.
+
+----------------------------------------
+14. TEST CASES
+----------------------------------------
+
+Verify:
+
+1. New visitor opens web app
+→ agent opens immediately
+→ no forced login/signup
+
+2. Guest user closes browser and returns
+→ same guestDeviceId restored
+→ same free input count remains
+
+3. Guest uses all free inputs
+→ paywall/signup prompt appears
+
+4. Guest signs up after building a program
+→ program state is preserved and merged
+
+5. Authenticated returning user
+→ normal logged-in state loads instead of guest mode
+
+6. Clearing local storage alone does not trivially reset unlimited free usage if backend guest tracking exists
+
+----------------------------------------
+15. DELIVERABLES
+----------------------------------------
+
+After implementation, provide:
+1. guest identity flow
+2. where device ID is created/restored
+3. how free inputs are tracked
+4. how guest program state is stored
+5. how guest-to-account merge works
+6. what auth-first logic was removed
