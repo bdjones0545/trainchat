@@ -1,0 +1,275 @@
+Conduct a full platform audit of TrainChat with one specific goal:
+
+Determine whether TrainChat truly functions as a “vibe coding platform for training” rather than just a chatbot or static program generator.
+
+This is not a generic bug audit. This is a product-behavior, logic, persistence, UX, and system-integrity audit centered on the core promise:
+
+“Every user input should actively shape the training system in real time, like vibe coding a program with an expert coach.”
+
+I want you to audit the app as if the product standard is:
+“Cursor / Replit agent, but for strength and speed training.”
+
+==================================================
+PRIMARY AUDIT OBJECTIVE
+==================================================
+
+Answer these questions with evidence from the codebase and live behavior:
+
+1. Does user input actually mutate the training system?
+2. Does the agent behave like a collaborative coach-builder, not just a responder?
+3. Do program changes persist correctly across chats, saved programs, reloads, and auth changes?
+4. Does the UI clearly reflect that the system has changed after user input?
+5. Does the flow create a real “vibe coding” feeling for training creation?
+
+If the answer is no anywhere, identify exactly why, where, and how to fix it.
+
+==================================================
+AUDIT SCOPE
+==================================================
+
+Audit these areas deeply:
+
+A. INPUT → SYSTEM MUTATION PIPELINE
+Trace the full path from:
+user message
+→ intent parsing
+→ structured interpretation
+→ program mutation logic
+→ saved state/database write
+→ UI refresh/render
+→ agent explanation back to user
+
+I want to know:
+- Where user input is captured
+- How it is interpreted
+- Whether the app converts natural language into structured training edits
+- Whether those edits are actually applied to the current system/program
+- Whether the UI updates immediately to reflect the change
+- Whether the agent explains what changed and why
+
+Flag any places where:
+- input is only answered conversationally but not applied
+- state updates happen locally but are not persisted
+- persistence happens but UI does not refresh
+- UI refreshes but underlying program did not actually change
+- mutations are ambiguous, inconsistent, duplicated, or silently fail
+
+B. AGENT BEHAVIOR AUDIT
+Determine whether the agent behaves like:
+1. a collaborative training architect
+or
+2. a generic AI assistant
+
+Audit whether the agent can:
+- ask useful follow-up questions when needed
+- make smart training decisions
+- modify user plans based on requests
+- reject or improve bad user ideas intelligently
+- adapt for strength mode vs speed mode if applicable
+- explain modifications in a coach-like way
+- maintain continuity across the conversation and the active program
+
+Flag anything that makes the agent feel:
+- rigid
+- scripted
+- too generic
+- disconnected from the actual system state
+- like it is “chatting about” the program rather than “editing” the program
+
+C. PROGRAM STATE / PERSISTENCE AUDIT
+Audit active programs, saved programs, and program switching.
+
+Test and verify:
+- creating a new program does not overwrite previous programs
+- saved programs list shows all programs correctly
+- selecting a saved program loads that exact program
+- active program and saved program states are not conflated
+- program state survives refresh
+- program state survives logout/login where intended
+- program state remains tied to the correct user/device/account
+- not-paid users and paid users are handled correctly
+- device ID logic does not cause state loss, loops, or wrong routing
+- selecting a program navigates to the correct system view
+- the correct day/system/paywall state is shown for each program
+
+Flag any issues with:
+- stale state
+- duplicate state sources
+- race conditions
+- overwriting
+- missing DB writes
+- broken fetch/load logic
+- incorrect joins/filters by user/program ID
+- hydration issues between frontend and backend
+
+D. UI / UX VIBE CODING AUDIT
+Audit whether the interface feels like a live program-building environment.
+
+Specifically check:
+- after user input, is there visible evidence that the program changed?
+- does the user feel they are co-creating a system, not filling out a form?
+- is the app showing “thinking / editing / updating” states clearly?
+- does the app reveal enough of the program structure to make the edits feel real?
+- does the current screen reinforce co-creation or hide it?
+- does the paywall appear at the right time, after meaningful value is shown?
+- does the app show Day 1 / system preview correctly before locking?
+- do saved programs and active programs feel understandable and trustworthy?
+- does navigation support the workflow or fight it?
+
+Flag anything that breaks the vibe-coding illusion:
+- dead clicks
+- delayed updates
+- edits with no visual effect
+- route confusion
+- program switches that do nothing
+- paywall showing too early or incorrectly
+- generic wording instead of collaborative builder language
+
+E. CONVERSION FLOW AUDIT
+Audit the unauthenticated and non-paying user flow.
+
+I want to validate that the platform correctly supports this funnel:
+- user enters app
+- user goes straight to the real agent experience
+- user gets several meaningful inputs
+- user sees the system/program taking shape
+- user becomes invested
+- paywall/signup triggers at the correct moment
+
+Audit for:
+- unnecessary onboarding loops
+- routing to sign-in when user should go to the agent
+- incorrect gating based on auth/device ID
+- repeated onboarding
+- not-paid users being treated like broken users instead of conversion opportunities
+- cases where the user loses progress before signup/paywall
+- cases where the agent experience is weaker for unauthenticated users than it should be
+
+F. CODEBASE HEALTH / ARCHITECTURE AUDIT
+Audit for technical issues that would prevent TrainChat from reliably acting like a vibe-coding platform:
+- spaghetti state management
+- duplicated business logic
+- frontend/backend mismatch
+- fragile routing
+- inconsistent naming
+- silent catch blocks
+- poor error handling
+- mutation logic hidden in too many places
+- lack of clear source of truth for active program
+- weak typing around program objects and edits
+- poor abstraction around program generation vs modification
+- hardcoded fallbacks masking real failures
+
+Identify the core architectural blockers preventing the product from feeling seamless.
+
+==================================================
+MANDATORY TEST SCENARIOS
+==================================================
+
+Run the platform mentally and in code against these user scenarios:
+
+1. Beginner fat loss user:
+“I want to lose fat and train 3 days a week.”
+
+2. Athlete speed user:
+“I want to improve first-step explosiveness and speed for football.”
+
+3. Advanced user:
+“Periodize this into a structured 8-week progression.”
+
+4. Constraint-based user:
+“I only have bands, dumbbells, and 20 minutes.”
+
+5. Bad-input user:
+“I want max effort every day with no deloads.”
+
+For each scenario determine:
+- does the agent interpret it properly?
+- does the program actually change?
+- is the change visible?
+- is the new state saved correctly?
+- does the app feel collaborative and intelligent?
+
+==================================================
+REQUIRED OUTPUT FORMAT
+==================================================
+
+Return the audit in this exact structure:
+
+1. EXECUTIVE VERDICT
+- Does TrainChat currently function as a true vibe coding platform for training: Yes, Partially, or No
+- One paragraph summary
+- Top 3 blockers
+
+2. SYSTEM SCORECARD
+Give 1–10 scores for:
+- Input → Mutation Reliability
+- Agent Coaching Intelligence
+- Program Persistence
+- Saved Program Integrity
+- UI Feedback Clarity
+- Vibe Coding Feel
+- Conversion Flow
+- Codebase Stability
+
+3. CRITICAL FAILURES
+List every critical issue that directly breaks the vibe-coding product promise.
+For each include:
+- issue title
+- why it matters
+- likely root cause
+- exact files/components/functions involved
+- severity: Critical / High / Medium
+
+4. UX / PRODUCT GAPS
+List behavior, messaging, and interaction issues that make the app feel less like collaborative program building.
+
+5. ARCHITECTURAL RISKS
+Identify deeper technical/design issues that will continue causing failures unless refactored.
+
+6. EXACT FIX PLAN
+Create a prioritized repair plan in phases:
+- Phase 1: immediate fixes for broken core loop
+- Phase 2: persistence and saved-program stability
+- Phase 3: UX enhancements for stronger vibe-coding feel
+- Phase 4: architectural cleanup for scale
+
+Each phase should include:
+- exact tasks
+- affected files
+- expected result
+- risk level
+
+7. QUICK WINS
+List the fastest improvements that would most dramatically improve the vibe-coding experience.
+
+8. FINAL PRODUCT TRUTH
+Answer plainly:
+“If a user entered TrainChat today, would they truly feel like they are vibe coding their training with an expert?”
+Explain why or why not.
+
+==================================================
+IMPORTANT AUDIT RULES
+==================================================
+
+- Do not give me vague advice
+- Do not just say “looks good”
+- Do not only identify frontend issues
+- Trace behavior through the full stack
+- Be brutally honest
+- Prioritize truth over optimism
+- If something is broken, say it clearly
+- If architecture needs refactoring, say so clearly
+- If the agent is behaving like a chatbot rather than a builder, say it clearly
+- If user input is not truly mutating the system, treat that as a major failure
+- If saved program behavior is unreliable, treat that as a major trust-breaking issue
+
+==================================================
+FINAL INSTRUCTION
+==================================================
+
+Act like a senior product architect, senior engineer, and UX systems auditor combined.
+
+Your job is to determine whether TrainChat really behaves like a training vibe-coding platform and, if not, produce the clearest possible roadmap to make it one.
+
+Start by mapping the current architecture, the active program state flow, the saved program flow, the agent mutation flow, and the unauthenticated user conversion flow before making recommendations.
