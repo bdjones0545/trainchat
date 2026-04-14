@@ -164,6 +164,8 @@ export default function Chat() {
   const [undoChangeLogId, setUndoChangeLogId] = useState<number | null>(null);
   const [isUndoing, setIsUndoing] = useState(false);
   const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [operationError, setOperationError] = useState<string | null>(null);
+  const operationErrorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [newChangeSignal, setNewChangeSignal] = useState(0);
   const [newProgramSignal, setNewProgramSignal] = useState(0);
   const [changeTargets, setChangeTargets] = useState<Array<{
@@ -463,13 +465,32 @@ export default function Chat() {
       setMessagesUsed(messagesUsed + 1);
     }
 
+    // Handle explicit edit/save failures — show error, do NOT fire undo toast
+    if (result.editFailure) {
+      if (operationErrorTimeoutRef.current) clearTimeout(operationErrorTimeoutRef.current);
+      const msg = result.editFailure.reason === "no_changes_applied"
+        ? "No changes could be applied — try being more specific about the exercise, day, or session."
+        : "Something went wrong while applying that change. Your program has not been modified.";
+      setOperationError(msg);
+      operationErrorTimeoutRef.current = setTimeout(() => setOperationError(null), 7000);
+    }
+
+    if (result.saveFailure) {
+      if (operationErrorTimeoutRef.current) clearTimeout(operationErrorTimeoutRef.current);
+      setOperationError("Your program couldn't be saved due to a system error. Please try again.");
+      operationErrorTimeoutRef.current = setTimeout(() => setOperationError(null), 7000);
+    }
+
     if (result.systemEdit?.applied || result.systemSaved) {
       queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-library"] });
+      // Use refetch (not just invalidate) for the week view so the UI shows
+      // the updated program immediately rather than stale cached data
+      queryClient.refetchQueries({ queryKey: ["training-system-week"] });
+
       if (result.systemSaved) {
         setIsSaved(true);
       }
@@ -494,7 +515,7 @@ export default function Chat() {
       if (result.systemSaved && !result.systemEdit?.applied && result.changeLogId) {
         setNewChangeSignal((n) => n + 1);
       }
-      // Show undo toast for 8 seconds after any program change
+      // Show undo toast for 8 seconds after any successful program change
       const logId = result.changeLogId ?? result.systemEdit?.changeLogId;
       if (logId) {
         if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
@@ -513,11 +534,13 @@ export default function Chat() {
       await customFetch<any>(`/api/training-system/restore/${undoChangeLogId}`, { method: "POST" });
       queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+      queryClient.refetchQueries({ queryKey: ["training-system-week"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
     } catch {
-      // Non-fatal: undo failed silently
+      if (operationErrorTimeoutRef.current) clearTimeout(operationErrorTimeoutRef.current);
+      setOperationError("Undo failed — your program may not have been restored. Please try again.");
+      operationErrorTimeoutRef.current = setTimeout(() => setOperationError(null), 7000);
     } finally {
       setIsUndoing(false);
     }
@@ -1242,6 +1265,22 @@ export default function Chat() {
                 >
                   <RotateCcw className="w-3 h-3" />
                   Undo
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Operation error banner — honest failures for edit/save/undo */}
+          {operationError && (
+            <div className="flex-shrink-0 px-4 py-2 flex justify-center">
+              <div className="flex items-center gap-2 px-3 py-2 bg-destructive/10 border border-destructive/30 rounded-full shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-200">
+                <span className="text-[11px] text-destructive font-medium">{operationError}</span>
+                <button
+                  onClick={() => setOperationError(null)}
+                  className="text-[11px] text-destructive/70 hover:text-destructive transition-colors ml-1"
+                  aria-label="Dismiss"
+                >
+                  ✕
                 </button>
               </div>
             </div>

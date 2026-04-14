@@ -540,18 +540,54 @@ Keep it helpful and intelligent, never promotional.`;
     return;
   }
 
-  // SAVE_PROGRAM — respond with save signal (frontend handles actual save)
+  // SAVE_PROGRAM — actually persist the program to the training system database
   if (intentResult.type === "SAVE_PROGRAM") {
-    logger.info("[IntentRouter] Handling SAVE_PROGRAM — responding with save confirmation");
-    const saveContent = formatShortCircuitResponse({
-      mode: "EXECUTION_RESPONSE",
-      hasActiveProgram: !!latestStructuredProgram,
-    });
+    logger.info("[IntentRouter] Handling SAVE_PROGRAM — persisting program to training system");
+    const programToSave = latestStructuredProgram;
+    let saveSuccess = false;
+    let savedSystemId: number | undefined;
+    let saveFailureReason: string | undefined;
+
+    if (programToSave) {
+      try {
+        const result = await upsertTrainingSystemFromProgram(userId, programToSave);
+        savedSystemId = result.system.id;
+        saveSuccess = true;
+        const emptySnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
+        createChangeLogEntry({
+          userId,
+          trainingSystemId: result.system.id,
+          source: "initialize",
+          intent: "save_program",
+          scope: "system",
+          changeSummary: `Program saved: ${programToSave.programName}`,
+          requestText: parsed.data.content.slice(0, 300),
+          beforeSnapshot: emptySnapshot,
+          afterSnapshot: emptySnapshot,
+          fullProgramSnapshot: programToSave as unknown as Record<string, unknown>,
+          appliedCount: 1,
+          skippedCount: 0,
+          versionOverrides: { isMajorVersion: true, versionLabel: "V1 Initial Build" },
+          decisionMetadata: { intentType: intentResult.type },
+        }).catch((logErr) => logger.warn({ logErr }, "[SAVE_PROGRAM] Change log write failed — non-fatal"));
+        logger.info({ userId, systemId: savedSystemId, programName: programToSave.programName }, "[SAVE_PROGRAM] Program persisted successfully");
+      } catch (saveErr: any) {
+        saveFailureReason = saveErr?.message ?? "unknown";
+        logger.error({ err: saveErr?.message, userId }, "[SAVE_PROGRAM] Failed to persist program — returning failure to user");
+      }
+    }
+
+    const saveContent = saveSuccess
+      ? `Your program "${programToSave!.programName}" has been saved to your training system. You can access it anytime from the Program panel.`
+      : programToSave
+        ? `I wasn't able to save your program due to a system error. Your program hasn't been saved. Please try again in a moment.`
+        : `There's no program ready to save yet. Once I've built your training program, you can ask me to save it and I'll add it to your system.`;
+
     const [assistantMessage] = await db.insert(messagesTable).values({
       conversationId: params.data.id,
       role: "assistant",
       content: saveContent,
-      structuredData: latestStructuredProgram ? JSON.stringify(latestStructuredProgram) : null,
+      structuredData: programToSave ? JSON.stringify(programToSave) : null,
     }).returning();
 
     await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
@@ -575,7 +611,9 @@ Keep it helpful and intelligent, never promotional.`;
       },
       planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
       intentDebug: { type: intentResult.type, confidence: intentResult.confidence },
-      triggerSave: !!latestStructuredProgram,
+      systemSaved: saveSuccess,
+      systemId: savedSystemId,
+      saveFailure: !saveSuccess && !!programToSave ? { reason: saveFailureReason } : undefined,
     });
     return;
   }
@@ -711,15 +749,54 @@ Keep it helpful and intelligent, never promotional.`;
           return;
         }
 
-        // Edit plan produced no applied changes — fall through to AI response
+        // Edit plan produced no applied changes — return explicit failure, do NOT pretend success
         logger.warn(
           { intent: editPlan.intent, skipped: editResult.skippedCount },
-          "[VibeEdit] No changes applied — falling back to AI response"
+          "[VibeEdit] No changes applied — returning honest failure response to user"
         );
+        const noOpContent = `I wasn't able to apply that change to your training system.\n\nThe modification you requested couldn't be resolved to specific exercises, sessions, or blocks in your current program. This typically happens when:\n- The exercise name is slightly different from what's in your program\n- The day or session you referenced doesn't exist\n- The request is too broad for a targeted edit\n\nCould you be more specific? For example: name the exact exercise, reference the specific day (e.g. "on Day 2"), or describe the scope more precisely and I'll apply it directly.`;
+        const [noOpMessage] = await db.insert(messagesTable).values({
+          conversationId: params.data.id,
+          role: "assistant",
+          content: noOpContent,
+          structuredData: null,
+        }).returning();
+        await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+          stripeStorage.incrementMessageCount(userId).catch(() => {});
+        }
+        res.json({
+          userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
+          assistantMessage: { id: noOpMessage.id, conversationId: noOpMessage.conversationId, role: noOpMessage.role, content: noOpMessage.content, createdAt: noOpMessage.createdAt.toISOString(), structuredData: null },
+          planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+          intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
+          systemEdit: { applied: false },
+          editFailure: { reason: "no_changes_applied", skippedCount: editResult.skippedCount },
+        });
+        return;
       }
     } catch (err: any) {
-      logger.error({ err: err?.message, stack: err?.stack }, "[VibeEdit] Edit pipeline failed — falling back to AI");
-      // Fall through to regular AI response
+      logger.error({ err: err?.message, stack: err?.stack }, "[VibeEdit] Edit pipeline threw — returning error response to user");
+      const errContent = `I encountered a system issue while trying to apply that change. Your program has not been modified.\n\nPlease try again. If the problem continues, try rephrasing your request with more detail about which exercise, day, or session to change.`;
+      const [errMessage] = await db.insert(messagesTable).values({
+        conversationId: params.data.id,
+        role: "assistant",
+        content: errContent,
+        structuredData: null,
+      }).returning();
+      await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+      if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+        stripeStorage.incrementMessageCount(userId).catch(() => {});
+      }
+      res.json({
+        userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
+        assistantMessage: { id: errMessage.id, conversationId: errMessage.conversationId, role: errMessage.role, content: errMessage.content, createdAt: errMessage.createdAt.toISOString(), structuredData: null },
+        planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+        intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
+        systemEdit: { applied: false },
+        editFailure: { reason: "pipeline_error" },
+      });
+      return;
     }
   }
 
@@ -1212,6 +1289,29 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     extractMemoriesFromMessage(userId, userMessage.content).catch(() => {});
   }
 
+  // ── Neural Graph Context (streaming path) ─────────────────────────────────
+  let streamNeuralBias: NeuralBias | undefined;
+  let streamNeuralImbalances: Imbalance[] | undefined;
+  let streamNeuralContextStr: string | undefined;
+  try {
+    const [neuralRow] = await db
+      .select({ graphState: neuralProfilesTable.graphState })
+      .from(neuralProfilesTable)
+      .where(eq(neuralProfilesTable.userId, userId))
+      .limit(1);
+    if (neuralRow?.graphState) {
+      const interpretation = interpretNeuralGraph(neuralRow.graphState as any);
+      if (interpretation.bias || interpretation.imbalances.length > 0) {
+        streamNeuralBias = interpretation.bias;
+        streamNeuralImbalances = interpretation.imbalances;
+        streamNeuralContextStr = interpretation.promptContext;
+        logger.info({ userId }, "[NeuralGraph:stream] Interpretation active — injecting into AI context");
+      }
+    }
+  } catch (err) {
+    logger.warn({ err }, "[NeuralGraph:stream] Failed to load neural profile — proceeding without bias");
+  }
+
   let conversionHint = "";
   if (planInfo?.plan === "free") {
     const remaining = planInfo.messagesRemaining ?? 0;
@@ -1325,15 +1425,58 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     return;
   }
 
-  // ── Short-circuit: SAVE_PROGRAM ───────────────────────────────────────────
+  // ── Short-circuit: SAVE_PROGRAM — actually persist to DB ─────────────────
   if (intentResult.type === "SAVE_PROGRAM") {
-    const saveContent = formatShortCircuitResponse({ mode: "EXECUTION_RESPONSE", hasActiveProgram: !!latestStructuredProgram });
+    const programToSave = latestStructuredProgram;
+    let saveSuccess = false;
+    let savedSystemId: number | undefined;
+
+    if (programToSave) {
+      try {
+        const result = await upsertTrainingSystemFromProgram(userId, programToSave);
+        savedSystemId = result.system.id;
+        saveSuccess = true;
+        const emptySnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
+        createChangeLogEntry({
+          userId,
+          trainingSystemId: result.system.id,
+          source: "initialize",
+          intent: "save_program",
+          scope: "system",
+          changeSummary: `Program saved: ${programToSave.programName}`,
+          requestText: parsed.data.content.slice(0, 300),
+          beforeSnapshot: emptySnapshot,
+          afterSnapshot: emptySnapshot,
+          fullProgramSnapshot: programToSave as unknown as Record<string, unknown>,
+          appliedCount: 1,
+          skippedCount: 0,
+          versionOverrides: { isMajorVersion: true, versionLabel: "V1 Initial Build" },
+          decisionMetadata: { intentType: intentResult.type },
+        }).catch((logErr) => logger.warn({ logErr }, "[SAVE_PROGRAM:stream] Change log write failed — non-fatal"));
+        logger.info({ userId, systemId: savedSystemId, programName: programToSave.programName }, "[SAVE_PROGRAM:stream] Program persisted successfully");
+      } catch (saveErr: any) {
+        logger.error({ err: saveErr?.message, userId }, "[SAVE_PROGRAM:stream] Failed to persist — returning failure to user");
+      }
+    }
+
+    const saveContent = saveSuccess
+      ? `Your program "${programToSave!.programName}" has been saved to your training system. You can access it anytime from the Program panel.`
+      : programToSave
+        ? `I wasn't able to save your program due to a system error. Your program hasn't been saved. Please try again in a moment.`
+        : `There's no program ready to save yet. Once I've built your training program, you can ask me to save it and I'll add it to your system.`;
+
     const [assistantMessage] = await db.insert(messagesTable).values({
       conversationId: params.data.id, role: "assistant", content: saveContent,
-      structuredData: latestStructuredProgram ? JSON.stringify(latestStructuredProgram) : null,
+      structuredData: programToSave ? JSON.stringify(programToSave) : null,
     }).returning();
     await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-    done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false }));
+    if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+      stripeStorage.incrementMessageCount(userId).catch(() => {});
+    }
+    done({
+      ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: saveSuccess, systemIdVal: savedSystemId }),
+      saveFailure: !saveSuccess && !!programToSave ? { reason: "persistence_error" } : undefined,
+    });
     return;
   }
 
@@ -1420,11 +1563,39 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           });
           return;
         }
-        // No changes applied — fall through to AI
-        logger.warn({ intent: editPlan.intent, skipped: editResult.skippedCount }, "[VibeEdit:stream] No changes applied — falling back to AI");
+        // No changes applied — return explicit failure, do NOT fall through to AI
+        logger.warn({ intent: editPlan.intent, skipped: editResult.skippedCount }, "[VibeEdit:stream] No changes applied — returning honest failure response to user");
+        const noOpContent = `I wasn't able to apply that change to your training system.\n\nThe modification you requested couldn't be resolved to specific exercises, sessions, or blocks in your current program. This typically happens when:\n- The exercise name is slightly different from what's in your program\n- The day or session you referenced doesn't exist\n- The request is too broad for a targeted edit\n\nCould you be more specific? For example: name the exact exercise, reference the specific day (e.g. "on Day 2"), or describe the scope more precisely and I'll apply it directly.`;
+        const [noOpMsg] = await db.insert(messagesTable).values({
+          conversationId: params.data.id, role: "assistant", content: noOpContent, structuredData: null,
+        }).returning();
+        await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+          stripeStorage.incrementMessageCount(userId).catch(() => {});
+        }
+        done({
+          ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: noOpMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false }),
+          systemEdit: { applied: false },
+          editFailure: { reason: "no_changes_applied", skippedCount: editResult.skippedCount },
+        });
+        return;
       }
     } catch (err: any) {
-      logger.error({ err: err?.message }, "[VibeEdit:stream] Edit pipeline failed — falling back to AI");
+      logger.error({ err: err?.message }, "[VibeEdit:stream] Edit pipeline threw — returning error response to user");
+      const errContent = `I encountered a system issue while trying to apply that change. Your program has not been modified.\n\nPlease try again. If the problem continues, try rephrasing your request with more detail about which exercise, day, or session to change.`;
+      const [errMsg] = await db.insert(messagesTable).values({
+        conversationId: params.data.id, role: "assistant", content: errContent, structuredData: null,
+      }).returning();
+      await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+      if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+        stripeStorage.incrementMessageCount(userId).catch(() => {});
+      }
+      done({
+        ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: errMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false }),
+        systemEdit: { applied: false },
+        editFailure: { reason: "pipeline_error" },
+      });
+      return;
     }
   }
 
@@ -1475,6 +1646,9 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       responseMode,
       extractedConstraints,
       userMessage: parsed.data.content,
+      neuralContext: streamNeuralContextStr,
+      neuralBias: streamNeuralBias,
+      neuralImbalances: streamNeuralImbalances,
     }
   );
 

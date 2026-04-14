@@ -1,0 +1,274 @@
+We are now entering Phase 1 of the TrainChat integrity rebuild.
+
+OBJECTIVE:
+Eliminate all silent failures across the platform, especially in the training mutation flow, save flow, and agent response layer.
+
+CORE RULE:
+TrainChat must never tell the user that something was updated, saved, changed, or applied unless that action was actually completed and verified.
+
+Right now, the platform is too willing to “sound intelligent” even when the underlying action failed. That destroys trust and breaks the vibe-coding experience.
+
+From this point forward, the system must be truth-first, not comfort-first.
+
+==================================================
+PHASE 1 GOAL
+==================================================
+
+Implement a strict “truth layer” across TrainChat so that:
+
+1. If an edit succeeds, the user is told exactly what changed
+2. If an edit partially succeeds, the user is told exactly what succeeded and what did not
+3. If an edit fails, the user is explicitly told it failed
+4. If a save fails, the user is explicitly told it failed
+5. If the system is uncertain, it asks for clarification instead of pretending
+6. If entity resolution fails, the agent does not fake success
+7. If a DB write fails, the UI and assistant do not claim success
+8. If a program cannot be mutated, the app must surface a real failure state
+
+No more silent fallback behavior that produces polished coaching language without a real system mutation.
+
+==================================================
+REQUIRED IMPLEMENTATION
+==================================================
+
+Audit and update all relevant code paths involved in:
+
+- user edit requests
+- program mutations
+- exercise swaps
+- volume/intensity/frequency changes
+- program save actions
+- save-as actions
+- program switching
+- guest program persistence if applicable
+- change log creation
+- undo/restore
+- agent response generation after edit attempts
+
+I want you to identify every place where the platform currently:
+- assumes success without verification
+- catches errors silently
+- swallows mutation failures
+- returns fallback language that implies success
+- allows UI optimism without backend confirmation
+- confirms saves without checking persistence
+- returns generic coaching text instead of operational truth
+
+==================================================
+TRUTH LAYER ARCHITECTURE
+==================================================
+
+Create and enforce a standardized operation result contract for all critical actions.
+
+Every critical mutation/save action should return a structured result like:
+
+type OperationResult = {
+  success: boolean;
+  operationType: 'edit' | 'save' | 'save_as' | 'switch_program' | 'undo' | 'restore';
+  message: string;
+  userSafeMessage: string;
+  failureReason?: string;
+  errorCode?: string;
+  changedEntities?: string[];
+  unchangedRequestedEntities?: string[];
+  requiresClarification?: boolean;
+  clarificationQuestion?: string;
+  metadata?: Record<string, any>;
+};
+
+All relevant services, mutation handlers, and UI consumers should use a shared result format or the closest equivalent already used in the codebase.
+
+==================================================
+RULES FOR AGENT / RESPONSE LAYER
+==================================================
+
+Update the agent response layer so that:
+
+1. The agent cannot say:
+- “Done”
+- “Updated”
+- “Saved”
+- “Changed”
+- “Adjusted your program”
+- “I swapped that”
+unless success = true and the change was verified
+
+2. If the system fails to resolve the requested exercise, day, block, phase, or target:
+- the response must say that clearly
+- the response must ask a clarifying question or explain what could not be found
+
+3. If the mutation engine returns no actual changes:
+- do not frame the response as success
+- explicitly say that no changes were applied
+
+4. If only part of the request was applied:
+- explain exactly what changed
+- explain what did not change
+
+5. If the action failed due to internal error:
+- show a clean user-facing message like:
+  “I couldn’t apply that change due to a system issue. Please try again.”
+- also log the technical reason for debugging
+
+The product should feel intelligent and honest, not falsely reassuring.
+
+==================================================
+SAVE / PERSISTENCE TRUTH RULES
+==================================================
+
+Update all save-related flows so that:
+
+- “Program saved” is shown only after persistence succeeds
+- “Save as new program” is shown only after the new record exists and is fetchable
+- if save fails, the user sees an error state, not a success toast
+- if local UI updates before backend confirmation, rollback on failure
+- if guest/local persistence exists, distinguish clearly between:
+  - locally stored
+  - account-saved
+  - unsaved changes
+
+Do not let local optimistic state masquerade as durable persistence.
+
+==================================================
+ERROR HANDLING RULES
+==================================================
+
+Search the codebase for:
+- empty catch blocks
+- console-only failures
+- fallback success returns
+- default success booleans
+- silent no-op branches
+- optimistic success toasts without verification
+
+Replace them with explicit operational outcomes.
+
+All critical flows must:
+- log technical detail for developers
+- return structured failure for the app
+- show truthful user-facing feedback
+
+==================================================
+UI REQUIREMENTS
+==================================================
+
+Update the UI so that it reflects truthfully what happened.
+
+Examples:
+- successful edit → clear success state with specific change summary
+- failed edit → error state with explanation
+- partial edit → warning/partial success state
+- unresolved request → clarification state
+- save failure → explicit failed save state
+- no-op edit → neutral state saying no change was made
+
+Do not let the UI imply success through:
+- green toasts
+- animation
+- agent text
+- highlighted cards
+- updated labels
+unless the underlying action succeeded
+
+==================================================
+AUDIT TARGETS
+==================================================
+
+Find and patch likely failure points in:
+- agent orchestration layer
+- mutation/edit engine
+- entity resolution logic
+- save handlers
+- persistence services
+- program state store
+- API routes for update/save actions
+- change log creation
+- undo/restore actions
+- guest mode edit/save pipeline
+- any helper that converts AI output into program edits
+
+Trace all paths end-to-end instead of only patching frontend wording.
+
+==================================================
+IMPLEMENTATION TASKS
+==================================================
+
+1. Create or standardize the shared operation result object
+2. Refactor mutation handlers to return structured results
+3. Refactor save handlers to return structured verified results
+4. Refactor agent response generation to depend on real operation results
+5. Remove deceptive fallback language
+6. Add explicit handling for no-op and partial success states
+7. Add logging for all critical failures
+8. Patch optimistic UI states that are not verified
+9. Ensure unresolved requests trigger clarification, not fake success
+10. Surface user-safe failure states across all critical flows
+
+==================================================
+TEST CASES TO PASS
+==================================================
+
+Test these exact cases:
+
+1. User says:
+“Swap barbell bench press for dumbbell bench press.”
+Expected:
+- if resolved and applied, show exact success
+- if not resolved, do not claim success
+
+2. User says:
+“Add more speed work on day 2.”
+Expected:
+- if day 2 exists and mutation succeeds, explain exactly what changed
+- if day 2 is ambiguous or not found, ask for clarification
+
+3. User says:
+“Save my program.”
+Expected:
+- only confirm save if persistence succeeds
+- otherwise show failure
+
+4. User says:
+“Replace all lower body lifts with plyometrics.”
+Expected:
+- if partially applied, explain partial success
+- do not pretend full success if only some lifts were changed
+
+5. User says:
+“Undo that.”
+Expected:
+- only confirm restore if restore/change log action actually succeeded
+
+6. Internal DB/API failure occurs during edit
+Expected:
+- clean user-facing failure
+- technical log
+- no false success messaging
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+After implementing, return:
+
+1. What files/components/routes/services were changed
+2. What silent failure patterns were found
+3. What was patched
+4. What still needs follow-up
+5. Which flows now return truthful operation states
+6. Any areas where architecture still makes truth enforcement difficult
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat must behave like a real system editor, not a motivational chatbot.
+
+If the system changed something, say so clearly.
+If it did not, say so clearly.
+If it is unsure, ask.
+If it failed, admit it.
+
+Truth is now required infrastructure for the vibe-coding experience.
+
+Begin the refactor now.

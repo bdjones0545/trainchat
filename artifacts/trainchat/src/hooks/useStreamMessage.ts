@@ -52,6 +52,8 @@ export interface CompleteEvent {
   changeLogId?: number;
   intentDebug?: { type: string; confidence: string; editSubtype: string | null };
   systemEdit?: { applied: boolean; changeSummary?: string; changedIds?: { exercises: number[]; sessions: number[]; weeks: number[]; phases: number[] }; changeTargets?: Array<{ type: string; id: number; label: string }>; systemId?: number; changeLogId?: number };
+  editFailure?: { reason: "no_changes_applied" | "pipeline_error"; skippedCount?: number };
+  saveFailure?: { reason: string };
 }
 
 export interface StreamErrorEvent {
