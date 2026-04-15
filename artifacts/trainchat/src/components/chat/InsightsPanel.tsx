@@ -5,11 +5,9 @@ import {
   Activity,
   Calendar,
   Moon,
-  Watch,
   Brain,
   ShieldCheck,
   CheckCircle2,
-  ChevronRight,
 } from "lucide-react";
 
 // ─── Types (mirrored from API) ─────────────────────────────────────────────────
@@ -131,12 +129,6 @@ export default function InsightsPanel({ insights, memories, isLoading }: Props) 
             Log readiness check-ins and session feedback to unlock personalized insights.
           </p>
         </div>
-        {/* Wearable placeholder */}
-        <button className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-[10px] text-muted-foreground hover:border-primary/30 hover:text-foreground transition-all duration-150">
-          <Watch className="w-3 h-3" />
-          Connect wearable
-          <ChevronRight className="w-2.5 h-2.5 opacity-50" />
-        </button>
       </div>
     );
   }
@@ -203,16 +195,6 @@ export default function InsightsPanel({ insights, memories, isLoading }: Props) 
         </div>
       )}
 
-      {/* Wearable placeholder — subtle, at the bottom */}
-      <div className="mt-1 pt-3 border-t border-border">
-        <button className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg border border-border text-[10px] text-muted-foreground hover:border-primary/30 hover:text-foreground transition-all duration-150 group">
-          <div className="flex items-center gap-1.5">
-            <Watch className="w-3 h-3" />
-            <span>Connect wearable</span>
-          </div>
-          <ChevronRight className="w-3 h-3 opacity-40 group-hover:opacity-70 transition-opacity" />
-        </button>
-      </div>
     </div>
   );
 }

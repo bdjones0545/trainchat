@@ -61,7 +61,7 @@ const PLANS: Plan[] = [
       "Advanced adaptation logic",
       "High-performance mode",
       "Early access to new features",
-      "Wearable integration ready",
+      "Deepest performance memory",
     ],
   },
 ];

@@ -1,0 +1,198 @@
+We are now running a WEARABLE CLAIMS REMOVAL + PRODUCT TRUTH ALIGNMENT PASS for TrainChat.
+
+OBJECTIVE:
+Remove ALL user-facing references to wearable integrations, connected devices, or health platform syncing, while preserving the underlying architecture for future development.
+
+The goal is:
+- no overpromising
+- no misleading signals
+- no references to features that do not exist
+- clean, truthful positioning
+
+IMPORTANT:
+Do NOT delete backend scaffolding (e.g., ingestWearableData, WearableData interfaces).
+This is a UI/UX, copy, and product-surface cleanup — NOT a system removal.
+
+==================================================
+PRIMARY RULE
+==================================================
+
+If a user can see it or read it, and it implies wearable integration:
+→ it must be removed or rewritten
+
+If it is backend-only scaffolding:
+→ leave it intact
+
+==================================================
+TASK 1 — SEARCH AND REMOVE ALL WEARABLE CLAIMS
+==================================================
+
+Search the entire codebase for references to:
+
+- wearable
+- wearables
+- Apple Health
+- HealthKit
+- Google Fit
+- Health Connect
+- WHOOP
+- Oura
+- Fitbit
+- Garmin
+- Polar
+- “connect your device”
+- “sync your data”
+- “connected health”
+- “biometric tracking”
+- “device integration”
+
+For each instance:
+- remove it OR
+- rewrite it to reflect current reality (manual check-ins only)
+
+==================================================
+TASK 2 — CLEAN UI COMPONENTS
+==================================================
+
+Audit and update all user-facing components, including:
+
+- onboarding flows
+- landing screens
+- marketing sections inside app
+- feature descriptions
+- tooltips
+- modals
+- settings pages
+- profile pages
+- dashboard panels
+- empty states
+- help text
+
+Ensure:
+- no wearable logos
+- no “connect device” buttons
+- no placeholder integrations
+- no misleading labels
+
+If a section currently implies wearable data:
+→ rewrite it to emphasize:
+“manual readiness check-ins” and “coach-driven adaptation”
+
+==================================================
+TASK 3 — REWRITE POSITIONING LANGUAGE
+==================================================
+
+Replace any wearable-related positioning with:
+
+FROM:
+- “Connect your wearable for personalized insights”
+- “Sync your recovery data”
+- “Wearable-driven training”
+
+TO:
+- “Daily readiness check-ins”
+- “AI-driven adaptation based on your input”
+- “Your training responds to how you feel and perform”
+- “Real coaching logic, not passive tracking”
+
+Keep tone:
+- elite
+- intelligent
+- coaching-focused
+- system-driven
+
+==================================================
+TASK 4 — CHECK AGENT / SYSTEM PROMPTS
+==================================================
+
+Audit:
+- system prompts
+- agent instructions
+- adaptation prompt builders
+
+Ensure the AI does NOT:
+- reference wearable integrations
+- assume biometric data exists
+- hallucinate device connections
+
+Instead:
+- reference user check-ins
+- reference session feedback
+- reference performance trends
+
+==================================================
+TASK 5 — REMOVE DEAD UI PATHS
+==================================================
+
+If any of the following exist:
+- “Connect Device” buttons
+- wearable settings panels
+- integration tabs
+- empty wearable dashboards
+
+Then:
+- remove them completely OR
+- hide behind a dev flag (not visible to users)
+
+No “coming soon” placeholders.
+
+==================================================
+TASK 6 — VALIDATE USER TRUTH
+==================================================
+
+After cleanup, validate:
+
+If a user opens TrainChat fresh:
+- do they believe it connects to wearables? → must be NO
+- do they understand how adaptation works? → must be YES
+- is everything they see actually real? → must be YES
+
+==================================================
+TASK 7 — PRESERVE FUTURE HOOKS
+==================================================
+
+DO NOT DELETE:
+- ingestWearableData()
+- WearableData interfaces
+- adaptation engine hooks
+- readiness schema compatibility
+
+Just ensure:
+- they are not exposed or referenced in UI or copy
+
+==================================================
+TASK 8 — FINAL SWEEP
+==================================================
+
+Do a final global search to ensure:
+- zero wearable claims remain
+- no misleading copy
+- no partial references
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+Return:
+
+1. All files/components updated
+2. Examples of removed or rewritten copy
+3. Confirmation that no wearable claims remain
+4. Confirmation that backend scaffolding is preserved
+5. Any edge cases where wording was ambiguous and how it was resolved
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat must now feel like:
+
+“A high-level AI performance system that adapts to you based on your input and training”
+
+NOT:
+
+“A wearable-connected fitness tracker”
+
+This is about truth, trust, and positioning.
+
+Implement this now.
