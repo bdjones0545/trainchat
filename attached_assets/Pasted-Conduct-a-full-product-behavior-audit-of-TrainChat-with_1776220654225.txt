@@ -1,0 +1,314 @@
+Conduct a full product-behavior audit of TrainChat with one specific goal:
+
+Determine whether TrainChat now truly feels like an authentic vibe-coding agent for training.
+
+This is NOT a generic bug audit.
+This is NOT primarily a code-quality audit.
+This is a realism, interaction, mutation, trust, continuity, and UX audit centered on one product promise:
+
+“TrainChat should feel like you are co-creating and editing your training system in real time with an expert.”
+
+I want this audited from the perspective of a first-time user, returning anonymous user, unpaid registered user, and paid user.
+
+==================================================
+PRIMARY AUDIT QUESTION
+==================================================
+
+If a user entered TrainChat today, would they truly feel like they are vibe coding their training with an expert coach-builder?
+
+Answer that question with evidence.
+
+==================================================
+WHAT “AUTHENTIC VIBE CODING” MEANS
+==================================================
+
+For this audit, authentic vibe coding means the user feels all of the following:
+
+1. My input actually changes the system
+2. The agent understands my intent like a real coach-builder
+3. The program feels alive, editable, and responsive
+4. The system tells the truth about what changed
+5. The UI makes those changes feel visible and real
+6. The conversation and the program are tightly connected
+7. The product feels like collaborative building, not chatbot theater
+8. The experience stays consistent across anonymous, unpaid, and paid flows
+9. I do not lose momentum when I sign up, pay, refresh, or return
+10. The interaction feels more like Cursor/Replit/Figma for training than a static fitness app
+
+==================================================
+AUDIT SCOPE
+==================================================
+
+Audit TrainChat deeply across these dimensions:
+
+A. FIRST IMPRESSION / ENTRY FEEL
+Evaluate what it feels like when a brand new user enters the product.
+
+Check:
+- does the user get into the real experience immediately?
+- does the system feel live from first contact?
+- does the product feel like a real builder or a demo shell?
+- does the user understand they are creating a real training system?
+- are there any dead gaps between entry and “realness”?
+- does anonymous deviceId auth make entry feel seamless?
+- do any screens, badges, or states make it feel fake, limited, or disconnected?
+
+B. INPUT → SYSTEM CHANGE FEEL
+Audit whether user input feels like it directly reshapes the training system.
+
+Check:
+- does the program mutate when the user asks for changes?
+- are mutations visible enough?
+- do edits feel immediate and meaningful?
+- does the system ever “talk about” changes without making them?
+- does the edit flow feel deterministic and trustworthy?
+- does the user feel they are editing a real system rather than prompting a chatbot?
+
+C. AGENT AUTHENTICITY
+Audit whether the agent feels like an expert coach-builder.
+
+Check:
+- does it understand real training intent?
+- does it make intelligent coaching decisions?
+- does it ask for clarification when appropriate?
+- does it improve bad requests intelligently?
+- does it feel collaborative rather than generic?
+- does it stay grounded in the current program state?
+- does it explain edits like a coach who is actually modifying a system?
+
+Flag anything that makes the agent feel:
+- generic
+- robotic
+- scripted
+- too ChatGPT-like
+- disconnected from the actual system state
+- more like a narrator than an editor
+
+D. UI REFLECTION / VISIBILITY OF CHANGE
+Audit whether the interface makes mutations feel real.
+
+Check:
+- after an edit, can the user clearly see what changed?
+- is the changed area obvious?
+- does the interface reinforce the “I’m building” feeling?
+- do success, partial, failed, noop, and clarification states feel clear?
+- does the UI over-celebrate or under-show changes?
+- are there places where the backend changed but the UI feels static?
+- are there places where the UI implies change that isn’t strongly visible?
+
+E. CANONICAL SYSTEM TRUST
+Audit whether the user can trust that there is a real program underneath the chat.
+
+Check:
+- is there a clear active training system?
+- does the UI feel tied to a real canonical object?
+- do refreshes, returns, and navigation preserve the same system?
+- does the product ever feel like it lost the program or switched invisibly?
+- do anonymous and registered users feel like they are in the same real product?
+
+F. ANONYMOUS / UNPAID / PAID CONSISTENCY
+Audit whether the vibe-coding experience is consistent across user states.
+
+Check:
+- anonymous deviceId user
+- registered unpaid user
+- paid user
+
+I want to know:
+- does anonymous already feel like the real product?
+- are unpaid users getting the same real intelligence and mutation flow?
+- are paid users benefiting from entitlement expansion rather than fundamentally different product quality?
+- does signup/payment preserve momentum and identity?
+- does the experience degrade anywhere in a way that breaks trust?
+
+G. PAYWALL / CONVERSION FEEL
+Audit whether the paywall timing supports the vibe-coding illusion.
+
+Check:
+- does the user get enough real magic before gating?
+- does the paywall feel like “unlock the rest” instead of “you hit a fake wall”?
+- is the message limit timing appropriate?
+- does work remain intact at the gate?
+- does returning after limit feel like continuation, not punishment?
+
+H. LATENCY / MOMENTUM / INTERACTION RHYTHM
+Audit the rhythm of interaction.
+
+Check:
+- does the agent feel fast enough?
+- do edits feel too slow?
+- do transitions break momentum?
+- does the UI communicate “thinking / editing / updating” well?
+- are there pauses where users might doubt the system is really working?
+- does the overall experience feel fluid enough to support the vibe-coding identity?
+
+I. FAILURE HONESTY
+Audit whether failures are handled in a way that preserves trust.
+
+Check:
+- does the system tell the truth when it cannot do something?
+- are partial results explained well?
+- does the product recover gracefully from ambiguity or failure?
+- do error states feel honest and competent rather than broken?
+
+J. OVERALL PRODUCT IDENTITY
+Audit whether the whole product currently feels like:
+1. a training vibe-coding platform
+2. a strong AI fitness app with some editing
+3. a chatbot with program visuals
+4. a partially wired prototype
+
+Be brutally honest.
+
+==================================================
+MANDATORY TEST SCENARIOS
+==================================================
+
+Audit the experience using these exact scenarios:
+
+1. Brand new anonymous user:
+“Build me a 3-day strength plan.”
+
+2. Anonymous user follow-up:
+“Swap bench press for incline dumbbell press.”
+
+3. Anonymous user follow-up:
+“Add more speed work on day 2.”
+
+4. Anonymous user follow-up:
+“Make this more beginner friendly.”
+
+5. Constraint-driven user:
+“I only have dumbbells, bands, and 20 minutes.”
+
+6. Bad-input user:
+“I want max effort every day and no deloads.”
+
+7. Returning anonymous user on same device
+8. Anonymous user hitting paywall
+9. Anonymous user signing up
+10. Registered unpaid user continuing same system
+11. Paid user editing and continuing
+
+For each scenario evaluate:
+- did the system feel real?
+- did the system actually change?
+- was the change visible?
+- did the agent feel expert?
+- did the experience preserve momentum?
+- did it feel like vibe coding?
+
+==================================================
+REQUIRED OUTPUT FORMAT
+==================================================
+
+Return the audit in this exact structure:
+
+1. EXECUTIVE VERDICT
+Answer plainly:
+Does TrainChat currently feel like an authentic vibe-coding agent for training?
+Use one of:
+- Yes
+- Mostly
+- Partially
+- Not yet
+
+Then explain why in one strong paragraph.
+
+2. THE FEEL SCORECARD
+Score 1–10 for:
+- First impression
+- Agent authenticity
+- Input → system change feel
+- UI visibility of edits
+- System trust / realness
+- Anonymous user experience
+- Conversion continuity
+- Paywall timing
+- Interaction rhythm
+- Overall vibe-coding feel
+
+3. WHAT FEELS AUTHENTIC RIGHT NOW
+List the parts of the experience that genuinely create the vibe-coding feeling.
+
+4. WHAT BREAKS THE ILLUSION
+List the exact moments where the product stops feeling like authentic vibe coding.
+
+For each include:
+- issue
+- where it happens
+- why it breaks the feeling
+- severity: Critical / High / Medium
+
+5. USER-STATE BREAKDOWN
+Evaluate separately:
+- Anonymous user
+- Registered unpaid user
+- Paid user
+
+For each answer:
+- does it feel like the real product?
+- what feels strong?
+- what still feels split or weaker?
+
+6. AGENT TRUTH
+Answer plainly:
+Does the agent feel like a real expert system editor or a smart narrator?
+Explain with evidence.
+
+7. UI TRUTH
+Answer plainly:
+Does the interface make changes feel real enough?
+Explain what is visible, what is too subtle, and what is missing.
+
+8. FINAL PRODUCT TRUTH
+Answer plainly:
+If a user entered TrainChat today, would they truly feel like they are vibe coding their training with an expert?
+Explain why or why not in a direct, no-BS paragraph.
+
+9. TOP 5 IMPROVEMENTS
+List the five highest-leverage improvements that would most increase the authentic vibe-coding feeling.
+
+For each include:
+- exact improvement
+- why it matters
+- expected impact on user perception
+
+10. FINAL RECOMMENDATION
+Should we now:
+- polish and tune the feel
+- keep fixing core infrastructure
+- tighten the agent behavior
+- improve UI visibility
+- change paywall timing
+or some combination?
+
+Prioritize the next moves clearly.
+
+==================================================
+AUDIT RULES
+==================================================
+
+- Be brutally honest
+- Do not give vague compliments
+- Do not confuse “works technically” with “feels authentic”
+- Judge from the user’s perspective, not from implementation effort
+- If something only works but does not feel magical, say so
+- If something feels real but not yet smooth, say so
+- If anonymous users still feel like they are in a teaser, say so
+- If the product already feels real in key moments, say so
+- Distinguish between:
+  - technical correctness
+  - emotional/product feel
+- Prioritize the lived experience over architecture discussion
+
+==================================================
+FINAL INSTRUCTION
+==================================================
+
+Act like a senior product critic, UX systems auditor, and AI agent experience designer.
+
+You are not judging whether TrainChat is “pretty good.”
+You are judging whether it genuinely feels like the first real vibe-coding platform for training.
+
+Audit it accordingly.
