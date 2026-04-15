@@ -1,0 +1,381 @@
+We are replacing the current Guest Session / Guest JSON preview architecture with a simpler and more scalable model:
+
+DEVICE-ID AUTHENTICATED ANONYMOUS USERS
+
+OBJECTIVE:
+Make every guest a real anonymous user authenticated by deviceId so they can use the real TrainChat system immediately:
+- real conversations
+- real training systems
+- real edit engine
+- real mutation verification
+- real persistence
+- real paywall gating
+
+No more separate guest preview pipeline.
+No more guest-only program JSON as the primary product path.
+No more conversion-time recreation as the core architecture.
+
+==================================================
+CORE PRODUCT DECISION
+==================================================
+
+From now on, every first-time visitor should be treated as a real anonymous user.
+
+That means:
+- on first app entry, generate or restore a persistent deviceId
+- create or fetch a real anonymous user account linked to that deviceId
+- attach all conversations, training systems, edits, and change history to that anonymous user
+- when the user signs up or logs in, upgrade/merge that anonymous account instead of recreating their data
+
+This should create one real product engine with one ownership model.
+
+==================================================
+HIGH-LEVEL END STATE
+==================================================
+
+I want TrainChat to operate with these user states:
+
+1. Anonymous user
+- authenticated by deviceId
+- real user row in DB
+- real training systems
+- real conversations
+- real editing
+- limited by free-tier entitlements
+
+2. Registered unpaid user
+- same underlying account and data
+- email/password attached
+- same real systems and conversations
+- still limited by unpaid entitlements where intended
+
+3. Paid user
+- same underlying account and data
+- expanded entitlements
+- premium features enabled
+
+The only difference between these states should be entitlement/access,
+NOT different infrastructure.
+
+==================================================
+PRIMARY REFACTOR GOALS
+==================================================
+
+1. Replace guest session architecture with anonymous user architecture
+2. Tie all real product data to anonymous user ownership via deviceId
+3. Let anonymous users use the real edit engine immediately
+4. Preserve all work when anonymous users sign up or log in
+5. Reduce or remove guest JSON preview dependence
+6. Eliminate conversion-time rebuilding wherever possible
+7. Keep existing paid flows stable
+8. Maintain truth layer + mutation verification layer across all user states
+
+==================================================
+REQUIRED IMPLEMENTATION SCOPE
+==================================================
+
+A. DEVICE IDENTITY LAYER
+Implement a robust deviceId identity system.
+
+Requirements:
+- generate deviceId on first visit if missing
+- persist it reliably
+- restore it on return visits
+- send it with relevant API requests
+- use localStorage + cookie fallback if helpful
+- avoid deviceId regeneration unless truly necessary
+
+I want a shared utility for:
+- getOrCreateDeviceId()
+- storing/restoring deviceId
+- exposing deviceId to frontend and backend consistently
+
+Also audit current deviceId usage and unify it if fragmented.
+
+B. ANONYMOUS USER MODEL
+Implement a real anonymous-user account model in the backend.
+
+Preferred approach:
+- use existing users table if practical
+- add fields like:
+  - device_id (nullable/unique where appropriate)
+  - is_anonymous (boolean)
+  - onboarding_completed
+  - any needed timestamps/metadata
+- allow users with no email/password initially
+
+If the existing auth model makes this difficult, adapt it cleanly — but I want the cleanest long-term architecture.
+
+Every guest should become or map to a real user record.
+
+C. ANONYMOUS AUTH FLOW
+On app entry:
+1. frontend gets/creates deviceId
+2. frontend calls backend bootstrap endpoint
+3. backend fetches existing anonymous user by deviceId or creates one
+4. backend returns user/session/bootstrap payload
+5. frontend uses that user as the current real app identity
+
+This should happen seamlessly and quickly.
+
+I want a real anonymous bootstrap flow, not just a tracking token.
+
+D. REAL DATA OWNERSHIP
+Refactor ownership of TrainChat entities so anonymous users can own real data.
+
+This includes auditing and patching where needed:
+- conversations
+- messages
+- training_systems
+- training_phases
+- session_weeks
+- training_sessions
+- session_exercises
+- change logs
+- undo/restore history
+- active program references
+- any edit/mutation records
+- any neural or memory context tied to users/programs
+
+All these should be owned by a real user ID, including anonymous users.
+
+Do NOT keep relying on:
+- guest_session_id as the primary model
+- preview-only JSON blobs as the primary model
+- conversion-time program recreation as the default path
+
+E. GUEST PIPELINE REPLACEMENT
+Replace or phase out the current guest flow:
+- guestChat.ts
+- guestMerge.ts
+- guest route logic
+- guest preview program panel dependence on extracted JSON as the core path
+
+I still want backward compatibility for existing guest sessions where practical, but the new main path should be:
+
+deviceId anonymous user → real conversation → real training system → real edits
+
+If structured extraction is still useful for UI helpers, it can remain as a secondary enhancement, but not the core product architecture.
+
+F. REAL EDIT ENGINE FOR ANONYMOUS USERS
+Refactor the edit engine so anonymous users can use the same real mutation flow as paid users.
+
+This includes:
+- applyEditPlan
+- verifyMutation
+- truth layer / operation result handling
+- change logs
+- undo/restore
+- active program targeting
+- UI feedback based on real verified state
+
+The edit engine should not care whether the user is anonymous, unpaid, or paid except where entitlement rules intentionally block something.
+
+G. SIGNUP / LOGIN UPGRADE FLOW
+When an anonymous user signs up or logs in:
+
+Preferred behavior:
+- preserve the same underlying account and data whenever possible
+OR
+- safely merge anonymous account data into the authenticated account if needed
+
+Requirements:
+- no loss of training systems
+- no loss of conversations
+- no loss of edits/change history where intended
+- no product restart
+- no conversion-time fake rebuild
+- no duplicate systems unless truly necessary
+- no confusing route loops
+
+If the user signs up fresh:
+- attach credentials/email to the anonymous account if possible
+
+If the user logs into an existing account:
+- merge or transfer anonymous work safely and deterministically
+
+Implement the cleanest long-term strategy and explain the tradeoffs.
+
+H. ENTITLEMENT LAYER
+Implement clean entitlement checks on top of the shared engine.
+
+Examples:
+- anonymous/free users get limited number of messages or edits
+- anonymous/free users may have limited number of active programs
+- save/export/advanced features may be gated
+- premium users unlock expanded usage
+
+But all user tiers should use the same core system.
+
+I want access control, not product fragmentation.
+
+I also want existing teaser/paywall logic reviewed and adapted to fit this architecture.
+
+I likely still want a free interaction/message cap, but it should now apply to the anonymous real user account rather than a fake guest session layer.
+
+I previously used 8 messages for the teaser window. Preserve or improve that logic, but align it to real anonymous-user entitlements.
+
+I. FRONTEND STATE REFACTOR
+Refactor frontend auth/state/store logic so anonymous users are treated as real current users.
+
+Audit and patch:
+- auth bootstrap
+- user store
+- current program store
+- conversation state
+- guest-start flow
+- paywall gating
+- localStorage role
+- route guards
+- onboarding logic
+- any component assuming guest != real user
+
+localStorage should become supportive cache only, not the primary product state.
+
+The UI should feel like the user is simply in the app from first contact.
+
+J. ROUTING / UX REQUIREMENTS
+Desired UX:
+
+1. User lands in app
+2. deviceId bootstrap silently authenticates them as anonymous user
+3. user enters real TrainChat experience immediately
+4. real program is created and edited through the real system
+5. after entitlement threshold, paywall/signup triggers
+6. when they sign up or pay, their same work continues seamlessly
+
+Avoid:
+- dead-end guest screens
+- restart after signup
+- onboarding loops
+- device/auth conflicts
+- flashing modals
+- fake preview product
+- program disappearing after conversion
+
+==================================================
+DATA / SCHEMA TASKS
+==================================================
+
+Audit the existing schema and implement the cleanest required changes.
+
+Potential changes may include:
+- users.device_id
+- users.is_anonymous
+- indexes/constraints for device_id lookup
+- optional auth credential fields for later upgrade
+- migration support for guest sessions to anonymous users
+- migration support for guest-created conversation/program data
+
+If the current auth stack requires a dedicated anonymous-user bootstrap token/session, implement it cleanly.
+
+But I want the final ownership model to be user-centric, not guest-session-centric.
+
+==================================================
+BACKWARD COMPATIBILITY
+==================================================
+
+Preserve support for:
+- existing guest sessions still in progress
+- legacy firstProgramOutput / chatProgramJSON conversion paths where needed
+- existing paid and registered user flows
+
+Implement migration logic where practical so old guest data can still be converted or attached.
+
+But do not let backward compatibility keep the old architecture as the main path.
+
+==================================================
+MANDATORY TEST SCENARIOS
+==================================================
+
+Run and validate these scenarios:
+
+1. First-time visitor on fresh device
+- app generates deviceId
+- anonymous user is created
+- user enters real TrainChat immediately
+- can create a real program
+- program is stored against real user ownership
+
+2. Returning anonymous visitor on same device
+- same anonymous user is restored
+- same conversations/programs restore appropriately
+- no duplicate anonymous users created
+- no lost progress
+
+3. Anonymous user edits a real program
+- uses same edit engine as paid flow
+- verification runs
+- truthful UI feedback is shown
+- change log/undo works if enabled
+
+4. Anonymous user hits free limit
+- paywall triggers correctly
+- work remains intact
+- no fake dead-end state
+
+5. Anonymous user signs up for a new account
+- existing anonymous data is preserved
+- account upgrades cleanly
+- no rebuild or reset
+
+6. Anonymous user logs into an existing account
+- anonymous work is merged or transferred cleanly
+- no duplicate/conflicting active programs
+- no data loss
+- no routing loops
+
+7. Paid user flow after refactor
+- no regression
+- same shared core still works
+- premium entitlements preserved
+
+8. Legacy guest session still present
+- backward compatible path works
+- no user-facing failure
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What routes/stores/components/services were changed
+2. What schema/auth changes were made
+3. How deviceId bootstrap now works end-to-end
+4. How anonymous users are represented in the DB
+5. What old guest logic was replaced or deprecated
+6. How anonymous → registered upgrade now works
+7. How anonymous → existing-account merge now works
+8. What entitlement checks now exist
+9. Any remaining architectural debt or migration risk
+10. Any legacy guest code that can now be removed in a later cleanup pass
+
+==================================================
+IMPORTANT IMPLEMENTATION RULES
+==================================================
+
+- Reuse the existing real system as much as possible
+- Do not create another parallel guest architecture
+- Prefer one user model over multiple ownership systems
+- Preserve truth layer behavior
+- Preserve mutation verification behavior
+- Be explicit about merge/upgrade conflict handling
+- Do not silently duplicate user data if accounts merge
+- Keep the UX seamless and momentum-preserving
+- Keep the product feeling like the real app from first contact
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat should now operate like this:
+
+Every visitor is a real user.
+Some are anonymous.
+Some are registered.
+Some are paid.
+
+But all of them are inside the same real product.
+
+Build this refactor now.

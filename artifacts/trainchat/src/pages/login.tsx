@@ -6,9 +6,8 @@ import { z } from "zod";
 import { useLogin } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetMeQueryKey } from "@workspace/api-client-react";
+import { getOrCreateDeviceId } from "@/lib/deviceId";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
-
-const DEVICE_ID_KEY = "trainchat_device_id";
 
 const loginSchema = z.object({
   email: z.string().email("Valid email required"),
@@ -70,35 +69,18 @@ export default function Login() {
 
   async function onSubmit(data: LoginForm) {
     setError(null);
+
+    // Pass deviceId so the backend can merge any anonymous data from this device
+    // into the authenticated account (conversations, training systems, edits).
+    const deviceId = getOrCreateDeviceId();
+
     login.mutate(
-      { data },
+      { data: { ...data, deviceId } as any },
       {
         onSuccess: async (result) => {
           // Seed the cache immediately so Chat sees a valid user on mount
-          // and doesn't fire its stale-error redirect back to /start.
           queryClient.setQueryData(getGetMeQueryKey(), result.user);
-
-          // ── Guest-to-user merge on login ──────────────────────────────
-          const deviceId = (() => {
-            try { return localStorage.getItem(DEVICE_ID_KEY); } catch { return null; }
-          })();
-
-          if (deviceId) {
-            setConverting(true);
-            const merged = await tryConvertGuestSession(deviceId);
-            setConverting(false);
-
-            if (merged) {
-              // Guest session merged — user's profile is now populated,
-              // starter conversation created, onboardingComplete = true.
-              // Always route to chat for a seamless continuation experience.
-              queryClient.setQueryData(getGetMeQueryKey(), result.user);
-              setLocation("/chat");
-              return;
-            }
-          }
-
-          // Always route to chat — onboarding happens through the agent conversation
+          // Route to chat — anonymous data merged on backend (fire-and-forget)
           setLocation("/chat");
         },
         onError: (err: unknown) => {

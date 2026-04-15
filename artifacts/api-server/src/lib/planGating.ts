@@ -5,6 +5,10 @@ import type { PlanTier } from "@workspace/db";
 export const FREE_MESSAGE_LIMIT = 5;
 export const STARTER_MESSAGE_LIMIT = 75;
 
+// Anonymous users (device-ID authenticated, not yet registered) get 8 free
+// interactions — enough to build and refine a real program before the paywall.
+export const ANON_MESSAGE_LIMIT = 8;
+
 export interface PlanFeatures {
   unlimitedMessages: boolean;
   adaptationContext: boolean;
@@ -96,7 +100,6 @@ export function checkSubscriptionAccess(user: {
   }
 
   if (planStatus === "past_due") {
-    // Grant access during Stripe's retry window — do not punish users for temporary failures
     return {
       effectivePlan: user.plan,
       hasActiveAccess: true,
@@ -105,7 +108,6 @@ export function checkSubscriptionAccess(user: {
   }
 
   if (planStatus === "canceled" && withinPeriod) {
-    // User canceled but period hasn't ended — honor the paid access they already have
     return {
       effectivePlan: user.plan,
       hasActiveAccess: true,
@@ -113,7 +115,6 @@ export function checkSubscriptionAccess(user: {
     };
   }
 
-  // Everything else: revoke
   return { effectivePlan: "free", hasActiveAccess: false, accessReason: planStatus };
 }
 
@@ -129,13 +130,33 @@ export async function getUserPlanInfo(userId: number): Promise<{
   cancelAtPeriodEnd: boolean;
   trialEnd: Date | null;
   hasActiveAccess: boolean;
+  isAnonymous: boolean;
 }> {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
   if (!user) throw new Error("User not found");
 
   const messageCount = user.messageCount ?? 0;
 
-  // Determine effective plan via access rules
+  // ── Anonymous users bypass subscription logic and use a simple message cap ──
+  if (user.isAnonymous) {
+    const messagesRemaining = Math.max(0, ANON_MESSAGE_LIMIT - messageCount);
+    return {
+      plan: "free",
+      planStatus: "active",
+      messageCount,
+      features: getPlanFeatures("free"),
+      canSendMessage: messageCount < ANON_MESSAGE_LIMIT,
+      messagesRemaining,
+      billingInterval: null,
+      currentPeriodEnd: null,
+      cancelAtPeriodEnd: false,
+      trialEnd: null,
+      hasActiveAccess: false,
+      isAnonymous: true,
+    };
+  }
+
+  // ── Registered users: check subscription access ───────────────────────────
   const { effectivePlan, hasActiveAccess } = checkSubscriptionAccess({
     plan: (user.plan ?? "free") as PlanTier,
     planStatus: user.planStatus ?? "active",
@@ -169,6 +190,7 @@ export async function getUserPlanInfo(userId: number): Promise<{
     cancelAtPeriodEnd: user.cancelAtPeriodEnd ?? false,
     trialEnd: user.trialEnd ?? null,
     hasActiveAccess,
+    isAnonymous: false,
   };
 }
 

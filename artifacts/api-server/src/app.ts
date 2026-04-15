@@ -1,10 +1,12 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { sessionMiddleware } from "./lib/session";
 import { WebhookHandlers } from "./lib/webhookHandlers";
+import { db, usersTable } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
 
 const app: Express = express();
 
@@ -58,6 +60,45 @@ app.post(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(sessionMiddleware);
+
+/**
+ * Anonymous user fallback: if the request has no session userId but carries an
+ * X-Device-Id header, look up the matching anonymous user and attach their ID
+ * to the session for this request only (not persisted).
+ *
+ * This allows anonymous users to be authenticated via their device ID even
+ * when session cookies are blocked (e.g. HTTP dev environment, strict browsers).
+ * Registered user sessions always take precedence because they're checked first.
+ */
+app.use(async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
+  if (req.session?.userId) {
+    next();
+    return;
+  }
+
+  const rawDeviceId = req.headers["x-device-id"];
+  const deviceId = typeof rawDeviceId === "string" ? rawDeviceId.trim() : undefined;
+
+  if (!deviceId) {
+    next();
+    return;
+  }
+
+  try {
+    const [user] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(and(eq(usersTable.deviceId, deviceId), eq(usersTable.isAnonymous, true)));
+
+    if (user) {
+      req.session.userId = user.id;
+    }
+  } catch (err) {
+    logger.warn({ err, deviceId }, "device-id auth fallback: DB lookup failed — skipping");
+  }
+
+  next();
+});
 
 app.use("/api", router);
 

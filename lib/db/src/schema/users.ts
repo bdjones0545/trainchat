@@ -10,9 +10,17 @@ export type BillingInterval = (typeof BILLING_INTERVALS)[number];
 
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
-  email: text("email").notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
-  name: text("name").notNull(),
+
+  // Device-ID anonymous auth — every visitor gets a real user row.
+  // For anonymous users, email/passwordHash/name are null until they register.
+  deviceId: text("device_id").unique(),
+  isAnonymous: boolean("is_anonymous").notNull().default(false),
+
+  // Nullable for anonymous users; set on registration/upgrade
+  email: text("email").unique(),
+  passwordHash: text("password_hash"),
+  name: text("name"),
+
   onboardingComplete: boolean("onboarding_complete").notNull().default(false),
 
   // Stripe identifiers

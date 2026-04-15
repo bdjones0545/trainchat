@@ -6,9 +6,8 @@ import { z } from "zod";
 import { useRegister, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { GUEST_CONFIG } from "@/lib/guestConfig";
+import { getOrCreateDeviceId } from "@/lib/deviceId";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
-
-const DEVICE_ID_KEY = "trainchat_device_id";
 
 const registerSchema = z.object({
   name: z.string().min(1, "Name required"),
@@ -74,36 +73,25 @@ export default function Register() {
 
   async function onSubmit(data: RegisterForm) {
     setError(null);
+
+    // Pass deviceId so the backend can upgrade the anonymous user in-place,
+    // preserving all conversations and training systems without a rebuild.
+    const deviceId = getOrCreateDeviceId();
+
     register.mutate(
-      { data },
+      { data: { ...data, deviceId } as any },
       {
         onSuccess: async (result) => {
           // Seed the cache immediately so Chat sees a valid user on mount
-          // and doesn't fire its stale-error redirect back to /start.
           queryClient.setQueryData(getGetMeQueryKey(), result.user);
 
-          // ── Guest-to-user merge ─────────────────────────────────────────
-          const deviceId = (() => {
-            try { return localStorage.getItem(DEVICE_ID_KEY); } catch { return null; }
-          })();
-
+          // Track signup completed (fire-and-forget, non-fatal)
           if (deviceId) {
-            setConverting(true);
-            await trackGuestEvent(deviceId, GUEST_CONFIG.EVENTS.SIGNUP_COMPLETED);
-            const merged = await convertGuestSession(deviceId);
-
-            if (merged) {
-              // Merge succeeded → go straight to chat (profile + conversation ready)
-              queryClient.setQueryData(getGetMeQueryKey(), result.user);
-              setConverting(false);
-              setLocation("/chat");
-              return;
-            }
-            setConverting(false);
+            trackGuestEvent(deviceId, GUEST_CONFIG.EVENTS.SIGNUP_COMPLETED).catch(() => {});
           }
 
-          // No guest session or merge failed → go directly to chat
-          // Agent handles onboarding through conversation
+          // Route to chat — the anonymous user was upgraded in-place so all
+          // their conversations and training systems are already there.
           setLocation("/chat");
         },
         onError: (err: unknown) => {

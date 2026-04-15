@@ -341,8 +341,11 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
   if (planInfo && !planInfo.canSendMessage) {
     res.status(402).json({
       error: "MESSAGE_LIMIT_REACHED",
-      message:
-        planInfo.plan === "free"
+      code: "PAYWALL",
+      isAnonymous: planInfo.isAnonymous ?? false,
+      message: planInfo.isAnonymous
+        ? `You've used your ${planInfo.messageCount} free interactions. Create your free account to keep training.`
+        : planInfo.plan === "free"
           ? `You've used your 5 free interactions. Upgrade to keep training with your AI coach.`
           : `You've reached your monthly message limit. Upgrade to Pro for unlimited access.`,
       plan: planInfo.plan,
@@ -1258,8 +1261,11 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     done({
       type: "error",
       status: 402,
-      message:
-        planInfo.plan === "free"
+      code: "PAYWALL",
+      isAnonymous: planInfo.isAnonymous ?? false,
+      message: planInfo.isAnonymous
+        ? `You've used your ${planInfo.messageCount} free interactions. Create your free account to keep training.`
+        : planInfo.plan === "free"
           ? "You've used your 5 free interactions. Upgrade to keep training with your AI coach."
           : "You've reached your monthly message limit. Upgrade to Pro for unlimited access.",
     });

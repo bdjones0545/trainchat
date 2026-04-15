@@ -1,6 +1,6 @@
-import { Component, useRef, type ReactNode } from "react";
+import { Component, useRef, useState, useEffect, type ReactNode } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
@@ -11,41 +11,64 @@ import GuestStart from "@/pages/guest-start";
 import AdminDashboard from "@/pages/admin";
 import SystemPage from "@/pages/system";
 import BillingPage from "@/pages/billing";
-import { useGetMe } from "@workspace/api-client-react";
+import { useGetMe, getGetMeQueryKey, setDefaultHeaders } from "@workspace/api-client-react";
 import { computeRoute, readDeviceId, type UserMode } from "@/lib/routing";
+import { getOrCreateDeviceId } from "@/lib/deviceId";
+
+// Attach the device ID to every API request immediately on module load.
+// Anonymous users are identified server-side via this header when there is
+// no session cookie (e.g. first visit, HTTP dev environment, strict browsers).
+setDefaultHeaders({ "X-Device-Id": getOrCreateDeviceId() });
 
 export type { UserMode };
 
 /**
  * ChatPage — universal entry point for /chat.
  *
- * Derives UserMode from auth state and renders the correct experience:
- *   • spinner        — auth check still in flight (first load only)
- *   • authenticated  → <Chat />
- *   • auth_required  → <Redirect to="/login" />  (session expired mid-use)
- *   • guest          → <GuestStart />            (no signup required)
+ * Phase 3 behaviour: every visitor is immediately bootstrapped into a real
+ * anonymous user account via POST /api/auth/bootstrap. This means:
+ *   • spinner        — bootstrap in flight (typically <300 ms on first load)
+ *   • authenticated  → <Chat />   (includes anonymous users with a real session)
+ *   • auth_required  → <Redirect to="/login" />   (session expired mid-use)
+ *   • fallback       → <GuestStart />  (only if bootstrap completely failed)
  *
- * This is the ONLY place in the app that decides which experience renders.
- * GuestStart has its own two-stage gate so it NEVER flashes an empty shell.
+ * Anonymous users use the REAL chat, edit engine, training systems, and
+ * mutation verification — no separate guest pipeline.
  */
 function ChatPage() {
+  const queryClient = useQueryClient();
+  // Bootstrap fires immediately on mount, before useGetMe resolves.
+  // It creates (or resumes) the anonymous session and seeds the me cache.
+  const [bootstrapped, setBootstrapped] = useState(false);
+
+  useEffect(() => {
+    const deviceId = getOrCreateDeviceId();
+    fetch("/api/auth/bootstrap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ deviceId }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.user) {
+          // Seed the React Query cache immediately so useGetMe reads from cache
+          queryClient.setQueryData(getGetMeQueryKey(), data.user);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setBootstrapped(true));
+  }, [queryClient]);
+
   const { data: me, isLoading } = useGetMe();
 
-  // Track whether this page instance ever had an authenticated user.
-  // If me later becomes undefined (session expired), set mode to auth_required
-  // rather than silently switching them to guest mode.
+  // Track whether this page instance ever had an authenticated user so that
+  // session expiry sends them to /login instead of silently showing fallback.
   const hadUser = useRef(false);
   if (me && !hadUser.current) hadUser.current = true;
 
-  const userMode: UserMode | "loading" = isLoading
-    ? "loading"
-    : me
-      ? "authenticated"
-      : hadUser.current
-        ? "auth_required"
-        : "guest";
-
-  if (userMode === "loading") {
+  // Show loading spinner while bootstrap or auth check is in flight
+  if (!bootstrapped || isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
@@ -53,14 +76,14 @@ function ChatPage() {
     );
   }
 
-  if (userMode === "auth_required") return <Redirect to="/login" />;
-  if (userMode === "authenticated") return <Chat />;
+  if (me) return <Chat />;
 
-  // userMode === "guest": unauthenticated AND no prior session in this page instance.
-  // Guest is a valid, first-class app state — no redirect to login.
-  // Includes "converted" sessions (previously signed up, now unauthenticated):
-  // they get full guest access; the nav "Sign in" button lets them return voluntarily.
-  return <GuestStart userMode={userMode} />;
+  // Session expired mid-use (had a real user, now 401)
+  if (hadUser.current) return <Redirect to="/login" />;
+
+  // Bootstrap completed but no session was created (network error, storage blocked, etc.)
+  // Fall back to the legacy guest flow so the user still sees something useful.
+  return <GuestStart userMode="guest" />;
 }
 
 const queryClient = new QueryClient({

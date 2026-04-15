@@ -70,6 +70,8 @@ export interface StreamErrorEvent {
   type: "error";
   message: string;
   status?: number;
+  code?: string;
+  isAnonymous?: boolean;
 }
 
 export type StreamEvent = AcknowledgedEvent | StageEvent | CompleteEvent | StreamErrorEvent;
@@ -91,6 +93,10 @@ export interface StreamState {
   /** Action type (PROGRAM_GENERATION, STRUCTURAL_REBUILD, DIRECT_MUTATION, SESSION_ADJUSTMENT). */
   actionType: string | undefined;
   error: string | null;
+  /** Set to true when error is a PAYWALL 402 — triggers upgrade modal in Chat. */
+  paywallTriggered: boolean;
+  /** Whether the paywalled user is anonymous (vs a registered free-tier user). */
+  paywallIsAnonymous: boolean;
 }
 
 // ─── Milestone stage logic ─────────────────────────────────────────────────────
@@ -134,6 +140,8 @@ const INITIAL_STATE: StreamState = {
   intentType: undefined,
   actionType: undefined,
   error: null,
+  paywallTriggered: false,
+  paywallIsAnonymous: false,
 };
 
 export function useStreamMessage(): UseStreamMessageResult {
@@ -246,10 +254,13 @@ export function useStreamMessage(): UseStreamMessageResult {
                 return event;
 
               } else if (event.type === "error") {
+                const isPaywall = event.status === 402 || event.code === "PAYWALL";
                 setState((s) => ({
                   ...s,
                   phase: "error",
                   error: event.message,
+                  paywallTriggered: isPaywall,
+                  paywallIsAnonymous: isPaywall ? (event.isAnonymous ?? false) : false,
                 }));
                 reader.cancel();
                 return null;

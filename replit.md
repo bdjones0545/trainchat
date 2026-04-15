@@ -47,7 +47,8 @@ The UI features a dark theme with electric blue accents and the Inter font, cent
 
 ### System Design Choices
 - **Database Schema**: Comprehensive tables for users, profiles, conversations, training programs, readiness, feedback, memories, logs, analytics, Stripe data, and coaching_knowledge.
-- **Authentication**: Session-based authentication using `express-session` with a PostgreSQL-backed store.
+- **Authentication**: Session-based authentication using `express-session` with a PostgreSQL-backed store. Anonymous users are identified via a `deviceId` stored in localStorage and sent as an `X-Device-Id` header on every request — the backend resolves the anonymous user from this header when no session cookie is present (cookie-less fallback for HTTP dev environments / strict browsers). On registration the anonymous user row is upgraded in-place; on login their data is merged into the existing account.
+- **Anonymous User Architecture (Phase 3b)**: Every visitor is immediately bootstrapped into a real anonymous user account via `POST /api/auth/bootstrap`. Schema: `usersTable` has `deviceId` (unique), `isAnonymous` (boolean), and nullable `email/passwordHash/name` for anonymous rows. Anonymous users hit `ANON_MESSAGE_LIMIT=8` (separate from the registered `FREE_MESSAGE_LIMIT`). `anonymousMerge.ts` handles conversation + training-system migration on registration/login. `setDefaultHeaders({ 'X-Device-Id': id })` is called at module load in `App.tsx` via the api-client-react utility.
 - **Modularity & Extensibility**: Services are designed as distinct modules with clear extension points.
 
 ## External Dependencies
