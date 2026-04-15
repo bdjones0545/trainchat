@@ -1525,9 +1525,13 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     systemIdVal?: number;
     systemEditVal?: { applied: boolean };
     changeLogIdVal?: number;
+    outcomeTypeVal?: "mutation_applied" | "clarification_needed" | "conversation_only" | "true_failure";
   }) {
+    const outcomeType: "mutation_applied" | "clarification_needed" | "conversation_only" | "true_failure" =
+      opts.outcomeTypeVal ?? "conversation_only";
     return {
       type: "complete",
+      outcomeType,
       userMessage: {
         id: opts.userMsg.id,
         conversationId: opts.userMsg.conversationId,
@@ -1567,7 +1571,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       structuredData: JSON.stringify(latestStructuredProgram),
     }).returning();
     await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-    done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false }));
+    done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "conversation_only" }));
     return;
   }
 
@@ -1578,7 +1582,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       conversationId: params.data.id, role: "assistant", content: clarifyContent, structuredData: null,
     }).returning();
     await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-    done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false }));
+    done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "clarification_needed" }));
     return;
   }
 
@@ -1631,7 +1635,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       stripeStorage.incrementMessageCount(userId).catch(() => {});
     }
     done({
-      ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: saveSuccess, systemIdVal: savedSystemId }),
+      ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: saveSuccess, systemIdVal: savedSystemId, outcomeTypeVal: saveSuccess ? "mutation_applied" : (!programToSave ? "conversation_only" : "true_failure") }),
       saveFailure: !saveSuccess && !!programToSave ? { reason: "persistence_error" } : undefined,
     });
     return;
@@ -1667,7 +1671,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       }
       done(buildCompleteEvent({
         userMsg: userMessage, assistantMsg: assistantMsg, planInfoVal: planInfo,
-        intentResultVal: intentResult, systemSavedVal: false,
+        intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "conversation_only",
       }));
       return;
     }
@@ -1710,7 +1714,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
               stripeStorage.incrementMessageCount(userId).catch(() => {});
             }
             done({
-              ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: failedMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false }),
+              ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: failedMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure" }),
               systemEdit: { applied: false },
               editFailure: { reason: "verification_failed", verificationSummary: verification.summary },
             });
@@ -1773,6 +1777,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
               userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo,
               intentResultVal: intentResult, systemSavedVal: systemAutoCreatedForEdit,
               systemIdVal: systemAutoCreatedForEdit ? resolvedSystem.id : undefined,
+              outcomeTypeVal: "mutation_applied",
             }),
             systemEdit: {
               applied: true,
@@ -1803,7 +1808,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           stripeStorage.incrementMessageCount(userId).catch(() => {});
         }
         done({
-          ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: noOpMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false }),
+          ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: noOpMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "clarification_needed" }),
           systemEdit: { applied: false },
           editFailure: { reason: "no_changes_applied", skippedCount: editResult.skippedCount },
         });
@@ -1820,7 +1825,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         stripeStorage.incrementMessageCount(userId).catch(() => {});
       }
       done({
-        ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: errMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false }),
+        ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: errMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure" }),
         systemEdit: { applied: false },
         editFailure: { reason: "pipeline_error" },
       });
@@ -2058,6 +2063,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo,
     intentResultVal: intentResult, systemSavedVal: systemSaved, systemIdVal: autoSavedSystemId,
     changeLogIdVal: changeLogId,
+    outcomeTypeVal: systemSaved ? "mutation_applied" : "conversation_only",
   }));
 });
 

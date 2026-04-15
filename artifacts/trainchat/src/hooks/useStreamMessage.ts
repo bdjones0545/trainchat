@@ -1,6 +1,16 @@
 import { useState, useRef, useCallback } from "react";
 import { getDefaultHeaders } from "@workspace/api-client-react";
 
+// ─── Agent outcome type ────────────────────────────────────────────────────────
+// Explicit classification of what a complete agent response represents.
+// Drives all UI decisions: panel open, toasts, scroll anchoring, etc.
+
+export type AgentOutcomeType =
+  | "mutation_applied"      // DB/program state was changed — show changes, open panel
+  | "clarification_needed"  // Agent needs more input — NOT an error, no panel open
+  | "conversation_only"     // Normal coaching reply — NOT an error, no panel open
+  | "true_failure";         // Something genuinely failed — show error toast
+
 // ─── Build pipeline stage type (mirrors build-pipeline.ts on the server) ──────
 
 export type BuildStage =
@@ -31,6 +41,8 @@ export interface StageEvent {
 
 export interface CompleteEvent {
   type: "complete";
+  /** Explicit outcome classification — drives panel, toast, and scroll behavior. */
+  outcomeType: AgentOutcomeType;
   userMessage: {
     id: number;
     conversationId: number;
@@ -264,6 +276,18 @@ export function useStreamMessage(): UseStreamMessageResult {
                 });
 
               } else if (event.type === "complete") {
+                // Ensure outcomeType is always present — fallback for older backend responses.
+                // Derive from existing fields if the server did not send the field.
+                if (!event.outcomeType) {
+                  const raw = event as Partial<CompleteEvent> & { systemEdit?: { applied?: boolean }; systemSaved?: boolean; editFailure?: { reason?: string } };
+                  if (raw.systemEdit?.applied || raw.systemSaved) {
+                    event.outcomeType = "mutation_applied";
+                  } else if (raw.editFailure?.reason === "pipeline_error" || raw.editFailure?.reason === "verification_failed") {
+                    event.outcomeType = "true_failure";
+                  } else {
+                    event.outcomeType = "conversation_only";
+                  }
+                }
                 setState((s) => ({ ...s, phase: "complete" }));
                 reader.cancel();
                 return event;

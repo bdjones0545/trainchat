@@ -195,6 +195,10 @@ export default function Chat() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const agentSectionRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // Tracks whether the user has intentionally scrolled up in the messages container.
+  // When true, we do not force-scroll to the bottom during streaming or message updates.
+  // Resets to false any time the user sends a message.
+  const userScrolledUpRef = useRef(false);
 
   const { data: me, isError: meError, isLoading: meLoading, isFetching: meFetching } = useGetMe();
   const { data: profile } = useGetProfile({
@@ -357,13 +361,30 @@ export default function Chat() {
     }
   }, [latestProgram, calibrationScore]);
 
+  // ── Scroll handler: detect intentional upward scroll ───────────────────────
+  // Attaches to the messages container. If the user scrolls more than 80px above
+  // the bottom we mark them as "scrolled up" so we stop fighting their scroll.
+  // The flag resets when they send a message (see handleSend).
   useEffect(() => {
-    // Scroll within the messages container (does not propagate to the document)
-    if (messagesContainerRef.current) {
-      messagesContainerRef.current.scrollTo({
-        top: messagesContainerRef.current.scrollHeight,
-        behavior: "smooth",
-      });
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    function onScroll() {
+      if (!container) return;
+      const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+      userScrolledUpRef.current = distanceFromBottom > 80;
+    }
+
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => container.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // ── Auto-scroll to bottom on new messages / stream activity ─────────────────
+  // Uses the sentinel div at the end of the message list for reliable anchoring.
+  // Only scrolls if the user has not intentionally scrolled up.
+  useEffect(() => {
+    if (!userScrolledUpRef.current && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
     }
     // Re-anchor the page viewport to the agent section for anonymous/deviceId users.
     // Prevents new messages / SSE stream growth from drifting the page into the
@@ -371,7 +392,7 @@ export default function Chat() {
     if (!!(me as any)?.isAnonymous) {
       window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
     }
-  }, [messages, stream.isActive, stream.state.phase, me]);
+  }, [messages, stream.isActive, stream.state.phase, stream.state.acknowledgment, me]);
 
   // Mobile Safari / iOS keyboard fix for anonymous users.
   // When the virtual keyboard opens, Safari scrolls the document to keep the
@@ -392,15 +413,10 @@ export default function Chat() {
     return () => vv.removeEventListener("resize", handleViewportResize);
   }, [me]);
 
-  // Auto-open the program panel when a build starts so users see it animate live
-  useEffect(() => {
-    if (stream.isActive) {
-      setRightPanelOpen(true);
-      if (!latestProgram) {
-        setMobilePanel("right");
-      }
-    }
-  }, [stream.isActive]);
+  // Panel auto-open is intentionally NOT triggered by stream.isActive.
+  // The panel only opens automatically when a mutation is confirmed (mutation_applied),
+  // which is handled in the handleSend result block below.
+  // This prevents conversational / clarification replies from opening the panel.
 
   const buildingState = {
     isBuilding: stream.isActive,
@@ -491,6 +507,13 @@ export default function Chat() {
       inputRef.current.style.height = "auto";
     }
 
+    // Reset intentional-scroll tracking so send always anchors chat to the bottom.
+    userScrolledUpRef.current = false;
+    // Immediately scroll to the bottom sentinel so the user message is visible.
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+
     // Anchor page viewport to agent section immediately on send for anonymous users.
     // This prevents the conversion floor from entering view during the stream.
     if (!!(me as any)?.isAnonymous) {
@@ -521,22 +544,20 @@ export default function Chat() {
       setMessagesUsed(messagesUsed + 1);
     }
 
-    // Handle explicit edit/save failures — show error, do NOT fire undo toast
-    if (result.editFailure) {
+    // Error toasts fire ONLY for true_failure outcomes.
+    // clarification_needed and conversation_only are never errors — the agent
+    // replied normally and may be asking for more information.
+    // no_changes_applied is classified as clarification_needed on the backend,
+    // so it does NOT trigger an error toast here.
+    if (result.outcomeType === "true_failure") {
       if (operationErrorTimeoutRef.current) clearTimeout(operationErrorTimeoutRef.current);
-      const msg =
-        result.editFailure.reason === "no_changes_applied"
-          ? "No changes could be applied — try being more specific about the exercise, day, or session."
-          : result.editFailure.reason === "verification_failed"
-          ? "That change was processed but couldn't be confirmed in your program. Try again with more specifics."
-          : "Something went wrong while applying that change. Your program has not been modified.";
+      let msg = "Something went wrong while applying that change. Your program has not been modified.";
+      if (result.editFailure?.reason === "verification_failed") {
+        msg = "That change was processed but couldn't be confirmed in your program. Try again with more specifics.";
+      } else if (result.saveFailure) {
+        msg = "Your program couldn't be saved due to a system error. Please try again.";
+      }
       setOperationError(msg);
-      operationErrorTimeoutRef.current = setTimeout(() => setOperationError(null), 7000);
-    }
-
-    if (result.saveFailure) {
-      if (operationErrorTimeoutRef.current) clearTimeout(operationErrorTimeoutRef.current);
-      setOperationError("Your program couldn't be saved due to a system error. Please try again.");
       operationErrorTimeoutRef.current = setTimeout(() => setOperationError(null), 7000);
     }
 
@@ -558,9 +579,12 @@ export default function Chat() {
       if (result.systemEdit?.applied) {
         setLatestProgram(null);
       }
-      // After a new program build: switch to Program tab to show the result
+      // After a new program build: switch to Program tab to show the result.
+      // Also open the panel (mutation_applied) so the user sees their new program.
       if (result.systemSaved) {
         setNewProgramSignal((n) => n + 1);
+        setRightPanelOpen(true);
+        setMobilePanel("right");
       }
       // After a program modification (edit): switch to Program tab, highlight, and open panel
       if (result.systemEdit?.applied) {
