@@ -1,0 +1,425 @@
+Conduct a full PROGRAMMING INTELLIGENCE AUDIT of TrainChat.
+
+OBJECTIVE:
+Determine whether TrainChat is actually programming like a high-level coach across different goals, sports, and training contexts — or whether it is still relying on generic templates with strong presentation.
+
+This is NOT a UI audit.
+This is NOT a generic bug audit.
+This is NOT mainly about vibe-coding feel.
+
+This is an audit of the training brain itself.
+
+==================================================
+PRIMARY QUESTION
+==================================================
+
+If an athlete or client asked TrainChat for a program based on a specific goal, sport, training age, and constraint set, would the resulting programming reflect real coaching intelligence?
+
+Answer with evidence.
+
+==================================================
+WHAT THIS AUDIT MUST DETERMINE
+==================================================
+
+I want to know whether the agent is genuinely strong at:
+
+1. Exercise selection
+2. Exercise variation selection
+3. Goal-specific program design
+4. Sport-specific programming
+5. Strength vs power vs hypertrophy vs cardio differentiation
+6. Progression logic
+7. Volume / intensity / frequency prescription
+8. Constraint handling
+9. Training age / skill level adaptation
+10. Real coaching judgment
+
+This audit must determine whether the agent is educated enough and differentiated enough to program like an expert rather than a generic AI fitness assistant.
+
+==================================================
+CORE AUDIT STANDARD
+==================================================
+
+TrainChat should not just output “good looking” programs.
+
+It should show evidence that it understands:
+- what kind of adaptation the user is seeking
+- what exercises best fit that adaptation
+- how to vary exercises based on the person and sport
+- how to sequence work within a session
+- how to structure the week
+- how to progress the plan over time
+- how to adjust prescription based on equipment, time, level, and recovery demands
+
+==================================================
+AUDIT AREAS
+==================================================
+
+A. GOAL DIFFERENTIATION
+Audit whether the agent truly distinguishes between major goals.
+
+I want you to test and compare outputs for:
+- maximal strength
+- hypertrophy
+- power
+- speed
+- conditioning / cardio
+- fat loss
+- athletic performance
+- general fitness
+- return to training / low readiness
+- movement quality / beginner rebuilding
+
+For each:
+- does the exercise selection change meaningfully?
+- does the session structure change meaningfully?
+- does volume/intensity change meaningfully?
+- does progression logic change meaningfully?
+- or does it feel like one generic template with minor cosmetic edits?
+
+B. EXERCISE SELECTION QUALITY
+Audit whether the agent chooses exercises appropriately for the stated objective.
+
+I want you to assess:
+- primary lift selection
+- accessory selection
+- plyometric/power exercise selection
+- conditioning modality selection
+- mobility / prep / tissue tolerance selections where appropriate
+- whether exercises fit the user’s stated sport, goal, equipment, and level
+
+Also assess exercise variation quality:
+- does it intelligently choose between barbell, dumbbell, bodyweight, machine, sled, med ball, jumps, sprint work, intervals, etc.?
+- does it default too often to the same exercise families?
+- does it understand when a variation is more appropriate for a beginner, athlete, injured user, or equipment-limited user?
+
+C. SESSION DESIGN QUALITY
+Audit whether a single training session is designed intelligently.
+
+Check:
+- warm-up / prep logic if included
+- order of exercises
+- placement of speed/power work
+- placement of heavy strength work
+- accessory sequencing
+- energy system logic
+- whether sessions reflect real coaching priorities instead of random exercise lists
+
+D. WEEKLY PROGRAM STRUCTURE
+Audit whether the weekly split makes sense.
+
+Check:
+- number of days relative to user request
+- distribution of stress
+- upper/lower/full body logic
+- field sport vs general fitness structure
+- speed + strength compatibility
+- fatigue management across the week
+- whether the weekly structure supports the stated outcome
+
+E. PROGRESSION LOGIC
+Audit whether the program appears to have real progression intelligence.
+
+Check:
+- are progressions specific or vague?
+- does the plan show overload logic?
+- does it account for intensification, accumulation, deloads, exposure, density, or progression type where relevant?
+- do strength programs progress like strength programs?
+- do power programs progress like power programs?
+- do cardio/conditioning plans progress appropriately?
+- does beginner progression differ from advanced progression?
+
+F. SPORT-SPECIFIC INTELLIGENCE
+Audit whether the agent actually changes programming based on sport.
+
+Test sports such as:
+- football
+- basketball
+- baseball
+- soccer
+- track/sprinting
+- combat sport
+- general athlete / no sport
+
+For each:
+- does the program reflect real sport demands?
+- do movement qualities shift appropriately?
+- does conditioning change appropriately?
+- does speed/power emphasis change appropriately?
+- do exercise choices and weekly structure actually adapt?
+
+Flag any places where “sport-specific” output is just generic training with a sport label attached.
+
+G. STRENGTH vs POWER vs CARDIO DIFFERENTIATION
+This is a major priority.
+
+I want explicit evaluation of whether the agent truly knows the difference between:
+- strength programming
+- power programming
+- speed programming
+- conditioning/cardio programming
+
+Check:
+- rep ranges
+- loading logic
+- exercise intent
+- sequencing
+- rest periods
+- density
+- modality selection
+- energy system alignment
+
+For example:
+- power should not look like hypertrophy with jumps added
+- cardio should not just be “circuits”
+- strength should not just be moderate reps on everything
+- speed should not just be generic athletic language
+
+H. CONSTRAINT HANDLING
+Audit whether the agent meaningfully adapts to constraints such as:
+- only dumbbells
+- only bands
+- home gym
+- 20 minutes
+- 3 days per week
+- older adult
+- beginner
+- history of pain
+- limited equipment
+- in-season athlete
+- high fatigue / poor recovery
+
+Check whether the output truly changes or whether the agent simply acknowledges the constraint and then outputs something mostly generic.
+
+I. EDUCATION / KNOWLEDGE GAPS
+Determine whether the agent appears undereducated in any major programming domains.
+
+Examples:
+- weak power prescription
+- weak energy system development
+- poor sprint/speed integration
+- shallow sport-specific logic
+- poor progression detail
+- repetitive exercise database usage
+- poor differentiation between novice and advanced
+- weak autoregulation / fatigue awareness
+- poor transfer logic
+
+I want you to identify where the agent may need more education, more rules, more examples, or stronger programming frameworks.
+
+J. EXERCISE LIBRARY / VARIATION DEPTH
+Audit whether the system is actually using enough exercise variation to feel expert.
+
+Check:
+- does it repeatedly choose the same movements?
+- are speed/power movements underrepresented?
+- are conditioning modalities underrepresented?
+- are sport-relevant drills underrepresented?
+- are variations selected intelligently or randomly?
+- does the library support the quality of programming the product is trying to promise?
+
+If the exercise library itself is limiting programming quality, say so clearly.
+
+==================================================
+MANDATORY TEST SCENARIOS
+==================================================
+
+Run and compare these exact scenarios:
+
+1. Strength goal:
+“Build me a 4-day strength program to increase my squat, bench, and deadlift.”
+
+2. Power goal:
+“Build me a 3-day power program for explosive performance.”
+
+3. Cardio / conditioning goal:
+“Build me a 4-day conditioning plan to improve work capacity and cardio.”
+
+4. Hypertrophy goal:
+“Build me a 5-day hypertrophy program for muscle gain.”
+
+5. Speed + football:
+“I play football and want first-step explosiveness, acceleration, and lower-body power.”
+
+6. Basketball athlete:
+“I play basketball and want vertical power, deceleration, and reactivity.”
+
+7. Soccer athlete:
+“I play soccer and need speed endurance, repeat sprint ability, and lower-body resilience.”
+
+8. Baseball athlete:
+“I play baseball and want rotational power and arm-care-conscious lifting.”
+
+9. Constraint-based:
+“I only have dumbbells, bands, and 20 minutes.”
+
+10. Beginner:
+“I’m new to lifting and want to get stronger safely 3 days a week.”
+
+11. Advanced:
+“I’ve trained seriously for 8 years and want structured strength blocks.”
+
+12. In-season athlete:
+“I’m in season and need to maintain strength without crushing recovery.”
+
+13. Fat loss:
+“I want to lose fat, keep muscle, and train 4 days per week.”
+
+14. Return to training:
+“I haven’t trained consistently in 8 months — rebuild me gradually.”
+
+15. Bad request:
+“I want max effort every day with no deloads.”
+
+For each scenario evaluate:
+- does exercise selection fit?
+- does weekly structure fit?
+- do session design and sequencing fit?
+- does progression fit?
+- does it actually adapt to the goal/sport?
+- does it feel expert or generic?
+
+==================================================
+REQUIRED OUTPUT FORMAT
+==================================================
+
+Return the audit in this exact structure:
+
+1. EXECUTIVE VERDICT
+Choose one:
+- Elite
+- Strong
+- Mixed
+- Weak
+
+Then explain clearly:
+Is TrainChat actually programming like a high-level coach across goals and sports?
+
+2. PROGRAMMING SCORECARD (1–10)
+Score:
+- Goal differentiation
+- Exercise selection quality
+- Exercise variation depth
+- Session design quality
+- Weekly structure quality
+- Progression logic
+- Strength programming
+- Power programming
+- Speed programming
+- Cardio/conditioning programming
+- Sport-specific intelligence
+- Constraint handling
+- Beginner adaptation
+- Advanced adaptation
+- Overall coaching intelligence
+
+3. WHAT THE AGENT DOES WELL
+List the domains where the programming clearly feels intelligent and differentiated.
+
+4. WHAT FEELS GENERIC OR UNDEREDUCATED
+List the domains where the output still feels shallow, templated, repetitive, or underdeveloped.
+
+For each include:
+- issue
+- why it matters
+- severity: Critical / High / Medium
+
+5. GOAL-BY-GOAL BREAKDOWN
+Evaluate separately:
+- strength
+- hypertrophy
+- power
+- speed
+- cardio/conditioning
+- fat loss
+- general fitness
+- return to training
+
+For each answer:
+- does it feel truly differentiated?
+- what is strong?
+- what is weak?
+
+6. SPORT-SPECIFIC BREAKDOWN
+Evaluate separately:
+- football
+- basketball
+- soccer
+- baseball
+- general athlete
+
+For each answer:
+- does the sport materially shape the program?
+- what feels strong?
+- what feels generic?
+
+7. EXERCISE VARIATION / LIBRARY TRUTH
+Answer plainly:
+Is the current exercise variation and library depth sufficient to support elite-level programming?
+Explain where it helps and where it limits the agent.
+
+8. EDUCATION GAP ANALYSIS
+Answer plainly:
+Where does the agent need to become more educated?
+Identify specific domains such as:
+- power development
+- sprint/speed logic
+- conditioning systems
+- progression frameworks
+- sport-specific logic
+- exercise variation
+- fatigue management
+- autoregulation
+- return-to-play / re-entry logic
+or others as needed
+
+9. FINAL PRODUCT TRUTH
+Answer plainly:
+Does TrainChat currently deserve the interface and vibe-coding experience it now has from a programming-intelligence standpoint?
+Explain why or why not.
+
+10. TOP 5 IMPROVEMENTS
+List the five highest-leverage improvements that would most strengthen the agent’s actual coaching/programming intelligence.
+
+For each include:
+- exact improvement
+- why it matters
+- expected effect on program quality
+
+11. FINAL RECOMMENDATION
+Should the next move be:
+- educate the agent more deeply
+- expand the exercise library
+- add stronger programming rules
+- improve sport-specific frameworks
+- improve progression logic
+- or some combination?
+
+Prioritize the next moves clearly.
+
+==================================================
+AUDIT RULES
+==================================================
+
+- Be brutally honest
+- Do not confuse polished presentation with intelligent programming
+- Judge the output like a real coach would
+- If exercise choices are repetitive, say so
+- If sport specificity is shallow, say so
+- If power/cardio/speed look underdeveloped, say so
+- If strength programming is good, say so
+- Distinguish between:
+  - good-looking output
+  - truly expert programming
+- Prioritize training logic over app polish
+
+==================================================
+FINAL INSTRUCTION
+==================================================
+
+Act like a senior strength coach, performance coach, and programming auditor.
+
+You are not judging whether TrainChat is “pretty good for AI.”
+You are judging whether it actually programs like an expert across strength, power, cardio, sport, and real-world constraints.
+
+Audit it accordingly.
