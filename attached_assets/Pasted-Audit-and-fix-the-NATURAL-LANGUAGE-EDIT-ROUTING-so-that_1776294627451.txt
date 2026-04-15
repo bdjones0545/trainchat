@@ -1,0 +1,191 @@
+Audit and fix the NATURAL-LANGUAGE EDIT ROUTING so that all plan-refinement requests actually go through the OpenAI-backed agent orchestration path.
+
+OBJECTIVE:
+Determine whether user refinement requests like:
+- “I want to focus more on endurance”
+- “I want to add more exercises to day 1”
+- “make this session harder”
+- “add more upper body work”
+
+are truly being routed through the OpenAI-powered agent pipeline.
+
+If they are not, fix the routing so they do.
+
+==================================================
+PRIMARY PROBLEM
+==================================================
+
+Current behavior strongly suggests that some edit/refinement requests are still being handled by a rigid local edit resolver instead of the OpenAI agent.
+
+Evidence:
+- requests fail with strict entity-resolution language
+- broad coaching requests are treated like unresolved database edits
+- behavior does not feel agentic
+
+This breaks the core product promise.
+
+==================================================
+GOAL
+==================================================
+
+Any natural-language request that modifies the training system should pass through the OpenAI-backed reasoning/orchestration path before mutation is attempted.
+
+That includes:
+- targeted edits
+- session structural edits
+- full program transformations
+- focus shifts (endurance, power, conditioning, etc.)
+
+==================================================
+TASK 1 — TRACE THE ACTUAL REQUEST PATH
+==================================================
+
+Trace the exact flow for these user actions:
+- typing into the main agent input on chat page
+- tapping Refine My Plan
+- making edits from the system page
+- any quick edit actions that accept free text
+
+For each path, determine:
+- does it hit OpenAI-backed orchestration?
+- does it hit ai.ts / generateAIResponse / equivalent?
+- or does it go straight to a local training-system edit resolver?
+
+I want a clear map of:
+- which edit surfaces are truly agent-powered
+- which are not
+
+==================================================
+TASK 2 — IDENTIFY NON-AGENT SHORTCUT PATHS
+==================================================
+
+Find any path where natural-language edits bypass OpenAI reasoning and go directly to:
+- entity resolution
+- local mutation planning
+- direct training-system/edit logic
+- deterministic edit handlers
+
+Especially inspect:
+- Refine My Plan flow
+- training-system-edit endpoints
+- quick edit handlers
+- system page edit actions
+
+If any natural-language request bypasses the agent path, flag it.
+
+==================================================
+TASK 3 — ROUTE NATURAL-LANGUAGE EDITS THROUGH OPENAI
+==================================================
+
+For any free-text refinement request, route through the OpenAI-backed orchestration layer first.
+
+This layer should:
+- interpret the request
+- classify intent
+- determine whether it is:
+  - TARGETED_EDIT
+  - SESSION_TRANSFORMATION
+  - PROGRAM_TRANSFORMATION
+- generate a structured mutation plan
+- only then pass to mutation/validation layer
+
+The mutation layer should not be the first interpreter of natural language.
+
+==================================================
+TASK 4 — KEEP QUICK BUTTON ACTIONS LIGHTWEIGHT WHERE APPROPRIATE
+==================================================
+
+Structured one-tap actions like:
+- +Set
+- -Set
+- Harder
+- Easier
+may remain fast-path if they are deterministic
+
+BUT:
+- if they produce ambiguous or fake results
+- or if they rely on natural-language placeholders
+they must escalate to the OpenAI-backed interpretation path
+
+Rule:
+Buttons can stay local only if they produce real, deterministic, validated edits.
+Anything language-like or broad must go through the agent.
+
+==================================================
+TASK 5 — FIX FAILURE LANGUAGE
+==================================================
+
+If the request did go through OpenAI and still cannot be applied, the failure response should sound agentic and context-aware.
+
+It should NOT default to:
+“I couldn’t resolve that to a specific exercise/session/block...”
+
+For broad requests, failures should instead look like:
+- clarification questions
+- scope explanations
+- coaching-style guidance
+
+But the bigger goal is to reduce these failures by routing correctly.
+
+==================================================
+TASK 6 — ADD DEBUG VISIBILITY
+==================================================
+
+Add developer-visible tracing so it is obvious whether a given request used:
+- OpenAI orchestration
+- local deterministic edit path
+- hybrid path
+
+I want to be able to inspect, in development:
+- request text
+- chosen route
+- chosen intent type
+- whether OpenAI was called
+- resulting mutation plan
+
+Do not expose ugly debug text in production UI.
+
+==================================================
+TASK 7 — TEST REQUIRED PROMPTS
+==================================================
+
+Run these exact prompts through the actual live edit flow:
+
+1. “I want to focus more on endurance”
+2. “I want to add more exercises to day 1”
+3. “Make this session harder”
+4. “Add more upper body work”
+5. “Make this more explosive”
+6. “Reduce the overall volume”
+
+For each confirm:
+- did it go through OpenAI-backed reasoning?
+- did it classify correctly?
+- did it produce a structural edit instead of entity-resolution failure?
+
+==================================================
+TASK 8 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. Which edit/refinement paths were already agent-powered
+2. Which paths were bypassing the agent
+3. What routing changes were made
+4. How natural-language edits now reach OpenAI
+5. Which button/fast-path actions remain deterministic
+6. What debug tracing was added
+7. Which previously brittle prompts now behave agentically
+
+==================================================
+FINAL STANDARD
+==================================================
+
+When a user makes a natural-language refinement request, TrainChat must feel like an OpenAI-powered agent interpreting and modifying the system.
+
+It must not feel like a local entity matcher pretending to be an agent.
+
+If a request is broad, structural, or coaching-style:
+→ it should go through the OpenAI reasoning layer first.
+
+Implement this now.
