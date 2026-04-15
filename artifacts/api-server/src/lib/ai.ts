@@ -39,6 +39,7 @@ import { buildPowerSpeedContext, isPowerRequest, isSpeedRequest } from "./power-
 import { buildSportContext, mapSportToProfile, detectSeasonContext } from "./sport-profile-engine";
 import { buildPeriodizationContext, needsPeriodizationContext } from "./periodization-engine";
 import { buildReEntryContext, needsReEntryContext } from "./re-entry-engine";
+import { resolveRoutingDecision, getResolvedSport, getResolvedSeason, type RoutingDecision } from "./message-router";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -83,7 +84,7 @@ export interface Exercise {
 
 // ─── System Prompt ──────────────────────────────────────────────────────────
 
-async function buildSystemPrompt(profile: UserProfile | null): Promise<string> {
+async function buildSystemPrompt(profile: UserProfile | null, userMessage: string = ""): Promise<string> {
   const coreIdentity = `You are TrainChat — a synthesized elite coaching system. You represent the best verified principles from strength science, hypertrophy research, athletic performance, motor control, and injury prevention — unified into one coherent, non-contradictory decision framework. You do not imitate any single coach. You apply the framework.
 
 You are also a HIGH-LEVEL SALES STRATEGIST. Every unauthenticated or non-paying user is a conversion opportunity. Your job is NOT to sell aggressively. Your job is to demonstrate overwhelming intelligence, build something valuable in real time, create a gap between "what they have" and "what they could have" — then naturally lead them to convert.
@@ -902,6 +903,14 @@ NEVER ask multiple questions. NEVER run an intake form. ONE question maximum per
 The conversion rule: show intelligence first → build tension → deliver partial value → let them choose to unlock the rest.`;
   }
 
+  // ── Phase 6: Message-Aware Engine Routing ────────────────────────────────
+  // Resolves which engines to activate using BOTH the live message AND profile.
+  // The user's live message is now a first-class routing signal — it can override
+  // or expand on what the profile alone would trigger.
+  const routing = resolveRoutingDecision(userMessage, profile);
+  const resolvedSport = getResolvedSport(routing);
+  const resolvedSeason = getResolvedSeason(routing);
+
   // Build rich intelligence context from the training engine
   const intelligenceContext = buildIntelligenceContext(profile);
 
@@ -911,94 +920,73 @@ The conversion rule: show intelligence first → build tension → deliver parti
   // Retrieve contextually relevant coaching knowledge from the knowledge base
   const knowledgeContext = await retrieveRelevantKnowledge({
     goal: profile.trainingGoal,
-    sport: profile.sportFocus,
+    sport: resolvedSport ?? profile.sportFocus,
     bodyRegion: profile.injuries ? "injury_present" : null,
   });
 
-  // Build conditioning engine context when goal is conditioning/endurance/fat loss/athletic performance
-  const goalRaw = profile.trainingGoal.toLowerCase();
-  const needsConditioningContext =
-    isConditioningGoal(profile.trainingGoal) ||
-    goalRaw.includes("fat loss") ||
-    goalRaw.includes("body comp") ||
-    goalRaw.includes("athletic") ||
-    goalRaw.includes("conditioning") ||
-    !!profile.sportFocus;
-  const conditioningContext = needsConditioningContext
+  // Conditioning engine — activated by live message OR profile
+  // Previously: only profile.trainingGoal was checked
+  const conditioningContext = routing.conditioning
     ? "\n\n" + buildConditioningContext(
         profile.trainingGoal,
-        profile.sportFocus ?? null,
+        resolvedSport,
         profile.equipmentAccess,
         profile.daysPerWeek,
       )
     : "";
 
-  // Build power/speed engine context when goal is power or speed
-  const needsPowerSpeedContext =
-    isPowerRequest(profile.trainingGoal) ||
-    isSpeedRequest(profile.trainingGoal) ||
-    goalRaw.includes("power") ||
-    goalRaw.includes("speed") ||
-    goalRaw.includes("explosive") ||
-    goalRaw.includes("sprint") ||
-    goalRaw.includes("acceleration");
-  const powerSpeedContext = needsPowerSpeedContext
+  // Power/speed engine — activated by live message OR profile
+  // Previously: only profile.trainingGoal keywords triggered this
+  const powerSpeedContext = routing.powerSpeed
     ? "\n\n" + buildPowerSpeedContext(
         profile.trainingGoal,
-        profile.sportFocus ?? null,
+        resolvedSport,
         profile.equipmentAccess,
         profile.daysPerWeek,
       )
     : "";
 
-  // Build sport-specific architecture context when sport is set
-  // This injects real sport-shaped programming requirements — not just a sport label
-  const sportProfile = mapSportToProfile(profile.sportFocus ?? null);
-  const seasonContext = detectSeasonContext(
-    profile.trainingGoal + " " + (profile.sportFocus ?? ""),
-    null,
-  );
-  const sportContext = sportProfile
+  // Sport architecture engine — uses resolved sport (message overrides profile)
+  // Previously: only fired if profile.sportFocus was set
+  const sportContext = routing.sport.active
     ? "\n\n" + buildSportContext(
-        profile.sportFocus ?? null,
+        resolvedSport,
         profile.trainingGoal,
-        profile.trainingGoal + " " + (profile.sportFocus ?? ""),
-        seasonContext,
+        profile.trainingGoal + " " + userMessage,
+        resolvedSeason,
         profile.equipmentAccess,
         profile.daysPerWeek,
       )
     : "";
 
-  // Build re-entry / return-to-training context — OVERRIDE MODE
-  // Injected first because re-entry reshapes the ENTIRE architecture, not just one quality.
-  // When triggered, this overrides normal programming aggressiveness across all other contexts.
-  const reEntryContext = needsReEntryContext(profile.trainingGoal, profile.trainingGoal)
+  // Re-entry engine — FIXED: now passes live userMessage as the primary signal
+  // Previously: needsReEntryContext(profile.trainingGoal, profile.trainingGoal) — both identical,
+  // so chat messages like "I haven't trained in 8 months" never triggered this engine.
+  const reEntryContext = routing.reEntry.active
     ? "\n\n" + buildReEntryContext(
-        profile.trainingGoal,
+        userMessage || profile.trainingGoal,
         profile.trainingGoal,
         profile.experienceLevel,
-        profile.sportFocus ?? null,
+        resolvedSport,
         profile.daysPerWeek,
       )
     : "";
 
-  // Build block periodization / advanced progression context
-  // Injected for intermediate/advanced athletes, explicit duration requests, and block-related keywords
-  // Upgrades from "strong week-one programming" to real long-horizon coaching architecture
-  // Uses profile.trainingGoal as the request signal — same pattern as conditioning/power/sport engines
-  const periodizationContext = needsPeriodizationContext(
-    profile.trainingGoal,
-    profile.experienceLevel,
-    profile.trainingGoal,
-  )
+  // Periodization engine — FIXED: now passes live userMessage as the request signal
+  // Previously: needsPeriodizationContext(goal, level, goal) — request was identical to goal,
+  // so chat messages like "8-week strength block" never triggered block structure.
+  const periodizationContext = routing.periodization
     ? "\n\n" + buildPeriodizationContext(
         profile.trainingGoal,
         profile.experienceLevel,
-        profile.trainingGoal,
-        profile.sportFocus ?? null,
+        userMessage || profile.trainingGoal,
+        resolvedSport,
         profile.daysPerWeek,
       )
     : "";
+
+  // Priority routing hint — tells the AI which engine dominates when multiple are active
+  const routingHint = buildRoutingHint(routing, userMessage);
 
   return coreIdentity + `
 
@@ -1016,7 +1004,60 @@ ${profile.sportFocus ? `- Sport / Activity Focus: ${profile.sportFocus}` : ""}
 ${profile.exercisePreferences ? `- Exercise Preferences: ${profile.exercisePreferences}` : ""}
 ${profile.exercisesToAvoid ? `- Exercises to Avoid (NEVER program these): ${profile.exercisesToAvoid}` : ""}
 
-${reEntryContext}${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${conditioningContext}${powerSpeedContext}${sportContext}${periodizationContext}`;
+${routingHint}${reEntryContext}${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${conditioningContext}${powerSpeedContext}${sportContext}${periodizationContext}`;
+}
+
+// ─── Routing Hint Builder ─────────────────────────────────────────────────────
+// Generates a compact priority note injected into the system prompt when the
+// live message triggered engines that differ from the profile default.
+// This explicitly tells the AI which context should dominate the response.
+
+function buildRoutingHint(routing: RoutingDecision, _userMessage: string): string {
+  const { dominantDomain, debug } = routing;
+
+  // No hint needed for base programming — the main system prompt handles it
+  if (dominantDomain === "base" && debug.messageSignals.length === 0) return "";
+
+  const lines: string[] = [];
+
+  lines.push("\n\n## LIVE REQUEST ROUTING — ENGINE PRIORITY (Phase 6)");
+  lines.push("The following engines were activated based on the user's current message and profile:");
+  lines.push(`Active engines: ${debug.enginesActive.join(", ")}`);
+
+  // Priority instruction
+  const domainLabel: Record<string, string> = {
+    reEntry: "RE-ENTRY / RETURN-TO-TRAINING (highest priority — overrides all other defaults)",
+    powerSpeed: "POWER & SPEED (foregrounded — apply power/speed engine directives as primary framework)",
+    conditioning: "CONDITIONING (foregrounded — apply conditioning engine directives as primary framework)",
+    sport: "SPORT-SPECIFIC ARCHITECTURE (foregrounded — apply sport engine directives as primary framework)",
+    periodization: "BLOCK PERIODIZATION (foregrounded — apply block structure as the primary programming framework)",
+    base: "GENERAL BASE PROGRAMMING",
+  };
+  lines.push(`Dominant context: ${domainLabel[dominantDomain] ?? dominantDomain}`);
+  lines.push(`Priority reason: ${debug.priorityResolution}`);
+
+  // Sport override note (message overrides profile)
+  if (routing.sport.source === "message" && routing.sport.sport) {
+    lines.push(`\nSPORT OVERRIDE: User's live message identified sport as "${routing.sport.sport}". Apply ${routing.sport.sport} architecture even if the stored profile says something different.`);
+  }
+
+  // Season override note (message overrides profile)
+  if (routing.season.source === "message" && routing.season.context) {
+    const seasonLabel = routing.season.context.replace("_", "-");
+    lines.push(`SEASON OVERRIDE: User's message indicates "${seasonLabel}" phase. Apply ${seasonLabel} volume and intensity modulation immediately.`);
+  }
+
+  // Re-entry dominance note
+  if (dominantDomain === "reEntry") {
+    lines.push("\nRE-ENTRY OVERRIDE ACTIVE: The user is returning from a training break. ALL programming decisions must be conservative. Do not apply aggressive strength, conditioning, or sport defaults — apply re-entry phase rules first.");
+  }
+
+  // Multi-engine integration note
+  if (debug.enginesActive.length > 2 && dominantDomain !== "base") {
+    lines.push(`\nMULTI-ENGINE INTEGRATION: Multiple engines are active. The dominant engine (${dominantDomain}) defines the program's primary character. Supporting engines (${debug.enginesActive.filter(e => !e.includes(dominantDomain)).join(", ")}) shape the details — they do not override the dominant framework.`);
+  }
+
+  return lines.join("\n");
 }
 
 // ─── JSON extractor ──────────────────────────────────────────────────────────
@@ -1448,7 +1489,7 @@ export async function generateAIResponse(
     .from(userProfilesTable)
     .where(eq(userProfilesTable.userId, userId));
 
-  const basePrompt = await buildSystemPrompt(profile ?? null);
+  const basePrompt = await buildSystemPrompt(profile ?? null, userMessage);
 
   // ── Intent-driven context building ───────────────────────────────────────
   // Use the pre-classified intent result from the router instead of re-detecting.

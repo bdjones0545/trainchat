@@ -908,5 +908,5 @@ export function isConditioningRequest(goal: string, request?: string): boolean {
 
 export function isConditioningGoal(rawGoal: string): boolean {
   const g = rawGoal.toLowerCase();
-  return /endurance|conditioning|cardio|aerobic|stamina|work.?capacity|engine/.test(g);
+  return /endurance|conditioning|cardio|aerobic|stamina|work.?capacity|engine|gas.?tank|gassed|game.?shape|game.?fitness|repeat.?sprint|vo2|lactate|threshold|out.?of.?breath|improve.*cardio|build.*cardio|more.*cardio|fitness.*base|base.*fitness/.test(g);
 }

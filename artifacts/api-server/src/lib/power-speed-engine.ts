@@ -1045,7 +1045,7 @@ export function isPowerRequest(goal: string, request?: string): boolean {
   const g = (goal + " " + (request ?? "")).toLowerCase();
   return (
     /\bpower\b/.test(g) ||
-    /explosive|contrast.training|complex.training|pap|post.activation|force.velocity|rate.of.force|rfd|plyometric/.test(g)
+    /explosive(ness)?|contrast.training|complex.training|pap|post.activation|force.velocity|rate.of.force|rfd|plyometric|vertical.jump|\bjump\b|\bjumps\b|jump.higher|bounce|reactiv(e|ity)|first.?step|box.jump|broad.jump|jumper|more.explosive|more.power/.test(g)
   );
 }
 
@@ -1053,7 +1053,7 @@ export function isSpeedRequest(goal: string, request?: string): boolean {
   const g = (goal + " " + (request ?? "")).toLowerCase();
   return (
     /\bspeed\b/.test(g) ||
-    /\bsprint\b|acceleration|max.velocity|change.of.direction|first.step|quickness|agility|linear.speed/.test(g)
+    /\bsprint\b|acceleration|max.velocity|change.of.direction|\bcod\b|first.?step|quickness|agility|linear.speed|deceleration|decelerating|sprint.work|more.speed|faster|speed.work|speed.training|sprint.training/.test(g)
   );
 }
 

@@ -1,0 +1,466 @@
+We are now implementing:
+
+PHASE 6 — MESSAGE-AWARE ENGINE ROUTING LAYER
+
+OBJECTIVE:
+Fix the final integration gap in TrainChat by making all programming engines respond to the user’s LIVE message, not just stored onboarding/profile fields.
+
+This is not a new intelligence phase.
+This is the routing layer that finally unlocks the intelligence already built in Phases 1–5.
+
+==================================================
+CORE PROBLEM
+==================================================
+
+Right now, TrainChat has strong programming engines for:
+
+- conditioning / energy systems
+- power / speed
+- sport-specific architecture
+- advanced progression / block periodization
+- re-entry / return-to-training
+
+But these engines are still being triggered primarily from stored profile context, such as:
+- profile.trainingGoal
+- stored sport
+- stored onboarding selections
+
+This causes a major product failure:
+
+A user can ask for something NEW in the live chat —
+for example:
+- “Add more speed work”
+- “I’m in-season now”
+- “I haven’t trained in 8 months”
+- “Make this more soccer-specific”
+- “Build my conditioning”
+
+—and the system may fail to activate the correct engine, because the trigger logic is reading stale profile context instead of the current message.
+
+This makes the product feel less adaptive than it actually is.
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+A true AI performance architect must adapt to what the user is asking for RIGHT NOW.
+
+The user’s live message must be a first-class routing signal.
+
+Stored profile context is useful, but it must be secondary to the current request.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Refactor TrainChat so that every engine-routing decision is based on:
+
+1. the user’s live message
+2. the user’s stored profile
+3. resolved priority rules between them
+
+The system should use BOTH sources intelligently, but the live message must be able to override or reshape the profile-driven default.
+
+==================================================
+REQUIRED ARCHITECTURE
+==================================================
+
+Build a routing layer where all engine trigger functions receive both:
+
+- userMessage
+- profileContext
+
+instead of only profile-derived fields
+
+Examples of the kind of API shape I want:
+
+needsConditioningContext(userMessage, profile)
+needsPowerContext(userMessage, profile)
+needsSpeedContext(userMessage, profile)
+needsSportSpecificContext(userMessage, profile)
+needsReEntryContext(userMessage, profile)
+detectSeasonContext(userMessage, profile)
+
+Use existing naming where appropriate, but the behavior must match this standard.
+
+==================================================
+TASK 1 — AUDIT ALL ENGINE TRIGGER CALL SITES
+==================================================
+
+Find every place in ai.ts (and related orchestration files) where engine activation is decided.
+
+Audit every trigger call related to:
+- conditioning
+- power
+- speed
+- sport
+- season / in-season context
+- re-entry / return-to-training
+- progression / advanced periodization if applicable
+
+I want all relevant trigger decisions mapped and patched.
+
+==================================================
+TASK 2 — PASS LIVE USER MESSAGE INTO ALL ENGINE TRIGGERS
+==================================================
+
+Every engine trigger must now receive the current user message.
+
+Current anti-pattern example:
+needsReEntryContext(profile.trainingGoal, profile.trainingGoal)
+
+Target pattern:
+needsReEntryContext(userMessage, profile)
+
+Apply the same principle across all five major engines and any relevant sub-engines.
+
+The user message should always be available to:
+- goal detection
+- sport detection
+- season detection
+- re-entry detection
+- conditioning detection
+- speed/power detection
+- advanced / periodization intent detection if applicable
+
+==================================================
+TASK 3 — FIX THE RE-ENTRY DUPLICATE PARAMETER BUG
+==================================================
+
+There is a known critical bug:
+needsReEntryContext currently receives duplicate profile-based data instead of the actual user request.
+
+Fix it so it receives:
+- the live user message
+- the relevant profile context
+
+This is a high-priority one-line unlock if still present.
+
+==================================================
+TASK 4 — MAKE SPORT / SEASON DETECTION MESSAGE-AWARE
+==================================================
+
+Sport and season context must no longer be static profile-only concepts.
+
+Examples that must now work:
+
+- “I’m in-season now”
+- “I play soccer”
+- “This is for baseball”
+- “I’m a football lineman”
+- “I’m a pitcher”
+- “I want this to be more basketball-specific”
+
+Even if the stored profile says something else, the live request must trigger the relevant engine behavior.
+
+If the system needs to reconcile mismatch between stored profile and live message, use priority rules (Task 5).
+
+==================================================
+TASK 5 — ADD CONTEXT PRIORITY RESOLUTION
+==================================================
+
+When multiple contexts are present, add a simple priority system so the right engine dominates.
+
+Required priority concept:
+
+1. SAFETY / RE-ENTRY / RECOVERY-SENSITIVE CONTEXT
+2. EXPLICIT LIVE MESSAGE REQUEST
+3. SPORT-SPECIFIC CONTEXT
+4. SEASON CONTEXT
+5. PROFILE DEFAULT GOAL / PROFILE DEFAULT SPORT
+6. GENERAL BASE PROGRAMMING RULES
+
+Examples:
+
+If profile says:
+- strength
+
+But live message says:
+- “Add more speed work”
+
+Then:
+- speed engine must fire
+- profile should inform background context, not override the live request
+
+If profile says:
+- off-season football
+
+But user says:
+- “I’m in-season now”
+
+Then:
+- in-season modulation must override stored off-season assumptions
+
+If user says:
+- “I haven’t trained in 8 months”
+
+Then:
+- re-entry logic must override aggressive strength or performance defaults
+
+Build this resolution cleanly and explicitly.
+
+==================================================
+TASK 6 — EXPAND TRIGGER VOCABULARY FOR IMPLICIT REQUESTS
+==================================================
+
+Right now some trigger functions likely depend on overly literal keywords.
+
+Expand detection so the live message can activate engines from realistic user language.
+
+Examples that should trigger SPEED / POWER:
+- explosive
+- explosiveness
+- first step
+- quickness
+- speed
+- sprint speed
+- acceleration
+- deceleration
+- reactivity
+- bounce
+- vertical
+- jump
+- agility
+- COD
+- change of direction
+
+Examples that should trigger CONDITIONING:
+- cardio
+- work capacity
+- game shape
+- fitness
+- gas tank
+- conditioning
+- endurance
+- engine
+- stamina
+- repeat sprint
+- gassed late in games
+
+Examples that should trigger RE-ENTRY:
+- getting back into it
+- starting over
+- fell off
+- haven’t trained in months
+- coming back
+- inconsistent
+- layoff
+- rebuilding
+
+Examples that should trigger ADVANCED / PERIODIZATION:
+- blocks
+- periodized
+- structured progression
+- peak
+- peaking
+- advanced
+- 8 years training
+- serious lifter
+- strength block
+
+Use phrase-aware detection, not just one-word matching where possible.
+
+==================================================
+TASK 7 — SUPPORT LIVE MESSAGE OVERRIDES WITHOUT DESTROYING PROFILE VALUE
+==================================================
+
+The stored profile still matters.
+
+The goal is NOT to ignore profile data.
+The goal is to combine it correctly.
+
+Examples:
+
+If profile says:
+- soccer athlete, goal = strength
+
+And live message says:
+- “I want more conditioning”
+
+Then:
+- sport context remains soccer
+- live request shifts programming toward conditioning
+- output should become soccer-conditioned conditioning, not generic strength
+
+If profile says:
+- fat loss
+
+And live message says:
+- “I’m returning after 6 months off”
+
+Then:
+- goal remains fat loss
+- re-entry overrides aggressiveness
+- output becomes re-entry fat-loss programming
+
+This combined routing behavior is the target.
+
+==================================================
+TASK 8 — IMPROVE ENGINE INJECTION ORCHESTRATION
+==================================================
+
+When multiple engines are activated, prevent context saturation.
+
+Build a cleaner orchestration layer so:
+- the dominant request type is foregrounded
+- supporting engines shape the details
+- lower-priority context does not dilute the answer
+
+Examples:
+
+Primary:
+- re-entry
+
+Secondary:
+- soccer
+
+Tertiary:
+- conditioning
+
+Output should feel like:
+- re-entry soccer conditioning
+not
+- three disconnected instruction stacks fighting each other
+
+Use prioritization and clean prompt assembly.
+
+==================================================
+TASK 9 — ADD DEBUG / INSPECTION VISIBILITY
+==================================================
+
+Add temporary or developer-friendly visibility into what engines fired for a given request.
+
+This can be:
+- logs
+- debug output in development
+- structured trace object
+- internal metadata
+
+I want to be able to inspect:
+- what the live message triggered
+- what the profile contributed
+- which engine won priority
+- what contexts were injected
+
+This is critical for validating the routing layer during testing.
+
+Make sure this is safe and does not leak ugly debug info into the user experience in production.
+
+==================================================
+TASK 10 — VALIDATE MESSAGE-AWARE ROUTING WITH STRESS TESTS
+==================================================
+
+Test these exact scenarios where the profile and live message could conflict or diverge:
+
+1. Profile goal = strength
+User message:
+“Add more speed work.”
+
+Expected:
+- speed engine fires
+- output becomes speed-aware, not just strength
+
+2. Profile goal = hypertrophy
+User message:
+“Build my conditioning.”
+
+Expected:
+- conditioning engine fires
+- output includes real energy system work
+
+3. Profile sport = football
+User message:
+“I’m in-season now.”
+
+Expected:
+- in-season modulation overrides default off-season assumptions
+
+4. Profile goal = general fitness
+User message:
+“I haven’t trained in 8 months.”
+
+Expected:
+- re-entry engine fires
+- conservative ramp overrides generic fitness
+
+5. Profile sport = general athlete
+User message:
+“This is really for soccer.”
+
+Expected:
+- soccer sport architecture fires
+
+6. Profile goal = strength
+User message:
+“I want vertical power and deceleration for basketball.”
+
+Expected:
+- power/speed engine fires
+- basketball architecture fires
+- output is not generic strength
+
+7. Profile goal = fat loss
+User message:
+“I only have dumbbells and 20 minutes, and I’m getting back into it.”
+
+Expected:
+- constraint logic
+- re-entry logic
+- fat-loss goal
+all combine coherently
+
+==================================================
+FILES / AREAS TO AUDIT
+==================================================
+
+Audit and patch the relevant files, likely including:
+- ai.ts
+- intent detection / routing utilities
+- engine trigger functions
+- season detection helpers
+- sport detection helpers
+- context injection builders
+- any orchestration functions that assemble engine prompts
+- relevant debug/logging helpers
+
+Use the existing architecture wherever possible.
+This is an integration fix, not a rewrite.
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What engine trigger call sites were found and updated
+2. Which functions now receive userMessage + profile
+3. What the priority resolution rules are
+4. What trigger vocabularies were expanded
+5. How sport and season detection now handle live-message overrides
+6. How re-entry detection was fixed
+7. What debugging/inspection support was added
+8. What test cases now pass that previously failed
+9. Any remaining routing edge cases or integration debt
+
+==================================================
+FINAL STANDARD
+==================================================
+
+A user should be able to say something new in the live chat and have TrainChat adapt immediately.
+
+Examples:
+- “Add more speed work”
+- “I’m in-season now”
+- “I haven’t trained in 8 months”
+- “Make this more soccer-specific”
+- “Build my conditioning”
+
+And the correct engines should fire based on that live request, even if the stored profile says something different.
+
+TrainChat must no longer behave like:
+“elite programming locked behind stale onboarding context.”
+
+It must behave like:
+“a real AI performance architect that adapts to what I ask right now.”
+
+Implement this now.
