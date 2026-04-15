@@ -643,24 +643,58 @@ Keep it helpful and intelligent, never promotional.`;
   }
 
   // ── VIBE EDIT MODE ────────────────────────────────────────────────────────
-  // If the user has an active training system in the DB AND the intent is a
-  // system edit (EDIT_PROGRAM or ADJUST_FOR_PAIN), bypass the draft-program chat
-  // flow and directly edit the real training system. This is the "vibe coding" UX.
-  if (hasActiveSystem && isVibeEditIntent(intentResult)) {
+  // Handles all edit intents (EDIT_PROGRAM, ADJUST_FOR_PAIN, ADJUST_FOR_READINESS).
+  // Resolution order:
+  //   1. Active DB system exists   → edit directly (fast path)
+  //   2. No DB system, chat program exists → auto-create system first, then edit
+  //   3. No program at all         → return truthful "build first" message
+  if (isVibeEditIntent(intentResult)) {
+    let resolvedSystem: typeof activeSystem = activeSystem;
+    let systemAutoCreatedForEdit = false;
+
+    if (!resolvedSystem && latestStructuredProgram) {
+      try {
+        resolvedSystem = await createTrainingSystemFromProgram(userId, latestStructuredProgram);
+        systemAutoCreatedForEdit = true;
+        logger.info({ userId, systemId: resolvedSystem.id }, "[VibeEdit] Auto-created system from chat program before edit");
+      } catch (createErr: any) {
+        logger.error({ err: createErr?.message }, "[VibeEdit] Auto-create before edit failed — falling back to build-first response");
+      }
+    }
+
+    if (!resolvedSystem) {
+      const noProgramContent = `You don't have a training program yet. Once you build one, I can apply targeted changes directly to your system.\n\nTry something like: "Build me a 3-day strength program" — then I can handle any adjustments you need.`;
+      const [assistantMsg] = await db.insert(messagesTable).values({
+        conversationId: params.data.id, role: "assistant", content: noProgramContent, structuredData: null,
+      }).returning();
+      await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+      if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+        stripeStorage.incrementMessageCount(userId).catch(() => {});
+      }
+      res.json({
+        userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
+        assistantMessage: { id: assistantMsg.id, conversationId: assistantMsg.conversationId, role: assistantMsg.role, content: assistantMsg.content, createdAt: assistantMsg.createdAt.toISOString(), structuredData: null },
+        planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+        intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
+        systemSaved: false,
+      });
+      return;
+    }
+
     logger.info(
-      { userId, systemId: activeSystem!.id, intentType: intentResult.type, editSubtype: intentResult.editSubtype },
+      { userId, systemId: resolvedSystem.id, intentType: intentResult.type, editSubtype: intentResult.editSubtype, wasAutoCreated: systemAutoCreatedForEdit },
       "[VibeEdit] Entering vibe edit mode — editing real training system from chat"
     );
 
     try {
       // Load full system + decision memory in parallel
       const [fullSystem, decisionMemory] = await Promise.all([
-        getFullTrainingSystem(activeSystem!.id),
-        buildDecisionMemory(activeSystem!.id, userId).catch(() => null),
+        getFullTrainingSystem(resolvedSystem.id),
+        buildDecisionMemory(resolvedSystem.id, userId).catch(() => null),
       ]);
 
       if (!fullSystem) {
-        logger.warn({ systemId: activeSystem!.id }, "[VibeEdit] Could not load full system — falling back to AI");
+        logger.warn({ systemId: resolvedSystem.id }, "[VibeEdit] Could not load full system — falling back to AI");
         // Fall through to regular AI response below
       } else {
         // Interpret + apply the edit
@@ -724,7 +758,7 @@ Keep it helpful and intelligent, never promotional.`;
           // Log the change to system_change_log (only reached when verification passes)
           const changeLogId = await createChangeLogEntry({
             userId,
-            trainingSystemId: activeSystem!.id,
+            trainingSystemId: resolvedSystem.id,
             source: "ai_edit",
             intent: editPlan.intent,
             scope: editPlan.scope,
@@ -757,7 +791,7 @@ Keep it helpful and intelligent, never promotional.`;
             _type: "system_edit" as const,
             changeSummary: editResult.changeSummary,
             changedIds: editResult.changedIds,
-            systemId: activeSystem!.id,
+            systemId: resolvedSystem.id,
             changeLogId,
             verificationStatus: verification.status,
           };
@@ -801,7 +835,7 @@ Keep it helpful and intelligent, never promotional.`;
               changeSummary: editResult.changeSummary,
               changedIds: editResult.changedIds,
               changeTargets: editResult.changeTargets,
-              systemId: activeSystem!.id,
+              systemId: resolvedSystem.id,
               changeLogId,
               verificationStatus: verification.status as VerificationStatus,
               requiresReview: verification.requiresReview ?? false,
@@ -1545,11 +1579,44 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   }
 
   // ── Vibe Edit Mode ────────────────────────────────────────────────────────
-  if (hasActiveSystem && isVibeEditIntent(intentResult)) {
+  // Resolution order:
+  //   1. Active DB system exists   → edit directly
+  //   2. No DB system, chat program exists → auto-create system first, then edit
+  //   3. No program at all         → return truthful "build first" SSE message
+  if (isVibeEditIntent(intentResult)) {
+    let resolvedSystem: typeof activeSystem = activeSystem;
+    let systemAutoCreatedForEdit = false;
+
+    if (!resolvedSystem && latestStructuredProgram) {
+      try {
+        resolvedSystem = await createTrainingSystemFromProgram(userId, latestStructuredProgram);
+        systemAutoCreatedForEdit = true;
+        logger.info({ userId, systemId: resolvedSystem.id }, "[VibeEdit:stream] Auto-created system from chat program before edit");
+      } catch (createErr: any) {
+        logger.error({ err: createErr?.message }, "[VibeEdit:stream] Auto-create before edit failed — returning build-first message");
+      }
+    }
+
+    if (!resolvedSystem) {
+      const noProgramContent = `You don't have a training program yet. Once you build one, I can apply targeted changes directly to your system.\n\nTry something like: "Build me a 3-day strength program" — then I can handle any adjustments you need.`;
+      const [assistantMsg] = await db.insert(messagesTable).values({
+        conversationId: params.data.id, role: "assistant", content: noProgramContent, structuredData: null,
+      }).returning();
+      await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+      if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+        stripeStorage.incrementMessageCount(userId).catch(() => {});
+      }
+      done(buildCompleteEvent({
+        userMsg: userMessage, assistantMsg: assistantMsg, planInfoVal: planInfo,
+        intentResultVal: intentResult, systemSavedVal: false,
+      }));
+      return;
+    }
+
     try {
       const [fullSystem, decisionMemory] = await Promise.all([
-        getFullTrainingSystem(activeSystem!.id),
-        buildDecisionMemory(activeSystem!.id, userId).catch(() => null),
+        getFullTrainingSystem(resolvedSystem.id),
+        buildDecisionMemory(resolvedSystem.id, userId).catch(() => null),
       ]);
 
       if (fullSystem) {
@@ -1602,7 +1669,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           const vibeWhyChanged = whyChangedParts.length > 0 ? whyChangedParts.join("; ") : undefined;
 
           const changeLogId = await createChangeLogEntry({
-            userId, trainingSystemId: activeSystem!.id, source: "ai_edit",
+            userId, trainingSystemId: resolvedSystem.id, source: "ai_edit",
             intent: editPlan.intent, scope: editPlan.scope,
             changeSummary: editResult.changeSummary, requestText: parsed.data.content,
             beforeSnapshot: editResult.beforeSnapshot, afterSnapshot: editResult.afterSnapshot,
@@ -1626,7 +1693,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
             _type: "system_edit" as const,
             changeSummary: editResult.changeSummary,
             changedIds: editResult.changedIds,
-            systemId: activeSystem!.id,
+            systemId: resolvedSystem.id,
             changeLogId,
             verificationStatus: verification.status,
           };
@@ -1645,14 +1712,15 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           done({
             ...buildCompleteEvent({
               userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo,
-              intentResultVal: intentResult, systemSavedVal: false,
+              intentResultVal: intentResult, systemSavedVal: systemAutoCreatedForEdit,
+              systemIdVal: systemAutoCreatedForEdit ? resolvedSystem.id : undefined,
             }),
             systemEdit: {
               applied: true,
               changeSummary: editResult.changeSummary,
               changedIds: editResult.changedIds,
               changeTargets: editResult.changeTargets,
-              systemId: activeSystem!.id,
+              systemId: resolvedSystem.id,
               changeLogId,
               verificationStatus: verification.status as VerificationStatus,
               requiresReview: verification.requiresReview ?? false,
