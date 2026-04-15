@@ -347,6 +347,7 @@ export type EditSubtype =
   | "reduce_frequency"
   | "increase_frequency"
   | "structural_edit"
+  | "program_transformation"
   | "general_modification";
 
 export interface StructuralEditMetadata {
@@ -502,7 +503,29 @@ export function classifyIntent(
     }
   }
 
-  // ── Priority 6b: EDIT_PROGRAM (atomic) ───────────────────────────────────
+  // ── Priority 6b: EDIT_PROGRAM (program_transformation) ──────────────────
+  // Intercepts broad goal/focus shift requests BEFORE atomic patterns.
+  // "I want to focus more on endurance" should NOT be routed to a surgical
+  // entity-level edit (add_conditioning) that always fails with 0 applied
+  // changes. Instead, this routes to the block-level edit engine with explicit
+  // transformation instructions.
+  if (context.hasActiveProgram) {
+    const transformResult = matchesProgramTransformation(lower);
+    if (transformResult.matched) {
+      logger.info(
+        { direction: transformResult.direction },
+        "[IntentRouter] → EDIT_PROGRAM (program_transformation)"
+      );
+      return {
+        type: "EDIT_PROGRAM",
+        confidence: "high",
+        editSubtype: "program_transformation",
+        metadata: { direction: transformResult.direction },
+      };
+    }
+  }
+
+  // ── Priority 6c: EDIT_PROGRAM (atomic) ───────────────────────────────────
   const editResult = matchesEditProgram(lower, context.hasActiveProgram);
   if (editResult.matched) {
     logger.debug({ editSubtype: editResult.subtype, confidence: editResult.confidence }, "[IntentRouter] → EDIT_PROGRAM");
@@ -607,6 +630,73 @@ function matchesReadinessAdjustment(lower: string): {
   }
 
   return { matched: false, confidence: "low" as const };
+}
+
+// ─── Program Transformation Detection ────────────────────────────────────────
+//
+// Detects broad goal/focus shift requests that affect the entire program's
+// direction, emphasis, or energy system bias. These are NOT surgical edits
+// (no specific exercise or session targeted) — they require block-level or
+// system-level restructuring by the edit engine.
+//
+// Runs BEFORE atomic edit pattern matching to prevent requests like
+// "I want to focus more on endurance" from being misclassified as
+// add_conditioning (surgical) and then failing with 0 applied changes.
+
+const TRANSFORMATION_PATTERNS: Array<{ pattern: RegExp; direction: string }> = [
+  // Endurance / aerobic focus
+  { pattern: /\bfocus\s+(?:more\s+)?on\s+(?:endurance|aerobic|cardio\s+(?:capacity|fitness))\b/i, direction: "endurance" },
+  { pattern: /\bmore\s+endurance[\s-](?:based?|focused?|work|training|oriented|heavy)\b/i, direction: "endurance" },
+  { pattern: /\bmore\s+aerobic[\s-](?:based?|focused?|work|training|oriented|heavy)\b/i, direction: "endurance" },
+  { pattern: /\bshift(?:ing)?\s+(?:toward?|to(?:ward)?)\s+(?:endurance|aerobic)\b/i, direction: "endurance" },
+  { pattern: /\bmake\s+(?:this|it|the\s+program|my\s+program)\s+(?:more\s+)?(?:endurance|aerobic)[\s-](?:based?|focused?|oriented?)\b/i, direction: "endurance" },
+  { pattern: /\bwant\s+(?:to\s+(?:build|develop|improve))?\s*(?:my\s+)?endurance\s+(?:more|further)?\b/i, direction: "endurance" },
+
+  // Conditioning focus (distinct from "add a conditioning block" — this is a whole-program pivot)
+  { pattern: /\bmore\s+conditioning[\s-](?:based?|focused?|heavy|oriented)\b/i, direction: "conditioning" },
+  { pattern: /\bmake\s+(?:this|it|the\s+program|my\s+program)\s+(?:more\s+)?conditioning[\s-](?:based?|focused?)\b/i, direction: "conditioning" },
+  { pattern: /\bshift(?:ing)?\s+(?:toward?|to(?:ward)?)\s+conditioning\b/i, direction: "conditioning" },
+  { pattern: /\bfocus\s+(?:more\s+)?on\s+(?:overall\s+)?conditioning\b/i, direction: "conditioning" },
+
+  // Power / explosiveness focus
+  { pattern: /\bfocus\s+(?:more\s+)?on\s+(?:power|explosiveness?)\b/i, direction: "power" },
+  { pattern: /\bmore\s+(?:power|explosive(?:ness)?)[\s-](?:based?|focused?|work|training|oriented|heavy)\b/i, direction: "power" },
+  { pattern: /\bshift(?:ing)?\s+(?:toward?|to(?:ward)?)\s+(?:power|explosiveness?)\b/i, direction: "power" },
+  { pattern: /\bwant\s+(?:to\s+be\s+|to\s+get\s+)?more\s+(?:explosive|powerful)\b/i, direction: "power" },
+  { pattern: /\bmake\s+(?:this|it|the\s+program|my\s+program)\s+(?:more\s+)?(?:power|explosive)[\s-](?:based?|focused?|oriented?)\b/i, direction: "power" },
+
+  // Speed focus
+  { pattern: /\bfocus\s+(?:more\s+)?on\s+speed\b/i, direction: "speed" },
+  { pattern: /\bmore\s+speed[\s-](?:based?|focused?|work|training|oriented)\b/i, direction: "speed" },
+  { pattern: /\bshift(?:ing)?\s+(?:toward?|to(?:ward)?)\s+speed\b/i, direction: "speed" },
+
+  // Hypertrophy focus (as a global program shift, not "add isolation work")
+  { pattern: /\bfocus\s+(?:more\s+)?on\s+(?:hypertrophy|muscle\s+(?:building|growth|gain))\b/i, direction: "hypertrophy" },
+  { pattern: /\bmore\s+hypertrophy[\s-](?:based?|focused?|heavy|oriented)\b/i, direction: "hypertrophy" },
+  { pattern: /\bshift(?:ing)?\s+(?:toward?|to(?:ward)?)\s+(?:hypertrophy|muscle\s+(?:building|growth))\b/i, direction: "hypertrophy" },
+  { pattern: /\bmake\s+(?:this|it|the\s+program|my\s+program)\s+(?:more\s+)?hypertrophy[\s-](?:based?|focused?)\b/i, direction: "hypertrophy" },
+
+  // Strength focus (as a program-wide shift)
+  { pattern: /\bfocus\s+(?:more\s+)?on\s+(?:pure\s+)?strength\b/i, direction: "strength" },
+  { pattern: /\bshift(?:ing)?\s+(?:toward?|to(?:ward)?)\s+(?:pure\s+)?strength\b/i, direction: "strength" },
+  { pattern: /\bmake\s+(?:this|it|the\s+program|my\s+program)\s+(?:more\s+)?strength[\s-](?:based?|focused?)\b/i, direction: "strength" },
+
+  // Overall intensity (program-wide)
+  { pattern: /\bmake\s+(?:this|it|the\s+program|my\s+program)\s+(?:more|less)\s+intense(?:ity)?\b/i, direction: "intensity" },
+  { pattern: /\b(?:increase|raise|bump\s+up)\s+(?:the\s+)?(?:overall\s+)?intensity(?:\s+(?:of\s+(?:the\s+)?)?(?:program|training))?\b/i, direction: "intensity" },
+
+  // Overall volume (program-wide — distinct from "reduce one set")
+  { pattern: /\b(?:reduce|lower|decrease)\s+(?:the\s+)?(?:overall\s+)?(?:volume|load|workload)\s+(?:across\s+(?:the\s+)?(?:program|week)|throughout|overall|program[\s-]wide)\b/i, direction: "volume_reduction" },
+  { pattern: /\b(?:increase|raise|add)\s+(?:the\s+)?(?:overall\s+)?(?:volume|workload)\s+(?:across\s+(?:the\s+)?(?:program|week)|throughout|overall|program[\s-]wide)\b/i, direction: "volume_increase" },
+];
+
+function matchesProgramTransformation(lower: string): { matched: boolean; direction: string } {
+  for (const { pattern, direction } of TRANSFORMATION_PATTERNS) {
+    if (pattern.test(lower)) {
+      return { matched: true, direction };
+    }
+  }
+  return { matched: false, direction: "" };
 }
 
 // ─── Structural Edit Detection ───────────────────────────────────────────────

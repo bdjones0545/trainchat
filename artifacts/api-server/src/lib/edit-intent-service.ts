@@ -231,6 +231,36 @@ BLOCK MUTATION RULES:
    - Add appropriate sport-transfer work (lateral mechanics for hockey/basketball, rotational power for baseball, collision prep for football/rugby)
    - changeSummary must name the sport and list the specific exercises added
 
+7. ENDURANCE_TRANSFORMATION — "focus more on endurance", "more endurance-based", "want to build my endurance", "shift toward aerobic":
+   - Add energy-system work to ALL sessions: rowing intervals, ski erg, assault bike, or running (time-based, not mileage)
+   - Reduce rest intervals on secondary compound and accessory exercises (target 60–90 sec rather than 90–120 sec)
+   - Add 1 dedicated conditioning finisher (10–15 min) to at least 2 sessions per week
+   - Update rep ranges on accessory lifts toward the higher end (10–15 reps) to increase metabolic demand
+   - Update session emphasis and phase goal to reflect aerobic capacity focus
+   - Keep all primary compound lifts — do NOT remove squats, deadlifts, or presses
+   - changeSummary must name which sessions got conditioning finishers and describe the rest-interval changes
+
+8. CONDITIONING_TRANSFORMATION — "more conditioning-based", "shift toward conditioning", "conditioning-focused":
+   - Same protocol as ENDURANCE_TRANSFORMATION but with higher-intensity intervals (HIIT-style, tabata, or circuit work) rather than steady-state aerobic
+   - Add conditioning circuits (3–4 exercises, minimal rest) as session finishers
+   - Pair accessory exercises as supersets where possible to increase density
+   - changeSummary must name specific conditioning methods added and sessions affected
+
+9. SPEED_TRANSFORMATION — "focus more on speed", "more speed work", "shift toward speed":
+   - Add acceleration/deceleration drills (10–30m sprints, agility ladder, cone patterns) to at least 2 sessions
+   - Add plyometric speed-expression work (drop step bounds, resisted sprints, reactive agility) before primary lifts
+   - Reduce pure hypertrophy accessory volume to make room — trim 1 set per accessory exercise
+   - Update session emphasis and phase goal to reflect speed/agility focus
+   - changeSummary must name specific speed drills added and what accessory volume was trimmed
+
+10. INTENSITY_TRANSFORMATION — "make this more intense", "increase overall intensity":
+    - Tighten rest intervals on all secondary and accessory exercises (15–30 sec shorter than current)
+    - Increase set counts on secondary compound lifts by 1 set
+    - Add a 1RM-percentage note to primary lifts if not already present (e.g., "aim for 80–85% 1RM")
+    - Add tempo prescriptions to primary lifts if not already present (e.g., "3-1-X-0")
+    - Update session emphasis fields to reflect intensity focus
+    - changeSummary must describe what changed in rest times, set counts, and any new tempo prescriptions
+
 BLOCK MUTATION — SCOPE AND CHANGES:
 - Use scope: "block" for all block mutations
 - Include update_phase change to update phase name, goal, emphasis, and notes

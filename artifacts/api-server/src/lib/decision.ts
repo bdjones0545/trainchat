@@ -267,6 +267,34 @@ export function resolveAction(
         };
       }
 
+      // Program transformation — broad goal/focus shift across the whole program
+      if (editSubtype === "program_transformation") {
+        const direction = (intent.metadata?.direction as string) ?? "focus shift";
+        return {
+          actionType: "DIRECT_MUTATION",
+          shouldAsk: false,
+          inferenceRationale: `Program-wide transformation: ${direction}. Making real structural changes across multiple sessions using block-level edit engine.`,
+          targetDescription: hasProgram
+            ? `Entire ${currentDays}-day program — ${direction} transformation`
+            : "No program to transform",
+          preservationRules: {
+            ...PRESERVE_PROFILE_ONLY,
+            preserveKeyExercises: true,
+            preserveSplitStructure: true,
+            allowedChanges: [
+              "rest intervals",
+              "rep ranges and intensity zones",
+              "exercise selection (accessories and secondary compounds)",
+              "session emphasis and coaching notes",
+              "conditioning blocks and energy system work",
+              "phase goal and emphasis labels",
+            ],
+            preservedCompoundLifts: compoundLifts,
+          },
+          recommendedMaxTokens: 4500,
+        };
+      }
+
       // Atomic edits — high-confidence, specific changes
       const atomicSubtypes = new Set([
         "add_core", "add_hamstrings", "add_calves", "add_glutes",

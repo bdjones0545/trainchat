@@ -693,9 +693,21 @@ Keep it helpful and intelligent, never promotional.`;
         logger.warn({ systemId: resolvedSystem.id }, "[VibeEdit] Could not load full system — falling back to AI");
         // Fall through to regular AI response below
       } else {
+        // For program_transformation intents, enrich the user request with
+        // explicit block-level instructions so the edit engine makes real
+        // structural changes instead of trying to find a specific entity.
+        const isProgramTransformation = intentResult.editSubtype === "program_transformation";
+        const transformationDirection = isProgramTransformation
+          ? (intentResult.metadata?.direction as string) ?? "focus shift"
+          : null;
+
+        const effectiveEditRequest = isProgramTransformation
+          ? `[PROGRAM TRANSFORMATION — GLOBAL FOCUS SHIFT]\nUser request: "${parsed.data.content}"\n\nTransformation direction: ${transformationDirection}\n\nThis is a program-wide transformation, NOT a surgical exercise edit. You MUST:\n- Use scope: "block" (affects the whole phase/block)\n- Apply the matching BLOCK MUTATION RULE from your instructions (e.g., ENDURANCE_TRANSFORMATION, CONDITIONING_TRANSFORMATION, SPEED_TRANSFORMATION, INTENSITY_TRANSFORMATION, INCREASE_POWER_BIAS, INCREASE_HYPERTROPHY_BIAS, or INCREASE_SPORT_SPECIFICITY)\n- Make real structural changes: update exercises, rest intervals, rep ranges, session emphases, and phase goal across MULTIPLE sessions\n- Do NOT produce a notes-only update — exercise-level and session-level changes are required\n- Keep all primary compound lifts (squats, deadlifts, presses) intact\n- changeSummary must name specific exercises added/changed and sessions affected`
+          : parsed.data.content;
+
         // Interpret + apply the edit
         const editPlan = await interpretEditRequest(
-          parsed.data.content,
+          effectiveEditRequest,
           fullSystem,
           undefined,
           adaptationCtx || undefined,

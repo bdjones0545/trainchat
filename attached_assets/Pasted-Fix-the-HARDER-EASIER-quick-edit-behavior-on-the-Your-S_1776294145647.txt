@@ -1,0 +1,233 @@
+Fix the HARDER / EASIER quick-edit behavior on the Your System page so it always resolves to a real, valid exercise change or a real prescription change.
+
+OBJECTIVE:
+When a user taps “Harder” or “Easier” on an exercise card (for example Back Squat), TrainChat must never replace the exercise with a generic placeholder like:
+- “a harder variation”
+- “an easier variation”
+
+That is not acceptable product behavior.
+
+The system must either:
+1. resolve to a real named exercise variation from the exercise library
+OR
+2. apply a real prescription change to the current exercise
+OR
+3. fail honestly without mutating the displayed exercise
+
+==================================================
+PROBLEM
+==================================================
+
+Current behavior:
+- User taps Harder/Easier
+- System updates the card
+- Exercise name becomes a generic placeholder like “a harder variation”
+
+This creates a fake-feeling result and breaks trust.
+
+==================================================
+CORRECT BEHAVIOR
+==================================================
+
+If the user taps Harder on Back Squat, the system should do one of these:
+
+A. REAL EXERCISE SUBSTITUTION
+Examples:
+- Pause Back Squat
+- Tempo Back Squat
+- Front Squat
+- Safety Bar Squat
+- Box Squat (if contextually appropriate)
+
+OR
+
+B. REAL PRESCRIPTION CHANGE
+Examples:
+- keep Back Squat
+- increase sets
+- decrease reps / increase intensity bias
+- add tempo or pause prescription in notes
+- adjust rest
+
+But the system must never commit a generic unresolved label.
+
+==================================================
+TASK 1 — TRACE THE HARDER / EASIER FLOW
+==================================================
+
+Audit the full quick-edit pipeline for:
+- Harder
+- Easier
+
+Trace:
+- frontend action handler
+- request payload
+- backend interpretation
+- variation resolution logic
+- mutation result
+- UI rendering
+
+I want to identify exactly where the generic label is being created and why it is being committed.
+
+Likely files include:
+- system page or training page exercise controls
+- quick edit action handlers
+- training-system-edit route or service
+- variation recommendation / substitution logic
+- exercise mutation response shaping
+- exercise card rendering
+
+==================================================
+TASK 2 — REQUIRE REAL EXERCISE RESOLUTION
+==================================================
+
+If quick-edit mode chooses substitution:
+- the substitute must resolve to a real exercise record or real exercise name from the library
+- it must preserve the exercise identity chain cleanly
+- it must return the resolved exercise name in the mutation result
+
+Do NOT allow unresolved labels like:
+- “a harder variation”
+- “an easier variation”
+- “harder squat variation”
+
+The replacement must be a real exercise.
+
+==================================================
+TASK 3 — ADD PRESCRIPTION-CHANGE FALLBACK
+==================================================
+
+If the system cannot confidently resolve a better exercise variation, do NOT write a fake name.
+
+Instead, fallback to modifying the current exercise prescription.
+
+Examples:
+
+For “Harder”:
+- keep Back Squat
+- +1 set
+- slightly lower rep range with higher intensity bias
+- add pause/tempo note if supported
+- longer rest if needed
+
+For “Easier”:
+- keep Back Squat
+- reduce sets
+- reduce load/intensity bias
+- simplify rep target
+- adjust rest if needed
+
+This is preferable to a fake substitution.
+
+==================================================
+TASK 4 — ADD VALIDATION BEFORE COMMIT
+==================================================
+
+Before writing the edit result to DB/UI:
+
+Validate:
+- exerciseName is a real named value
+- exerciseName is not a placeholder/generic phrase
+- mutation result contains either:
+  - a resolved replacement exercise
+  - or a real prescription modification
+
+If validation fails:
+- do not commit the mutation
+- return a truthful error
+- optionally trigger a retry to resolve a real variation
+
+==================================================
+TASK 5 — IMPROVE HARDER / EASIER MAPPING RULES
+==================================================
+
+Build explicit variation ladders for common movements.
+
+Example for Back Squat:
+
+Harder options:
+- Pause Back Squat
+- Tempo Back Squat
+- Front Squat
+- Safety Bar Squat
+- Box Squat (depending on goal)
+- heavier lower-rep back squat prescription
+
+Easier options:
+- Goblet Squat
+- Split Squat
+- Belt Squat
+- Box Squat (if simplifying mechanics)
+- reduced-volume back squat prescription
+
+Do this intelligently by movement pattern and training goal where possible.
+
+At minimum, make squat-family harder/easier logic coherent.
+
+==================================================
+TASK 6 — PRESERVE USER TRUST IN UI
+==================================================
+
+After pressing Harder/Easier:
+- the exercise card should show a real result
+- update badge is fine
+- but the title must remain a real exercise name
+- notes should clearly explain the change
+
+Example:
+- “Pause Back Squat”
+- subtitle: “Substituted for Back Squat to increase positional demand”
+
+OR
+- “Back Squat”
+- subtitle: “Adjusted for higher intensity focus”
+
+==================================================
+TASK 7 — TEST REQUIRED CASES
+==================================================
+
+Test these exact cases:
+
+1. Harder on Back Squat
+Expected:
+- real exercise name OR real prescription change
+- never generic placeholder
+
+2. Easier on Back Squat
+Expected:
+- real exercise name OR real prescription change
+
+3. Harder on dumbbell press
+4. Easier on deadlift
+5. Harder on sprint/power movement if supported
+6. A case where no confident variation exists
+Expected:
+- fallback to prescription modification or truthful failure
+- no fake label committed
+
+==================================================
+TASK 8 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What files/components/services were changed
+2. Where the generic placeholder was being introduced
+3. How real variation resolution now works
+4. What fallback behavior now exists
+5. What validation now prevents fake exercise names
+6. Which exercise families now have better harder/easier mappings
+
+==================================================
+FINAL STANDARD
+==================================================
+
+When a user taps Harder or Easier on an exercise:
+- the result must feel real
+- the title must remain a valid exercise name
+- or the current exercise must remain with a real prescription adjustment
+
+The system must never display fake unresolved placeholders like:
+- “a harder variation”
+
+Implement this now.
