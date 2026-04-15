@@ -56,6 +56,15 @@ export function setDefaultHeaders(headers: Record<string, string>): void {
   _defaultHeaders = { ..._defaultHeaders, ...headers };
 }
 
+/**
+ * Returns a copy of the current default headers registered via setDefaultHeaders.
+ * Useful for raw fetch() calls that need to carry the same ambient context
+ * (e.g. X-Device-Id) that customFetch automatically injects.
+ */
+export function getDefaultHeaders(): Record<string, string> {
+  return { ..._defaultHeaders };
+}
+
 function isRequest(input: RequestInfo | URL): input is Request {
   return typeof Request !== "undefined" && input instanceof Request;
 }

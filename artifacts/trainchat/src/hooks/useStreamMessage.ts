@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from "react";
+import { getDefaultHeaders } from "@workspace/api-client-react";
 
 // ─── Build pipeline stage type (mirrors build-pipeline.ts on the server) ──────
 
@@ -175,7 +176,7 @@ export function useStreamMessage(): UseStreamMessageResult {
           `/api/conversations/${conversationId}/messages/stream`,
           {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...getDefaultHeaders() },
             credentials: "include",
             body: JSON.stringify({ content }),
             signal: controller.signal,

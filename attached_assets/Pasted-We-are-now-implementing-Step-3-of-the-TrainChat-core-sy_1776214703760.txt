@@ -1,0 +1,259 @@
+We are now implementing Step 3 of the TrainChat core system loop:
+
+BIND THE EDIT ENGINE TO THE ACTIVE TRAINING SYSTEM
+
+OBJECTIVE:
+Ensure that every user edit request mutates the real, canonical, active training system tied to the current user (including anonymous users via deviceId).
+
+At this stage:
+- users are real (deviceId auth works)
+- conversations are real
+- training systems will be auto-created (Step 2)
+- but edits must now operate on that SAME system consistently
+
+The goal is:
+User input → parsed → edit engine → real system mutation → verification → UI update
+
+No disconnected logic.
+No preview mutations.
+No orphan edits.
+No “chat about program” behavior.
+
+==================================================
+CORE REQUIREMENT
+==================================================
+
+Every edit request must:
+
+1. Resolve the current active training system
+2. Pass that system into the edit engine
+3. Apply mutations directly to that system
+4. Run mutation verification
+5. Return structured operation result
+6. Update UI based on verified result
+
+If no active system exists:
+- either trigger auto-create (Step 2 integration)
+- or return a truthful failure asking user to build a program first
+
+==================================================
+ACTIVE SYSTEM RESOLUTION
+==================================================
+
+Implement a reliable method:
+
+getActiveTrainingSystem(userId)
+
+This must:
+- work for anonymous users (deviceId-backed users)
+- work for registered users
+- work for paid users
+- return the correct system every time
+
+Audit and fix:
+- multiple active systems
+- missing active system references
+- stale system pointers
+- mismatch between UI-selected system and backend active system
+
+There must be ONE clear active system per user (unless multi-system support is explicitly handled).
+
+==================================================
+EDIT REQUEST PIPELINE
+==================================================
+
+For every incoming user message:
+
+1. classify intent:
+   - build request
+   - edit request
+   - general question
+
+2. if edit request:
+   - resolve active system
+   - pass system + intent into edit engine
+
+3. edit engine must:
+   - operate on canonical DB-backed system
+   - not on temporary JSON
+   - not on UI-only state
+
+4. run mutation
+5. run verification (Phase 2)
+6. return OperationResult
+7. generate agent response from VERIFIED result
+
+==================================================
+SUPPORTED EDIT TYPES
+==================================================
+
+Ensure binding works for:
+
+- exercise swaps
+- set/rep changes
+- intensity changes
+- rest changes
+- adding/removing exercises
+- modifying specific days
+- global transformations
+- speed vs strength adjustments
+- progression logic changes
+- undo / restore
+
+All must hit the SAME active system.
+
+==================================================
+NO-OP / FAILURE HANDLING
+==================================================
+
+If:
+- no matching exercise found
+- no matching day found
+- mutation fails
+- verification fails
+
+Then:
+- do NOT silently succeed
+- return truthful failure or clarification
+- do NOT modify unrelated parts of system
+- do NOT generate fake success responses
+
+This must integrate with Phase 1 + Phase 2.
+
+==================================================
+FRONTEND BINDING
+==================================================
+
+Ensure frontend:
+
+- always reflects the active system from backend
+- does not hold a separate “preview program” as source of truth
+- updates UI ONLY after verified mutation
+- highlights changes only when verification confirms them
+- does not drift from backend state
+
+Audit:
+- currentProgram state
+- panel rendering
+- conversation → system binding
+- refresh/hydration behavior
+
+==================================================
+STATE CONSISTENCY RULES
+==================================================
+
+After any edit:
+
+- backend canonical system is updated
+- verification confirms change
+- frontend re-fetches or updates from canonical source
+- UI reflects exact updated state
+
+Never allow:
+- UI to show change that backend doesn’t have
+- backend change not reflected in UI
+- edits applied to wrong system
+- multiple conflicting sources of truth
+
+==================================================
+INTEGRATION WITH STEP 2
+==================================================
+
+If edit request arrives and no active system exists:
+
+Option A (preferred):
+- trigger system auto-create
+- THEN apply edit
+
+Option B:
+- return:
+  “I don’t have a program yet — tell me to build one first.”
+
+Choose the best UX path, but prefer seamless creation.
+
+==================================================
+TEST SCENARIOS
+==================================================
+
+1. Anonymous user:
+“Build me a 3-day program”
+→ system created
+
+Then:
+“Swap squats for leg press”
+→ SAME system updated
+→ verified
+→ visible change
+
+2. User:
+“Add more speed work on day 2”
+→ correct system mutated
+→ only day 2 affected
+
+3. User:
+“Replace all lower body lifts with plyometrics”
+→ global mutation applied correctly
+→ partial/failure handled truthfully if needed
+
+4. User refreshes
+→ same system loads
+→ edits persist
+
+5. User sends edit with no system yet
+→ system created OR proper failure returned
+
+6. Paid user
+→ no regression
+→ same behavior
+
+==================================================
+FILES / AREAS TO AUDIT
+==================================================
+
+- edit engine (applyEditPlan)
+- verification layer (verifyMutation)
+- agent orchestration layer
+- conversation → system binding logic
+- active system resolver
+- training system routes
+- frontend program state
+- UI rendering components
+- any legacy preview logic
+- any guest-specific mutation code
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. How active system is resolved
+2. What files/services were modified
+3. How edit requests are now routed
+4. How anonymous users now use the real edit engine
+5. What preview/duplicate logic was removed
+6. Any remaining edge cases
+7. Any remaining state drift risks
+
+==================================================
+FINAL STANDARD
+==================================================
+
+When a user types:
+
+“Swap bench press for incline dumbbell press”
+
+The system should:
+- mutate the real program
+- verify the mutation
+- show the updated program
+- explain the change
+
+Not:
+- describe the change
+- simulate the change
+- or pretend the change happened
+
+TrainChat must behave like a real system editor.
+
+Implement this now.

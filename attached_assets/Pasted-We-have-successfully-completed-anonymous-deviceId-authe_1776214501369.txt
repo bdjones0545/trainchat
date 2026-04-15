@@ -1,0 +1,163 @@
+We have successfully completed anonymous deviceId authentication and real conversation creation for anonymous users.
+
+Now implement the next phase:
+
+AUTO-CREATE / AUTO-BOOTSTRAP THE CANONICAL ACTIVE TRAINING SYSTEM
+
+OBJECTIVE:
+Ensure that once an anonymous or authenticated user makes their first meaningful training-build request, TrainChat creates a real canonical training system record and sets it as the active editable system.
+
+Right now:
+- anonymous users are real users
+- conversations are real
+- session history is real
+- auth works correctly across HTTP and HTTPS environments
+- but /api/training-system/active returns 404 until a training system exists
+
+That 404 is truthful, but now we need to eliminate this gap in the product experience.
+
+==================================================
+GOAL
+==================================================
+
+When a user sends their first real training-building request, the system should:
+
+1. detect that no active training system exists
+2. determine whether the message is a real build/program request
+3. create a canonical training system automatically
+4. create all required child records as needed
+5. mark it as the active training system
+6. return it consistently through the existing active-system flow
+7. bind future edits to that same system
+
+From that point on, the user should feel like they are editing a real live program.
+
+==================================================
+REQUIRED BEHAVIOR
+==================================================
+
+If /api/training-system/active is requested before any program exists:
+- returning 404 is acceptable internally
+- but once the user makes a meaningful build request, TrainChat should create the active system automatically
+
+A “meaningful build request” includes messages like:
+- Build me a 3-day strength program
+- I want speed work for football
+- Create a beginner fat loss plan
+- Make me a 4-day hypertrophy split
+- Build around dumbbells and bands
+
+A generic greeting like:
+- hi
+- hello
+- what can you do
+should not create a system yet
+
+==================================================
+IMPLEMENTATION TASKS
+==================================================
+
+1. Audit where the first real training request is handled
+2. Add logic to detect build-worthy training prompts
+3. If no active training system exists, auto-create one from that request
+4. Use the real canonical DB-backed training system model
+5. Ensure the created system is attached to the current real user ID, including anonymous users
+6. Ensure the system becomes the active training system
+7. Ensure subsequent edits target that same system
+8. Ensure the UI no longer gets stuck in a “real user but no real system” gap after the first build request
+9. Preserve truth layer and mutation verification compatibility
+10. Keep registered and paid flows stable
+
+==================================================
+DATA MODEL / API REQUIREMENTS
+==================================================
+
+Use the existing real tables and ownership model:
+- training_systems
+- training_phases
+- session_weeks
+- training_sessions
+- session_exercises
+- any active-system references already in the codebase
+
+Do not create a fake preview object.
+Do not create a parallel guest-only system model.
+
+==================================================
+UX REQUIREMENTS
+==================================================
+
+Desired experience:
+
+1. User enters app
+2. Anonymous auth already works
+3. User asks for a program
+4. TrainChat creates a real program in the real system
+5. Active system becomes available immediately
+6. Program panel / edit flow now reflects real canonical data
+7. Future edits mutate that same system
+
+The user should never feel:
+“I can chat, but the real system still doesn’t exist.”
+
+==================================================
+TEST SCENARIOS
+==================================================
+
+1. Brand new anonymous user says:
+“Build me a 3-day strength program.”
+Expected:
+- conversation exists
+- training system is created
+- active system returns 200
+- UI reflects real program
+
+2. Brand new anonymous user says:
+“Hi”
+Expected:
+- no training system created yet
+- no junk records
+
+3. Anonymous user says:
+“I want speed training for football”
+Expected:
+- active system created from first real request
+- future edits target same system
+
+4. Returning anonymous user with existing active system
+Expected:
+- no duplicate system creation
+- existing system reused
+
+5. Registered unpaid user with no system yet
+Expected:
+- same auto-create behavior
+
+6. Paid user with no active system yet
+Expected:
+- same auto-create behavior
+- no regression
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+1. What files/routes/services were changed
+2. Where build-request detection now happens
+3. How active-system auto-creation now works
+4. How duplicate system creation is prevented
+5. How anonymous and registered users both use the same path
+6. Any remaining edge cases or architectural debt
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Once a real user makes a real training request, TrainChat should automatically create the real training system and make it active.
+
+No fake preview.
+No dead gap.
+No “chat first, real system later” disconnect.
+
+Build this now.
