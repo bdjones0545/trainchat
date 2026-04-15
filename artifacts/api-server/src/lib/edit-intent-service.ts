@@ -1454,10 +1454,12 @@ export function classifyEditRequest(
     }
 
     // ── Rule 4: Simple set add/remove → DETERMINISTIC ──────────────────────
-    if (/\b(add|plus|\+)\s*(a\s+)?set\b|\+1\s*set\b|one\s+more\s+set\b/i.test(lower)) {
+    // Matches: "add a set", "add 1 set", "add 2 sets", "+1 set", "one more set"
+    if (/\b(add|plus|\+)\s*(\d+\s+|a\s+)?sets?\b|\+\d+\s*sets?\b|one\s+more\s+set\b/i.test(lower)) {
       return { route: "DETERMINISTIC", reason: "set_add" };
     }
-    if (/\b(remove|drop|minus|-)\s*(a\s+)?set\b|-1\s*set\b|fewer\s+sets?\b|less\s+sets?\b/i.test(lower)) {
+    // Matches: "remove a set", "remove 1 set", "drop a set", "-1 set", "fewer sets"
+    if (/\b(remove|drop|minus)\s*(\d+\s+|a\s+)?sets?\b|-\d*\s*sets?\b|fewer\s+sets?\b|less\s+sets?\b/i.test(lower)) {
       return { route: "DETERMINISTIC", reason: "set_remove" };
     }
   }
