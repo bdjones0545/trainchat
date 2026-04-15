@@ -37,6 +37,7 @@ import { buildArchitectureBrief, validateProgramArchitecture, extractSportFromRe
 import { buildConditioningContext, isConditioningGoal } from "./conditioning-engine";
 import { buildPowerSpeedContext, isPowerRequest, isSpeedRequest } from "./power-speed-engine";
 import { buildSportContext, mapSportToProfile, detectSeasonContext } from "./sport-profile-engine";
+import { buildPeriodizationContext, needsPeriodizationContext } from "./periodization-engine";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -967,6 +968,24 @@ The conversion rule: show intelligence first → build tension → deliver parti
       )
     : "";
 
+  // Build block periodization / advanced progression context
+  // Injected for intermediate/advanced athletes, explicit duration requests, and block-related keywords
+  // Upgrades from "strong week-one programming" to real long-horizon coaching architecture
+  // Uses profile.trainingGoal as the request signal — same pattern as conditioning/power/sport engines
+  const periodizationContext = needsPeriodizationContext(
+    profile.trainingGoal,
+    profile.experienceLevel,
+    profile.trainingGoal,
+  )
+    ? "\n\n" + buildPeriodizationContext(
+        profile.trainingGoal,
+        profile.experienceLevel,
+        profile.trainingGoal,
+        profile.sportFocus ?? null,
+        profile.daysPerWeek,
+      )
+    : "";
+
   return coreIdentity + `
 
 ## USER TRAINING PROFILE
@@ -983,7 +1002,7 @@ ${profile.sportFocus ? `- Sport / Activity Focus: ${profile.sportFocus}` : ""}
 ${profile.exercisePreferences ? `- Exercise Preferences: ${profile.exercisePreferences}` : ""}
 ${profile.exercisesToAvoid ? `- Exercises to Avoid (NEVER program these): ${profile.exercisesToAvoid}` : ""}
 
-${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${conditioningContext}${powerSpeedContext}${sportContext}`;
+${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${conditioningContext}${powerSpeedContext}${sportContext}${periodizationContext}`;
 }
 
 // ─── JSON extractor ──────────────────────────────────────────────────────────
