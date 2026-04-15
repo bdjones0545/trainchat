@@ -8,6 +8,27 @@ export interface GuestChatMessage {
   content: string;
 }
 
+/** Structured program extracted from a chat response — same shape as ChatProgram */
+export interface GuestChatProgram {
+  programName: string;
+  description?: string;
+  splitType?: string;
+  progressionStrategy?: string;
+  days: Array<{
+    dayNumber: number;
+    name: string;
+    focus?: string;
+    exercises: Array<{
+      name: string;
+      sets: number;
+      reps: string;
+      rest: string;
+      notes?: string;
+    }>;
+    notes?: string;
+  }>;
+}
+
 // ─── System Prompt ────────────────────────────────────────────────────────────
 
 function buildGuestChatSystemPrompt(turnNumber: number): string {
@@ -82,6 +103,83 @@ NEVER ask about equipment, experience, AND days in the same message.`
   : turnNumber === 2
   ? "TURN 2 — Show the COMPLETE WEEKLY SPLIT if not already shown. Include all days with exercises, sets×reps. This is the 'wow' moment. End with one refinement question."
   : "TURN 3+ — Expand and refine. Add progression detail, adjust based on feedback. The system is real — make it great."}`;
+}
+
+// ─── Program structure extraction ────────────────────────────────────────────
+
+/** Returns true if the assistant message looks like it contains a training program */
+function looksLikeProgram(content: string): boolean {
+  return (
+    /Day\s+\d|Upper\s|Lower\s|Push\s|Pull\s|Legs\s|Full Body/.test(content) &&
+    /×|\bsets?\b|\breps?\b|4×|3×|2×/.test(content)
+  );
+}
+
+/** Call OpenAI to extract a structured program JSON from assistant text */
+async function extractProgramJSON(
+  assistantText: string,
+  apiKey: string
+): Promise<GuestChatProgram | null> {
+  const extractionPrompt = `Extract the training program from the following assistant message and return ONLY valid JSON matching this exact structure. No markdown, no explanation — pure JSON only.
+
+Structure:
+{
+  "programName": "string (e.g. '4-Day Upper/Lower Split')",
+  "splitType": "string (e.g. 'Upper/Lower', 'Full Body', 'Push/Pull/Legs')",
+  "progressionStrategy": "string (brief, optional)",
+  "days": [
+    {
+      "dayNumber": 1,
+      "name": "string (e.g. 'Upper Strength')",
+      "focus": "string (e.g. 'Strength')",
+      "exercises": [
+        {
+          "name": "string",
+          "sets": 4,
+          "reps": "4-6",
+          "rest": "3 min",
+          "notes": "optional string"
+        }
+      ],
+      "notes": "optional string"
+    }
+  ]
+}
+
+If the message does not contain a full program, return: {"error": "no_program"}
+
+Assistant message to extract from:
+${assistantText.slice(0, 2000)}`;
+
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: extractionPrompt }],
+        max_tokens: 1200,
+        temperature: 0,
+      }),
+    });
+
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as { choices: { message: { content: string } }[] };
+    const raw = data.choices[0]?.message?.content?.trim() ?? "";
+
+    // Strip any accidental markdown code fences
+    const cleaned = raw.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+    const parsed = JSON.parse(cleaned);
+
+    if (parsed.error || !parsed.days || !Array.isArray(parsed.days) || parsed.days.length === 0) {
+      return null;
+    }
+
+    return parsed as GuestChatProgram;
+  } catch {
+    return null;
+  }
 }
 
 // ─── OpenAI Call (conversational, non-JSON) ───────────────────────────────────
@@ -165,7 +263,6 @@ function buildFallbackResponse(
 ): string {
   const lower = userMessage.toLowerCase();
 
-  // Detect if key context is already in the message
   const detectedDays = extractDaysFromMessage(lower);
   const hasSport = /soccer|basketball|baseball|tennis|hockey|rugby|mma|wrestling|volleyball|lacrosse|track|sprint|swimming|cycling|golf|football|futbol/.test(lower);
   const sportName = hasSport
@@ -187,15 +284,12 @@ function buildFallbackResponse(
     : "strength";
 
   if (turnNumber === 1) {
-    // If we already have enough context, build immediately — never ask blocking questions
     if (detectedDays !== null) {
-      // Days stated — build structure immediately (turn 2 behavior)
       const structure = buildFallbackStructure(detectedDays, sportName, goalStr);
       const goalLabel = hasSport ? `${sportName} performance + ${goalStr}` : goalStr;
       return `Got it — ${detectedDays}-day ${goalLabel} program. Building your split now.\n\n${structure}`;
     }
 
-    // No days stated — echo goal, signal building, ask ONE question
     if (hasSport) {
       return `${sportName ? sportName.charAt(0).toUpperCase() + sportName.slice(1) : "Sport"} performance + strength. I'm already mapping a sport-specific protocol.\n\nOne question: how many training days per week do you have?`;
     }
@@ -212,7 +306,6 @@ function buildFallbackResponse(
   }
 
   if (turnNumber === 2) {
-    // Check current message AND use detectedDays from it
     const days = detectedDays ?? 3;
     return buildFallbackStructure(days, sportName, goalStr);
   }
@@ -222,13 +315,15 @@ function buildFallbackResponse(
 
 // ─── Main service ─────────────────────────────────────────────────────────────
 
-export const GUEST_CHAT_LIMIT = 5;
+export const GUEST_CHAT_LIMIT = 8;
 
 export interface GuestChatResult {
   response: string;
   messageCount: number;
   limitReached: boolean;
   turnNumber: number;
+  /** Structured program JSON if this response contained a full program — used for the program panel and conversion */
+  guestProgram?: GuestChatProgram;
 }
 
 export async function processGuestChat(
@@ -242,7 +337,6 @@ export async function processGuestChat(
 
   const currentCount = session.teaserUsesCount ?? 0;
 
-  // Limit check
   if (currentCount >= GUEST_CHAT_LIMIT) {
     return {
       response: "",
@@ -252,10 +346,8 @@ export async function processGuestChat(
     };
   }
 
-  // Turn number = which user message this is (1-indexed)
   const turnNumber = currentCount + 1;
 
-  // Build conversation for OpenAI
   const fullHistory: GuestChatMessage[] = [
     ...history,
     { role: "user", content: userMessage },
@@ -287,18 +379,44 @@ export async function processGuestChat(
     { role: "assistant", content: response },
   ];
 
+  // Phase 3: If the response looks like a program, extract structured JSON in the background
+  // Only attempt on turns 1–3 when programs are first built, and only if no program exists yet
+  let guestProgram: GuestChatProgram | undefined;
+  const existingProgram = meta.chatProgramJSON as GuestChatProgram | undefined;
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (apiKey && looksLikeProgram(response) && turnNumber <= 4) {
+    try {
+      const extracted = await extractProgramJSON(response, apiKey);
+      if (extracted) {
+        guestProgram = extracted;
+        logger.info(
+          { deviceId, turnNumber, programName: extracted.programName, days: extracted.days.length },
+          "[GuestChat] Structured program extracted from response"
+        );
+      }
+    } catch (err: any) {
+      logger.warn({ err: err.message, deviceId }, "[GuestChat] Program extraction failed — ignoring");
+    }
+  } else if (existingProgram) {
+    // Return the existing stored program on subsequent turns so the panel stays visible
+    guestProgram = existingProgram;
+  }
+
   await updateGuestSession(deviceId, {
     teaserUsesCount: newCount,
     firstProgramGeneratedAt: session.firstProgramGeneratedAt ?? new Date(),
     metadata: {
       ...meta,
       chatHistory: updatedHistory,
+      // Store the latest extracted program (or keep existing if no new one was found)
+      ...(guestProgram ? { chatProgramJSON: guestProgram } : {}),
       ...(limitReached ? { paywallTriggeredAt: new Date().toISOString() } : {}),
     },
   });
 
   logger.info(
-    { deviceId, messageCount: newCount, turnNumber, limitReached },
+    { deviceId, messageCount: newCount, turnNumber, limitReached, hasProgramJSON: !!guestProgram },
     "Guest chat message processed"
   );
 
@@ -307,5 +425,6 @@ export async function processGuestChat(
     messageCount: newCount,
     limitReached,
     turnNumber,
+    ...(guestProgram ? { guestProgram } : {}),
   };
 }

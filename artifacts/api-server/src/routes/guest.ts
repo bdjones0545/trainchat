@@ -364,6 +364,8 @@ router.post("/guest/chat", async (req, res): Promise<void> => {
       messageCount: result.messageCount,
       limitReached: result.limitReached,
       remaining: Math.max(0, GUEST_CHAT_LIMIT - result.messageCount),
+      // Phase 3: structured program JSON for the guest program panel
+      ...(result.guestProgram ? { guestProgram: result.guestProgram } : {}),
     });
   } catch (err: any) {
     if (err.message === "Guest session not found") {

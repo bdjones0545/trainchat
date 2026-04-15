@@ -8,7 +8,7 @@
 export const GUEST_CONFIG = {
   // ─── Free Message Limit ────────────────────────────────────────────────────
   // Number of free user messages allowed before the paywall fires.
-  TEASER_TOTAL_LIMIT: 5,
+  TEASER_TOTAL_LIMIT: 8,
 
   // ─── Paywall Headline & Body ──────────────────────────────────────────────
   PAYWALL_BADGE: "Your System Is Ready",

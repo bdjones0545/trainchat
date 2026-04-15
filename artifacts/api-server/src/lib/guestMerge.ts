@@ -4,16 +4,19 @@ import {
   userProfilesTable,
   conversationsTable,
   messagesTable,
+  trainingSystems,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { convertGuestSession, getGuestSession } from "./guestService";
+import { createTrainingSystemFromProgram, type ChatProgram } from "./training-system-service";
+import type { GuestChatProgram } from "./guestChat";
 import { logger } from "./logger";
 
 // ─── Teaser Limits ─────────────────────────────────────────────────────────────
 // Mirrors GUEST_CONFIG.TEASER_TOTAL_LIMIT on the frontend.
 // Adjust both together when changing the teaser gate.
 export const TEASER_GENERATE_LIMIT = 1; // max distinct program generations
-export const TEASER_TOTAL_LIMIT = 5; // free chat messages before paywall
+export const TEASER_TOTAL_LIMIT = 8; // free chat messages before paywall (Phase 3: 5→8)
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -70,6 +73,56 @@ function formatProgramAsText(program: any): string {
   return lines.join("\n").trim();
 }
 
+/**
+ * Convert a GuestChatProgram (from conversational chat extraction) to the
+ * ChatProgram format that createTrainingSystemFromProgram accepts.
+ */
+function guestChatProgramToChatProgram(gcp: GuestChatProgram): ChatProgram {
+  return {
+    programName: gcp.programName,
+    description: gcp.description,
+    progressionStrategy: gcp.progressionStrategy,
+    splitType: gcp.splitType,
+    days: gcp.days.map((d) => ({
+      dayNumber: d.dayNumber,
+      name: d.name,
+      focus: d.focus,
+      exercises: d.exercises.map((ex) => ({
+        name: ex.name,
+        sets: ex.sets,
+        reps: ex.reps,
+        rest: ex.rest,
+        notes: ex.notes,
+      })),
+      notes: d.notes,
+    })),
+  };
+}
+
+/**
+ * Convert a legacy GuestProgram (from onboarding generate flow) to ChatProgram format.
+ */
+function legacyGuestProgramToChatProgram(gp: any): ChatProgram {
+  return {
+    programName: gp.programName ?? "Training Program",
+    description: gp.rationale ?? gp.coachIntro,
+    progressionStrategy: gp.progressionPrinciple,
+    days: (gp.days ?? []).map((d: any) => ({
+      dayNumber: d.dayNumber,
+      name: d.name,
+      focus: d.focus,
+      exercises: (d.exercises ?? []).map((ex: any) => ({
+        name: ex.name,
+        sets: ex.sets,
+        reps: ex.reps,
+        rest: ex.rest,
+        notes: ex.notes,
+      })),
+      notes: d.dayNotes,
+    })),
+  };
+}
+
 // ─── Core Merge Function ───────────────────────────────────────────────────────
 
 /**
@@ -80,15 +133,15 @@ function formatProgramAsText(program: any): string {
  * Steps:
  * 1. Load the guest session — bail safely if missing or already converted
  * 2. Populate user_profile from onboarding answers (if user has none)
- * 3. Create a starter conversation with the generated program (if user has none)
- * 4. Mark user onboardingComplete = true (skips the in-app onboarding flow)
- * 5. Convert guest session (status → converted, linkedUserId, convertedAt)
+ * 3. Create a starter conversation with the full chat history
+ * 4. Create a real training_system from the guest's structured program JSON (Phase 3)
+ * 5. Mark user onboardingComplete = true (skips the in-app onboarding flow)
+ * 6. Convert guest session (status → converted, linkedUserId, convertedAt)
  */
 export async function mergeGuestToUser(
   deviceId: string,
   userId: number,
 ): Promise<{ merged: boolean; reason?: string }> {
-  // Load guest session
   const session = await getGuestSession(deviceId);
   if (!session) {
     logger.warn(
@@ -98,7 +151,6 @@ export async function mergeGuestToUser(
     return { merged: false, reason: "session_not_found" };
   }
 
-  // Already converted for this user — idempotent
   if (session.status === "converted" && session.linkedUserId === userId) {
     logger.debug(
       { deviceId, userId },
@@ -109,7 +161,9 @@ export async function mergeGuestToUser(
 
   const meta = (session.metadata ?? {}) as Record<string, unknown>;
   const answers = meta.onboardingAnswers as Record<string, any> | undefined;
-  const program = meta.firstProgramOutput as Record<string, any> | undefined;
+  // Phase 3: prefer the conversational chat program JSON over the legacy generate output
+  const chatProgramJSON = meta.chatProgramJSON as GuestChatProgram | undefined;
+  const legacyProgram = meta.firstProgramOutput as Record<string, any> | undefined;
 
   // ── 1. Populate user profile ──────────────────────────────────────────────
   const [existingProfile] = await db
@@ -151,10 +205,11 @@ export async function mergeGuestToUser(
     .limit(1);
 
   if (!existingConv) {
-    // Prefer restoring the full chat history (new flow)
     const chatHistory = meta.chatHistory as Array<{ role: string; content: string }> | undefined;
-    const convTitle = program
-      ? String(program.programName ?? "Your Training Program")
+    const convTitle = chatProgramJSON
+      ? chatProgramJSON.programName
+      : legacyProgram
+      ? String(legacyProgram.programName ?? "Your Training Program")
       : "Your Training Program";
 
     const [conv] = await db
@@ -163,7 +218,6 @@ export async function mergeGuestToUser(
       .returning();
 
     if (chatHistory && chatHistory.length > 0) {
-      // Restore the full conversational history
       const messageRows = chatHistory.map((msg) => ({
         conversationId: conv.id,
         role: msg.role as "user" | "assistant",
@@ -177,11 +231,10 @@ export async function mergeGuestToUser(
         { deviceId, userId, conversationId: conv.id, messageCount: messageRows.length },
         "mergeGuestToUser: full chat history restored from guest session",
       );
-    } else if (program) {
-      // Fallback: legacy flow — format program as text message
-      const programText = formatProgramAsText(program);
-      const intro = program.coachIntro
-        ? `${program.coachIntro}\n\nHere is your personalized program:\n\n${programText}`
+    } else if (legacyProgram) {
+      const programText = formatProgramAsText(legacyProgram);
+      const intro = legacyProgram.coachIntro
+        ? `${legacyProgram.coachIntro}\n\nHere is your personalized program:\n\n${programText}`
         : programText;
 
       await db.insert(messagesTable).values({
@@ -190,7 +243,7 @@ export async function mergeGuestToUser(
         content: intro,
         structuredData: JSON.stringify({
           type: "guest_program_import",
-          program,
+          program: legacyProgram,
           sourceDeviceId: deviceId,
         }),
       });
@@ -202,13 +255,58 @@ export async function mergeGuestToUser(
     }
   }
 
-  // ── 3. Mark user onboarding complete ─────────────────────────────────────
+  // ── 3. Phase 3: Create real training system from structured program JSON ──
+  // This is the key Phase 3 addition — after conversion the user immediately
+  // has an active, editable training system rather than just chat history.
+  const existingSystemRows = await db
+    .select({ id: trainingSystems.id })
+    .from(trainingSystems)
+    .where(eq(trainingSystems.userId, userId))
+    .limit(1)
+    .catch(() => [] as { id: number }[]);
+  const existingSystem = existingSystemRows[0];
+
+  if (!existingSystem) {
+    let chatProgram: ChatProgram | null = null;
+
+    if (chatProgramJSON && chatProgramJSON.days && chatProgramJSON.days.length > 0) {
+      chatProgram = guestChatProgramToChatProgram(chatProgramJSON);
+      logger.info(
+        { deviceId, userId, programName: chatProgram.programName },
+        "mergeGuestToUser: using conversational chat program JSON for training system"
+      );
+    } else if (legacyProgram && legacyProgram.days && Array.isArray(legacyProgram.days) && legacyProgram.days.length > 0) {
+      chatProgram = legacyGuestProgramToChatProgram(legacyProgram);
+      logger.info(
+        { deviceId, userId, programName: chatProgram.programName },
+        "mergeGuestToUser: using legacy program JSON for training system"
+      );
+    }
+
+    if (chatProgram) {
+      try {
+        const system = await createTrainingSystemFromProgram(userId, chatProgram);
+        logger.info(
+          { deviceId, userId, systemId: system.id, programName: chatProgram.programName },
+          "mergeGuestToUser: real training system created from guest program"
+        );
+      } catch (err: any) {
+        // Non-fatal: the user still gets their chat history, they just need to build a system
+        logger.warn(
+          { deviceId, userId, err: err.message },
+          "mergeGuestToUser: failed to create training system from guest program — continuing"
+        );
+      }
+    }
+  }
+
+  // ── 4. Mark user onboarding complete ─────────────────────────────────────
   await db
     .update(usersTable)
     .set({ onboardingComplete: true })
     .where(eq(usersTable.id, userId));
 
-  // ── 4. Convert guest session ──────────────────────────────────────────────
+  // ── 5. Convert guest session ──────────────────────────────────────────────
   await convertGuestSession(deviceId, userId);
 
   logger.info(

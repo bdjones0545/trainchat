@@ -11,12 +11,33 @@ import logoSrc from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.
 const FREE_MESSAGE_LIMIT = GUEST_CONFIG.TEASER_TOTAL_LIMIT;
 const CHAT_HISTORY_KEY = "trainchat_guest_chat";
 const DEVICE_ID_KEY = "trainchat_device_id";
+const PROGRAM_JSON_KEY = "trainchat_guest_program";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+}
+
+interface GuestChatProgram {
+  programName: string;
+  description?: string;
+  splitType?: string;
+  progressionStrategy?: string;
+  days: Array<{
+    dayNumber: number;
+    name: string;
+    focus?: string;
+    exercises: Array<{
+      name: string;
+      sets: number;
+      reps: string;
+      rest: string;
+      notes?: string;
+    }>;
+    notes?: string;
+  }>;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -39,6 +60,20 @@ function saveLocalHistory(history: ChatMessage[]) {
   try { localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(history)); } catch {}
 }
 
+function loadLocalProgram(): GuestChatProgram | null {
+  try {
+    const raw = localStorage.getItem(PROGRAM_JSON_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.days && Array.isArray(parsed.days)) return parsed as GuestChatProgram;
+    return null;
+  } catch { return null; }
+}
+
+function saveLocalProgram(program: GuestChatProgram) {
+  try { localStorage.setItem(PROGRAM_JSON_KEY, JSON.stringify(program)); } catch {}
+}
+
 async function trackFunnelEvent(deviceId: string, event: string, metadata?: Record<string, unknown>) {
   try {
     await fetch("/api/guest/track", {
@@ -47,12 +82,6 @@ async function trackFunnelEvent(deviceId: string, event: string, metadata?: Reco
       body: JSON.stringify({ deviceId, event, ...(metadata ? { metadata } : {}) }),
     });
   } catch {}
-}
-
-// Detect whether a message looks like a structured training system preview
-function isSystemPreview(content: string): boolean {
-  return /Day\s+\d|Upper\s|Lower\s|Push\s|Pull\s|Legs\s|Full Body/.test(content) &&
-    /×|\bsets?\b|\breps?\b|4×|3×/.test(content);
 }
 
 // ─── Quick-start chips ────────────────────────────────────────────────────────
@@ -98,29 +127,18 @@ function parseInline(text: string): React.ReactNode {
   });
 }
 
-function AssistantMessage({ content, isSystemPreviewMsg }: { content: string; isSystemPreviewMsg: boolean }) {
+function AssistantMessage({ content }: { content: string }) {
   const lines = content.split("\n");
 
   return (
     <div className="flex items-start gap-3 max-w-[90%]">
       <AgentAvatar />
       <div style={{ minWidth: 0, flex: 1 }}>
-        {isSystemPreviewMsg && (
-          <div
-            className="inline-flex items-center gap-1.5 mb-2 px-2 py-1 rounded-full text-[10px] font-semibold uppercase tracking-widest"
-            style={{ background: "hsl(199 89% 48% / 0.12)", color: "hsl(199 89% 68%)", border: "1px solid hsl(199 89% 48% / 0.25)" }}
-          >
-            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            System Preview
-          </div>
-        )}
         <div
           className="rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed"
           style={{
-            background: isSystemPreviewMsg ? "hsl(222 47% 11%)" : "hsl(222 47% 13%)",
-            border: isSystemPreviewMsg ? "1px solid hsl(199 89% 48% / 0.25)" : "1px solid hsl(222 47% 20%)",
+            background: "hsl(222 47% 13%)",
+            border: "1px solid hsl(222 47% 20%)",
             color: "#d4d4d8",
           }}
         >
@@ -250,6 +268,103 @@ function LockedScreen({ onUnlock, onSignIn }: { onUnlock: () => void; onSignIn: 
   );
 }
 
+// ─── Guest Program Panel ─────────────────────────────────────────────────────
+// Shows the structured training program alongside chat once it's been generated.
+// This makes the program feel real and persistent, not text-buried in chat.
+
+function GuestProgramPanel({ program }: { program: GuestChatProgram }) {
+  const [expanded, setExpanded] = useState(true);
+
+  return (
+    <div
+      className="mx-4 mb-4 rounded-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-400"
+      style={{ border: "1px solid hsl(199 89% 48% / 0.30)", background: "hsl(222 47% 9%)" }}
+    >
+      {/* Header */}
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left transition-colors"
+        style={{ borderBottom: expanded ? "1px solid hsl(199 89% 48% / 0.15)" : "none" }}
+      >
+        <div className="flex items-center gap-2.5">
+          <div
+            className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: "hsl(199 89% 48% / 0.15)" }}
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="hsl(199 89% 68%)" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
+          <div>
+            <div className="text-[12px] font-semibold" style={{ color: "#f4f4f5" }}>{program.programName}</div>
+            {program.splitType && (
+              <div className="text-[10px]" style={{ color: "rgba(255,255,255,0.40)" }}>{program.splitType}</div>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span
+            className="text-[9px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-full"
+            style={{ background: "hsl(199 89% 48% / 0.12)", color: "hsl(199 89% 68%)", border: "1px solid hsl(199 89% 48% / 0.2)" }}
+          >
+            Live
+          </span>
+          <svg
+            className="w-3.5 h-3.5 transition-transform"
+            style={{ color: "rgba(255,255,255,0.35)", transform: expanded ? "rotate(180deg)" : "none" }}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </button>
+
+      {/* Body */}
+      {expanded && (
+        <div className="divide-y" style={{ divideColor: "hsl(222 47% 14%)" }}>
+          {program.days.map((day) => (
+            <div key={day.dayNumber} className="px-4 py-3">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <span className="text-[11px] font-semibold" style={{ color: "#f4f4f5" }}>
+                    Day {day.dayNumber} — {day.name}
+                  </span>
+                  {day.focus && (
+                    <span className="ml-2 text-[10px]" style={{ color: "rgba(255,255,255,0.38)" }}>{day.focus}</span>
+                  )}
+                </div>
+                <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.28)" }}>
+                  {day.exercises.length} exercises
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                {day.exercises.map((ex, j) => (
+                  <div key={j} className="flex items-start justify-between gap-2">
+                    <span className="text-[11px]" style={{ color: "#d4d4d8" }}>{ex.name}</span>
+                    <span
+                      className="text-[10px] font-medium flex-shrink-0"
+                      style={{ color: "rgba(255,255,255,0.45)" }}
+                    >
+                      {ex.sets}×{ex.reps}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          {program.progressionStrategy && (
+            <div className="px-4 py-2.5">
+              <p className="text-[10px] leading-relaxed" style={{ color: "rgba(255,255,255,0.35)" }}>
+                {program.progressionStrategy}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function GuestStart({ userMode }: { userMode: UserMode }) {
@@ -262,6 +377,8 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
   const [showPaywall, setShowPaywall] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [currentTurn, setCurrentTurn] = useState(0);
+  /** Phase 3: structured program JSON extracted from AI responses */
+  const [currentProgram, setCurrentProgram] = useState<GuestChatProgram | null>(null);
   // Bootstrap gate: prevents main UI from rendering before the initialization
   // useEffect has run. This eliminates the one-frame flash where the empty
   // chat shell appears before we know the session status.
@@ -333,6 +450,12 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
       }]);
     }
 
+    // Phase 3: Restore structured program panel if available
+    const storedProgram = loadLocalProgram();
+    if (storedProgram) {
+      setCurrentProgram(storedProgram);
+    }
+
     setIsInitialized(true);
   }, [guestSession, deviceId]);
 
@@ -399,6 +522,13 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
       const updated = [...newMessages, assistantMsg];
       setMessages(updated);
       saveLocalHistory(updated);
+
+      // Phase 3: If the response included a structured program, update the panel
+      if (data.guestProgram && data.guestProgram.days && data.guestProgram.days.length > 0) {
+        setCurrentProgram(data.guestProgram);
+        saveLocalProgram(data.guestProgram);
+        if (deviceId) trackFunnelEvent(id, GUEST_CONFIG.EVENTS.PROGRAM_GENERATED, { programName: data.guestProgram.programName });
+      }
 
       if (data.limitReached) {
         setTimeout(() => {
@@ -627,23 +757,32 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
           </div>
         ) : (
           /* ── Conversation view ───────────────────────────────────────── */
-          <div className="flex-1 overflow-y-auto px-4 pt-5 pb-4 space-y-4">
-            {messages.map((msg, i) => (
-              <div
-                key={i}
-                className="animate-in fade-in slide-in-from-bottom-2 duration-300"
-              >
-                {msg.role === "assistant"
-                  ? <AssistantMessage content={msg.content} isSystemPreviewMsg={isSystemPreview(msg.content)} />
-                  : <UserMessage content={msg.content} />
-                }
-              </div>
-            ))}
-            {isTyping && (
-              <div className="animate-in fade-in duration-200">
-                <TypingIndicator turnNumber={currentTurn} />
-              </div>
+          <div className="flex-1 overflow-y-auto pt-5 pb-4 space-y-4">
+            {/* Chat messages */}
+            <div className="space-y-4 px-4">
+              {messages.map((msg, i) => (
+                <div
+                  key={i}
+                  className="animate-in fade-in slide-in-from-bottom-2 duration-300"
+                >
+                  {msg.role === "assistant"
+                    ? <AssistantMessage content={msg.content} />
+                    : <UserMessage content={msg.content} />
+                  }
+                </div>
+              ))}
+              {isTyping && (
+                <div className="animate-in fade-in duration-200">
+                  <TypingIndicator turnNumber={currentTurn} />
+                </div>
+              )}
+            </div>
+
+            {/* Phase 3: Structured program panel — appears below chat once program is built */}
+            {currentProgram && !isTyping && (
+              <GuestProgramPanel program={currentProgram} />
             )}
+
             <div ref={bottomRef} />
           </div>
         )}
