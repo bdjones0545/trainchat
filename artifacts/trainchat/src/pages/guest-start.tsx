@@ -321,7 +321,7 @@ function GuestProgramPanel({ program }: { program: GuestChatProgram }) {
 
       {/* Body */}
       {expanded && (
-        <div className="divide-y" style={{ divideColor: "hsl(222 47% 14%)" }}>
+        <div className="divide-y divide-[hsl(222_47%_14%)]">
           {program.days.map((day) => (
             <div key={day.dayNumber} className="px-4 py-3">
               <div className="flex items-center justify-between mb-2">

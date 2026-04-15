@@ -56,6 +56,10 @@ const INSIGHT_EDIT_REQUESTS: Record<InsightType, string> = {
     "Sessions are appropriately challenging and I'm adapting well. Maintain the current programming as is — just add a note that the current loading is working well and to stay the course.",
   program_evolution:
     "My current program is several weeks old. Introduce a meaningful progression — either a new phase emphasis, exercise rotation in the main lifts, or an increase in training complexity to drive continued adaptation.",
+  pain_trigger_pattern:
+    "I've been experiencing a recurring pain trigger pattern in my training. Review the current program for exercises that consistently load the affected area and replace them with lower-risk alternatives. Add coaching notes about load management and movement substitutions.",
+  low_engagement_trend:
+    "My engagement with training sessions has been declining. Refresh the program to re-introduce variety and motivation — rotate the main lifts, add a new training modality, or shift the session structure to something more interesting while maintaining the training stimulus.",
 };
 
 // ─── POST /insights/apply ────────────────────────────────────────────────────

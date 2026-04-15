@@ -562,7 +562,7 @@ function matchesPainAdjustment(lower: string): {
   const painSignals = /\b(pain|hurt|hurts|hurting|ache|aching|sore|soreness|injury|injured|strain|sprain|tweak|tweaked|flare|flaring|aggravate|bother|bothering|issue|problem|tight|tightness|uncomfortable|discomfort|inflamed|inflammation|swollen)\b/;
   const acuteSignals = /\b(this week|today|right now|lately|recently|just|started|developed|new|sudden)\b/;
 
-  if (!painSignals.test(lower)) return { matched: false };
+  if (!painSignals.test(lower)) return { matched: false, confidence: "low" as const };
 
   for (const [part, pattern] of Object.entries(bodyPartPatterns)) {
     if (pattern.test(lower)) {
@@ -606,7 +606,7 @@ function matchesReadinessAdjustment(lower: string): {
     }
   }
 
-  return { matched: false };
+  return { matched: false, confidence: "low" as const };
 }
 
 // ─── Structural Edit Detection ───────────────────────────────────────────────

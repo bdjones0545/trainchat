@@ -84,6 +84,10 @@ router.post("/subscription/checkout", requireAuth, async (req: any, res): Promis
     // Create Stripe customer if not yet on file
     let customerId = user.stripeCustomerId;
     if (!customerId) {
+      if (!user.email) {
+        res.status(400).json({ error: "User account has no email address" });
+        return;
+      }
       customerId = await stripeService.createCustomer(user.email, userId);
       await stripeStorage.linkStripeCustomer(userId, customerId);
     }

@@ -1150,7 +1150,7 @@ export async function buildDBExerciseContext(profile: UserProfile): Promise<stri
     }
 
     // Add prep/mobility patterns for recovery or lower readiness
-    if (spec.goal === "mobility" || spec.goal === "recovery") {
+    if ((spec.goal as string) === "mobility" || (spec.goal as string) === "recovery") {
       patterns.push("mobility_prep", "core_lateral", "core_rotation");
     }
 

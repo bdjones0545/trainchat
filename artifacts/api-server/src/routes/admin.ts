@@ -18,7 +18,7 @@ async function requireAdmin(req: any, res: any, next: any) {
       .select({ email: usersTable.email })
       .from(usersTable)
       .where(eq(usersTable.id, req.session.userId));
-    if (!user || !ADMIN_EMAILS.includes(user.email)) {
+    if (!user || !ADMIN_EMAILS.includes(user.email ?? "")) {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
@@ -201,7 +201,7 @@ router.post("/admin/knowledge", requireAuth, requireAdmin, async (req, res): Pro
  * Update a coaching knowledge entry.
  */
 router.put("/admin/knowledge/:id", requireAuth, requireAdmin, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
@@ -240,7 +240,7 @@ router.put("/admin/knowledge/:id", requireAuth, requireAdmin, async (req, res): 
  * Delete a coaching knowledge entry.
  */
 router.delete("/admin/knowledge/:id", requireAuth, requireAdmin, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;

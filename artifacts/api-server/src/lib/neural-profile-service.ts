@@ -383,7 +383,7 @@ async function computeScores(userId: number) {
     : 0;
 
   const avgReadiness = readinessEntries.length > 0
-    ? readinessEntries.reduce((sum, r) => sum + (r.readinessScore ?? 3), 0) / readinessEntries.length
+    ? readinessEntries.reduce((sum, r) => sum + (r.sorenessScore ?? 3), 0) / readinessEntries.length
     : 3;
   const recoveryScore = Math.min(100, Math.round(((avgReadiness - 1) / 4) * 100));
 

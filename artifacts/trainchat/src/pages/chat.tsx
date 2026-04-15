@@ -196,20 +196,25 @@ export default function Chat() {
 
   const { data: me, isError: meError, isLoading: meLoading, isFetching: meFetching } = useGetMe();
   const { data: profile } = useGetProfile({
-    query: { enabled: !!me },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query: { enabled: !!me } as any,
   });
   const { data: conversations = [], isLoading: convosLoading } = useListConversations({
-    query: { enabled: !!me },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query: { enabled: !!me } as any,
   });
   const { data: messages = [], isLoading: messagesLoading } = useListMessages(
     activeConvoId!,
-    { query: { enabled: !!activeConvoId } }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    { query: { enabled: !!activeConvoId } as any }
   );
   const { data: memories = [], isLoading: memoriesLoading } = useListMemories({
-    query: { enabled: !!me },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query: { enabled: !!me } as any,
   });
   const { data: insights = [], isLoading: insightsLoading } = useListInsights({
-    query: { enabled: !!me },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query: { enabled: !!me } as any,
   });
 
   const { data: subscription } = useQuery({
@@ -521,7 +526,8 @@ export default function Chat() {
       // After a program modification (edit): switch to Program tab, highlight, and open panel
       if (result.systemEdit?.applied) {
         if (result.systemEdit?.changeTargets?.length) {
-          setChangeTargets(result.systemEdit.changeTargets);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          setChangeTargets(result.systemEdit.changeTargets as any);
         }
         setNewChangeSignal((n) => n + 1);
         // Auto-open right panel so the change is immediately visible
@@ -613,15 +619,19 @@ export default function Chat() {
             name: day.name,
             focus: day.focus ?? undefined,
             notes: day.notes ?? undefined,
-            exercises: (day.exercises ?? []).map((ex) => ({
-              name: ex.name,
-              classification: ex.classification ?? undefined,
-              sets: typeof ex.sets === "number" ? ex.sets : 3,
-              reps: ex.reps ?? "10",
-              rest: ex.rest ?? "60 sec",
-              intent: ex.intent ?? undefined,
-              notes: ex.notes ?? undefined,
-            })),
+            exercises: (day.exercises ?? []).map((ex) => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const exAny = ex as any;
+              return {
+                name: ex.name,
+                classification: exAny.classification ?? undefined,
+                sets: typeof ex.sets === "number" ? ex.sets : 3,
+                reps: ex.reps ?? "10",
+                rest: ex.rest ?? "60 sec",
+                intent: exAny.intent ?? undefined,
+                notes: ex.notes ?? undefined,
+              };
+            }),
           })),
         }),
       });

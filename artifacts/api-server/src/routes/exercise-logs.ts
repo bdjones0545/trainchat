@@ -116,7 +116,7 @@ router.get("/exercise-logs/targets", requireAuth, async (req: any, res): Promise
     const { readinessEntriesTable } = await import("@workspace/db");
     const oneDayAgo = new Date(Date.now() - 86400000);
     const entries = await db
-      .select({ readinessScore: readinessEntriesTable.readinessScore })
+      .select({ readinessScore: readinessEntriesTable.sorenessScore })
       .from(readinessEntriesTable)
       .where(
         and(

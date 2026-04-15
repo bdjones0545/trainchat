@@ -101,7 +101,7 @@ export function classifyEdit(
 export interface CreateChangeLogParams {
   userId: number;
   trainingSystemId: number;
-  source?: "ai_edit" | "quick_action" | "initialize" | "restore" | "auto_adjust";
+  source?: "ai_edit" | "quick_action" | "initialize" | "restore" | "auto_adjust" | "proactive_agent" | "workout_feedback";
   intent: string;
   scope: EditScope;
   changeSummary: string;
@@ -269,5 +269,6 @@ export async function getChangeDetail(
     createdAt: entry.createdAt,
     beforeSnapshot: (entry.beforeSnapshot as SystemSnapshot | null) ?? null,
     afterSnapshot: (entry.afterSnapshot as SystemSnapshot | null) ?? null,
+    decisionMetadata: (entry.decisionMetadata as Record<string, unknown> | null) ?? null,
   };
 }

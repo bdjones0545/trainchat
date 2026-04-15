@@ -2012,7 +2012,7 @@ function generateFallbackResponse(
   // messy phrasing) and applies structured mutations to the live program.
   // Falls through to the legacy engine only if the specialist returns AMBIGUOUS.
   if (currentProgram) {
-    const specialistDecision = decideProgramAdjustment(userMessage, currentProgram, { profile });
+    const specialistDecision = decideProgramAdjustment(userMessage, currentProgram, { profile: profile as unknown as Record<string, unknown> | null });
     if (!specialistDecision.requiresClarification && specialistDecision.primaryIntent !== "AMBIGUOUS" && specialistDecision.mutations.length > 0) {
       const mutatedProgram = applySpecialistMutations(currentProgram, specialistDecision);
       const changeSummary = buildSpecialistChangeSummary(specialistDecision);
@@ -2023,7 +2023,7 @@ function generateFallbackResponse(
       );
       return {
         content: responseText,
-        structuredData: mutatedProgram,
+        structuredData: mutatedProgram as unknown as ProgramStructure,
         changeSummary,
       };
     }

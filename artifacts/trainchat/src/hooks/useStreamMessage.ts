@@ -181,6 +181,8 @@ export function useStreamMessage(): UseStreamMessageResult {
         intentType: undefined,
         actionType: undefined,
         error: null,
+        paywallTriggered: false,
+        paywallIsAnonymous: false,
       });
 
       try {

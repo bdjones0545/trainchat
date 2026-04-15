@@ -92,7 +92,7 @@ export interface SportProfile {
     fourDayShape: string;
   };
   seasonModulation: Record<NonNullable<SeasonContext>, SeasonModulation>;
-  positionOverlays: Partial<Record<PlayerPosition, string>>;
+  positionOverlays: Partial<Record<NonNullable<PlayerPosition>, string>>;
   validationRules: string[];
   architectureDistinctions: string; // What makes this sport's program uniquely different
 }

@@ -106,6 +106,7 @@ interface ProgramDay {
 
 export interface ProgramStructure {
   programName?: string;
+  description?: string;
   splitType?: string;
   days: ProgramDay[];
 }

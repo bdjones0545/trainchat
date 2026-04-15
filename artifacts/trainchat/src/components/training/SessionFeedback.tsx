@@ -134,7 +134,7 @@ function RatingRow({
 
 // ─── Session Recap Card ────────────────────────────────────────────────────
 
-function SessionRecapCard({ recap, onClose }: { recap: SessionRecap; onClose: () => void }) {
+function SessionRecapCard({ recap, onClose, onGotIt }: { recap: SessionRecap; onClose: () => void; onGotIt: () => void }) {
   return (
     <div className="flex flex-col gap-3 py-6 px-1">
       <div className="w-14 h-14 rounded-full bg-green-500/15 flex items-center justify-center mx-auto">
@@ -167,7 +167,7 @@ function SessionRecapCard({ recap, onClose }: { recap: SessionRecap; onClose: ()
         </div>
       )}
       <button
-        onClick={handleGotIt}
+        onClick={onGotIt}
         className="w-full mt-1 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
       >
         Got it
@@ -277,7 +277,7 @@ export default function SessionFeedback({ sessionLabel, streakDays, onClose, onS
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
           {recap ? (
-            <SessionRecapCard recap={recap} onClose={handleClose} />
+            <SessionRecapCard recap={recap} onClose={handleClose} onGotIt={handleGotIt} />
           ) : (
             <>
               {/* Session status */}

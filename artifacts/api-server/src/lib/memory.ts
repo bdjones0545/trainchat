@@ -133,8 +133,8 @@ async function extractProfileMemories(userId: number): Promise<MemoryCandidate[]
   const candidates: MemoryCandidate[] = [];
 
   // Equipment preferences
-  if (p.equipment) {
-    const eq_lower = p.equipment.toLowerCase();
+  if (p.equipmentAccess) {
+    const eq_lower = p.equipmentAccess.toLowerCase();
     if (eq_lower.includes("dumbbell") && !eq_lower.includes("barbell")) {
       candidates.push({
         type: "exercise_preference",

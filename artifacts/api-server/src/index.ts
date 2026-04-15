@@ -54,7 +54,7 @@ async function initStripe() {
 
     stripeSync.syncBackfill().then(() => {
       logger.info("Stripe data synced");
-    }).catch((err) => {
+    }).catch((err: unknown) => {
       logger.error({ err }, "Stripe backfill error");
     });
 

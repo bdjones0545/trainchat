@@ -6,7 +6,7 @@ import { z } from "zod";
 import { useLogin } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetMeQueryKey } from "@workspace/api-client-react";
-import { getOrCreateDeviceId } from "@/lib/deviceId";
+import { getOrCreateDeviceId, DEVICE_ID_KEY } from "@/lib/deviceId";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 
 const loginSchema = z.object({

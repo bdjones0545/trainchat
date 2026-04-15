@@ -149,7 +149,7 @@ export default function AgentStatusBar({
   return (
     <div
       className={`flex-shrink-0 px-4 py-2 flex justify-center transition-all duration-300 ${
-        displayState !== "hidden" ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
+        (displayState as string) !== "hidden" ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
       }`}
     >
       <div

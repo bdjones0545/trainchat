@@ -1085,7 +1085,7 @@ Keep it helpful and intelligent, never promotional.`;
     (intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM");
 
   if (isInitialBuildNonStream && structuredData) {
-    (structuredData as Record<string, unknown>)._buildMeta = {
+    (structuredData as unknown as Record<string, unknown>)._buildMeta = {
       frequency: structuredData.days.length,
       goal: extractedConstraints?.primaryGoal ?? null,
       sport: extractedConstraints?.sportFocus ?? null,
@@ -1875,7 +1875,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     (intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM");
 
   if (isInitialBuild && structuredData) {
-    (structuredData as Record<string, unknown>)._buildMeta = {
+    (structuredData as unknown as Record<string, unknown>)._buildMeta = {
       frequency: structuredData.days.length,
       goal: extractedConstraints?.primaryGoal ?? null,
       sport: extractedConstraints?.sportFocus ?? null,

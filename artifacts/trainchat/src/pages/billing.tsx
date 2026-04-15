@@ -1,26 +1,25 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { ArrowLeft, CreditCard, Calendar, RefreshCw, AlertCircle, CheckCircle, XCircle, Zap, Crown, Star } from "lucide-react";
-import { customFetch } from "@workspace/api-client-react";
 import { useState } from "react";
 import PricingModal from "@/components/PricingModal";
 
 // ─── Data fetching ────────────────────────────────────────────────────────────
 
 async function fetchSubscription() {
-  const r = await customFetch("/api/subscription");
+  const r = await fetch("/api/subscription", { credentials: "include" });
   if (!r.ok) throw new Error("Failed to load subscription");
   return r.json();
 }
 
 async function fetchActiveSystem() {
-  const r = await customFetch("/api/training-system/active");
+  const r = await fetch("/api/training-system/active", { credentials: "include" });
   if (!r.ok) return null;
   return r.json();
 }
 
 async function openPortal() {
-  const r = await customFetch("/api/subscription/portal", { method: "POST" });
+  const r = await fetch("/api/subscription/portal", { method: "POST", credentials: "include" });
   if (!r.ok) {
     const body = await r.json().catch(() => ({}));
     throw new Error(body.error ?? "Failed to open billing portal");
@@ -30,8 +29,9 @@ async function openPortal() {
 }
 
 async function startCheckout(priceId: string) {
-  const r = await customFetch("/api/subscription/checkout", {
+  const r = await fetch("/api/subscription/checkout", {
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ priceId }),
   });

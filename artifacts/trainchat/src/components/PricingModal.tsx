@@ -1,6 +1,5 @@
 import { X, Zap, Check, Star, Crown } from "lucide-react";
 import { useState, useEffect } from "react";
-import { customFetch } from "@workspace/api-client-react";
 
 interface Plan {
   id: string;
@@ -77,7 +76,7 @@ export default function PricingModal({ onClose, onSelectPlan, currentPlan = "fre
   const [plans, setPlans] = useState<Plan[]>(PLANS);
 
   useEffect(() => {
-    customFetch("/api/subscription/products")
+    fetch("/api/subscription/products", { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
       .then((data: any) => {
         if (!data?.products?.length) return;

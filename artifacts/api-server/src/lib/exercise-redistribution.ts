@@ -883,7 +883,7 @@ export function redistributeExercises(
             decision: "REMOVE_FOR_FATIGUE",
             reason: `Session fatigue budget (${cap}) exceeded — exercise removed to protect recovery`,
             originalDay: ex.sourceDay,
-            priorityScore: ex.priorityScore,
+            priorityScore: (ex as ScoredExercise).priorityScore,
           });
         }
       }

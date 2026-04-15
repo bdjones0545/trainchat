@@ -22,7 +22,7 @@ function getSecretKey(): string {
 // Do not use unrecognized or future-dated version strings.
 // Update this intentionally when upgrading Stripe SDK or API behavior.
 
-const STRIPE_API_VERSION = "2024-06-20" as const;
+const STRIPE_API_VERSION = "2024-06-20" as Stripe.LatestApiVersion;
 
 // Stripe client is created fresh each call — avoids stale credentials.
 export async function getUncachableStripeClient(): Promise<Stripe> {

@@ -214,7 +214,7 @@ router.get("/training-system/history", requireAuth, async (req, res): Promise<vo
 router.post("/training-system/restore/:changeId", requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = req.session.userId!;
-    const changeId = parseInt(req.params.changeId, 10);
+    const changeId = parseInt(req.params.changeId as string, 10);
 
     if (isNaN(changeId)) {
       res.status(400).json({ error: "Invalid changeId" });
@@ -253,7 +253,7 @@ router.post("/training-system/restore/:changeId", requireAuth, async (req, res):
       scope: "system",
       changeSummary: `Restored to: "${sourceLabel}"`,
       beforeSnapshot: emptySnapshot,
-      afterSnapshot: { ...emptySnapshot, fullProgram },
+      afterSnapshot: emptySnapshot,
       fullProgramSnapshot: fullProgram,
       appliedCount: 1,
       skippedCount: 0,
@@ -317,7 +317,7 @@ router.get("/training-system/library", requireAuth, async (req, res): Promise<vo
 router.post("/training-system/set-active/:id", requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = req.session.userId!;
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(req.params.id as string, 10);
 
     if (isNaN(id)) {
       res.status(400).json({ error: "Invalid training system id" });
