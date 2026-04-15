@@ -13,6 +13,8 @@
 
 import { db, readinessEntriesTable, sessionFeedbackTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
+import { buildPerformanceAdaptationContext } from "./performance-adaptation-service";
+import type { PerformanceAdaptationSummary } from "./performance-adaptation-service";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -47,6 +49,7 @@ export interface AdaptationContext {
   recentReadiness: ReadinessEntry[];
   recentFeedback: SessionFeedbackEntry[];
   trends: TrendSignals;
+  performanceAdaptation: PerformanceAdaptationSummary | null;
   promptContext: string;
 }
 
@@ -267,19 +270,28 @@ function scoreLabel(score: number, type: string): string {
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export async function buildAdaptationContext(userId: number): Promise<AdaptationContext> {
-  const [recentReadiness, recentFeedback] = await Promise.all([
+  const [recentReadiness, recentFeedback, performanceAdaptation] = await Promise.all([
     fetchRecentReadiness(userId, 7),
     fetchRecentFeedback(userId, 5),
+    buildPerformanceAdaptationContext(userId, 14).catch(() => null),
   ]);
 
   const latestReadiness = recentReadiness[0] ?? null;
   const trends = computeTrends(recentReadiness, recentFeedback);
-  const promptContext = buildAdaptationPrompt(
+
+  const readinessPrompt = buildAdaptationPrompt(
     latestReadiness,
     trends,
     recentFeedback,
     recentReadiness.length
   );
+
+  // Merge readiness context + performance adaptation context
+  // Performance block is only appended when there is enough data to be meaningful
+  const performanceBlock = performanceAdaptation?.promptBlock ?? "";
+  const promptContext = [readinessPrompt, performanceBlock]
+    .filter(Boolean)
+    .join("\n\n");
 
   return {
     hasReadiness: recentReadiness.length > 0,
@@ -288,6 +300,7 @@ export async function buildAdaptationContext(userId: number): Promise<Adaptation
     recentReadiness,
     recentFeedback,
     trends,
+    performanceAdaptation: performanceAdaptation ?? null,
     promptContext,
   };
 }

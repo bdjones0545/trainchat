@@ -1,0 +1,375 @@
+We are now implementing:
+
+FIX 2 — CROSS-SESSION ADAPTATION LOOP
+
+OBJECTIVE:
+Turn TrainChat from a strong program builder into a real adaptive training system by feeding logged training performance back into future engine decisions.
+
+Right now, TrainChat can generate strong programs.
+But a real coaching system does more than generate:
+it adapts based on what actually happened.
+
+This fix closes the loop between:
+- prescribed training
+- performed training
+- future programming decisions
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+A real coach does not just write a plan.
+A real coach looks at:
+- what the athlete completed
+- what loads they used
+- how hard it felt
+- what patterns are trending
+- whether recovery and performance are improving or slipping
+
+Then the coach adjusts the next prescription.
+
+TrainChat must now do the same.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Build a cross-session adaptation system so that when the user logs training performance, the next program generation / major edit / weekly update can incorporate actual recent training outcomes.
+
+This is not just storage.
+This is decision input.
+
+==================================================
+TASK 1 — DEFINE PERFORMANCE MEMORY MODEL
+==================================================
+
+Create a structured performance memory layer that stores meaningful training outcomes from completed or logged sessions.
+
+At minimum, capture concepts like:
+- session completion status
+- exercise performance
+- load used
+- reps completed
+- RPE / difficulty if available
+- skipped exercises
+- failed targets
+- notes if available
+- date / recency
+- trend summaries by movement or session type
+
+Create or standardize a structure like:
+
+type PerformanceMemoryRecord = {
+  userId: string;
+  trainingSystemId?: string;
+  sessionId?: string;
+  completedAt: string;
+  exerciseResults?: Array<{
+    exerciseId?: string;
+    exerciseName: string;
+    prescribedSets?: number;
+    prescribedReps?: string;
+    prescribedLoad?: string | number;
+    completedSets?: number;
+    completedReps?: string;
+    completedLoad?: string | number;
+    rpe?: number;
+    completed?: boolean;
+    skipped?: boolean;
+    notes?: string;
+  }>;
+  sessionRPE?: number;
+  completionStatus?: "completed" | "partial" | "missed";
+  notes?: string;
+  metadata?: Record<string, any>;
+};
+
+Use existing session logging models if they already exist, but ensure the system can derive adaptation-ready summaries from them.
+
+==================================================
+TASK 2 — DEFINE ADAPTATION SIGNALS
+==================================================
+
+Create a lightweight interpretation layer that converts logged performance into useful coaching signals.
+
+Examples of signals:
+- repeated overshooting (too easy)
+- repeated undershooting / excessive difficulty
+- multiple missed sessions
+- repeated skipped exercises
+- rising RPE trend
+- reduced performance on key lifts
+- successful completion across multiple weeks
+- high adherence
+- low adherence
+- possible fatigue accumulation
+- readiness to progress
+- need to hold or reduce load/volume
+
+Create an adaptation summary concept like:
+
+type AdaptationSignalSummary = {
+  userId: string;
+  windowDays: number;
+  adherenceTrend?: "high" | "moderate" | "low";
+  fatigueTrend?: "rising" | "stable" | "unclear";
+  progressionReadiness?: "progress" | "hold" | "reduce" | "review";
+  keyFindings: string[];
+  movementTrends?: Array<{
+    movementKey: string;
+    trend: "improving" | "stalled" | "regressing" | "unclear";
+    notes?: string;
+  }>;
+  engineRelevantFlags?: string[];
+  metadata?: Record<string, any>;
+};
+
+==================================================
+TASK 3 — BUILD TREND ANALYSIS RULES
+==================================================
+
+Implement practical first-pass rules for interpreting performance memory.
+
+Examples:
+- if key lift completed for 2–3 exposures at target RPE <= planned → readiness to progress
+- if session RPE consistently high and completion falls → fatigue warning
+- if multiple missed sessions in recent window → reduce aggressiveness
+- if user skips conditioning repeatedly → review modality or volume
+- if re-entry user completes first phase comfortably → allow transition
+- if advanced user performance stalls across exposures → hold or modulate load/volume
+
+Keep this version practical and interpretable.
+Do not overcomplicate with fake precision.
+
+==================================================
+TASK 4 — FEED ADAPTATION INTO ENGINE INJECTION
+==================================================
+
+This is the core of the fix.
+
+When relevant generation/edit flows happen, inject adaptation context into the active engines.
+
+Examples:
+- strength engine sees repeated squat overshoot → increase load/progression
+- re-entry engine sees adherence + low RPE → progress phase sooner
+- conditioning engine sees poor adherence to intervals → reduce complexity or adjust modality
+- periodization engine sees fatigue trend → insert hold/deload logic
+- sport engine sees in-season fatigue or low adherence → bias maintenance over development
+
+Add adaptation context to the orchestration layer so engines no longer operate only on:
+- profile
+- live message
+
+They should now also operate on:
+- recent performance memory
+
+==================================================
+TASK 5 — DEFINE WHERE ADAPTATION APPLIES
+==================================================
+
+Apply adaptation to the right flows, not everything blindly.
+
+Relevant flows should include:
+- weekly progression updates
+- program rebuilds
+- major edits to ongoing systems
+- next-block generation
+- “what should I do next?” style requests
+- check-in / calibration / adaptation prompts
+- future generation after logged sessions
+
+Less relevant:
+- first-ever program generation for a brand new user with no history
+
+Use good judgment and avoid injecting empty/noisy adaptation context when no useful data exists.
+
+==================================================
+TASK 6 — ADD ADAPTATION PRIORITY RULES
+==================================================
+
+Create priority logic for how adaptation interacts with existing engines.
+
+Example hierarchy:
+1. safety / re-entry / pain-sensitive context
+2. actual recent performance trend
+3. live user request
+4. sport/season context
+5. profile defaults
+
+Examples:
+- if user wants to progress hard but recent performance shows high fatigue → adaptation should temper aggressiveness
+- if user says “push intensity” but adherence is poor → system should respond intelligently, not blindly comply
+- if re-entry user is crushing sessions with low RPE → system can progress more confidently
+
+Adaptation must influence output like a real coach would.
+
+==================================================
+TASK 7 — CREATE ADAPTATION MEMORY INJECTION FORMAT
+==================================================
+
+Build a clean injection format for the prompt/orchestration layer.
+
+Example concept:
+
+ADAPTATION MEMORY
+- Last 14 days adherence: high
+- Squat exposures: improving, target RPE lower than planned
+- Conditioning adherence: low, missed 2 intervals
+- Session fatigue trend: stable
+- Recommendation: progress lower-body loading modestly, simplify conditioning modality
+
+This should be concise, structured, and engine-readable.
+
+Avoid dumping raw logs into the prompt.
+
+==================================================
+TASK 8 — SUPPORT MOVEMENT-LEVEL ADAPTATION
+==================================================
+
+Where possible, adaptation should not only be global.
+
+Examples:
+- squat progressing well → progress squat
+- upper-body fatigue high → hold pressing volume
+- conditioning compliance low → alter conditioning without changing everything else
+- repeated skipped split squats → substitute exercise or reduce burden
+
+This can be lightweight initially, but the system should not treat all performance feedback as one global blob.
+
+==================================================
+TASK 9 — ADD ADAPTATION-SENSITIVE OUTPUT BEHAVIOR
+==================================================
+
+The agent should explain adaptive changes in a coach-like way.
+
+Examples:
+- “You’ve handled your lower-body work well the last two sessions, so I progressed the load slightly this week.”
+- “Your recent sessions looked more fatiguing, so I held volume steady instead of pushing harder.”
+- “You’ve been skipping the conditioning finisher, so I swapped it for a simpler bike interval block.”
+
+This is crucial:
+The user should feel the system is responding to reality, not just generating more content.
+
+==================================================
+TASK 10 — ADD VALIDATION / SAFETY FOR ADAPTATION CHANGES
+==================================================
+
+Do not let adaptation logic create unsafe jumps.
+
+Examples:
+- no large progression jumps from sparse data
+- no aggressive intensity increase after one easy session
+- no assumption of readiness from incomplete logs
+- no punitive deloads from one bad day
+- require enough confidence / repeated signal before making meaningful changes
+
+Use conservative thresholds and mark low-confidence trends as “review” or “hold.”
+
+==================================================
+TASK 11 — ADD DEV INSPECTION / DEBUG SUPPORT
+==================================================
+
+Make adaptation routing inspectable in development.
+
+I want to be able to see:
+- what performance records were considered
+- what adaptation signals were derived
+- what recommendation was produced
+- what engines received adaptation context
+- what output changes resulted from adaptation
+
+This can be:
+- structured logs
+- internal trace object
+- dev-only metadata
+
+Do not leak noisy internals into production UI.
+
+==================================================
+TASK 12 — TEST REQUIRED SCENARIOS
+==================================================
+
+Run and validate these exact scenarios:
+
+1. User logs 2–3 strong squat sessions with lower-than-expected RPE
+Expected:
+- next strength output progresses squat modestly
+
+2. User logs repeated high RPE / missed reps on key lifts
+Expected:
+- next output holds or reduces aggressiveness
+
+3. User misses multiple sessions in a week
+Expected:
+- next update reduces volume or simplifies progression
+
+4. User repeatedly skips conditioning finisher
+Expected:
+- system modifies conditioning modality or volume instead of blindly repeating it
+
+5. Re-entry user completes first two weeks comfortably
+Expected:
+- system transitions toward next phase appropriately
+
+6. In-season athlete shows fatigue/high RPE trend
+Expected:
+- system biases maintenance and recovery
+
+7. User has sparse or low-confidence logging data
+Expected:
+- system avoids overreacting
+- adaptation remains conservative
+
+==================================================
+FILES / AREAS TO AUDIT
+==================================================
+
+Audit and patch relevant areas, likely including:
+- session logging / completion models
+- adaptation / check-in logic
+- ai.ts orchestration
+- engine injection builders
+- memory/context builders
+- program update/generation flows
+- any existing adaptation engine or forecast logic
+- relevant DB/storage models
+- debug/logging helpers
+
+Use the existing architecture wherever possible.
+This is a loop-closing integration phase, not a full rewrite.
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What performance memory structures were created or reused
+2. What adaptation signals were added
+3. How trend analysis works
+4. Where adaptation context is injected
+5. What priority rules were added
+6. What movement-level adaptation is supported
+7. What safety/validation rules were added
+8. What debugging/inspection support was added
+9. What test cases now adapt correctly that previously would not
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat must no longer behave like:
+“I generated your plan.”
+
+It must begin behaving like:
+“I saw what happened in your recent training, and I adjusted the system accordingly.”
+
+A user should be able to train, log what happened, come back, and feel:
+- the system remembers
+- the system interpreted it
+- the system adapted intelligently
+- the next prescription is meaningfully different because of their actual performance
+
+This is the fix that turns TrainChat from a strong builder into a real adaptive training system.
+
+Implement this now.
