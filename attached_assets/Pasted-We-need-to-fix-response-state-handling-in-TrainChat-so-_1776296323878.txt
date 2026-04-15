@@ -1,0 +1,264 @@
+We need to fix response-state handling in TrainChat so the UI clearly distinguishes between:
+1. real program mutations
+2. clarification/conversational replies
+3. true failures
+
+Right now the product is overreacting to non-mutation agent replies.
+
+PROBLEMS OBSERVED:
+- After every user input, the right sidebar/program panel shows or opens, even when no program adjustment was made
+- Conversational/clarification agent replies can trigger an error toast
+- Chat does not always auto-anchor to the newest message / bottom of conversation
+
+This breaks the vibe-coding experience.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Refactor the response handling layer so the UI behaves differently depending on whether the result is:
+
+A. MUTATION_APPLIED
+B. CLARIFICATION_NEEDED
+C. CONVERSATION_ONLY
+D. TRUE_FAILURE
+
+The product should only behave like “a program changed” when a program actually changed.
+
+==================================================
+TASK 1 — DEFINE RESPONSE OUTCOME TYPES
+==================================================
+
+Create or standardize explicit frontend/backend response outcome types such as:
+
+type AgentOutcomeType =
+  | "mutation_applied"
+  | "clarification_needed"
+  | "conversation_only"
+  | "true_failure";
+
+Map all agent/edit responses into one of these buckets.
+
+Definitions:
+
+mutation_applied:
+- DB/program state changed
+- validation passed
+- change targets exist or program update exists
+
+clarification_needed:
+- agent needs more user input before applying a change
+- no mutation committed
+- this is NOT an error
+
+conversation_only:
+- normal conversational response / answer / explanation
+- no mutation committed
+- this is NOT an error
+
+true_failure:
+- attempted mutation failed unexpectedly
+- validation failed irrecoverably
+- real system problem or unresolvable action
+
+==================================================
+TASK 2 — FIX RIGHT SIDEBAR / PROGRAM PANEL BEHAVIOR
+==================================================
+
+Current issue:
+Right sidebar/panel is opening or showing for too many response types.
+
+Correct behavior:
+
+ONLY auto-open / foreground the program panel when:
+- outcomeType === "mutation_applied"
+
+DO NOT auto-open for:
+- clarification_needed
+- conversation_only
+- true_failure unless specifically needed for user recovery
+
+The panel should remain stable during normal conversational exchanges.
+
+Audit:
+- message completion handlers
+- stream completion handlers
+- newProgramSignal / newChangeSignal usage
+- any auto-open logic tied to agent responses
+- mobile panel switching logic
+
+==================================================
+TASK 3 — FIX ERROR TOAST LOGIC
+==================================================
+
+Current issue:
+Clarifying/conversational replies are triggering error toasts.
+
+Correct behavior:
+
+- mutation_applied → success/update UI
+- clarification_needed → no error toast
+- conversation_only → no error toast
+- true_failure → show error toast
+
+A clarifying question is not a failure.
+A no-mutation conversational answer is not a failure.
+
+Audit:
+- toast trigger conditions
+- mutation result parsing
+- stream result completion logic
+- any fallback path that equates “no mutation” with “error”
+
+==================================================
+TASK 4 — FIX AUTO-SCROLL / BOTTOM ANCHORING
+==================================================
+
+Current issue:
+Conversation does not always start or remain at the newest message.
+
+Correct behavior:
+- when a user sends a message, chat should scroll to latest
+- during stream, latest assistant response should remain visible
+- after completion, bottom should remain anchored
+- if user manually scrolls up intentionally, avoid fighting them aggressively
+- on initial conversation load, default should show latest messages unless there is a deliberate restore rule
+
+Implement robust bottom anchoring using:
+- container ref
+- bottom sentinel ref
+- scrollIntoView or equivalent
+- stream-aware updates
+- intentional-user-scroll detection if needed
+
+Audit:
+- message list container
+- initial load behavior
+- stream append behavior
+- mobile Safari behavior
+- any saved scroll position logic
+
+==================================================
+TASK 5 — CONNECT OUTCOME TYPE TO UI BEHAVIOR
+==================================================
+
+Create a clean mapping like:
+
+mutation_applied:
+- show SystemUpdateCard
+- open program panel if needed
+- highlight changes
+- show undo toast
+- no error toast
+- scroll chat to latest
+
+clarification_needed:
+- render assistant clarification normally
+- keep focus in chat
+- do not open program panel
+- do not show error toast
+- scroll chat to latest
+
+conversation_only:
+- render normally
+- no sidebar auto-open
+- no error toast
+- scroll chat to latest
+
+true_failure:
+- show clean failure message
+- optionally toast
+- do not pretend a mutation happened
+- keep chat visible
+
+==================================================
+TASK 6 — AUDIT CURRENT STREAM / RESPONSE PAYLOADS
+==================================================
+
+Determine where the frontend can derive the correct outcome from current payloads.
+
+Possible signals:
+- changeTargets
+- program built/updated flags
+- mutation verification result
+- clarification flags
+- validation result
+- explicit response type from backend
+
+If current payloads are too ambiguous, add a clearer backend field so the frontend does not have to guess.
+
+==================================================
+TASK 7 — TEST REQUIRED SCENARIOS
+==================================================
+
+Test these exact cases:
+
+1. User asks:
+“I want to add more exercises to day 1”
+Agent asks clarification
+Expected:
+- no error toast
+- no auto-open right panel
+- chat scrolls to latest
+
+2. User asks:
+“What does day 2 focus on?”
+Expected:
+- no error toast
+- no panel auto-open
+- chat scrolls to latest
+
+3. User asks:
+“Swap bench press for incline dumbbell press”
+Expected:
+- mutation applied
+- panel opens
+- highlight shows
+- undo toast appears
+
+4. User asks:
+“I want to focus more on endurance”
+If clarification needed:
+- no error toast
+- no panel auto-open
+If mutation applied:
+- mutation UI should fire correctly
+
+5. Initial conversation load
+Expected:
+- starts at latest messages / bottom
+
+6. Streamed response
+Expected:
+- latest assistant content remains visible
+
+==================================================
+TASK 8 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What outcome types were added
+2. How panel auto-open logic changed
+3. How error toast logic changed
+4. How auto-scroll/bottom anchoring was fixed
+5. What backend/frontend payload fields now drive UI behavior
+6. Which previously broken conversational cases now behave correctly
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat must no longer treat:
+- clarification
+- normal conversation
+- no-op replies
+
+as if they were:
+- errors
+- mutations
+- program updates
+
+The UI should only react like a program changed when a program actually changed.
+
+Implement this now.
