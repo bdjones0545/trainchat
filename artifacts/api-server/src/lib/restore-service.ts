@@ -26,6 +26,7 @@ import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 import { getChangeDetail, createChangeLogEntry } from "./change-log-service";
 import type { SystemSnapshot } from "./change-log-service";
+import { verifyRestoration } from "./mutation-verifier";
 
 // ─── Restore a prior state ────────────────────────────────────────────────────
 
@@ -39,6 +40,7 @@ export interface RestoreResult {
     weeks: number[];
     phases: number[];
   };
+  verificationStatus: "verified" | "partial" | "failed" | "noop" | "unclear";
 }
 
 export async function restoreFromChange(
@@ -62,6 +64,14 @@ export async function restoreFromChange(
   // 3. Apply the before snapshot (restore the prior state)
   const restoredIds = await applySnapshot(original.beforeSnapshot);
 
+  // Phase 2: Verify the restoration — capture actual post-restore state and compare to expected
+  const postRestoreState = await captureCurrentState(original.beforeSnapshot);
+  const restoreVerification = verifyRestoration(original.beforeSnapshot, postRestoreState);
+  logger.info(
+    { status: restoreVerification.status, matched: restoreVerification.verifiedCount, total: restoreVerification.totalCount },
+    "[MutationVerifier] Restore verification complete"
+  );
+
   // 4. Build a coach-oriented restore summary
   const itemCount = restoredIds.exercises.length + restoredIds.sessions.length +
     restoredIds.weeks.length + restoredIds.phases.length;
@@ -76,7 +86,7 @@ export async function restoreFromChange(
 
   const changeSummary = `Restored ${targetDesc} to its state from ${originalDate}. ${itemCount} item${itemCount !== 1 ? "s" : ""} reverted. The prior change (${original.changeSummary.slice(0, 80)}${original.changeSummary.length > 80 ? "…" : ""}) has been undone.`;
 
-  // 5. Create a new change log entry for the restore action
+  // 5. Create a new change log entry for the restore action (includes verification result)
   const newChangeLogId = await createChangeLogEntry({
     userId,
     trainingSystemId,
@@ -97,11 +107,17 @@ export async function restoreFromChange(
       originalIntent: original.intent,
       originalScope: original.scope,
       restoredFromId: changeId,
+      verification: {
+        status: restoreVerification.status,
+        verifiedCount: restoreVerification.verifiedCount,
+        totalCount: restoreVerification.totalCount,
+        summary: restoreVerification.summary,
+      },
     },
   } as any);
 
   logger.info(
-    { userId, changeId, newChangeLogId, restoredCount: itemCount },
+    { userId, changeId, newChangeLogId, restoredCount: itemCount, verificationStatus: restoreVerification.status },
     "Restore completed"
   );
 
@@ -110,6 +126,7 @@ export async function restoreFromChange(
     restoredCount: itemCount,
     changeSummary,
     changedIds: restoredIds,
+    verificationStatus: restoreVerification.status,
   };
 }
 

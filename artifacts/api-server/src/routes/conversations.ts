@@ -23,6 +23,7 @@ import { getUserPlanInfo } from "../lib/planGating";
 import { stripeStorage } from "../lib/stripeStorage";
 import { interpretEditRequest } from "../lib/edit-intent-service";
 import { applyEditPlan, type EditResult } from "../lib/edit-engine";
+import type { VerificationStatus } from "../lib/mutation-verifier";
 import { createChangeLogEntry } from "../lib/change-log-service";
 import { interpretNeuralGraph, buildNeuralAdjustmentSummary, type NeuralBias, type Imbalance } from "../lib/neural-graph-interpreter";
 import { getActiveTrainingSystem, getFullTrainingSystem, createTrainingSystemFromProgram, upsertTrainingSystemFromProgram } from "../lib/training-system-service";
@@ -142,10 +143,30 @@ function buildVibeEditCoachingResponse(editResult: EditResult): string {
   const summary = editResult.changeSummary;
   const skipped = editResult.skippedCount;
   const base = summary.endsWith(".") ? summary : `${summary}.`;
-  const suffix = skipped > 0
-    ? ` (${skipped} change${skipped > 1 ? "s" : ""} could not be applied.)`
-    : "";
-  return `${base}${suffix}\n\nYour training system is updated — the change is live now.`;
+  const status = editResult.verification.status;
+
+  if (status === "verified") {
+    const suffix = skipped > 0
+      ? ` (${skipped} change${skipped > 1 ? "s" : ""} could not be applied.)`
+      : "";
+    return `${base}${suffix}\n\nYour training system is updated — the change is live now.`;
+  }
+
+  if (status === "partial") {
+    const verifiedCount = editResult.verification.verifiedChanges.length;
+    const totalCount = editResult.verification.expectedChanges.length;
+    const missingSummary = editResult.verification.missingChanges.length > 0
+      ? `\n\nNote: ${editResult.verification.missingChanges.length} of ${totalCount} change${totalCount === 1 ? "" : "s"} could not be confirmed in your program. If you notice anything is missing, try being more specific about that item.`
+      : "";
+    return `${base}${missingSummary}\n\nYour training system has been updated (${verifiedCount}/${totalCount} changes confirmed).`;
+  }
+
+  if (status === "unclear") {
+    return `${base}\n\nYour training system has been updated. Some changes could not be fully confirmed — your program should reflect this edit, but double-check if anything looks off.`;
+  }
+
+  // Fallback (should not normally reach here for failed — that's handled upstream)
+  return `${base}\n\nYour training system has been processed.`;
 }
 
 router.get("/conversations", requireAuth, async (req, res): Promise<void> => {
@@ -661,6 +682,34 @@ Keep it helpful and intelligent, never promotional.`;
         );
 
         if (editResult.appliedCount > 0) {
+          const verification = editResult.verification;
+
+          // Phase 2: If verification fails — the DB wrote but the state didn't change
+          if (verification.status === "failed") {
+            logger.warn(
+              { intent: editPlan.intent, summary: verification.summary },
+              "[VibeEdit] Verification FAILED — changes applied but not detected in post-state"
+            );
+            const failedContent = `I processed that change but couldn't confirm it actually took effect in your training system. Your program may not have been modified.\n\nThis can happen when the requested change didn't produce a detectable difference in the program state. Please try again with a more specific request — for example, name the exact exercise, reference the day number, or specify the exact field to change (sets, reps, rest, etc.).`;
+            const [failedMsg] = await db.insert(messagesTable).values({
+              conversationId: params.data.id, role: "assistant",
+              content: failedContent, structuredData: null,
+            }).returning();
+            await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+            if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+              stripeStorage.incrementMessageCount(userId).catch(() => {});
+            }
+            res.json({
+              userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
+              assistantMessage: { id: failedMsg.id, conversationId: failedMsg.conversationId, role: failedMsg.role, content: failedMsg.content, createdAt: failedMsg.createdAt.toISOString(), structuredData: null },
+              planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+              intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
+              systemEdit: { applied: false },
+              editFailure: { reason: "verification_failed", verificationSummary: verification.summary },
+            });
+            return;
+          }
+
           // Aggregate the AI's per-change reasons into a single "whyChanged" string
           const whyChangedParts = editPlan.changes
             .map((c) => c.reason)
@@ -669,7 +718,7 @@ Keep it helpful and intelligent, never promotional.`;
 
           const isStructuralVibeEdit = editPlan.scope === "system" || editPlan.scope === "block";
 
-          // Log the change to system_change_log
+          // Log the change to system_change_log (only reached when verification passes)
           const changeLogId = await createChangeLogEntry({
             userId,
             trainingSystemId: activeSystem!.id,
@@ -687,10 +736,16 @@ Keep it helpful and intelligent, never promotional.`;
               whyChanged,
               intentType: intentResult.type,
               editSubtype: intentResult.editSubtype ?? undefined,
+              verification: {
+                status: verification.status,
+                verifiedCount: verification.verifiedChanges.length,
+                missingCount: verification.missingChanges.length,
+                requiresReview: verification.requiresReview ?? false,
+              },
             },
           });
 
-          // Build coaching response confirming the change
+          // Build coaching response — now verification-aware
           const coachingContent = buildVibeEditCoachingResponse(editResult);
 
           // Store the systemEdit marker in structuredData so MessageBubble
@@ -701,6 +756,7 @@ Keep it helpful and intelligent, never promotional.`;
             changedIds: editResult.changedIds,
             systemId: activeSystem!.id,
             changeLogId,
+            verificationStatus: verification.status,
           };
 
           const [assistantMessage] = await db.insert(messagesTable).values({
@@ -744,6 +800,8 @@ Keep it helpful and intelligent, never promotional.`;
               changeTargets: editResult.changeTargets,
               systemId: activeSystem!.id,
               changeLogId,
+              verificationStatus: verification.status as VerificationStatus,
+              requiresReview: verification.requiresReview ?? false,
             },
           });
           return;
@@ -1503,7 +1561,31 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         const editResult = await applyEditPlan(editPlan);
 
         if (editResult.appliedCount > 0) {
-          // Stage 6: Validate — implicit in applyEditPlan quality checks; then save
+          const verification = editResult.verification;
+
+          // Phase 2: Verification gate — only proceed to success if state actually changed
+          if (verification.status === "failed") {
+            logger.warn(
+              { intent: editPlan.intent, summary: verification.summary },
+              "[VibeEdit:stream] Verification FAILED — changes applied but not detected in post-state"
+            );
+            const failedContent = `I processed that change but couldn't confirm it actually took effect in your training system. Your program may not have been modified.\n\nThis can happen when the requested change didn't produce a detectable difference in the program state. Please try again with a more specific request — for example, name the exact exercise, reference the day number, or specify the exact field to change (sets, reps, rest, etc.).`;
+            const [failedMsg] = await db.insert(messagesTable).values({
+              conversationId: params.data.id, role: "assistant", content: failedContent, structuredData: null,
+            }).returning();
+            await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+            if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+              stripeStorage.incrementMessageCount(userId).catch(() => {});
+            }
+            done({
+              ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: failedMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false }),
+              systemEdit: { applied: false },
+              editFailure: { reason: "verification_failed", verificationSummary: verification.summary },
+            });
+            return;
+          }
+
+          // Stage 6: Validate — verification passed; then save
           emit(buildStageEvent("validating", intentResult.type, actionDecision.actionType));
 
           // Stage 7: Save Program State
@@ -1524,6 +1606,12 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
               whyChanged: vibeWhyChanged,
               intentType: intentResult.type,
               editSubtype: intentResult.editSubtype ?? undefined,
+              verification: {
+                status: verification.status,
+                verifiedCount: verification.verifiedChanges.length,
+                missingCount: verification.missingChanges.length,
+                requiresReview: verification.requiresReview ?? false,
+              },
             },
           });
 
@@ -1534,6 +1622,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
             changedIds: editResult.changedIds,
             systemId: activeSystem!.id,
             changeLogId,
+            verificationStatus: verification.status,
           };
 
           const [assistantMessage] = await db.insert(messagesTable).values({
@@ -1559,6 +1648,8 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
               changeTargets: editResult.changeTargets,
               systemId: activeSystem!.id,
               changeLogId,
+              verificationStatus: verification.status as VerificationStatus,
+              requiresReview: verification.requiresReview ?? false,
             },
           });
           return;

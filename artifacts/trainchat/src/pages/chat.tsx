@@ -162,6 +162,7 @@ export default function Chat() {
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
   const [calibrationNudgeShown, setCalibrationNudgeShown] = useState(false);
   const [undoChangeLogId, setUndoChangeLogId] = useState<number | null>(null);
+  const [undoVerificationStatus, setUndoVerificationStatus] = useState<"verified" | "partial" | "unclear" | null>(null);
   const [isUndoing, setIsUndoing] = useState(false);
   const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [operationError, setOperationError] = useState<string | null>(null);
@@ -468,9 +469,12 @@ export default function Chat() {
     // Handle explicit edit/save failures — show error, do NOT fire undo toast
     if (result.editFailure) {
       if (operationErrorTimeoutRef.current) clearTimeout(operationErrorTimeoutRef.current);
-      const msg = result.editFailure.reason === "no_changes_applied"
-        ? "No changes could be applied — try being more specific about the exercise, day, or session."
-        : "Something went wrong while applying that change. Your program has not been modified.";
+      const msg =
+        result.editFailure.reason === "no_changes_applied"
+          ? "No changes could be applied — try being more specific about the exercise, day, or session."
+          : result.editFailure.reason === "verification_failed"
+          ? "That change was processed but couldn't be confirmed in your program. Try again with more specifics."
+          : "Something went wrong while applying that change. Your program has not been modified.";
       setOperationError(msg);
       operationErrorTimeoutRef.current = setTimeout(() => setOperationError(null), 7000);
     }
@@ -516,11 +520,14 @@ export default function Chat() {
         setNewChangeSignal((n) => n + 1);
       }
       // Show undo toast for 8 seconds after any successful program change
+      // Gate on verificationStatus — only show for verified/partial/unclear (not failed, which has applied:false anyway)
       const logId = result.changeLogId ?? result.systemEdit?.changeLogId;
+      const vs = result.systemEdit?.verificationStatus ?? null;
       if (logId) {
         if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
         setUndoChangeLogId(logId);
-        undoTimeoutRef.current = setTimeout(() => setUndoChangeLogId(null), 8000);
+        setUndoVerificationStatus(vs === "partial" || vs === "unclear" ? vs : "verified");
+        undoTimeoutRef.current = setTimeout(() => { setUndoChangeLogId(null); setUndoVerificationStatus(null); }, 8000);
       }
     }
   }
@@ -530,6 +537,7 @@ export default function Chat() {
     setIsUndoing(true);
     if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
     setUndoChangeLogId(null);
+    setUndoVerificationStatus(null);
     try {
       await customFetch<any>(`/api/training-system/restore/${undoChangeLogId}`, { method: "POST" });
       queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
@@ -1256,7 +1264,13 @@ export default function Chat() {
           {undoChangeLogId && (
             <div className="flex-shrink-0 px-4 py-2 flex justify-center">
               <div className="flex items-center gap-2 px-3 py-2 bg-card border border-border rounded-full shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-200">
-                <span className="text-[11px] text-muted-foreground">Program updated</span>
+                {undoVerificationStatus === "partial" ? (
+                  <span className="text-[11px] text-amber-500">Partially updated — check your program</span>
+                ) : undoVerificationStatus === "unclear" ? (
+                  <span className="text-[11px] text-muted-foreground">Updated (verify changes)</span>
+                ) : (
+                  <span className="text-[11px] text-muted-foreground">Program updated</span>
+                )}
                 <span className="text-muted-foreground/40 text-[11px]">·</span>
                 <button
                   onClick={handleUndo}

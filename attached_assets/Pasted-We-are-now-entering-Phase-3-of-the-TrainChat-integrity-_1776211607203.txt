@@ -1,0 +1,352 @@
+We are now entering Phase 3 of the TrainChat integrity rebuild.
+
+OBJECTIVE:
+Unify the guest and paid user product pipeline so that every new user experiences the real TrainChat vibe-coding engine before the paywall, instead of a weaker, disconnected, or fake-light version.
+
+Right now, the guest experience appears to be a separate or degraded path. That is a major conversion leak.
+
+TrainChat’s growth depends on this truth:
+The guest must experience the actual magic before being asked to pay.
+
+From this point forward, the guest pipeline and paid pipeline should share the same core infrastructure wherever possible:
+- same agent behavior
+- same mutation engine
+- same verification layer
+- same truth layer
+- same program-building experience
+- same UI language
+- same system-editing feel
+
+The paywall should gate continuation, persistence depth, and premium access — not the core magic.
+
+==================================================
+PHASE 3 GOAL
+==================================================
+
+Refactor TrainChat so that an unauthenticated or non-paying user enters the same real vibe-coding workflow as a paid user, up until the exact moment the conversion wall is intentionally triggered.
+
+The guest should not get:
+- a fake preview engine
+- weaker edit logic
+- disconnected program generation
+- generic chatbot behavior
+- separate mutation logic
+- reduced honesty or verification
+- different UI states that make the product feel less real
+
+The guest should get:
+- the real agent
+- the real program-building loop
+- the real mutation logic
+- the real verification system
+- meaningful visible progress
+- enough experience to become invested before gating
+
+==================================================
+CORE PRODUCT STANDARD
+==================================================
+
+Desired flow:
+
+1. User enters TrainChat
+2. User goes directly into the real agent experience
+3. User starts describing goals and constraints
+4. The actual program/system begins taking shape
+5. The user sees visible, real edits and program structure
+6. The user gets several meaningful interactions
+7. The user becomes invested in the system being built
+8. Only then does paywall/signup trigger
+9. After signup/payment, the exact same system continues seamlessly
+
+No product bait-and-switch.
+No fake front half with a different backend.
+No losing progress when the user converts.
+
+==================================================
+REQUIRED AUDIT + REFACTOR SCOPE
+==================================================
+
+Audit and refactor these areas:
+
+A. ENTRY FLOW
+Map exactly what happens when:
+- first-time guest enters
+- returning guest enters
+- guest who already used some free interactions returns
+- logged-out account user returns
+- non-paying registered user enters
+- paying user enters
+
+Identify every route, gate, branch, fallback, and redirect.
+
+I want to know:
+- where guest and paid logic diverge
+- whether separate agent paths exist
+- whether different prompts/tools/stores are used
+- whether different state models are used
+- whether the guest path bypasses the real edit engine
+- whether the guest path bypasses the real verification layer
+- whether the guest path bypasses the real neural/personalization context
+
+Then reduce unnecessary divergence.
+
+B. AGENT PARITY
+Ensure guest users use the same real agent orchestration stack as paid users wherever possible.
+
+The guest must not receive:
+- simplified “marketing AI”
+- fake or canned edits
+- weaker system modification behavior
+- disconnected response logic
+- different mutation capabilities before the paywall
+
+Before gating, guest and paid should share:
+- intent parsing
+- edit orchestration
+- clarification logic
+- truth layer behavior
+- mutation verification behavior
+- coaching tone and system-editing logic
+
+If limits are needed, those limits should be about session count or persistence depth, not intelligence quality.
+
+C. PROGRAM STATE PARITY
+Ensure guest users build against a real temporary/canonical program state, not a toy preview object.
+
+Requirements:
+- guest edits should affect a real structured program state
+- guest changes should be visible and verifiable
+- guest state should persist appropriately for the free experience window
+- when the user signs up or pays, that state should be upgraded or attached, not discarded
+
+I want a seamless handoff path from:
+guest temporary state
+→ authenticated user state
+→ paid persistent state
+
+No reset of the magic at conversion.
+
+D. PAYWALL / GATING LOGIC
+Refactor the paywall so it appears at the right moment:
+after real value is demonstrated.
+
+The gate should occur based on intentional product strategy such as:
+- after X meaningful interactions
+- after the first real program/system is generated
+- after the user tries to continue beyond preview depth
+- after save/export/continue requests
+- after a defined conversion threshold event
+
+Do not trigger the gate:
+- before the user feels the product working
+- on first input unless intentionally tested
+- in a way that breaks momentum
+- in a way that discards progress
+
+Audit all gating triggers and remove premature interruption.
+
+E. DEVICE ID / SESSION / AUTH TRANSITION
+Audit device ID and guest identity handling deeply.
+
+I want to know:
+- how guest sessions are tracked
+- how free interactions are counted
+- how guest program state is stored
+- how guest state is restored on return
+- how logout affects device-based state
+- whether device ID conflicts with account state
+- whether account login causes lost guest progress
+- whether auth state changes cause loops, reroutes, or agent interruption
+
+Refactor so that:
+- guest identity is stable enough for free-session continuity
+- auth transitions are smooth
+- device ID does not create routing bugs or overwritten state
+- program state is merged or migrated safely when user signs up/logs in
+
+F. CONVERSION CONTINUITY
+When a guest signs up or pays:
+- preserve the current conversation context where appropriate
+- preserve the current program/system state
+- preserve visible progress
+- preserve the feeling that the build is continuing, not restarting
+
+After conversion, the user should feel:
+“I unlocked more of what I was already building”
+not
+“I got kicked into a different app”
+
+==================================================
+ARCHITECTURAL TARGET
+==================================================
+
+Move toward a single shared product engine with layered entitlements:
+
+SHARED CORE:
+- agent orchestration
+- program state model
+- edit engine
+- truth layer
+- mutation verification
+- change log
+- UI feedback patterns
+
+ENTITLEMENT LAYER:
+- free interaction count
+- save limits
+- number of active programs
+- premium depth/features
+- export/advanced personalization
+- long-term persistence
+- premium tools or advanced modes
+
+This means:
+same real engine
+different access rules
+
+Do not maintain two different products unless absolutely necessary.
+
+==================================================
+GUEST EXPERIENCE RULES
+==================================================
+
+Before paywall, the guest must be able to:
+- interact with the real agent
+- describe goals and constraints
+- see a real system/program emerge
+- request edits and see real changes
+- receive truthful verified feedback
+- build emotional investment in the result
+
+The guest does not necessarily need:
+- unlimited edits
+- full long-term persistence
+- unlimited saved programs
+- export/download
+- advanced dashboards
+- premium neural depth if strategically gated
+
+But the guest must absolutely feel:
+“This is the real thing.”
+
+==================================================
+UI / UX REQUIREMENTS
+==================================================
+
+Update the UX so the guest path communicates:
+- live co-creation
+- visible progress
+- clear but non-disruptive remaining free interactions if applicable
+- continuity into signup/paywall
+- preservation of work
+- trust that the system being built is real
+
+Avoid:
+- sudden redirects to sign-in
+- restarting onboarding after login
+- flashing screens or looped modals
+- paywall interrupts without context
+- fake previews
+- disappearing programs
+- route changes that make the product feel broken
+
+The paywall should feel like:
+“You’ve started something valuable — unlock the rest”
+not
+“You hit a wall and lost your work”
+
+==================================================
+IMPLEMENTATION TASKS
+==================================================
+
+1. Map all guest vs paid entry paths
+2. Identify all divergence points in logic, state, routing, and UI
+3. Refactor guest users onto the real shared agent/mutation pipeline
+4. Ensure truth layer and verification layer are active for guests
+5. Create or strengthen a temporary guest canonical program state
+6. Implement seamless guest → auth → paid state migration
+7. Refactor paywall triggers for better timing and continuity
+8. Patch routing/auth/device ID loops and conflicts
+9. Ensure conversion does not discard current build progress
+10. Reduce duplicated guest vs paid product logic where possible
+
+==================================================
+MANDATORY TEST SCENARIOS
+==================================================
+
+Run and validate these exact scenarios:
+
+1. First-time guest enters and says:
+“I want to build a strength program.”
+Expected:
+- enters real agent flow
+- real program state begins forming
+- real edits are possible before gate
+- user sees real value before paywall
+
+2. Guest builds a partial program, then hits paywall
+Expected:
+- the current work is preserved
+- signup/payment continues the same build
+- no reset into a different experience
+
+3. Returning guest on same device
+Expected:
+- guest state is restored appropriately within free-use rules
+- no broken loops or lost progress
+
+4. Guest logs in after starting a build
+Expected:
+- current program/conversation state migrates or attaches cleanly
+- no restart, overwrite, or disappearance
+
+5. Logged-out existing account user re-enters
+Expected:
+- correct routing
+- no confusion between device-based guest state and account state
+- no onboarding loop
+
+6. Non-paying registered user interacts with the agent
+Expected:
+- same real intelligence and edit behavior as guest/paid
+- gated by entitlement, not degraded intelligence
+
+7. Paying user enters after all refactors
+Expected:
+- no regression
+- still uses the same shared core engine
+- premium benefits remain intact
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+After implementing, return:
+
+1. What guest vs paid divergence points were found
+2. What routes/stores/components/services were changed
+3. How guest state is now handled
+4. How guest → auth → paid migration now works
+5. What gating triggers now exist
+6. What logic is now shared across guest and paid users
+7. Any remaining architectural reasons the product is still split
+8. Any risks around device ID, auth, or state migration still remaining
+
+==================================================
+FINAL STANDARD
+==================================================
+
+A first-time user should enter TrainChat and immediately feel:
+“I am building my training system with the real agent.”
+
+Not:
+“I am looking at a demo.”
+Not:
+“I am in a limited fake preview.”
+Not:
+“I need to pay before I know if this is real.”
+
+The conversion strategy should be:
+show the real magic first, then gate continuation.
+
+Build that unified pipeline now.

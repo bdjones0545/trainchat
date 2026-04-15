@@ -20,6 +20,7 @@ import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 import type { EditPlan, EditChange } from "./edit-intent-service";
 import type { SystemSnapshot } from "./change-log-service";
+import { verifyMutation, type MutationVerificationResult } from "./mutation-verifier";
 
 // ─── Allowed field allowlists (safety guard) ─────────────────────────────────
 
@@ -421,6 +422,8 @@ export interface EditResult {
   beforeSnapshot: SystemSnapshot;
   afterSnapshot: SystemSnapshot;
   changeTargets: ChangeTarget[];
+  /** Phase 2: Post-mutation verification result */
+  verification: MutationVerificationResult;
 }
 
 export async function applyEditPlan(plan: EditPlan): Promise<EditResult> {
@@ -443,6 +446,13 @@ export async function applyEditPlan(plan: EditPlan): Promise<EditResult> {
 
   // Phase 4: Capture state AFTER applying changes
   const afterSnapshot = await captureAfterSnapshot(changedIds);
+
+  // Phase 2: Verify that the intended changes are actually present in the post-mutation state
+  const verification = verifyMutation(plan, beforeSnapshot, afterSnapshot, results);
+  logger.info(
+    { status: verification.status, verified: verification.verifiedChanges.length, missing: verification.missingChanges.length, requiresReview: verification.requiresReview ?? false, intent: plan.intent },
+    "[MutationVerifier] Verification complete"
+  );
 
   // Build change targets for frontend highlighting
   const changeTargets: ChangeTarget[] = [];
@@ -509,5 +519,6 @@ export async function applyEditPlan(plan: EditPlan): Promise<EditResult> {
     beforeSnapshot,
     afterSnapshot,
     changeTargets,
+    verification,
   };
 }

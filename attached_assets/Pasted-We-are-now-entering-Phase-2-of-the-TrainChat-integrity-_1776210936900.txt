@@ -1,0 +1,345 @@
+We are now entering Phase 2 of the TrainChat integrity rebuild.
+
+OBJECTIVE:
+Implement strict mutation verification across TrainChat so the system cannot claim a program was changed unless the change is confirmed in the actual post-mutation program state.
+
+Phase 1 was about removing silent failures and deceptive success language.
+
+Phase 2 is about making every edit provable.
+
+From this point forward, every training mutation must follow this rule:
+
+ATTEMPT → APPLY → VERIFY → RESPOND
+
+If verification fails, TrainChat must not present the change as successful.
+
+==================================================
+PHASE 2 GOAL
+==================================================
+
+Build a mutation verification layer that confirms whether the requested program edit actually took effect in the canonical training program state before the UI, change log, or agent response can present it as complete.
+
+This applies to:
+- exercise swaps
+- set/rep changes
+- intensity changes
+- rest changes
+- progression changes
+- schedule/frequency changes
+- block/day edits
+- phase updates
+- speed mode / strength mode edits if applicable
+- global replacements
+- deletions
+- additions
+- undo / restore actions
+- template transforms
+- save-triggered mutations if they occur
+
+==================================================
+CORE STANDARD
+==================================================
+
+Every mutation must produce three things:
+
+1. PRE-MUTATION SNAPSHOT
+A normalized representation of the relevant program state before the edit
+
+2. POST-MUTATION SNAPSHOT
+A normalized representation of the relevant program state after the edit
+
+3. VERIFICATION RESULT
+A structured judgment of whether the intended change actually occurred
+
+Do not rely on:
+- “the function returned no error”
+- “the AI said it changed”
+- “the UI updated visually”
+- “the mutation handler returned success”
+
+The only acceptable success state is:
+The requested change is detectably present in the actual post-mutation program state.
+
+==================================================
+REQUIRED ARCHITECTURE
+==================================================
+
+Create a mutation verification system or equivalent that includes concepts like:
+
+type VerificationStatus = 'verified' | 'partial' | 'failed' | 'noop' | 'unclear';
+
+type MutationVerificationResult = {
+  status: VerificationStatus;
+  verified: boolean;
+  requestedMutationType: string;
+  summary: string;
+  userSafeSummary: string;
+  expectedChanges: string[];
+  verifiedChanges: string[];
+  missingChanges: string[];
+  unexpectedChanges?: string[];
+  requiresReview?: boolean;
+  metadata?: Record<string, any>;
+};
+
+This does not need to match this exact type if the codebase already has similar structures, but the behavior must match.
+
+==================================================
+MUTATION VERIFICATION RULES
+==================================================
+
+For every critical edit:
+
+1. Capture the relevant program state before mutation
+2. Apply the mutation
+3. Capture the relevant program state after mutation
+4. Compare expected change vs actual change
+5. Return a structured verification result
+6. Only then allow:
+   - success toasts
+   - change highlights
+   - change log entries labeled as successful
+   - agent “I updated your program” language
+
+If actual state does not reflect requested change:
+- do not mark success
+- do not present false confirmation
+- return failure, partial, or unclear
+
+==================================================
+CANONICAL PROGRAM STATE
+==================================================
+
+Identify and enforce the true source of truth for the program.
+
+I want you to find:
+- where the canonical active program object lives
+- where mutations are applied
+- whether multiple competing versions of state exist
+- whether frontend state, backend state, and AI interpretation can drift
+
+Then refactor as needed so verification checks against the canonical program state, not a stale clone or temporary UI object.
+
+If there are multiple sources of truth, identify them and reduce drift.
+
+==================================================
+EXPECTED CHANGE MODEL
+==================================================
+
+For each mutation type, define what “success” actually means.
+
+Examples:
+
+1. Exercise swap
+Request:
+“Swap barbell bench press for dumbbell bench press”
+Verified success means:
+- target exercise previously existed in specified location
+- replacement exercise now exists in that location
+- original exercise no longer exists there unless intentionally duplicated
+
+2. Volume change
+Request:
+“Add one set to all lower body lifts”
+Verified success means:
+- qualifying lifts in targeted scope have increased set count
+- non-target lifts are unchanged unless intended
+
+3. Day-specific edit
+Request:
+“Add more speed work on day 2”
+Verified success means:
+- day 2 exists
+- speed-related elements changed on day 2
+- other unrelated days did not receive unintended edits
+
+4. Global replacement
+Request:
+“Replace all lower body lifts with plyometrics”
+Verified success means:
+- targeted lower body lifts were replaced or transformed as intended
+- system reports any unresolved replacements clearly
+
+5. Undo
+Request:
+“Undo that”
+Verified success means:
+- prior state was restored measurably
+- change log and live program state align
+
+==================================================
+VERIFICATION STRATEGY
+==================================================
+
+Implement a robust comparison strategy, not naive object equality.
+
+Use normalized comparison where needed.
+
+Examples of normalization:
+- exercise IDs vs names
+- case-insensitive matching where appropriate
+- resolved aliases / synonyms
+- stripped UI-only metadata
+- stable ordering rules if arrays reorder
+- exclusion of timestamps or unrelated transient props
+
+The verification layer should detect true operational changes, not fail because of harmless metadata drift.
+
+==================================================
+PATCH ALL CRITICAL FLOWS
+==================================================
+
+Apply verification to:
+- edit engine
+- AI-to-edit conversion pipeline
+- template split/transform engine
+- change log creation
+- save-after-edit flow
+- undo/restore
+- saved program update flow
+- active program update flow
+- guest program editing flow
+- any bulk edit utilities
+- any day/block/phase rewrite logic
+
+Anywhere an edit can happen, verification must happen.
+
+==================================================
+CHANGE LOG RULES
+==================================================
+
+Refactor change log behavior so that:
+
+- successful verified mutations create a “verified” change entry
+- partial mutations create a “partial” entry
+- failed or noop mutations do not create misleading success entries
+- undo/restore entries only appear after verification
+
+I want the change log to become a trustworthy product feature, not a story generator.
+
+==================================================
+UI RULES
+==================================================
+
+Update the UI so it reflects verification status honestly.
+
+Examples:
+- verified = strong success state
+- partial = warning state with specifics
+- failed = failure state
+- noop = neutral “no changes applied”
+- unclear = review-needed state
+
+Do not allow:
+- highlight animations
+- optimistic “updated” banners
+- success labels
+- edit summaries
+unless verification confirms the mutation
+
+Where helpful, show:
+- what changed
+- what did not change
+- why a request was only partially applied
+
+==================================================
+AGENT RESPONSE RULES
+==================================================
+
+The agent’s coaching response must be downstream of verification.
+
+That means:
+- verified mutation → explain the verified change
+- partial mutation → explain the partial result
+- failed mutation → explain failure honestly
+- noop → say no change was applied
+- unclear → ask clarifying question or indicate review issue
+
+The agent should no longer narrate intent.
+It should narrate verified reality.
+
+==================================================
+IMPLEMENTATION TASKS
+==================================================
+
+1. Identify the canonical active program state
+2. Map all mutation entry points
+3. Build or standardize pre/post snapshot capture
+4. Build mutation verification service/utilities
+5. Define verification rules for common mutation types
+6. Refactor mutation handlers to require verification before success
+7. Patch change log behavior to reflect verification status
+8. Patch UI feedback to reflect verification status
+9. Patch agent response generation to use verification output
+10. Flag any mutation flows that still cannot be verified due to architectural limitations
+
+==================================================
+MANDATORY TEST CASES
+==================================================
+
+Run and validate these exact cases:
+
+1. “Swap barbell bench press for dumbbell bench press”
+Pass only if:
+- the exact target location changed
+- verification confirms it
+
+2. “Add more speed work on day 2”
+Pass only if:
+- day 2 exists
+- measurable speed-related change occurred on day 2
+- verification confirms it
+
+3. “Add one set to every squat variation”
+Pass only if:
+- targeted squat movements have increased set counts
+- unrelated movements did not change unintentionally
+
+4. “Replace all lower body lifts with plyometrics”
+Pass only if:
+- verified replacement/transformation occurred where possible
+- unresolved items are surfaced clearly
+
+5. “Undo that”
+Pass only if:
+- state is measurably restored
+- verification confirms restoration
+
+6. Mutation handler returns success but post-state is unchanged
+Expected:
+- verification overrides handler success
+- user does not see successful update messaging
+
+7. UI renders a changed card but backend/canonical program state is unchanged
+Expected:
+- verification fails
+- UI does not present final success
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+After implementing, return:
+
+1. What files/components/services were changed
+2. What the canonical program state source is
+3. What mutation flows now require verification
+4. What verification statuses are supported
+5. What silent false-positive success paths were eliminated
+6. Any mutation types still difficult to verify
+7. Any architectural conflicts still preventing full confidence
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat is not allowed to “feel like it changed the program.”
+It must be able to prove that it changed the program.
+
+A mutation is only complete when:
+- the intended edit was applied
+- the actual state reflects it
+- verification confirms it
+- only then is the user told it happened
+
+Build this verification layer now.

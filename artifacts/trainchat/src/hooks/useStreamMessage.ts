@@ -51,8 +51,18 @@ export interface CompleteEvent {
   systemId?: number;
   changeLogId?: number;
   intentDebug?: { type: string; confidence: string; editSubtype: string | null };
-  systemEdit?: { applied: boolean; changeSummary?: string; changedIds?: { exercises: number[]; sessions: number[]; weeks: number[]; phases: number[] }; changeTargets?: Array<{ type: string; id: number; label: string }>; systemId?: number; changeLogId?: number };
-  editFailure?: { reason: "no_changes_applied" | "pipeline_error"; skippedCount?: number };
+  systemEdit?: {
+    applied: boolean;
+    changeSummary?: string;
+    changedIds?: { exercises: number[]; sessions: number[]; weeks: number[]; phases: number[] };
+    changeTargets?: Array<{ type: string; id: number; label: string }>;
+    systemId?: number;
+    changeLogId?: number;
+    /** Phase 2: whether the edit was verified in the post-mutation state */
+    verificationStatus?: "verified" | "partial" | "failed" | "noop" | "unclear";
+    requiresReview?: boolean;
+  };
+  editFailure?: { reason: "no_changes_applied" | "pipeline_error" | "verification_failed"; skippedCount?: number; verificationSummary?: string };
   saveFailure?: { reason: string };
 }
 
