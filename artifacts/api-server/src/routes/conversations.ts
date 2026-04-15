@@ -146,27 +146,23 @@ function buildVibeEditCoachingResponse(editResult: EditResult): string {
   const status = editResult.verification.status;
 
   if (status === "verified") {
-    const suffix = skipped > 0
-      ? ` (${skipped} change${skipped > 1 ? "s" : ""} could not be applied.)`
-      : "";
-    return `${base}${suffix}\n\nYour training system is updated — the change is live now.`;
+    if (skipped > 0) {
+      return `${base} (${skipped} item${skipped > 1 ? "s" : ""} couldn't be applied — try being more specific.)`;
+    }
+    return base;
   }
 
   if (status === "partial") {
     const verifiedCount = editResult.verification.verifiedChanges.length;
     const totalCount = editResult.verification.expectedChanges.length;
-    const missingSummary = editResult.verification.missingChanges.length > 0
-      ? `\n\nNote: ${editResult.verification.missingChanges.length} of ${totalCount} change${totalCount === 1 ? "" : "s"} could not be confirmed in your program. If you notice anything is missing, try being more specific about that item.`
-      : "";
-    return `${base}${missingSummary}\n\nYour training system has been updated (${verifiedCount}/${totalCount} changes confirmed).`;
+    return `${base} (${verifiedCount}/${totalCount} changes confirmed — check the panel for anything missing.)`;
   }
 
   if (status === "unclear") {
-    return `${base}\n\nYour training system has been updated. Some changes could not be fully confirmed — your program should reflect this edit, but double-check if anything looks off.`;
+    return `${base} — double-check the panel to confirm.`;
   }
 
-  // Fallback (should not normally reach here for failed — that's handled upstream)
-  return `${base}\n\nYour training system has been processed.`;
+  return base;
 }
 
 router.get("/conversations", requireAuth, async (req, res): Promise<void> => {

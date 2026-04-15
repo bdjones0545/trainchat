@@ -66,6 +66,10 @@ interface Props {
   changeTargets?: ChangeTarget[];
   /** Callback to send a pre-written coaching message from the Forecast tab */
   onSendMessage?: (message: string) => void;
+  /** Hint from the acknowledged intent during an active DIRECT_MUTATION stream */
+  pendingChangeHint?: string;
+  /** Summary of the last applied change — shown as a continuity chip in the panel header */
+  lastChangeSummary?: string;
 }
 
 type Tab = "program" | "changes" | "history" | "forecast";
@@ -363,6 +367,8 @@ function ProgramTab({
   trainingGoal,
   changeTargets,
   newChangeSignal,
+  pendingChangeHint,
+  lastChangeSummary,
 }: Omit<Props, "hasActiveSystem">) {
   const queryClient = useQueryClient();
   const [expandedDay, setExpandedDay] = useState<number | null>(0);
@@ -606,15 +612,17 @@ function ProgramTab({
       `}</style>
       {isUpdating && updatePhase && <UpdatingBadge phase={updatePhase} />}
 
-      {/* "Updating..." feedback banner — shown while AI is modifying the program */}
+      {/* Stream preview banner — shown while AI is modifying the program */}
       {isUpdating && (
         <div
           className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-primary/8 border-b border-primary/15"
           style={{ animation: "fadeSlideIn 0.2s ease both" }}
         >
           <Loader2 className="w-3 h-3 animate-spin text-primary flex-shrink-0" />
-          <span className="text-[10px] font-semibold text-primary">
-            Updating your program based on your input…
+          <span className="text-[10px] font-semibold text-primary truncate">
+            {pendingChangeHint
+              ? `Applying: ${pendingChangeHint}`
+              : "Updating your program…"}
           </span>
         </div>
       )}
@@ -667,6 +675,16 @@ function ProgramTab({
           <p className="text-[11px] text-foreground/70 leading-relaxed mb-3 font-medium">
             {program.description}
           </p>
+        )}
+
+        {/* Continuity chip — last applied change */}
+        {!isUpdating && lastChangeSummary && (
+          <div className="flex items-center gap-1.5 mb-3 px-2.5 py-1.5 rounded-lg bg-primary/5 border border-primary/10">
+            <div className="w-1.5 h-1.5 rounded-full bg-green-400/70 flex-shrink-0" />
+            <span className="text-[10px] text-muted-foreground/75 truncate leading-snug">
+              Last change: {lastChangeSummary}
+            </span>
+          </div>
         )}
 
         {/* Action buttons */}
@@ -1439,6 +1457,8 @@ export default function LiveProgramPanel({
   newProgramSignal = 0,
   changeTargets = [],
   onSendMessage,
+  pendingChangeHint,
+  lastChangeSummary,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("program");
   const [hasUnseenChange, setHasUnseenChange] = useState(false);
@@ -1554,6 +1574,8 @@ export default function LiveProgramPanel({
             trainingGoal={trainingGoal}
             changeTargets={changeTargets}
             newChangeSignal={newChangeSignal}
+            pendingChangeHint={pendingChangeHint}
+            lastChangeSummary={lastChangeSummary}
           />
         )}
         {activeTab === "changes" && (

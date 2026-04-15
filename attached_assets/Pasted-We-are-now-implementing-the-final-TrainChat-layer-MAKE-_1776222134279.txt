@@ -1,0 +1,279 @@
+We are now implementing the final TrainChat layer:
+
+MAKE VIBE CODING UNDENIABLE
+
+OBJECTIVE:
+Ensure that every interaction makes it immediately obvious that:
+- a real system was changed
+- the change is visible
+- the change is primary
+- the agent is an editor, not a narrator
+
+At this stage:
+- auth is real (deviceId)
+- systems are real (DB-backed)
+- edit engine is real
+- mutation verification is real
+- UI highlights exist
+- change cards exist
+
+The only remaining goal:
+
+Make the experience so clear and immediate that no user can miss the fact that they are editing a real system.
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+MUTATION > EXPLANATION
+
+The change must be:
+1. seen first
+2. understood instantly
+3. reinforced visually
+4. then explained (briefly)
+
+Never the reverse.
+
+==================================================
+TASK 1 — FORCE MUTATION-FIRST RESPONSE STRUCTURE
+==================================================
+
+Refactor assistant response rendering so that for any verified mutation:
+
+ORDER MUST BE:
+
+1. SystemUpdateCard (standalone, ABOVE everything)
+2. (optional) minimal 1–2 line explanation
+3. (optional) follow-up suggestion
+
+NOT:
+- explanation first
+- change buried in text
+- change appended at bottom
+
+SystemUpdateCard must be:
+- visually dominant
+- impossible to miss
+- rendered outside or above message bubble if needed
+
+==================================================
+TASK 2 — COMPRESS AGENT VERBOSITY DURING EDITS
+==================================================
+
+When actionType = DIRECT_MUTATION or similar:
+
+Limit assistant text to:
+- max 1–2 sentences
+- no filler
+- no motivational tone
+- no generic coaching phrases
+
+Allowed:
+- “Swapped bench press for incline DB press on Day 2.”
+- “Added one set to all squat variations.”
+
+Optional second line:
+- short reasoning only if valuable
+
+Disallowed:
+- long explanations
+- paragraphs before confirmation
+- generic praise (“great choice”, “love this”)
+
+The edit is the product — not the explanation.
+
+==================================================
+TASK 3 — ELEVATE SYSTEMUPDATECARD TO PRIMARY ARTIFACT
+==================================================
+
+SystemUpdateCard must:
+
+- render ABOVE assistant text
+- or as a standalone block between messages
+- persist in chat history
+- not scroll out instantly
+- not depend on user scrolling
+
+It must include:
+- what changed
+- where it changed
+- what it replaced/added
+- CTA: “Show Change”
+
+Optional enhancements:
+- icon for type of change (swap, add, adjust)
+- color coding by scope (exercise/day/program)
+
+==================================================
+TASK 4 — INSTANT VISUAL CONFIRMATION LOOP
+==================================================
+
+When a mutation completes:
+
+Trigger ALL of the following:
+
+1. SystemUpdateCard appears immediately
+2. Right panel opens automatically (if closed)
+3. Correct tab (Program) is selected
+4. Auto-scroll to changed item
+5. Highlight animation runs (8s)
+6. Undo toast appears with:
+   - Undo
+   - Show →
+
+This must feel like a single coordinated event.
+
+==================================================
+TASK 5 — GUARANTEE CHANGE VISIBILITY ON MOBILE
+==================================================
+
+Audit mobile behavior:
+
+Ensure:
+- SystemUpdateCard is visible without scrolling
+- “Show Change” opens panel correctly
+- panel overlay works cleanly
+- highlight is visible on small screens
+- user does NOT need to “discover” where the change is
+
+Mobile must not weaken the vibe-coding effect.
+
+==================================================
+TASK 6 — PREVIEW CHANGE DURING STREAM (LIGHTWEIGHT)
+==================================================
+
+For DIRECT_MUTATION:
+
+During SSE stream BEFORE completion:
+
+- show target exercise names in right panel
+- show “Updating…” shimmer state
+- optionally show placeholder swap:
+
+Example:
+Bench Press → Incline DB Press (updating...)
+
+This does NOT need full real-time mutation.
+Just enough to make the system feel alive during thinking.
+
+==================================================
+TASK 7 — REMOVE ANY REMAINING “NARRATOR” BEHAVIOR
+==================================================
+
+Audit agent responses for:
+
+- filler phrases
+- coaching clichés
+- unnecessary explanation
+- statements that don’t correspond to real mutations
+
+If detected:
+- remove or shorten
+- replace with direct system-grounded language
+
+The agent should feel like:
+- an engineer modifying a system
+- not a coach giving a speech
+
+==================================================
+TASK 8 — STRENGTHEN CAUSAL LANGUAGE
+==================================================
+
+Ensure agent language ties directly to system state:
+
+Instead of:
+“I updated your workout”
+
+Use:
+“Day 2 now opens with Incline DB Press instead of Bench Press”
+
+Instead of:
+“I added more speed work”
+
+Use:
+“Added plyometric bounds and sprint starts to Day 2”
+
+Make every statement:
+- specific
+- locational
+- structural
+
+==================================================
+TASK 9 — REINFORCE CONTINUITY SIGNALS
+==================================================
+
+After each mutation:
+
+Optionally add subtle continuity cues:
+
+- “System updated just now”
+- “Last change: Bench → Incline DB”
+- timestamp in panel header
+
+Goal:
+Make the system feel alive and evolving, not static.
+
+==================================================
+MANDATORY TEST SCENARIOS
+==================================================
+
+Test:
+
+1. “Swap bench press for incline dumbbell press”
+2. “Add more speed work on day 2”
+3. “Add one set to all squats”
+4. “Replace lower body lifts with plyometrics”
+
+For each confirm:
+
+- change is shown FIRST
+- change is visible WITHOUT searching
+- explanation is minimal
+- panel reflects change immediately
+- highlight is seen
+- undo works
+- mobile works
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. Where SystemUpdateCard is now rendered
+2. How agent verbosity was reduced
+3. What UI changes ensure mutation-first visibility
+4. How mobile behavior was improved
+5. How preview during stream works
+6. Any remaining edge cases where changes might still be missed
+
+==================================================
+FINAL STANDARD
+==================================================
+
+A user should:
+
+Type:
+“Swap bench press for incline DB press”
+
+And instantly experience:
+
+- visible change card
+- panel update
+- highlight
+- clear confirmation
+
+WITHOUT:
+- reading paragraphs
+- searching the UI
+- guessing what happened
+
+If a user can ever ask:
+“Did it actually change?”
+
+The system has failed.
+
+Make the change undeniable.
+
+Implement this now.

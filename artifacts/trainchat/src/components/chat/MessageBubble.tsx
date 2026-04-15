@@ -185,20 +185,26 @@ export default function MessageBubble({ message, onViewProgram, onShowChange }: 
         )}
       </div>
 
-      {/* Bubble */}
+      {/* Content */}
       <div className={`min-w-0 flex-1 ${isUser ? "items-end flex flex-col" : ""}`}>
         {isUser ? (
           <div className="inline-block max-w-[75%] px-4 py-3 rounded-2xl rounded-tr-sm bg-primary text-primary-foreground text-sm leading-relaxed whitespace-pre-wrap">
             {message.content}
           </div>
+        ) : isSystemEdit ? (
+          /* MUTATION-FIRST: SystemUpdateCard is the primary artifact — rendered standalone above text */
+          <div className="min-w-0 max-w-[95%]">
+            <SystemUpdateCard data={parsed.data} onShowChange={onShowChange} />
+            {message.content && (
+              <p className="text-[12px] text-muted-foreground/75 leading-relaxed mt-2 px-1">
+                {message.content}
+              </p>
+            )}
+          </div>
         ) : (
+          /* Standard assistant bubble for all non-edit messages */
           <div className="max-w-[90%] px-4 py-3 rounded-2xl rounded-tl-sm bg-card border border-border text-foreground">
             <RichContent text={message.content} />
-
-            {/* System edit card — shown when the agent modified the real training system */}
-            {isSystemEdit && (
-              <SystemUpdateCard data={parsed.data} onShowChange={onShowChange} />
-            )}
 
             {/* Build summary card — shown for new initial program builds */}
             {isInitialBuild && (

@@ -163,6 +163,8 @@ export default function Chat() {
   const [calibrationNudgeShown, setCalibrationNudgeShown] = useState(false);
   const [undoChangeLogId, setUndoChangeLogId] = useState<number | null>(null);
   const [undoVerificationStatus, setUndoVerificationStatus] = useState<"verified" | "partial" | "unclear" | null>(null);
+  const [lastChangeSummary, setLastChangeSummary] = useState<string | null>(null);
+  const [paywallIsAnon, setPaywallIsAnon] = useState(false);
   const [isUndoing, setIsUndoing] = useState(false);
   const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [operationError, setOperationError] = useState<string | null>(null);
@@ -453,6 +455,7 @@ export default function Chat() {
     if (!result) {
       // Check if it was a paywall error (phase = error means stream errored)
       if (stream.state.error?.includes("402") || stream.state.error?.toLowerCase().includes("limit")) {
+        setPaywallIsAnon(stream.state.paywallIsAnonymous);
         setShowPaywall(true);
       }
       return;
@@ -507,12 +510,19 @@ export default function Chat() {
       if (result.systemSaved) {
         setNewProgramSignal((n) => n + 1);
       }
-      // After a program modification (edit): switch to Program tab and highlight what changed
+      // After a program modification (edit): switch to Program tab, highlight, and open panel
       if (result.systemEdit?.applied) {
         if (result.systemEdit?.changeTargets?.length) {
           setChangeTargets(result.systemEdit.changeTargets);
         }
         setNewChangeSignal((n) => n + 1);
+        // Auto-open right panel so the change is immediately visible
+        setRightPanelOpen(true);
+        setMobilePanel("right");
+        // Track last change summary for continuity chip in panel header
+        if (result.systemEdit.changeSummary) {
+          setLastChangeSummary(result.systemEdit.changeSummary);
+        }
       }
       // After any AI rebuild (systemSaved) that produced a change log entry,
       // also animate the Changes tab so the new entry is visible
@@ -983,6 +993,12 @@ export default function Chat() {
           newChangeSignal={newChangeSignal}
           newProgramSignal={newProgramSignal}
           changeTargets={changeTargets}
+          pendingChangeHint={
+            stream.isActive && stream.state.actionType === "DIRECT_MUTATION"
+              ? (stream.state.acknowledgment || undefined)
+              : undefined
+          }
+          lastChangeSummary={lastChangeSummary ?? undefined}
         />
       </div>
     </div>
@@ -1019,9 +1035,14 @@ export default function Chat() {
         <PaywallModal
           plan={currentPlan}
           messagesUsed={messagesUsed}
+          isAnonymous={paywallIsAnon}
           onUpgrade={() => {
             setShowPaywall(false);
-            setShowPricing(true);
+            if (paywallIsAnon) {
+              setLocation("/register?from=paywall");
+            } else {
+              setShowPricing(true);
+            }
           }}
           onClose={() => setShowPaywall(false)}
         />
