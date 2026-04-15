@@ -273,16 +273,41 @@ Good changeSummary for power bias: "Shifted the Foundation Strength Block toward
 Bad changeSummary: "Block updated to increase power focus." or "Done."
 
 CRITICAL — HARDER / EASIER REQUESTS (exercise level):
-When the user says "make it harder", "harder variation", "make it easier", "easier variation", or similar:
-- You MUST produce a real prescription change. A notes-only update is NOT acceptable.
-- Valid "harder" mutations: replace_exercise with a harder variation, add a tempo (e.g. "3-1-X-0"), tighten reps, add a pause prescription, or increase set count.
-- Valid "easier" mutations: replace_exercise with an easier variation, widen reps, add a note about reducing load + lighter tempo.
+When the user says "make it harder", "make it easier", or similar:
+- NEVER use a generic descriptor as the replacement exercise name. Forbidden names: "a harder variation", "an easier variation", "harder variation", "easier variation", "a progression", "a regression", "harder exercise", "easier exercise", "a harder squat variation", or any similar placeholder phrase.
+- If choosing substitution: use a REAL NAMED EXERCISE from the PROGRESSION OPTIONS / REGRESSION OPTIONS injected above (if provided), or from the variation ladders below.
+- If no confident real exercise name is available: apply a REAL PRESCRIPTION CHANGE to the current exercise (tempo, pause, sets, reps, rest) using update_exercise — do NOT use replace_exercise with a generic name.
 - For explosive/plyometric exercises (jumps, broad jumps, bounds): NEVER add load-based progressions — use distance/height targets, set count, or variation changes.
 - For trunk/core exercises (Pallof press, plank, bird dog): use lever length, pause duration, or stance changes.
-- For strength primaries (squat, deadlift, bench, press): use replace_exercise to a harder variation first; if no variation available, add eccentric tempo (e.g. "3-1-X-0").
-- The changeSummary MUST state exactly what changed: name if swapped, tempo if added, reps if changed. Be specific.
-- Example good changeSummary: "Changed Back Squat to Pause Back Squat — same sets and reps, but the 2-second pause at the bottom eliminates the stretch reflex and forces you to generate force from a dead stop."
-- Example bad changeSummary: "Progression cue added." or "1 change applied."
+- For strength primaries (squat, deadlift, bench, press): use replace_exercise with a real named variation first (see ladders below); if no clear option, add eccentric tempo (e.g. "3-1-X-0") via update_exercise.
+- The changeSummary MUST state exactly what changed: real exercise name if swapped, tempo if added, reps if changed.
+- Example good changeSummary: "Changed Back Squat to Pause Back Squat — same sets and reps, but the 2-second pause at the bottom eliminates the stretch reflex."
+- Example bad changeSummary: "Progression cue added." or "Replaced with harder variation."
+
+VARIATION LADDERS — use these real exercise names for substitution:
+
+Back Squat → Harder: Pause Back Squat, Tempo Back Squat, Front Squat, Safety Bar Squat
+Back Squat → Easier: Box Squat, Goblet Squat, Split Squat, Dumbbell Goblet Squat
+Deadlift → Harder: Pause Deadlift, Deficit Deadlift, Romanian Deadlift (heavier)
+Deadlift → Easier: Romanian Deadlift, Trap Bar Deadlift, Single-Leg Romanian Deadlift
+Bench Press → Harder: Pause Bench Press, Tempo Bench Press, Close-Grip Bench Press
+Bench Press → Easier: Dumbbell Bench Press, Incline Dumbbell Press, Machine Chest Press
+Barbell Row → Harder: Pendlay Row, Paused Barbell Row, Single-Arm Barbell Row
+Barbell Row → Easier: Chest-Supported Row, Seated Cable Row, Machine Row
+Pull-Up / Chin-Up → Harder: Weighted Pull-Up, L-Sit Pull-Up, Archer Pull-Up
+Pull-Up / Chin-Up → Easier: Band-Assisted Pull-Up, Ring Row, Lat Pulldown
+Overhead Press → Harder: Push Press, Seated Overhead Press, Z-Press
+Overhead Press → Easier: Dumbbell Overhead Press, Landmine Press, Machine Shoulder Press
+Romanian Deadlift → Harder: Single-Leg Romanian Deadlift, Pause Romanian Deadlift
+Romanian Deadlift → Easier: Dumbbell Romanian Deadlift, Good Morning
+Hip Thrust → Harder: Single-Leg Hip Thrust, Pause Hip Thrust
+Hip Thrust → Easier: Glute Bridge, Banded Glute Bridge
+Dumbbell Bench Press → Harder: Pause Dumbbell Bench Press, Dumbbell Floor Press
+Dumbbell Bench Press → Easier: Machine Chest Press, Cable Chest Fly
+Split Squat → Harder: Rear Foot Elevated Split Squat, Walking Lunge, Barbell Split Squat
+Split Squat → Easier: Goblet Squat, Step-Up, Assisted Split Squat
+Dumbbell Row → Harder: Chest-Supported Dumbbell Row, Pendlay Row
+Dumbbell Row → Easier: Seated Cable Row, Machine Row
 
 NSCA STANDARDS — PRESERVE THESE IN EVERY EDIT:
 
@@ -419,6 +444,24 @@ async function interpretWithAI(
     logger.error({ err }, "Failed to interpret edit with AI");
     return null;
   }
+}
+
+// ─── Generic Placeholder Guard ────────────────────────────────────────────────
+// Detects exercise names that are descriptive phrases rather than real exercise
+// names. These must never be committed to the database — they are the root cause
+// of "a harder variation" appearing as an exercise card title.
+
+const GENERIC_PLACEHOLDER_PATTERNS = [
+  /^(a\s+|an\s+)?(harder|easier|more difficult|less difficult|simpler|advanced|beginner|intermediate)\s+(variation|option|exercise|version|alternative|progression|regression|movement|squat variation|deadlift variation|press variation|row variation)$/i,
+  /^(harder|easier)\s+(variation|option|exercise|version|alternative|progression|regression|movement)$/i,
+  /^a\s+(progression|regression|substitution|alternative|modification)$/i,
+  /^(more (challenging|difficult)|less (challenging|difficult))\s*(variation|option|exercise|version|alternative)?$/i,
+  /^(harder|easier|simpler|advanced|beginner)\s+(squat|deadlift|bench|press|row|pull|push|hinge|lunge|carry|swing)\s+(variation|alternative|option|version)?$/i,
+];
+
+export function isGenericPlaceholder(name: string): boolean {
+  if (!name || name.trim().length === 0) return true;
+  return GENERIC_PLACEHOLDER_PATTERNS.some((p) => p.test(name.trim()));
 }
 
 // ─── Exercise-Aware Harder / Easier Mutation Builders ────────────────────────
@@ -869,7 +912,10 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
     const wantsLessSets = lower.match(/remove.*set|less.*set|fewer.*set|drop.*set/);
     const wantsReps = lower.match(/change.*rep|rep.*range|reps/);
 
-    if (swapTo) {
+    // Guard: only commit a swap if the resolved name is a real exercise, not a generic placeholder.
+    // "Replace Back Squat with a harder variation" would extract "a harder variation" from the
+    // regex — which must never be committed. Fall through to wantsHarder/wantsEasier instead.
+    if (swapTo && !isGenericPlaceholder(swapTo)) {
       return {
         intent: "swap_exercise",
         scope: "exercise",
@@ -1408,7 +1454,7 @@ export async function interpretEditRequest(
   );
 
   if (aiPlan && Array.isArray(aiPlan.changes) && aiPlan.changes.length > 0) {
-    // Guard: if AI produced a harder/easier intent but only changed notes, reject it and use our fallback
+    // Guard 1: if AI produced a harder/easier intent but only changed notes, reject it and use our fallback
     const isProgressionIntent = /harder_variation|easier_variation|increase_difficulty|decrease_difficulty/i.test(aiPlan.intent);
     const onlyNotesChange = aiPlan.changes.every((c) => {
       if (c.type !== "update_exercise") return false;
@@ -1416,8 +1462,25 @@ export async function interpretEditRequest(
       return keys.length === 1 && keys[0] === "notes";
     });
 
+    // Guard 2: if AI produced a replace_exercise with a generic placeholder name, reject it.
+    // This catches cases where the AI outputs "replacement": {"name": "a harder variation", ...}
+    const hasGenericReplacementName = aiPlan.changes.some((c) => {
+      if (c.type !== "replace_exercise") return false;
+      const replacementName = (c as any).replacement?.name ?? (c as any).updates?.name ?? "";
+      if (isGenericPlaceholder(replacementName)) {
+        logger.warn(
+          { replacementName, intent: aiPlan.intent },
+          "[InterpretEdit] AI produced generic placeholder name in replace_exercise — rejecting"
+        );
+        return true;
+      }
+      return false;
+    });
+
     if (isProgressionIntent && onlyNotesChange) {
       logger.warn({ intent: aiPlan.intent, changes: aiPlan.changes.length }, "AI produced note-only mutation for progression request — rejecting, using real mutation fallback");
+    } else if (hasGenericReplacementName) {
+      logger.warn({ intent: aiPlan.intent }, "AI produced generic placeholder in replace_exercise — rejecting, using real mutation fallback");
     } else {
       logger.info({ intent: aiPlan.intent, scope: aiPlan.scope, changes: aiPlan.changes.length }, "AI edit plan generated");
       return aiPlan;

@@ -1,0 +1,240 @@
+We need to fix a major vibe-coding behavior gap in TrainChat.
+
+PROBLEM:
+Normal coaching-style structural requests are still being treated like strict targeted entity edits and failing.
+
+Examples of failing requests:
+- “I want to add more exercises to day 1”
+- “Make day 2 more explosive”
+- “Turn day 3 into more of a recovery day”
+- “Add more upper body work to this session”
+
+These are valid coaching requests and should NOT fail with:
+“I couldn’t resolve that to a specific exercise/session/block.”
+
+That response breaks the core vibe-coding experience.
+
+==================================================
+OBJECTIVE
+==================================================
+
+TrainChat must correctly handle SESSION-LEVEL and DAY-LEVEL STRUCTURAL EDITS as a distinct category from targeted exercise edits.
+
+The system must behave like a coach modifying the structure of a session, not a rigid entity resolver.
+
+==================================================
+TASK 1 — ADD A NEW INTENT TYPE
+==================================================
+
+Add a distinct intent/action type such as:
+
+- SESSION_TRANSFORMATION
+or
+- STRUCTURAL_SESSION_EDIT
+
+This should be separate from:
+- TARGETED_EDIT
+- PROGRAM_TRANSFORMATION
+
+==================================================
+TASK 2 — DETECT SESSION-LEVEL STRUCTURAL REQUESTS
+==================================================
+
+Classify requests like these into the new structural edit type:
+
+- “add more exercises to day 1”
+- “make day 1 longer”
+- “add more upper body work to day 2”
+- “make this session more explosive”
+- “add more core work”
+- “make this day harder”
+- “add more posterior chain to this session”
+
+Detection rules:
+- request references a day/session or implicitly the current viewed session
+- request implies modifying the structure/content of the session
+- request does NOT require exact named exercise substitution
+- request should be interpreted at session architecture level
+
+==================================================
+TASK 3 — RESOLVE DAY / SESSION TARGETS INTELLIGENTLY
+==================================================
+
+If the user references:
+- “day 1”
+- “session 2”
+- “this session”
+- “this day”
+
+Then resolve the target using:
+- explicit day name if present
+- current UIContext selectedSessionName / selectedWeek / page context
+- active program structure
+
+Do NOT fail if exact exercise names are missing.
+This is not an exercise-level request.
+
+==================================================
+TASK 4 — ADD SESSION STRUCTURE MODIFICATION LOGIC
+==================================================
+
+For the new structural session edit type, support operations like:
+
+- add exercises
+- remove exercises
+- increase/decrease total session volume
+- bias toward a movement pattern
+- bias toward a quality (power, endurance, hypertrophy, recovery)
+- add trunk/core work
+- add unilateral work
+- add conditioning finisher
+- shift session emphasis
+
+Examples:
+
+“add more exercises to day 1”
+→ add 1–3 relevant exercises that fit the day’s existing intent
+
+“make day 2 more explosive”
+→ insert or swap in power-biased movements, adjust reps/rest accordingly
+
+“add more core work to this session”
+→ add a trunk-focused exercise without breaking session balance
+
+==================================================
+TASK 5 — PRESERVE SESSION IDENTITY
+==================================================
+
+Structural edits must preserve the day’s overall purpose unless the user explicitly asks to change it.
+
+Examples:
+- strength day stays strength-biased
+- power day stays power-biased
+- conditioning day stays conditioning-biased
+
+If adding exercises:
+- choose exercises that fit the session identity
+- avoid random unrelated additions
+- manage fatigue and redundancy
+
+==================================================
+TASK 6 — NEVER FAIL JUST BECAUSE NO EXERCISE NAME WAS GIVEN
+==================================================
+
+For session/day-level structural requests:
+- do NOT require exact exercise names
+- do NOT return entity resolution failure by default
+
+Only ask for clarification if:
+- target day/session is genuinely ambiguous
+- OR requested scope is impossible to infer
+
+Examples where clarification is okay:
+- “add more stuff” with no program/session context
+- “make it better” with no visible target and no current program
+
+But for:
+- “add more exercises to day 1”
+- “make this session harder”
+- “add more upper body”
+the system should act, not fail
+
+==================================================
+TASK 7 — RESPONSE STYLE
+==================================================
+
+When a structural session edit succeeds, the response should be coaching-style and concise.
+
+Examples:
+- “Got it — I expanded Day 1 with two support exercises to increase total work without changing the day’s main strength focus.”
+- “I added more upper-body volume to Day 2 and kept the session balanced.”
+- “I shifted this session toward explosiveness by adding a power movement and adjusting the loading.”
+
+Then:
+- show SystemUpdateCard
+- highlight the added/changed exercises
+- make the changes visually obvious
+
+==================================================
+TASK 8 — VALIDATION
+==================================================
+
+Before committing:
+- verify the session still has coherent structure
+- verify exercise count remains within sensible limits
+- verify no duplicated junk additions
+- verify the day still matches the user’s stated goal unless explicitly changed
+
+If structural edit cannot be applied coherently:
+- fail honestly with a useful explanation
+- but do NOT use generic entity-resolution failure copy
+
+==================================================
+TASK 9 — TEST REQUIRED SCENARIOS
+==================================================
+
+Test these exact prompts:
+
+1. “I want to add more exercises to day 1”
+Expected:
+- day 1 resolved
+- 1–3 relevant exercises added
+- visible change
+- no failure
+
+2. “Add more upper body work to day 2”
+Expected:
+- session architecture changes appropriately
+
+3. “Make this session more explosive”
+Expected:
+- UIContext target resolved
+- session modified toward power
+
+4. “Add more core work”
+Expected:
+- current session/program context used
+- relevant core/trunk addition made
+
+5. “Make day 3 longer”
+Expected:
+- session expanded appropriately, not failed
+
+6. Truly ambiguous request:
+“add more stuff”
+Expected:
+- clarification request, not fake success and not wrong rigid failure copy
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What new intent/action type was added
+2. What detection rules were added
+3. How session/day targets are resolved
+4. What structural session modifications are now supported
+5. What validation rules protect coherence
+6. What failure conditions still require clarification
+7. Which previously failing prompts now work correctly
+
+==================================================
+FINAL STANDARD
+==================================================
+
+When a user says:
+“I want to add more exercises to day 1”
+
+TrainChat should behave like a coach editing the structure of Day 1.
+
+It should NOT behave like a rigid database tool asking for exact exercise names.
+
+The product should now support:
+- targeted edits
+- session-level structural edits
+- full program transformations
+
+without collapsing them into the same failure path.
+
+Implement this now.

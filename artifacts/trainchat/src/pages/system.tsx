@@ -239,8 +239,8 @@ function ExerciseCard({ exercise, index, sessionLabel, highlightedIds, onEdit, o
   const QUICK_ACTIONS = [
     { label: "+Set", icon: Plus, req: `Add one set to ${exercise.name}` },
     { label: "-Set", icon: Minus, req: `Remove one set from ${exercise.name}` },
-    { label: "Easier", icon: TrendingDown, req: `Replace ${exercise.name} with an easier variation` },
-    { label: "Harder", icon: Flame, req: `Replace ${exercise.name} with a harder variation` },
+    { label: "Easier", icon: TrendingDown, req: `Make ${exercise.name} easier` },
+    { label: "Harder", icon: Flame, req: `Make ${exercise.name} harder` },
   ];
 
   const difficultyColor: Record<string, string> = {
