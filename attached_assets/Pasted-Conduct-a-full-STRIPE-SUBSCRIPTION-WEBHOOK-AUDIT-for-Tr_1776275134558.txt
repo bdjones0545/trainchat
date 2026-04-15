@@ -1,0 +1,380 @@
+Conduct a full STRIPE SUBSCRIPTION + WEBHOOK AUDIT for TrainChat.
+
+OBJECTIVE:
+Determine whether the Stripe integration, recurring billing, webhook handling, and subscription entitlement logic are fully correct, reliable, and production-safe.
+
+This is NOT just a checkout audit.
+This is a full subscription lifecycle audit.
+
+I want to know whether TrainChat correctly handles:
+- new subscriptions
+- recurring monthly billing
+- recurring annual billing if present
+- failed recurring charges
+- retries / dunning
+- cancellations
+- expired subscriptions
+- upgrades / downgrades
+- billing portal changes
+- webhook event handling
+- entitlement changes inside the app
+
+==================================================
+PRIMARY QUESTION
+==================================================
+
+If a user subscribes to TrainChat, renews, fails a payment, updates their card, cancels, upgrades, downgrades, or comes back later — does the system always do the correct thing?
+
+Answer with evidence from the codebase and the actual Stripe integration flow.
+
+==================================================
+AUDIT AREAS
+==================================================
+
+A. CHECKOUT FLOW
+Audit:
+- how checkout sessions are created
+- how product/price IDs are mapped
+- whether correct Stripe prices are used
+- whether monthly vs annual plans map correctly
+- whether success/cancel URLs are correct
+- whether metadata is attached properly
+- whether the app can identify which user the Stripe subscription belongs to
+
+Check for:
+- wrong plan IDs
+- environment mismatches
+- missing metadata
+- wrong user linking
+- duplicate customer creation
+- missing customer reuse logic
+
+B. STRIPE CUSTOMER / SUBSCRIPTION LINKING
+Audit:
+- how Stripe customer IDs are created and stored
+- how subscriptions are linked to app users
+- whether duplicate Stripe customers can be created for one user
+- whether returning subscribers are recognized correctly
+- whether anonymous → registered → paid transitions preserve billing identity
+
+I want a clear understanding of the source of truth for:
+- stripeCustomerId
+- stripeSubscriptionId
+- current plan
+- billing status
+- entitlement status
+
+C. WEBHOOK VERIFICATION + SECURITY
+Audit:
+- webhook signature verification
+- environment variable usage
+- raw body handling
+- whether the webhook route is implemented correctly for Stripe
+- whether invalid events are rejected
+- whether events can be spoofed or misprocessed
+
+Check for:
+- missing signature verification
+- body parser issues that break signature validation
+- incorrect webhook secret usage
+- insecure fallback behavior
+
+D. WEBHOOK EVENT COVERAGE
+Audit what webhook events are actually handled.
+
+At minimum I want you to look for correct handling of:
+- checkout.session.completed
+- customer.subscription.created
+- customer.subscription.updated
+- customer.subscription.deleted
+- invoice.paid
+- invoice.payment_failed
+- invoice.payment_succeeded
+- customer.subscription.trial_will_end if relevant
+- payment_intent.payment_failed if used
+- customer.updated if relevant to billing sync
+- invoice.finalized / invoice.marked_uncollectible if relevant
+
+I want to know:
+- which events are handled
+- which are missing
+- which matter most
+- whether the app is relying on the wrong event for subscription state
+
+E. RECURRING BILLING LIFECYCLE
+Audit how recurring billing behaves over time.
+
+For monthly subscriptions:
+- what happens at renewal?
+- how is success recorded?
+- how is failure recorded?
+- what happens during Stripe retry attempts?
+- when does the user lose access?
+- is there any grace period?
+- does the UI reflect billing status correctly?
+
+For annual subscriptions if present:
+- same audit
+
+This is a major priority:
+I want a precise answer for what happens if a recurring monthly charge fails.
+
+F. FAILED PAYMENT / DUNNING FLOW
+This is critical.
+
+Audit:
+- what Stripe does by default in this integration
+- what the app does when invoice.payment_failed happens
+- whether subscription state changes correctly
+- whether the user is warned
+- whether access is removed immediately or after a status transition
+- whether payment recovery restores access correctly
+- whether stale paid access can linger after failed payment
+
+I want explicit answers to questions like:
+- If a user’s card declines on renewal, do they still have premium access?
+- For how long?
+- What Stripe subscription status is expected?
+- Does the app react to that status correctly?
+- If they update their card later, does access restore automatically?
+
+G. ENTITLEMENT / ACCESS CONTROL
+Audit how premium access is actually granted inside TrainChat.
+
+Check:
+- what field or state determines “isPremium”
+- where it is set
+- where it is revoked
+- whether it is derived from Stripe status correctly
+- whether different plans unlock the correct features
+- whether expired/canceled/past_due/unpaid users are handled correctly
+
+I want to know whether the app could ever:
+- leave a canceled user premium
+- downgrade a paid user incorrectly
+- fail to upgrade someone after payment
+- get stuck in an inconsistent entitlement state
+
+H. CANCELLATION / DOWNGRADE / UPGRADE LOGIC
+Audit:
+- user-initiated cancellation
+- billing portal cancellation
+- end-of-period cancellation
+- immediate cancellation if used
+- upgrade between plans
+- downgrade between plans
+- switching billing interval if present
+- whether proration is handled intentionally
+- whether entitlements update correctly at the right time
+
+I want explicit answers for:
+- when access ends after cancellation
+- whether access lasts until period end
+- how the DB records that
+- how the UI communicates it
+
+I. BILLING PORTAL / SELF-SERVE MANAGEMENT
+Audit:
+- whether Stripe customer portal is integrated correctly
+- whether the correct customer is passed
+- whether the return URL is correct
+- whether actions taken in the portal sync back correctly through webhooks
+- whether subscription changes made in Stripe portal are reflected in the app
+
+J. IDEMPOTENCY / DUPLICATE EVENT SAFETY
+Audit whether webhook handlers are safe against:
+- duplicate Stripe deliveries
+- retries
+- out-of-order events
+- race conditions
+
+Check for:
+- event ID persistence
+- idempotency guards
+- duplicate DB writes
+- duplicate entitlement changes
+- multiple subscription records for same event
+- accidental repeated provisioning
+
+K. DATABASE / SOURCE-OF-TRUTH AUDIT
+Audit the DB schema and logic for:
+- user billing fields
+- plan fields
+- subscription status fields
+- renewal fields
+- cancellation flags
+- timestamps like current_period_end
+- trial data if present
+
+I want to know:
+- what the app treats as the billing source of truth
+- whether Stripe state is mirrored properly
+- whether there are fields that can drift
+- whether reconciliation is possible if drift occurs
+
+L. TEST / SANDBOX / ENVIRONMENT SEPARATION
+Audit:
+- use of test vs live Stripe keys
+- webhook secrets by environment
+- plan/price IDs by environment
+- whether hardcoded test values exist
+- whether production could accidentally use test configuration or vice versa
+
+==================================================
+MANDATORY LIFECYCLE SCENARIOS
+==================================================
+
+Audit and trace these exact scenarios:
+
+1. New monthly subscription purchase
+- checkout created
+- payment succeeds
+- webhook fires
+- user becomes premium
+- DB updates correctly
+
+2. New annual subscription purchase (if annual exists)
+- same audit
+
+3. Monthly renewal succeeds
+- invoice paid
+- subscription remains active
+- app remains premium
+
+4. Monthly renewal fails
+- card declines
+- Stripe retries or marks status accordingly
+- app handles past_due/unpaid/incomplete as intended
+- user access changes correctly
+- user recovery path works
+
+5. User updates card after failed payment
+- Stripe payment recovery succeeds
+- webhooks fire
+- premium access restores correctly
+
+6. User cancels subscription
+- determine whether cancellation is immediate or period-end
+- app reflects correct access timing
+
+7. User downgrades or switches plans
+- entitlements remain correct
+- billing state remains correct
+
+8. User changes subscription through Stripe portal
+- app syncs correctly through webhook flow
+
+9. Duplicate webhook delivery
+- no duplicate entitlement writes
+- no inconsistent records
+
+10. Anonymous/free user becomes paid
+- user identity remains correct
+- premium status updates correctly
+- no duplicate customer/subscription mismatch
+
+==================================================
+REQUIRED OUTPUT FORMAT
+==================================================
+
+Return the audit in this exact structure:
+
+1. EXECUTIVE VERDICT
+Choose one:
+- Production-ready
+- Mostly solid
+- Risky
+- Broken
+
+Then explain clearly.
+
+2. BILLING SCORECARD (1–10)
+Score:
+- Checkout reliability
+- Customer/subscription linking
+- Webhook security
+- Webhook completeness
+- Recurring billing correctness
+- Failed payment handling
+- Entitlement accuracy
+- Cancellation handling
+- Upgrade/downgrade handling
+- Idempotency / duplicate safety
+- Source-of-truth clarity
+- Overall billing reliability
+
+3. WHAT IS WORKING WELL
+List the billing/subscription pieces that are clearly implemented correctly.
+
+4. CRITICAL RISKS
+List every meaningful billing risk.
+
+For each include:
+- issue
+- why it matters
+- likely root cause
+- affected files/routes/functions
+- severity: Critical / High / Medium
+
+5. WEBHOOK TRUTH
+Answer plainly:
+- Which webhook events are handled?
+- Which important events are missing?
+- Is the webhook implementation secure and correct?
+
+6. FAILED PAYMENT TRUTH
+Answer plainly:
+What exactly happens if a recurring monthly charge does not go through?
+
+I want:
+- Stripe status behavior
+- app behavior
+- entitlement behavior
+- recovery behavior
+- whether there is any gap or bug
+
+7. ENTITLEMENT TRUTH
+Answer plainly:
+Does premium access always match billing reality?
+Explain where it does and where it can drift.
+
+8. SOURCE OF TRUTH
+Answer plainly:
+What is the true billing source of truth in the system?
+Explain any drift or reconciliation risks.
+
+9. TOP 5 FIXES
+List the five highest-leverage fixes to make the Stripe lifecycle fully trustworthy.
+
+10. FINAL RECOMMENDATION
+Should we:
+- patch billing before growth
+- add more webhook handling
+- harden entitlement logic
+- improve failed payment recovery
+- add reconciliation tooling
+or some combination?
+
+Prioritize the next moves clearly.
+
+==================================================
+AUDIT RULES
+==================================================
+
+- Be brutally honest
+- Treat billing as high-stakes infrastructure
+- Do not assume checkout success means billing is safe
+- Judge recurring billing and failed-payment behavior carefully
+- If something is unclear in code, say so clearly
+- If a plan/access mismatch is possible, call it out
+- Prioritize correctness and reliability over optimism
+
+==================================================
+FINAL INSTRUCTION
+==================================================
+
+Act like a senior billing systems auditor.
+
+You are deciding whether TrainChat can safely scale paid subscriptions without revenue leakage, entitlement bugs, or failed renewal confusion.
+
+Audit it accordingly.
