@@ -34,6 +34,7 @@ import {
 } from "./split-transform";
 import { retrieveRelevantKnowledge } from "./knowledge-retrieval";
 import { buildArchitectureBrief, validateProgramArchitecture, extractSportFromRequest } from "./program-architecture-engine";
+import { buildConditioningContext, isConditioningGoal } from "./conditioning-engine";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -910,6 +911,24 @@ The conversion rule: show intelligence first → build tension → deliver parti
     bodyRegion: profile.injuries ? "injury_present" : null,
   });
 
+  // Build conditioning engine context when goal is conditioning/endurance/fat loss/athletic performance
+  const goalRaw = profile.trainingGoal.toLowerCase();
+  const needsConditioningContext =
+    isConditioningGoal(profile.trainingGoal) ||
+    goalRaw.includes("fat loss") ||
+    goalRaw.includes("body comp") ||
+    goalRaw.includes("athletic") ||
+    goalRaw.includes("conditioning") ||
+    !!profile.sportFocus;
+  const conditioningContext = needsConditioningContext
+    ? "\n\n" + buildConditioningContext(
+        profile.trainingGoal,
+        profile.sportFocus ?? null,
+        profile.equipmentAccess,
+        profile.daysPerWeek,
+      )
+    : "";
+
   return coreIdentity + `
 
 ## USER TRAINING PROFILE
@@ -926,7 +945,7 @@ ${profile.sportFocus ? `- Sport / Activity Focus: ${profile.sportFocus}` : ""}
 ${profile.exercisePreferences ? `- Exercise Preferences: ${profile.exercisePreferences}` : ""}
 ${profile.exercisesToAvoid ? `- Exercises to Avoid (NEVER program these): ${profile.exercisesToAvoid}` : ""}
 
-${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}`;
+${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${conditioningContext}`;
 }
 
 // ─── JSON extractor ──────────────────────────────────────────────────────────

@@ -1,0 +1,288 @@
+We are now implementing:
+
+PHASE 1 — CONDITIONING / ENERGY SYSTEM ENGINE
+
+OBJECTIVE:
+Upgrade TrainChat from “resistance training with circuits” to a system that can prescribe real conditioning based on energy system demands, sport, and goals.
+
+This is the highest-priority intelligence upgrade.
+
+==================================================
+CORE PROBLEM
+==================================================
+
+Current behavior:
+- conditioning requests default to circuits or short-rest lifting
+- no true energy system differentiation
+- no structured conditioning progression
+- no sport-specific conditioning logic
+
+This breaks credibility immediately for:
+- athletes
+- fat loss clients
+- conditioning-focused users
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+Conditioning is NOT:
+- circuits
+- “high reps with low rest”
+
+Conditioning IS:
+- energy system development
+- structured work:rest prescriptions
+- modality-specific programming
+- progressive overload in time, density, or intensity
+
+==================================================
+TASK 1 — DEFINE ENERGY SYSTEM TYPES
+==================================================
+
+Create a new classification layer:
+
+EnergySystemType:
+- aerobic_base
+- aerobic_power (tempo work)
+- lactate_threshold
+- vo2max
+- anaerobic_capacity
+- repeat_sprint_ability
+
+Each type must have:
+- target duration ranges
+- intensity level
+- work:rest ratio guidelines
+- session structure pattern
+
+==================================================
+TASK 2 — MAP USER GOALS TO ENERGY SYSTEMS
+==================================================
+
+Update intent parsing so conditioning-related goals map correctly.
+
+Examples:
+
+“improve cardio” →
+- aerobic_base + lactate_threshold
+
+“game conditioning” →
+- repeat_sprint_ability + anaerobic_capacity
+
+“fat loss” →
+- aerobic_base + aerobic_power + optional anaerobic work
+
+“soccer conditioning” →
+- aerobic_base + repeat_sprint_ability
+
+“football conditioning” →
+- anaerobic_capacity + repeat_sprint_ability
+
+“general fitness” →
+- aerobic_base + mixed moderate conditioning
+
+==================================================
+TASK 3 — BUILD CONDITIONING SESSION TEMPLATES
+==================================================
+
+Create structured templates for each energy system.
+
+Examples:
+
+AEROBIC BASE:
+- steady-state or tempo intervals
+- 20–40 min total
+- low/mod intensity
+- example:
+  5 min warmup
+  20 min steady effort
+  cooldown
+
+LACTATE THRESHOLD:
+- longer intervals
+- moderate-high intensity
+- example:
+  4 x 6 min @ threshold
+  2 min rest
+
+VO2 MAX:
+- short high-intensity intervals
+- example:
+  6 x 2 min hard
+  2 min rest
+
+ANAEROBIC CAPACITY:
+- short explosive intervals
+- example:
+  8 x 20 sec all-out
+  100 sec rest
+
+REPEAT SPRINT ABILITY:
+- short sprint clusters
+- example:
+  2 sets:
+    6 x 20m sprint
+    20 sec rest
+  2–3 min between sets
+
+==================================================
+TASK 4 — ADD MODALITY SELECTION LOGIC
+==================================================
+
+Conditioning must select modality based on:
+- sport
+- equipment
+- environment
+- user constraints
+
+Modalities:
+- running (tempo runs, sprints, shuttles)
+- sled pushes/pulls
+- bike
+- rower
+- jump rope
+- med ball circuits (only where appropriate)
+- bodyweight conditioning (only if constrained)
+
+Rules:
+- field sports → running + sprint work
+- limited equipment → bike/rower/bodyweight
+- gym access → sleds + mixed modalities
+
+==================================================
+TASK 5 — INTEGRATE INTO SESSION DESIGN
+==================================================
+
+Conditioning must appear correctly in sessions:
+
+Rules:
+- NOT randomly placed
+- NOT always at the end
+- NOT always circuits
+
+Examples:
+- separate conditioning day
+- after strength work (if appropriate)
+- standalone session for athletes
+- split AM/PM logic (future-ready)
+
+==================================================
+TASK 6 — ADD WEEKLY CONDITIONING STRUCTURE
+==================================================
+
+Programs must include:
+- variation across the week
+- multiple energy systems where appropriate
+
+Example:
+Day 1 → aerobic base
+Day 2 → strength
+Day 3 → repeat sprint
+Day 4 → rest or mobility
+
+NOT:
+- same conditioning every day
+- random placement
+
+==================================================
+TASK 7 — ADD PROGRESSION LOGIC
+==================================================
+
+Conditioning must progress over time.
+
+Progression methods:
+- increase duration
+- increase reps
+- decrease rest
+- increase density
+- increase intensity
+
+Example:
+Week 1 → 4 x 2 min intervals
+Week 3 → 5 x 2 min intervals
+Week 5 → 6 x 2 min intervals
+
+==================================================
+TASK 8 — PREVENT MISCLASSIFICATION
+==================================================
+
+Ensure:
+- circuits ≠ conditioning (unless explicitly chosen)
+- hypertrophy ≠ conditioning
+- short rest lifting ≠ cardio
+
+If user asks for conditioning:
+- MUST include true conditioning work
+- not just resistance training adjustments
+
+==================================================
+TASK 9 — UPDATE AGENT LANGUAGE
+==================================================
+
+Agent must reflect real conditioning logic:
+
+Instead of:
+“added conditioning”
+
+Use:
+“Added repeat sprint work: 6 x 20m sprints with 20s rest to build game-specific conditioning”
+
+Language must:
+- specify system
+- specify structure
+- specify purpose
+
+==================================================
+MANDATORY TEST SCENARIOS
+==================================================
+
+Test:
+
+1. “Build me a conditioning program”
+2. “Improve my cardio”
+3. “Soccer conditioning”
+4. “Football conditioning”
+5. “Fat loss program”
+6. “I only have 20 minutes”
+
+Verify:
+- real intervals exist
+- real work:rest exists
+- modality is correct
+- progression is logical
+- NOT just circuits
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What energy system types were created
+2. How goal mapping works
+3. What session templates were added
+4. How modality selection works
+5. How weekly structure changed
+6. How progression works
+7. Examples of improved outputs
+
+==================================================
+FINAL STANDARD
+==================================================
+
+If a coach looks at a conditioning program, they should see:
+
+- clear energy system targeting
+- structured intervals
+- intelligent modality selection
+- real progression
+
+NOT:
+- circuits
+- random conditioning
+- resistance training disguised as cardio
+
+TrainChat must now program conditioning like a real coach.
+
+Implement this now.

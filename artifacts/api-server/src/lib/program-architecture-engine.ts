@@ -164,6 +164,164 @@ function buildSessionsForDayCount(
     || goal?.toLowerCase().includes("size")
     || false;
 
+  // Conditioning/endurance goal: programs structured around energy system development
+  // with dedicated conditioning sessions rather than only lifting days
+  const isConditioning = !!(
+    goal?.toLowerCase().includes("conditioning") ||
+    goal?.toLowerCase().includes("endurance") ||
+    goal?.toLowerCase().includes("cardio") ||
+    goal?.toLowerCase().includes("aerobic") ||
+    goal?.toLowerCase().includes("work capacity") ||
+    goal?.toLowerCase().includes("stamina")
+  );
+
+  // Sport with a field/court context benefits from conditioning session architecture
+  const isSportConditioning = !!(sport && (
+    sport.toLowerCase().includes("soccer") ||
+    sport.toLowerCase().includes("football") ||
+    sport.toLowerCase().includes("basketball") ||
+    sport.toLowerCase().includes("rugby") ||
+    sport.toLowerCase().includes("lacrosse")
+  ));
+
+  // For conditioning-dominant goals, use conditioning-specific session architectures
+  if (isConditioning && !isAthletic) {
+    if (daysPerWeek === 3) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Strength Support + Aerobic Base",
+          intent: "Compound lower-body strength as the structural foundation; aerobic base conditioning finisher to develop cardiac output",
+          neuralDemand: "moderate",
+          primaryPattern: "squat",
+          emphasizedPatterns: ["squat", "hinge", "trunk", "locomotion"],
+          cnsFlow: [
+            { role: "prep", description: "Dynamic lower prep: hip mobility, glute activation, ankle stiffness" },
+            { role: "primary", description: "Compound squat pattern — bilateral force production foundation" },
+            { role: "secondary", description: "Hinge pattern — posterior chain structural support" },
+            { role: "unilateral", description: "Unilateral lower — single-leg stability and asymmetry correction" },
+            { role: "trunk", description: "Anti-extension trunk work: dead bug or ab wheel" },
+            { role: "finisher", description: "AEROBIC BASE CONDITIONING: 20–30 min steady-state run, row, or bike at 60–70% max HR. This is a dedicated energy system session, not a circuit." },
+          ],
+        },
+        {
+          dayNumber: 2,
+          identity: "Dedicated Conditioning — Energy System Development",
+          intent: "Standalone conditioning session targeting the primary energy system — real intervals, real work:rest ratios. This day is conditioning-first, not strength.",
+          neuralDemand: "moderate",
+          primaryPattern: "locomotion",
+          emphasizedPatterns: ["locomotion", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Dynamic warm-up: jog, dynamic drills, build-up strides or jump rope warm-up" },
+            { role: "primary", description: "PRIMARY CONDITIONING BLOCK: Structured intervals per the conditioning engine — lactate threshold or VO2max work. Not a circuit. Real work:rest prescribed." },
+            { role: "secondary", description: "SECONDARY CONDITIONING: A second energy system block if time allows — e.g., aerobic base cool-down or tempo work" },
+            { role: "trunk", description: "Trunk stability cooldown: 2–3 sets anti-rotation or anti-extension (minimal fatigue)" },
+          ],
+        },
+        {
+          dayNumber: 3,
+          identity: "Upper Strength + Repeat Effort Conditioning",
+          intent: "Upper body structural strength support; sprint or repeat-effort conditioning finisher to develop anaerobic capacity",
+          neuralDemand: "moderate",
+          primaryPattern: "upper_push",
+          emphasizedPatterns: ["upper_push", "upper_pull", "trunk", "locomotion"],
+          cnsFlow: [
+            { role: "prep", description: "Upper-body neural prep: scapular activation, wall slides, thoracic mobility" },
+            { role: "primary", description: "Upper push compound — horizontal or vertical press strength" },
+            { role: "secondary", description: "Upper pull complement — row or chin-up for structural balance" },
+            { role: "trunk", description: "Anti-rotation trunk: Pallof press or dead bug" },
+            { role: "finisher", description: "CONDITIONING FINISHER: Anaerobic capacity or repeat sprint work — 6–10 × 20-sec all-out efforts with adequate rest. Named energy system, not 'circuits'." },
+          ],
+        },
+      ];
+    }
+
+    if (daysPerWeek === 4) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Lower Strength + Aerobic Foundation",
+          intent: "Build structural lower-body strength as the conditioning support base; aerobic conditioning to close the session",
+          neuralDemand: "moderate",
+          primaryPattern: "squat",
+          emphasizedPatterns: ["squat", "hinge", "unilateral_lower", "trunk", "locomotion"],
+          cnsFlow: [
+            { role: "prep", description: "Lower-body dynamic prep: hip mobility, glute activation" },
+            { role: "primary", description: "Squat-pattern bilateral strength" },
+            { role: "secondary", description: "Hinge-pattern posterior chain" },
+            { role: "unilateral", description: "Unilateral lower stability" },
+            { role: "trunk", description: "Anti-extension trunk" },
+            { role: "finisher", description: "AEROBIC BASE: 20 min steady-state run or row at 60–70% max HR" },
+          ],
+        },
+        {
+          dayNumber: 2,
+          identity: "Dedicated Conditioning — Lactate Threshold",
+          intent: "Standalone lactate threshold session — structured intervals at 85–92% max HR. No lifting this day. Real conditioning work.",
+          neuralDemand: "moderate",
+          primaryPattern: "locomotion",
+          emphasizedPatterns: ["locomotion"],
+          cnsFlow: [
+            { role: "prep", description: "5 min easy jog or row warm-up" },
+            { role: "primary", description: "LACTATE THRESHOLD INTERVALS: 3–5 × 4–6 min at 85–92% max HR with equal rest. Run, row, or bike. This is a real conditioning session." },
+            { role: "finisher", description: "5 min easy cool-down" },
+          ],
+        },
+        {
+          dayNumber: 3,
+          identity: "Upper Structural Strength",
+          intent: "Upper-body compound strength to maintain structural balance in a conditioning-dominant program",
+          neuralDemand: "moderate",
+          primaryPattern: "upper_push",
+          emphasizedPatterns: ["upper_push", "upper_pull", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Upper-body scapular and shoulder prep" },
+            { role: "primary", description: "Horizontal press compound" },
+            { role: "secondary", description: "Horizontal pull complement" },
+            { role: "trunk", description: "Anti-rotation trunk integrity" },
+          ],
+        },
+        {
+          dayNumber: 4,
+          identity: "Dedicated Conditioning — Anaerobic Capacity / RSA",
+          intent: "High-intensity conditioning session targeting anaerobic capacity or repeat sprint ability — the most sport-specific conditioning day",
+          neuralDemand: "high",
+          primaryPattern: "locomotion",
+          emphasizedPatterns: ["locomotion", "power"],
+          cnsFlow: [
+            { role: "prep", description: "8 min dynamic warm-up: jog + A-skips + high knees + 2 × build-up strides" },
+            { role: "primary", description: "ANAEROBIC CAPACITY / RSA: 6–12 × 10–30 sec all-out sprints or bike efforts with 3–5× work:rest ratio. Full speed on every rep. Named energy system target." },
+            { role: "finisher", description: "5 min walk cool-down" },
+          ],
+        },
+      ];
+    }
+  }
+
+  // Sport with conditioning emphasis — add a dedicated conditioning day where days allow
+  if (isSportConditioning && daysPerWeek >= 4) {
+    const strengthDays = buildSessionsForDayCount(daysPerWeek - 1, sport, "athletic_performance");
+    // Replace the last session with a dedicated sport conditioning day
+    return [
+      ...strengthDays.slice(0, daysPerWeek - 1),
+      {
+        dayNumber: daysPerWeek,
+        identity: "Sport-Specific Conditioning — RSA + Energy Systems",
+        intent: "Standalone sport conditioning session: repeat sprint ability + energy system development specific to the sport's demands. Real intervals, real work:rest.",
+        neuralDemand: "high",
+        primaryPattern: "locomotion",
+        emphasizedPatterns: ["locomotion", "power", "lateral"],
+        cnsFlow: [
+          { role: "prep", description: "8 min dynamic prep: jog + dynamic drills + 2 × 20m build-up strides" },
+          { role: "primary", description: "REPEAT SPRINT ABILITY: 2–4 sets × 4–6 sprints @ 20–30m with 20 sec intra-set rest and 2–3 min between sets. Full sprint speed every rep." },
+          { role: "secondary", description: "SECONDARY ENERGY SYSTEM: Aerobic base or lactate threshold work — 15–20 min at appropriate intensity to complement RSA" },
+          { role: "trunk", description: "Movement quality and recovery work" },
+        ],
+        sportNotes: `Sport-specific conditioning block — mirrors the repeat sprint and aerobic demands of ${sport} competition`,
+      },
+    ];
+  }
+
   if (daysPerWeek === 2) {
     return [
       {
@@ -511,6 +669,13 @@ export function buildArchitectureBrief(
 
   const arch = computeWeeklyArchitecture(daysPerWeek, sport, goal);
   const isHockey = sport?.toLowerCase().includes("hockey") ?? false;
+  const isConditioningGoal = !!(
+    goal?.toLowerCase().includes("conditioning") ||
+    goal?.toLowerCase().includes("endurance") ||
+    goal?.toLowerCase().includes("cardio") ||
+    goal?.toLowerCase().includes("aerobic") ||
+    goal?.toLowerCase().includes("work capacity")
+  );
 
   const sessionLines = arch.sessions.map((s) => {
     const flowRoles = s.cnsFlow.map((b) => `[${b.role.toUpperCase()}] ${b.description}`).join("\n    ");
@@ -529,6 +694,19 @@ export function buildArchitectureBrief(
     .filter(([, v]) => v && v > 0)
     .map(([k, v]) => `  ${k.replace("_", " ")}: ${v} session${v === 1 ? "" : "s"} per week`)
     .join("\n");
+
+  const conditioningOverlay = isConditioningGoal ? `
+## CONDITIONING PROGRAM ARCHITECTURE — MANDATORY RULES
+This program includes dedicated conditioning sessions. Enforce these rules:
+
+- **Conditioning sessions are NOT circuits.** A conditioning session must include named energy system work (aerobic base / lactate threshold / VO2max / anaerobic capacity / repeat sprint ability).
+- **Every conditioning session must specify:** modality (run/row/bike/sprint/sled), work duration, rest duration, number of intervals, and intensity zone.
+- **Dedicated conditioning days** (days with identity "Conditioning") must be structured intervals — NOT a random mix of exercises.
+- **Strength sessions that include conditioning finishers** must place the conditioning block LAST, after all lifting.
+- **Do NOT call lifting circuits "conditioning"** — conditioning is energy system work, not resistance training with short rest.
+- **Progression must be specified:** State Week 1 → Week 3 → Week 5 targets for every conditioning session.
+- **Language must name the energy system:** Instead of "cardio finisher", write "Aerobic Base: 20 min run at 60–70% max HR" or "Lactate Threshold: 4 × 5 min at 85–92% HR with 5 min rest".
+` : "";
 
   const hockeyOverlay = isHockey ? `
 ## HOCKEY-SPECIFIC OVERLAY — MANDATORY
@@ -570,7 +748,7 @@ ${arch.recoveryNotes}
 - Push:pull ratio must be balanced across the week
 - Every session MUST include trunk work (not optional)
 - Power/explosive work always comes first when CNS is fresh (after prep only)
-${hockeyOverlay}
+${conditioningOverlay}${hockeyOverlay}
 ### EXERCISE SELECTION MANDATE
 Only AFTER the above architecture is locked, select exercises that:
 1. Match the session's primary and secondary patterns
@@ -589,7 +767,7 @@ Only AFTER the above architecture is locked, select exercises that:
 - [ ] Every session has at least one unilateral lower-body movement (lower/full-body days)
 - [ ] No repeated primary lifts across sessions
 - [ ] Exercise intents are performance cues, not muscle labels
-${isHockey ? "- [ ] Lateral and rotational patterns present in ≥3 sessions\n- [ ] Copenhagen plank or adductor work in every lower-body day\n- [ ] Pallof press in ≥2 sessions" : ""}`;
+${isHockey ? "- [ ] Lateral and rotational patterns present in ≥3 sessions\n- [ ] Copenhagen plank or adductor work in every lower-body day\n- [ ] Pallof press in ≥2 sessions" : ""}${isConditioningGoal ? "\n- [ ] Dedicated conditioning sessions include named energy system (aerobic base / lactate threshold / VO2max / anaerobic capacity / RSA)\n- [ ] Every conditioning exercise has work duration, rest duration, and interval count\n- [ ] Conditioning sessions do NOT default to circuits — real intervals required\n- [ ] Progression is stated: Week 1 → Week 3 → Week 5" : ""}`;
 }
 
 // ─── Post-generation Validation ───────────────────────────────────────────────

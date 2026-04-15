@@ -160,7 +160,14 @@ export function normalizeGoal(rawGoal: string): GoalType {
   if (g.includes("strength") || g.includes("strong") || g.includes("powerlifting") || g.includes("1rm")) return "strength";
   if (g.includes("athletic") || g.includes("performance") || g.includes("sport") || g.includes("speed") || g.includes("power") || g.includes("agility")) return "athletic_performance";
   if (g.includes("fat") || g.includes("weight loss") || g.includes("lean") || g.includes("cut")) return "fat_loss";
-  if (g.includes("endurance") || g.includes("cardio") || g.includes("aerobic")) return "endurance";
+  // Conditioning detection — explicit conditioning/cardio requests get the endurance goal type
+  // The conditioning-engine module handles the detailed energy system mapping
+  if (
+    g.includes("endurance") || g.includes("cardio") || g.includes("aerobic") ||
+    g.includes("conditioning") || g.includes("work capacity") || g.includes("stamina") ||
+    g.includes("engine") || g.includes("vo2") || g.includes("lactate") ||
+    g.includes("repeat sprint") || g.includes("interval")
+  ) return "endurance";
   return "general_fitness";
 }
 
@@ -638,14 +645,28 @@ function computePrescription(goal: GoalType, experience: ExperienceTier): {
 
     case "fat_loss":
       return {
-        primaryRepRange: "10-15",
-        secondaryRepRange: "12-20",
-        primaryRest: "60s",
-        secondaryRest: "45-60s",
+        primaryRepRange: "8-12",
+        secondaryRepRange: "10-15",
+        primaryRest: "75s",
+        secondaryRest: "60s",
         accessoryRest: "45s",
         primarySets: 3,
         secondarySets: 3,
         accessorySets: 3,
+      };
+
+    case "endurance":
+      // Conditioning/endurance programs blend strength-support work with dedicated conditioning sessions.
+      // The resistance training prescription stays moderate — conditioning is handled by the conditioning engine.
+      return {
+        primaryRepRange: "6-10",
+        secondaryRepRange: "10-15",
+        primaryRest: "90s",
+        secondaryRest: "75s",
+        accessoryRest: "60s",
+        primarySets: 3,
+        secondarySets: 3,
+        accessorySets: 2,
       };
 
     case "general_fitness":
@@ -695,9 +716,16 @@ function computeProgression(
 
     case "fat_loss":
       return {
-        progressionModel: "Volume progression (increase density — more work in same time)",
-        progressionRate: "Add reps or reduce rest before adding load — focus on density, not raw strength",
+        progressionModel: "Volume and density progression (more quality work in the same time window)",
+        progressionRate: "Add reps first, then load. Use density as the primary lever — complete more work within the session time.",
         deloadFrequency: "Every 5–6 weeks",
+      };
+
+    case "endurance":
+      return {
+        progressionModel: "Conditioning volume progression (duration, reps, then intensity)",
+        progressionRate: "Add duration or reps to conditioning sessions every 2 weeks. Increase intensity (shorter rest or harder zone) after 4–6 weeks at the same structure.",
+        deloadFrequency: "Every 4–5 weeks — reduce conditioning volume by 30%, maintain intensity",
       };
 
     default:
@@ -775,7 +803,10 @@ function buildGoalRationale(goal: GoalType, experience: ExperienceTier): string 
       return "Athletic performance training must develop force production, reactivity, and conditioning simultaneously. The order within sessions matters: explosive work first (when CNS is fresh), strength second, conditioning last.";
 
     case "fat_loss":
-      return "Fat loss is driven by the energy balance created outside the gym, but training should preserve muscle mass. High-effort resistance training with shorter rest periods maximizes caloric demand while protecting lean tissue.";
+      return "Fat loss is driven by energy balance, but training must preserve lean tissue. Compound resistance work at moderate intensity with progressive overload protects muscle while creating a training stimulus. Conditioning finishers or dedicated conditioning days increase caloric demand without sacrificing structural integrity.";
+
+    case "endurance":
+      return "Conditioning and endurance training must target specific energy systems — not circuits, not short-rest lifting. Real conditioning programming uses structured intervals with defined work:rest ratios, named modalities, and energy system targets. The program will include dedicated conditioning sessions alongside strength-support work. Every conditioning day has a different energy system target — aerobic base, lactate threshold, repeat sprint ability — because the body adapts to what it is specifically asked to do.";
 
     case "general_fitness":
       return "General fitness training should be sustainable, balanced across movement patterns, and progressively challenging. Complexity should increase with competence.";
