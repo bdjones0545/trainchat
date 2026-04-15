@@ -1,0 +1,192 @@
+Implement a full BRANDING + LINK PREVIEW metadata fix for TrainChat.
+
+OBJECTIVE:
+Make sure TrainChat displays the correct branding in:
+1. the browser tab / URL icon (favicon)
+2. link previews when the URL is pasted into messages, social apps, Slack, iMessage, etc.
+
+Right now:
+- the favicon is missing or incorrect
+- shared links do not reliably show the TrainChat name and description
+
+I want TrainChat to present like a polished real product.
+
+==================================================
+TASK 1 — FIX THE FAVICON / TAB ICON
+==================================================
+
+Audit the app’s current favicon setup and ensure the correct TrainChat logo is used.
+
+Requirements:
+- browser tab should show the TrainChat logo
+- favicon must be wired correctly in the HTML/app shell
+- support standard favicon formats where appropriate
+- ensure pathing works in production and preview environments
+- remove any default Vite/Replit/favicon placeholders
+
+Check:
+- index.html
+- public assets
+- manifest if present
+- any icon references in head tags
+
+If needed, add:
+- favicon.ico
+- favicon.svg or PNG variants
+- apple-touch-icon if appropriate
+
+==================================================
+TASK 2 — ADD / FIX PAGE TITLE
+==================================================
+
+Ensure the browser tab title is correct and branded.
+
+Use:
+Title: TrainChat
+
+If page-specific titles exist, they can be:
+- TrainChat — AI Performance Architect
+- TrainChat — Build Your Training System
+But the base app title must clearly include TrainChat.
+
+==================================================
+TASK 3 — ADD OPEN GRAPH METADATA
+==================================================
+
+Add correct Open Graph tags so shared links display properly.
+
+Required tags:
+- og:title
+- og:description
+- og:type
+- og:url
+- og:image
+- og:site_name
+
+Use this baseline unless a better existing brand line is already in the app:
+
+og:title:
+TrainChat
+
+og:description:
+Build and evolve your training system with an AI performance architect.
+
+og:type:
+website
+
+og:site_name:
+TrainChat
+
+If a production URL is already known in env/config, use it for og:url.
+If an OG image does not exist yet, create a placeholder reference and clearly document it.
+
+==================================================
+TASK 4 — ADD TWITTER / X CARD METADATA
+==================================================
+
+Add:
+- twitter:card
+- twitter:title
+- twitter:description
+- twitter:image
+
+Use a summary_large_image card if an image exists.
+
+==================================================
+TASK 5 — ADD A CLEAN META DESCRIPTION
+==================================================
+
+Add a standard meta description for SEO and previews:
+
+TrainChat helps you build, edit, and evolve your training system with an AI performance architect.
+
+If there is a stronger existing product description in the codebase, use it — but keep it concise and brand-right.
+
+==================================================
+TASK 6 — VERIFY OG IMAGE SETUP
+==================================================
+
+Audit whether an Open Graph preview image exists.
+
+If yes:
+- wire it correctly in og:image and twitter:image
+- ensure it uses a proper absolute URL if required
+
+If no:
+- add a temporary placeholder path and document that a branded OG image still needs to be created
+- do not leave broken metadata
+
+Ideal OG image should include:
+- TrainChat logo
+- product name
+- short line like:
+  “Build and evolve your training system with AI”
+
+==================================================
+TASK 7 — ENSURE METADATA WORKS IN SPA / DEPLOYMENT CONTEXT
+==================================================
+
+Because this may be a React/Vite app, make sure the metadata is placed where link scrapers can actually read it.
+
+Check:
+- whether metadata is only client-rendered (bad for link unfurling)
+- whether it exists in index.html or equivalent server-rendered shell
+- whether production deployment serves the correct head tags
+
+If current architecture limits dynamic metadata, make sure at minimum the base site metadata is correct for the root app URL.
+
+==================================================
+TASK 8 — REMOVE DEFAULT / GENERIC BRANDING
+==================================================
+
+Search for and remove any remaining default branding like:
+- Vite
+- Replit
+- generic app names
+- placeholder descriptions
+- default icons
+
+TrainChat should be the only visible brand in the tab and metadata.
+
+==================================================
+TASK 9 — VERIFY LINK PREVIEW BEHAVIOR
+==================================================
+
+After implementation, verify that the shared URL now has:
+- correct title: TrainChat
+- correct description
+- correct preview image if available
+- correct favicon in browser tab
+
+If there are environment limitations for local preview, explain what will work only after deployment.
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+Return:
+
+1. What files were changed
+2. What favicon/icon assets are now used
+3. What title and meta description were set
+4. What Open Graph tags were added
+5. What Twitter/X tags were added
+6. Whether an OG image is wired correctly
+7. Any remaining limitation that depends on deployment or needing a final OG image asset
+
+==================================================
+FINAL STANDARD
+==================================================
+
+When someone opens TrainChat:
+- the browser tab shows the TrainChat logo
+- the page title says TrainChat
+
+When someone pastes the URL into a message/social app:
+- it shows TrainChat
+- it shows a clean description
+- it shows a proper preview image if available
+
+This should feel like a polished product, not a raw app link.
+
+Implement this now.
