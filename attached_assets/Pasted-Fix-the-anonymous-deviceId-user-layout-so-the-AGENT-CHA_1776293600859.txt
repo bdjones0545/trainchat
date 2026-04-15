@@ -1,0 +1,216 @@
+Fix the anonymous deviceId user layout so the AGENT / CHAT AREA REMAINS PINNED AS THE PRIMARY TOP-OF-PAGE WORKSPACE during interaction.
+
+OBJECTIVE:
+When deviceId / anonymous users type into the agent, submit messages, receive streaming responses, or focus the input, the viewport should remain anchored to the agent/chat workspace at the top of the page.
+
+Right now, anonymous users can drift downward into the conversion-floor content when interacting, which breaks the product hierarchy.
+
+The correct UX is:
+- the agent stays visually dominant
+- the user remains in the chat/workspace while interacting
+- the conversion-floor content below only comes into view when intentionally scrolled to
+- input focus, message send, and streamed responses should not push the user down the page
+
+==================================================
+PRIMARY RULE
+==================================================
+
+For anonymous/deviceId users:
+
+WHILE ACTIVELY USING THE AGENT
+- keep viewport anchored to the agent/workspace section
+- do not let new messages or layout growth push the user into the lower conversion content
+- preserve the feeling that the agent is the main surface
+
+The content below the agent is secondary.
+It should never hijack the interaction flow.
+
+==================================================
+TASK 1 — IDENTIFY THE ROOT CAUSE
+==================================================
+
+Audit the anonymous conversion-floor layout and determine why the viewport is not staying at the top agent area.
+
+Check for:
+- one long page flow with no anchor management
+- message append behavior increasing page height without scroll correction
+- autofocus/focus behavior on the input not re-anchoring the viewport
+- keyboard opening on mobile shifting the page downward
+- browser scroll anchoring issues
+- flex/overflow/height rules causing the page to resize incorrectly
+
+Audit likely files such as:
+- main chat/workspace page
+- anonymous conversion floor wrapper
+- chat container
+- input focus handlers
+- SSE message append handlers
+- mobile layout wrappers
+
+==================================================
+TASK 2 — CREATE A CLEAR AGENT VIEWPORT ANCHOR
+==================================================
+
+Implement a stable top-of-page anchor for the agent/workspace section.
+
+Requirements:
+- the agent section should have a stable container ref
+- interactions can scroll or snap back to this container when needed
+- the layout should treat this section as the primary active surface
+
+Examples:
+- agentContainerRef
+- scrollIntoView({ block: "start", behavior: "auto" | "smooth" as appropriate })
+- safe viewport alignment logic for desktop and mobile
+
+Do not create janky repeated scrolling.
+This should feel intentional and stable.
+
+==================================================
+TASK 3 — KEEP VIEWPORT ON AGENT DURING INTERACTION
+==================================================
+
+For anonymous/deviceId users, ensure the page remains anchored to the agent section during these moments:
+
+1. input receives focus
+2. user submits a message
+3. SSE stream starts
+4. SSE stream appends content
+5. assistant finishes response
+6. follow-up input becomes active again
+
+The lower conversion floor should not steal visual priority during any of these states.
+
+==================================================
+TASK 4 — HANDLE MOBILE KEYBOARD / SAFARI BEHAVIOR
+==================================================
+
+This is critical.
+
+Audit mobile behavior, especially:
+- iPhone Safari viewport resize
+- keyboard opening pushing content
+- scroll jumping when input is focused
+- fixed/sticky containers misbehaving with vh units
+
+Requirements:
+- use safer mobile height rules if needed (dvh / svh where appropriate)
+- avoid the page dropping below the agent when the keyboard opens
+- ensure the input remains usable and visible
+- ensure the viewport stays centered on the chat/workspace, not the content below
+
+If necessary, add mobile-specific handling for anonymous users only.
+
+==================================================
+TASK 5 — PREVENT CONVERSION FLOOR FROM COMPETING DURING ACTIVE CHAT
+==================================================
+
+The lower content should remain available, but it should not compete with the agent while the user is actively chatting.
+
+Possible solutions:
+- keep the agent section visually sticky at the top on desktop
+- ensure new messages keep the viewport within the agent section
+- add top padding / container boundaries so the lower floor does not visually intrude
+- preserve intentional scroll access to the lower sections
+
+Do NOT remove the conversion floor.
+Do NOT hide it entirely.
+Just make sure it behaves as secondary content.
+
+==================================================
+TASK 6 — PRESERVE INTENTIONAL SCROLLING
+==================================================
+
+Users should still be able to scroll down into the lower conversion-floor content intentionally.
+
+But:
+- active chatting should bias the viewport back to the agent
+- passive browsing should not be trapped
+- there should be no broken scroll lock
+
+This should feel like:
+- primary workspace on top
+- supporting content below
+
+not:
+- locked page
+and not:
+- drifting landing page
+
+==================================================
+TASK 7 — TEST DESKTOP AND MOBILE FLOWS
+==================================================
+
+Validate these exact scenarios for anonymous/deviceId users:
+
+1. User lands on page
+Expected:
+- agent/workspace clearly at top
+- conversion floor below
+
+2. User taps input
+Expected:
+- viewport remains anchored to agent
+- no jump into lower content
+
+3. User sends a message
+Expected:
+- page stays in agent area
+- streaming response does not push user downward
+
+4. User receives several messages in sequence
+Expected:
+- still anchored to agent/workspace
+- conversion floor does not intrude
+
+5. User intentionally scrolls down after chatting
+Expected:
+- lower content is accessible normally
+
+6. User returns focus to input after scrolling down
+Expected:
+- viewport returns to agent/workspace appropriately
+
+7. Mobile Safari / iPhone keyboard
+Expected:
+- no broken jumps
+- input remains visible
+- page does not fall below the agent section
+
+==================================================
+TASK 8 — KEEP THE FIX SCOPED
+==================================================
+
+Do NOT redesign the whole anonymous layout.
+Do NOT remove the conversion floor.
+Do NOT change signed-in user behavior unless required.
+
+This fix should specifically improve:
+- anonymous/deviceId users
+- top-of-page agent anchoring
+- interaction stability
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What files/components were changed
+2. What the root cause was
+3. How the agent viewport is now anchored
+4. How input focus/send/stream events keep the user at the top
+5. What mobile-specific fixes were added
+6. Any remaining browser-specific limitations
+
+==================================================
+FINAL STANDARD
+==================================================
+
+For anonymous/deviceId users:
+- the agent remains the clear primary workspace
+- interacting with the agent keeps the user visually at the top
+- the lower conversion floor is available but secondary
+- the page no longer drifts downward while chatting
+
+Implement this now.
