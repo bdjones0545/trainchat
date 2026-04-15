@@ -1,0 +1,132 @@
+We need to fix a critical intent classification and behavior issue in TrainChat.
+
+PROBLEM:
+When a user makes a high-level request like:
+- "I want to focus more on endurance"
+- "make this more conditioning based"
+- "I want more power"
+- "reduce volume"
+
+The system incorrectly routes this as a targeted edit and fails with:
+"I couldn't apply that change..."
+
+This breaks the core product experience.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Introduce a PROGRAM TRANSFORMATION MODE for high-level requests that modify the entire system rather than a specific entity.
+
+==================================================
+TASK 1 — DETECT TRANSFORMATION INTENT
+==================================================
+
+Extend intent classification to detect "global program modification" inputs.
+
+Trigger conditions:
+- no specific exercise/session mentioned
+- request includes:
+  - endurance
+  - conditioning
+  - power
+  - explosiveness
+  - volume
+  - intensity
+  - fatigue
+  - hypertrophy
+  - speed
+- request implies a shift in training focus
+
+Label this:
+actionType = "PROGRAM_TRANSFORMATION"
+
+==================================================
+TASK 2 — ROUTE TO FULL SYSTEM MODIFICATION
+==================================================
+
+When actionType === "PROGRAM_TRANSFORMATION":
+
+DO NOT:
+- require entity resolution
+- return "could not apply change"
+
+INSTEAD:
+- pass request into full program modification pipeline
+- treat it like a rebuild/refinement, not a surgical edit
+
+==================================================
+TASK 3 — APPLY REAL CHANGES
+==================================================
+
+For endurance example:
+- reduce rest times
+- increase reps or density
+- add conditioning blocks
+- modify weekly structure if needed
+
+For power:
+- introduce explosive movements
+- adjust rep ranges
+- modify intensity profile
+
+For volume:
+- adjust total sets and weekly distribution
+
+These changes should be real DB mutations.
+
+==================================================
+TASK 4 — RESPONSE STYLE
+==================================================
+
+Replace failure messaging with:
+
+ACKNOWLEDGEMENT + ACTION
+
+Example:
+"Got it — I’m shifting your program toward endurance. I’ve adjusted rest intervals, increased training density, and added conditioning work across your week."
+
+Then:
+- show SystemUpdateCard
+- highlight changes
+
+==================================================
+TASK 5 — FALLBACK SAFETY
+==================================================
+
+Only ask for clarification if:
+- request is completely ambiguous
+- OR no program exists
+
+Do NOT ask for:
+- exercise names
+- session IDs
+for transformation-level requests
+
+==================================================
+TASK 6 — VALIDATION
+==================================================
+
+After applying transformation:
+- verify changes occurred
+- ensure program still valid
+- ensure structure integrity
+
+==================================================
+FINAL STANDARD
+==================================================
+
+User says:
+"I want to focus more on endurance"
+
+System:
+- understands intent
+- modifies program
+- shows changes
+
+NOT:
+- fails
+- asks for specifics
+- breaks flow
+
+Implement this now.

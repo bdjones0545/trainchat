@@ -192,6 +192,8 @@ export default function Chat() {
   const logout = useLogout();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const agentSectionRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: me, isError: meError, isLoading: meLoading, isFetching: meFetching } = useGetMe();
@@ -356,8 +358,39 @@ export default function Chat() {
   }, [latestProgram, calibrationScore]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, stream.isActive, stream.state.phase]);
+    // Scroll within the messages container (does not propagate to the document)
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTo({
+        top: messagesContainerRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+    }
+    // Re-anchor the page viewport to the agent section for anonymous/deviceId users.
+    // Prevents new messages / SSE stream growth from drifting the page into the
+    // conversion floor below the 100dvh workspace.
+    if (!!(me as any)?.isAnonymous) {
+      window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+    }
+  }, [messages, stream.isActive, stream.state.phase, me]);
+
+  // Mobile Safari / iOS keyboard fix for anonymous users.
+  // When the virtual keyboard opens, Safari scrolls the document to keep the
+  // focused input visible. For anonymous users this pushes the viewport into
+  // the conversion floor. visualViewport "resize" fires when the keyboard
+  // opens/closes — we use it to snap back to the top of the page.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv || !(me as any)?.isAnonymous) return;
+
+    function handleViewportResize() {
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+      });
+    }
+
+    vv.addEventListener("resize", handleViewportResize);
+    return () => vv.removeEventListener("resize", handleViewportResize);
+  }, [me]);
 
   // Auto-open the program panel when a build starts so users see it animate live
   useEffect(() => {
@@ -456,6 +489,12 @@ export default function Chat() {
     setInputText("");
     if (inputRef.current) {
       inputRef.current.style.height = "auto";
+    }
+
+    // Anchor page viewport to agent section immediately on send for anonymous users.
+    // This prevents the conversion floor from entering view during the stream.
+    if (!!(me as any)?.isAnonymous) {
+      window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
     }
 
     const chatUIContext = {
@@ -1024,6 +1063,10 @@ export default function Chat() {
 
   return (
     <>
+    {/* Agent workspace anchor — always sits at scroll position 0 of the document.
+        For anonymous users the page is taller than 100dvh (conversion floor below),
+        so we use this ref + window.scrollTo(0,0) to re-anchor during interactions. */}
+    <div ref={agentSectionRef} style={{ overflowAnchor: "none" }}>
     <MobileSlideLayout
       activePanel={mobilePanel}
       onPanelClose={() => setMobilePanel(null)}
@@ -1211,7 +1254,11 @@ export default function Chat() {
           )}
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-4 pt-4 md:pt-12 pb-4">
+          <div
+            ref={messagesContainerRef}
+            className="flex-1 overflow-y-auto px-4 pt-4 md:pt-12 pb-4"
+            style={{ overscrollBehaviorY: "contain", overflowAnchor: "none" }}
+          >
             {messagesLoading ? (
               <div className="flex justify-center items-center h-32">
                 <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
@@ -1427,6 +1474,17 @@ export default function Chat() {
                     t.style.height = "auto";
                     t.style.height = Math.min(t.scrollHeight, 160) + "px";
                   }}
+                  onFocus={() => {
+                    // On mobile, focusing the input causes the browser to scroll to keep
+                    // it visible. For anonymous users this can push the page into the
+                    // conversion floor. Use rAF to re-anchor after the browser finishes
+                    // its native scroll-to-focus behaviour.
+                    if (!!(me as any)?.isAnonymous) {
+                      requestAnimationFrame(() => {
+                        window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+                      });
+                    }
+                  }}
                 />
                 <button
                   data-testid="button-send"
@@ -1508,6 +1566,7 @@ export default function Chat() {
         />
       )}
     </MobileSlideLayout>
+    </div>
 
     {/* ─── Anonymous conversion floor ─────────────────────────────────────
         Rendered below the 100dvh workspace for anonymous deviceId users only.
