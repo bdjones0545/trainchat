@@ -1,0 +1,345 @@
+Implement a new anonymous-user layout for TrainChat:
+
+DEVICE-ID USER CONVERSION FLOOR UNDER THE AGENT
+
+OBJECTIVE:
+For users who are not signed in but are authenticated through deviceId anonymous auth, keep the real agent experience at the top of the page and add a scrollable conversion content layer directly underneath it.
+
+This should NOT feel like a separate marketing landing page.
+It should feel like supporting context for the real system the user is already using.
+
+The agent remains the hero.
+The content below reinforces trust, clarity, proof, and conversion.
+
+==================================================
+CORE PRODUCT DECISION
+==================================================
+
+For anonymous deviceId users:
+
+- keep the live TrainChat agent at the top
+- keep the real workspace experience intact
+- add a scrollable conversion floor below the agent
+- make the page feel like one continuous product surface
+- do not redirect users to a separate homepage or separate landing page
+
+This should create the feeling:
+
+“I’m already inside the real system, and below it I can explore what this product is, how it works, and why I should save my system.”
+
+==================================================
+PRIMARY UX GOAL
+==================================================
+
+The top of the page should remain:
+- real agent
+- real chat
+- real system editing
+- real workspace
+
+Below that, the user should be able to scroll through:
+- explanation
+- trust signals
+- examples
+- value framing
+- conversion cues
+
+This should help anonymous users convert without interrupting momentum.
+
+==================================================
+REQUIRED LAYOUT BEHAVIOR
+==================================================
+
+For anonymous users only:
+
+1. Agent/workspace stays at the top of the page
+2. Under the agent, render a conversion content stack
+3. The content stack should be scrollable naturally as part of the same page
+4. The content should not block chatting
+5. The content should not feel like a separate site
+6. The content should visually match the app
+7. The content should feel like “more context about the system you are already using”
+
+For signed-in users:
+- do NOT show this anonymous conversion floor
+- preserve the existing signed-in app experience unless a specific signed-in variant already exists
+
+==================================================
+IMPORTANT PRODUCT RULES
+==================================================
+
+- Do not reduce the prominence of the agent
+- Do not push the agent below the fold
+- Do not make the content below more visually dominant than the workspace
+- Do not make it look like a generic landing page
+- Do not create duplicate CTAs competing with the live agent
+- Do not interrupt the current vibe-coding flow
+
+The page should feel like:
+real product first
+supporting conversion context second
+
+==================================================
+LAYOUT STRUCTURE
+==================================================
+
+Implement a layout like this for anonymous users:
+
+SECTION 1 — LIVE AGENT HERO
+- existing TrainChat workspace/chat experience
+- this remains the primary focus
+- maintain all current behavior:
+  - SSE stages
+  - live workspace
+  - system editing
+  - right panel / mobile panel behavior
+  - update cards
+  - paywall behavior
+
+SECTION 2 — WHAT YOU’RE BUILDING
+A concise section that explains what TrainChat is in product-native language.
+
+Example direction:
+- “Build your training system live with an AI performance architect”
+- “Describe your goal, equipment, schedule, and constraints — then refine the program in real time”
+- “Every edit changes a real system, not a static template”
+
+SECTION 3 — HOW LIVE EDITS WORK
+Show concrete examples of vibe-coding style edits.
+
+Example edit examples:
+- “Swap bench press for incline dumbbell press”
+- “Add more speed work on day 2”
+- “Make this beginner friendly”
+- “Only use dumbbells, bands, and 20 minutes”
+
+Each should show that the system updates live.
+
+SECTION 4 — WHY IT FEELS DIFFERENT
+Explain the difference between TrainChat and generic AI fitness chat/program generators.
+
+Messaging direction:
+- real editable system
+- live updates
+- actual program structure
+- continuity over time
+- memory and adaptation when saved/upgraded
+
+SECTION 5 — TRUST / AUTHORITY / PROOF
+Add a section for trust-building content.
+
+This can include:
+- evidence-based training language
+- coaching philosophy
+- system-backed editing
+- real athlete/performance framing
+- optional testimonials/social proof if available in the codebase/content already
+
+If no testimonials exist yet, create a clean placeholder-proof structure without fake testimonials.
+
+SECTION 6 — SAVE YOUR SYSTEM
+A strong anonymous-user conversion section.
+
+Frame account creation as:
+- saving progress
+- preserving the system
+- continuing to evolve the program
+- unlocking continuity
+
+Preferred CTA:
+- “Create Free Account”
+- “Save My System”
+- “Keep Building”
+
+Do NOT frame this first as a pricing section.
+For anonymous users, free account creation should be the primary conversion path.
+
+SECTION 7 — OPTIONAL LOWER PAGE CONTENT
+If there is already strong conversion content or FAQ material in the app, integrate it cleanly below the above sections.
+If not, keep the page tighter rather than bloating it.
+
+==================================================
+VISUAL / UX REQUIREMENTS
+==================================================
+
+The conversion floor must visually feel like part of the app.
+
+Requirements:
+- same visual system
+- same typography family
+- same spacing language
+- same card style / gradients / surfaces where appropriate
+- responsive for desktop and mobile
+
+It should NOT feel like:
+- a separate Webflow marketing page
+- a template landing page bolted underneath the app
+- a long-form sales page disconnected from the workspace
+
+Preferred feel:
+- product-native
+- modern
+- athletic
+- intelligent
+- clean
+- premium but not corporate
+
+==================================================
+SCROLL / STICKINESS BEHAVIOR
+==================================================
+
+Choose the cleanest UX, but aim for this behavior:
+
+Desktop:
+- agent remains prominent at the top
+- the user can scroll into supporting content naturally
+- if useful, keep a compact sticky top area or sticky CTA so the agent still feels present
+
+Mobile:
+- content stacks cleanly below the chat/workspace
+- no awkward nested scroll traps
+- agent remains the obvious top section
+- lower content is easy to flick through
+- account CTA remains easy to access
+
+Avoid:
+- double scroll containers
+- content clipping
+- awkward fixed heights
+- layout jumping when new messages arrive
+
+==================================================
+CONVERSION CTA RULES
+==================================================
+
+Anonymous users should see CTA language oriented around free account creation, not immediate payment.
+
+Primary CTA language examples:
+- Create Free Account
+- Save My System
+- Keep Building
+- Save Progress and Continue
+
+Secondary CTA examples:
+- See How It Works
+- View Example Edits
+
+If there is a paid CTA, it should be secondary and lower priority for anonymous users.
+
+==================================================
+CONTENT TONE
+==================================================
+
+The copy should sound like the product is already alive.
+
+Use language like:
+- your system
+- your program
+- live edits
+- real-time changes
+- evolve your training
+- build around constraints
+- adjust as you go
+
+Avoid language like:
+- trial
+- teaser
+- limited demo
+- beta preview
+- try our AI
+
+The user is already inside it. The content should reinforce that truth.
+
+==================================================
+IMPLEMENTATION TASKS
+==================================================
+
+1. Detect anonymous deviceId users in the main app layout
+2. Add a conditional anonymous-only conversion floor below the agent/workspace
+3. Build the new content sections as reusable product-native components
+4. Ensure signed-in users do not see the anonymous conversion floor
+5. Keep the agent/workspace behavior unchanged
+6. Add strong free-account CTAs tied to preserving the user’s system
+7. Ensure responsive behavior is clean on desktop and mobile
+8. Avoid nested-scroll and layout-jump issues
+9. Reuse existing design system components where possible
+10. Keep the experience cohesive and product-native
+
+==================================================
+FILES / AREAS TO AUDIT
+==================================================
+
+Audit and patch the relevant files, likely including:
+- main app layout
+- chat/workspace page
+- anonymous-user conditional rendering logic
+- paywall / CTA components
+- any shared landing/marketing section components
+- mobile layout wrappers
+- sidebar/topnav if needed for cohesion
+
+Use the existing architecture and component system wherever possible.
+
+==================================================
+MANDATORY TEST SCENARIOS
+==================================================
+
+1. Brand new anonymous user lands in TrainChat
+Expected:
+- agent/workspace appears first
+- conversion floor appears below
+- page feels like one unified product surface
+
+2. Anonymous user chats and scrolls down
+Expected:
+- can naturally explore supporting content
+- no interruption to the live product feel
+
+3. Anonymous user on mobile
+Expected:
+- agent remains top priority
+- content below is readable and clean
+- no broken nested scroll behavior
+
+4. Signed-in registered user
+Expected:
+- anonymous conversion floor does not appear
+- existing signed-in experience remains intact
+
+5. Anonymous user hits CTA in the conversion floor
+Expected:
+- goes to correct free-account flow
+- momentum feels preserved
+- language matches “save your system / keep building”
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What files/components were changed
+2. How anonymous users are detected for this layout
+3. What new sections/components were added below the agent
+4. How signed-in users are excluded
+5. How desktop/mobile behavior works
+6. What CTA flow now exists for anonymous users
+7. Any remaining layout or UX tradeoffs
+
+==================================================
+FINAL STANDARD
+==================================================
+
+For anonymous users, TrainChat should feel like:
+
+- the real agent is already live
+- the real workspace is already active
+- the content below helps me understand and trust what I’m building
+- creating an account feels like saving and continuing something real
+
+Not:
+- chat on top + random landing page underneath
+- a demo leading to a sales page
+- a split product experience
+
+Build this anonymous conversion-floor layout now.
