@@ -1,0 +1,271 @@
+We are now conducting a FULL NAVIGATION, PAGE, AND AGENT BEHAVIOR AUDIT for TrainChat.
+
+OBJECTIVE:
+Ensure that the entire product behaves like a single intelligent system, not a collection of disconnected pages, and that the agent functions as the central brain across ALL user surfaces.
+
+This is a SYSTEM COHESION audit.
+
+==================================================
+PRIMARY QUESTION
+==================================================
+
+Does TrainChat feel like:
+- one continuous, intelligent training system
+
+OR
+
+- a set of separate pages with an AI chat feature
+
+Answer with evidence from the codebase and UI behavior.
+
+==================================================
+AUDIT AREAS
+==================================================
+
+A. MENU / NAVIGATION STRUCTURE
+Audit:
+- top navigation
+- sidebar navigation
+- mobile navigation
+- dropdown menus
+- any secondary menus
+
+I want to know:
+- what are the core sections?
+- what does each section represent conceptually?
+- are they “pages” or “systems”?
+- is the structure intuitive or fragmented?
+
+Evaluate:
+- naming clarity
+- hierarchy
+- redundancy
+- dead or low-value sections
+
+==================================================
+B. PAGE-BY-PAGE ANALYSIS
+==================================================
+
+For EVERY major page/section, analyze:
+
+1. Purpose:
+- What is this page supposed to do?
+
+2. Data:
+- What data does it use?
+- Where does that data come from?
+
+3. Intelligence:
+- Is the page static or dynamic?
+- Does it reflect user state?
+- Does it adapt?
+
+4. Connection:
+- How does it connect to:
+  - training system
+  - agent
+  - other pages
+
+5. Issues:
+- dead UI
+- placeholder content
+- duplicated logic
+- disconnected features
+
+Pages to include (if they exist):
+- Chat / Agent
+- Program / System view
+- Saved programs
+- Check-in / Readiness
+- Session logging
+- Forecast / Insights
+- Settings
+- Any additional feature pages
+
+==================================================
+C. AGENT PRESENCE AND BEHAVIOR
+==================================================
+
+This is the most important section.
+
+Audit:
+- where the agent is active
+- where the agent is absent
+- how the agent behaves in different contexts
+
+I want to know:
+- does the agent understand page context?
+- does it behave differently based on where the user is?
+- is it aware of:
+  - current program
+  - selected session
+  - recent actions
+  - page the user is on
+
+Check for:
+- agent acting like generic chat vs system editor
+- missing context injection
+- lack of awareness of UI state
+
+==================================================
+D. CONTINUITY BETWEEN PAGES
+==================================================
+
+Audit transitions:
+
+- Chat → Program panel
+- Program → Session
+- Session → Feedback
+- Feedback → Adaptation
+- Check-in → Program changes
+- Saved programs → Active system
+
+I want to know:
+- does user state persist?
+- does the system feel continuous?
+- are there breaks in logic or experience?
+
+==================================================
+E. STATE MANAGEMENT
+==================================================
+
+Audit:
+- how global state is handled
+- how program state is stored and accessed
+- how selected program/session is tracked
+- whether different pages use the same source of truth
+
+Check for:
+- duplicated state
+- stale data
+- desync between pages
+- local vs global inconsistencies
+
+==================================================
+F. REDUNDANCY AND DEAD FEATURES
+==================================================
+
+Identify:
+- pages that are rarely used
+- duplicated features across pages
+- UI that exists but adds no value
+- features not connected to the training system
+
+These should be:
+- removed
+- merged
+- or reconnected to the core system
+
+==================================================
+G. UX COHERENCE
+==================================================
+
+Evaluate:
+- does everything feel like one product?
+- is the language consistent?
+- are interactions consistent?
+- does the system feel intentional?
+
+Or:
+- does it feel like features added over time?
+
+==================================================
+H. MOBILE VS DESKTOP BEHAVIOR
+==================================================
+
+Audit:
+- how navigation differs on mobile
+- whether key features are hidden or harder to access
+- whether the agent behaves differently on mobile
+- whether critical flows break on smaller screens
+
+==================================================
+MANDATORY TEST FLOWS
+==================================================
+
+Trace these flows end-to-end:
+
+1. New user → chat → program built → program view → edit request
+2. Existing user → open saved program → modify → verify changes
+3. User completes session → logs feedback → next program update
+4. User performs readiness check-in → system adapts
+5. User navigates between all major pages in one session
+
+For each:
+- identify friction
+- identify breaks in intelligence
+- identify inconsistencies
+
+==================================================
+REQUIRED OUTPUT FORMAT
+==================================================
+
+Return:
+
+1. EXECUTIVE VERDICT
+Choose:
+- Fully cohesive system
+- Mostly cohesive
+- Fragmented
+- Disconnected
+
+Explain clearly.
+
+2. NAVIGATION SCORE (1–10)
+
+3. PAGE INTELLIGENCE SCORE (1–10)
+
+4. AGENT INTEGRATION SCORE (1–10)
+
+5. CONTINUITY SCORE (1–10)
+
+6. WHAT IS WORKING WELL
+List strongest parts of system cohesion.
+
+7. CRITICAL ISSUES
+For each:
+- issue
+- why it matters
+- affected files/components
+- severity
+
+8. REDUNDANT OR DEAD FEATURES
+List what should be removed or merged.
+
+9. TOP 5 IMPROVEMENTS
+Highest-leverage changes to make the system feel unified.
+
+10. FINAL RECOMMENDATION
+Should we:
+- refactor navigation
+- unify agent context
+- remove pages
+- restructure system
+- or keep as-is?
+
+Prioritize clearly.
+
+==================================================
+AUDIT RULES
+==================================================
+
+- Be brutally honest
+- Do not assume cohesion — verify it
+- Treat agent presence as critical
+- Treat disconnected pages as failures
+- Prioritize system feel over feature count
+
+==================================================
+FINAL INSTRUCTION
+==================================================
+
+Act like a senior product architect.
+
+You are deciding whether TrainChat feels like:
+- a true AI system
+
+or
+
+- a collection of features with an AI layer
+
+Audit it accordingly.
