@@ -1,0 +1,249 @@
+Conduct a FINAL LAUNCH-CRITICAL TYPESCRIPT + ARCHITECTURE AUDIT for TrainChat.
+
+OBJECTIVE:
+Identify and fix TypeScript errors, unsafe typing, fragile code paths, and obvious spaghetti architecture ONLY where they create real launch risk.
+
+This is NOT a broad refactor.
+This is NOT a code prettification sprint.
+This is a launch hardening pass.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Determine whether any existing TypeScript errors or structural code problems could realistically cause:
+- runtime bugs
+- broken billing/subscription logic
+- broken AI routing
+- broken program state sync
+- broken SSE behavior
+- broken auth / anonymous conversion
+- silent failures in core product flows
+
+If yes, fix them.
+If not, document them and defer.
+
+==================================================
+SCOPE RULE
+==================================================
+
+Only prioritize code issues in launch-critical systems:
+
+1. Billing / Stripe / webhooks / entitlements
+2. AI orchestration / routing / validators / adaptation
+3. Program state / active system / chat-system cohesion
+4. SSE streaming / mutation UI / result handling
+5. Auth / deviceId anonymous flow / conversion
+6. Any shared utils directly used by the above
+
+Do NOT burn time on:
+- low-risk legacy code
+- stylistic inconsistencies
+- non-critical unused components
+- broad renaming/reorganization
+- cosmetic TypeScript cleanup outside critical paths
+
+==================================================
+TASK 1 — TYPESCRIPT ERROR TRIAGE
+==================================================
+
+Run a TypeScript audit and classify all errors into:
+
+A. Critical launch risk
+B. Medium risk / should fix soon
+C. Pre-existing but low-risk / defer
+D. Noise / irrelevant to current launch
+
+For each error, determine:
+- file
+- exact problem
+- whether it affects runtime-critical code
+- whether it should block launch
+
+I want a triage-first approach, not blind fixing.
+
+==================================================
+TASK 2 — AUDIT UNSAFE TYPING IN CORE FLOWS
+==================================================
+
+Find unsafe patterns in launch-critical paths, such as:
+- any
+- unknown without narrowing
+- unsafe casts
+- non-null assertions that could break
+- loosely typed request bodies
+- loosely typed webhook payload handling
+- weakly typed AI context objects
+- weakly typed mutation results
+- weakly typed SSE events
+
+Prioritize types around:
+- webhook event handlers
+- billing sync
+- AI request/response contracts
+- UIContext
+- ProgrammingValidationResult
+- adaptation memory / performance memory
+- active program query data
+- mutation/change result contracts
+- conversation streaming payloads
+
+==================================================
+TASK 3 — FIND SPAGHETTI IN CRITICAL FILES
+==================================================
+
+Audit for obvious spaghetti code in critical files only.
+
+Examples:
+- giant files with too many responsibilities
+- duplicated business logic
+- split source-of-truth
+- buried side effects
+- error swallowing
+- repeated API parsing logic
+- inconsistent state update patterns
+- hidden coupling between frontend and backend payloads
+
+Flag only what creates real bug risk.
+
+Especially inspect:
+- chat.tsx
+- system.tsx
+- ai.ts
+- training-system-edit.ts
+- billing/webhook files
+- stream handling hooks
+- auth/bootstrap flow
+
+==================================================
+TASK 4 — FIX ONLY HIGH-LEVERAGE ISSUES
+==================================================
+
+For anything in category A (critical) and strong B (medium-high):
+- fix the issue
+- tighten types
+- reduce fragility
+- preserve current behavior
+- avoid risky broad rewrites
+
+Examples of acceptable fixes:
+- add missing shared interfaces
+- tighten payload schemas
+- extract a duplicated helper
+- remove unsafe fallback
+- add explicit null guards
+- unify a contract used across files
+
+Examples of unacceptable overreach:
+- reorganizing the whole app
+- rewriting working files for style
+- changing architecture that is already stable
+- refactoring non-critical old pages
+
+==================================================
+TASK 5 — PROTECT CORE CONTRACTS
+==================================================
+
+I want stronger shared types for the most important product contracts, if missing or weak:
+
+- UIContext
+- stream message request payload
+- SSE event payloads
+- active program response
+- program mutation result
+- programming validator result
+- billing subscription sync result
+- webhook processing result
+- adaptation signal summary
+- performance memory records
+
+Where possible, move toward one shared type per contract, not duplicates.
+
+==================================================
+TASK 6 — VERIFY ERROR HANDLING
+==================================================
+
+Audit critical code for:
+- swallowed exceptions
+- console-only errors
+- implicit success on failure
+- nullable values assumed present
+- fallback defaults that hide real failures
+
+Patch only where it affects launch-critical flows.
+
+==================================================
+TASK 7 — CHECK DEAD OR DUPLICATE LOGIC IN CORE PATHS
+==================================================
+
+Identify and remove or consolidate:
+- duplicate helpers in critical paths
+- dead branches in launch-critical flows
+- retired logic still callable
+- shadow state updates competing with canonical state
+
+Again: only in core launch paths.
+
+==================================================
+TASK 8 — RE-RUN AND REPORT
+==================================================
+
+After fixes:
+- re-run TypeScript checks
+- clearly separate:
+  - errors fixed
+  - errors deferred
+  - why deferred errors are not launch-blocking
+
+I want a final “go / no-go from an engineering hygiene standpoint” judgment.
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+Return:
+
+1. EXECUTIVE VERDICT
+Choose:
+- Clean enough to launch
+- Minor cleanup remaining
+- Risky until patched
+
+2. TYPESCRIPT TRIAGE SUMMARY
+- Critical errors fixed
+- Medium-risk errors fixed
+- Deferred low-risk errors
+- Why deferred items are not blocking
+
+3. STRUCTURAL RISKS FOUND
+For each:
+- issue
+- why it matters
+- affected files
+- severity
+
+4. FIXES APPLIED
+List exactly what was changed
+
+5. SHARED TYPES ADDED OR IMPROVED
+List important contracts tightened
+
+6. REMAINING TECH DEBT
+Only meaningful remaining launch-adjacent debt
+
+7. FINAL ENGINEERING RECOMMENDATION
+Should we launch now, or patch anything else first?
+
+==================================================
+FINAL STANDARD
+==================================================
+
+This audit should not make the codebase beautiful.
+It should make the launch-critical systems safe, typed, and non-fragile enough to scale confidently.
+
+If the product is already stable, say so and stop.
+If a few high-risk code issues remain, fix them and stop.
+
+Do not gold-plate.
+Do not over-refactor.
+Harden the launch path and report the truth.
