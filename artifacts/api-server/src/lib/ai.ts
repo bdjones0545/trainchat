@@ -35,6 +35,7 @@ import {
 import { retrieveRelevantKnowledge } from "./knowledge-retrieval";
 import { buildArchitectureBrief, validateProgramArchitecture, extractSportFromRequest } from "./program-architecture-engine";
 import { buildConditioningContext, isConditioningGoal } from "./conditioning-engine";
+import { buildPowerSpeedContext, isPowerRequest, isSpeedRequest } from "./power-speed-engine";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -929,6 +930,24 @@ The conversion rule: show intelligence first → build tension → deliver parti
       )
     : "";
 
+  // Build power/speed engine context when goal is power or speed
+  const needsPowerSpeedContext =
+    isPowerRequest(profile.trainingGoal) ||
+    isSpeedRequest(profile.trainingGoal) ||
+    goalRaw.includes("power") ||
+    goalRaw.includes("speed") ||
+    goalRaw.includes("explosive") ||
+    goalRaw.includes("sprint") ||
+    goalRaw.includes("acceleration");
+  const powerSpeedContext = needsPowerSpeedContext
+    ? "\n\n" + buildPowerSpeedContext(
+        profile.trainingGoal,
+        profile.sportFocus ?? null,
+        profile.equipmentAccess,
+        profile.daysPerWeek,
+      )
+    : "";
+
   return coreIdentity + `
 
 ## USER TRAINING PROFILE
@@ -945,7 +964,7 @@ ${profile.sportFocus ? `- Sport / Activity Focus: ${profile.sportFocus}` : ""}
 ${profile.exercisePreferences ? `- Exercise Preferences: ${profile.exercisePreferences}` : ""}
 ${profile.exercisesToAvoid ? `- Exercises to Avoid (NEVER program these): ${profile.exercisesToAvoid}` : ""}
 
-${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${conditioningContext}`;
+${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${conditioningContext}${powerSpeedContext}`;
 }
 
 // ─── JSON extractor ──────────────────────────────────────────────────────────
@@ -2044,6 +2063,8 @@ function buildProgramName(profile: UserProfile): string {
     fat_loss: "Body Composition",
     general_fitness: "General Fitness",
     endurance: "Endurance",
+    power: "Power Development",
+    speed: "Speed Development",
   };
 
   const seasonLabels: Record<string, string> = {
@@ -2090,6 +2111,12 @@ function getGoalConfirmationLine(goal: GoalType, daysPerWeek: number): string {
       return `Built. ${daysPerWeek}-day athletic performance program is live.\n\nCheck the Program tab — want to adjust anything?`;
     case "fat_loss":
       return `Built. ${daysPerWeek}-day body composition program is ready.\n\nCheck the Program tab — want to adjust anything?`;
+    case "power":
+      return `Built. ${daysPerWeek}-day power development program is live — contrast pairs, force-velocity work, full rest between efforts.\n\nCheck the Program tab — want to adjust anything?`;
+    case "speed":
+      return `Built. ${daysPerWeek}-day speed development program is live — sprint structure, full recovery, strength-speed integration.\n\nCheck the Program tab — want to adjust anything?`;
+    case "endurance":
+      return `Built. ${daysPerWeek}-day conditioning program is live — dedicated energy system sessions with real intervals.\n\nCheck the Program tab — want to adjust anything?`;
     default:
       return `Built. ${daysPerWeek}-day program is live.\n\nCheck the Program tab — want to adjust anything?`;
   }

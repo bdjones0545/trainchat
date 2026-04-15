@@ -1,0 +1,345 @@
+We are now implementing:
+
+PHASE 3 — SPORT-SPECIFIC ARCHITECTURE ENGINE
+
+OBJECTIVE:
+Upgrade TrainChat from “general athletic programming with a sport label” to true sport-shaped programming architecture.
+
+This phase builds real structural differentiation for major sports so the program changes meaningfully based on what the athlete actually plays.
+
+==================================================
+CORE PROBLEM
+==================================================
+
+Current behavior:
+- sport-specific requests often receive strong general athletic programming
+- sport label may change language more than architecture
+- football, basketball, soccer, baseball can still look too similar underneath
+- movement emphasis, conditioning, and weekly structure are not differentiated enough
+
+This breaks credibility for serious athletes and coaches.
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+Sport-specific programming is NOT:
+- generic strength training with the sport name inserted
+- a universal split with minor swaps
+- similar weekly structure across all sports
+
+Sport-specific programming IS:
+- different physical priorities
+- different stress patterns
+- different conditioning demands
+- different movement qualities
+- different session identities
+- different weekly architecture
+
+==================================================
+TASK 1 — CREATE SPORT PROFILE ARCHITECTURE
+==================================================
+
+Create a sport profile system for at least:
+
+- football
+- basketball
+- soccer
+- baseball
+- general_athlete
+
+Each SportProfile must define:
+- primary physical qualities
+- secondary physical qualities
+- conditioning demands
+- movement emphasis
+- common tissue/joint considerations
+- preferred session archetypes
+- in-season vs off-season emphasis
+- recovery sensitivity
+- weekly stress distribution guidance
+
+Example concept:
+
+football:
+- primary: acceleration, force production, collision resilience, lower-body power
+- secondary: repeat high-intensity effort, tissue robustness
+- conditioning: anaerobic capacity + repeat effort, not endurance-dominant
+- movement emphasis: acceleration, lateral power, trunk/bracing, posterior chain
+- weekly architecture: speed/power + heavy strength support
+
+soccer:
+- primary: repeat sprint ability, aerobic base, speed endurance, lower-body resilience
+- secondary: acceleration, COD efficiency
+- conditioning: aerobic base + repeat sprint system
+- movement emphasis: hamstrings, calves, adductors, decel, single-leg resilience
+- weekly architecture: speed + conditioning + lower-body tissue management
+
+==================================================
+TASK 2 — CREATE SPORT-DRIVEN SESSION ARCHETYPES
+==================================================
+
+For each sport, create session archetypes that differ structurally.
+
+Examples:
+
+football session archetypes:
+- acceleration + lower strength
+- upper strength + trunk
+- power / jumps / med ball
+- repeat-effort conditioning
+
+basketball session archetypes:
+- reactive plyometric + lower strength
+- upper strength + trunk + shoulder balance
+- deceleration / landing / elastic power
+- repeat-power conditioning
+
+soccer session archetypes:
+- acceleration + hamstring resilience
+- lower strength + adductor / calf support
+- repeat sprint conditioning
+- aerobic support / tempo work
+- decel / change of direction support
+
+baseball session archetypes:
+- rotational power + lower strength
+- upper strength with shoulder/arm-care-conscious balance
+- acceleration + med ball work
+- trunk / scapular control / tissue support
+
+These should not just be exercise swaps.
+They should differ in actual session identity and structure.
+
+==================================================
+TASK 3 — MAP SPORT TO EXERCISE EMPHASIS
+==================================================
+
+For each sport, define exercise emphasis logic.
+
+Examples:
+
+football:
+- heavier bilateral force production
+- sleds, jumps, loaded carries, trunk/bracing
+- posterior chain power
+- acceleration-friendly lower body work
+
+basketball:
+- vertical power
+- landing mechanics
+- deceleration
+- elastic/reactive plyometrics
+- single-leg strength
+- tendon-friendly lower-body choices
+
+soccer:
+- hamstring/adductor/calf resilience
+- repeat sprint support
+- single-leg strength
+- lower-body tissue tolerance
+- COD/decel work
+- aerobic support options
+
+baseball:
+- rotational med ball
+- unilateral lower body
+- trunk stiffness/control
+- scapular upward rotation / retraction balance
+- arm-care-conscious pressing/pulling balance
+- avoid dumb generic overhead volume when inappropriate
+
+==================================================
+TASK 4 — DIFFERENTIATE CONDITIONING BY SPORT
+==================================================
+
+Use Phase 1 conditioning engine, but overlay sport demands.
+
+football:
+- anaerobic capacity
+- short repeat-effort work
+- position-appropriate conditioning flavor
+- less endurance bias
+
+basketball:
+- repeat-power efforts
+- repeated accelerations/decelerations
+- mixed alactic + glycolytic bursts
+
+soccer:
+- aerobic base
+- repeat sprint ability
+- speed endurance
+- larger running volumes when appropriate
+
+baseball:
+- generally lighter conditioning emphasis
+- preserve power and skill freshness
+- short burst work / general work capacity, not soccer-style volume
+
+general_athlete:
+- balanced conditioning relative to goal
+
+Sport should materially change conditioning prescription.
+
+==================================================
+TASK 5 — DIFFERENTIATE WEEKLY ARCHITECTURE
+==================================================
+
+For each sport, define distinct weekly program shapes.
+
+Examples:
+
+football off-season:
+- Day 1 acceleration + lower strength
+- Day 2 upper strength
+- Day 3 power + jumps + med ball
+- Day 4 conditioning / tissue / repeat effort
+
+soccer off-season:
+- Day 1 acceleration + lower body
+- Day 2 aerobic / tempo / resilience
+- Day 3 upper + trunk + single-leg support
+- Day 4 repeat sprint + lower tissue support
+
+basketball off-season:
+- Day 1 reactive power + lower strength
+- Day 2 upper + trunk
+- Day 3 decel / landing / elastic work
+- Day 4 repeat effort conditioning + mobility support
+
+Do NOT let all sports collapse into the same weekly template.
+
+==================================================
+TASK 6 — ADD IN-SEASON vs OFF-SEASON MODULATION
+==================================================
+
+Sport profile logic must change based on season status.
+
+If in-season:
+- reduce volume
+- maintain strength/power
+- preserve freshness
+- support tissue resilience
+- avoid overloading conditioning that competes with sport demands
+
+If off-season:
+- expand development focus
+- tolerate more volume
+- build qualities more aggressively
+
+Add explicit rules by sport where useful.
+
+==================================================
+TASK 7 — ADD POSITION / SUBTYPE AWARENESS (LIGHTWEIGHT)
+==================================================
+
+Do a lightweight first pass for role differences where practical.
+
+Examples:
+- football skill vs lineman emphasis
+- soccer field player vs general mention
+- baseball pitcher vs hitter if user mentions it
+- basketball guard vs general if user mentions it
+
+Do NOT overcomplicate yet.
+But if the user explicitly mentions role/position, let it influence exercise emphasis and conditioning choice.
+
+==================================================
+TASK 8 — PREVENT FAKE SPORT SPECIFICITY
+==================================================
+
+Add guardrails so the system does NOT:
+- output generic training and just relabel it
+- use same conditioning across all sports
+- use same weekly structure across all sports
+- ignore tissue/joint patterns relevant to the sport
+- ignore movement quality differences
+
+If the sport-specific engine cannot materially shape the output, say so internally and improve the architecture rather than masking it with wording.
+
+==================================================
+TASK 9 — UPDATE AGENT LANGUAGE
+==================================================
+
+When the sport engine shapes the plan, the agent should describe that clearly.
+
+Examples:
+- “Built this around soccer’s repeat sprint and lower-body resilience demands.”
+- “This football plan emphasizes acceleration, force production, and lower-body power.”
+- “This baseball build biases rotational power and arm-care-conscious upper-body work.”
+
+Language should reflect real architectural differences, not generic sports hype.
+
+==================================================
+TASK 10 — ADD VALIDATION / AUDIT CHECKS
+==================================================
+
+Add or strengthen validation rules so outputs are checked for sport alignment.
+
+Examples:
+- soccer program should include repeat sprint / aerobic support patterns where appropriate
+- football should not look endurance-dominant
+- baseball should not have generic shoulder-heavy bodybuilding volume without arm-care balance
+- basketball should show reactive/decel/landing logic where appropriate
+
+If sport label and architecture don’t match, flag it.
+
+==================================================
+MANDATORY TEST SCENARIOS
+==================================================
+
+Test these exact scenarios:
+
+1. “I play football and want explosiveness, acceleration, and lower-body power.”
+2. “I play basketball and want vertical power, deceleration, and reactivity.”
+3. “I play soccer and need repeat sprint ability, speed endurance, and lower-body resilience.”
+4. “I play baseball and want rotational power and arm-care-conscious lifting.”
+5. “Build me a general athlete performance program.”
+6. “I’m in season and need to maintain performance without crushing recovery.”
+7. “I play football as a lineman.”
+8. “I’m a baseball pitcher.”
+9. “I play basketball as a guard.”
+10. Compare sport outputs side-by-side and verify they differ structurally, not just cosmetically.
+
+For each verify:
+- session archetypes differ
+- exercise emphasis differs
+- conditioning differs
+- weekly structure differs
+- season context changes the program
+- sport label is backed by real architecture
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What sport profiles were created
+2. What session archetypes were added per sport
+3. How exercise emphasis differs by sport
+4. How conditioning differs by sport
+5. How weekly architecture differs by sport
+6. How in-season vs off-season changes output
+7. What position/role awareness was added
+8. Examples showing before vs after sport differentiation
+
+==================================================
+FINAL STANDARD
+==================================================
+
+A coach comparing a football, basketball, soccer, and baseball program should immediately see:
+
+- different physical priorities
+- different session identities
+- different conditioning logic
+- different weekly architecture
+- different exercise emphasis
+
+NOT:
+- the same program wearing four different sport labels
+
+TrainChat must now program like a real sport performance coach.
+
+Implement this now.

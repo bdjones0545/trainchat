@@ -1,0 +1,314 @@
+We are now implementing:
+
+PHASE 2 — POWER & SPEED ENGINE
+
+OBJECTIVE:
+Upgrade TrainChat to program true power and speed development — not generic “athletic” training.
+
+This phase separates:
+- strength
+- power
+- speed
+
+into distinct, expert-level programming systems.
+
+==================================================
+CORE PROBLEM
+==================================================
+
+Current behavior:
+- “athletic performance” blends strength, power, and speed
+- power is diluted (jumps added to strength)
+- speed is underdeveloped or missing structure
+- no force-velocity awareness
+- no sprint programming logic
+
+This fails for:
+- athletes
+- performance users
+- speed/power focused goals
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+Power and speed are NOT:
+- hypertrophy with jumps
+- circuits
+- general athletic language
+
+They are:
+- CNS-dominant qualities
+- low fatigue, high intent
+- high rest, low volume
+- highly structured
+
+==================================================
+TASK 1 — CREATE DISTINCT GOAL TYPES
+==================================================
+
+Add new GoalTypes:
+
+- power
+- speed
+
+Ensure they are NOT grouped under:
+- athletic_performance
+
+Each must trigger a different programming engine.
+
+==================================================
+TASK 2 — DEFINE FORCE-VELOCITY CATEGORIES
+==================================================
+
+Create a classification system:
+
+ForceVelocityType:
+- max_strength
+- strength_speed
+- speed_strength
+- max_velocity
+
+Map exercises into these categories.
+
+Examples:
+
+max_strength:
+- squat, deadlift, heavy presses
+
+strength_speed:
+- heavy sled pushes
+- Olympic lift variations (clean pulls)
+
+speed_strength:
+- jumps, med ball throws
+- lighter Olympic lifts
+
+max_velocity:
+- sprinting
+- reactive plyos
+
+==================================================
+TASK 3 — BUILD POWER PROGRAMMING LOGIC
+==================================================
+
+Power sessions must include:
+
+- explosive intent
+- low reps (1–5)
+- moderate to long rest
+- contrast or complex methods (optional)
+
+Add methods:
+
+- contrast training
+- complex training
+- PAP (post-activation potentiation)
+
+Example session:
+
+A1: Trap bar jump — 4x3  
+A2: Heavy trap bar deadlift — 4x3  
+Rest 2–3 min
+
+B: Med ball throws — 4x5  
+Rest 90–120 sec
+
+Rules:
+- no fatigue stacking
+- quality > volume
+- power first in session
+
+==================================================
+TASK 4 — BUILD SPEED PROGRAMMING LOGIC
+==================================================
+
+Speed must include:
+
+- acceleration work
+- max velocity work
+- sprint mechanics
+
+Create SprintType:
+
+- acceleration (0–20m)
+- max_velocity (20–40m)
+- change_of_direction (COD)
+- reactive/agility
+
+Session example:
+
+Acceleration Day:
+- 6 x 10m sprints
+- 4 x 20m sprints
+Rest: FULL (2–3 min)
+
+Max Velocity Day:
+- flying sprints
+- build-ups
+
+Rules:
+- full recovery between reps
+- low total volume
+- strict rep quality
+
+==================================================
+TASK 5 — ADD SPRINT VOLUME RULES
+==================================================
+
+Define limits:
+
+- total sprint distance per session
+- max reps per sprint type
+- recovery requirements
+
+Example:
+
+Acceleration:
+- 100–300m total
+
+Max velocity:
+- 200–400m total
+
+Ensure:
+- no over-prescription
+- no fatigue-based sprinting
+
+==================================================
+TASK 6 — INTEGRATE INTO SESSION DESIGN
+==================================================
+
+Rules:
+
+- speed/power ALWAYS first
+- before strength
+- never after fatigue
+
+Correct order:
+1. speed
+2. power
+3. strength
+4. accessory
+
+NOT:
+- strength first
+- circuits before speed
+
+==================================================
+TASK 7 — ADD WEEKLY STRUCTURE
+==================================================
+
+Power/speed programs must vary days:
+
+Example:
+
+Day 1 → acceleration + lower strength  
+Day 2 → upper strength  
+Day 3 → max velocity + power  
+Day 4 → recovery / conditioning  
+
+NOT:
+- repeating same stimulus every day
+
+==================================================
+TASK 8 — INTEGRATE WITH SPORTS
+==================================================
+
+Map sports to speed/power needs:
+
+Football:
+- acceleration + power
+
+Basketball:
+- reactive + vertical power + decel
+
+Soccer:
+- repeat sprint + max velocity
+
+Baseball:
+- rotational power + short acceleration
+
+Ensure:
+- sport changes exercise selection
+- sport changes sprint structure
+
+==================================================
+TASK 9 — PREVENT COMMON ERRORS
+==================================================
+
+Ensure system NEVER:
+
+- prescribes speed work with short rest
+- mixes conditioning fatigue into speed sessions
+- treats plyos as conditioning
+- over-prescribes sprint volume
+- uses moderate reps for power
+
+==================================================
+TASK 10 — UPDATE AGENT LANGUAGE
+==================================================
+
+Agent must explain:
+
+- what type of speed/power was added
+- where it is in the session
+- why it matters
+
+Example:
+
+“Added acceleration work (6 x 10m sprints with full recovery) at the start of Day 1 to improve first-step explosiveness.”
+
+==================================================
+MANDATORY TEST SCENARIOS
+==================================================
+
+Test:
+
+1. “Build me a power program”
+2. “Improve explosiveness”
+3. “Speed training for football”
+4. “Increase sprint speed”
+5. “Basketball vertical and agility”
+
+Verify:
+
+- sprint structure exists
+- power is low rep / high intent
+- rest is long
+- sequencing is correct
+- no conditioning bleed
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+Return:
+
+1. New goal types
+2. Force-velocity mapping
+3. Power session examples
+4. Speed session examples
+5. Sprint volume rules
+6. Weekly structure examples
+7. Improvements vs previous output
+
+==================================================
+FINAL STANDARD
+==================================================
+
+A coach reviewing the program should see:
+
+- real speed work
+- real power development
+- correct sequencing
+- correct rest
+- correct volume
+
+NOT:
+- generic athletic programming
+- jumps added randomly
+- sprinting without structure
+
+TrainChat must now program like a performance coach.
+
+Implement this now.

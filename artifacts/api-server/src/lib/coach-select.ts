@@ -29,7 +29,9 @@ export type GoalType =
   | "athletic_performance"
   | "fat_loss"
   | "general_fitness"
-  | "endurance";
+  | "endurance"
+  | "power"
+  | "speed";
 
 export type ExperienceTier = "beginner" | "intermediate" | "advanced";
 export type EquipmentLevel = "full_gym" | "dumbbells_only" | "home_limited" | "bodyweight";
@@ -237,6 +239,20 @@ const PRESCRIPTIONS: Record<GoalType, PrescriptionTable> = {
     secondary:    { classification: "Secondary Compound",   sets: 3, reps: "15-20",   rest: "60 sec",    note: "Volume-based work to build muscular endurance." },
     accessory:    { classification: "Accessory",            sets: 2, reps: "15-20",   rest: "45 sec",    note: "High-rep accessory for muscular endurance and tissue resilience." },
     conditioning: { classification: "Conditioning",         sets: 4, reps: "60-90 sec", rest: "30-60 sec", note: "Aerobic conditioning finisher — Zone 2 to threshold effort." },
+  },
+  power: {
+    explosive:    { classification: "Power",      sets: 4, reps: "2-4",  rest: "3-5 min", note: "Maximum intent every rep — this is a power development exercise, not a fatigue exercise. Bar speed is the output, not load." },
+    primary:      { classification: "Primary",   sets: 4, reps: "2-5",  rest: "3-5 min", note: "Heavy load at high velocity intent — the 'strength' side of the contrast pair. Drive with maximum force application." },
+    secondary:    { classification: "Secondary", sets: 3, reps: "3-6",  rest: "2-3 min", note: "Secondary power development or strength support. Move with intent — quality over quantity." },
+    accessory:    { classification: "Accessory", sets: 2, reps: "6-10", rest: "90 sec",  note: "Structural support for power output — posterior chain, trunk stiffness, joint prep. Not a fatigue exercise." },
+    conditioning: { classification: "Conditioning", sets: 2, reps: "30m", rest: "2 min", note: "Light movement work only — power sessions do not end with metabolic conditioning. This is recovery-oriented." },
+  },
+  speed: {
+    explosive:    { classification: "Speed",     sets: 3, reps: "2-4",  rest: "3-5 min", note: "Full sprint effort — every rep is a true max-speed attempt. If mechanics break down, the rep is over." },
+    primary:      { classification: "Primary",   sets: 3, reps: "2-5",  rest: "3-5 min", note: "Speed-strength compound work — power-focused primary lift that supports sprint mechanics. Full intent every rep." },
+    secondary:    { classification: "Secondary", sets: 3, reps: "4-8",  rest: "2-3 min", note: "Strength support for speed — posterior chain, hip extension, unilateral power. Supports sprint mechanics." },
+    accessory:    { classification: "Accessory", sets: 2, reps: "8-12", rest: "90 sec",  note: "Sprint-mechanics accessory — hip flexor, hamstring resilience, ankle stiffness. Structural sprint preparation." },
+    conditioning: { classification: "Conditioning", sets: 0, reps: "N/A", rest: "N/A",   note: "Speed sessions do NOT include conditioning work. Fatigue contaminates speed development." },
   },
 };
 

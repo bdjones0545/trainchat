@@ -43,7 +43,9 @@ export type GoalType =
   | "athletic_performance"
   | "general_fitness"
   | "fat_loss"
-  | "endurance";
+  | "endurance"
+  | "power"    // Explosive strength, force-velocity, contrast/complex methods
+  | "speed";   // Sprint mechanics, acceleration, max velocity, COD
 
 // Normalized experience tiers
 export type ExperienceTier = "beginner" | "intermediate" | "advanced";
@@ -158,7 +160,29 @@ export function normalizeGoal(rawGoal: string): GoalType {
   const g = rawGoal.toLowerCase();
   if (g.includes("hypertrophy") || g.includes("muscle") || g.includes("size") || g.includes("mass")) return "hypertrophy";
   if (g.includes("strength") || g.includes("strong") || g.includes("powerlifting") || g.includes("1rm")) return "strength";
-  if (g.includes("athletic") || g.includes("performance") || g.includes("sport") || g.includes("speed") || g.includes("power") || g.includes("agility")) return "athletic_performance";
+
+  // Power detection — explosive strength, force-velocity, contrast/complex training
+  // Placed before athletic_performance to prevent "power" from being diluted into generic athletic
+  if (
+    /\bpower\b/.test(g) ||
+    g.includes("explosive") || g.includes("explosiveness") ||
+    g.includes("force-velocity") || g.includes("force velocity") ||
+    g.includes("contrast training") || g.includes("complex training") ||
+    g.includes("pap") || g.includes("post-activation") ||
+    g.includes("power development") || g.includes("power program")
+  ) return "power";
+
+  // Speed detection — sprint mechanics, acceleration, max velocity, COD
+  // Also placed before athletic_performance
+  if (
+    /\bspeed\b/.test(g) ||
+    g.includes("sprint") || g.includes("acceleration") ||
+    g.includes("max velocity") || g.includes("first step") ||
+    g.includes("quickness") || g.includes("change of direction") ||
+    g.includes("agility") || g.includes("linear speed")
+  ) return "speed";
+
+  if (g.includes("athletic") || g.includes("performance") || g.includes("sport")) return "athletic_performance";
   if (g.includes("fat") || g.includes("weight loss") || g.includes("lean") || g.includes("cut")) return "fat_loss";
   // Conditioning detection — explicit conditioning/cardio requests get the endurance goal type
   // The conditioning-engine module handles the detailed energy system mapping
@@ -569,6 +593,10 @@ function computeVolume(
     fat_loss: { min: 8, max: 14 },
     general_fitness: { min: 8, max: 12 },
     endurance: { min: 6, max: 10 },
+    // Power: low volume, high quality — power is a neural quality, not a volume quality
+    power: { min: 6, max: 10 },
+    // Speed: very low gym volume — speed work IS the volume (sprint sessions)
+    speed: { min: 4, max: 8 },
   };
 
   const multiplier = experience === "beginner" ? 0.7 : experience === "advanced" ? 1.15 : 1.0;
@@ -669,6 +697,33 @@ function computePrescription(goal: GoalType, experience: ExperienceTier): {
         accessorySets: 2,
       };
 
+    case "power":
+      // Power: low reps, high intent, long rest — this is neural quality training
+      return {
+        primaryRepRange: "1-5",
+        secondaryRepRange: "3-6",
+        primaryRest: "3-5 min",
+        secondaryRest: "2-3 min",
+        accessoryRest: "90s",
+        primarySets: 4,
+        secondarySets: 3,
+        accessorySets: 2,
+      };
+
+    case "speed":
+      // Speed: very low reps (sprint reps), full recovery — CNS-dominant
+      // Gym work is supplementary to sprint work — lower rep, higher rest
+      return {
+        primaryRepRange: "2-5",
+        secondaryRepRange: "4-6",
+        primaryRest: "3-5 min",
+        secondaryRest: "2-3 min",
+        accessoryRest: "90s",
+        primarySets: 3,
+        secondarySets: 3,
+        accessorySets: 2,
+      };
+
     case "general_fitness":
     default:
       return {
@@ -726,6 +781,20 @@ function computeProgression(
         progressionModel: "Conditioning volume progression (duration, reps, then intensity)",
         progressionRate: "Add duration or reps to conditioning sessions every 2 weeks. Increase intensity (shorter rest or harder zone) after 4–6 weeks at the same structure.",
         deloadFrequency: "Every 4–5 weeks — reduce conditioning volume by 30%, maintain intensity",
+      };
+
+    case "power":
+      return {
+        progressionModel: "PAP / force-velocity progression (load and contrast method sophistication)",
+        progressionRate: "Week 1–2: establish contrast pairs at moderate load. Week 3–4: increase primary lift load by 5%, maintain jump intent. Week 5–6: reduce volume by 30%, increase intensity (heavier primary, same jump quality). Deload week 7.",
+        deloadFrequency: "Every 6–7 weeks — reduce power session volume by 40%, maintain bar speed and jump height targets",
+      };
+
+    case "speed":
+      return {
+        progressionModel: "Sprint volume progression (total distance, then sprint quality)",
+        progressionRate: "Week 1–2: establish sprint mechanics and baseline volume. Week 3–4: add 1–2 reps per session. Week 5–6: increase sprint distance or add a speed-strength complex. Volume cap enforced throughout.",
+        deloadFrequency: "Every 4–5 weeks — reduce sprint volume by 50%, maintain gym work. Sprint quality degrades before volume in deload.",
       };
 
     default:
@@ -807,6 +876,12 @@ function buildGoalRationale(goal: GoalType, experience: ExperienceTier): string 
 
     case "endurance":
       return "Conditioning and endurance training must target specific energy systems — not circuits, not short-rest lifting. Real conditioning programming uses structured intervals with defined work:rest ratios, named modalities, and energy system targets. The program will include dedicated conditioning sessions alongside strength-support work. Every conditioning day has a different energy system target — aerobic base, lactate threshold, repeat sprint ability — because the body adapts to what it is specifically asked to do.";
+
+    case "power":
+      return "Power development is a CNS-dominant quality — low reps, full recovery, maximal intent. The goal is rate of force development, not muscle fatigue. Sessions use contrast training (heavy lift paired with explosive action), complex training, or PAP protocols. Every power rep must be executed at maximum velocity intent — if bar speed is slow, the set is over. Volume is low by design: 3–5 reps per set, 3–5 min rest. Never mix power development with conditioning fatigue in the same block.";
+
+    case "speed":
+      return "Speed is a technical and neuromuscular quality — it requires full recovery between every effort. Sprint work cannot be treated as conditioning. Acceleration sessions (0–20m) focus on first-step mechanics and force application. Max velocity sessions (20m+ fly sprints) target top-end speed. All sprint reps require full 2–3 min recovery — a sprinter's worst workout is doing sprints tired. Gym strength work supports speed but comes after speed work in every session.";
 
     case "general_fitness":
       return "General fitness training should be sustainable, balanced across movement patterns, and progressively challenging. Complexity should increase with competence.";

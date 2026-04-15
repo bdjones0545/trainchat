@@ -298,6 +298,248 @@ function buildSessionsForDayCount(
     }
   }
 
+  // ─── Power goal: contrast/complex/PAP session architecture ─────────────────
+  // Power development requires: sprint/power FIRST, strength support SECOND, NO conditioning finishers
+  const isPower = !!(
+    goal?.toLowerCase().includes("power") ||
+    goal?.toLowerCase().includes("explosive")
+  );
+
+  if (isPower) {
+    if (daysPerWeek === 3) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Power Development — Lower Contrast Training",
+          intent: "Lower-body contrast pairs: heavy compound lift paired with explosive jump/bound — exploits post-activation potentiation for maximum rate of force development",
+          neuralDemand: "high",
+          primaryPattern: "power",
+          emphasizedPatterns: ["power", "squat", "hinge", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "CNS activation prep: 8 min — dynamic lower prep → A-skip × 2 × 20m → broad jumps × 3 (sub-max) → build-up stride × 1" },
+            { role: "power", description: "CONTRAST PAIR A: Heavy Squat/Trap Bar DL (4 × 2-3 @ 85-90%) → Box Jump or Broad Jump (4 × 3-5 BW) with 3-5 min between primary and explosive. This is a PAP pair, not separate exercises." },
+            { role: "primary", description: "CONTRAST PAIR B: Heavy Hip Hinge variant (3 × 3-5) → Med Ball Overhead Scoop Toss (3 × 5) — second contrast pair targeting posterior chain power expression" },
+            { role: "trunk", description: "Structural trunk: Pallof press anti-rotation + dead bug (2-3 sets each, low fatigue)" },
+          ],
+        },
+        {
+          dayNumber: 2,
+          identity: "Speed-Strength — Olympic/Loaded Jump + Sprint",
+          intent: "Speed-strength zone: moderate load at maximum velocity intent — bridges gym to track. Gym work supports sprint mechanics.",
+          neuralDemand: "high",
+          primaryPattern: "power",
+          emphasizedPatterns: ["power", "locomotion", "unilateral_lower", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Sprint/movement prep: 10 min — jog → dynamic drill series → 3 × 20m build-up strides at 70%, 85%, 95%" },
+            { role: "power", description: "SPRINT BLOCK: Acceleration development — 5 × 10m + 4 × 20m sprints with 2 min full recovery. Every rep is 100% — if speed drops, rest longer." },
+            { role: "primary", description: "SPEED-STRENGTH LIFT: Hang Power Clean or Trap Bar Jump (3-4 × 2-4 @ moderate load) — gym work that directly supports sprint force application. Maximum velocity intent every rep." },
+            { role: "secondary", description: "Strength support: single-leg RDL or step-up (2-3 × 6-8) — posterior chain and unilateral stability" },
+            { role: "trunk", description: "Anti-rotation trunk: Pallof press (2 × 10 each side)" },
+          ],
+        },
+        {
+          dayNumber: 3,
+          identity: "Upper Power + Strength Support",
+          intent: "Upper-body power expression + lower-body strength support; integrates rotational power for full athletic transfer",
+          neuralDemand: "moderate",
+          primaryPattern: "upper_push",
+          emphasizedPatterns: ["upper_push", "upper_pull", "power", "trunk", "rotational"],
+          cnsFlow: [
+            { role: "prep", description: "Upper-body power prep: band pull-aparts, wall slides, med ball chest throw (2 × 5 sub-max)" },
+            { role: "power", description: "UPPER POWER PAIR: Weighted push-up or explosive push-up (3 × 5) paired with med ball rotational throw (3 × 5 each side) — rotational and horizontal power expression" },
+            { role: "primary", description: "Upper push compound: bench press or overhead press (4 × 3-5 @ 80-85%) — strength support for upper power output" },
+            { role: "secondary", description: "Upper pull: row or chin-up variation (3 × 5-8) — structural balance" },
+            { role: "trunk", description: "Rotational trunk: landmine rotation or cable chop (2 × 8 each side)" },
+          ],
+        },
+      ];
+    }
+
+    if (daysPerWeek === 4) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Power Development — Lower Contrast (PAP)",
+          intent: "Heavy lower-body compound paired with maximal jump or sprint — PAP protocol: 4-8 min between primary and explosive to peak potentiation",
+          neuralDemand: "high",
+          primaryPattern: "power",
+          emphasizedPatterns: ["power", "squat", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "CNS activation: dynamic lower prep → 2 × broad jump sub-max → 1 × 30m build-up stride at 90%" },
+            { role: "power", description: "PAP PAIR A: Back Squat (4 × 2-3 @ 85-93%) → 4-8 min rest → Vertical Jump max effort (3 reps). Time the jump at PAP peak (4-6 min post-lift)." },
+            { role: "primary", description: "PAP PAIR B: Trap Bar Deadlift (3 × 2-3 @ 85%) → 4-5 min rest → Sprint Acceleration 20m (2 reps at 100%)" },
+            { role: "trunk", description: "Structural trunk only: Pallof press + anti-extension plank (minimal fatigue — protect CNS for next session)" },
+          ],
+        },
+        {
+          dayNumber: 2,
+          identity: "Sprint — Acceleration Development",
+          intent: "Pure speed session: acceleration mechanics, 0-20m. Gym work comes AFTER sprint work — not before.",
+          neuralDemand: "high",
+          primaryPattern: "locomotion",
+          emphasizedPatterns: ["locomotion", "power", "unilateral_lower"],
+          cnsFlow: [
+            { role: "prep", description: "Sprint warm-up: 10 min jog → A-skip 2 × 20m → B-skip 2 × 20m → high knees 2 × 20m → 3 × 30m build-ups at 70%, 85%, 95%" },
+            { role: "power", description: "ACCELERATION BLOCK: 5-6 × 10m (standing start) + 4-5 × 20m acceleration with 2 min rest between every rep. Every rep is 100% — not conditioning, not intervals. Full recovery." },
+            { role: "primary", description: "STRENGTH SUPPORT (post-sprint only): Trap Bar Deadlift or Hip Thrust (3 × 4-6) — posterior chain that supports sprint mechanics. Moderate load, not maximal." },
+            { role: "secondary", description: "Unilateral strength: single-leg RDL (3 × 6 each side) — hamstring resilience for sprint demand" },
+          ],
+        },
+        {
+          dayNumber: 3,
+          identity: "Complex Training — Lower Power",
+          intent: "Biomechanically linked heavy-explosive pairs: brief rest between primary and explosive distinguishes complex from contrast training",
+          neuralDemand: "high",
+          primaryPattern: "power",
+          emphasizedPatterns: ["power", "hinge", "unilateral_lower", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Movement prep: hip hinge activation, hamstring mobility, Nordic lowering prep (2 × 4)" },
+            { role: "power", description: "COMPLEX A: Front Squat or Hack Squat (4 × 3 @ 75-80%) → 45 sec rest → Depth Jump (4 × 3) — biomechanically linked squat-to-jump complex" },
+            { role: "primary", description: "COMPLEX B: Hang Power Clean (4 × 3 @ 70-75%) → 45 sec rest → Med Ball Overhead Scoop Toss (4 × 5) — Olympic lift to triple extension power expression" },
+            { role: "secondary", description: "Strength support: Nordic hamstring curl or RDL (2-3 × 6) — posterior chain resilience" },
+            { role: "trunk", description: "Rotational trunk: landmine press + cable chop (2 × 8 each side)" },
+          ],
+        },
+        {
+          dayNumber: 4,
+          identity: "Upper Power + Plyometric Integration",
+          intent: "Upper-body power expression + plyometric block for vertical/horizontal force development; week-closing athletic transfer",
+          neuralDemand: "moderate",
+          primaryPattern: "upper_push",
+          emphasizedPatterns: ["upper_push", "upper_pull", "power", "trunk", "rotational"],
+          cnsFlow: [
+            { role: "prep", description: "Upper power warm-up: band pull-aparts, explosive push-up (2 × 3 max intent), med ball chest throw (2 × 4)" },
+            { role: "power", description: "PLYOMETRIC BLOCK: Box Jump (4 × 4) → Broad Jump (4 × 4) → Lateral Bound (3 × 4 each side) — 45-90 sec between exercises. Total foot contacts: 40-60. Power, not conditioning." },
+            { role: "primary", description: "Upper push: Bench Press or Weighted Push-Up (4 × 3-5 @ 80-85%)" },
+            { role: "secondary", description: "Upper pull: Weighted Pull-Up or Cable Row (3 × 5-8)" },
+            { role: "trunk", description: "Anti-rotation + rotational trunk: Pallof press + medicine ball rotational throw finisher (2 × 5 each)" },
+          ],
+        },
+      ];
+    }
+  }
+
+  // ─── Speed goal: sprint-first architecture ───────────────────────────────────
+  // Speed sessions: sprint work ALWAYS before gym work. No conditioning finishers.
+  const isSpeed = !!(
+    goal?.toLowerCase().includes("speed") ||
+    goal?.toLowerCase().includes("sprint") ||
+    goal?.toLowerCase().includes("acceleration")
+  );
+
+  if (isSpeed) {
+    if (daysPerWeek === 3) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Acceleration Development + Strength Support",
+          intent: "Sprint mechanics first — 0-20m acceleration focus. Gym strength work comes AFTER sprint work and supports sprint mechanics only.",
+          neuralDemand: "high",
+          primaryPattern: "locomotion",
+          emphasizedPatterns: ["locomotion", "power", "hinge", "unilateral_lower"],
+          cnsFlow: [
+            { role: "prep", description: "Sprint warm-up: 10 min jog → A-skip × 2 × 20m → B-skip × 2 × 20m → high knees × 2 → 3 × build-up strides at 70%, 85%, 95%" },
+            { role: "power", description: "ACCELERATION BLOCK: 5 × 10m (3-point start or standing) + 4 × 20m acceleration. 90 sec minimum between 10m reps, 2 min between 20m reps. 100% intent every rep." },
+            { role: "primary", description: "STRENGTH SUPPORT (post-sprint): Heavy hinge — Trap Bar Deadlift or Romanian DL (4 × 3-5) — hip extension strength that powers acceleration. NOT a speed exercise." },
+            { role: "secondary", description: "Unilateral: single-leg RDL or step-up (3 × 6 each side) — single-leg posterior chain resilience" },
+            { role: "trunk", description: "Anti-rotation trunk: Pallof press (2-3 × 10 each side)" },
+          ],
+        },
+        {
+          dayNumber: 2,
+          identity: "Strength + Speed-Strength",
+          intent: "Strength support day: heavier lifting and speed-strength work in the gym — prepares the system for next speed session",
+          neuralDemand: "moderate",
+          primaryPattern: "squat",
+          emphasizedPatterns: ["squat", "power", "upper_push", "upper_pull", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "General prep: hip mobility, thoracic rotation, glute activation" },
+            { role: "power", description: "SPEED-STRENGTH BLOCK: Hang Power Clean (4 × 3 @ 65-75%) or Trap Bar Jump (4 × 4 @ 20-30% load) — gym explosive work that bridges strength to sprint speed" },
+            { role: "primary", description: "Squat compound: Back Squat or Front Squat (4 × 4-6 @ 75-82%) — lower-body force production foundation" },
+            { role: "secondary", description: "Upper structural: Bench Press + Row (3 × 5-8 each) — maintains structural balance in a lower-dominant program" },
+            { role: "trunk", description: "Trunk: dead bug or RKC plank (2-3 × 30-45 sec)" },
+          ],
+        },
+        {
+          dayNumber: 3,
+          identity: "Max Velocity Development + Speed-Strength",
+          intent: "Top-end speed: fly sprints after full warm-up. Gym work is supplementary to the sprint stimulus.",
+          neuralDemand: "high",
+          primaryPattern: "locomotion",
+          emphasizedPatterns: ["locomotion", "power", "unilateral_lower"],
+          cnsFlow: [
+            { role: "prep", description: "Max velocity prep: 12 min — jog → drill series (A/B/C skip) → 4 × build-ups at 70%, 80%, 90%, 95%. Do NOT sprint at max before this." },
+            { role: "power", description: "MAX VELOCITY BLOCK: 3-4 × (20m build + 20m fly) at absolute maximum. 4-5 min full rest between every rep. Max velocity budget: 80-100m at true top speed." },
+            { role: "primary", description: "STRENGTH SUPPORT (post-sprint): Hip Thrust or Nordic Hamstring Curl (3 × 5-8) — posterior chain specific to sprint propulsion and injury resilience" },
+            { role: "trunk", description: "Structural trunk: anti-extension + anti-rotation (2 sets each, low CNS cost)" },
+          ],
+        },
+      ];
+    }
+
+    if (daysPerWeek === 4) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Acceleration — 0-20m Sprint Mechanics",
+          intent: "First-step power and acceleration mechanics: standing starts, 3-point starts, 10m and 20m reps with full recovery",
+          neuralDemand: "high",
+          primaryPattern: "locomotion",
+          emphasizedPatterns: ["locomotion", "power", "hinge"],
+          cnsFlow: [
+            { role: "prep", description: "Sprint activation: 10 min warm-up → A-skip × 3 × 20m → broad jump × 3 sub-max → 3 × build-up strides" },
+            { role: "power", description: "ACCELERATION: 6 × 10m (standing/3-point start) + 5 × 20m acceleration. 90 sec between 10m, 2 min between 20m. Every rep: 100%." },
+            { role: "primary", description: "HINGE STRENGTH (post-sprint): Trap Bar Deadlift (4 × 3-5 @ 80-85%) — hip extension force application" },
+            { role: "secondary", description: "Single-leg posterior chain: single-leg RDL (3 × 6 each side)" },
+          ],
+        },
+        {
+          dayNumber: 2,
+          identity: "Strength — Lower + Speed-Strength",
+          intent: "Strength training day — heavier compound loading with speed-strength component. No sprinting.",
+          neuralDemand: "moderate",
+          primaryPattern: "squat",
+          emphasizedPatterns: ["squat", "power", "upper_push", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "General lower prep: hip mobility, glute activation, core activation sequence" },
+            { role: "power", description: "SPEED-STRENGTH: Hang Power Clean or Trap Bar Jump (4 × 3 @ moderate load, maximum velocity intent) — bridges strength to sprint speed" },
+            { role: "primary", description: "Squat: Back Squat (4 × 3-5 @ 80-87%) — strength foundation" },
+            { role: "secondary", description: "Upper push + pull: Bench Press + Weighted Pull-Up (3 × 4-6 each) — structural balance" },
+            { role: "trunk", description: "Trunk: Pallof press + dead bug (2 × each)" },
+          ],
+        },
+        {
+          dayNumber: 3,
+          identity: "Max Velocity — Fly Sprints",
+          intent: "Top-end speed: maximum velocity fly sprints with complete recovery. Not conditioning. Not intervals. One quality rep at a time.",
+          neuralDemand: "high",
+          primaryPattern: "locomotion",
+          emphasizedPatterns: ["locomotion", "power"],
+          cnsFlow: [
+            { role: "prep", description: "Max velocity warm-up: 12 min — jog → A/B/C skip drill series × 2 → 4 × build-up strides at 70%, 80%, 90%, 95%" },
+            { role: "power", description: "MAX VELOCITY: 4-5 × (20m build + 20m fly) at 100%. 4-5 min full recovery between each rep. True max-speed volume: 100-120m." },
+            { role: "primary", description: "STRENGTH (post-sprint only): Hip Thrust (3 × 6-8) + Nordic Curl (2 × 4-6) — sprint-specific posterior chain protection" },
+          ],
+        },
+        {
+          dayNumber: 4,
+          identity: "COD Speed + Upper Structural",
+          intent: "Change of direction and reactive speed; upper-body structural strength for balance in lower-dominant speed program",
+          neuralDemand: "moderate",
+          primaryPattern: "locomotion",
+          emphasizedPatterns: ["locomotion", "lateral", "upper_push", "upper_pull", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "COD prep: jog → lateral shuffle × 2 × 20m → backpedal × 2 → 5-10-5 drill at 60% × 2 → build-up strides × 2" },
+            { role: "power", description: "COD BLOCK: 5-10-5 yard shuttle (5 reps) + T-drill (5 reps) with 90 sec recovery — deceleration mechanics and plant-and-drive" },
+            { role: "primary", description: "Upper push: Bench Press or Overhead Press (3-4 × 5-8) — upper structural maintenance" },
+            { role: "secondary", description: "Upper pull: Row or Chin-Up (3 × 5-8) — structural balance" },
+            { role: "trunk", description: "Rotational + anti-rotation trunk: landmine rotation + Pallof press (2 × 8 each)" },
+          ],
+        },
+      ];
+    }
+  }
+
   // Sport with conditioning emphasis — add a dedicated conditioning day where days allow
   if (isSportConditioning && daysPerWeek >= 4) {
     const strengthDays = buildSessionsForDayCount(daysPerWeek - 1, sport, "athletic_performance");
