@@ -201,7 +201,8 @@ function AuthGuard({ children }: { children: ReactNode }) {
 
 /**
  * PublicOnlyGuard — wraps pages that should not be accessible when authenticated.
- * If the user is already signed in, send them to /chat.
+ * If the user is already signed in as a registered (non-anonymous) user, redirect to /chat.
+ * Anonymous device-ID users are allowed through so they can create a real account.
  */
 function PublicOnlyGuard({ children }: { children: ReactNode }) {
   const { data: me, isLoading } = useGetMe();
@@ -209,7 +210,11 @@ function PublicOnlyGuard({ children }: { children: ReactNode }) {
 
   if (isLoading) return null; // Don't flash the form — stay blank briefly
 
-  if (me) {
+  // Only redirect fully registered (non-anonymous) users back to /chat.
+  // Anonymous users bootstrapped via deviceId must be able to reach /register
+  // to convert their session into a real account.
+  const isAnonymous = !!(me as any)?.isAnonymous;
+  if (me && !isAnonymous) {
     computeRoute({ pathname, authResolved: true, hasUser: true, authError: false });
     return <Redirect to="/chat" />;
   }

@@ -36,6 +36,7 @@ import NeuralGrowthOverlay, { type NeuralAwardResult } from "@/components/gamifi
 import SessionLogModal from "@/components/chat/SessionLogModal";
 import PaywallModal from "@/components/PaywallModal";
 import PricingModal from "@/components/PricingModal";
+import AnonymousConversionFloor from "@/components/AnonymousConversionFloor";
 import CalibrationModal from "@/components/chat/CalibrationModal";
 import CoachMemoryPanel from "@/components/chat/CoachMemoryPanel";
 import { useStreamMessage } from "@/hooks/useStreamMessage";
@@ -1005,6 +1006,7 @@ export default function Chat() {
   );
 
   return (
+    <>
     <MobileSlideLayout
       activePanel={mobilePanel}
       onPanelClose={() => setMobilePanel(null)}
@@ -1489,5 +1491,17 @@ export default function Chat() {
         />
       )}
     </MobileSlideLayout>
+
+    {/* ─── Anonymous conversion floor ─────────────────────────────────────
+        Rendered below the 100dvh workspace for anonymous deviceId users only.
+        Signed-in users never see this. The page becomes naturally scrollable
+        to reveal this content while the agent stays anchored at the top.
+    ──────────────────────────────────────────────────────────────────────── */}
+    {isAnonymousUser && (
+      <AnonymousConversionFloor
+        onCreateAccount={() => setLocation("/register?from=conversion-floor")}
+      />
+    )}
+    </>
   );
 }
