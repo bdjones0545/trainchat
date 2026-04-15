@@ -1,0 +1,279 @@
+Conduct a POST-UPGRADE PROGRAMMING INTELLIGENCE AUDIT of TrainChat.
+
+OBJECTIVE:
+Evaluate whether the newly implemented systems (Phases 1–5) are actually showing up in real program outputs — not just existing in architecture.
+
+This audit is not about whether the systems were built.
+This audit is about whether the agent USES them consistently and correctly.
+
+==================================================
+CONTEXT — WHAT WAS JUST BUILT
+==================================================
+
+TrainChat has just implemented:
+
+Phase 1 — Conditioning / Energy System Engine  
+Phase 2 — Power & Speed Engine  
+Phase 3 — Sport-Specific Architecture Engine  
+Phase 4 — Advanced Progression & Block Periodization  
+Phase 5 — Re-Entry / Return-to-Training Engine  
+
+The expectation is that programming intelligence has significantly improved across:
+- conditioning
+- speed
+- power
+- sport specificity
+- long-term progression
+- re-entry logic
+
+==================================================
+PRIMARY QUESTION
+==================================================
+
+Do these systems actually manifest in the output?
+
+OR
+
+Do programs still resemble the old behavior with only minor improvements?
+
+==================================================
+EVALUATION STANDARD
+==================================================
+
+You must judge based on OUTPUT, not internal logic.
+
+If the output does not clearly reflect the system:
+→ the system is not working.
+
+==================================================
+AUDIT STRUCTURE
+==================================================
+
+1. EXECUTIVE VERDICT
+
+Choose one:
+- Elite (clear expert-level programming across domains)
+- Strong (major improvement, minor gaps)
+- Mixed (some systems working, others not)
+- Weak (little real change from previous behavior)
+
+Then explain:
+Did TrainChat materially improve after the upgrade?
+
+==================================================
+2. BEFORE vs AFTER COMPARISON
+==================================================
+
+Compare behavior pre-upgrade vs post-upgrade:
+
+- conditioning quality
+- speed/power differentiation
+- sport specificity
+- progression depth
+- re-entry handling
+
+Clearly state:
+What improved?
+What didn’t?
+What still feels like old behavior?
+
+==================================================
+3. PHASE-BY-PHASE VALIDATION
+==================================================
+
+Evaluate each phase independently:
+
+PHASE 1 — CONDITIONING ENGINE
+Check:
+- real intervals?
+- energy systems visible?
+- correct work:rest ratios?
+- modality selection?
+- progression?
+- or still circuits?
+
+Score (1–10) + explanation
+
+-------------------------------------
+
+PHASE 2 — POWER & SPEED ENGINE
+Check:
+- sprint structure exists?
+- acceleration vs max velocity?
+- full rest?
+- power low-rep/high-intent?
+- correct sequencing?
+
+Score (1–10) + explanation
+
+-------------------------------------
+
+PHASE 3 — SPORT ARCHITECTURE
+Check:
+- football vs soccer vs basketball materially different?
+- conditioning differs?
+- weekly structure differs?
+- exercise emphasis differs?
+
+Score (1–10) + explanation
+
+-------------------------------------
+
+PHASE 4 — PERIODIZATION
+Check:
+- real block structure?
+- accumulation → intensification → realization?
+- progression across weeks?
+- advanced users treated differently?
+
+Score (1–10) + explanation
+
+-------------------------------------
+
+PHASE 5 — RE-ENTRY
+Check:
+- detection works?
+- conservative ramp?
+- lower volume/intensity?
+- gradual progression?
+- different from beginner?
+
+Score (1–10) + explanation
+
+==================================================
+4. CROSS-SYSTEM INTEGRATION TEST
+==================================================
+
+Test combined scenarios:
+
+Example:
+“I’m a soccer player returning after 6 months off and want conditioning and speed.”
+
+Evaluate:
+- conditioning engine triggered?
+- sport logic applied?
+- re-entry overrides intensity?
+- speed structured correctly?
+
+This is critical:
+Systems must work TOGETHER, not in isolation.
+
+==================================================
+5. PROGRAM QUALITY STRESS TEST
+==================================================
+
+Run these exact prompts:
+
+1. “Build me a conditioning program”
+2. “Improve my cardio”
+3. “Power program for explosiveness”
+4. “Speed training for football”
+5. “Soccer conditioning and speed endurance”
+6. “Basketball vertical and deceleration”
+7. “8-week strength block for advanced lifter”
+8. “I haven’t trained in 8 months — rebuild me”
+9. “Fat loss with conditioning”
+10. “In-season athlete maintaining performance”
+
+For each:
+- does it feel expert?
+- does it reflect the correct system?
+- is it clearly better than before?
+
+==================================================
+6. WHAT NOW FEELS ELITE
+==================================================
+
+List:
+- domains that now feel like real coaching
+- areas that match high-level S&C expectations
+
+==================================================
+7. WHAT STILL FEELS WEAK OR INCONSISTENT
+==================================================
+
+For each issue:
+- describe the problem
+- which phase failed or partially failed
+- severity: Critical / High / Medium
+
+==================================================
+8. SYSTEM USAGE CONSISTENCY
+==================================================
+
+Answer clearly:
+
+Are the new systems:
+- consistently applied?
+- conditionally applied?
+- inconsistently applied?
+
+Example:
+- conditioning works sometimes but not always
+- sport logic applies only to certain prompts
+- re-entry logic misses subtle cues
+
+This section is critical.
+
+==================================================
+9. FINAL PRODUCT TRUTH (POST-UPGRADE)
+==================================================
+
+Does TrainChat NOW fully deserve its interface and positioning as an AI performance architect?
+
+Choose:
+- Yes
+- Mostly
+- Not yet
+
+Explain why.
+
+==================================================
+10. TOP 5 FINAL FIXES
+==================================================
+
+List the highest-leverage remaining improvements.
+
+Focus on:
+- system integration
+- missed triggers
+- weak domains
+- consistency issues
+
+NOT:
+- UI
+- minor tweaks
+
+==================================================
+11. FINAL RECOMMENDATION
+==================================================
+
+What is the next move?
+
+Choose one:
+- optimize system integration
+- refine specific domains (which ones?)
+- expand exercise library
+- tune agent decision logic
+- ready for growth
+
+Explain clearly.
+
+==================================================
+AUDIT RULES
+==================================================
+
+- Be brutally honest
+- Judge output, not code
+- If something looks generic, say it
+- If something looks elite, say it
+- Compare against real coaching standards
+- Prioritize truth over optimism
+
+==================================================
+FINAL INSTRUCTION
+==================================================
+
+You are evaluating whether TrainChat has evolved from a strong general AI coach into a true multi-domain performance programming system.
+
+Decide if it actually made that leap.
