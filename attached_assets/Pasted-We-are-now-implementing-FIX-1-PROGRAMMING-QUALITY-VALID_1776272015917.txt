@@ -1,0 +1,458 @@
+We are now implementing:
+
+FIX 1 — PROGRAMMING QUALITY VALIDATOR
+
+OBJECTIVE:
+Add a post-generation programming quality validation layer so TrainChat does not just inject expert engine logic into the prompt — it verifies that the final output actually reflects that logic.
+
+This is the final reliability layer between:
+- intelligent engine activation
+and
+- trustworthy program output
+
+Right now, the engines are strong:
+- conditioning
+- power/speed
+- sport-specific architecture
+- periodization
+- re-entry
+
+But the final output is still bounded by GPT-4o’s compliance on any given call.
+
+That means:
+- the engines can fire correctly
+- but the output can still drift
+- and the system has no true programming-quality gate after generation
+
+This fix changes that.
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+A programming engine is not complete until its requirements are enforced in the final output.
+
+Prompt injection is not enough.
+The system must validate that the output actually contains the required programming qualities.
+
+If it does not:
+- flag it
+- retry with tighter constraints
+- or fail honestly
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Build a lightweight but real Programming Quality Validator that runs AFTER the AI generates a program and BEFORE the output is finalized for the user.
+
+This validator should:
+1. inspect the generated program
+2. inspect which engines were active
+3. verify required domain-specific programming signals exist
+4. return pass / fail / warning
+5. trigger retry or correction when needed
+
+==================================================
+SCOPE
+==================================================
+
+This validator is for PROGRAMMING QUALITY, not just structural validity.
+
+We already have structural logic and mutation verification.
+
+This new validator must focus on:
+- programming integrity
+- engine compliance
+- domain-specific output quality
+- safety-sensitive enforcement where relevant
+
+==================================================
+TASK 1 — DEFINE VALIDATOR INPUTS
+==================================================
+
+The validator must receive enough context to evaluate the output intelligently.
+
+At minimum include:
+- generated program output
+- parsed program structure if available
+- active engine list
+- dominant engine / dominant request type
+- user message
+- profile context
+- training level if resolved
+- sport if resolved
+- phase/block info if resolved
+
+Create or standardize an input object like:
+
+type ProgrammingValidationInput = {
+  userMessage: string;
+  profile: any;
+  generatedProgram: any;
+  activeEngines: string[];
+  dominantContext?: string;
+  resolvedGoal?: string;
+  resolvedSport?: string;
+  resolvedSeason?: string;
+  resolvedTrainingLevel?: string;
+  resolvedReEntryStatus?: string;
+  metadata?: Record<string, any>;
+};
+
+Use existing structures where appropriate, but behavior must match this intent.
+
+==================================================
+TASK 2 — DEFINE VALIDATION RESULT CONTRACT
+==================================================
+
+Create a result format like:
+
+type ProgrammingValidationStatus =
+  | "pass"
+  | "warning"
+  | "fail";
+
+type ProgrammingValidationResult = {
+  status: ProgrammingValidationStatus;
+  passedChecks: string[];
+  failedChecks: string[];
+  warnings: string[];
+  dominantFailureReason?: string;
+  retryRecommended: boolean;
+  retryInstructions?: string[];
+  metadata?: Record<string, any>;
+};
+
+This should be machine-usable, not just logs.
+
+==================================================
+TASK 3 — BUILD ENGINE-SPECIFIC VALIDATION RULES
+==================================================
+
+For each major engine, define what MUST be present in the final output if that engine fired.
+
+-------------------------------------
+A. CONDITIONING ENGINE VALIDATION
+-------------------------------------
+
+If conditioning engine is active, verify that output contains real conditioning work.
+
+Required checks should include things like:
+- at least one conditioning session OR conditioning block exists
+- conditioning is not just short-rest lifting
+- structured work/rest exists where appropriate
+- interval notation exists where applicable
+- conditioning modality is explicit where appropriate
+- conditioning progression exists if multi-week output
+
+Examples of acceptable indicators:
+- “6 x 2 min hard / 2 min rest”
+- “tempo runs”
+- “repeat sprint”
+- “sled pushes 20s on / 100s off”
+- “aerobic base work 25–30 min”
+
+Fail examples:
+- only resistance circuits
+- only “high reps with low rest”
+- no true conditioning session despite conditioning request
+
+-------------------------------------
+B. POWER / SPEED ENGINE VALIDATION
+-------------------------------------
+
+If power or speed engine is active, verify:
+- low rep, high intent structure exists
+- sprint work has full rest where appropriate
+- speed work is early in session
+- power work is not written as hypertrophy
+- sprint distance / rep structure exists for speed requests
+- rest periods are not too short for speed/power quality
+
+Examples of required signals:
+- “6 x 10m”
+- “full recovery”
+- “3–5 reps”
+- “jumps/throws before strength work”
+- “contrast pairing”
+
+Fail examples:
+- moderate reps everywhere
+- no sprint structure
+- speed work after fatigue circuits
+- jumps treated like conditioning
+
+-------------------------------------
+C. SPORT-SPECIFIC ENGINE VALIDATION
+-------------------------------------
+
+If sport engine is active, verify:
+- the sport materially shaped the output
+- session architecture reflects the sport
+- conditioning reflects the sport where relevant
+- exercise emphasis reflects the sport
+- output is not generic training with a sport label
+
+Examples:
+- soccer should show repeat sprint / resilience patterns
+- football should bias acceleration / force / power
+- baseball should show rotational and arm-care-conscious logic
+- basketball should show decel / reactivity / vertical emphasis
+
+Fail examples:
+- same weekly structure as general athlete
+- no sport-specific movement or conditioning emphasis
+
+-------------------------------------
+D. PERIODIZATION / ADVANCED ENGINE VALIDATION
+-------------------------------------
+
+If periodization or advanced progression engine is active, verify:
+- multiple blocks or progression phases exist if horizon requires it
+- progression changes across time
+- volume / intensity shift across blocks
+- advanced users are not given simple beginner linear progression
+- deload logic exists where appropriate
+
+Fail examples:
+- 8-week program that repeats the same week
+- advanced request with only “add weight weekly”
+- no block structure despite periodized request
+
+-------------------------------------
+E. RE-ENTRY ENGINE VALIDATION
+-------------------------------------
+
+If re-entry engine is active, verify:
+- output is clearly more conservative than standard programming
+- early volume is reduced
+- early intensity is reduced
+- no max-effort language in reacclimation phase
+- no DOMS-heavy / excessive volume week 1
+- conditioning is moderate / base-oriented initially
+- progression ramps gradually
+
+Examples of re-entry fail signals:
+- >3 hard sets per main pattern in reacclimation
+- explicit max effort / all-out language in week 1
+- aggressive anaerobic intervals immediately
+- advanced power work too early
+
+This is safety-critical and should be treated with high priority.
+
+==================================================
+TASK 4 — BUILD CROSS-ENGINE VALIDATION LOGIC
+==================================================
+
+Some outputs require multiple engines working together.
+
+Examples:
+- soccer + conditioning + speed
+- re-entry + fat loss
+- basketball + power + deceleration
+- advanced strength + periodization
+- in-season football + maintenance
+
+Validator must check:
+- dominant context is visible
+- supporting engines shape output
+- output is coherent, not overloaded
+- no engine contradicts higher-priority context
+
+Examples:
+- re-entry should override aggressive speed/power prescription
+- in-season should override excessive volume
+- conditioning should not crowd out stated strength priority unless dominant
+
+==================================================
+TASK 5 — ADD DOMINANT CONTEXT PRIORITY TO VALIDATION
+==================================================
+
+Validation should understand priority.
+
+Priority example:
+1. re-entry / safety
+2. explicit live-message request
+3. sport
+4. season
+5. profile default
+
+This means:
+- if re-entry is active and output is aggressive, fail hard
+- if live request was conditioning and output is mostly strength, fail
+- if sport was soccer and conditioning is generic bodybuilding conditioning, warn or fail depending on severity
+
+==================================================
+TASK 6 — DETECT DRIFT vs TRUE COMPLIANCE
+==================================================
+
+Differentiate between:
+- small acceptable variation
+- material drift from engine intent
+
+Examples:
+- conditioning session present but progression weak → warning
+- no conditioning session at all despite conditioning request → fail
+- soccer program has some repeat sprint work but no resilience emphasis → warning
+- speed program has no sprint distances or rest structure → fail
+
+Do not over-fail for minor stylistic differences.
+Do fail for missing domain requirements.
+
+==================================================
+TASK 7 — ADD RETRY / CORRECTION FLOW
+==================================================
+
+If validator returns fail:
+- trigger a retry generation pass with tighter instructions
+- include the failed checks explicitly in the retry prompt
+- ask model to correct the program, not regenerate blindly
+
+Retry prompt should say things like:
+- “The prior output failed conditioning validation because no true conditioning intervals were included. Regenerate with explicit energy system work.”
+- “The prior output failed re-entry validation because initial week volume was too aggressive. Reduce week 1 volume and intensity.”
+
+If validator returns warning:
+- either accept with log
+- or optionally run one light correction pass depending on severity
+
+Set sane retry limits to avoid loops.
+
+==================================================
+TASK 8 — ADD SAFETY-HARDENED RULES FOR RE-ENTRY
+==================================================
+
+Because re-entry is safety-sensitive, add extra enforcement.
+
+Examples:
+- if re-entry dominant and week 1 includes RPE > 7 → fail
+- if reacclimation phase has >3 work sets per primary pattern → fail
+- if all-out intervals appear in week 1 → fail
+- if sprint volume exceeds defined re-entry thresholds early → fail
+
+This should be an actual gate, not just a suggestion.
+
+==================================================
+TASK 9 — MAKE VALIDATION TRACEABLE IN DEV
+==================================================
+
+Add developer-visible inspection support.
+
+In development, make it possible to inspect:
+- which engines fired
+- what checks ran
+- which passed / failed
+- whether retry occurred
+- what correction instructions were used
+
+This can be:
+- structured logs
+- debug object
+- internal metadata
+
+Do NOT leak raw validator internals into the user-facing UI in production.
+
+==================================================
+TASK 10 — APPLY VALIDATOR TO PROGRAM GENERATION PATHS
+==================================================
+
+Audit all relevant generation flows.
+
+Apply validator anywhere TrainChat generates or substantially rebuilds a program, including:
+- new program creation
+- major rebuild from prompt
+- sport/goal reframe generation
+- periodized plan generation
+- re-entry plan generation
+- conditioning-heavy generation
+- long-horizon block creation
+
+Do not limit this to one narrow generation path if multiple exist.
+
+==================================================
+TASK 11 — TEST REQUIRED SCENARIOS
+==================================================
+
+Run and validate these exact cases:
+
+1. “Build me a conditioning program”
+Expected:
+- true conditioning session exists
+- work/rest or structured modality appears
+- validator passes
+
+2. “Build me a power program for explosiveness”
+Expected:
+- low-rep high-intent power structure
+- validator catches hypertrophy-like drift if present
+
+3. “I play soccer and need speed endurance and repeat sprint ability”
+Expected:
+- soccer architecture + conditioning engine both visible
+- validator checks sport-specific conditioning
+
+4. “I haven’t trained in 8 months — rebuild me gradually”
+Expected:
+- re-entry validator enforces conservative output
+- no aggressive week 1
+
+5. “Build me an 8-week advanced strength block”
+Expected:
+- real block structure
+- validator catches repeated week or shallow progression
+
+6. “I’m a basketball athlete and want vertical power and deceleration”
+Expected:
+- basketball architecture + power/speed logic visible
+- validator catches generic strength output if it drifts
+
+7. “I want fat loss, only have dumbbells and 20 minutes, and I’m getting back into it”
+Expected:
+- constraints + fat loss + re-entry integrate
+- validator checks coherence and safety
+
+==================================================
+TASK 12 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What files/services were changed
+2. What validator input/result contracts were created
+3. What engine-specific checks exist
+4. What cross-engine checks exist
+5. What retry/correction behavior was added
+6. What re-entry hard-safety rules were added
+7. What generation paths now use the validator
+8. What debug/inspection support was added
+9. What scenarios previously passed weakly but now fail and retry correctly
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat must no longer rely only on:
+“the engines were injected, so the output is probably good.”
+
+It must behave like:
+“the engines were injected, and the final output was checked to ensure it actually reflects them.”
+
+If a conditioning engine fired:
+- conditioning must actually appear.
+
+If re-entry fired:
+- the output must actually be conservative.
+
+If sport-specific architecture fired:
+- the sport must actually shape the plan.
+
+If advanced periodization fired:
+- the output must actually evolve over time.
+
+This validator is the layer that turns TrainChat from:
+impressive
+into
+trustworthy.
+
+Implement this now.

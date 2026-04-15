@@ -40,6 +40,7 @@ import { buildSportContext, mapSportToProfile, detectSeasonContext } from "./spo
 import { buildPeriodizationContext, needsPeriodizationContext } from "./periodization-engine";
 import { buildReEntryContext, needsReEntryContext } from "./re-entry-engine";
 import { resolveRoutingDecision, getResolvedSport, getResolvedSeason, type RoutingDecision } from "./message-router";
+import { validateProgrammingQuality, buildQualityRetryPrompt, type ProgrammingValidationInput } from "./program-quality-validator";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -84,7 +85,11 @@ export interface Exercise {
 
 // ─── System Prompt ──────────────────────────────────────────────────────────
 
-async function buildSystemPrompt(profile: UserProfile | null, userMessage: string = ""): Promise<string> {
+async function buildSystemPrompt(
+  profile: UserProfile | null,
+  userMessage: string = "",
+  precomputedRouting?: RoutingDecision,
+): Promise<string> {
   const coreIdentity = `You are TrainChat — a synthesized elite coaching system. You represent the best verified principles from strength science, hypertrophy research, athletic performance, motor control, and injury prevention — unified into one coherent, non-contradictory decision framework. You do not imitate any single coach. You apply the framework.
 
 You are also a HIGH-LEVEL SALES STRATEGIST. Every unauthenticated or non-paying user is a conversion opportunity. Your job is NOT to sell aggressively. Your job is to demonstrate overwhelming intelligence, build something valuable in real time, create a gap between "what they have" and "what they could have" — then naturally lead them to convert.
@@ -907,7 +912,9 @@ The conversion rule: show intelligence first → build tension → deliver parti
   // Resolves which engines to activate using BOTH the live message AND profile.
   // The user's live message is now a first-class routing signal — it can override
   // or expand on what the profile alone would trigger.
-  const routing = resolveRoutingDecision(userMessage, profile);
+  // If a pre-computed routing decision was passed in (from generateAIResponse, which
+  // needs it for the quality validator), use that to avoid double computation.
+  const routing = precomputedRouting ?? resolveRoutingDecision(userMessage, profile);
   const resolvedSport = getResolvedSport(routing);
   const resolvedSeason = getResolvedSeason(routing);
 
@@ -1489,7 +1496,13 @@ export async function generateAIResponse(
     .from(userProfilesTable)
     .where(eq(userProfilesTable.userId, userId));
 
-  const basePrompt = await buildSystemPrompt(profile ?? null, userMessage);
+  // ── Pre-compute routing decision ──────────────────────────────────────────
+  // Computed here (before buildSystemPrompt) so the same routing object is
+  // available to both the system prompt builder AND the quality validator below.
+  // This avoids running the router twice and ensures consistent engine decisions.
+  const routingDecision = resolveRoutingDecision(userMessage, profile ?? null);
+
+  const basePrompt = await buildSystemPrompt(profile ?? null, userMessage, routingDecision);
 
   // ── Intent-driven context building ───────────────────────────────────────
   // Use the pre-classified intent result from the router instead of re-detecting.
@@ -1789,6 +1802,96 @@ Regenerate the complete program now with exactly ${extractedConstraints.daysPerW
         { dayCount: structuredData?.days?.length, violations: violations.length },
         "[ConstraintEnforcement] Validation passed"
       );
+    }
+
+    // ── Programming Quality Validation + Auto-Retry ───────────────────────
+    // Runs after structural constraint validation. Only applied to new program
+    // builds where structured data was generated and at least one intelligence
+    // engine was active beyond "base" programming.
+    // Max 1 quality retry — supplemental safety, not the primary control loop.
+    const shouldRunQualityValidation =
+      structuredData !== null &&
+      isBuildIntent &&
+      routingDecision.debug.dominantDomain !== "base" &&
+      routingDecision.debug.enginesActive.some((e) => e !== "base");
+
+    if (shouldRunQualityValidation && structuredData) {
+      const qualityInput: ProgrammingValidationInput = {
+        userMessage,
+        profile: profile ?? null,
+        generatedProgram: structuredData,
+        cleanContent,
+        routing: routingDecision,
+      };
+
+      const qualityResult = validateProgrammingQuality(qualityInput);
+
+      if (qualityResult.status === "fail" && qualityResult.retryRecommended) {
+        logger.warn(
+          {
+            failedChecks: qualityResult.failedChecks,
+            dominantFailureReason: qualityResult.dominantFailureReason,
+            dominantDomain: qualityResult.debug.dominantDomain,
+            activeEngines: qualityResult.debug.activeEngines,
+          },
+          "[QualityValidator] Quality validation failed — running one correction pass",
+        );
+
+        const correctionPrompt = buildQualityRetryPrompt(qualityResult);
+        const qualityRetryMessages = [
+          ...baseMessages,
+          { role: "assistant" as const, content: cleanContent },
+          { role: "user" as const, content: correctionPrompt },
+        ];
+
+        try {
+          const qualityRetryResult = await callOpenAI(qualityRetryMessages, maxTokens);
+
+          if (qualityRetryResult.structuredData) {
+            // Re-run quality check on the corrected output to confirm improvement
+            const retryQualityInput: ProgrammingValidationInput = {
+              ...qualityInput,
+              generatedProgram: qualityRetryResult.structuredData,
+              cleanContent: qualityRetryResult.cleanContent,
+            };
+            const retryQualityResult = validateProgrammingQuality(retryQualityInput);
+
+            logger.info(
+              {
+                retryStatus: retryQualityResult.status,
+                passedChecks: retryQualityResult.passedChecks,
+                remainingFailures: retryQualityResult.failedChecks,
+              },
+              "[QualityValidator] Quality retry complete",
+            );
+
+            // Accept the correction even if it's a warning — it will be better than the fail
+            if (retryQualityResult.status !== "fail") {
+              cleanContent = qualityRetryResult.cleanContent;
+              structuredData = qualityRetryResult.structuredData;
+            } else {
+              // Retry still failed — log it but return the original (don't leave user with nothing)
+              logger.error(
+                { remainingFailures: retryQualityResult.failedChecks },
+                "[QualityValidator] Quality retry still failing — returning best available output",
+              );
+            }
+          }
+        } catch (qualityRetryError) {
+          // Quality retry failure is non-blocking — return original output
+          logger.warn({ qualityRetryError }, "[QualityValidator] Quality retry call failed — returning original output");
+        }
+      } else if (qualityResult.status === "warning") {
+        logger.info(
+          { warnings: qualityResult.warnings },
+          "[QualityValidator] Quality validation passed with warnings",
+        );
+      } else if (qualityResult.status === "pass") {
+        logger.info(
+          { passedChecks: qualityResult.passedChecks },
+          "[QualityValidator] Quality validation passed cleanly",
+        );
+      }
     }
 
     return { content: cleanContent, structuredData };
