@@ -1,0 +1,385 @@
+Conduct a full WEARABLE TECHNOLOGY INTEGRATION AUDIT for TrainChat.
+
+OBJECTIVE:
+Determine whether wearable integrations are connected correctly, synced reliably, normalized properly, and actually used meaningfully inside TrainChat’s adaptation and coaching logic.
+
+This is NOT just a “does OAuth work” audit.
+This is a full connection, sync, data integrity, and system-usage audit.
+
+I want to know whether TrainChat can safely rely on wearable data for real training decisions.
+
+==================================================
+PRIMARY QUESTION
+==================================================
+
+If a user connects a wearable or health data source, does TrainChat:
+- connect it correctly
+- keep it synced correctly
+- interpret the data correctly
+- and use it correctly in adaptation, recovery, and programming decisions?
+
+Answer with evidence from the codebase and integration flow.
+
+==================================================
+AUDIT AREAS
+==================================================
+
+A. PROVIDER COVERAGE / INTEGRATION MAP
+Audit exactly which wearable / health providers are supported.
+
+Examples may include:
+- Apple Health
+- Garmin
+- WHOOP
+- Oura
+- Fitbit
+- Google Fit / Health Connect
+- Polar
+- other APIs if present
+
+I want:
+- which providers are truly integrated
+- which are partial / placeholder / mocked
+- which are front-end only vs fully connected
+- which are production-ready vs incomplete
+
+B. AUTH / CONNECTION FLOW
+Audit how each provider is connected.
+
+Check:
+- OAuth or API auth flow
+- redirect URLs
+- token exchange
+- token storage
+- refresh token handling
+- reconnect flow
+- disconnect flow
+- duplicate connection handling
+- provider account linking to correct app user
+
+I want to know:
+- can connections break silently?
+- can duplicate provider accounts be created?
+- can one user accidentally connect multiple identities incorrectly?
+- does anonymous → registered → paid preserve connections correctly if relevant?
+
+C. TOKEN STORAGE / SECURITY
+Audit:
+- access token storage
+- refresh token storage
+- encryption / secrecy handling
+- server vs client token exposure
+- token refresh scheduling
+- expired token handling
+- invalid token recovery
+
+Check for:
+- insecure storage
+- token leakage to frontend
+- missing refresh logic
+- stale token loops
+- broken reconnect behavior
+
+D. DATA INGESTION / SYNC FLOW
+Audit how wearable data is actually fetched and updated.
+
+Check:
+- sync triggers (manual, cron, webhook, app open, background job)
+- frequency of sync
+- rate limit handling
+- retry behavior
+- partial sync handling
+- failed sync handling
+- incremental sync vs full sync
+- duplicate record handling
+
+I want to know:
+- how new data arrives
+- how often it is refreshed
+- what happens if provider API is down
+- whether the system can drift into stale data without noticing
+
+E. METRICS INGESTED
+Audit exactly what metrics TrainChat is reading from each provider.
+
+Examples:
+- steps
+- resting heart rate
+- HRV
+- sleep duration
+- sleep stages
+- recovery score / strain score
+- calories
+- readiness
+- workouts
+- heart rate during training
+- VO2 max if present
+- body metrics if present
+
+I want:
+- what fields are actually used
+- what fields are stored
+- what fields are merely displayed
+- which providers support which metrics in the current implementation
+
+F. DATA NORMALIZATION / UNIFICATION
+Audit how provider data is normalized across sources.
+
+Examples:
+- Apple Health HRV vs WHOOP recovery vs Oura readiness
+- sleep scores from different systems
+- step counts across providers
+- workouts with different schemas
+- timezone handling
+- date boundaries
+- metric units
+
+I want to know:
+- is there a normalized internal model?
+- how are incompatible provider schemas handled?
+- are there misleading equivalencies being made?
+- are provider-specific metrics preserved or oversimplified?
+
+G. STALENESS / MISSING DATA HANDLING
+This is critical.
+
+Audit:
+- how the system detects stale wearable data
+- what happens when data is missing
+- what happens when no sync has occurred recently
+- whether the UI or agent still speaks as if the data is current
+- whether adaptation logic incorrectly assumes data exists
+
+I want explicit answers to:
+- how many hours/days old is “too old”?
+- what happens if today’s recovery data is missing?
+- what happens if the provider connection broke yesterday?
+- does the app fall back gracefully or hallucinate certainty?
+
+H. USE IN TRAINING / ADAPTATION LOGIC
+This is the most important section.
+
+Audit whether wearable data is actually used by:
+- adaptation engine
+- readiness logic
+- recovery logic
+- session modification
+- fatigue management
+- deload recommendations
+- conditioning adjustments
+- check-in or forecast systems
+
+I want to know:
+- where in code wearable metrics influence decisions
+- whether they are first-class inputs or just dashboard decoration
+- whether outputs materially change based on wearable data
+- whether the system can explain how wearable data affected a recommendation
+
+If TrainChat claims wearable-informed adaptation, prove it from the code.
+
+I. CONFLICT / OVERRIDE LOGIC
+Audit what happens when wearable data conflicts with:
+- user-reported readiness
+- logged performance
+- profile defaults
+- recent session completion
+- user goals
+
+Examples:
+- WHOOP says poor recovery, but user feels great
+- HRV low, but recent training performance strong
+- sleep poor, but user requests high intensity
+
+I want to know:
+- is there a priority system?
+- does wearable data overrule everything?
+- is it blended with subjective and performance data?
+- how does the system avoid overreacting?
+
+J. UI / USER TRUTH
+Audit whether the UI accurately represents the state of wearable integrations.
+
+Check:
+- connected vs disconnected state
+- last sync timestamp
+- sync error visibility
+- stale data warnings
+- provider-specific labeling
+- whether user can tell which data source is active
+- whether the UI overstates connection quality or recency
+
+I want to know whether users can trust what the app says about their wearable data.
+
+K. WEBHOOKS / PROVIDER PUSH EVENTS (IF USED)
+If any providers use webhooks or push sync:
+- audit webhook verification
+- duplicate event handling
+- provider event coverage
+- retry logic
+- idempotency
+- out-of-order events
+
+L. DATABASE / SOURCE OF TRUTH
+Audit the DB/storage model for:
+- connected providers
+- tokens
+- sync timestamps
+- normalized metrics
+- raw provider payloads if stored
+- daily summaries
+- readiness/recovery records
+
+I want to know:
+- what the source of truth is
+- whether there is drift risk
+- whether reconciliation is possible
+- whether stale or duplicated records can accumulate
+
+==================================================
+MANDATORY TEST SCENARIOS
+==================================================
+
+Audit and trace these exact scenarios:
+
+1. User connects a wearable for the first time
+- auth succeeds
+- provider account links to correct user
+- token stored correctly
+- initial sync runs correctly
+
+2. Daily sync succeeds
+- new metrics arrive
+- normalization works
+- last sync updates
+- app reflects fresh data
+
+3. Daily sync fails
+- error is recorded
+- stale data is detectable
+- app does not pretend data is current
+
+4. Access token expires
+- refresh flow works
+OR
+- user is prompted correctly to reconnect
+- no silent broken integration
+
+5. Provider data is missing for a day
+- adaptation logic behaves safely
+- no false readiness certainty
+
+6. User disconnects provider
+- tokens revoked/removed appropriately
+- UI updates correctly
+- system stops using stale wearable data as if live
+
+7. Wearable data conflicts with user performance trend
+- system handles conflict intelligently
+
+8. Wearable-connected user gets an adaptation recommendation
+- verify whether wearable data actually changed the recommendation
+
+9. Duplicate sync / repeated provider events
+- no duplicate daily records
+- no corrupted summaries
+
+10. Anonymous / free / paid transitions (if relevant)
+- wearable connection remains correctly linked to the user identity
+- no broken ownership or lost integration
+
+==================================================
+REQUIRED OUTPUT FORMAT
+==================================================
+
+Return the audit in this exact structure:
+
+1. EXECUTIVE VERDICT
+Choose one:
+- Production-ready
+- Mostly solid
+- Risky
+- Superficial
+
+Then explain clearly.
+
+2. WEARABLE INTEGRATION SCORECARD (1–10)
+Score:
+- Connection reliability
+- Token/auth security
+- Sync reliability
+- Data normalization quality
+- Staleness handling
+- Adaptation usage
+- Conflict handling
+- UI truthfulness
+- Source-of-truth clarity
+- Overall wearable reliability
+
+3. WHAT IS WORKING WELL
+List the wearable/integration pieces that are clearly implemented correctly.
+
+4. CRITICAL RISKS
+List every meaningful integration risk.
+
+For each include:
+- issue
+- why it matters
+- likely root cause
+- affected files/routes/functions
+- severity: Critical / High / Medium
+
+5. DATA TRUTH
+Answer plainly:
+- What wearable providers are really integrated?
+- What data is really ingested?
+- What data is really used vs merely displayed?
+
+6. ADAPTATION TRUTH
+Answer plainly:
+Does wearable data materially affect programming and adaptation decisions?
+Explain where it does and where it does not.
+
+7. STALENESS TRUTH
+Answer plainly:
+What happens when wearable data is old, missing, or the sync breaks?
+Does the system handle that safely and honestly?
+
+8. SOURCE OF TRUTH
+Answer plainly:
+What is the true source of truth for wearable connection state, sync freshness, and normalized metrics?
+
+9. TOP 5 FIXES
+List the five highest-leverage fixes to make wearable integrations truly trustworthy and useful.
+
+10. FINAL RECOMMENDATION
+Should we:
+- patch wearable reliability before growth
+- improve sync/retry behavior
+- tighten adaptation usage
+- improve stale-data handling
+- reduce provider claims
+or some combination?
+
+Prioritize the next moves clearly.
+
+==================================================
+AUDIT RULES
+==================================================
+
+- Be brutally honest
+- Treat wearable data as high-stakes input if it influences training decisions
+- Do not confuse “connected” with “useful”
+- Do not confuse “displayed” with “integrated into logic”
+- If the system overclaims wearable intelligence, say so
+- If data freshness is unclear, say so
+- Prioritize reliability, truthfulness, and correct decision usage
+
+==================================================
+FINAL INSTRUCTION
+==================================================
+
+Act like a senior integrations and data-systems auditor.
+
+You are deciding whether TrainChat’s wearable technology layer is real, reliable, and worthy of influencing training recommendations.
+
+Audit it accordingly.
