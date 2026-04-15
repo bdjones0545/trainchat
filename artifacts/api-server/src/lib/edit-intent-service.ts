@@ -72,7 +72,8 @@ export interface EditPlan {
   _debugRoute?: {
     openaiCalled: boolean;
     openaiSucceeded: boolean;
-    pathUsed: "openai" | "library_progression" | "rule_based" | "prescription";
+    /** deterministic = fast sync rules, no OpenAI; rule_based = rules used as fallback after OpenAI failed */
+    pathUsed: "openai" | "library_progression" | "rule_based" | "deterministic";
     rejectionReason?: string;
   };
 }
@@ -1378,9 +1379,28 @@ function findCurrentSession(system: any): any | null {
   return week.sessions?.find((s: any) => s.dayOfWeek === dow) ?? week.sessions?.[0] ?? null;
 }
 
-// ─── Main Entry Point ────────────────────────────────────────────────────────
+// ─── Intent Router ───────────────────────────────────────────────────────────
+//
+// Classifies each edit request as DETERMINISTIC or AGENT before any mutation logic.
+//
+//  DETERMINISTIC — fast path, zero OpenAI cost:
+//    • Exact numeric prescription (set/rep/weight/rest/tempo with a real number)
+//    • Exact named exercise swap (non-placeholder target extracted from message)
+//    • Simple set add/remove ("add a set", "remove a set", "+1 set")
+//
+//  AGENT — OpenAI interpretation layer:
+//    • Coaching / transformation language ("make this harder", "more explosive")
+//    • Structural session changes ("add more exercises to day 1")
+//    • No exercise target in context
+//    • Anything that doesn't map deterministically
+//
+// Auto-escalation: if a DETERMINISTIC request produces zero changes,
+// the router automatically re-routes to the AGENT path.
 
-// Detects swap/progression intent from user request keywords
+export interface EditRouteDecision {
+  route: "DETERMINISTIC" | "AGENT";
+  reason: string;
+}
 
 function detectSwapIntent(userRequest: string): "swap" | "easier" | "harder" | null {
   const lower = userRequest.toLowerCase();
@@ -1396,6 +1416,65 @@ function detectSwapIntent(userRequest: string): "swap" | "easier" | "harder" | n
   return null;
 }
 
+// Extracts the explicit replacement exercise name from a swap-style request.
+// Returns null if no concrete name is present (i.e. the target is a generic placeholder).
+function extractSwapTargetName(userRequest: string): string | null {
+  const name =
+    userRequest.match(/(?:swap|replace|change|switch|substitute|sub)\s+.+?\s+(?:for|with|to)\s+(.+)$/i)?.[1]?.trim() ||
+    userRequest.match(/(?:swap|replace|change|switch|substitute|sub)\s+(?:this|it|out)?\s*(?:for|with|to)\s+(.+)$/i)?.[1]?.trim() ||
+    userRequest.match(/(?:use|do)\s+(.+?)\s+instead$/i)?.[1]?.trim() ||
+    userRequest.match(/^try\s+(.+?)(?:\s+instead)?$/i)?.[1]?.trim() ||
+    null;
+  if (!name || isGenericPlaceholder(name)) return null;
+  return name;
+}
+
+export function classifyEditRequest(
+  userRequest: string,
+  targetContext?: TargetContext
+): EditRouteDecision {
+  const lower = userRequest.toLowerCase();
+
+  // ── Rule 1: No exercise target = can't be deterministic ──────────────────
+  // Phase/week/session/system-level requests need OpenAI to reason about scope.
+  if (targetContext?.type === "exercise") {
+    const exerciseLabel = targetContext.label ?? "";
+
+    // ── Rule 2: Exact numeric prescription → DETERMINISTIC ─────────────────
+    // parsePrescriptionCommand handles sets/reps/weight/rest/tempo with real numbers.
+    const prescription = parsePrescriptionCommand(userRequest, exerciseLabel);
+    if (prescription) {
+      return { route: "DETERMINISTIC", reason: "numeric_prescription" };
+    }
+
+    // ── Rule 3: Exact named swap to a real exercise → DETERMINISTIC ─────────
+    const swapTarget = extractSwapTargetName(userRequest);
+    if (swapTarget) {
+      return { route: "DETERMINISTIC", reason: "exact_named_swap" };
+    }
+
+    // ── Rule 4: Simple set add/remove → DETERMINISTIC ──────────────────────
+    if (/\b(add|plus|\+)\s*(a\s+)?set\b|\+1\s*set\b|one\s+more\s+set\b/i.test(lower)) {
+      return { route: "DETERMINISTIC", reason: "set_add" };
+    }
+    if (/\b(remove|drop|minus|-)\s*(a\s+)?set\b|-1\s*set\b|fewer\s+sets?\b|less\s+sets?\b/i.test(lower)) {
+      return { route: "DETERMINISTIC", reason: "set_remove" };
+    }
+  }
+
+  // ── Everything else → AGENT ───────────────────────────────────────────────
+  // Includes: harder/easier, explosive/endurance coaching language, session/week/phase
+  // transforms, and any request without a deterministic exercise target.
+  const agentReason =
+    !targetContext ? "no_target_context" :
+    targetContext.type !== "exercise" ? `${targetContext.type}_level_edit` :
+    "exercise_coaching_transformation";
+
+  return { route: "AGENT", reason: agentReason };
+}
+
+// ─── Main Entry Point ────────────────────────────────────────────────────────
+
 export async function interpretEditRequest(
   userRequest: string,
   system: any,
@@ -1405,9 +1484,41 @@ export async function interpretEditRequest(
 ): Promise<EditPlan> {
   const systemContext = serializeSystemForPrompt(system);
 
-  // ── Exercise Intelligence: inject swap candidates or progressions ──────────
+  // ── Step 1: Classify the request ─────────────────────────────────────────
+  const classification = classifyEditRequest(userRequest, targetContext);
+
+  logger.info(
+    { route: classification.route, reason: classification.reason, request: userRequest.slice(0, 100), targetType: targetContext?.type },
+    `[EditRouter] Classified → ${classification.route} (${classification.reason})`
+  );
+
+  // ── Step 2: DETERMINISTIC fast path ──────────────────────────────────────
+  // Zero API cost. interpretWithRules is synchronous and sub-millisecond.
+  if (classification.route === "DETERMINISTIC") {
+    const rulePlan = interpretWithRules(userRequest, system, targetContext);
+
+    if (rulePlan.changes.length > 0) {
+      logger.info(
+        { intent: rulePlan.intent, scope: rulePlan.scope, changes: rulePlan.changes.length, route: "deterministic" },
+        "[EditRouter] Deterministic path resolved — OpenAI not called"
+      );
+      return {
+        ...rulePlan,
+        _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+      };
+    }
+
+    // Auto-escalation: deterministic rules produced no changes → escalate to AGENT
+    logger.warn(
+      { reason: classification.reason, intent: rulePlan.intent },
+      "[EditRouter] Deterministic path produced no changes — auto-escalating to AGENT"
+    );
+    // Fall through to AGENT path
+  }
+
+  // ── Step 3: AGENT path — build exercise intelligence context ─────────────
+  // Only runs for AGENT requests (or auto-escalated DETERMINISTIC failures).
   let exerciseSwapContext: string | undefined;
-  // Hold onto progressions so rule-based fallback can produce a real library swap
   let fetchedProgressions: { easier: any[]; harder: any[] } | null = null;
   let resolvedSwapIntent: "swap" | "easier" | "harder" | null = null;
 
@@ -1426,34 +1537,30 @@ export async function interpretEditRequest(
 
     try {
       if (swapIntent === "swap") {
-        exerciseSwapContext = await buildSwapContext({
-          exerciseName,
-          equipmentLevel,
-        });
-        logger.info({ exerciseName, equipmentLevel }, "Injecting swap context from exercise library");
+        exerciseSwapContext = await buildSwapContext({ exerciseName, equipmentLevel });
+        logger.info({ exerciseName, equipmentLevel }, "[EditRouter] Injecting swap context from exercise library");
       } else {
-        // Easier or harder — use progressions
         const progressions = await getProgressions(exerciseName);
         fetchedProgressions = progressions;
         const target = swapIntent === "easier" ? progressions.easier : progressions.harder;
         if (target.length > 0) {
           const label = swapIntent === "easier" ? "REGRESSION OPTIONS" : "PROGRESSION OPTIONS";
           exerciseSwapContext = `${label} for "${exerciseName}" (prefer these — use replace_exercise with one of these exact names):\n${target.map((ex) => `  - ${ex.name} (${(ex.equipment as string[]).join("/")}, ${ex.difficultyLevel})`).join("\n")}`;
-          logger.info({ exerciseName, swapIntent, count: target.length }, "Injecting progression context from exercise library");
+          logger.info({ exerciseName, swapIntent, count: target.length }, "[EditRouter] Injecting progression context from exercise library");
         } else {
-          // Fallback to cluster-based swap when no direct progressions
           exerciseSwapContext = await buildSwapContext({ exerciseName, equipmentLevel });
-          logger.info({ exerciseName, swapIntent }, "No direct progressions — injecting cluster swap context");
+          logger.info({ exerciseName, swapIntent }, "[EditRouter] No direct progressions — injecting cluster swap context");
         }
       }
     } catch (err) {
-      logger.warn({ err, exerciseName }, "Failed to load exercise swap context — proceeding without it");
+      logger.warn({ err, exerciseName }, "[EditRouter] Failed to load exercise swap context — proceeding without it");
     }
   }
 
+  // ── Step 4: Call OpenAI ───────────────────────────────────────────────────
   logger.info(
-    { userRequest: userRequest.slice(0, 100), hasTargetContext: !!targetContext, targetType: targetContext?.type },
-    "[EditRouter] Calling OpenAI interpretation — route: openai"
+    { request: userRequest.slice(0, 100), hasTargetContext: !!targetContext, targetType: targetContext?.type, escalatedFrom: classification.route === "DETERMINISTIC" ? "deterministic" : undefined },
+    "[EditRouter] Calling OpenAI — route: agent_openai"
   );
 
   const aiPlan = await interpretWithAI(
@@ -1466,7 +1573,7 @@ export async function interpretEditRequest(
   );
 
   if (aiPlan && Array.isArray(aiPlan.changes) && aiPlan.changes.length > 0) {
-    // Guard 1: if AI produced a harder/easier intent but only changed notes, reject it and use our fallback
+    // Guard 1: progression intent with note-only mutation → reject, use library fallback
     const isProgressionIntent = /harder_variation|easier_variation|increase_difficulty|decrease_difficulty/i.test(aiPlan.intent);
     const onlyNotesChange = aiPlan.changes.every((c) => {
       if (c.type !== "update_exercise") return false;
@@ -1474,44 +1581,44 @@ export async function interpretEditRequest(
       return keys.length === 1 && keys[0] === "notes";
     });
 
-    // Guard 2: if AI produced a replace_exercise with a generic placeholder name, reject it.
-    // This catches cases where the AI outputs "replacement": {"name": "a harder variation", ...}
+    // Guard 2: generic placeholder name in replace_exercise → reject
     const hasGenericReplacementName = aiPlan.changes.some((c) => {
       if (c.type !== "replace_exercise") return false;
       const replacementName = (c as any).replacement?.name ?? (c as any).updates?.name ?? "";
       if (isGenericPlaceholder(replacementName)) {
-        logger.warn(
-          { replacementName, intent: aiPlan.intent },
-          "[InterpretEdit] AI produced generic placeholder name in replace_exercise — rejecting"
-        );
+        logger.warn({ replacementName, intent: aiPlan.intent }, "[EditRouter] AI produced generic placeholder in replace_exercise — rejecting");
         return true;
       }
       return false;
     });
 
     if (isProgressionIntent && onlyNotesChange) {
-      logger.warn({ intent: aiPlan.intent, changes: aiPlan.changes.length }, "[EditRouter] AI produced note-only mutation for progression — rejecting, falling back");
+      logger.warn({ intent: aiPlan.intent, changes: aiPlan.changes.length }, "[EditRouter] AI returned note-only mutation for progression — rejecting");
     } else if (hasGenericReplacementName) {
-      logger.warn({ intent: aiPlan.intent }, "[EditRouter] AI produced generic placeholder in replace_exercise — rejecting, falling back");
+      logger.warn({ intent: aiPlan.intent }, "[EditRouter] AI returned generic placeholder in replace_exercise — rejecting");
     } else {
       logger.info(
-        { intent: aiPlan.intent, scope: aiPlan.scope, changes: aiPlan.changes.length, route: "openai" },
-        "[EditRouter] OpenAI edit plan accepted — route: openai"
+        { intent: aiPlan.intent, scope: aiPlan.scope, changes: aiPlan.changes.length, route: "agent_openai" },
+        "[EditRouter] OpenAI edit plan accepted"
       );
       return {
         ...aiPlan,
-        _debugRoute: { openaiCalled: true, openaiSucceeded: true, pathUsed: "openai" },
+        _debugRoute: {
+          openaiCalled: true,
+          openaiSucceeded: true,
+          pathUsed: "openai",
+          ...(classification.route === "DETERMINISTIC" ? { rejectionReason: "escalated_from_deterministic" } : {}),
+        },
       };
     }
   } else {
-    const rejectionReason = aiPlan === null ? "openai_returned_null" : "empty_changes_array";
     logger.warn(
-      { rejectionReason, hasApiKey: !!process.env.OPENAI_API_KEY },
-      "[EditRouter] OpenAI plan unusable — falling back"
+      { result: aiPlan === null ? "null" : "empty_changes", hasApiKey: !!process.env.OPENAI_API_KEY },
+      "[EditRouter] OpenAI plan unusable — falling back to library/rules"
     );
   }
 
-  // ── Fallback: progression-aware plan using library data ──────────────────
+  // ── Step 5: Library progression fallback ─────────────────────────────────
   if (
     (resolvedSwapIntent === "harder" || resolvedSwapIntent === "easier") &&
     fetchedProgressions &&
@@ -1519,7 +1626,7 @@ export async function interpretEditRequest(
   ) {
     const libFallback = buildProgressionFallbackPlan(targetContext, fetchedProgressions, resolvedSwapIntent);
     if (libFallback) {
-      logger.info({ intent: libFallback.intent, exercise: targetContext.label, direction: resolvedSwapIntent, route: "library_progression" }, "[EditRouter] Using library progression fallback — route: library_progression");
+      logger.info({ intent: libFallback.intent, exercise: targetContext.label, direction: resolvedSwapIntent }, "[EditRouter] Using library progression fallback");
       return {
         ...libFallback,
         _debugRoute: { openaiCalled: true, openaiSucceeded: false, pathUsed: "library_progression" },
@@ -1527,10 +1634,10 @@ export async function interpretEditRequest(
     }
   }
 
-  // ── Final fallback: exercise-aware rule-based mutation ────────────────────
+  // ── Step 6: Rule-based safety net ────────────────────────────────────────
   logger.info(
-    { userRequest: userRequest.slice(0, 100), hasTargetContext: !!targetContext, route: "rule_based" },
-    "[EditRouter] Falling back to rule-based edit interpretation — route: rule_based"
+    { request: userRequest.slice(0, 100), route: "rule_based_fallback" },
+    "[EditRouter] Using rule-based safety net — all prior paths failed"
   );
   const rulePlan = interpretWithRules(userRequest, system, targetContext);
   return {
@@ -1539,7 +1646,7 @@ export async function interpretEditRequest(
       openaiCalled: true,
       openaiSucceeded: false,
       pathUsed: "rule_based",
-      rejectionReason: aiPlan === null ? "openai_returned_null" : "openai_empty_plan",
+      rejectionReason: aiPlan === null ? "openai_returned_null" : "openai_empty_or_rejected_plan",
     },
   };
 }

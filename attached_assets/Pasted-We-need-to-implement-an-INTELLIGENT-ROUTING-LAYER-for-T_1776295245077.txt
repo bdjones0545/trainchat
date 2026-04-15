@@ -1,0 +1,232 @@
+We need to implement an INTELLIGENT ROUTING LAYER for TrainChat that preserves the current high-speed deterministic system while enabling true agent behavior via OpenAI when needed.
+
+OBJECTIVE:
+Maintain the existing fast, deterministic edit system for clear actions, but introduce a smart router that sends ONLY ambiguous or natural-language requests to the OpenAI interpreter layer.
+
+This ensures:
+- speed is preserved
+- cost is controlled
+- agent behavior feels real
+- no more brittle failures on normal coaching requests
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+“Use OpenAI for meaning, not mechanics.”
+
+- Deterministic system = execution engine (fast, reliable)
+- OpenAI = interpretation layer (understands user intent)
+
+==================================================
+TARGET ARCHITECTURE
+==================================================
+
+All incoming user edit/refinement requests go through a Router:
+
+function routeEditRequest(userMessage, context) {
+  if (isDeterministic(userMessage)) {
+    return handleDeterministicEdit(...)
+  } else {
+    return handleAgentEditWithOpenAI(...)
+  }
+}
+
+==================================================
+TASK 1 — BUILD INTENT ROUTER
+==================================================
+
+Create a routing layer before any mutation logic.
+
+Add a function like:
+
+function classifyRequestType(userMessage: string): "DETERMINISTIC" | "AGENT"
+
+Rules:
+
+DETERMINISTIC:
+- exact entity reference present
+- explicit numeric or mechanical instruction
+- clear mapping to existing logic
+
+Examples:
+- “add 1 set to back squat”
+- “remove a set from bench press”
+- “swap bench press for incline dumbbell press” (if exact match exists)
+- “change reps to 8”
+
+AGENT:
+- broad or coaching-style language
+- no exact entity resolution required
+- intent involves structure, emphasis, or transformation
+
+Examples:
+- “make this harder”
+- “add more exercises to day 1”
+- “focus more on endurance”
+- “make this more explosive”
+- “reduce overall volume”
+
+==================================================
+TASK 2 — IMPLEMENT ROUTING LOGIC
+==================================================
+
+Before any edit handling:
+
+if (classifyRequestType(message) === "DETERMINISTIC") {
+  → existing fast mutation logic
+} else {
+  → call OpenAI interpretation layer
+}
+
+==================================================
+TASK 3 — CONNECT AGENT PATH TO OPENAI
+==================================================
+
+For AGENT requests:
+
+Call OpenAI with:
+- user message
+- active program structure (summary)
+- UIContext (page, selected session, selected exercise)
+- user profile (goal, sport, experience)
+- recent adaptation context (if available)
+
+OpenAI returns structured intent:
+
+{
+  intentType: "TARGETED_EDIT" | "SESSION_TRANSFORMATION" | "PROGRAM_TRANSFORMATION" | "CLARIFICATION",
+  targetScope,
+  targetIdentifiers,
+  requestedChange,
+  requestedFocus,
+  rationale
+}
+
+==================================================
+TASK 4 — MAP OPENAI INTENT TO LOCAL ENGINE
+==================================================
+
+After OpenAI returns intent:
+
+DO NOT mutate directly.
+
+Instead:
+- pass structured intent into existing deterministic engine
+- generate mutation plan
+- run validation
+- commit changes
+
+This preserves:
+- safety
+- consistency
+- program quality
+
+==================================================
+TASK 5 — PRESERVE FAST PATHS
+==================================================
+
+DO NOT slow down these actions:
+
+- +Set
+- -Set
+- exact swaps
+- exact prescription changes
+
+These should NEVER call OpenAI unless:
+- they fail resolution
+- or ambiguity is detected
+
+==================================================
+TASK 6 — ADD ESCALATION FALLBACK
+==================================================
+
+If a deterministic path fails:
+
+Instead of returning failure:
+→ automatically escalate to OpenAI
+
+Example:
+
+User: “add more to day 1”
+Deterministic path fails
+→ fallback to OpenAI interpretation
+
+This removes brittle failure cases.
+
+==================================================
+TASK 7 — RESPONSE BEHAVIOR
+==================================================
+
+DETERMINISTIC PATH:
+- fast
+- minimal explanation
+- immediate UI update
+
+AGENT PATH:
+- short coaching-style explanation
+- SystemUpdateCard
+- visible structural change
+
+==================================================
+TASK 8 — DEBUG VISIBILITY
+==================================================
+
+Add dev logs:
+
+- message
+- route chosen (DETERMINISTIC vs AGENT)
+- OpenAI called? (yes/no)
+- intent type
+- mutation plan result
+
+This must be visible in development mode.
+
+==================================================
+TASK 9 — TEST CASES
+==================================================
+
+Ensure routing behaves correctly:
+
+DETERMINISTIC:
+- “add 1 set to back squat”
+- “remove a set from bench press”
+
+AGENT:
+- “make this harder”
+- “add more exercises to day 1”
+- “focus more on endurance”
+- “make this more explosive”
+
+EDGE:
+- deterministic fails → auto escalate → works
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+
+1. Router implementation details
+2. Classification rules used
+3. Which paths now call OpenAI
+4. Which paths remain deterministic
+5. Fallback escalation behavior
+6. Debug logging added
+7. Performance impact (latency difference)
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat must now:
+
+- feel instant for simple edits
+- feel intelligent for complex requests
+- never fail on normal coaching language
+- never replace speed with unnecessary AI calls
+
+The system should feel like:
+a fast editing engine powered by an intelligent AI interpreter.
+
+Implement this now.
