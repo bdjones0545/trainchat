@@ -175,14 +175,8 @@ function buildSessionsForDayCount(
     goal?.toLowerCase().includes("stamina")
   );
 
-  // Sport with a field/court context benefits from conditioning session architecture
-  const isSportConditioning = !!(sport && (
-    sport.toLowerCase().includes("soccer") ||
-    sport.toLowerCase().includes("football") ||
-    sport.toLowerCase().includes("basketball") ||
-    sport.toLowerCase().includes("rugby") ||
-    sport.toLowerCase().includes("lacrosse")
-  ));
+  // Individual sport-specific architectures are handled below
+  // (football, basketball, soccer, baseball each have dedicated 3-day and 4-day blocks)
 
   // For conditioning-dominant goals, use conditioning-specific session architectures
   if (isConditioning && !isAthletic) {
@@ -540,10 +534,503 @@ function buildSessionsForDayCount(
     }
   }
 
-  // Sport with conditioning emphasis — add a dedicated conditioning day where days allow
+  // ─── FOOTBALL — Acceleration + Force + Power + Repeat Effort ───────────────
+  const isFootball = !!(sport && /\bfootball\b/i.test(sport) && !/soccer/.test(sport.toLowerCase()));
+  if (isFootball) {
+    if (daysPerWeek === 3) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Acceleration + Lower Force Production",
+          intent: "Sprint mechanics (0–20m) + bilateral lower-body strength — the two defining football physical qualities",
+          neuralDemand: "high",
+          primaryPattern: "squat",
+          emphasizedPatterns: ["locomotion", "squat", "hinge", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Sprint activation: 10 min — A-skip × 2 × 20m → broad jump × 3 sub-max → build-up strides × 3 at 70%, 85%, 95%" },
+            { role: "power", description: "ACCELERATION: 5 × 10m + 4 × 20m with 90 sec between 10m and 2 min between 20m. 100% effort every rep. Standing or 3-point start." },
+            { role: "primary", description: "LOWER FORCE: Heavy bilateral compound — Back Squat or Trap Bar Deadlift (4 × 3-5 @ 80-87%). The strength foundation for collision and acceleration." },
+            { role: "secondary", description: "Posterior chain support: Romanian DL or Hip Thrust (3 × 5-8) — hamstring and glute resilience for sprint demand" },
+            { role: "trunk", description: "Collision trunk: Pallof press (3 × 10 each side) + Farmer Carry (3 × 30m) — trunk bracing for contact" },
+          ],
+          sportNotes: "Football: Acceleration + heavy lower on the same day — force application in the gym mirrors force application on the field",
+        },
+        {
+          dayNumber: 2,
+          identity: "Upper Structural Strength",
+          intent: "Horizontal press and pull balance for collision-ready upper body — NOT bodybuilding volume",
+          neuralDemand: "moderate",
+          primaryPattern: "upper_push",
+          emphasizedPatterns: ["upper_push", "upper_pull", "trunk", "rotational"],
+          cnsFlow: [
+            { role: "prep", description: "Upper prep: scapular activation, band pull-apart × 3 × 15, wall slide × 2 × 10" },
+            { role: "power", description: "EXPLOSIVE PUSH: Med ball chest throw (4 × 5) or explosive push-up (4 × 4) — upper power for shedding blocks and contact" },
+            { role: "primary", description: "Horizontal press: Bench Press or Dumbbell Press (4 × 4-6 @ 80%) — collision-ready chest and shoulder development" },
+            { role: "secondary", description: "Horizontal pull: Bent-Over Row or Cable Row (4 × 5-8) — scapular stability and shoulder health balance" },
+            { role: "trunk", description: "Rotational trunk: Landmine Rotation (3 × 8 each) + Pallof Press (2 × 10 each side)" },
+          ],
+          sportNotes: "Football upper: balanced press/pull — contact athletes cannot have press-dominant upper body imbalance",
+        },
+        {
+          dayNumber: 3,
+          identity: "Power Development + Repeat Effort",
+          intent: "Contrast training and plyometrics for rate of force development; anaerobic repeat effort conditioning — football-specific",
+          neuralDemand: "high",
+          primaryPattern: "power",
+          emphasizedPatterns: ["power", "hinge", "trunk", "locomotion"],
+          cnsFlow: [
+            { role: "prep", description: "Power activation: dynamic lower prep → box jump (2 × 3 sub-max)" },
+            { role: "power", description: "CONTRAST PAIR: Trap Bar DL or Hex Bar DL (4 × 2-3 @ 85-90%) → Box Jump or Broad Jump (4 × 4) with 4 min between primary and jump — PAP potentiation" },
+            { role: "primary", description: "SECOND POWER PAIR: Heavy Sled Push (4 × 20m) → Med Ball Overhead Scoop Toss (4 × 5) — force application transfer" },
+            { role: "secondary", description: "Nordic Hamstring Curl (3 × 4-6) — mandatory for sprint resilience" },
+            { role: "trunk", description: "CONDITIONING FINISHER: REPEAT EFFORT — 6–8 × 20m sprints at 100% with 90 sec rest. ANAEROBIC CAPACITY, not endurance. 2 min between sets of 3." },
+          ],
+          sportNotes: "Football power day: contrast pairs for RFD + anaerobic repeat effort conditioning — NOT aerobic endurance conditioning",
+        },
+      ];
+    }
+    if (daysPerWeek === 4) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Acceleration + Lower Force Production",
+          intent: "Sprint mechanics + heavy bilateral lower strength — the foundation football session",
+          neuralDemand: "high",
+          primaryPattern: "squat",
+          emphasizedPatterns: ["locomotion", "squat", "hinge", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Sprint prep: 10 min — A-skip + B-skip + build-up strides × 3" },
+            { role: "power", description: "ACCELERATION: 6 × 10m + 5 × 20m with full recovery. 3-point or standing start. 100% every rep." },
+            { role: "primary", description: "Back Squat or Trap Bar DL (4 × 3-5 @ 82-88%) — lower force production foundation" },
+            { role: "secondary", description: "Romanian DL or Nordic Hamstring Curl (3 × 5-8) — posterior chain resilience" },
+            { role: "trunk", description: "Pallof Press (3 × 10 each) + Loaded Carry (3 × 30m)" },
+          ],
+          sportNotes: "Football Day 1: Sprint before lifting — always. Acceleration mechanics are the highest priority.",
+        },
+        {
+          dayNumber: 2,
+          identity: "Upper Structural Strength",
+          intent: "Bilateral upper pressing + pulling balance — structural strength for collision sport demands",
+          neuralDemand: "moderate",
+          primaryPattern: "upper_push",
+          emphasizedPatterns: ["upper_push", "upper_pull", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Upper activation: scapular prep, band pull-apart, face pull warm-up" },
+            { role: "power", description: "Med Ball Chest Throw (4 × 5) — explosive horizontal power for contact" },
+            { role: "primary", description: "Bench Press (4 × 4-6 @ 80%) + Incline Dumbbell Press (3 × 6-8) — collision upper strength" },
+            { role: "secondary", description: "Barbell Row + Face Pull (4 × 6-8 each) — scapular balance and shoulder health" },
+            { role: "trunk", description: "Landmine Rotation (3 × 8 each side) — rotational trunk for contact sport demands" },
+          ],
+          sportNotes: "Football upper: equal pressing and pulling volume — contact sport demands balanced shoulder health",
+        },
+        {
+          dayNumber: 3,
+          identity: "Power Development — Contrast + Plyometric",
+          intent: "Rate of force development via contrast pairs and plyometrics — explosive performance for play initiation",
+          neuralDemand: "high",
+          primaryPattern: "power",
+          emphasizedPatterns: ["power", "squat", "hinge", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "CNS prep: broad jump × 3 sub-max → A-skip × 20m → build-up stride × 1" },
+            { role: "power", description: "CONTRAST PAIR A: Front Squat (4 × 3 @ 80%) → Box Jump (4 × 4 BW) with 4 min PAP window" },
+            { role: "primary", description: "CONTRAST PAIR B: Power Clean or Hang Clean (4 × 3 @ 70-75%) → Med Ball Overhead Scoop Toss (4 × 5)" },
+            { role: "secondary", description: "Unilateral power: Split Squat jump or Step-Up (2 × 5 each side) — single-leg force application" },
+            { role: "trunk", description: "Anti-rotation: Pallof Press + Dead Bug (2-3 sets each)" },
+          ],
+          sportNotes: "Football power: contrast pairs develop the RFD needed for explosive play — acceleration off the line mirrors PAP mechanics",
+        },
+        {
+          dayNumber: 4,
+          identity: "Repeat Effort Conditioning + Posterior Chain Tissue",
+          intent: "Anaerobic capacity conditioning (football-specific) + posterior chain tissue support — resilience and conditioning",
+          neuralDemand: "moderate",
+          primaryPattern: "hinge",
+          emphasizedPatterns: ["locomotion", "hinge", "unilateral_lower", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Movement prep: jog + dynamic drill series + deceleration mechanic drill" },
+            { role: "power", description: "FOOTBALL CONDITIONING: REPEAT SPRINT ABILITY — 3 sets × 5 × 20m sprints with 20 sec intra-set rest and 3 min between sets. 100% sprint effort. NOT endurance conditioning." },
+            { role: "primary", description: "Posterior chain tissue: Romanian DL (3 × 8-10) + Hip Thrust (3 × 10) — hamstring and glute maintenance for sprint demand" },
+            { role: "secondary", description: "Nordic Hamstring Curl (3 × 5-8) — mandatory hamstring resilience. Non-negotiable for sprint athletes." },
+            { role: "trunk", description: "Loaded Carry complex: Farmer carry + Cross-body carry (3 × 30m each) — trunk integrity under fatigue" },
+          ],
+          sportNotes: "Football conditioning: SHORT sprints with FULL rest — NOT soccer-style long aerobic work. Football repeat effort is anaerobic.",
+        },
+      ];
+    }
+  }
+
+  // ─── BASKETBALL — Reactive Power + Decel + Upper Balance + Repeat Power ─────
+  const isBasketball = !!(sport && /basketball/i.test(sport));
+  if (isBasketball) {
+    if (daysPerWeek === 3) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Reactive Plyometric + Lower Strength",
+          intent: "Vertical and horizontal power via reactive jumps; bilateral lower strength as the force foundation — highest CNS session of the week",
+          neuralDemand: "high",
+          primaryPattern: "power",
+          emphasizedPatterns: ["power", "squat", "unilateral_lower", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "CNS jump prep: 2 × box step-up → 3 × sub-max countermovement jump → lateral shuffle × 2" },
+            { role: "power", description: "REACTIVE PLYOMETRIC BLOCK: Box Jump (4 × 4) → Broad Jump (4 × 4) — maximum height/distance intent every rep. 90 sec between exercises." },
+            { role: "primary", description: "Trap Bar Deadlift or Goblet Squat (4 × 4-6) — joint-friendly bilateral lower strength for vertical power foundation" },
+            { role: "secondary", description: "RFESS or Single-Leg Squat (3 × 6 each side) — single-leg basketball-specific loading" },
+            { role: "trunk", description: "Anti-extension + anti-rotation: Dead Bug (3 × 8) + Pallof Press (3 × 10 each)" },
+          ],
+          sportNotes: "Basketball Day 1: Jumps first — explosive quality must be fresh. Trap bar DL over barbell squat for joint-friendly bilateral loading.",
+        },
+        {
+          dayNumber: 2,
+          identity: "Upper Structural + Trunk",
+          intent: "Press/pull balance for shoulder health; rotational and anti-rotation trunk for contact and landing stability",
+          neuralDemand: "moderate",
+          primaryPattern: "upper_push",
+          emphasizedPatterns: ["upper_push", "upper_pull", "trunk", "rotational"],
+          cnsFlow: [
+            { role: "prep", description: "Upper activation: band pull-apart × 3, wall slide × 2, thoracic extension" },
+            { role: "power", description: "Med Ball Rotational Throw (3 × 5 each) or Chest Throw — upper rotational power for contact and outlet passes" },
+            { role: "primary", description: "Dumbbell Press (4 × 6-8) — shoulder-health-conscious horizontal press" },
+            { role: "secondary", description: "Chin-Up or Cable Row (4 × 6-8) — matching pull volume for shoulder joint health" },
+            { role: "trunk", description: "Rotational trunk: Cable Chop (3 × 8 each) + Copenhagen Plank (3 × 20-30 sec each) — adductor and groin resilience" },
+          ],
+          sportNotes: "Basketball upper: shoulder health priority — dumbbell over barbell for joint tolerance; face pull in warm-up; balanced push:pull",
+        },
+        {
+          dayNumber: 3,
+          identity: "Deceleration + Landing Mechanics + Repeat Power Conditioning",
+          intent: "Landing mechanics and reactive deceleration — distinct from pure strength; basketball conditioning: repeat power efforts, NOT aerobic endurance",
+          neuralDemand: "moderate",
+          primaryPattern: "power",
+          emphasizedPatterns: ["power", "unilateral_lower", "lateral", "locomotion"],
+          cnsFlow: [
+            { role: "prep", description: "Movement prep: lateral shuffle × 2 × 20m → backpedal → decel pattern × 2" },
+            { role: "power", description: "DECELERATION + ELASTIC: Depth Jump (3 × 4) — land and IMMEDIATELY jump. Contact time is the metric. Then Lateral Bound (3 × 4 each side)" },
+            { role: "primary", description: "Nordic Hamstring Curl (3 × 5-8) + Single-Leg RDL (3 × 8 each) — tendon resilience and hamstring load tolerance" },
+            { role: "trunk", description: "CONDITIONING: REPEAT POWER — 6–8 × court sprint (baseline to half and back) at 100% with 60 sec rest. NOT endurance — explosive court transitions." },
+          ],
+          sportNotes: "Basketball: deceleration and landing mechanics are as important as acceleration — this session trains the qualities that prevent patellar tendon and ACL injuries",
+        },
+      ];
+    }
+    if (daysPerWeek === 4) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Reactive Plyometric + Lower Strength",
+          intent: "Vertical power first — jumps before lifting. Bilateral lower strength as the power foundation.",
+          neuralDemand: "high",
+          primaryPattern: "power",
+          emphasizedPatterns: ["power", "squat", "unilateral_lower", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Jump prep: 3 × sub-max CMJ → 2 × broad jump" },
+            { role: "power", description: "BOX JUMP (4 × 4) → BROAD JUMP (4 × 4). Maximum height/distance. 90 sec between each exercise. Step down from box every time." },
+            { role: "primary", description: "Trap Bar Deadlift (4 × 4-6 @ 75-82%) — foundational lower strength" },
+            { role: "secondary", description: "RFESS (3 × 6 each side) — single-leg stability and asymmetry management" },
+            { role: "trunk", description: "Copenhagen Plank (3 × 20-30 sec each side) + Dead Bug (3 × 8)" },
+          ],
+          sportNotes: "Basketball: Box jump before the heavy lift — CNS must be fresh for reactive power expression",
+        },
+        {
+          dayNumber: 2,
+          identity: "Upper Structural + Shoulder Health",
+          intent: "Balanced pressing and pulling for shoulder joint longevity — NOT hypertrophy focus",
+          neuralDemand: "moderate",
+          primaryPattern: "upper_push",
+          emphasizedPatterns: ["upper_push", "upper_pull", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Shoulder prep: band pull-apart × 20 + face pull × 15 + wall slide × 10" },
+            { role: "primary", description: "Dumbbell Press (4 × 6-8) + Landmine Press (3 × 8 each) — joint-friendly pressing patterns" },
+            { role: "secondary", description: "Weighted Chin-Up (4 × 5-8) + Face Pull (3 × 15) — pull volume equals press volume for shoulder health" },
+            { role: "trunk", description: "Rotational + anti-rotation: Pallof Press (3 × 10 each) + Cable Chop (3 × 8 each)" },
+          ],
+          sportNotes: "Basketball upper: equal push:pull volume — shoulder health determines career longevity",
+        },
+        {
+          dayNumber: 3,
+          identity: "Deceleration + Landing + Elastic Power",
+          intent: "Landing mechanics, stretch-shortening cycle at full intensity, single-leg resilience — distinct from Day 1 plyometric emphasis",
+          neuralDemand: "moderate",
+          primaryPattern: "power",
+          emphasizedPatterns: ["power", "unilateral_lower", "lateral", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Decel prep: snap-down drill × 3 → lateral shuffle → backpedal break mechanic × 3" },
+            { role: "power", description: "DEPTH JUMP (3 × 4) — step off, land, IMMEDIATELY jump. Develops elastic SSC. LATERAL BOUND (3 × 4 each) — reactive lateral power for defensive movements." },
+            { role: "primary", description: "Nordic Hamstring Curl (3 × 5-6) — tendon resilience mandatory for basketball athletes" },
+            { role: "secondary", description: "Single-Leg Squat or Pistol Squat (3 × 5-8 each side) — unilateral vertical force" },
+            { role: "trunk", description: "Anti-rotation: Half-Kneeling Pallof + Copenhagen Plank (2-3 sets each)" },
+          ],
+          sportNotes: "Basketball deceleration day: teaches the landing mechanics and deceleration capacity that prevent patellar tendon and ACL injuries",
+        },
+        {
+          dayNumber: 4,
+          identity: "Repeat Power Conditioning + Mobility Support",
+          intent: "Basketball-specific conditioning: repeat explosive efforts, NOT long aerobic work; mobility and tissue maintenance",
+          neuralDemand: "moderate",
+          primaryPattern: "locomotion",
+          emphasizedPatterns: ["locomotion", "lateral", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Court prep: jog → lateral shuffle × 2 → 3-cone drill at 60% × 2" },
+            { role: "power", description: "BASKETBALL CONDITIONING: 8 × court sprint (full court and back) at 100% with 45-60 sec rest. EXPLOSIVE — not a jog. Add line drill complex if court available." },
+            { role: "secondary", description: "Hip Thrust (3 × 10) + Calf Raise (3 × 15) — posterior chain and ankle tendon maintenance for jump athletes" },
+            { role: "trunk", description: "Mobility: hip flexor stretch, ankle mobility, thoracic rotation + light core maintenance" },
+          ],
+          sportNotes: "Basketball conditioning: short explosive court efforts with full rest — mirrors game demands. NOT aerobic endurance.",
+        },
+      ];
+    }
+  }
+
+  // ─── SOCCER — Aerobic + RSA + Hamstring Resilience + Tissue Protection ──────
+  const isSoccer = !!(sport && /soccer|association football/i.test(sport));
+  if (isSoccer) {
+    if (daysPerWeek === 3) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Acceleration + Hamstring Resilience",
+          intent: "Sprint mechanics (0–20m) + Nordic curl and single-leg posterior chain — addresses the two most common soccer injury vectors in one session",
+          neuralDemand: "high",
+          primaryPattern: "hinge",
+          emphasizedPatterns: ["locomotion", "hinge", "unilateral_lower", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Sprint warm-up: 10 min jog → A-skip × 2 × 20m → high knees × 2 × 20m → build-up strides × 3 at 70%, 85%, 95%" },
+            { role: "power", description: "ACCELERATION: 5 × 10m + 4 × 20m with 90 sec between 10m, 2 min between 20m. 100% effort." },
+            { role: "primary", description: "HAMSTRING RESILIENCE: Nordic Hamstring Curl (3 × 5-8) — MANDATORY for soccer. Non-negotiable tissue protection." },
+            { role: "secondary", description: "Single-Leg RDL (3 × 8-10 each side) + Hip Thrust (3 × 10) — posterior chain tissue loading for sprint resilience" },
+            { role: "trunk", description: "ADDUCTOR: Copenhagen Plank (3 × 20-30 sec each side) — mandatory. Adductor injuries are the second-highest soccer injury type." },
+          ],
+          sportNotes: "Soccer Day 1: Nordic curl and Copenhagen plank are mandatory — these are the highest-ROI injury prevention tools for soccer athletes",
+        },
+        {
+          dayNumber: 2,
+          identity: "Upper Structural + Trunk + Single-Leg Support",
+          intent: "Upper strength balance + rotational trunk + unilateral lower support — structural maintenance in a lower-dominant sport",
+          neuralDemand: "moderate",
+          primaryPattern: "upper_push",
+          emphasizedPatterns: ["upper_push", "upper_pull", "trunk", "unilateral_lower"],
+          cnsFlow: [
+            { role: "prep", description: "General activation: hip mobility, thoracic rotation, shoulder prep" },
+            { role: "primary", description: "Upper push + pull: Bench Press or Dumbbell Press (3 × 6-8) + Bent Row (3 × 6-8) — structural balance for aerial duels and contact" },
+            { role: "secondary", description: "Vertical pull: Chin-Up or Lat Pulldown (3 × 8-10) + Face Pull (3 × 15) — scapular health" },
+            { role: "trunk", description: "Rotational trunk: Pallof Press (3 × 10 each) + Lateral Lunge (3 × 8 each side) — adductor and COD support" },
+          ],
+          sportNotes: "Soccer upper: relatively low volume — focus on structural balance for aerial duels and shoulder health",
+        },
+        {
+          dayNumber: 3,
+          identity: "Repeat Sprint Conditioning + Lower Tissue",
+          intent: "RSA conditioning: the most sport-specific soccer session — sprint repeats with incomplete recovery + calf and adductor tissue maintenance",
+          neuralDemand: "high",
+          primaryPattern: "locomotion",
+          emphasizedPatterns: ["locomotion", "hinge", "lateral"],
+          cnsFlow: [
+            { role: "prep", description: "RSA warm-up: 5 min jog → dynamic drill series → 3 × 30m build-up strides" },
+            { role: "power", description: "REPEAT SPRINT ABILITY: 3 sets × 5 × 20-30m sprints with 20 sec intra-set rest and 3 min between sets. This is NOT conditioning circuits. Real sprint effort, real work:rest." },
+            { role: "secondary", description: "AEROBIC SUPPORT: 15 min run at 65-70% max HR following RSA work — aerobic base underpins sprint recovery" },
+            { role: "trunk", description: "Lower tissue maintenance: Calf Raise (3 × 15) + Copenhagen Plank (2 × 30 sec each) — mandatory every session" },
+          ],
+          sportNotes: "Soccer RSA day: real sprint intervals with real rest — NOT circuits. Soccer repeat sprint ability is the most sport-defining quality.",
+        },
+      ];
+    }
+    if (daysPerWeek === 4) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Acceleration + Hamstring Resilience",
+          intent: "Sprint mechanics + Nordic curl + posterior chain tissue — the most important soccer injury prevention session",
+          neuralDemand: "high",
+          primaryPattern: "hinge",
+          emphasizedPatterns: ["locomotion", "hinge", "unilateral_lower", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Sprint prep: 10 min warm-up → A-skip + high knees → build-up strides × 3" },
+            { role: "power", description: "ACCELERATION: 5 × 10m + 5 × 20m with full rest. Every rep 100%." },
+            { role: "primary", description: "Nordic Hamstring Curl (4 × 5-8) — mandatory every lower session in soccer. Most common soccer injury prevention." },
+            { role: "secondary", description: "Single-Leg RDL (3 × 8 each side) + Hip Thrust (3 × 10) — posterior chain resilience" },
+            { role: "trunk", description: "Copenhagen Plank (3 × 25 sec each side) — mandatory. Adductor resilience." },
+          ],
+          sportNotes: "Soccer: Nordic curl + Copenhagen plank are mandatory in EVERY lower session — not optional, not substitutable",
+        },
+        {
+          dayNumber: 2,
+          identity: "Aerobic Base / Tempo + Lower Tissue Support",
+          intent: "Dedicated aerobic conditioning + adductor/calf tissue maintenance — soccer aerobic base is non-negotiable",
+          neuralDemand: "low",
+          primaryPattern: "locomotion",
+          emphasizedPatterns: ["locomotion", "unilateral_lower"],
+          cnsFlow: [
+            { role: "prep", description: "Easy warm-up: 5 min jog + dynamic stretching + calf activation" },
+            { role: "primary", description: "AEROBIC BASE: 25-35 min steady-state run at 65-73% max HR OR 4 × 6 min at 80-85% HR (lactate threshold) with 3 min rest. Soccer demands aerobic capacity for 90 minutes." },
+            { role: "secondary", description: "Calf Raise (3 × 15) + Tibialis Raise (2 × 15) — calf and ankle tissue maintenance for running volume" },
+            { role: "trunk", description: "Copenhagen Plank (2 × 20 sec each side) + Lateral Lunge (2 × 8 each side) — adductor maintenance session" },
+          ],
+          sportNotes: "Soccer aerobic day: real running conditioning. 10-13km per game demands this foundation. No lifting today — full aerobic development.",
+        },
+        {
+          dayNumber: 3,
+          identity: "Upper Structural + Trunk + Single-Leg",
+          intent: "Upper strength balance + lower unilateral strength support + trunk — structural maintenance week",
+          neuralDemand: "moderate",
+          primaryPattern: "upper_push",
+          emphasizedPatterns: ["upper_push", "upper_pull", "trunk", "unilateral_lower"],
+          cnsFlow: [
+            { role: "prep", description: "General prep: hip flexor stretch, thoracic rotation, shoulder warm-up" },
+            { role: "primary", description: "Dumbbell Press (3 × 8) + Bent Row (3 × 8) — balanced upper structural strength" },
+            { role: "secondary", description: "Chin-Up (3 × 8) + Lateral Lunge (3 × 8 each side) — upper pull + adductor strength" },
+            { role: "trunk", description: "Pallof Press (3 × 10 each) + Single-Leg Squat (3 × 8 each side) — anti-rotation trunk + single-leg strength" },
+          ],
+          sportNotes: "Soccer upper day: moderate volume — structural balance for heading duels and collision resilience without fatiguing the lower body",
+        },
+        {
+          dayNumber: 4,
+          identity: "Repeat Sprint Conditioning + Lower Tissue",
+          intent: "RSA: the most sport-specific soccer conditioning — sprint repeats with partial rest + posterior chain/adductor tissue protection",
+          neuralDemand: "high",
+          primaryPattern: "locomotion",
+          emphasizedPatterns: ["locomotion", "hinge", "lateral"],
+          cnsFlow: [
+            { role: "prep", description: "RSA prep: 5 min jog → dynamic drill → 3 × build-up strides" },
+            { role: "power", description: "REPEAT SPRINT ABILITY: 4 sets × 4 × 20-30m sprint with 20 sec between reps and 3 min between sets. 100% sprint effort. Full rest between sets." },
+            { role: "secondary", description: "Nordic Hamstring Curl (3 × 5-8) — maintained even on conditioning days — hamstring protection is highest priority" },
+            { role: "trunk", description: "Copenhagen Plank (2 × 25 sec each) + Calf Raise (3 × 15) — tissue maintenance after sprint load" },
+          ],
+          sportNotes: "Soccer RSA day: sprint intervals with partial recovery — the most sport-specific quality for soccer performance and game endurance",
+        },
+      ];
+    }
+  }
+
+  // ─── BASEBALL — Rotational Power + Arm Care + Short Acceleration ─────────────
+  const isBaseball = !!(sport && /baseball|softball/i.test(sport));
+  if (isBaseball) {
+    if (daysPerWeek === 3) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Rotational Power + Lower Strength",
+          intent: "Med ball rotational throws + trap bar DL — the two most important physical qualities for baseball athletes",
+          neuralDemand: "high",
+          primaryPattern: "rotational",
+          emphasizedPatterns: ["rotational", "hinge", "squat", "power", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Rotational prep: hip rotation mobility → band hip flexor → rotational med ball throw × 3 sub-max" },
+            { role: "power", description: "ROTATIONAL POWER: Med Ball Rotational Throw (4 × 6 each side) at maximum effort — hip-driven rotation. Then Med Ball Overhead Scoop Toss (4 × 5) for posterior chain power." },
+            { role: "primary", description: "LOWER STRENGTH: Trap Bar Deadlift (4 × 4-6 @ 78-85%) — bilateral posterior chain without high lumbar stress" },
+            { role: "secondary", description: "Single-Leg RDL (3 × 8 each side) — unilateral posterior chain for throwing stride and fielding stance resilience" },
+            { role: "trunk", description: "ANTI-ROTATION: Pallof Press (3 × 10 each side) + Landmine Rotation (3 × 8 each) — trunk stiffness converts hip rotation to power" },
+          ],
+          sportNotes: "Baseball: med ball rotational throw is as important as any barbell exercise. This session is the foundation of batting and throwing power.",
+        },
+        {
+          dayNumber: 2,
+          identity: "Arm-Care Upper + Shoulder Balance",
+          intent: "Pressing and pulling balance with mandatory shoulder care — arm-care-conscious upper development for throwing sport athletes",
+          neuralDemand: "moderate",
+          primaryPattern: "upper_pull",
+          emphasizedPatterns: ["upper_push", "upper_pull", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "ARM CARE PREP: Band pull-apart × 20 + Face Pull × 15 + External rotation drill × 10 each side — MANDATORY every upper session" },
+            { role: "primary", description: "PULL-DOMINANT UPPER: Weighted Chin-Up or Cable Row (4 × 6-8) — scapular strength and shoulder health first" },
+            { role: "secondary", description: "PRESS BALANCED: Landmine Press (3 × 8 each side) or Dumbbell Press (3 × 8) — arm-care-conscious press. NOT heavy barbell overhead for pitchers." },
+            { role: "trunk", description: "SCAPULAR + ROTATOR: Y/T/W Band Work (2 × 10 each) + Face Pull (3 × 15) — scapular upward rotation and retraction for throwing health" },
+          ],
+          sportNotes: "Baseball upper: arm care is the HIGHEST priority. Face pull and external rotation are mandatory. Pull volume ≥ push volume. Never press-dominant for pitchers.",
+        },
+        {
+          dayNumber: 3,
+          identity: "Acceleration + Med Ball + Unilateral",
+          intent: "Short sprint acceleration (0–30m) + med ball power + single-leg strength — sport-transfer session",
+          neuralDemand: "high",
+          primaryPattern: "locomotion",
+          emphasizedPatterns: ["locomotion", "power", "rotational", "unilateral_lower"],
+          cnsFlow: [
+            { role: "prep", description: "Sprint + power prep: jog → build-up strides × 3 → sub-max broad jump × 2" },
+            { role: "power", description: "ACCELERATION: 5 × 20m + 4 × 30m sprints with full rest — baserunning and fielding sprint mechanics. Short, not distance." },
+            { role: "primary", description: "ROTATIONAL POWER: Med Ball Rotational Throw (4 × 5 each side) + Med Ball Slam (3 × 5) — power expression without barbell loading" },
+            { role: "secondary", description: "RFESS (3 × 8 each side) + Calf Raise (3 × 15) — unilateral lower for fielding stance and baserunning" },
+            { role: "trunk", description: "CONDITIONING: 8–10 × 20-30m sprints at 100% with 90 sec rest — baseball work capacity. SHORT. Not aerobic endurance." },
+          ],
+          sportNotes: "Baseball: short sprint acceleration (not distance running). Med ball rotational throws are the conditioning of baseball — they build the rotational power that defines the sport.",
+        },
+      ];
+    }
+    if (daysPerWeek === 4) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Rotational Power + Lower Strength",
+          intent: "Hip-driven rotational power via med ball + bilateral lower strength — the foundation of hitting and throwing",
+          neuralDemand: "high",
+          primaryPattern: "rotational",
+          emphasizedPatterns: ["rotational", "hinge", "squat", "power", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Rotational activation: hip rotation drills → sub-max med ball throw × 3" },
+            { role: "power", description: "ROTATIONAL POWER: Med Ball Rotational Throw (5 × 5 each side) at max effort → Med Ball Overhead Scoop Toss (4 × 5)" },
+            { role: "primary", description: "Trap Bar Deadlift (4 × 4-6 @ 80-85%) — bilateral posterior chain foundation" },
+            { role: "secondary", description: "Single-Leg RDL (3 × 8 each side) — unilateral posterior chain resilience" },
+            { role: "trunk", description: "Pallof Press (3 × 10 each) + Landmine Rotation (3 × 8 each) — anti-rotation and rotational trunk" },
+          ],
+          sportNotes: "Baseball Day 1: Rotational power is the highest priority — med ball work comes first",
+        },
+        {
+          dayNumber: 2,
+          identity: "Arm-Care Upper + Shoulder Balance",
+          intent: "Pull-dominant upper strength + mandatory rotator cuff and scapular care — throwing sport demands this every session",
+          neuralDemand: "moderate",
+          primaryPattern: "upper_pull",
+          emphasizedPatterns: ["upper_pull", "upper_push", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "ARM CARE: Band pull-apart × 20 + Face Pull × 15 + External Rotation × 10 each — mandatory before any loading" },
+            { role: "primary", description: "Weighted Chin-Up (4 × 5-8) + Barbell Row (4 × 6-8) — pull strength foundation" },
+            { role: "secondary", description: "Landmine Press (3 × 8 each) or Dumbbell Press (3 × 8) — press with arm-care constraint" },
+            { role: "trunk", description: "Y/T/W scapular (2 × 10 each) + Face Pull (3 × 15) + External Rotation Stretch" },
+          ],
+          sportNotes: "Baseball arm care: face pull and external rotation every single upper session. This is non-negotiable for shoulder longevity.",
+        },
+        {
+          dayNumber: 3,
+          identity: "Acceleration + Med Ball Power",
+          intent: "Short sprint acceleration + additional rotational med ball work — sport-specific power transfer session",
+          neuralDemand: "high",
+          primaryPattern: "locomotion",
+          emphasizedPatterns: ["locomotion", "rotational", "power", "unilateral_lower"],
+          cnsFlow: [
+            { role: "prep", description: "Sprint + power prep: jog → build-up strides × 3 → sub-max broad jump × 2" },
+            { role: "power", description: "ACCELERATION: 6 × 20m + 5 × 30m with full rest — 100% effort, baserunning mechanics" },
+            { role: "primary", description: "Med Ball Power Circuit: Rotational Throw (4 × 5 each) + Med Ball Slam (3 × 5) + Chest Throw (3 × 5) — multi-plane power expression" },
+            { role: "secondary", description: "RFESS (3 × 8 each) + Step-Up (2 × 10 each) — fielding stance and baserunning single-leg strength" },
+          ],
+          sportNotes: "Baseball acceleration: 0-30m only. Baserunners never need max velocity — acceleration is the only sprint quality that matters.",
+        },
+        {
+          dayNumber: 4,
+          identity: "Trunk / Scapular / Tissue Support",
+          intent: "Anti-rotation trunk integrity, scapular control, unilateral resilience — injury prevention and power transfer architecture",
+          neuralDemand: "low",
+          primaryPattern: "trunk",
+          emphasizedPatterns: ["trunk", "upper_pull", "unilateral_lower"],
+          cnsFlow: [
+            { role: "prep", description: "Mobility: hip rotation, thoracic rotation, shoulder flexion + extension" },
+            { role: "primary", description: "SCAPULAR WORK: Y/T/W (3 × 10 each) + Serratus Press (3 × 12) + Band External Rotation (3 × 15 each) — throwing health maintenance" },
+            { role: "secondary", description: "TRUNK: Pallof Press (4 × 10 each side) + Half-Kneeling Cable Chop (3 × 8 each) + Dead Bug (3 × 8) — stiffness for rotation power transfer" },
+            { role: "trunk", description: "CONDITIONING: 8-10 × 20m sprints with 90 sec rest OR Assault Bike 4 × 30 sec at max with 2 min rest — brief work capacity, NOT aerobic endurance" },
+          ],
+          sportNotes: "Baseball tissue day: shoulder health maintenance + trunk integrity. This session prevents the injuries that end baseball careers.",
+        },
+      ];
+    }
+  }
+
+  // ─── Generic isSportConditioning fallback (rugby, lacrosse, other field sports)
+  const isSportConditioning = !!(sport && (
+    sport.toLowerCase().includes("rugby") ||
+    sport.toLowerCase().includes("lacrosse") ||
+    sport.toLowerCase().includes("volleyball")
+  ));
+
   if (isSportConditioning && daysPerWeek >= 4) {
     const strengthDays = buildSessionsForDayCount(daysPerWeek - 1, sport, "athletic_performance");
-    // Replace the last session with a dedicated sport conditioning day
     return [
       ...strengthDays.slice(0, daysPerWeek - 1),
       {
@@ -911,6 +1398,11 @@ export function buildArchitectureBrief(
 
   const arch = computeWeeklyArchitecture(daysPerWeek, sport, goal);
   const isHockey = sport?.toLowerCase().includes("hockey") ?? false;
+  const isFootball = !!(sport && /\bfootball\b/i.test(sport) && !/soccer/.test(sport.toLowerCase()));
+  const isBasketball = !!(sport && /basketball/i.test(sport));
+  const isSoccer = !!(sport && /soccer|association football/i.test(sport));
+  const isBaseball = !!(sport && /baseball|softball/i.test(sport));
+  const hasSportProfile = isFootball || isBasketball || isSoccer || isBaseball || isHockey;
   const isConditioningGoal = !!(
     goal?.toLowerCase().includes("conditioning") ||
     goal?.toLowerCase().includes("endurance") ||
@@ -966,6 +1458,81 @@ REDUCE or ELIMINATE:
 - High-volume quad-dominant loading without corresponding posterior chain balance
 ` : "";
 
+  const footballOverlay = isFootball ? `
+## FOOTBALL-SPECIFIC OVERLAY — MANDATORY
+This program is for an American football athlete. Structural rules:
+- **Acceleration work COMES FIRST** in every lower/full-body session — sprint before lifting
+- **Conditioning is ANAEROBIC ONLY** — short sprint repeats (10–30m), full rest between efforts. NO long aerobic conditioning.
+- **Heavy bilateral lower is the strength foundation** — back squat or trap bar DL at 80%+ 1RM
+- **Trunk bracing for collision** — loaded carry and Pallof press in every session
+- **Upper press:pull must be balanced** — contact sport demands shoulder integrity
+- **Med ball and contrast pairs** develop rate of force development — use in power sessions
+ELIMINATE from this football program:
+- Long-duration steady-state cardio
+- Soccer-style aerobic conditioning
+- Pure hypertrophy isolation work without collision-transfer purpose
+` : "";
+
+  const basketballOverlay = isBasketball ? `
+## BASKETBALL-SPECIFIC OVERLAY — MANDATORY
+This program is for a basketball athlete. Structural rules:
+- **Reactive plyometrics COME FIRST** in every lower session — jumps before lifting when CNS is fresh
+- **Deceleration and landing mechanics** are required — not optional, not substitutable by conditioning
+- **Single-leg strength in every lower session** — all basketball actions are single-leg
+- **Conditioning is EXPLOSIVE, NOT AEROBIC** — court sprints, line drills, repeat explosive efforts with full rest
+- **Trap bar over barbell squat** — joint-friendly bilateral loading for tendon-sensitive athletes
+- **Shoulder health is non-negotiable** — push:pull balanced, face pull in warm-up, dumbbell over barbell where appropriate
+- **Copenhagen plank** — adductor and groin resilience in every lower session
+ELIMINATE from this basketball program:
+- Long-duration aerobic conditioning
+- Heavy barbell back squat without adequate deceleration and landing mechanics first
+- Pure isolated chest/arm hypertrophy without athletic transfer
+` : "";
+
+  const soccerOverlay = isSoccer ? `
+## SOCCER-SPECIFIC OVERLAY — MANDATORY
+This program is for a soccer athlete. Structural rules:
+- **Nordic hamstring curl is MANDATORY** in every lower session — most common soccer injury vector. Non-negotiable.
+- **Copenhagen plank is MANDATORY** in every lower session — adductor injuries are the second-highest soccer injury type
+- **BOTH aerobic conditioning AND repeat sprint ability** are required — they are not interchangeable
+- **Single-leg strength in every lower session** — all soccer movement is single-leg
+- **Calf and ankle loading** are included — high running volume demands calf tissue resilience
+- **Conditioning sessions must include real intervals** — named energy system work with work:rest ratios
+ELIMINATE from this soccer program:
+- Conditioning sessions that replace real sprint work with circuits
+- Programs that ignore hamstring/adductor tissue loading
+- Football-style anaerobic-only conditioning without aerobic base component
+` : "";
+
+  const baseballOverlay = isBaseball ? `
+## BASEBALL-SPECIFIC OVERLAY — MANDATORY
+This program is for a baseball athlete. Structural rules:
+- **Med ball rotational throws are required** in every power session — rotational power IS baseball training
+- **Face pull and band external rotation EVERY upper session** — arm care is non-negotiable for throwing sport athletes
+- **Pull volume ≥ push volume** — scapular health demands more pulling than pressing
+- **Conditioning is SHORT** — sprint repeats (20–30m) with full recovery only. NO soccer-style aerobic volume.
+- **Conditioning preserves power freshness** — never sacrifice rotational power quality for conditioning volume
+- **Trap bar over barbell** — safer bilateral loading pattern for rotational athletes
+- **Anti-rotation trunk** (Pallof press) is required — stiff trunk converts hip rotation to power
+ELIMINATE from this baseball program:
+- High-volume internal rotation dominant pressing without arm-care balance
+- Soccer-style long-duration conditioning
+- Generic bodybuilding shoulder volume without rotator cuff and scapular control work
+` : "";
+
+  const sportOverlayBlock = hasSportProfile
+    ? `${footballOverlay}${basketballOverlay}${soccerOverlay}${baseballOverlay}${hockeyOverlay}`
+    : hockeyOverlay;
+
+  const sportValidationLines = (() => {
+    if (isFootball) return "\n- [ ] Acceleration sprint work present (10–20m)\n- [ ] Conditioning is anaerobic only — NO long aerobic sessions\n- [ ] Heavy bilateral lower present (80%+ 1RM)\n- [ ] Trunk bracing (Pallof press or loaded carry) in ≥2 sessions\n- [ ] Upper press:pull balanced";
+    if (isBasketball) return "\n- [ ] Reactive plyometrics before lifting in lower sessions\n- [ ] Deceleration and landing mechanics session included\n- [ ] Single-leg strength in every lower session\n- [ ] Conditioning is explosive court efforts — NOT aerobic endurance\n- [ ] Push:pull balanced in upper sessions";
+    if (isSoccer) return "\n- [ ] Nordic hamstring curl in EVERY lower session\n- [ ] Copenhagen plank in EVERY lower session\n- [ ] BOTH aerobic conditioning AND RSA conditioning included\n- [ ] Single-leg strength in every lower session\n- [ ] Calf or ankle loading present";
+    if (isBaseball) return "\n- [ ] Med ball rotational throw in every power session\n- [ ] Face pull or external rotation in every upper session\n- [ ] Pull volume ≥ push volume\n- [ ] Conditioning is short sprint work ONLY — no aerobic endurance volume\n- [ ] Anti-rotation trunk (Pallof press) included";
+    if (isHockey) return "\n- [ ] Lateral and rotational patterns present in ≥3 sessions\n- [ ] Copenhagen plank or adductor work in every lower-body day\n- [ ] Pallof press in ≥2 sessions";
+    return "";
+  })();
+
   return `## PROGRAM ARCHITECTURE BRIEF — MANDATORY STRUCTURE
 The following architecture MUST be used as the blueprint for this program.
 DO NOT begin exercise selection until this structure is established.
@@ -990,7 +1557,7 @@ ${arch.recoveryNotes}
 - Push:pull ratio must be balanced across the week
 - Every session MUST include trunk work (not optional)
 - Power/explosive work always comes first when CNS is fresh (after prep only)
-${conditioningOverlay}${hockeyOverlay}
+${conditioningOverlay}${sportOverlayBlock}
 ### EXERCISE SELECTION MANDATE
 Only AFTER the above architecture is locked, select exercises that:
 1. Match the session's primary and secondary patterns
@@ -1008,8 +1575,7 @@ Only AFTER the above architecture is locked, select exercises that:
 - [ ] Every session has power/explosive work (unless injury contraindicates)
 - [ ] Every session has at least one unilateral lower-body movement (lower/full-body days)
 - [ ] No repeated primary lifts across sessions
-- [ ] Exercise intents are performance cues, not muscle labels
-${isHockey ? "- [ ] Lateral and rotational patterns present in ≥3 sessions\n- [ ] Copenhagen plank or adductor work in every lower-body day\n- [ ] Pallof press in ≥2 sessions" : ""}${isConditioningGoal ? "\n- [ ] Dedicated conditioning sessions include named energy system (aerobic base / lactate threshold / VO2max / anaerobic capacity / RSA)\n- [ ] Every conditioning exercise has work duration, rest duration, and interval count\n- [ ] Conditioning sessions do NOT default to circuits — real intervals required\n- [ ] Progression is stated: Week 1 → Week 3 → Week 5" : ""}`;
+- [ ] Exercise intents are performance cues, not muscle labels${sportValidationLines}${isConditioningGoal ? "\n- [ ] Dedicated conditioning sessions include named energy system (aerobic base / lactate threshold / VO2max / anaerobic capacity / RSA)\n- [ ] Every conditioning exercise has work duration, rest duration, and interval count\n- [ ] Conditioning sessions do NOT default to circuits — real intervals required\n- [ ] Progression is stated: Week 1 → Week 3 → Week 5" : ""}`;
 }
 
 // ─── Post-generation Validation ───────────────────────────────────────────────
@@ -1072,18 +1638,65 @@ export function validateProgramArchitecture(
     issues.push(`Duplicate primary lifts detected across sessions: ${[...new Set(duplicatePrimaries)].join(", ")}`);
   }
 
-  const isHockey = sport?.toLowerCase().includes("hockey") ?? false;
+  const sportLower = (sport ?? "").toLowerCase();
+  const allExNames = days.flatMap((d) => d.exercises.map((e) => e.name.toLowerCase()));
+  const allExClasses = days.flatMap((d) => d.exercises.map((e) => (e.classification ?? "").toLowerCase()));
+
+  // Hockey validation
+  const isHockey = sportLower.includes("hockey");
   if (isHockey) {
-    const allExNames = days.flatMap((d) => d.exercises.map((e) => e.name.toLowerCase()));
     const hasLateral = allExNames.some((n) => n.includes("lateral") || n.includes("bound") || n.includes("lunge"));
     const hasRotational = allExNames.some((n) => n.includes("rotational") || n.includes("pallof") || n.includes("chop") || n.includes("landmine"));
-    if (!hasLateral) {
-      warnings.push("Hockey program missing lateral force production patterns (lateral bound, lateral step-up, lateral lunge).");
-    }
-    if (!hasRotational) {
-      warnings.push("Hockey program missing rotational trunk work (Pallof press, cable chop, landmine rotation).");
-    }
+    if (!hasLateral) warnings.push("Hockey program missing lateral force production patterns (lateral bound, lateral step-up, lateral lunge).");
+    if (!hasRotational) warnings.push("Hockey program missing rotational trunk work (Pallof press, cable chop, landmine rotation).");
   }
+
+  // Football validation
+  const isFootball = /\bfootball\b/.test(sportLower) && !sportLower.includes("soccer");
+  if (isFootball) {
+    const hasSprintOrAcceleration = allExNames.some((n) => n.includes("sprint") || n.includes("acceleration") || n.includes("sled") || n.includes("broad jump"));
+    const hasTrunkBracing = allExNames.some((n) => n.includes("pallof") || n.includes("carry") || n.includes("farmer"));
+    const hasHeavyLower = allExNames.some((n) => n.includes("squat") || n.includes("deadlift") || n.includes("trap bar") || n.includes("hex bar"));
+    if (!hasSprintOrAcceleration) warnings.push("Football program missing acceleration/sprint work — should include 10–30m sprint or sled work.");
+    if (!hasTrunkBracing) warnings.push("Football program missing trunk bracing for collision (Pallof press or loaded carry).");
+    if (!hasHeavyLower) warnings.push("Football program missing heavy bilateral lower strength (squat or DL variation).");
+  }
+
+  // Basketball validation
+  const isBasketball = sportLower.includes("basketball");
+  if (isBasketball) {
+    const hasReactivePlyo = allExNames.some((n) => n.includes("jump") || n.includes("depth") || n.includes("bound") || n.includes("reactive"));
+    const hasDecelOrLanding = allExNames.some((n) => n.includes("decel") || n.includes("landing") || n.includes("snap-down") || n.includes("depth jump"));
+    const hasSingleLeg = allExNames.some((n) => n.includes("single-leg") || n.includes("rfess") || n.includes("step-up") || n.includes("pistol"));
+    if (!hasReactivePlyo) warnings.push("Basketball program missing reactive plyometrics (box jump, depth jump, lateral bound).");
+    if (!hasDecelOrLanding) warnings.push("Basketball program missing deceleration/landing mechanics training.");
+    if (!hasSingleLeg) warnings.push("Basketball program missing single-leg strength work.");
+  }
+
+  // Soccer validation
+  const isSoccer = sportLower.includes("soccer") || sportLower.includes("association football");
+  if (isSoccer) {
+    const hasNordic = allExNames.some((n) => n.includes("nordic") || n.includes("hamstring curl") || n.includes("glute-ham"));
+    const hasCopenhagen = allExNames.some((n) => n.includes("copenhagen") || n.includes("adductor") || n.includes("lateral lunge"));
+    const hasSingleLeg = allExNames.some((n) => n.includes("single-leg") || n.includes("rfess") || n.includes("rdl") || n.includes("step-up"));
+    if (!hasNordic) issues.push("Soccer program MISSING Nordic hamstring curl or equivalent — this is mandatory for soccer athlete injury prevention.");
+    if (!hasCopenhagen) warnings.push("Soccer program missing Copenhagen plank or adductor loading — adductor injuries are the second-most common soccer injury.");
+    if (!hasSingleLeg) warnings.push("Soccer program missing single-leg strength work — all soccer actions are single-leg.");
+  }
+
+  // Baseball validation
+  const isBaseball = sportLower.includes("baseball") || sportLower.includes("softball");
+  if (isBaseball) {
+    const hasRotationalMedBall = allExNames.some((n) => n.includes("rotational") || n.includes("med ball") || n.includes("medicine ball") || n.includes("scoop toss"));
+    const hasFacePull = allExNames.some((n) => n.includes("face pull") || n.includes("external rotation") || n.includes("band pull"));
+    const hasPallof = allExNames.some((n) => n.includes("pallof") || n.includes("chop") || n.includes("anti-rotation"));
+    if (!hasRotationalMedBall) issues.push("Baseball program MISSING med ball rotational throws — rotational power is the primary physical quality in baseball.");
+    if (!hasFacePull) warnings.push("Baseball program missing face pull or external rotation work — arm care is mandatory for throwing sport athletes.");
+    if (!hasPallof) warnings.push("Baseball program missing anti-rotation trunk work (Pallof press) — stiff trunk is required for rotational power transfer.");
+  }
+
+  // allExClasses used for future classification-based validation
+  void allExClasses;
 
   return {
     valid: issues.length === 0,
@@ -1097,13 +1710,29 @@ export function validateProgramArchitecture(
 export function extractSportFromRequest(userRequest: string, sportFocus: string | null): string | null {
   if (sportFocus) return sportFocus;
   const text = userRequest.toLowerCase();
+
+  // Position-based detection (before generic sport keywords)
+  if (/lineman|linebacker|tight end|wide receiver|running back|quarterback|cornerback|safety|defensive end/.test(text)) return "football";
+  if (/point guard|shooting guard|power forward|small forward|center.+basketball|basketball.+center/.test(text)) return "basketball";
+  if (/striker|winger.+soccer|soccer.+midfielder|goalkeeper.+soccer/.test(text)) return "soccer";
+  if (/pitcher|baseball.+catcher|shortstop|outfield.+baseball/.test(text)) return "baseball";
+
+  // Direct sport name detection
   const sports = [
     "hockey", "soccer", "football", "basketball", "baseball", "softball",
-    "tennis", "volleyball", "rugby", "lacrosse", "track", "sprinting",
-    "swimming", "wrestling", "mma", "boxing", "martial arts",
+    "tennis", "volleyball", "rugby", "lacrosse", "track and field", "track",
+    "sprinting", "swimming", "wrestling", "mma", "boxing", "martial arts",
+    "cricket", "golf",
   ];
   for (const s of sports) {
     if (text.includes(s)) return s;
   }
+
+  // Phrase-based detection
+  if (/i play.*(football|grid iron)/.test(text)) return "football";
+  if (/i play.*(ball|basketball|hoops)/.test(text)) return "basketball";
+  if (/i play.*(soccer|futbol)/.test(text)) return "soccer";
+  if (/i play.*(baseball|softball)/.test(text)) return "baseball";
+
   return null;
 }

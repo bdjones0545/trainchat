@@ -36,6 +36,7 @@ import { retrieveRelevantKnowledge } from "./knowledge-retrieval";
 import { buildArchitectureBrief, validateProgramArchitecture, extractSportFromRequest } from "./program-architecture-engine";
 import { buildConditioningContext, isConditioningGoal } from "./conditioning-engine";
 import { buildPowerSpeedContext, isPowerRequest, isSpeedRequest } from "./power-speed-engine";
+import { buildSportContext, mapSportToProfile, detectSeasonContext } from "./sport-profile-engine";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -948,6 +949,24 @@ The conversion rule: show intelligence first → build tension → deliver parti
       )
     : "";
 
+  // Build sport-specific architecture context when sport is set
+  // This injects real sport-shaped programming requirements — not just a sport label
+  const sportProfile = mapSportToProfile(profile.sportFocus ?? null);
+  const seasonContext = detectSeasonContext(
+    profile.trainingGoal + " " + (profile.sportFocus ?? ""),
+    null,
+  );
+  const sportContext = sportProfile
+    ? "\n\n" + buildSportContext(
+        profile.sportFocus ?? null,
+        profile.trainingGoal,
+        profile.trainingGoal + " " + (profile.sportFocus ?? ""),
+        seasonContext,
+        profile.equipmentAccess,
+        profile.daysPerWeek,
+      )
+    : "";
+
   return coreIdentity + `
 
 ## USER TRAINING PROFILE
@@ -964,7 +983,7 @@ ${profile.sportFocus ? `- Sport / Activity Focus: ${profile.sportFocus}` : ""}
 ${profile.exercisePreferences ? `- Exercise Preferences: ${profile.exercisePreferences}` : ""}
 ${profile.exercisesToAvoid ? `- Exercises to Avoid (NEVER program these): ${profile.exercisesToAvoid}` : ""}
 
-${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${conditioningContext}${powerSpeedContext}`;
+${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${conditioningContext}${powerSpeedContext}${sportContext}`;
 }
 
 // ─── JSON extractor ──────────────────────────────────────────────────────────

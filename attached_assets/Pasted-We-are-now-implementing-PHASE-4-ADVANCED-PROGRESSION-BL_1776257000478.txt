@@ -1,0 +1,387 @@
+We are now implementing:
+
+PHASE 4 — ADVANCED PROGRESSION & BLOCK PERIODIZATION ENGINE
+
+OBJECTIVE:
+Upgrade TrainChat from “strong weekly programming” to “real multi-week coaching architecture” for intermediate and advanced users.
+
+This phase adds:
+- block periodization
+- progression models that change across time
+- deload logic tied to block structure
+- user-level training age modulation
+- advanced loading frameworks
+
+==================================================
+CORE PROBLEM
+==================================================
+
+Current behavior:
+- weekly structure is strong
+- session logic is strong
+- but long-term progression is still too shallow for advanced users
+- many outputs still rely on linear or simple double progression
+- deloads are too generic
+- advanced athletes need block structure, not just good week-one programming
+
+This limits credibility for:
+- serious lifters
+- advanced athletes
+- long-term subscribers
+- coaches evaluating the system
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+Advanced programming is NOT:
+- repeating the same week with slightly more load
+- generic “progress each week”
+- a deload every X weeks with no broader logic
+
+Advanced programming IS:
+- quality-specific block emphasis
+- planned volume/intensity shifts
+- accumulation → intensification → realization logic
+- structured exposure to different loading zones
+- fatigue management tied to the training phase
+- progression models chosen based on goal and user level
+
+==================================================
+TASK 1 — CREATE TRAINING AGE / LEVEL ARCHITECTURE
+==================================================
+
+Create a stronger classification layer for training age:
+
+TrainingLevel:
+- beginner
+- novice
+- intermediate
+- advanced
+
+Map from:
+- years trained
+- user statement
+- program request
+- intensity of goal
+
+Rules:
+- beginners can use simpler progression
+- intermediate needs more variation and load management
+- advanced needs block structure and more deliberate sequencing
+
+If user says:
+- “I’m new to lifting” → beginner/novice
+- “I’ve trained seriously for 8 years” → advanced
+- “I want structured strength blocks” → intermediate/advanced bias
+
+==================================================
+TASK 2 — CREATE PERIODIZATION BLOCK TYPES
+==================================================
+
+Define BlockType:
+- accumulation
+- intensification
+- realization
+- deload
+- re-entry (if applicable)
+
+Each block must define:
+- primary objective
+- volume emphasis
+- intensity emphasis
+- exercise variation strategy
+- fatigue expectation
+- progression style
+
+Example:
+
+ACCUMULATION:
+- objective: build work capacity / hypertrophy / base strength
+- higher volume
+- moderate intensity
+- more variation
+- progressive overload via reps/sets/volume
+
+INTENSIFICATION:
+- objective: increase force expression / sharpen output
+- lower volume
+- higher intensity
+- more specific lifts
+- progression via load/intensity
+
+REALIZATION:
+- objective: express peak quality / performance
+- lower overall volume
+- high specificity
+- reduced accessory noise
+- progression via exposure to top-end output
+
+DELOAD:
+- objective: dissipate fatigue
+- reduced volume
+- reduced intensity or reduced density depending on context
+
+==================================================
+TASK 3 — MAP GOALS TO BLOCK STRUCTURES
+==================================================
+
+Create default block structures by goal.
+
+Examples:
+
+STRENGTH:
+- accumulation → intensification → realization → deload
+
+HYPERTROPHY:
+- accumulation-heavy with optional intensification
+- less peaking, more volume cycling
+
+POWER:
+- accumulation → intensification → realization with power/speed emphasis shifts
+
+SPEED:
+- lower-volume high-quality blocks
+- acceleration vs max-velocity emphasis shifts
+
+CONDITIONING:
+- base → threshold/capacity → sport-specific expression → deload
+
+RETURN TO TRAINING:
+- re-entry → accumulation → low-intensification
+
+Ensure goal materially changes block logic.
+
+==================================================
+TASK 4 — ADD BLOCK-LENGTH LOGIC
+==================================================
+
+Determine sensible block durations.
+
+Examples:
+- 2–4 weeks for re-entry or mini-block
+- 3–5 weeks for accumulation
+- 2–4 weeks for intensification
+- 1–2 weeks for realization
+- 1 week deload
+
+If user requests:
+- 8 weeks
+- 12 weeks
+- “structured blocks”
+the engine should generate a coherent multi-block structure, not just one repeating template.
+
+==================================================
+TASK 5 — ADD PROGRESSION MODELS
+==================================================
+
+Create ProgressionModel options such as:
+- linear
+- double_progression
+- wave_loading
+- undulating
+- block_periodized
+- density_progression
+- exposure_based
+- velocity/power quality progression (future-ready if needed)
+
+Map progression model by:
+- goal
+- training level
+- exercise type
+- block type
+
+Examples:
+- beginner strength → linear or double progression
+- intermediate hypertrophy → double + volume progression
+- advanced strength → block periodized + wave loading
+- power → exposure-based quality progression
+- conditioning → interval density or volume progression
+
+==================================================
+TASK 6 — MODULATE EXERCISE SPECIFICITY ACROSS BLOCKS
+==================================================
+
+The exercise mix should change across blocks.
+
+Examples:
+STRENGTH:
+- accumulation: more variation, more accessory base
+- intensification: more competition/specific lifts
+- realization: highest specificity, less accessory clutter
+
+POWER:
+- earlier block: broader power base, med balls, jumps, derivatives
+- later block: more specific outputs and reduced fatigue
+
+SOCCER / FIELD ATHLETE:
+- accumulation: tissue and work-capacity support
+- later blocks: more speed/repeat sprint specificity
+
+Do NOT keep the exact same exercise menu across all blocks unless specifically justified.
+
+==================================================
+TASK 7 — ADD BLOCK-LEVEL VOLUME / INTENSITY SHIFTS
+==================================================
+
+Programs must show meaningful changes over time.
+
+Examples:
+- total weekly set count changes
+- rep ranges shift
+- intensity zones shift
+- rest periods may shift
+- accessory volume may reduce in realization blocks
+
+If a coach looks across weeks, they should see a plan that evolves.
+
+==================================================
+TASK 8 — UPGRADE DELOAD LOGIC
+==================================================
+
+Deloads must become contextual, not generic.
+
+Rules:
+- deload timing should depend on:
+  - goal
+  - training level
+  - accumulated fatigue
+  - block structure
+  - season status
+
+Deload methods:
+- reduce volume only
+- reduce intensity only
+- reduce both
+- technique / speed-focused lower stress week
+
+Advanced users should not get the same deload logic as beginners.
+
+==================================================
+TASK 9 — ADD ADVANCED USER RULES
+==================================================
+
+For intermediate/advanced users:
+
+- avoid endless linear progression
+- increase specificity when appropriate
+- reduce junk volume
+- modulate accessory work intelligently
+- use block transitions with clear rationale
+- support peaking/expression where goal requires it
+
+If user explicitly says:
+- “advanced”
+- “structured blocks”
+- “periodized”
+- “peaking”
+the output should clearly reflect that sophistication.
+
+==================================================
+TASK 10 — ADD PROGRAM HORIZON OUTPUT
+==================================================
+
+When appropriate, the system should show not just the current week, but the multi-week architecture.
+
+Examples:
+- 8-week strength plan overview
+- block names and week ranges
+- what changes from block to block
+
+The user should be able to understand:
+- where they are in the larger plan
+- what the current block is doing
+- what comes next
+
+This can be lightweight at first, but it must be real.
+
+==================================================
+TASK 11 — UPDATE AGENT LANGUAGE
+==================================================
+
+Agent should explain progression like a real coach.
+
+Examples:
+- “Weeks 1–3 build volume and positional strength, Weeks 4–6 raise intensity, Week 7 sharpens output, Week 8 deloads.”
+- “This block starts with more variation and support work, then becomes more specific as intensity rises.”
+- “Because you’re advanced, I used a block structure instead of linear weekly jumps.”
+
+Language must reflect:
+- block intent
+- progression rationale
+- user level
+
+==================================================
+TASK 12 — PREVENT COMMON ERRORS
+==================================================
+
+Ensure TrainChat does NOT:
+- give advanced users beginner progression
+- repeat the same week across 8–12 weeks
+- deload randomly with no structure
+- keep volume/intensity constant across blocks
+- peak hypertrophy like powerlifting
+- use realization logic where unnecessary for general fitness
+- overcomplicate beginner programs
+
+==================================================
+MANDATORY TEST SCENARIOS
+==================================================
+
+Test these exact scenarios:
+
+1. “Build me an 8-week strength program to raise my squat, bench, and deadlift.”
+2. “I’ve trained seriously for 8 years and want structured strength blocks.”
+3. “Build me a 12-week hypertrophy plan.”
+4. “Create an 8-week power program for explosive performance.”
+5. “I’m intermediate and want periodized training.”
+6. “I’m advanced and want a peak block.”
+7. “I’m new to lifting and want to get stronger safely.”
+8. “I haven’t trained in 8 months — rebuild me gradually.”
+9. “I’m in season and need to maintain strength without crushing recovery.”
+10. Compare beginner vs advanced strength outputs side-by-side.
+
+For each verify:
+- block structure exists where appropriate
+- progression changes across time
+- training level changes complexity
+- deload logic is contextual
+- exercise specificity shifts appropriately
+- multi-week architecture is visible and coherent
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What training levels were defined
+2. What block types were created
+3. How goals map to block structures
+4. What progression models were added
+5. How exercise specificity changes across blocks
+6. How volume/intensity shifts across blocks
+7. How deload logic was upgraded
+8. Examples of beginner vs advanced outputs
+9. Examples of 8–12 week block architecture
+
+==================================================
+FINAL STANDARD
+==================================================
+
+A coach reviewing an advanced 8–12 week plan should see:
+
+- real block structure
+- meaningful shifts in volume and intensity
+- specific progression logic
+- deloads with context
+- training age reflected in the design
+- exercise specificity evolving over time
+
+NOT:
+- the same good week repeated for multiple weeks
+- beginner progression dressed up as advanced programming
+
+TrainChat must now program like a real long-horizon coach.
+
+Implement this now.
