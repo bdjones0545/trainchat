@@ -1,14 +1,17 @@
 /**
- * Training System Edit Routes — Phase 2 + Phase 3 + Phase 4
+ * Training System Edit Routes — Phase 2 + Phase 3 + Phase 4 + Unified Intelligence
  *
  * POST /training-system/edit
- *   Accepts a natural language modification request with optional target context.
+ *   Accepts a natural language modification request with optional target context
+ *   and optional UI context (page, selected session/exercise).
  *   Orchestrates: interpret → snapshot before → plan → apply → snapshot after
- *                 → persist change log → respond with updated data + changedIds.
+ *                 → persist change log → sync memories → respond.
  *
  * Phase 3: targetContext enables focused, object-level edits from the UI.
  * Phase 4: Every applied edit is recorded in system_change_log with before/after
  *           snapshots for full history and restore capability.
+ * Unified: uiContext resolves spatial references ("this", "here") and triggers
+ *           the same memory-sync path as the main conversation pipeline.
  */
 
 import { Router, type IRouter } from "express";
@@ -17,7 +20,7 @@ import { interpretEditRequest } from "../lib/edit-intent-service";
 import { applyEditPlan } from "../lib/edit-engine";
 import { createChangeLogEntry } from "../lib/change-log-service";
 import { buildAdaptationContext } from "../lib/adaptation";
-import { listMemories } from "../lib/memory";
+import { listMemories, syncMemoriesFromData, extractMemoriesFromMessage } from "../lib/memory";
 import { buildDecisionMemory } from "../lib/decision-memory-service";
 import {
   getActiveTrainingSystem,
@@ -41,9 +44,26 @@ const TargetContextSchema = z.object({
 const EditRequestBody = z.object({
   request: z.string().min(1).max(2000),
   targetContext: TargetContextSchema.optional(),
-  // Phase 4: caller can hint at source type; defaults to ai_edit
   source: z.enum(["ai_edit", "quick_action", "initialize", "auto_adjust"]).optional(),
 });
+
+/** Builds a prompt hint from UIContext so the edit engine understands spatial references. */
+function buildUIContextHint(uiContext: Record<string, any> | null | undefined): string | null {
+  if (!uiContext) return null;
+  const lines: string[] = [];
+  if (uiContext.page) lines.push(`Current page: ${uiContext.page}`);
+  if (uiContext.activeProgramName) lines.push(`Active program: "${uiContext.activeProgramName}"`);
+  if (uiContext.selectedWeek != null) lines.push(`User is viewing Week ${uiContext.selectedWeek}`);
+  if (uiContext.selectedSessionName) lines.push(`Selected session: "${uiContext.selectedSessionName}"`);
+  if (uiContext.selectedExerciseName) lines.push(`Selected exercise: "${uiContext.selectedExerciseName}"`);
+  if (lines.length === 0) return null;
+  return [
+    "## CURRENT USER CONTEXT",
+    "The user is looking at:",
+    ...lines.map((l) => `- ${l}`),
+    "When the request says 'this', 'here', or a positional reference, resolve using the above context.",
+  ].join("\n");
+}
 
 // ─── POST /training-system/edit ───────────────────────────────────────────────
 router.post("/training-system/edit", requireAuth, async (req, res): Promise<void> => {
@@ -55,6 +75,7 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
 
   const userId = req.session.userId!;
   const { request: userRequest, targetContext, source = "ai_edit" } = parsed.data;
+  const uiContext = (req.body as any)?.uiContext ?? null;
 
   try {
     // 1. Load active training system
@@ -64,8 +85,7 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       return;
     }
 
-    // 2. Load full system with hierarchy (needed for AI context)
-    // Also load adaptation context, memories, and decision history in parallel
+    // 2. Load full system with hierarchy + adaptation context + memories in parallel
     const [fullSystem, adaptationCtx, memories] = await Promise.all([
       getFullTrainingSystem(activeSystem.id),
       buildAdaptationContext(userId).catch(() => null),
@@ -76,19 +96,26 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       return;
     }
 
-    // Build decision memory context (Phase B)
+    // Build decision memory context
     const decisionMemory = await buildDecisionMemory(
       userId,
       activeSystem.id,
       memories
     ).catch(() => null);
 
+    // Build UIContext hint and append to adaptationContext for the edit engine
+    const uiHint = buildUIContextHint(uiContext);
+    const enrichedAdaptationContext = [
+      adaptationCtx?.promptContext || "",
+      uiHint || "",
+    ].filter(Boolean).join("\n\n") || undefined;
+
     // 3. Interpret the edit request into a structured plan
     const editPlan = await interpretEditRequest(
       userRequest,
       fullSystem,
       targetContext,
-      adaptationCtx?.promptContext || undefined,
+      enrichedAdaptationContext,
       decisionMemory?.decisionMemoryContext || undefined
     );
 
@@ -97,14 +124,15 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
         userId, intent: editPlan.intent, scope: editPlan.scope,
         changesCount: editPlan.changes.length,
         targetType: targetContext?.type, targetId: targetContext?.id,
+        hasUIContext: !!uiContext,
       },
-      "Edit plan ready — applying"
+      "[SystemEdit] Edit plan ready — applying"
     );
 
-    // 4. Apply the edit plan to the database (Phase 4: also captures before/after snapshots)
+    // 4. Apply the edit plan to the database
     const editResult = await applyEditPlan(editPlan);
 
-    // 5. Persist the change log entry (Phase 4)
+    // 5. Persist the change log entry
     let changeLogId: number | undefined;
     try {
       changeLogId = await createChangeLogEntry({
@@ -124,11 +152,17 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
         skippedCount: editResult.skippedCount,
       });
     } catch (logErr) {
-      // Log error but do not fail the request — the edit itself succeeded
-      logger.error({ logErr, userId }, "Failed to persist change log entry (non-fatal)");
+      logger.error({ logErr, userId }, "[SystemEdit] Failed to persist change log entry (non-fatal)");
     }
 
-    // 6. Reload affected data to return fresh state
+    // 6. Sync coach memories from the edit — same path as the conversation pipeline.
+    //    Fire-and-forget: never block the response on memory operations.
+    syncMemoriesFromData(userId).catch(() => {});
+    if (userRequest.length > 10) {
+      extractMemoriesFromMessage(userId, userRequest).catch(() => {});
+    }
+
+    // 7. Reload affected data to return fresh state
     const [today, week, block] = await Promise.all([
       getTodaySession(userId).catch(() => null),
       getCurrentWeek(userId).catch(() => null),
@@ -147,7 +181,7 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       updatedData: { today, week, block },
     });
   } catch (err) {
-    logger.error({ err, userId, userRequest }, "Training system edit failed");
+    logger.error({ err, userId, userRequest }, "[SystemEdit] Training system edit failed");
     res.status(500).json({ error: "Failed to process edit request." });
   }
 });

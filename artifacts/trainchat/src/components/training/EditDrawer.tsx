@@ -116,6 +116,7 @@ interface EditDrawerProps {
   onEditComplete: (result: EditResult) => void;
   prefillRequest?: string;
   exerciseContext?: ExerciseContext;
+  uiContext?: Record<string, unknown>;
 }
 
 type DrawerPhase = "input" | "directions" | "executing" | "success" | "error";
@@ -242,7 +243,8 @@ async function fetchDirections(
 
 async function submitTargetedEdit(
   request: string,
-  target: EditTarget
+  target: EditTarget,
+  uiContext?: Record<string, unknown>
 ): Promise<EditResult> {
   return customFetch<EditResult>("/api/training-system/edit", {
     method: "POST",
@@ -254,6 +256,7 @@ async function submitTargetedEdit(
         label: target.label,
         parentLabel: target.parentLabel,
       },
+      ...(uiContext ? { uiContext } : {}),
     }),
   });
 }
@@ -881,7 +884,7 @@ function ExerciseLogSection({
 
 // ─── Main component ────────────────────────────────────────────────────────────
 
-export default function EditDrawer({ target, onClose, onEditComplete, prefillRequest, exerciseContext }: EditDrawerProps) {
+export default function EditDrawer({ target, onClose, onEditComplete, prefillRequest, exerciseContext, uiContext }: EditDrawerProps) {
   const [input, setInput] = useState(prefillRequest ?? "");
   const [visible, setVisible] = useState(false);
   const [phase, setPhase] = useState<DrawerPhase>("input");
@@ -932,7 +935,7 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
 
   // ── Edit execution mutation ──
   const editMutation = useMutation({
-    mutationFn: (request: string) => submitTargetedEdit(request, target),
+    mutationFn: (request: string) => submitTargetedEdit(request, target, uiContext),
     onSuccess: (data) => {
       setEditResult(data);
       setPhase("success");

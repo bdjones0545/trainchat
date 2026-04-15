@@ -90,7 +90,7 @@ export default function TopNav({ userName, extraContent }: Props) {
         <button
           onClick={() => setLocation("/billing")}
           className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-all duration-150"
-          title="Settings"
+          title="Billing & Account"
         >
           <Settings className="w-4 h-4" />
         </button>

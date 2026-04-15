@@ -1263,6 +1263,8 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     return;
   }
 
+  const streamUIContext = (req.body as any)?.uiContext ?? null;
+
   // ── SSE setup ─────────────────────────────────────────────────────────────
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
@@ -1810,6 +1812,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       neuralContext: streamNeuralContextStr,
       neuralBias: streamNeuralBias,
       neuralImbalances: streamNeuralImbalances,
+      uiContext: streamUIContext,
     }
   );
 

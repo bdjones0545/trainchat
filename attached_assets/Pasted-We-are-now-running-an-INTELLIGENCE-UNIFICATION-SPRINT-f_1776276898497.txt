@@ -1,0 +1,306 @@
+We are now running an INTELLIGENCE UNIFICATION SPRINT for TrainChat.
+
+OBJECTIVE:
+Turn TrainChat from “mostly cohesive” into a truly unified AI system by eliminating split intelligence across pages, giving the agent page/UI awareness, and making all major pages feel like expressions of the same brain.
+
+This is NOT a navigation redesign sprint.
+The high-level navigation structure is already correct:
+- Coach
+- Your System
+
+The problem is not the menu.
+The problem is that different pages are using different intelligence pipelines and different state assumptions.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+TrainChat must behave like ONE AI system with multiple views, not multiple pages with different levels of intelligence.
+
+Specifically:
+- all edits should go through the same core AI pipeline
+- the agent should know what page and object the user is looking at
+- chat and system views should read from the same source of truth
+- billing should feel like part of the training system, not a generic SaaS page
+
+==================================================
+PRIORITY ORDER
+==================================================
+
+Implement in this exact order unless dependencies force otherwise:
+
+1. Unify the edit pipeline
+2. Inject page/UI context into the agent
+3. Fix active program state drift across /chat and /system
+4. Make /billing training-aware
+5. Remove or consolidate duplicated components and misleading labels
+
+==================================================
+TASK 1 — UNIFY THE EDIT PIPELINE
+==================================================
+
+Current problem:
+The /system page has a parallel AI edit mechanism that bypasses the main agent pipeline in ai.ts.
+
+This is unacceptable.
+All user-initiated training edits — regardless of whether they begin in:
+- chat input
+- edit drawer
+- quick edit action
+- global edit action
+must flow through the SAME core intelligence pipeline.
+
+I want you to audit:
+- system.tsx edit actions
+- submitQuickEdit
+- submitGlobalEdit
+- /api/training-system/edit
+- /api/conversations/:id/messages/stream
+- ai.ts orchestration
+
+Then refactor so that:
+- /system edits are routed through the same intelligent pipeline as /chat
+- intent classification, specialist engines, validators, memory, and logging are shared
+- there is ONE edit intelligence path in the product
+
+If a legacy direct-edit endpoint must remain temporarily, wrap it so it uses the same backend orchestration layer as the main agent.
+
+Goal:
+No more “smart agent in chat, separate edit tool in system.”
+
+==================================================
+TASK 2 — INJECT PAGE / UI CONTEXT INTO THE AGENT
+==================================================
+
+Current problem:
+The agent has no awareness of where the user is in the app or what they are looking at.
+
+I want every relevant message/edit request to optionally carry UI context such as:
+
+type UIContext = {
+  page?: "/chat" | "/system" | "/billing" | string;
+  selectedWeek?: number | null;
+  selectedSessionId?: string | null;
+  selectedSessionName?: string | null;
+  selectedExerciseId?: string | null;
+  selectedExerciseName?: string | null;
+  activeProgramId?: string | null;
+  activeProgramName?: string | null;
+  panelState?: string | null;
+};
+
+This context should be:
+- sent from frontend where relevant
+- included in message/edit payloads
+- ingested by the backend orchestration layer
+- used in prompt/context building in ai.ts
+
+Examples that must become intelligent:
+- on /system, looking at Session 3, user says “make this harder”
+- selected exercise is RDL, user says “swap this”
+- on /billing, user should be recognized as being in conversion context
+
+The agent should no longer be blind to spatial/product context.
+
+==================================================
+TASK 3 — FIX ACTIVE PROGRAM STATE DRIFT
+==================================================
+
+Current problem:
+Both /chat and /system fetch and manage the active system independently, and /chat also keeps latestProgram in local component state.
+
+This creates drift risk.
+
+I want one canonical frontend source of truth for the active program.
+
+Requirements:
+- use the React Query cache for ["training-system-active"] as canonical
+- stop keeping shadow copies of the active program in local component state unless absolutely necessary
+- if SSE completion returns updated program data, write it into the shared query cache
+- /chat and /system must always render from the same canonical state
+- invalidation/update strategy must be shared and explicit
+
+Audit:
+- fetchActiveSystem in chat.tsx
+- fetchActiveSystem in system.tsx
+- latestProgram state in chat.tsx
+- SSE completion handlers
+- cache invalidation logic
+- change signal logic
+
+Goal:
+The user should never see one version of the program in Coach and another in Your System.
+
+==================================================
+TASK 4 — MAKE /BILLING A TRAINING-AWARE CONVERSION PAGE
+==================================================
+
+Current problem:
+Billing feels like a generic SaaS pricing page and breaks continuity with the rest of the system.
+
+Refactor /billing so it feels like part of TrainChat.
+
+Requirements:
+- fetch the user’s active program and relevant usage state
+- show what they have already built
+- frame upgrade in terms of THEIR system, not generic plans
+- optionally include a short coach/agent summary line
+- preserve continuity from free → paid
+
+Examples:
+- “You’ve built a 4-day strength system”
+- “You’re in Week 2 of your current plan”
+- “Pro unlocks ongoing adaptation, deeper block progression, and expanded system intelligence for your program”
+
+Do NOT turn this into marketing fluff.
+Keep it product-native and personalized.
+
+Also audit:
+- CTA logic
+- pricing copy
+- free vs paid differentiation
+- anonymous vs registered presentation if applicable
+
+==================================================
+TASK 5 — FIX MISLEADING SETTINGS / BILLING LABELING
+==================================================
+
+Current problem:
+The gear/settings icon routes to /billing, which breaks user trust.
+
+Refactor so:
+- “Settings” does not mean “Billing”
+- either create a lightweight /account or /settings page
+- or relabel the current entry accurately
+
+At minimum:
+- do not call a billing destination “Settings”
+- make the label truthful
+- preserve a clean top-nav experience
+
+==================================================
+TASK 6 — CONSOLIDATE DUPLICATED COMPONENTS
+==================================================
+
+Audit duplicated/inconsistent components such as:
+- InsightsPanel in chat/components
+- InsightsPanel in training/components
+- ReadinessModal vs ReadinessCheckIn
+- any repeated panel/view logic
+- any duplicate data presentation surfaces
+
+For each:
+- identify canonical version
+- remove or merge duplicates
+- update imports so there is one shared implementation where appropriate
+
+Goal:
+Reduce silent drift between “same feature in two places.”
+
+==================================================
+TASK 7 — IDENTIFY AND REMOVE DEAD / LOW-VALUE ROUTES AND FEATURES
+==================================================
+
+Audit:
+- /start
+- /onboarding
+- retired redirects
+- old localStorage flags
+- orphaned components such as CoachForecast if unused
+- modals or panels that duplicate /system functionality without strong reason
+
+For each:
+- remove if dead
+- merge if redundant
+- document if intentionally retained
+
+Keep the product tight.
+
+==================================================
+TASK 8 — REDUCE CHAT MONOLITH RISK WHERE IT HELPS COHESION
+==================================================
+
+Current problem:
+chat.tsx is too large and owns too many concerns.
+
+Do not attempt a giant rewrite.
+But extract the most cohesion-critical concerns if needed, especially:
+- active program state handling
+- page context packaging
+- modal/state orchestration that affects shared intelligence
+- SSE completion → cache sync logic
+
+This is a surgical cleanup, not a full refactor.
+
+==================================================
+MANDATORY TEST FLOWS
+==================================================
+
+Run and validate these exact flows:
+
+1. New user → /chat → build a program → switch to /system → edit an exercise
+Expected:
+- edit goes through same AI pipeline as chat
+- program updates consistently in both views
+
+2. Existing user → open saved/active program in /system → make global edit
+Expected:
+- same core intelligence path
+- conversation/system continuity preserved
+
+3. On /system with a selected exercise
+User says:
+“Swap this”
+Expected:
+- UI context tells agent what “this” refers to
+
+4. On /system with a selected session
+User says:
+“Make this harder”
+Expected:
+- agent uses page context to resolve target correctly
+
+5. User hits /billing after building a system
+Expected:
+- page shows personalized system-aware conversion context
+- does not feel like a generic pricing table
+
+6. User moves repeatedly between /chat and /system
+Expected:
+- no active program drift
+- same system shown in both places
+- edits and updates remain coherent
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What files/components/routes were changed
+2. How the edit pipeline was unified
+3. What UI/page context is now passed to the agent
+4. How the active program source of truth now works
+5. How /billing was personalized
+6. What labeling/navigation confusion was fixed
+7. What duplicated components were removed or consolidated
+8. What dead/redundant routes/features were removed
+9. Any remaining cohesion risks or technical debt
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat must now feel like:
+- one intelligent system
+- with multiple views into the same brain
+
+NOT:
+- a smart chat page
+- a separate system editor
+- and a generic billing page
+
+The user should be able to move anywhere in the app and still feel:
+“The same AI system is with me here.”
+
+Implement this now.

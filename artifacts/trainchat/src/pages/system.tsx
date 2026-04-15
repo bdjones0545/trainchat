@@ -2251,6 +2251,13 @@ export default function SystemPage() {
           target={editTarget}
           prefillRequest={editPrefill}
           exerciseContext={editTarget.type === "exercise" ? editExerciseContext : undefined}
+          uiContext={{
+            page: "system",
+            activeProgramId: activeSystem?.id ?? null,
+            activeProgramName: activeSystem?.name ?? null,
+            selectedExerciseName: editTarget.type === "exercise" ? editTarget.label : undefined,
+            selectedSessionName: editTarget.type === "session" ? editTarget.label : undefined,
+          }}
           onClose={() => { setEditTarget(null); setEditExerciseContext(undefined); }}
           onEditComplete={handleEditComplete}
         />

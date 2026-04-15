@@ -230,7 +230,8 @@ export default function Chat() {
     queryKey: ["training-system-active"],
     queryFn: fetchActiveSystem,
     enabled: !!me,
-    staleTime: 60000,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: programLibrary = [] } = useQuery({
@@ -244,7 +245,8 @@ export default function Chat() {
     queryKey: ["training-system-week"],
     queryFn: fetchCurrentWeek,
     enabled: !!me && !!activeSystem?.id,
-    staleTime: 30000,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: profileRaw } = useQuery({
@@ -451,7 +453,12 @@ export default function Chat() {
       inputRef.current.style.height = "auto";
     }
 
-    const result = await stream.send(activeConvoId, content);
+    const chatUIContext = {
+      page: "chat",
+      activeProgramId: activeSystem?.id ?? null,
+      activeProgramName: (activeSystem as any)?.programName ?? null,
+    };
+    const result = await stream.send(activeConvoId, content, chatUIContext);
 
     if (!result) {
       // Check if it was a paywall error (phase = error means stream errored)

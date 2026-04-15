@@ -1446,6 +1446,39 @@ export function validateProgramAgainstConstraints(
 
 // ─── AI Response Options ─────────────────────────────────────────────────────
 
+/** Spatial/product context sent from the frontend UI. */
+export interface UIContextData {
+  page?: string;
+  activeProgramId?: number | null;
+  activeProgramName?: string | null;
+  selectedWeek?: number | null;
+  selectedSessionId?: number | null;
+  selectedSessionName?: string | null;
+  selectedExerciseId?: number | null;
+  selectedExerciseName?: string | null;
+  panelState?: string | null;
+}
+
+/** Converts a UIContext object into a system prompt section. Returns null if no context. */
+function buildUIContextSection(ctx: UIContextData | null | undefined): string | null {
+  if (!ctx) return null;
+  const lines: string[] = [];
+  if (ctx.page) lines.push(`- Current page: ${ctx.page}`);
+  if (ctx.activeProgramName) lines.push(`- Active program: "${ctx.activeProgramName}"`);
+  if (ctx.selectedWeek != null) lines.push(`- User is viewing Week ${ctx.selectedWeek}`);
+  if (ctx.selectedSessionName) lines.push(`- Selected session: "${ctx.selectedSessionName}"`);
+  if (ctx.selectedExerciseName) lines.push(`- Selected exercise: "${ctx.selectedExerciseName}"`);
+  if (ctx.panelState) lines.push(`- Panel state: ${ctx.panelState}`);
+  if (lines.length === 0) return null;
+  return [
+    "## CURRENT USER CONTEXT",
+    "The user is currently looking at:",
+    ...lines,
+    "",
+    "When the user says 'this', 'here', 'that session', or refers to something by position rather than name, resolve the reference using the above context before responding.",
+  ].join("\n");
+}
+
 export interface AIResponseOptions {
   adaptationContext?: string;
   memoryContext?: string;
@@ -1464,6 +1497,8 @@ export interface AIResponseOptions {
   neuralBias?: import("./neural-graph-interpreter").NeuralBias;
   /** Imbalances for fallback program adaptation */
   neuralImbalances?: import("./neural-graph-interpreter").Imbalance[];
+  /** Spatial/product context from the frontend — resolves "this", "here", etc. */
+  uiContext?: UIContextData | null;
 }
 
 // ─── Main entry point ────────────────────────────────────────────────────────
@@ -1489,6 +1524,7 @@ export async function generateAIResponse(
     neuralContext,
     neuralBias,
     neuralImbalances,
+    uiContext,
   } = options;
 
   const [profile] = await db
@@ -1653,7 +1689,8 @@ export async function generateAIResponse(
     }
   }
 
-  const extras = [adaptationContext, memoryContext, insightHint, conversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, architectureBriefText, transformHint, responseModePrompt, neuralContext ?? null]
+  const uiContextSection = buildUIContextSection(uiContext);
+  const extras = [adaptationContext, memoryContext, insightHint, conversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, architectureBriefText, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection]
     .filter(Boolean)
     .join("\n\n");
   const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;

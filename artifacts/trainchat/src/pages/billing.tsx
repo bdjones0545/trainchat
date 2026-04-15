@@ -13,6 +13,12 @@ async function fetchSubscription() {
   return r.json();
 }
 
+async function fetchActiveSystem() {
+  const r = await customFetch("/api/training-system/active");
+  if (!r.ok) return null;
+  return r.json();
+}
+
 async function openPortal() {
   const r = await customFetch("/api/subscription/portal", { method: "POST" });
   if (!r.ok) {
@@ -124,6 +130,12 @@ export default function BillingPage() {
     staleTime: 30_000,
   });
 
+  const { data: activeProgram } = useQuery({
+    queryKey: ["training-system-active"],
+    queryFn: fetchActiveSystem,
+    staleTime: 60_000,
+  });
+
   const portalMutation = useMutation({
     mutationFn: openPortal,
     onSuccess: (url) => {
@@ -187,6 +199,24 @@ export default function BillingPage() {
             <button onClick={() => setError(null)} className="ml-auto text-red-400/60 hover:text-red-400">
               ✕
             </button>
+          </div>
+        )}
+
+        {/* Active program callout */}
+        {activeProgram?.name && (
+          <div className="mb-6 flex items-center gap-3 p-4 rounded-xl bg-primary/5 border border-primary/20">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
+              <Zap className="w-4 h-4 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-0.5">Active program</p>
+              <p className="text-sm font-semibold text-foreground truncate">{activeProgram.name}</p>
+            </div>
+            {activeProgram.days?.length > 0 && (
+              <div className="ml-auto flex-shrink-0">
+                <span className="text-xs text-muted-foreground">{activeProgram.days.length} day{activeProgram.days.length !== 1 ? "s" : ""}/wk</span>
+              </div>
+            )}
           </div>
         )}
 

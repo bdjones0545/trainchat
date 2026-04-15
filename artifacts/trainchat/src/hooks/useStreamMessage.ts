@@ -125,10 +125,22 @@ function getMilestoneStages(actionType?: string): Set<BuildStage> {
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
+export interface UIContext {
+  page?: string;
+  activeProgramId?: number | null;
+  activeProgramName?: string | null;
+  selectedWeek?: number | null;
+  selectedSessionId?: number | null;
+  selectedSessionName?: string | null;
+  selectedExerciseId?: number | null;
+  selectedExerciseName?: string | null;
+  panelState?: string | null;
+}
+
 interface UseStreamMessageResult {
   state: StreamState;
   isActive: boolean;
-  send: (conversationId: number, content: string) => Promise<CompleteEvent | null>;
+  send: (conversationId: number, content: string, uiContext?: UIContext) => Promise<CompleteEvent | null>;
   reset: () => void;
 }
 
@@ -155,7 +167,7 @@ export function useStreamMessage(): UseStreamMessageResult {
   }, []);
 
   const send = useCallback(
-    async (conversationId: number, content: string): Promise<CompleteEvent | null> => {
+    async (conversationId: number, content: string, uiContext?: UIContext): Promise<CompleteEvent | null> => {
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -178,7 +190,7 @@ export function useStreamMessage(): UseStreamMessageResult {
             method: "POST",
             headers: { "Content-Type": "application/json", ...getDefaultHeaders() },
             credentials: "include",
-            body: JSON.stringify({ content }),
+            body: JSON.stringify({ content, ...(uiContext ? { uiContext } : {}) }),
             signal: controller.signal,
           }
         );
