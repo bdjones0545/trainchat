@@ -1,0 +1,409 @@
+We are now running a focused BILLING HARDENING SPRINT for TrainChat.
+
+OBJECTIVE:
+Harden Stripe recurring billing, webhook reliability, entitlement syncing, and failed-payment recovery so the billing system is truly production-safe before growth.
+
+This is NOT a checkout polish sprint.
+This is NOT a billing UI sprint.
+This is a reliability and revenue-protection sprint.
+
+The billing foundation is already strong.
+The risks are concentrated in failure modes, retry behavior, renewal syncing, environment safety, and long-tail subscription state drift.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Eliminate silent billing drift.
+
+Specifically:
+- webhook business-logic failures must not be acknowledged as success
+- renewals must fully sync subscription state
+- unknown Stripe price IDs must fail loudly
+- environments must not rely on hardcoded live Stripe price IDs
+- failed-payment / past_due users must not retain premium access forever through drift
+- Stripe API version configuration must be correct and explicit
+
+==================================================
+PRIORITY ORDER
+==================================================
+
+Implement in this exact order unless a dependency forces otherwise:
+
+1. Webhook retry reliability
+2. Full subscription sync on invoice.paid
+3. Environment hardening for Stripe config
+4. Fail loudly on unknown price IDs
+5. Stripe API version correction
+6. Grace-period / dunning reconciliation backstop
+
+==================================================
+TASK 1 — WEBHOOK RELIABILITY: RETURN 5XX ON BUSINESS-LOGIC FAILURE
+==================================================
+
+This is the most critical fix.
+
+Current problem:
+A webhook can pass signature verification and enter business logic, but if the business logic fails internally, the handler may still swallow the exception and return success to Stripe.
+
+That causes:
+- no Stripe retry
+- stale DB state
+- silent billing drift
+- entitlement mismatch
+- very difficult debugging
+
+Required change:
+In the webhook business-logic dispatch layer (for example webhookHandlers.ts or equivalent), do NOT swallow business-logic exceptions.
+
+If the business logic fails:
+- log the error clearly
+- re-throw it
+- let the route return 400 or 500 to Stripe
+- Stripe should retry the event
+
+Assumption:
+The StripeSync / event recording layer already stores event IDs and upserts idempotently, so retries are safe.
+
+Implementation requirement:
+Patch the catch block so it re-throws after logging.
+
+Example target behavior:
+- signature valid
+- event parsed
+- business logic fails
+- API responds 500
+- Stripe retries
+- second attempt succeeds or remains visible as failed
+
+Audit and patch:
+- webhookHandlers.ts
+- app.ts webhook route
+- any wrapper around processWebhook / dispatchWebhook
+- error propagation behavior
+- final HTTP response behavior
+
+I want explicit confirmation that business-logic failures now produce retry-eligible responses.
+
+==================================================
+TASK 2 — FULL SUBSCRIPTION SYNC IN invoice.paid
+==================================================
+
+Current problem:
+invoice.paid may only patch planStatus or similar partial fields instead of fully syncing the subscription state.
+
+Risk:
+If customer.subscription.updated is delayed, dropped, or missed, fields like:
+- currentPeriodEnd
+- cancellation flags
+- interval
+- plan metadata
+may remain stale after a successful renewal.
+
+Required change:
+In invoice.paid handling:
+- expand or retrieve the related Stripe subscription
+- run the same full sync logic used for authoritative subscription updates
+- update all relevant billing fields, not just planStatus
+
+Goal:
+A successful renewal should always refresh the full app-side subscription record even if another Stripe event is missed.
+
+Implementation expectation:
+One Stripe API call per paid invoice is acceptable.
+Reliability matters more than micro-optimization here.
+
+Audit and patch:
+- handleInvoicePaid
+- subscription sync service
+- syncUserSubscription or equivalent
+- invoice event parsing
+- period-end updates
+- subscription status updates
+- plan interval updates if relevant
+
+I want invoice.paid to function as a reliable renewal backstop, not a partial patch.
+
+==================================================
+TASK 3 — ENVIRONMENT HARDENING: REMOVE HARDCODED LIVE PRICE FALLBACKS
+==================================================
+
+Current problem:
+billingUtils.ts or equivalent may fall back to hardcoded live Stripe price IDs when env vars are missing.
+
+This is dangerous because:
+- test environments can accidentally use live price IDs
+- missing config can go unnoticed
+- deployment mistakes become billing mistakes
+
+Required change:
+Do NOT silently fall back to hardcoded live price IDs.
+
+Instead:
+- require STRIPE_PRICE_* env vars explicitly
+- validate them at startup
+- throw a fatal error if missing
+- fail fast instead of billing incorrectly
+
+Also validate:
+- STRIPE_SECRET_KEY
+- STRIPE_WEBHOOK_SECRET
+- any STRIPE_PORTAL config if required
+- monthly/annual price IDs if both exist
+
+Implementation expectation:
+Add startup validation and clear operator-facing logs.
+
+Audit and patch:
+- billingUtils.ts
+- env config loaders
+- startup boot logic
+- Stripe client initialization
+- any helper that resolves price IDs or plan IDs
+
+I want environment misconfiguration to become immediately visible and impossible to ignore.
+
+==================================================
+TASK 4 — FAIL LOUDLY ON UNKNOWN PRICE IDS
+==================================================
+
+Current problem:
+detectPlanFromPriceId / detectPlanInterval or similar helpers may silently default to starter or another fallback when a Stripe price ID is unrecognized.
+
+This is unacceptable because:
+- wrong plan can be provisioned
+- revenue attribution can be wrong
+- entitlements can be wrong
+- operators may never notice
+
+Required change:
+If an unknown price ID is encountered:
+- log a high-severity error
+- include the unknown price ID and relevant customer/subscription context
+- either throw or return an explicit sentinel failure state
+- do NOT silently provision a default plan
+
+Preferred behavior:
+- fail loudly
+- do not silently downgrade or mis-provision
+- make the problem obvious for operators and developers
+
+Audit and patch:
+- detectPlanFromPriceId
+- detectPlanInterval
+- plan mapping helpers
+- any code that interprets Stripe price IDs into local plans
+
+I want unknown billing config to be visible, not silently normalized.
+
+==================================================
+TASK 5 — CORRECT STRIPE API VERSION CONFIGURATION
+==================================================
+
+Current problem:
+The configured Stripe API version string may be invalid or not aligned with the intended Stripe account/dashboard version.
+
+Required change:
+- verify the Stripe API version string used by the app
+- replace any invalid or unrecognized value
+- pin to a real, explicit Stripe API version that matches the intended account configuration
+- do not leave this ambiguous
+
+Also audit:
+- whether version is hardcoded or configured centrally
+- whether any library/client initialization is using an incorrect version
+
+Goal:
+Make Stripe behavior predictable and supported.
+
+==================================================
+TASK 6 — ADD GRACE-PERIOD / DUNNING RECONCILIATION BACKSTOP
+==================================================
+
+Current problem:
+A user can remain in past_due or similar status with stale app-side premium access if webhooks drift or if the dunning lifecycle is not actively reconciled.
+
+Required change:
+Add a reconciliation mechanism that periodically checks stale billing states.
+
+Preferred implementation:
+A scheduled job (cron/daily task) that:
+- finds users with planStatus = past_due (or equivalent)
+- checks whether currentPeriodEnd is sufficiently old or dunning window has plausibly expired
+- queries Stripe for the actual subscription state
+- runs authoritative subscription sync
+- removes or updates premium access if the subscription has truly expired / become unpaid / canceled
+
+Suggested default:
+- daily reconciliation
+- configurable threshold such as 14 days past currentPeriodEnd (or aligned with your Stripe retry policy)
+
+Goal:
+Prevent infinite premium access due to webhook drift or stale past_due state.
+
+Audit and patch:
+- cron / scheduler
+- billing reconciliation service
+- subscription sync service
+- stale-user query logic
+- entitlement correction logic
+
+This is a backstop, not a replacement for good webhook handling.
+
+==================================================
+TASK 7 — VERIFY ENTITLEMENT ACCURACY ACROSS FAILURE STATES
+==================================================
+
+Audit and patch entitlement logic so premium access correctly matches Stripe lifecycle states.
+
+I want explicit handling for states such as:
+- active
+- trialing if used
+- past_due
+- unpaid
+- canceled
+- incomplete
+- incomplete_expired
+
+Required behavior:
+- premium access should remain or be removed intentionally based on business rules
+- behavior must be consistent
+- the DB/app should not drift indefinitely from Stripe reality
+- failed payment recovery should restore access cleanly when billing recovers
+
+Audit:
+- isPremium logic
+- planStatus usage
+- subscription status mapping
+- access gating in app
+- any premium feature flags tied to stale DB fields
+
+==================================================
+TASK 8 — VERIFY WEBHOOK IDEMPOTENCY / DUPLICATE SAFETY
+==================================================
+
+Because retries will increase after Task 1, confirm duplicate safety is real.
+
+Audit:
+- event ID recording
+- idempotent upserts
+- duplicate processing guards
+- out-of-order event handling where relevant
+- whether retries can create duplicate subscription updates or broken entitlements
+
+Required outcome:
+- retries are safe
+- duplicate Stripe deliveries are safe
+- out-of-order events do not cause obvious corruption
+
+If any weak point exists, patch it now.
+
+==================================================
+TASK 9 — TEST THE FULL SUBSCRIPTION LIFECYCLE
+==================================================
+
+Run and validate these scenarios:
+
+1. New monthly subscription purchase
+Expected:
+- checkout succeeds
+- webhook sync succeeds
+- user becomes premium
+- DB fields correct
+
+2. Monthly renewal succeeds
+Expected:
+- invoice.paid triggers full sync
+- currentPeriodEnd advances
+- premium remains active
+
+3. Monthly renewal fails
+Expected:
+- Stripe status changes appropriately
+- app reflects billing state intentionally
+- no silent permanent premium drift
+
+4. User updates card after failed payment
+Expected:
+- Stripe recovery works
+- renewal sync restores correct state
+- premium access updates correctly
+
+5. User cancels at period end
+Expected:
+- access persists until intended end
+- DB reflects cancellation correctly
+- access ends correctly when billing period ends
+
+6. Duplicate webhook delivery
+Expected:
+- no duplicate subscription corruption
+- no duplicate entitlement provisioning
+
+7. Unknown price ID encountered
+Expected:
+- loud failure
+- no silent default plan assignment
+
+8. Missing env config in non-prod
+Expected:
+- startup fails loudly
+- no fallback to live price IDs
+
+9. Stale past_due account beyond threshold
+Expected:
+- reconciliation job queries Stripe
+- app state syncs correctly
+- premium removed if appropriate
+
+==================================================
+FILES / AREAS TO AUDIT
+==================================================
+
+Audit and patch relevant files, likely including:
+- webhookHandlers.ts
+- app.ts
+- Stripe sync service
+- invoice paid handler
+- billingUtils.ts
+- env validation / config loader
+- plan mapping helpers
+- entitlement logic
+- cron/scheduler/reconciliation job
+- Stripe client initialization
+- any price ID detection helpers
+- any subscription sync / user billing model code
+
+Use the existing architecture wherever possible.
+This is a hardening sprint, not a rewrite.
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What files/services were changed
+2. How webhook failure propagation now works
+3. How invoice.paid now performs full subscription sync
+4. What startup/env validation was added
+5. How unknown price IDs now fail loudly
+6. What Stripe API version is now pinned
+7. What grace-period/dunning reconciliation job was added
+8. How entitlement accuracy was hardened
+9. What idempotency protections were verified or added
+10. Which lifecycle tests now pass safely that were previously risky
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat billing must no longer behave like:
+“checkout works, so billing is probably fine.”
+
+It must behave like:
+“subscriptions, renewals, failures, retries, cancellations, and entitlement transitions are all reliable, observable, and safe.”
+
+The system should now be safe for growth without silent revenue leakage or subscription-state corruption.
+
+Implement this billing hardening sprint now.

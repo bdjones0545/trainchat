@@ -2,6 +2,8 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { runMigrations } from "stripe-replit-sync";
 import { getStripeSync } from "./lib/stripeClient";
+import { validateBillingConfig } from "./lib/billingUtils";
+import { startBillingReconciliation } from "./lib/billingReconciliation";
 
 const rawPort = process.env["PORT"];
 
@@ -15,6 +17,19 @@ const port = Number(rawPort);
 
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
+}
+
+// ─── TASK 3: Billing configuration validation ─────────────────────────────────
+//
+// Validate all required Stripe environment variables before starting the server.
+// If any are missing, the process exits with a clear error message.
+// This prevents silent billing misconfiguration in any environment.
+
+try {
+  validateBillingConfig();
+} catch (err: any) {
+  logger.error({ err }, "[Startup] Billing configuration is invalid — refusing to start");
+  process.exit(1);
 }
 
 async function initStripe() {
@@ -42,6 +57,13 @@ async function initStripe() {
     }).catch((err) => {
       logger.error({ err }, "Stripe backfill error");
     });
+
+    // ─── TASK 6: Start billing reconciliation job ─────────────────────────────
+    //
+    // Runs daily to find stale past_due users and sync their state from Stripe.
+    // This is a backstop against webhook drift — ensures premium access is never
+    // held indefinitely after a payment failure lifecycle concludes.
+    startBillingReconciliation();
   } catch (err) {
     logger.warn({ err }, "Stripe initialization failed — payments unavailable");
   }

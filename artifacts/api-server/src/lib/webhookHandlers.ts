@@ -9,8 +9,12 @@
 //
 // Idempotency: all writes are upsert-style. Duplicate events produce the same
 // final state with no side effects.
+//
+// Reliability: business-logic exceptions are re-thrown so the webhook route
+// returns 5xx → Stripe retries the event. StripeSync upserts are idempotent,
+// so retries are safe.
 
-import { getStripeSync } from "./stripeClient";
+import { getStripeSync, getUncachableStripeClient } from "./stripeClient";
 import { stripeStorage, type SubscriptionSyncPayload } from "./stripeStorage";
 import { logger } from "./logger";
 import type { PlanTier, BillingInterval } from "@workspace/db";
@@ -26,17 +30,37 @@ const PLAN_PRICE_MAP: Record<string, PlanTier> = {
   [process.env.STRIPE_PRICE_ELITE_YEARLY ?? ""]: "elite",
 };
 
+// Remove the empty-string key so missing env vars don't match anything
+delete (PLAN_PRICE_MAP as Record<string, PlanTier>)[""];
+
 const YEARLY_PRICE_IDS = new Set([
   process.env.STRIPE_PRICE_STARTER_YEARLY ?? "",
   process.env.STRIPE_PRICE_PRO_YEARLY ?? "",
   process.env.STRIPE_PRICE_ELITE_YEARLY ?? "",
 ].filter(Boolean));
 
-function detectPlanFromPriceId(priceId: string): PlanTier {
-  return PLAN_PRICE_MAP[priceId] ?? "starter";
+// ─── TASK 4: Fail loudly on unknown price IDs ─────────────────────────────────
+//
+// If a price ID is not in the configured map, we throw rather than silently
+// provisioning a wrong plan. This surfaces misconfiguration immediately.
+
+export function detectPlanFromPriceId(priceId: string): PlanTier {
+  const plan = PLAN_PRICE_MAP[priceId];
+  if (!plan) {
+    logger.error(
+      { priceId, knownPriceIds: Object.keys(PLAN_PRICE_MAP) },
+      "[WebhookHandlers] UNKNOWN PRICE ID — cannot determine plan tier. " +
+      "Check STRIPE_PRICE_* env vars. This event will not be processed."
+    );
+    throw new Error(
+      `Unknown Stripe price ID: "${priceId}". ` +
+      "Set the correct STRIPE_PRICE_* environment variables."
+    );
+  }
+  return plan;
 }
 
-function detectIntervalFromPriceId(priceId: string): BillingInterval {
+export function detectIntervalFromPriceId(priceId: string): BillingInterval {
   return YEARLY_PRICE_IDS.has(priceId) ? "yearly" : "monthly";
 }
 
@@ -45,7 +69,7 @@ function detectIntervalFromPriceId(priceId: string): BillingInterval {
 // Maps Stripe subscription status to our planStatus field.
 // active/trialing = full access; past_due = grace period; others = restricted.
 
-function normalizePlanStatus(stripeStatus: string): string {
+export function normalizePlanStatus(stripeStatus: string): string {
   switch (stripeStatus) {
     case "active":
     case "trialing":
@@ -66,8 +90,10 @@ function normalizePlanStatus(stripeStatus: string): string {
 }
 
 // ─── Build SubscriptionSyncPayload from a raw Stripe subscription object ──────
+//
+// Exported so the reconciliation job can re-use the same mapping logic.
 
-function buildSyncPayload(sub: any): SubscriptionSyncPayload | null {
+export function buildSyncPayload(sub: any): SubscriptionSyncPayload | null {
   try {
     const item = sub.items?.data?.[0];
     const priceId: string = item?.price?.id ?? "";
@@ -87,11 +113,14 @@ function buildSyncPayload(sub: any): SubscriptionSyncPayload | null {
       ? new Date(sub.trial_end * 1000)
       : null;
 
+    // detectPlanFromPriceId will throw on unknown price — bubble up to caller
+    const plan = detectPlanFromPriceId(priceId);
+
     return {
       stripeSubscriptionId: sub.id,
       stripeCustomerId: customerId,
       stripePriceId: priceId,
-      plan: detectPlanFromPriceId(priceId),
+      plan,
       planStatus: normalizePlanStatus(sub.status),
       billingInterval: detectIntervalFromPriceId(priceId),
       currentPeriodEnd: periodEnd,
@@ -100,7 +129,7 @@ function buildSyncPayload(sub: any): SubscriptionSyncPayload | null {
     };
   } catch (err) {
     logger.error({ err }, "[WebhookHandlers] Failed to build sync payload");
-    return null;
+    throw err; // re-throw so the caller can propagate for retry
   }
 }
 
@@ -182,7 +211,7 @@ async function handleSubscriptionUpsert(event: any): Promise<void> {
     "[WebhookHandlers] subscription upsert"
   );
 
-  const payload = buildSyncPayload(sub);
+  const payload = buildSyncPayload(sub); // throws on unknown price ID
   if (!payload) return;
 
   // Find user by customer ID
@@ -234,9 +263,16 @@ async function handleSubscriptionDeleted(event: any): Promise<void> {
 
 // ─── Handler: invoice.paid ────────────────────────────────────────────────────
 //
-// Fires on every successful payment including renewals. Re-sync subscription
-// state to confirm access is current. This is a safety net in case
-// subscription.updated was missed.
+// TASK 2: Full subscription sync on every successful payment.
+//
+// Fires on every successful payment including renewals. We perform a FULL sync
+// of the subscription state — not just a planStatus patch — by retrieving the
+// live subscription from Stripe. This is the authoritative renewal backstop.
+//
+// This prevents stale currentPeriodEnd, stale interval, or stale plan fields
+// if customer.subscription.updated was delayed or missed.
+//
+// One Stripe API call per paid invoice is intentional: reliability > latency.
 
 async function handleInvoicePaid(event: any): Promise<void> {
   const invoice = event.data.object;
@@ -253,7 +289,7 @@ async function handleInvoicePaid(event: any): Promise<void> {
     ? invoice.customer
     : invoice.customer?.id ?? "";
 
-  logger.info({ subscriptionId, customerId }, "[WebhookHandlers] invoice.paid");
+  logger.info({ subscriptionId, customerId }, "[WebhookHandlers] invoice.paid — fetching full subscription for sync");
 
   const user = await stripeStorage.getUserByStripeCustomerId(customerId);
   if (!user) {
@@ -261,19 +297,34 @@ async function handleInvoicePaid(event: any): Promise<void> {
     return;
   }
 
-  // Confirm active status — subscription.updated handles the full sync,
-  // so here we just ensure planStatus is active if it was in a degraded state.
-  if (user.planStatus === "past_due" || user.planStatus === "restricted") {
-    await stripeStorage.updateUserStripeInfo(user.id, { planStatus: "active" });
-    logger.info({ userId: user.id }, "[WebhookHandlers] invoice.paid — restored active status after payment");
-  }
+  // Retrieve the full subscription object from Stripe to get current state.
+  // This ensures currentPeriodEnd, plan, interval, and status are all fresh.
+  const stripe = await getUncachableStripeClient();
+  const sub = await stripe.subscriptions.retrieve(subscriptionId, {
+    expand: ["items.data.price"],
+  });
+
+  const payload = buildSyncPayload(sub); // throws on unknown price ID
+  if (!payload) return;
+
+  await stripeStorage.syncUserSubscription(user.id, payload);
+
+  logger.info(
+    {
+      userId: user.id,
+      plan: payload.plan,
+      planStatus: payload.planStatus,
+      periodEnd: payload.currentPeriodEnd,
+    },
+    "[WebhookHandlers] invoice.paid — full subscription sync complete"
+  );
 }
 
 // ─── Handler: invoice.payment_failed ─────────────────────────────────────────
 //
 // A payment attempt failed. Mark the account as past_due.
 // Stripe will retry automatically — we preserve access during the retry window.
-// Access is only revoked if subscription is deleted.
+// Access is only revoked if subscription is deleted or moves to unpaid/canceled.
 
 async function handleInvoicePaymentFailed(event: any): Promise<void> {
   const invoice = event.data.object;
@@ -335,6 +386,14 @@ async function dispatchWebhookEvent(event: any): Promise<void> {
 }
 
 // ─── Main entry point ─────────────────────────────────────────────────────────
+//
+// TASK 1: Webhook retry reliability.
+//
+// If business logic throws, we re-throw so the webhook route returns 4xx/5xx.
+// Stripe will then retry the event. StripeSync already recorded the event
+// idempotently, so retries are safe — the upsert writes produce the same state.
+//
+// DO NOT swallow business-logic exceptions here. Silent 200s cause drift.
 
 export class WebhookHandlers {
   static async processWebhook(payload: Buffer, signature: string): Promise<void> {
@@ -352,15 +411,11 @@ export class WebhookHandlers {
 
     // Layer 2: Business logic — runs after verified event.
     // Parse raw payload as JSON (StripeSync already verified the signature).
-    try {
-      const event = JSON.parse(payload.toString("utf8"));
-      if (HANDLED_EVENTS.has(event.type)) {
-        await dispatchWebhookEvent(event);
-      }
-    } catch (err) {
-      // Business logic failure should not prevent webhook acknowledgment.
-      // StripeSync already confirmed the event — log and continue.
-      logger.error({ err }, "[WebhookHandlers] Business logic dispatch failed — event will not be retried");
+    // TASK 1: Do NOT catch exceptions here. Let them bubble up to the route handler,
+    // which will return 5xx so Stripe retries the event.
+    const event = JSON.parse(payload.toString("utf8"));
+    if (HANDLED_EVENTS.has(event.type)) {
+      await dispatchWebhookEvent(event);
     }
   }
 }

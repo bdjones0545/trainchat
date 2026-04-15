@@ -16,10 +16,18 @@ function getSecretKey(): string {
   return key;
 }
 
+// ─── TASK 5: Pinned Stripe API version ───────────────────────────────────────
+//
+// Explicitly pinned to a known stable Stripe API version.
+// Do not use unrecognized or future-dated version strings.
+// Update this intentionally when upgrading Stripe SDK or API behavior.
+
+const STRIPE_API_VERSION = "2024-06-20" as const;
+
 // Stripe client is created fresh each call — avoids stale credentials.
 export async function getUncachableStripeClient(): Promise<Stripe> {
   const secretKey = getSecretKey();
-  return new Stripe(secretKey, { apiVersion: "2025-08-27.basil" as any });
+  return new Stripe(secretKey, { apiVersion: STRIPE_API_VERSION });
 }
 
 export async function getStripePublishableKey(): Promise<string> {
