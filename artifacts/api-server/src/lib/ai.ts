@@ -38,6 +38,7 @@ import { buildConditioningContext, isConditioningGoal } from "./conditioning-eng
 import { buildPowerSpeedContext, isPowerRequest, isSpeedRequest } from "./power-speed-engine";
 import { buildSportContext, mapSportToProfile, detectSeasonContext } from "./sport-profile-engine";
 import { buildPeriodizationContext, needsPeriodizationContext } from "./periodization-engine";
+import { buildReEntryContext, needsReEntryContext } from "./re-entry-engine";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -968,6 +969,19 @@ The conversion rule: show intelligence first → build tension → deliver parti
       )
     : "";
 
+  // Build re-entry / return-to-training context — OVERRIDE MODE
+  // Injected first because re-entry reshapes the ENTIRE architecture, not just one quality.
+  // When triggered, this overrides normal programming aggressiveness across all other contexts.
+  const reEntryContext = needsReEntryContext(profile.trainingGoal, profile.trainingGoal)
+    ? "\n\n" + buildReEntryContext(
+        profile.trainingGoal,
+        profile.trainingGoal,
+        profile.experienceLevel,
+        profile.sportFocus ?? null,
+        profile.daysPerWeek,
+      )
+    : "";
+
   // Build block periodization / advanced progression context
   // Injected for intermediate/advanced athletes, explicit duration requests, and block-related keywords
   // Upgrades from "strong week-one programming" to real long-horizon coaching architecture
@@ -1002,7 +1016,7 @@ ${profile.sportFocus ? `- Sport / Activity Focus: ${profile.sportFocus}` : ""}
 ${profile.exercisePreferences ? `- Exercise Preferences: ${profile.exercisePreferences}` : ""}
 ${profile.exercisesToAvoid ? `- Exercises to Avoid (NEVER program these): ${profile.exercisesToAvoid}` : ""}
 
-${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${conditioningContext}${powerSpeedContext}${sportContext}${periodizationContext}`;
+${reEntryContext}${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${conditioningContext}${powerSpeedContext}${sportContext}${periodizationContext}`;
 }
 
 // ─── JSON extractor ──────────────────────────────────────────────────────────

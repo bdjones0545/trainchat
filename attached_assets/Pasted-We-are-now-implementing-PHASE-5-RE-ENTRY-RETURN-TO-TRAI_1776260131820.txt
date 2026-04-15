@@ -1,0 +1,342 @@
+We are now implementing:
+
+PHASE 5 — RE-ENTRY / RETURN-TO-TRAINING ENGINE
+
+OBJECTIVE:
+Teach TrainChat to identify users who are detrained, inconsistent, recently returning, post-layoff, or rebuilding capacity — and prescribe a true re-entry plan instead of a normal training plan.
+
+This phase adds:
+- re-entry detection
+- conservative ramp logic
+- movement quality and tissue tolerance emphasis
+- lower initial volume/intensity
+- safer progression sequencing
+- better judgment for real-world returning users
+
+==================================================
+CORE PROBLEM
+==================================================
+
+Current behavior:
+- users returning after months off can still receive a standard strength, fitness, or athletic program
+- “I haven’t trained in 8 months” may not meaningfully reshape the entire architecture
+- the system may acknowledge the layoff but still prescribe too aggressively
+- returning users are a huge population and need a different training logic from active users
+
+This hurts:
+- safety
+- trust
+- realism
+- coaching credibility
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+Return-to-training is NOT:
+- normal programming with lighter weights
+- generic beginner programming
+- aggressive volume with “just take it easy”
+
+Return-to-training IS:
+- re-establishing consistency
+- restoring movement tolerance
+- rebuilding work capacity
+- managing soreness/fatigue risk
+- progressing only after the user demonstrates readiness
+
+The system must treat re-entry users as their own programming category.
+
+==================================================
+TASK 1 — CREATE RE-ENTRY DETECTION LAYER
+==================================================
+
+Add a detection system that identifies re-entry signals from user language.
+
+Examples of re-entry signals:
+- “I haven’t trained in 8 months”
+- “I’m getting back into it”
+- “I fell off for a while”
+- “I’m starting over”
+- “I used to train, but I’ve been inconsistent”
+- “I’m coming back after an injury” (lightweight support — not rehab programming)
+- “I’ve barely worked out lately”
+- “I’ve been off for a few months”
+
+Create a ReEntryStatus classification such as:
+- none
+- mild_reentry
+- moderate_reentry
+- major_reentry
+
+Map based on:
+- time away
+- inconsistency language
+- recovery sensitivity
+- injury/layoff context
+- user confidence and training age where useful
+
+==================================================
+TASK 2 — CREATE RE-ENTRY PROGRAM TYPE
+==================================================
+
+Add a dedicated program logic layer for re-entry users.
+
+This is NOT the same as:
+- beginner
+- general fitness
+- low motivation
+- deload week
+
+Create a true ReEntryProgram mode with:
+- reduced initial volume
+- reduced initial intensity
+- simplified exercise selection
+- more movement-quality emphasis
+- more tissue-tolerance-aware exercise selection
+- lower novelty / lower soreness risk
+- more conservative weekly progression
+
+==================================================
+TASK 3 — DEFINE RE-ENTRY PHASES
+==================================================
+
+Create re-entry phase structure such as:
+
+ReEntryPhaseType:
+- reacclimation
+- capacity_build
+- transition_to_standard_training
+
+Example model:
+Weeks 1–2 → reacclimation
+Weeks 3–4 → capacity build
+Weeks 5+ → transition to goal-specific training
+
+Each phase should define:
+- volume target
+- intensity target
+- exercise complexity
+- accessory density
+- conditioning tolerance
+- recovery emphasis
+
+==================================================
+TASK 4 — REDUCE EARLY TRAINING STRESS
+==================================================
+
+For re-entry users, initial programming must be meaningfully gentler.
+
+Rules:
+- lower number of hard sets
+- fewer total exercises
+- fewer high-soreness movements
+- reduced eccentric stress where useful
+- avoid unnecessary high novelty
+- avoid maximal effort work
+- avoid aggressive conditioning early
+- avoid loading every movement pattern hard in the first week
+
+Examples:
+- 2–3 working sets instead of 4–5
+- moderate RPE targets
+- simpler bilateral/unilateral balance
+- less “finishers” / less density stress
+- more repeatable exercises
+
+==================================================
+TASK 5 — ADD MOVEMENT QUALITY / TISSUE TOLERANCE EMPHASIS
+==================================================
+
+Re-entry programs should emphasize:
+- clean movement exposure
+- manageable ROM/loading
+- tissue tolerance
+- trunk control
+- single-leg control where appropriate
+- basic bracing / positioning competency
+- progressive exposure to impact or sprinting if applicable
+
+This does NOT mean turning it into rehab.
+It means good coaching judgment for a deconditioned or detrained user.
+
+==================================================
+TASK 6 — ADD RE-ENTRY CONDITIONING LOGIC
+==================================================
+
+Integrate with Phase 1 conditioning engine.
+
+Rules:
+- start with aerobic base / low-to-moderate work capacity
+- avoid hard anaerobic capacity work too early
+- avoid all-out intervals initially
+- gradually reintroduce threshold / higher-intensity work later if appropriate
+
+Examples:
+- walking incline treadmill
+- easy bike
+- tempo-style aerobic work
+- short low-intensity interval structures
+- field tempo or low-intensity locomotion for athletes
+
+Returning users should not get crushed by conditioning in week 1.
+
+==================================================
+TASK 7 — ADD RE-ENTRY PROGRESSION RULES
+==================================================
+
+Progression for re-entry users should favor:
+- consistency first
+- small weekly increases
+- controlled increase in volume before aggressive intensity
+- simple exposure-based progressions
+- readiness-based transition to standard programming
+
+Examples:
+- Week 1 → 2 sets
+- Week 2 → 3 sets
+- Week 3 → maintain sets, add moderate load
+- Week 4 → increase exercise density slightly
+
+Do NOT:
+- linearly force load jumps too quickly
+- overcomplicate the first month
+- peak too soon
+
+==================================================
+TASK 8 — CONNECT RE-ENTRY TO GOAL-SPECIFIC PROGRAMMING
+==================================================
+
+If a re-entry user also has a goal:
+- strength
+- fat loss
+- hypertrophy
+- athletic performance
+- conditioning
+
+The system should still honor the goal, but through a re-entry lens.
+
+Examples:
+- re-entry + strength = simplified strength base first
+- re-entry + fat loss = sustainable training + aerobic support, not brutal circuits
+- re-entry + athletic = rebuild force and tolerance before aggressive speed/power
+
+The re-entry logic should override normal aggressiveness.
+
+==================================================
+TASK 9 — ADD TRAINING AGE INTERACTION RULES
+==================================================
+
+Differentiate:
+- detrained former advanced lifter
+vs
+- true beginner
+
+A detrained advanced user may:
+- reacquire patterns faster
+- tolerate some complexity sooner
+- still need lower initial stress
+
+A true beginner:
+- needs both skill development and exposure tolerance
+
+The output should recognize this difference where possible.
+
+==================================================
+TASK 10 — ADD AGENT LANGUAGE FOR RE-ENTRY
+==================================================
+
+The agent should explain the plan like a coach.
+
+Examples:
+- “I’m starting you with a reacclimation block so you rebuild tolerance before we push intensity.”
+- “Because you’ve been off for 8 months, the first two weeks focus on movement quality, manageable volume, and consistency.”
+- “We’ll build capacity first, then transition into harder strength work.”
+
+This is a major trust signal.
+It should feel thoughtful, not watered down.
+
+==================================================
+TASK 11 — PREVENT COMMON RE-ENTRY ERRORS
+==================================================
+
+Ensure TrainChat does NOT:
+- prescribe high-volume DOMS-heavy plans in week 1
+- prescribe advanced power/sprint work too early
+- use “go hard but listen to your body” as a substitute for good structure
+- treat re-entry as generic beginner fitness
+- ignore time away because the user previously trained hard
+- push aggressive fat-loss conditioning too early
+
+==================================================
+TASK 12 — ADD VALIDATION / AUDIT CHECKS
+==================================================
+
+Add checks so re-entry outputs are evaluated for:
+- lower initial training stress
+- progressive ramp
+- appropriate conditioning intensity
+- appropriate exercise complexity
+- appropriate weekly volume
+- compatibility with stated time-off history
+
+If user says they’ve been off for months, the output should clearly look different from a standard plan.
+
+==================================================
+MANDATORY TEST SCENARIOS
+==================================================
+
+Test these exact scenarios:
+
+1. “I haven’t trained consistently in 8 months — rebuild me gradually.”
+2. “I used to lift seriously but fell off for 6 months.”
+3. “I’m getting back into training after a long break.”
+4. “I want to lose fat but I haven’t worked out in a while.”
+5. “I used to be strong, but I’m basically starting over.”
+6. “I’m returning after being inconsistent for the past year.”
+7. “I’m new to lifting and want to get stronger safely.” (compare against re-entry)
+8. “I’m advanced but took 4 months off and want to get back into strength training.”
+9. “I’m an athlete coming back after a layoff and need to rebuild safely.”
+10. Compare re-entry outputs vs standard outputs for the same goal.
+
+For each verify:
+- the plan is clearly more conservative
+- volume and intensity are reduced initially
+- progression is gradual
+- the goal is still honored
+- the user’s time away materially shapes the program
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What re-entry detection logic was added
+2. What re-entry statuses and phases were created
+3. How initial volume/intensity was reduced
+4. How conditioning was modified for re-entry users
+5. How re-entry progression works
+6. How re-entry interacts with goal-specific programming
+7. How detrained advanced users differ from true beginners
+8. Examples of before vs after re-entry outputs
+
+==================================================
+FINAL STANDARD
+==================================================
+
+A coach reviewing a re-entry program should see:
+
+- clear recognition of time away
+- a conservative initial ramp
+- manageable training stress
+- movement quality and tolerance emphasis
+- progression that earns harder training over time
+- goal-specific logic filtered through good judgment
+
+NOT:
+- a normal program with “start light” slapped on top
+
+TrainChat must now program like a coach who understands re-entry and rebuilding.
+
+Implement this now.
