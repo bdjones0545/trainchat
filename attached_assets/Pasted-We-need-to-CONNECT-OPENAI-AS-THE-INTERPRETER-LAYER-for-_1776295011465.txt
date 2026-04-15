@@ -1,0 +1,338 @@
+We need to CONNECT OPENAI AS THE INTERPRETER LAYER for all natural-language training edits and refinements in TrainChat.
+
+OBJECTIVE:
+Right now, TrainChat appears to have strong edit algorithms, mutation logic, validation logic, and structured rules — but natural-language refinement requests are still behaving like a rigid local resolver instead of a true OpenAI-powered agent.
+
+We need to fix that.
+
+The goal is:
+- OpenAI interprets natural-language requests
+- TrainChat algorithms safely apply them
+- validation enforces quality and safety
+- the system feels like a real agent, not a strict form editor
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+OpenAI should be the BRAIN for natural-language interpretation.
+
+TrainChat’s deterministic systems should remain the SKELETON / GUARDRAILS for:
+- mutation planning
+- safety
+- exercise mapping
+- progression logic
+- DB writes
+- validation
+
+We do NOT want OpenAI directly mutating the DB or inventing unsafe structure without guardrails.
+We DO want OpenAI to interpret what the user means.
+
+==================================================
+TARGET ARCHITECTURE
+==================================================
+
+The correct flow for natural-language edits should be:
+
+1. User sends natural-language request
+2. OpenAI interprets the request
+3. OpenAI returns a structured intent object
+4. Local algorithms map that intent into a mutation plan
+5. Validator checks quality/safety
+6. Mutation commits
+7. UI updates and agent explains changes
+
+NOT:
+
+1. User sends natural-language request
+2. Local entity resolver tries to match exact entities
+3. Request fails because the wording was broad
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Refactor all natural-language plan refinement/edit flows so OpenAI is the first interpreter layer for:
+
+- targeted edits
+- session/day structural edits
+- program transformations
+- focus shifts (endurance, power, conditioning, volume, etc.)
+- broad coaching-style modifications
+
+==================================================
+TASK 1 — AUDIT CURRENT EDIT PATHS
+==================================================
+
+Trace all user-facing edit/refinement entry points and determine whether they currently call OpenAI.
+
+Audit:
+- main chat input on /chat
+- Refine My Plan flow
+- /system free-text edit flow
+- EditDrawer full edit requests
+- any natural-language edit endpoints
+- any quick-edit actions that internally convert to text
+
+For each path, answer:
+- does it call OpenAI?
+- does it call ai.ts / generateAIResponse / equivalent?
+- or does it route directly into local edit resolution?
+
+I want a clear map of:
+- agent-powered paths
+- non-agent paths
+- hybrid paths
+
+==================================================
+TASK 2 — CREATE A STRUCTURED EDIT INTENT CONTRACT
+==================================================
+
+OpenAI must return structured edit intent, not just prose.
+
+Create or standardize a contract like:
+
+type EditIntentType =
+  | "TARGETED_EDIT"
+  | "SESSION_TRANSFORMATION"
+  | "PROGRAM_TRANSFORMATION"
+  | "QUESTION"
+  | "CLARIFICATION";
+
+type StructuredEditIntent = {
+  intentType: EditIntentType;
+  targetScope?: "exercise" | "session" | "day" | "program";
+  targetIdentifiers?: {
+    sessionName?: string;
+    sessionIndex?: number;
+    dayName?: string;
+    dayIndex?: number;
+    exerciseName?: string;
+    exerciseId?: string;
+  };
+  requestedChange?: string;
+  requestedFocus?: string[];
+  requestedConstraints?: string[];
+  needsClarification?: boolean;
+  clarificationQuestion?: string;
+  rationale?: string;
+  confidence?: number;
+};
+
+Use existing contracts if similar ones already exist, but I want the behavior to match this idea.
+
+==================================================
+TASK 3 — USE OPENAI TO CLASSIFY AND INTERPRET NATURAL-LANGUAGE EDITS
+==================================================
+
+For any free-text refinement request, OpenAI should classify it into one of the structured intent types.
+
+Examples:
+
+“Swap bench press for incline dumbbell press”
+→ TARGETED_EDIT
+
+“I want to add more exercises to day 1”
+→ SESSION_TRANSFORMATION
+
+“I want to focus more on endurance”
+→ PROGRAM_TRANSFORMATION
+
+“What does day 2 target?”
+→ QUESTION
+
+“Make it better”
+→ CLARIFICATION (if too ambiguous)
+
+This classification should happen before local mutation logic tries to resolve exact entities.
+
+==================================================
+TASK 4 — PASS UI CONTEXT + PROGRAM CONTEXT INTO OPENAI
+==================================================
+
+When calling OpenAI for interpretation, include:
+- current user message
+- active program structure summary
+- UIContext (page, selectedSessionName, selectedExerciseName, etc.)
+- user profile goal/sport context
+- recent adaptation/performance context if relevant
+- current block/phase if relevant
+
+This allows OpenAI to interpret:
+- “this session”
+- “this exercise”
+- “make this harder”
+- “add more to day 1”
+
+with real contextual meaning.
+
+==================================================
+TASK 5 — MAP STRUCTURED INTENT TO LOCAL ALGORITHMS
+==================================================
+
+After OpenAI returns structured intent:
+
+- local deterministic logic should convert it into a mutation plan
+- local deterministic logic should enforce domain rules
+- local deterministic logic should select real exercises / session changes
+- validator should enforce quality and safety
+
+Examples:
+
+TARGETED_EDIT
+→ exact substitution / set/rep change / intensity change
+
+SESSION_TRANSFORMATION
+→ add/remove exercises, change session emphasis, adjust volume
+
+PROGRAM_TRANSFORMATION
+→ shift rest/volume/energy system focus across the whole program
+
+OpenAI interprets.
+Algorithms apply.
+
+==================================================
+TASK 6 — KEEP DETERMINISTIC BUTTONS FAST WHERE THEY ARE RELIABLE
+==================================================
+
+Buttons like:
+- +Set
+- -Set
+
+can remain deterministic IF they are already reliable and explicit.
+
+But:
+- Harder / Easier
+- any natural-language-like transformations
+- broad refinement requests
+
+should route through the OpenAI interpreter layer if they require reasoning.
+
+Rule:
+Fast path is fine only when the action is unambiguous and deterministic.
+Anything semantic must use OpenAI interpretation.
+
+==================================================
+TASK 7 — REPLACE RIGID FAILURE BEHAVIOR
+==================================================
+
+Right now the system is failing too early with entity-resolution language like:
+“I couldn’t resolve that to a specific exercise/session/block...”
+
+That should not be the default failure mode for broad natural-language edits.
+
+After OpenAI interpretation is added:
+- failures should mostly become useful clarifications
+- or transformed into structural edits
+- not strict resolver failures
+
+Examples:
+“I want to add more exercises to day 1”
+→ should not fail
+“I want to focus more on endurance”
+→ should not fail
+“Make this session harder”
+→ should not fail if UI context exists
+
+Only truly ambiguous inputs should ask for clarification.
+
+==================================================
+TASK 8 — ADD DEBUG TRACE FOR INTERPRETATION
+==================================================
+
+In development, add clear tracing so we can verify:
+- which requests hit OpenAI interpretation
+- what structured intent came back
+- what local mutation plan was generated
+- whether validation passed
+- whether fallback/clarification happened
+
+I want to inspect the chain:
+user message → OpenAI intent → local mutation plan → result
+
+Do not expose ugly debug info in production UI.
+
+==================================================
+TASK 9 — TEST REQUIRED SCENARIOS
+==================================================
+
+Run and validate these exact prompts through the REAL live edit flow:
+
+1. “I want to add more exercises to day 1”
+Expected:
+- OpenAI classifies as SESSION_TRANSFORMATION
+- local logic adds relevant exercises
+- no rigid resolver failure
+
+2. “I want to focus more on endurance”
+Expected:
+- OpenAI classifies as PROGRAM_TRANSFORMATION
+- transformation rules apply
+- visible real changes
+
+3. “Make this session harder”
+Expected:
+- OpenAI uses UIContext to resolve target
+- structured session-level modification applied
+
+4. “Add more upper body work”
+Expected:
+- interpreted as structural session/program request depending context
+- not strict entity failure
+
+5. “Swap bench press for incline dumbbell press”
+Expected:
+- still works as TARGETED_EDIT
+- no regression
+
+6. Truly ambiguous:
+“make it better”
+Expected:
+- OpenAI returns CLARIFICATION
+- useful coaching-style follow-up question
+
+==================================================
+TASK 10 — INTEGRATE WITHOUT BREAKING VALIDATION
+==================================================
+
+This must NOT remove or weaken:
+- program quality validator
+- mutation verification
+- re-entry safety
+- engine routing
+- deterministic guardrails
+
+OpenAI should improve interpretation, not bypass safety.
+
+==================================================
+TASK 11 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. Which edit/refinement paths now call OpenAI interpretation
+2. What structured intent contract was added or reused
+3. How UI/program context is passed into interpretation
+4. How structured intent maps into local mutation logic
+5. Which deterministic actions remain local fast paths
+6. What debug/inspection trace was added
+7. Which previously failing prompts now behave like a real agent
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat must now behave like:
+
+- OpenAI interprets what the user means
+- local logic safely applies it
+- validators enforce quality
+- UI reflects real changes
+
+The system should no longer feel like:
+a rigid local resolver pretending to be an agent.
+
+It should feel like:
+a real AI performance architect that understands natural language and edits the system intelligently.
+
+Implement this now.

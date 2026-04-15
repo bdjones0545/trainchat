@@ -68,6 +68,13 @@ export interface EditPlan {
   scope: EditScope;
   changeSummary: string;
   changes: EditChange[];
+  /** Developer-only routing trace — never rendered in UI */
+  _debugRoute?: {
+    openaiCalled: boolean;
+    openaiSucceeded: boolean;
+    pathUsed: "openai" | "library_progression" | "rule_based" | "prescription";
+    rejectionReason?: string;
+  };
 }
 
 // ─── Target Context (Phase 3) ─────────────────────────────────────────────────
@@ -1444,6 +1451,11 @@ export async function interpretEditRequest(
     }
   }
 
+  logger.info(
+    { userRequest: userRequest.slice(0, 100), hasTargetContext: !!targetContext, targetType: targetContext?.type },
+    "[EditRouter] Calling OpenAI interpretation — route: openai"
+  );
+
   const aiPlan = await interpretWithAI(
     userRequest,
     systemContext,
@@ -1478,13 +1490,25 @@ export async function interpretEditRequest(
     });
 
     if (isProgressionIntent && onlyNotesChange) {
-      logger.warn({ intent: aiPlan.intent, changes: aiPlan.changes.length }, "AI produced note-only mutation for progression request — rejecting, using real mutation fallback");
+      logger.warn({ intent: aiPlan.intent, changes: aiPlan.changes.length }, "[EditRouter] AI produced note-only mutation for progression — rejecting, falling back");
     } else if (hasGenericReplacementName) {
-      logger.warn({ intent: aiPlan.intent }, "AI produced generic placeholder in replace_exercise — rejecting, using real mutation fallback");
+      logger.warn({ intent: aiPlan.intent }, "[EditRouter] AI produced generic placeholder in replace_exercise — rejecting, falling back");
     } else {
-      logger.info({ intent: aiPlan.intent, scope: aiPlan.scope, changes: aiPlan.changes.length }, "AI edit plan generated");
-      return aiPlan;
+      logger.info(
+        { intent: aiPlan.intent, scope: aiPlan.scope, changes: aiPlan.changes.length, route: "openai" },
+        "[EditRouter] OpenAI edit plan accepted — route: openai"
+      );
+      return {
+        ...aiPlan,
+        _debugRoute: { openaiCalled: true, openaiSucceeded: true, pathUsed: "openai" },
+      };
     }
+  } else {
+    const rejectionReason = aiPlan === null ? "openai_returned_null" : "empty_changes_array";
+    logger.warn(
+      { rejectionReason, hasApiKey: !!process.env.OPENAI_API_KEY },
+      "[EditRouter] OpenAI plan unusable — falling back"
+    );
   }
 
   // ── Fallback: progression-aware plan using library data ──────────────────
@@ -1495,12 +1519,27 @@ export async function interpretEditRequest(
   ) {
     const libFallback = buildProgressionFallbackPlan(targetContext, fetchedProgressions, resolvedSwapIntent);
     if (libFallback) {
-      logger.info({ intent: libFallback.intent, exercise: targetContext.label, direction: resolvedSwapIntent }, "Using library progression fallback plan");
-      return libFallback;
+      logger.info({ intent: libFallback.intent, exercise: targetContext.label, direction: resolvedSwapIntent, route: "library_progression" }, "[EditRouter] Using library progression fallback — route: library_progression");
+      return {
+        ...libFallback,
+        _debugRoute: { openaiCalled: true, openaiSucceeded: false, pathUsed: "library_progression" },
+      };
     }
   }
 
   // ── Final fallback: exercise-aware rule-based mutation ────────────────────
-  logger.info("Falling back to rule-based edit interpretation");
-  return interpretWithRules(userRequest, system, targetContext);
+  logger.info(
+    { userRequest: userRequest.slice(0, 100), hasTargetContext: !!targetContext, route: "rule_based" },
+    "[EditRouter] Falling back to rule-based edit interpretation — route: rule_based"
+  );
+  const rulePlan = interpretWithRules(userRequest, system, targetContext);
+  return {
+    ...rulePlan,
+    _debugRoute: {
+      openaiCalled: true,
+      openaiSucceeded: false,
+      pathUsed: "rule_based",
+      rejectionReason: aiPlan === null ? "openai_returned_null" : "openai_empty_plan",
+    },
+  };
 }

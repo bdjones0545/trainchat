@@ -136,6 +136,48 @@ function buildInitialBuildSummary(
 }
 
 /**
+ * Builds an agentic, coaching-style response when an edit request could not be applied.
+ * Language is intentional, context-aware, and never sounds like an entity-resolution error.
+ * Used instead of the brittle "couldn't resolve to specific exercises/sessions" fallback.
+ */
+function buildAgenticNoChangesResponse(
+  userRequest: string,
+  editIntent: string,
+  editScope: string,
+  editSubtype: string | undefined
+): string {
+  const lower = userRequest.toLowerCase();
+
+  // Broad program transformation that got no changes — ask for scope clarity
+  if (editScope === "block" || editScope === "system" || editSubtype === "program_transformation") {
+    const directionMap: Record<string, string> = {
+      endurance_transformation: "endurance focus",
+      conditioning_transformation: "conditioning emphasis",
+      speed_transformation: "speed and agility focus",
+      intensity_transformation: "overall intensity",
+      refocus_block_power: "power and explosive development",
+      refocus_block_hypertrophy: "hypertrophy emphasis",
+      add_explosive_emphasis: "explosive and power qualities",
+    };
+    const directionLabel = directionMap[editIntent] ?? "the focus shift you described";
+    return `I want to make that ${directionLabel} change — let me ask one thing first so I apply it right.\n\nIs there a specific block, phase, or training week you want this applied to? Or should I make it a program-wide change across all your current sessions?\n\nJust let me know and I'll get it done.`;
+  }
+
+  // Session-scoped failure — sound like a coach, ask which session
+  if (editScope === "session" || lower.match(/\bday\b|\bsession\b/)) {
+    return `Got it — let me apply that to the right session. Which day are you working on? (e.g. "Day 1", "Monday's session", or "the upper body day") and I'll make the change directly.`;
+  }
+
+  // Volume or intensity request with no current week found
+  if (editIntent.match(/volume|intensity|fatigue/)) {
+    return `I see what you're going for — let me dig into your current week and apply that. To make sure I'm targeting the right place: are you looking to adjust this week's sessions, or the overall program structure?\n\nOnce you confirm, I'll get it updated.`;
+  }
+
+  // Generic coaching-style fallback — sounds agentic, not like a resolver error
+  return `I processed your request but didn't find a clean match for it in your current program structure. Let me try a slightly different approach.\n\nCould you tell me which day or session this should apply to? Or if it's a program-wide change, just say "all sessions" and I'll handle it across the board.`;
+}
+
+/**
  * Builds a coaching-toned confirmation message after a successful system edit.
  * Uses the edit plan's changeSummary and applied count to create a concise, clear response.
  */
@@ -735,7 +777,7 @@ Keep it helpful and intelligent, never promotional.`;
               { intent: editPlan.intent, summary: verification.summary },
               "[VibeEdit] Verification FAILED — changes applied but not detected in post-state"
             );
-            const failedContent = `I processed that change but couldn't confirm it actually took effect in your training system. Your program may not have been modified.\n\nThis can happen when the requested change didn't produce a detectable difference in the program state. Please try again with a more specific request — for example, name the exact exercise, reference the day number, or specify the exact field to change (sets, reps, rest, etc.).`;
+            const failedContent = `I applied the change but something didn't land cleanly in your program. Let me take another pass at it.\n\nCould you give me a little more direction? For example: the specific exercise name, which day or session it's in, or exactly what you want to change (sets, reps, rest, or movement). That'll help me lock it in precisely.`;
             const [failedMsg] = await db.insert(messagesTable).values({
               conversationId: params.data.id, role: "assistant",
               content: failedContent, structuredData: null,
@@ -838,6 +880,7 @@ Keep it helpful and intelligent, never promotional.`;
             },
             planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
             intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
+            ...(process.env.NODE_ENV !== "production" && editPlan._debugRoute ? { routeDebug: { ...editPlan._debugRoute, intentType: intentResult.type, editSubtype: intentResult.editSubtype ?? null, requestPreview: parsed.data.content.slice(0, 120) } } : {}),
             systemEdit: {
               applied: true,
               changeSummary: editResult.changeSummary,
@@ -852,12 +895,17 @@ Keep it helpful and intelligent, never promotional.`;
           return;
         }
 
-        // Edit plan produced no applied changes — return explicit failure, do NOT pretend success
+        // Edit plan produced no applied changes — return agentic coaching response, do NOT pretend success
         logger.warn(
-          { intent: editPlan.intent, skipped: editResult.skippedCount },
-          "[VibeEdit] No changes applied — returning honest failure response to user"
+          { intent: editPlan.intent, scope: editPlan.scope, skipped: editResult.skippedCount, editSubtype: intentResult.editSubtype },
+          "[VibeEdit] No changes applied — returning agentic clarification response"
         );
-        const noOpContent = `I wasn't able to apply that change to your training system.\n\nThe modification you requested couldn't be resolved to specific exercises, sessions, or blocks in your current program. This typically happens when:\n- The exercise name is slightly different from what's in your program\n- The day or session you referenced doesn't exist\n- The request is too broad for a targeted edit\n\nCould you be more specific? For example: name the exact exercise, reference the specific day (e.g. "on Day 2"), or describe the scope more precisely and I'll apply it directly.`;
+        const noOpContent = buildAgenticNoChangesResponse(
+          parsed.data.content,
+          editPlan.intent,
+          editPlan.scope,
+          intentResult.editSubtype
+        );
         const [noOpMessage] = await db.insert(messagesTable).values({
           conversationId: params.data.id,
           role: "assistant",
@@ -873,6 +921,7 @@ Keep it helpful and intelligent, never promotional.`;
           assistantMessage: { id: noOpMessage.id, conversationId: noOpMessage.conversationId, role: noOpMessage.role, content: noOpMessage.content, createdAt: noOpMessage.createdAt.toISOString(), structuredData: null },
           planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
           intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
+          ...(process.env.NODE_ENV !== "production" && editPlan._debugRoute ? { routeDebug: { ...editPlan._debugRoute, intentType: intentResult.type, editSubtype: intentResult.editSubtype ?? null, requestPreview: parsed.data.content.slice(0, 120) } } : {}),
           systemEdit: { applied: false },
           editFailure: { reason: "no_changes_applied", skippedCount: editResult.skippedCount },
         });
@@ -880,7 +929,7 @@ Keep it helpful and intelligent, never promotional.`;
       }
     } catch (err: any) {
       logger.error({ err: err?.message, stack: err?.stack }, "[VibeEdit] Edit pipeline threw — returning error response to user");
-      const errContent = `I encountered a system issue while trying to apply that change. Your program has not been modified.\n\nPlease try again. If the problem continues, try rephrasing your request with more detail about which exercise, day, or session to change.`;
+      const errContent = `Something went wrong on my end while applying that change — your program hasn't been modified.\n\nGive it another try. If it keeps happening, try being a bit more specific: name the exercise, the day, or exactly what you want to change and I'll lock it in.`;
       const [errMessage] = await db.insert(messagesTable).values({
         conversationId: params.data.id,
         role: "assistant",
@@ -1652,7 +1701,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
               { intent: editPlan.intent, summary: verification.summary },
               "[VibeEdit:stream] Verification FAILED — changes applied but not detected in post-state"
             );
-            const failedContent = `I processed that change but couldn't confirm it actually took effect in your training system. Your program may not have been modified.\n\nThis can happen when the requested change didn't produce a detectable difference in the program state. Please try again with a more specific request — for example, name the exact exercise, reference the day number, or specify the exact field to change (sets, reps, rest, etc.).`;
+            const failedContent = `I applied the change but something didn't land cleanly in your program. Let me take another pass at it.\n\nCould you give me a little more direction? For example: the specific exercise name, which day or session it's in, or exactly what you want to change (sets, reps, rest, or movement). That'll help me lock it in precisely.`;
             const [failedMsg] = await db.insert(messagesTable).values({
               conversationId: params.data.id, role: "assistant", content: failedContent, structuredData: null,
             }).returning();
@@ -1738,9 +1787,14 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           });
           return;
         }
-        // No changes applied — return explicit failure, do NOT fall through to AI
-        logger.warn({ intent: editPlan.intent, skipped: editResult.skippedCount }, "[VibeEdit:stream] No changes applied — returning honest failure response to user");
-        const noOpContent = `I wasn't able to apply that change to your training system.\n\nThe modification you requested couldn't be resolved to specific exercises, sessions, or blocks in your current program. This typically happens when:\n- The exercise name is slightly different from what's in your program\n- The day or session you referenced doesn't exist\n- The request is too broad for a targeted edit\n\nCould you be more specific? For example: name the exact exercise, reference the specific day (e.g. "on Day 2"), or describe the scope more precisely and I'll apply it directly.`;
+        // No changes applied — return agentic coaching response, do NOT fall through to AI
+        logger.warn({ intent: editPlan.intent, scope: editPlan.scope, skipped: editResult.skippedCount, editSubtype: intentResult.editSubtype }, "[VibeEdit:stream] No changes applied — returning agentic clarification response");
+        const noOpContent = buildAgenticNoChangesResponse(
+          parsed.data.content,
+          editPlan.intent,
+          editPlan.scope,
+          intentResult.editSubtype
+        );
         const [noOpMsg] = await db.insert(messagesTable).values({
           conversationId: params.data.id, role: "assistant", content: noOpContent, structuredData: null,
         }).returning();
@@ -1757,7 +1811,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       }
     } catch (err: any) {
       logger.error({ err: err?.message }, "[VibeEdit:stream] Edit pipeline threw — returning error response to user");
-      const errContent = `I encountered a system issue while trying to apply that change. Your program has not been modified.\n\nPlease try again. If the problem continues, try rephrasing your request with more detail about which exercise, day, or session to change.`;
+      const errContent = `Something went wrong on my end while applying that change — your program hasn't been modified.\n\nGive it another try. If it keeps happening, try being a bit more specific: name the exercise, the day, or exactly what you want to change and I'll lock it in.`;
       const [errMsg] = await db.insert(messagesTable).values({
         conversationId: params.data.id, role: "assistant", content: errContent, structuredData: null,
       }).returning();

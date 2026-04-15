@@ -817,6 +817,16 @@ function matchesEditProgram(lower: string, hasActiveProgram: boolean): {
     { pattern: /\b(i (just got|got|received|have|looking at)).{0,40}(my|the|this).{0,20}(program|plan|routine|workout)\b/i, subtype: "general_modification" },
     { pattern: /\bthis program\b.{0,60}\b(needs?|should|doesn.t|does not|is|has no|lacks?)\b/i, subtype: "general_modification" },
     { pattern: /\b(noticed|see|saw|found|realized).{0,40}\b(no|missing|lack|without|not enough)\b/i, subtype: "general_modification" },
+    // "Make this/it/day N harder/more challenging/more intense" — broad difficulty escalation requests
+    { pattern: /\b(make|make it|make this|make (day|session|week))\b.{0,40}\b(harder|more challenging|more intense|more difficult|more demanding|tougher)\b/i, subtype: "general_modification" },
+    // "Add more/extra/some exercises to day N / to this session" — generic exercise addition
+    { pattern: /\badd\b.{0,30}\b(more|extra|some|additional)?\b.{0,20}\b(exercises?|movements?|lifts?|work)\b.{0,30}\b(to|on|for|into)\b.{0,20}\b(day|session)\b/i, subtype: "general_modification" },
+    // "Add more exercises" without specific day — still clearly an edit
+    { pattern: /\badd\s+(?:more|extra|some|additional)\s+(?:exercises?|movements?|lifts?)\b/i, subtype: "general_modification" },
+    // "I want to make day N harder" or "day 1 needs to be harder"
+    { pattern: /\b(day\s*\d|session\s*\d|week\s*\d)\b.{0,40}\b(harder|tougher|more intense|more challenging|more demanding)\b/i, subtype: "general_modification" },
+    // "This session/day feels too easy" — context-sensitive intensity adjustment
+    { pattern: /\b(this|today.s|that)?\s*(session|day|workout)\b.{0,30}\b(feels?|seems?|is)\b.{0,20}\b(too easy|not hard enough|not challenging enough|too light|easy)\b/i, subtype: "general_modification" },
   ];
 
   for (const { pattern, subtype } of highConfidencePatterns) {
