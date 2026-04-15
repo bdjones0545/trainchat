@@ -763,9 +763,14 @@ export default function Chat() {
   // please log in again" from a brand-new unregistered device. Cleared on logout.
   if (me) markOnboardingComplete();
 
-  const firstName = me?.name?.split(" ")[0] ?? "Athlete";
-  const userName = me?.name ?? "User";
-  const initials = userName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
+  const rawUserName = me?.name ?? "User";
+  const isAnonymousUser = !!(me as any)?.isAnonymous || rawUserName === "Anonymous";
+  const userName = rawUserName;
+  const displayName = isAnonymousUser
+    ? (activeSystem?.name ? activeSystem.name.split(" ").slice(0, 4).join(" ") : "Your Workspace")
+    : rawUserName;
+  const firstName = isAnonymousUser ? "Athlete" : (rawUserName.split(" ")[0] ?? "Athlete");
+  const initials = isAnonymousUser ? "TC" : rawUserName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
 
   // ─── Sidebar content ────────────────────────────────────────────────────────
 
@@ -778,9 +783,9 @@ export default function Chat() {
             {initials}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-foreground truncate">{userName}</p>
+            <p className="text-sm font-semibold text-foreground truncate">{displayName}</p>
             <p className="text-[11px] text-muted-foreground">
-              {currentStreak > 0 ? `${currentStreak} day streak 🔥` : "Performance Athlete"}
+              {isAnonymousUser ? "Performance Athlete" : (currentStreak > 0 ? `${currentStreak} day streak 🔥` : "Performance Athlete")}
             </p>
           </div>
           {calibrationScore > 0 && (
@@ -1092,7 +1097,7 @@ export default function Chat() {
       {/* ─── Desktop TopNav ─── */}
       <div className="hidden md:block">
         <TopNav
-          userName={userName}
+          userName={displayName}
           extraContent={
             <div className="flex items-center gap-2">
               <StreakBadge streak={currentStreak} />
@@ -1132,20 +1137,6 @@ export default function Chat() {
             {sidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeft className="w-4 h-4" />}
           </button>
 
-          {/* Free tier indicator */}
-          {!isPremium && subscription !== null && subscription?.plan === "free" && (
-            <div className="absolute top-3 right-3 z-10">
-              <button
-                onClick={() => setShowPricing(true)}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold text-primary/70 border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-all"
-              >
-                <Zap className="w-3 h-3" />
-                {subscription?.messagesRemaining !== undefined
-                  ? `${subscription.messagesRemaining} free left`
-                  : "Upgrade"}
-              </button>
-            </div>
-          )}
 
           {/* Compact sticky context bar — shows when a program exists */}
           {displayProgram && (
@@ -1216,6 +1207,11 @@ export default function Chat() {
                     key={msg.id}
                     message={msg}
                     onViewProgram={() => setMobilePanel("right")}
+                    onShowChange={() => {
+                      setRightPanelOpen(true);
+                      setMobilePanel("right");
+                      if (changeTargets.length > 0) setNewChangeSignal((n) => n + 1);
+                    }}
                   />
                 ))}
                 {stream.isActive && (
@@ -1255,6 +1251,27 @@ export default function Chat() {
                   </div>
                 )}
 
+                {/* Limit approach nudge — subtle in-chat message when near limit */}
+                {!isPremium && subscription?.messagesRemaining !== undefined && subscription?.messagesRemaining !== null && subscription.messagesRemaining <= 2 && subscription.messagesRemaining > 0 && (
+                  <div className="flex items-start gap-3 mb-5">
+                    <div className="w-7 h-7 rounded-full bg-card border border-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <div className="w-2 h-2 rounded-full bg-primary/40" />
+                    </div>
+                    <div className="max-w-[90%] px-4 py-3 rounded-2xl rounded-tl-sm bg-card border border-primary/15 text-foreground">
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        You've built something real here.{" "}
+                        <button
+                          onClick={() => setShowPricing(true)}
+                          className="text-primary font-semibold hover:underline"
+                        >
+                          Unlock full access
+                        </button>{" "}
+                        to keep evolving it — your program doesn't stop here.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <div ref={messagesEndRef} />
               </div>
             )}
@@ -1271,6 +1288,17 @@ export default function Chat() {
                 ) : (
                   <span className="text-[11px] text-muted-foreground">Program updated</span>
                 )}
+                <span className="text-muted-foreground/40 text-[11px]">·</span>
+                <button
+                  onClick={() => {
+                    setRightPanelOpen(true);
+                    setMobilePanel("right");
+                    if (changeTargets.length > 0) setNewChangeSignal((n) => n + 1);
+                  }}
+                  className="flex items-center gap-1 text-[11px] font-semibold text-primary/70 hover:text-primary transition-colors"
+                >
+                  Show →
+                </button>
                 <span className="text-muted-foreground/40 text-[11px]">·</span>
                 <button
                   onClick={handleUndo}

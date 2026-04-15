@@ -1,0 +1,398 @@
+We are now running a focused TrainChat product polish sprint.
+
+OBJECTIVE:
+Close the final gap between “technically real” and “authentically feels like vibe coding for training.”
+
+This is NOT an infrastructure rebuild.
+Do NOT re-architect the mutation engine, SSE pipeline, verification system, undo system, or canonical program model unless absolutely necessary for one of the polish tasks below.
+
+The infrastructure is already strong.
+
+This sprint is about:
+- trust
+- ownership
+- visibility of change
+- first impression
+- conversion continuity
+- reducing “metered demo” signals
+- making the realness impossible to miss
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make TrainChat feel less like:
+- a metered AI trial
+- a guest mode
+- a smart chatbot with visuals
+
+And more like:
+- a real training workspace
+- a live editable system
+- a collaborative coach-builder
+- Cursor/Figma/Replit for training
+
+==================================================
+SPRINT PRIORITIES
+==================================================
+
+Implement these in exact priority order unless you discover a dependency that forces a different sequence.
+
+1. Fix free registered users so signup is always an upgrade
+2. Remove the visible countdown timer from first impression
+3. Add a persistent in-chat mutation confirmation artifact
+4. Remove “Anonymous” from user-facing identity language
+5. Extend and replay change visibility in the Live Program panel
+6. Reduce “empty placeholder” feel on first load
+7. Clean up anonymous-user 404 behavior and weak fallback signals
+8. Tighten registered-user paywall copy so it feels like continuation, not a demo ending
+
+==================================================
+TASK 1 — SIGNUP MUST NEVER DEGRADE THE EXPERIENCE
+==================================================
+
+Current known issue:
+Registered free users get fewer messages than anonymous users.
+This is a trust-destruction event and must be fixed first.
+
+Audit and patch:
+- planGating.ts
+- any free/anonymous entitlement config
+- any merge behavior carrying over or penalizing message counts
+- any paywall messaging tied to these limits
+
+Requirements:
+- FREE_MESSAGE_LIMIT must be >= ANON_MESSAGE_LIMIT
+- ideally free registered is a clear upgrade over anonymous
+- signup must preserve momentum and feel beneficial
+- if anonymous usage carries over, ensure it does not create a “you signed up and now have less” feeling
+- if needed, reset or reframe counters on signup so it clearly feels like continuation or upgrade
+
+Recommended outcome:
+- anonymous users get enough to feel the product (e.g. 8)
+- free registered users get at least 10 or 12, or another clearly better entitlement
+- paid remains meaningfully better than both
+
+Output expectation:
+- explicitly state old limits and new limits
+- explain how signup now behaves
+- confirm there is no longer a downgrade path
+
+==================================================
+TASK 2 — REMOVE THE VISIBLE COUNTDOWN FROM FIRST IMPRESSION
+==================================================
+
+Current known issue:
+The “8 free left” badge is visible immediately and makes the app feel metered from second 1.
+
+Patch the UI so:
+- no visible free-counter appears at first load
+- user can enter the product without feeling they are racing a meter
+- the limit is still enforced in the backend
+- limit awareness is introduced only near the gate
+
+Preferred UX:
+- hide the top-right free message countdown entirely
+- after the user is close to the limit (for example after message 6 of 8), show a subtle in-chat nudge or lightweight system message
+- phrase it as preserving progress / saving their system, not consuming remaining credits
+
+Examples of better language:
+- “You’re close to the point where we’ll ask you to save your system.”
+- “A couple more edits and we’ll help you save your build.”
+- “You’ve built something real — next we’ll prompt you to save it.”
+
+Do NOT use:
+- “2 free left”
+- “credits remaining”
+- language that feels transactional or trial-like
+
+Audit and patch:
+- chat.tsx
+- any badge components
+- any top-nav free limit indicators
+- anonymous / free user status indicators
+
+==================================================
+TASK 3 — ADD A PERSISTENT IN-CHAT CHANGE CONFIRMATION ARTIFACT
+==================================================
+
+Current known issue:
+Real mutations happen, but the main proof lives in the right panel highlight and can be missed.
+
+Implement a first-class in-chat mutation artifact that appears after every verified successful edit.
+
+This should be a real product component, not just plain assistant text.
+
+Requirements:
+After a successful verified mutation, render a persistent SystemChangeCard (or equivalent) in the chat that includes:
+
+- short title, e.g. “Program Updated”
+- exact thing that changed
+- where it changed (day/session/block if known)
+- what it replaced or what was added/removed
+- concise impact summary if available
+- a CTA like “View in Program” or “Jump to Change”
+
+Examples:
+- “Day 2 updated: Bench Press → Incline Dumbbell Press”
+- “Lower-body block updated: Added 1 set to squat variations”
+- “Program adjusted: Added more speed work to Day 2”
+
+Behavior:
+- persists in the chat history
+- survives scrolling
+- is visually distinct from regular assistant messages
+- clicking it opens the relevant panel/tab and scrolls to the changed item if possible
+- should work on desktop and mobile
+- should not disappear after a few seconds
+
+It must be generated from the VERIFIED mutation result, not from raw intent.
+
+Audit and patch:
+- message rendering components
+- message bubble / system update card logic
+- mutation result → UI artifact mapping
+- chat panel / live panel linking behavior
+
+==================================================
+TASK 4 — REMOVE “ANONYMOUS” FROM USER-FACING PRODUCT LANGUAGE
+==================================================
+
+Current known issue:
+“Anonymous” is backend/auth terminology leaking into the UI and making the product feel temporary or limited.
+
+Remove “Anonymous” from all user-facing identity surfaces.
+
+Replace with a product-facing framing such as:
+- Your System
+- Your Workspace
+- Your Program
+- Performance Athlete
+- or the active program name once available
+
+Guidelines:
+- do not expose auth state language to the user
+- identity framing should increase ownership
+- the user should feel they are already inside something that belongs to them
+
+Audit and patch:
+- left sidebar labels
+- header identity labels
+- session/history labels if applicable
+- any paywall or empty-state copy that references anonymous/guest mode
+
+==================================================
+TASK 5 — EXTEND AND REPLAY CHANGE VISIBILITY
+==================================================
+
+Current known issue:
+The highlight animation is good but too easy to miss.
+
+Improve mutation visibility in the Live Program panel.
+
+Requirements:
+- extend highlight duration from current short window to something reliably noticeable (for example 8 seconds)
+- add a replay mechanism
+- expose a persistent “last change” signal until dismissed or replaced
+
+Preferred UX:
+- the undo toast should include a “What changed?” or “Show change” action
+- clicking it re-opens the relevant day/block if needed, scrolls to the changed area, and replays the highlight animation
+- the panel header can optionally show a compact “Last updated: Bench Press → Incline DB Press” chip that persists for a while
+
+Audit and patch:
+- highlight timing constants
+- changeTargets handling
+- undo toast actions
+- panel header/status chip logic
+- scroll + replay behavior
+
+==================================================
+TASK 6 — REDUCE EMPTY PLACEHOLDER FEEL ON FIRST LOAD
+==================================================
+
+Current known issue:
+The right panel starts in a ghost-skeleton/placeholder state that makes the first 30 seconds feel like a promise rather than a live system.
+
+Refactor the initial empty state so it feels intentional and alive, not like missing content.
+
+Requirements:
+- do not show a hollow skeleton that reads as “placeholder UI”
+- instead show a purposeful pre-build state that reinforces co-creation
+
+Preferred patterns:
+- “Your system will take shape here as we build it together.”
+- show 2–3 concise examples of what will appear after the first build
+- optionally show one strong line reinforcing realness, e.g.
+  “As you describe your goals, I’ll build and update your program live.”
+- make the space feel like a workspace waiting for input, not a loading shell
+
+This is a copy/UX/state-design task, not a feature rebuild.
+
+Audit and patch:
+- LiveProgramPanel empty state
+- EmptyProgramState component
+- initial right-panel visuals/copy
+- first-use mobile/desktop behavior
+
+==================================================
+TASK 7 — CLEAN UP ANONYMOUS-USER 404 BEHAVIOR AND WEAK FALLBACK SIGNALS
+==================================================
+
+Current known issues:
+- multiple expected 404s on anonymous first load
+- fallback GuestStart path feels noticeably weaker than main product
+
+Patch where practical so anonymous users feel fully supported.
+
+Requirements:
+- replace avoidable 404s with clean 200 responses + empty/default data where appropriate for anonymous users
+- reduce console noise and startup jitter
+- audit whether any anonymous-only APIs should return defaults rather than not-found
+- keep truthfulness, but prefer graceful empty-state contracts over noisy missing-resource behavior
+
+Also audit fallback behavior:
+- GuestStart fallback should not feel like a different weaker product if it ever appears
+- if it must remain, tighten it so it is closer in quality/tone to main Chat experience
+- if possible, reduce the chances a user ever lands there
+- if not possible, clearly document why it remains and what still differs
+
+Audit and patch:
+- anonymous bootstrap-related endpoints
+- profile/subscription/insights/streak endpoints or equivalents
+- GuestStart fallback route/components
+- any console-noise-producing client fetches
+
+==================================================
+TASK 8 — FIX REGISTERED-FREE PAYWALL COPY
+==================================================
+
+Current known issue:
+Registered-free paywall language feels like “your demo is over” rather than “continue building your system.”
+
+Refactor registered-free paywall messaging so it matches the product truth:
+the user has already begun building something real.
+
+Requirements:
+- the copy should frame upgrade as continuation and expansion
+- the tone should respect that the user already has a real system
+- it should feel different from a generic SaaS trial wall
+
+Better framing examples:
+- “Keep building your system”
+- “Continue evolving your training”
+- “Unlock deeper iteration, memory, and ongoing adaptation”
+- “You’ve started something real — unlock full continuity”
+
+Avoid:
+- “Your 5 free interactions are up”
+- generic trial language
+- copy that makes the product sound like a toy preview
+
+Audit and patch:
+- PaywallModal.tsx
+- registered-free paywall branch
+- any CTA labels
+- any upgrade explanation text
+
+==================================================
+DO NOT CHANGE UNLESS NECESSARY
+==================================================
+
+Do NOT rebuild or substantially alter:
+- SSE pipeline
+- mutation verifier
+- undo architecture
+- canonical program model
+- deviceId anonymous auth system
+- edit engine core logic
+- database schema
+- core conversation architecture
+
+Only touch these if absolutely required to support the polish tasks above.
+
+==================================================
+MANDATORY TEST SCENARIOS
+==================================================
+
+After changes, validate these scenarios:
+
+1. Brand new anonymous user enters app
+Expected:
+- no visible countdown timer on first impression
+- no “Anonymous” label in identity surfaces
+- right panel feels intentional, not placeholder
+- entry feels like real product, not trial mode
+
+2. Anonymous user builds first program
+Expected:
+- build feels real and alive
+- no awkward empty-state signals
+- product feels like a workspace becoming populated
+
+3. Anonymous user makes a mutation
+Example:
+“Swap bench press for incline dumbbell press”
+Expected:
+- persistent in-chat change card appears
+- change is also visible in panel
+- highlight lasts long enough to be noticed
+- replay action works if available
+
+4. Anonymous user nears free limit
+Expected:
+- subtle in-chat nudge appears
+- no anxiety-inducing countdown
+- messaging frames saving/build continuation correctly
+
+5. Anonymous user signs up
+Expected:
+- experience improves or at least clearly does not degrade
+- message limit does not become worse
+- no bait-and-switch feeling
+
+6. Registered free user hits limit
+Expected:
+- paywall copy feels like continuation of a real build
+- not like a generic trial ending
+
+7. Paid user
+Expected:
+- no regression
+- same real product feel
+- any new UI artifacts still work cleanly
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What files/components were changed
+2. What old vs new message limits are
+3. How countdown visibility changed
+4. What new in-chat mutation artifact was added
+5. What “Anonymous” language was removed/replaced
+6. How change highlight duration/replay now works
+7. How empty right-panel feel was improved
+8. What 404/fallback cleanup was completed
+9. How registered-free paywall copy now reads
+10. Any remaining polish issues that still weaken authentic vibe-coding feel
+
+==================================================
+FINAL STANDARD
+==================================================
+
+A user should enter TrainChat and feel:
+- this is a real workspace
+- my system is actually being built
+- changes are visible and undeniable
+- signing up helps me
+- the product is not counting down a trial in my face
+- I am already inside the real thing
+
+This sprint is about surfacing the truth of the product:
+the engine is already real.
+Now make the feeling real too.
+
+Implement this polish sprint now.

@@ -1,4 +1,4 @@
-import { CheckCircle2, ArrowRight, Zap, AlertTriangle, Info } from "lucide-react";
+import { CheckCircle2, ArrowRight, Zap, AlertTriangle, Info, Eye } from "lucide-react";
 import { useLocation } from "wouter";
 
 interface ChangedIds {
@@ -19,6 +19,7 @@ interface SystemEditData {
 
 interface Props {
   data: SystemEditData;
+  onShowChange?: () => void;
 }
 
 interface StatusConfig {
@@ -64,20 +65,20 @@ function getStatusConfig(status: SystemEditData["verificationStatus"]): StatusCo
       };
     default:
       return {
-        borderColor: "border-green-500/25",
+        borderColor: "border-green-500/30",
         bgColor: "bg-green-500/8",
-        headerBorder: "border-green-500/15",
+        headerBorder: "border-green-500/20",
         iconColor: "text-green-400",
         accentColor: "text-green-400",
         footerHover: "hover:bg-green-500/10",
         footerBorder: "border-green-500/15",
-        label: "Training System Updated",
+        label: "Program Updated",
         Icon: CheckCircle2,
       };
   }
 }
 
-export default function SystemUpdateCard({ data }: Props) {
+export default function SystemUpdateCard({ data, onShowChange }: Props) {
   const [, setLocation] = useLocation();
   const config = getStatusConfig(data.verificationStatus);
   const { Icon } = config;
@@ -109,7 +110,7 @@ export default function SystemUpdateCard({ data }: Props) {
     <div className={`mt-3 rounded-xl border ${config.borderColor} ${config.bgColor} overflow-hidden`}>
       <div className={`flex items-center gap-2 px-3 py-2 border-b ${config.headerBorder}`}>
         <Icon className={`w-3.5 h-3.5 ${config.iconColor} flex-shrink-0`} />
-        <span className={`text-[11px] font-semibold ${config.accentColor} uppercase tracking-widest`}>
+        <span className={`text-[11px] font-bold ${config.accentColor} uppercase tracking-widest`}>
           {config.label}
         </span>
         {totalChanged > 0 && (
@@ -120,8 +121,8 @@ export default function SystemUpdateCard({ data }: Props) {
         )}
       </div>
 
-      <div className="px-3 py-2.5">
-        <p className="text-[12px] text-muted-foreground leading-relaxed">
+      <div className="px-3 py-3">
+        <p className="text-[13px] text-foreground leading-relaxed font-medium">
           {data.changeSummary}
         </p>
         {config.subNote && (
@@ -131,13 +132,24 @@ export default function SystemUpdateCard({ data }: Props) {
         )}
       </div>
 
-      <button
-        onClick={() => setLocation("/system")}
-        className={`w-full flex items-center justify-between px-3 py-2 border-t ${config.footerBorder} text-[11px] font-semibold ${config.accentColor} ${config.footerHover} transition-colors duration-150`}
-      >
-        <span>View in Training System</span>
-        <ArrowRight className="w-3 h-3" />
-      </button>
+      <div className={`flex border-t ${config.footerBorder}`}>
+        {onShowChange && (
+          <button
+            onClick={onShowChange}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] font-semibold ${config.accentColor} ${config.footerHover} transition-colors duration-150 border-r ${config.footerBorder}`}
+          >
+            <Eye className="w-3 h-3" />
+            Show Change
+          </button>
+        )}
+        <button
+          onClick={() => setLocation("/system")}
+          className={`flex-1 flex items-center justify-between px-3 py-2 text-[11px] font-semibold ${config.accentColor} ${config.footerHover} transition-colors duration-150`}
+        >
+          <span>View System</span>
+          <ArrowRight className="w-3 h-3" />
+        </button>
+      </div>
     </div>
   );
 }

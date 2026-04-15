@@ -1,4 +1,4 @@
-import { X, Zap, Lock, ArrowRight } from "lucide-react";
+import { X, Zap, ArrowRight, Sparkles } from "lucide-react";
 
 interface Props {
   plan: string;
@@ -32,16 +32,18 @@ export default function PaywallModal({ plan, messagesUsed, onUpgrade, onClose }:
         <div className="p-8">
           {/* Icon */}
           <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-6 mx-auto">
-            <Lock className="w-6 h-6 text-primary" />
+            <Sparkles className="w-6 h-6 text-primary" />
           </div>
 
           <div className="text-center mb-6">
             <h2 className="text-xl font-bold text-foreground mb-2">
-              {isFree ? "Your 5 free interactions are up" : "Message limit reached"}
+              {isFree
+                ? "Your program is ready to evolve"
+                : "Message limit reached"}
             </h2>
             <p className="text-sm text-muted-foreground leading-relaxed">
               {isFree
-                ? "You've experienced what your AI performance architect can do. Unlock full access to keep building and evolving your program."
+                ? "You've built a real training program — and this is just the start. Unlock full access to keep adapting it week over week, log sessions, and let your coach remember everything."
                 : "You've hit your monthly limit. Upgrade to Pro for unlimited coaching sessions."}
             </p>
           </div>
@@ -68,7 +70,7 @@ export default function PaywallModal({ plan, messagesUsed, onUpgrade, onClose }:
             className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 active:scale-[0.98] transition-all duration-150"
           >
             <Zap className="w-4 h-4" />
-            View Plans & Unlock Access
+            {isFree ? "Keep Building — See Plans" : "View Plans & Unlock Access"}
             <ArrowRight className="w-4 h-4" />
           </button>
 

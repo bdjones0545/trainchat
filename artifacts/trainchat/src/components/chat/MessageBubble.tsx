@@ -14,6 +14,7 @@ interface Props {
   message: Message;
   onProgramGenerated?: () => void;
   onViewProgram?: () => void;
+  onShowChange?: () => void;
 }
 
 function formatTime(dateStr: string) {
@@ -160,7 +161,7 @@ function parseStructuredData(raw: string | null | undefined) {
   return { type: "none" as const };
 }
 
-export default function MessageBubble({ message, onViewProgram }: Props) {
+export default function MessageBubble({ message, onViewProgram, onShowChange }: Props) {
   const isUser = message.role === "user";
   const parsed = parseStructuredData(message.structuredData);
   const isSystemEdit = !isUser && parsed.type === "system_edit";
@@ -196,7 +197,7 @@ export default function MessageBubble({ message, onViewProgram }: Props) {
 
             {/* System edit card — shown when the agent modified the real training system */}
             {isSystemEdit && (
-              <SystemUpdateCard data={parsed.data} />
+              <SystemUpdateCard data={parsed.data} onShowChange={onShowChange} />
             )}
 
             {/* Build summary card — shown for new initial program builds */}

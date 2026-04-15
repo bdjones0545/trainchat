@@ -29,13 +29,7 @@ router.get("/training-system/active", requireAuth, async (req, res): Promise<voi
   try {
     const userId = req.session.userId!;
     const system = await getActiveTrainingSystem(userId);
-
-    if (!system) {
-      res.status(404).json({ error: "No active training system found" });
-      return;
-    }
-
-    res.json(system);
+    res.json(system ?? null);
   } catch (err) {
     console.error("[training-system] GET /active error", err);
     res.status(500).json({ error: "Failed to load training system" });
@@ -69,12 +63,7 @@ router.get("/training-system/today", requireAuth, async (req, res): Promise<void
     const userId = req.session.userId!;
     const todaySession = await getTodaySession(userId);
 
-    if (!todaySession) {
-      res.status(404).json({ error: "No session found for today" });
-      return;
-    }
-
-    res.json(todaySession);
+    res.json(todaySession ?? null);
   } catch (err) {
     console.error("[training-system] GET /today error", err);
     res.status(500).json({ error: "Failed to load today's session" });
@@ -88,12 +77,7 @@ router.get("/training-system/week", requireAuth, async (req, res): Promise<void>
     const userId = req.session.userId!;
     const week = await getCurrentWeek(userId);
 
-    if (!week) {
-      res.status(404).json({ error: "No current week found" });
-      return;
-    }
-
-    res.json(week);
+    res.json(week ?? null);
   } catch (err) {
     console.error("[training-system] GET /week error", err);
     res.status(500).json({ error: "Failed to load current week" });
@@ -107,12 +91,7 @@ router.get("/training-system/block", requireAuth, async (req, res): Promise<void
     const userId = req.session.userId!;
     const block = await getBlockSummary(userId);
 
-    if (!block) {
-      res.status(404).json({ error: "No training system found" });
-      return;
-    }
-
-    res.json(block);
+    res.json(block ?? null);
   } catch (err) {
     console.error("[training-system] GET /block error", err);
     res.status(500).json({ error: "Failed to load block summary" });

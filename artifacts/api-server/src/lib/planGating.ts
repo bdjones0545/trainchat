@@ -2,7 +2,7 @@ import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import type { PlanTier } from "@workspace/db";
 
-export const FREE_MESSAGE_LIMIT = 5;
+export const FREE_MESSAGE_LIMIT = 12;
 export const STARTER_MESSAGE_LIMIT = 75;
 
 // Anonymous users (device-ID authenticated, not yet registered) get 8 free

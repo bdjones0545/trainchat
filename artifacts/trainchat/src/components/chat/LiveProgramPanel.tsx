@@ -308,115 +308,42 @@ function UpdatingBadge({ phase }: { phase: BuildPhase }) {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function EmptyProgramState() {
-  return (
-    <div className="flex flex-col h-full overflow-y-auto p-4">
-      <style>{`
-        @keyframes emptyPulse {
-          0%, 100% { opacity: 0.35; }
-          50% { opacity: 0.6; }
-        }
-      `}</style>
+  const steps = [
+    { icon: MessageSquare, label: "Describe your goal", detail: "Tell the coach your schedule, equipment, and what you're training for" },
+    { icon: Zap, label: "Program builds live", detail: "Watch your training system structure in real time as the AI builds it" },
+    { icon: TrendingUp, label: "Evolve week over week", detail: "Ask for adjustments anytime — every change is tracked and reversible" },
+  ];
 
-      <div className="mb-4">
-        <div className="flex items-center gap-1.5 mb-1.5">
-          <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30" />
-          <span className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-[0.12em]">
-            Live Program
-          </span>
+  return (
+    <div className="flex flex-col h-full overflow-y-auto p-5">
+      <div className="flex items-center gap-2 mb-5">
+        <div className="w-7 h-7 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+          <Dumbbell className="w-3.5 h-3.5 text-primary/60" />
         </div>
-        <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
-          Your training system will appear here as you build with the agent.
-        </p>
+        <div>
+          <p className="text-[11px] font-bold text-foreground">Your Program</p>
+          <p className="text-[10px] text-muted-foreground">Waiting to be built</p>
+        </div>
       </div>
 
-      <div className="space-y-2">
-        {/* Weekly Split skeleton */}
-        <div className="bg-card/50 border border-border/30 rounded-xl p-3">
-          <div className="flex items-center gap-2 mb-2.5">
-            <LayoutGrid className="w-3 h-3 text-muted-foreground/25" />
-            <span className="text-[10px] font-semibold text-muted-foreground/35">Weekly Split</span>
+      <div className="space-y-3 mb-6">
+        {steps.map(({ icon: Icon, label, detail }, i) => (
+          <div key={i} className="flex items-start gap-3">
+            <div className="w-6 h-6 rounded-lg bg-primary/8 border border-primary/15 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Icon className="w-3 h-3 text-primary/50" />
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold text-foreground/70">{label}</p>
+              <p className="text-[10px] text-muted-foreground leading-relaxed mt-0.5">{detail}</p>
+            </div>
           </div>
-          <div className="flex gap-1.5">
-            {["M", "T", "W", "T", "F"].map((d, i) => (
-              <div
-                key={i}
-                className="flex-1 h-7 bg-muted/15 rounded-lg flex items-center justify-center"
-                style={{ animation: `emptyPulse 2.5s ease-in-out ${i * 120}ms infinite` }}
-              >
-                <span className="text-[9px] text-muted-foreground/25 font-semibold">{d}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        ))}
+      </div>
 
-        {/* Today's Session skeleton */}
-        <div className="bg-card/50 border border-border/30 rounded-xl p-3">
-          <div className="flex items-center gap-2 mb-2.5">
-            <PlayCircle className="w-3 h-3 text-muted-foreground/25" />
-            <span className="text-[10px] font-semibold text-muted-foreground/35">Today's Session</span>
-          </div>
-          <div className="space-y-2">
-            {[72, 56, 64].map((w, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <div
-                  className="h-2 bg-muted/20 rounded-full"
-                  style={{ width: `${w}%`, animation: `emptyPulse 2.5s ease-in-out ${i * 200}ms infinite` }}
-                />
-                <div className="h-2 bg-muted/12 rounded-full w-12 ml-auto" />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Exercise Blocks skeleton */}
-        <div className="bg-card/50 border border-border/30 rounded-xl p-3">
-          <div className="flex items-center gap-2 mb-2.5">
-            <Layers className="w-3 h-3 text-muted-foreground/25" />
-            <span className="text-[10px] font-semibold text-muted-foreground/35">Exercise Blocks</span>
-          </div>
-          <div className="space-y-1.5">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="flex items-center gap-2.5">
-                <div className="w-1 h-1 rounded-full bg-muted/30 flex-shrink-0" />
-                <div
-                  className="h-1.5 bg-muted/18 rounded-full flex-1"
-                  style={{ animation: `emptyPulse 2.5s ease-in-out ${i * 180}ms infinite` }}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Progression Strategy skeleton */}
-        <div className="bg-card/50 border border-border/30 rounded-xl p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <TrendingUp className="w-3 h-3 text-muted-foreground/25" />
-            <span className="text-[10px] font-semibold text-muted-foreground/35">Progression Strategy</span>
-          </div>
-          <div className="space-y-1.5">
-            <div className="h-1.5 bg-muted/18 rounded-full w-4/5" style={{ animation: "emptyPulse 2.5s ease-in-out 0ms infinite" }} />
-            <div className="h-1.5 bg-muted/12 rounded-full w-3/5" style={{ animation: "emptyPulse 2.5s ease-in-out 300ms infinite" }} />
-          </div>
-        </div>
-
-        {/* Agent Change Log skeleton */}
-        <div className="bg-card/50 border border-border/30 rounded-xl p-3">
-          <div className="flex items-center gap-2 mb-2.5">
-            <Activity className="w-3 h-3 text-muted-foreground/25" />
-            <span className="text-[10px] font-semibold text-muted-foreground/35">Agent Change Log</span>
-          </div>
-          <div className="space-y-2">
-            {[0, 1].map((i) => (
-              <div key={i} className="flex items-center gap-2">
-                <div className="w-1 h-1 rounded-full bg-muted/25 flex-shrink-0" />
-                <div
-                  className="h-1.5 bg-muted/15 rounded-full flex-1"
-                  style={{ animation: `emptyPulse 2.5s ease-in-out ${i * 220}ms infinite` }}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
+      <div className="mt-auto pt-4 border-t border-border/30">
+        <p className="text-[10px] text-muted-foreground/50 leading-relaxed text-center">
+          Your program appears here the moment the AI starts building — no need to leave the chat.
+        </p>
       </div>
     </div>
   );
@@ -556,7 +483,7 @@ function ProgramTab({
     highlightTimerRef.current = setTimeout(() => {
       setHighlightedNames(new Set());
       setInlineLabels(new Map());
-    }, 3500);
+    }, 8000);
 
     // Find the day containing the first target and expand it
     const firstTarget = changeTargets[0];
