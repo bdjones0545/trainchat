@@ -1,0 +1,248 @@
+Conduct a full product-behavior audit of TrainChat AFTER the recent polish sprint.
+
+OBJECTIVE:
+Determine whether TrainChat now truly feels like an authentic, undeniable vibe-coding platform for training — not just technically correct, but experientially convincing.
+
+This is NOT a bug audit.
+This is NOT a code-quality audit.
+This is a FEEL, TRUST, VISIBILITY, and PRODUCT IDENTITY audit.
+
+You must evaluate whether the recent changes successfully removed the “metered demo” feel and replaced it with a “real system workspace” feel.
+
+==================================================
+PRIMARY QUESTION
+==================================================
+
+If a brand new user entered TrainChat today, would they feel like they are actively building and editing a real training system with an expert?
+
+Answer with evidence.
+
+==================================================
+WHAT CHANGED (CONTEXT)
+==================================================
+
+The following improvements have already been implemented:
+
+- Free registered users now have MORE messages than anonymous users (no downgrade on signup)
+- Countdown badge removed from first impression
+- Subtle in-chat nudge replaces visible message counter near limit
+- Persistent in-chat mutation confirmation card added (SystemUpdateCard with "Show Change")
+- “Anonymous” removed and replaced with “Your Workspace” / program name identity
+- Change highlight duration increased (3.5s → 8s) with replay capability
+- Right panel empty state rewritten to feel intentional and instructive
+- API endpoints now return 200 + null instead of 404 for missing systems
+- Registered-free paywall copy rewritten to feel like continuation, not trial expiration
+
+Audit specifically whether these changes worked as intended.
+
+==================================================
+WHAT “AUTHENTIC VIBE CODING” MEANS NOW
+==================================================
+
+The user should feel:
+
+1. I am inside a real system from the first second
+2. My input directly changes that system
+3. I can clearly SEE what changed
+4. The agent feels like a real coach editing my program
+5. The system tells the truth about changes
+6. The UI reinforces that changes happened
+7. There is no “trial/demo” feeling on entry
+8. Signing up improves my experience, not degrades it
+9. I do not lose momentum at any point
+10. This feels like Cursor/Figma/Replit — but for training
+
+==================================================
+AUDIT AREAS
+==================================================
+
+A. FIRST IMPRESSION (POST-POLISH)
+Evaluate the first 30–60 seconds of use.
+
+Check:
+- does the app feel like a real workspace immediately?
+- is the empty panel now intentional instead of placeholder?
+- does “Your Workspace” improve ownership feel?
+- does the removal of countdown change the emotional tone?
+- does anything still signal “trial/demo mode”?
+
+B. INPUT → SYSTEM CHANGE FEEL
+Check:
+- do edits feel immediate and real?
+- does every meaningful input mutate the system?
+- are there still moments where the system “talks about” changes instead of applying them?
+
+C. MUTATION VISIBILITY (CRITICAL)
+Evaluate whether changes are now impossible to miss.
+
+Check:
+- is the SystemUpdateCard strong enough and noticeable?
+- does it clearly explain what changed and where?
+- does “Show Change” reliably take the user to the right place?
+- is the 8-second highlight sufficient?
+- can users still miss changes?
+- does mobile experience weaken visibility?
+
+D. AGENT AUTHENTICITY
+Check:
+- does the agent feel like a real coach-editor?
+- are explanations grounded in the actual program structure?
+- does it explain WHAT changed, WHERE, and WHY?
+- does it avoid generic phrasing?
+
+E. SYSTEM TRUST / REALNESS
+Check:
+- does the program feel like a persistent real object?
+- do refreshes and returns preserve continuity?
+- do 200 + null responses eliminate weird states?
+- does anything still feel like a preview or simulation?
+
+F. ANONYMOUS vs REGISTERED vs PAID
+Evaluate each:
+
+Anonymous:
+- does it feel like the real product now?
+- any remaining “limited mode” signals?
+
+Registered Free:
+- does signup now feel like an upgrade?
+- does paywall copy feel correct?
+- any friction after signup?
+
+Paid:
+- does paid feel meaningfully better?
+- is the upgrade noticeable enough?
+
+G. PAYWALL / LIMIT EXPERIENCE
+Check:
+- does the subtle in-chat nudge work?
+- does it feel like preserving momentum instead of stopping usage?
+- does the paywall feel like “continue building” instead of “you’re out”?
+
+H. INTERACTION RHYTHM
+Check:
+- does SSE still feel smooth?
+- do stage bubbles still reinforce real system work?
+- are there dead pauses or confusion moments?
+
+I. FAILURE HONESTY
+Check:
+- does the system still tell the truth on failure?
+- are partial/no-op states clear?
+- does anything still fake success?
+
+J. OVERALL PRODUCT IDENTITY
+Determine whether TrainChat now feels like:
+
+1. TRUE vibe-coding platform for training
+2. Strong AI training system with editing
+3. Chatbot with program visuals
+
+Be decisive.
+
+==================================================
+MANDATORY TEST SCENARIOS
+==================================================
+
+Test these:
+
+1. New anonymous user:
+“Build me a 3-day strength program.”
+
+2. Follow-up:
+“Swap bench press for incline dumbbell press.”
+
+3. Follow-up:
+“Add more speed work on day 2.”
+
+4. Follow-up:
+“Make this more beginner friendly.”
+
+5. Hit free limit
+6. Sign up
+7. Continue editing
+8. Return later
+9. Paid user experience
+
+For each:
+- did it feel real?
+- did the system actually change?
+- was the change visible?
+- did it maintain momentum?
+
+==================================================
+OUTPUT FORMAT
+==================================================
+
+1. EXECUTIVE VERDICT
+Choose:
+- Yes
+- Mostly
+- Partially
+- Not yet
+
+Then explain clearly.
+
+2. UPDATED SCORECARD (1–10)
+- First impression
+- Agent authenticity
+- Input → system change feel
+- Mutation visibility
+- System trust
+- Anonymous experience
+- Conversion continuity
+- Paywall experience
+- Interaction rhythm
+- Overall vibe-coding feel
+
+3. WHAT NOW FEELS AUTHENTIC
+What clearly improved from the polish sprint?
+
+4. WHAT STILL BREAKS THE ILLUSION
+List remaining friction points.
+
+For each:
+- issue
+- why it matters
+- severity
+
+5. USER-STATE BREAKDOWN
+Anonymous / Registered / Paid
+
+6. AGENT TRUTH (editor vs narrator)
+
+7. UI TRUTH (are changes undeniable now?)
+
+8. FINAL PRODUCT TRUTH
+One paragraph:
+Does this now genuinely feel like vibe coding?
+
+9. TOP 3 FINAL IMPROVEMENTS
+Only the highest leverage remaining moves.
+
+10. FINAL RECOMMENDATION
+Should we:
+- polish further
+- tune agent
+- improve UI signals
+- optimize performance
+- or shift to growth
+
+==================================================
+AUDIT RULES
+==================================================
+
+- Be brutally honest
+- Focus on FEEL, not just function
+- If something works but doesn’t feel real, call it out
+- If something now feels undeniably real, call it out
+- Compare BEFORE vs AFTER implicitly
+- Judge as a user, not a developer
+
+==================================================
+FINAL INSTRUCTION
+==================================================
+
+You are evaluating whether TrainChat has crossed the line into a truly believable vibe-coding platform for training.
+
+Decide if it has — or what is still holding it back.

@@ -1719,8 +1719,12 @@ export default function SystemPage() {
   }
 
   const hasSystem = !!activeSystem;
-  const userName = me?.name ?? "Athlete";
-  const initials = userName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
+  const rawName = me?.name ?? "Athlete";
+  const isAnonymousUser = !!(me as any)?.isAnonymous || rawName === "Anonymous";
+  const userName = isAnonymousUser
+    ? (activeSystem?.name ? activeSystem.name.split(" ").slice(0, 4).join(" ") : "Your Workspace")
+    : rawName;
+  const initials = isAnonymousUser ? "TC" : rawName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
 
   function handleLogout() {
     logout.mutate(undefined, {
