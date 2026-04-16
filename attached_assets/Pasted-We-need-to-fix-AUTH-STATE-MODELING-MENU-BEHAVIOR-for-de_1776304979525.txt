@@ -1,0 +1,195 @@
+We need to fix AUTH STATE MODELING + MENU BEHAVIOR for deviceId users in TrainChat.
+
+OBJECTIVE:
+DeviceId users are currently being treated too much like fully signed-in account users, which is creating broken UX and possibly broken session/account flows.
+
+These users are:
+- authenticated enough to have an anonymous user record
+- NOT true registered account users
+
+The UI and auth logic must distinguish clearly between:
+1. anonymous/device-authenticated users
+2. registered/authenticated account users
+
+==================================================
+PRIMARY PROBLEM
+==================================================
+
+Right now deviceId users can see account-like UI such as:
+- Sign Out
+- account-style menu behavior
+- session/program management that may assume full account semantics
+
+This is conceptually wrong and can break:
+- account creation
+- state recovery
+- session continuity
+- menu expectations
+- anonymous-to-registered upgrade flow
+
+==================================================
+GOAL
+==================================================
+
+Make the product explicitly support two auth states:
+
+A. Anonymous / device-authenticated user
+B. Registered account user
+
+And make UI/actions behave correctly for each.
+
+==================================================
+TASK 1 — AUDIT AUTH STATE MODELING
+==================================================
+
+Trace how the app currently identifies users as authenticated.
+
+I want a clear distinction between:
+- authenticated because of deviceId anonymous bootstrap
+- authenticated because of real registered account login
+
+Audit:
+- auth/me response
+- user model fields like isAnonymous
+- frontend auth state consumers
+- menu rendering logic
+- account creation flow
+- sign out flow
+
+Return exactly where anonymous users are being treated as fully signed-in users.
+
+==================================================
+TASK 2 — FIX MENU ACTIONS FOR ANONYMOUS USERS
+==================================================
+
+For anonymous/device-authenticated users:
+
+DO NOT show:
+- Sign Out (unless it truly means reset anonymous session and is labeled honestly)
+
+Instead show appropriate actions such as:
+- Create Account
+- Save My Progress
+- Start Fresh / Reset Workspace (if appropriate)
+- Upgrade to Pro (if allowed in anonymous flow)
+
+Registered users can still see:
+- Sign Out
+- account/billing management
+- normal account actions
+
+==================================================
+TASK 3 — FIX CREATE ACCOUNT FLOW
+==================================================
+
+Anonymous/device users must be able to create a real account even though they already have an anonymous authenticated session.
+
+The system should treat this as:
+- anonymous → registered conversion / upgrade
+NOT:
+- “already authenticated, block account creation”
+
+Ensure:
+- account creation remains available
+- anonymous conversation/program data is preserved/merged correctly
+- device-authenticated state does not block registration
+
+==================================================
+TASK 4 — FIX SIGN OUT SEMANTICS
+==================================================
+
+For registered users:
+- Sign Out should behave normally
+
+For anonymous/device users:
+- if there is a logout-style action, relabel it honestly, e.g.:
+  - Start Fresh
+  - Reset This Device Session
+  - Clear Guest Workspace
+
+Do NOT call anonymous reset “Sign Out” if there is no real account sign-out happening.
+
+==================================================
+TASK 5 — REVIEW ANONYMOUS SESSION STRUCTURE
+==================================================
+
+Audit whether anonymous/device users should be allowed to create multiple build sessions/saved sessions the same way as fully registered users.
+
+If this is causing state complexity or confusion, define the correct product behavior:
+- either keep multiple sessions but handle pointers safely
+- or constrain anonymous session behavior more tightly
+- or make session creation work differently for anonymous users
+
+I want the behavior to be explicit and stable, not accidental.
+
+==================================================
+TASK 6 — UPDATE UI COPY / LABELS
+==================================================
+
+Where anonymous users are shown account-like UI, update labels to match reality.
+
+Examples:
+- avoid implying they have a full account when they do not
+- ensure menu/actions communicate:
+  - guest/anonymous continuity
+  - account creation opportunity
+  - workspace reset when needed
+
+==================================================
+TASK 7 — TEST REQUIRED SCENARIOS
+==================================================
+
+Test these exact scenarios:
+
+1. Anonymous/device user opens menu
+Expected:
+- no misleading Sign Out
+- sees Create Account / Save Progress style action
+
+2. Anonymous/device user creates account
+Expected:
+- not blocked by existing anonymous auth
+- data preserved/merged correctly
+
+3. Registered user opens menu
+Expected:
+- sees proper account actions including Sign Out
+
+4. Anonymous/device user starts fresh/reset
+Expected:
+- guest workspace resets cleanly
+- no account confusion
+
+5. Anonymous/device user creates new build session
+Expected:
+- behavior is explicit and stable
+- does not break account conversion or active pointers
+
+==================================================
+TASK 8 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. How auth state is now distinguished (anonymous vs registered)
+2. What menu behavior changed for anonymous users
+3. How Create Account flow now works from anonymous state
+4. How Sign Out / reset semantics now differ by user type
+5. Whether anonymous session creation behavior changed
+6. Any remaining edge cases
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat must no longer treat anonymous/device-authenticated users like fully registered account users.
+
+Anonymous users should:
+- have continuity
+- be able to create an account easily
+- not see misleading Sign Out behavior
+
+Registered users should:
+- have true account semantics
+
+The auth model and UI should now match reality cleanly.
