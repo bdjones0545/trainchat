@@ -811,6 +811,7 @@ function matchesStructuralEdit(lower: string): {
   const hasGoalShift = targetGoalShift !== null;
   const hasVagueStructural = structuralVagueness.test(lower);
 
+  // Split / day-count changes are unambiguous structural edits regardless of scope language.
   if (hasSplitChange || hasDayChange) {
     return {
       matched: true,
@@ -819,7 +820,21 @@ function matchesStructuralEdit(lower: string): {
     };
   }
 
+  // Goal / orientation / sport / vague structural shifts are only program-wide when the
+  // message does NOT target a specific session. Phrases like "add more conditioning to
+  // day 3" or "I want strength training on day 3" are atomic session edits — they must
+  // NOT be intercepted here and redirected to the structural rewrite path. Without this
+  // guard they would pre-empt the high-confidence atomic edit patterns at Priority 6c.
+  //
+  // Session-specific signals: "day N", "session N", "on/to/for/into day/session N",
+  // ordinal day references like "first session", "third day".
+  const isSessionSpecific =
+    /\b(?:day|session)\s+\d|\b(?:on|to|for|into|add\s+\w+\s+to)\s+(?:day|session)\s+|\b(?:first|second|third|fourth|fifth|sixth|seventh)\s+(?:day|session)\b/i;
+
   if (hasGoalShift || hasVagueStructural || hasSportRequest) {
+    if (isSessionSpecific.test(lower)) {
+      return noMatch;
+    }
     return {
       matched: true,
       confidence: "medium",
