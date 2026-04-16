@@ -1,0 +1,165 @@
+We need to fix FINAL ASSISTANT MESSAGE COMMIT behavior in TrainChat so edit/refinement responses do not get overwritten by generic build responses.
+
+OBJECTIVE:
+When the agent performs an edit/refinement, the final committed assistant response must preserve the actual edit logic and change summary.
+
+Right now the flow appears to be:
+
+1. streamed/temporary response says something useful like “okay got it”
+2. mutation happens
+3. final message gets replaced by a generic build response like:
+   “Built a 3 day program”
+
+This breaks the agent feel and makes the system look like it forgot what it just did.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Ensure that:
+- build requests end with build-specific final responses
+- edit/refinement requests end with edit-specific final responses
+- streamed edit acknowledgments are not overwritten by generic build templates
+
+==================================================
+TASK 1 — TRACE RESPONSE LIFECYCLE
+==================================================
+
+Audit the full lifecycle for assistant responses:
+
+- streamed acknowledgment text
+- SSE stage messages
+- final assistant message persistence
+- any post-mutation response replacement
+- message rendering in UI
+
+I want to know exactly where an edit/refinement response is getting replaced with a generic build response.
+
+==================================================
+TASK 2 — SEPARATE BUILD FINALIZATION FROM EDIT FINALIZATION
+==================================================
+
+Create explicit final response paths:
+
+A. BUILD_FINAL_RESPONSE
+For:
+- initial program builds
+- full new program generation
+
+B. EDIT_FINAL_RESPONSE
+For:
+- session edits
+- day edits
+- exercise edits
+- transformation requests
+- refinement requests
+
+An edit/refinement must NEVER use the generic build template.
+
+==================================================
+TASK 3 — PRESERVE EDIT CHANGE SUMMARY
+==================================================
+
+For edit/refinement flows, the final persisted assistant message must include:
+
+- what was changed
+- where it was changed
+- optionally why it changed
+
+Examples:
+- “Shifted Day 1 toward endurance by increasing reps and reducing rest.”
+- “Added more jumps to Day 1 for soccer power support.”
+- “Made Pull-Ups easier by switching to Band-Assisted Pull-Ups.”
+
+Do NOT replace this with:
+- “Built a 3 day program”
+- “Check the program tab”
+- other initial-build language
+
+==================================================
+TASK 4 — USE MUTATION RESULT AS SOURCE OF TRUTH
+==================================================
+
+If a mutation succeeds, final assistant message should be built from:
+- mutation result
+- change summary
+- edit scope
+- intent family
+
+NOT from generic fallback response builders.
+
+Use the mutation result as the canonical source.
+
+==================================================
+TASK 5 — FIX STREAMED ACKNOWLEDGMENT HANDOFF
+==================================================
+
+If the streamed message says something good during execution, make sure the final assistant message is either:
+- the same message finalized
+or
+- a stronger edit-specific version
+
+But do NOT let it collapse into unrelated generic build text.
+
+==================================================
+TASK 6 — BLOCK BUILD TEMPLATE IN EDIT MODE
+==================================================
+
+Add a hard guard:
+
+If request mode is edit/refine/transformation:
+- generic build templates are forbidden
+
+This includes any fallback path after mutation success.
+
+==================================================
+TASK 7 — TEST REQUIRED SCENARIOS
+==================================================
+
+Test these exact cases:
+
+1. “Make day 1 more endurance based”
+Expected:
+- final message summarizes the endurance changes
+- no “Built a 3 day program”
+
+2. “I want to add more jumps”
+Expected:
+- final message says what was added/changed
+- no build template
+
+3. “Make the pull-up easier”
+Expected:
+- final message says the exercise change
+- no generic program build language
+
+4. Initial program build
+Expected:
+- still uses normal build response
+- no regression to edit template
+
+==================================================
+TASK 8 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. Where the overwrite/replacement was happening
+2. How build vs edit finalization is now separated
+3. What source of truth is now used for edit final messages
+4. How streamed acknowledgment handoff was fixed
+5. Which previously broken edit flows now keep the correct final response
+
+==================================================
+FINAL STANDARD
+==================================================
+
+When the user requests an edit, the final assistant message must reflect:
+- the actual change made
+- the scope of the change
+- the reasoning or coaching logic briefly
+
+It must never be overwritten by a generic initial-build response.
+
+TrainChat should feel like it remembers what it just changed.
+Implement this now.
