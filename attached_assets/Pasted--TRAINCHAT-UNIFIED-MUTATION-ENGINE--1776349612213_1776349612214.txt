@@ -1,0 +1,247 @@
+// ======================================================
+// TRAINCHAT UNIFIED MUTATION ENGINE
+// ======================================================
+//
+// GOAL:
+// Take an ExecutionPlan and GUARANTEE a real program change.
+//
+// RULES:
+// - NEVER return placeholders
+// - NEVER return original program unchanged
+// - ALWAYS mutate structure
+// - ALWAYS produce a VALID exercise
+//
+// ======================================================
+
+export async function applyMutation({
+  plan,
+  program,
+}: {
+  plan: ExecutionPlan;
+  program: ProgramStructure;
+}): Promise<{
+  updatedProgram: ProgramStructure;
+  changeSummary: string;
+}> {
+  if (!plan.mutation) {
+    throw new Error("No mutation provided");
+  }
+
+  const cloned = structuredClone(program);
+
+  switch (plan.mutation.type) {
+    case "swap":
+      return handleSwap(cloned, plan);
+
+    case "transform":
+      return handleTransformation(cloned, plan);
+
+    case "add":
+      return handleAdd(cloned, plan);
+
+    case "remove":
+      return handleRemove(cloned, plan);
+
+    default:
+      throw new Error("Unknown mutation type");
+  }
+}
+
+// ======================================================
+// SWAP ENGINE (FIXES YOUR CURRENT BUG)
+// ======================================================
+
+async function handleSwap(program: ProgramStructure, plan: ExecutionPlan) {
+  const { scope } = plan;
+  const targetName = plan.mutation?.params?.targetExercise;
+
+  const day = getTargetDay(program, scope);
+
+  const index = day.exercises.findIndex(
+    (e) => normalize(e.name) === normalize(targetName)
+  );
+
+  if (index === -1) {
+    throw new Error("Exercise not found for swap");
+  }
+
+  const original = day.exercises[index];
+
+  // 🔥 ALWAYS FIND REAL SUBSTITUTE
+  const replacement = await findBestSubstitute(original);
+
+  day.exercises[index] = {
+    ...replacement,
+    sets: original.sets,
+    reps: original.reps,
+    rest: original.rest,
+  };
+
+  return {
+    updatedProgram: program,
+    changeSummary: `${original.name} replaced with ${replacement.name}`,
+  };
+}
+
+// ======================================================
+// TRANSFORMATION ENGINE (ENDURANCE / POWER / ETC)
+// ======================================================
+
+function handleTransformation(program: ProgramStructure, plan: ExecutionPlan) {
+  const { scope } = plan;
+  const type = plan.mutation?.params?.transformation;
+
+  const days = resolveDays(program, scope);
+
+  for (const day of days) {
+    for (const ex of day.exercises) {
+      if (type === "endurance") {
+        ex.reps = increaseReps(ex.reps);
+        ex.rest = reduceRest(ex.rest);
+      }
+
+      if (type === "power") {
+        ex.reps = "3-5";
+        ex.rest = "2-3 min";
+      }
+    }
+
+    // 🔥 ADD STRUCTURAL CHANGE
+    if (type === "endurance") {
+      day.exercises.push({
+        name: "Bike Sprint Intervals",
+        sets: 4,
+        reps: "30 sec",
+        rest: "30 sec",
+      });
+    }
+  }
+
+  return {
+    updatedProgram: program,
+    changeSummary: `Shifted toward ${type} with structural changes`,
+  };
+}
+
+// ======================================================
+// ADD ENGINE
+// ======================================================
+
+async function handleAdd(program: ProgramStructure, plan: ExecutionPlan) {
+  const { scope } = plan;
+  const category = plan.mutation?.params?.category;
+
+  const day = getTargetDay(program, scope);
+
+  const exercise = await generateExercise(category);
+
+  day.exercises.push(exercise);
+
+  return {
+    updatedProgram: program,
+    changeSummary: `Added ${exercise.name}`,
+  };
+}
+
+// ======================================================
+// REMOVE ENGINE
+// ======================================================
+
+function handleRemove(program: ProgramStructure, plan: ExecutionPlan) {
+  const { scope } = plan;
+
+  const day = getTargetDay(program, scope);
+
+  const removed = day.exercises.pop();
+
+  return {
+    updatedProgram: program,
+    changeSummary: `Removed ${removed?.name}`,
+  };
+}
+
+// ======================================================
+// SUBSTITUTE LOGIC (CRITICAL FIX)
+// ======================================================
+
+async function findBestSubstitute(original: any) {
+  const candidates = await getSwapCandidates(original.name);
+
+  if (candidates.length > 0) {
+    return candidates[0];
+  }
+
+  // 🔥 HARD GUARANTEE FALLBACK (NO MORE "different exercise")
+  return {
+    name: fallbackExercise(original),
+    sets: original.sets,
+    reps: original.reps,
+    rest: original.rest,
+  };
+}
+
+// ======================================================
+// FALLBACK EXERCISE MAP
+// ======================================================
+
+function fallbackExercise(original: any) {
+  const name = original.name.toLowerCase();
+
+  if (name.includes("jump")) return "Broad Jump";
+  if (name.includes("squat")) return "Goblet Squat";
+  if (name.includes("deadlift")) return "RDL";
+  if (name.includes("push")) return "Push-Up";
+  if (name.includes("pull")) return "Lat Pulldown";
+
+  return "Kettlebell Swing";
+}
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+function getTargetDay(program: ProgramStructure, scope: any) {
+  if (scope.type === "session" && scope.dayIndex !== undefined) {
+    return program.days[scope.dayIndex];
+  }
+
+  return program.days[0]; // default fallback
+}
+
+function resolveDays(program: ProgramStructure, scope: any) {
+  if (scope.type === "session") {
+    return [program.days[scope.dayIndex]];
+  }
+
+  return program.days;
+}
+
+function normalize(str: string) {
+  return str.toLowerCase().trim();
+}
+
+function increaseReps(reps: string | number) {
+  return "12-15";
+}
+
+function reduceRest(rest: string | number) {
+  return "30-60 sec";
+}
+
+async function generateExercise(category: string) {
+  if (category === "plyometric") {
+    return {
+      name: "Bounding",
+      sets: 3,
+      reps: "10",
+      rest: "60 sec",
+    };
+  }
+
+  return {
+    name: "Farmer Carry",
+    sets: 3,
+    reps: "30m",
+    rest: "60 sec",
+  };
+}

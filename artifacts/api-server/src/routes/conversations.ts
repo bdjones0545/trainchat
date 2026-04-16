@@ -39,6 +39,7 @@ import {
   buildReconstructedRequest,
 } from "../lib/pending-clarification-service";
 import { normalizeToIntentFamily } from "../lib/intent-family-engine";
+import { buildExecutionPlan, type ExecutionPlan } from "../lib/execution-planner";
 
 const router: IRouter = Router();
 
@@ -596,6 +597,35 @@ Keep it helpful and intelligent, never promotional.`;
 
   logIntentSummary(parsed.data.content, intentResult, hasAnyProgram);
 
+  // ── EXECUTION PLANNER — Central single-brain routing decision ─────────────
+  // Converts message + program state + pending clarification into one plan.
+  // All downstream routing is driven by plan.action.
+  const execPlan: ExecutionPlan = await buildExecutionPlan({
+    message: parsed.data.content,
+    userId: String(userId),
+    conversationId: String(params.data.id),
+    program: latestStructuredProgram,
+    pendingClarification: activePendingClarification
+      ? {
+          intentFamily: activePendingClarification.intentFamily,
+          pendingAspect: activePendingClarification.pendingAspect,
+          originalRequest: activePendingClarification.originalRequest,
+          clarificationQuestion: activePendingClarification.clarificationQuestion,
+        }
+      : null,
+  });
+
+  logger.info(
+    {
+      action: execPlan.action,
+      intentFamily: execPlan.intentFamily,
+      scope: execPlan.scope,
+      mutation: execPlan.mutation?.type ?? null,
+      intentType: intentResult.type,
+    },
+    "[ExecutionPlanner] Plan resolved — driving routing"
+  );
+
   // ── Phase B: Constraint Extraction ────────────────────────────────────────
   // For new program builds, extract hard constraints from the user's message.
   // These override profile defaults per priority: explicit input > profile > defaults.
@@ -682,6 +712,21 @@ Keep it helpful and intelligent, never promotional.`;
     // No program from either source — fall through to AI to explain
     logger.info("[IntentRouter] RETRIEVE_CURRENT_PROGRAM but no program found — routing to AI to explain");
   }
+
+  // ── MAIN ROUTING SWITCH — driven entirely by execPlan.action ─────────────
+  //
+  //   APPLY_MUTATION  → edit engine (clarification followup OR direct vibe edit)
+  //   ASK_CLARIFICATION → store pending state, return question
+  //   REBUILD_PROGRAM   → fall through to AI program-builder path
+  //   GUIDANCE          → fall through to AI coaching path
+  //   NO_OP             → fall through (no action needed)
+  //
+  switch (execPlan.action) {
+
+    // ── APPLY_MUTATION ────────────────────────────────────────────────────────
+    // Handles both clarification followups (resume pending mutation) and direct
+    // vibe edits (surgical edit on the active training system).
+    case "APPLY_MUTATION": {
 
   // ── CLARIFICATION_FOLLOWUP — resume a pending mutation with the user's answer ──
   // This runs BEFORE the normal vibe edit path. When active, it reconstructs
@@ -904,6 +949,13 @@ Keep it helpful and intelligent, never promotional.`;
     }
   }
 
+      break; // end case "APPLY_MUTATION" — clarification followup did not fire; direct vibe edit handled below
+    } // end case "APPLY_MUTATION"
+
+    // ── ASK_CLARIFICATION ─────────────────────────────────────────────────────
+    // Store pending clarification state and return the question without an AI call.
+    case "ASK_CLARIFICATION": {
+
   // ASK_CLARIFYING_QUESTION — decision tree determined the request is genuinely ambiguous.
   // Skip AI call entirely; return the pre-formed question as the assistant response.
   // Write a pending clarification record BEFORE returning so the next reply can resume.
@@ -964,6 +1016,19 @@ Keep it helpful and intelligent, never promotional.`;
     });
     return;
   }
+
+      break; // end case "ASK_CLARIFICATION"
+    } // end case "ASK_CLARIFICATION"
+
+    // ── REBUILD_PROGRAM / GUIDANCE / NO_OP ───────────────────────────────────
+    // Fall through to the SAVE check and standard AI path below.
+    case "REBUILD_PROGRAM":
+    case "GUIDANCE":
+    case "NO_OP":
+    default:
+      break;
+
+  } // end switch (execPlan.action)
 
   // SAVE_PROGRAM — actually persist the program to the training system database
   if (intentResult.type === "SAVE_PROGRAM") {
@@ -1043,13 +1108,14 @@ Keep it helpful and intelligent, never promotional.`;
     return;
   }
 
-  // ── VIBE EDIT MODE ────────────────────────────────────────────────────────
-  // Handles all edit intents (EDIT_PROGRAM, ADJUST_FOR_PAIN, ADJUST_FOR_READINESS).
+  // ── APPLY_MUTATION — direct vibe edit ────────────────────────────────────
+  // Reached when execPlan.action === "APPLY_MUTATION" and the clarification
+  // followup block (above) did not return early (i.e. this is a direct edit).
   // Resolution order:
   //   1. Active DB system exists   → edit directly (fast path)
   //   2. No DB system, chat program exists → auto-create system first, then edit
   //   3. No program at all         → return truthful "build first" message
-  if (isVibeEditIntent(intentResult)) {
+  if (execPlan.action === "APPLY_MUTATION") {
     let resolvedSystem: typeof activeSystem = activeSystem;
     let systemAutoCreatedForEdit = false;
 
@@ -2045,6 +2111,33 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
   const responseMode = selectResponseMode(actionDecision.actionType);
 
+  // ── EXECUTION PLANNER (SSE path) — Central single-brain routing decision ──
+  const execPlan: ExecutionPlan = await buildExecutionPlan({
+    message: parsed.data.content,
+    userId: String(userId),
+    conversationId: String(params.data.id),
+    program: latestStructuredProgram,
+    pendingClarification: activePendingClarification
+      ? {
+          intentFamily: activePendingClarification.intentFamily,
+          pendingAspect: activePendingClarification.pendingAspect,
+          originalRequest: activePendingClarification.originalRequest,
+          clarificationQuestion: activePendingClarification.clarificationQuestion,
+        }
+      : null,
+  });
+
+  logger.info(
+    {
+      action: execPlan.action,
+      intentFamily: execPlan.intentFamily,
+      scope: execPlan.scope,
+      mutation: execPlan.mutation?.type ?? null,
+      intentType: intentResult.type,
+    },
+    "[ExecutionPlanner:stream] Plan resolved — driving routing"
+  );
+
   // Emit classifying stage — intent and action type are now known
   emit(buildStageEvent("classifying", intentResult.type, actionDecision.actionType));
 
@@ -2123,6 +2216,12 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     // No program from either source — fall through to AI to explain
     logger.info("[IntentRouter:stream] RETRIEVE_CURRENT_PROGRAM but no program found — routing to AI to explain");
   }
+
+  // ── MAIN ROUTING SWITCH (SSE path) — driven entirely by execPlan.action ───
+  switch (execPlan.action) {
+
+    // ── APPLY_MUTATION ────────────────────────────────────────────────────────
+    case "APPLY_MUTATION": {
 
   // ── Short-circuit: CLARIFICATION_FOLLOWUP ────────────────────────────────
   // Resume a pending mutation from a prior turn using the user's short answer.
@@ -2237,6 +2336,12 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     }
   }
 
+      break; // end case "APPLY_MUTATION" — clarification followup did not fire; direct vibe edit handled below
+    } // end case "APPLY_MUTATION"
+
+    // ── ASK_CLARIFICATION ─────────────────────────────────────────────────────
+    case "ASK_CLARIFICATION": {
+
   // ── Short-circuit: ASK_CLARIFYING_QUESTION ────────────────────────────────
   if (actionDecision.shouldAsk && actionDecision.clarifyingQuestion) {
     const clarifyContent = formatShortCircuitResponse({ mode: "CLARIFICATION_RESPONSE", hasActiveProgram, clarifyingQuestion: actionDecision.clarifyingQuestion });
@@ -2262,6 +2367,18 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "clarification_needed" }));
     return;
   }
+
+      break; // end case "ASK_CLARIFICATION"
+    } // end case "ASK_CLARIFICATION"
+
+    // ── REBUILD_PROGRAM / GUIDANCE / NO_OP ───────────────────────────────────
+    case "REBUILD_PROGRAM":
+    case "GUIDANCE":
+    case "NO_OP":
+    default:
+      break;
+
+  } // end switch (execPlan.action) — SSE path
 
   // ── Short-circuit: SAVE_PROGRAM — actually persist to DB ─────────────────
   if (intentResult.type === "SAVE_PROGRAM") {
@@ -2318,12 +2435,14 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     return;
   }
 
-  // ── Vibe Edit Mode ────────────────────────────────────────────────────────
+  // ── APPLY_MUTATION — direct vibe edit (SSE path) ─────────────────────────
+  // Reached when execPlan.action === "APPLY_MUTATION" and clarification followup
+  // block did not return early (i.e. this is a direct edit, not a followup).
   // Resolution order:
   //   1. Active DB system exists   → edit directly
   //   2. No DB system, chat program exists → auto-create system first, then edit
   //   3. No program at all         → return truthful "build first" SSE message
-  if (isVibeEditIntent(intentResult)) {
+  if (execPlan.action === "APPLY_MUTATION") {
     let resolvedSystem: typeof activeSystem = activeSystem;
     let systemAutoCreatedForEdit = false;
 
