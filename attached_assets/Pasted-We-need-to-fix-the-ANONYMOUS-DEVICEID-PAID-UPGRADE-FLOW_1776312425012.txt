@@ -1,0 +1,247 @@
+We need to fix the ANONYMOUS DEVICEID → PAID UPGRADE FLOW in TrainChat.
+
+OBJECTIVE:
+When a deviceId / anonymous user clicks “Upgrade to Pro” or “Get Pro,” they must be able to:
+
+1. create a real account
+2. preserve their anonymous workspace/program/history
+3. continue directly into Stripe checkout
+4. have the resulting subscription attached to their new account
+
+Right now the flow is broken:
+- anonymous user clicks Upgrade to Pro
+- instead of entering a conversion + payment flow, they get sent back to the agent/chat
+- this blocks paid conversion entirely for deviceId users
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Build a proper anonymous → account → paid flow.
+
+DeviceId users must be able to become paid users without losing their current program/workspace.
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+Anonymous users can try the product.
+Registered users own the product.
+Paid users unlock full capability.
+
+For anonymous users:
+- payment must not happen without durable account identity
+- but upgrade intent must not be blocked
+
+So:
+deviceId user → create account → checkout → paid account
+
+==================================================
+TASK 1 — AUDIT CURRENT UPGRADE / BILLING ROUTING
+==================================================
+
+Trace exactly what happens when an anonymous/deviceId user clicks:
+- Upgrade to Pro
+- Get Pro
+- Get Elite
+- any billing/checkout CTA
+
+Identify:
+- where the route redirects back to agent/chat
+- where anonymous users are blocked
+- where billing assumes registered auth only
+- where upgrade intent is lost
+
+Return the exact failing condition.
+
+==================================================
+TASK 2 — ADD ANONYMOUS UPGRADE FLOW
+==================================================
+
+When:
+- user.isAnonymous === true
+- and they click any paid upgrade CTA
+
+DO NOT:
+- redirect back to chat
+- silently fail
+- require manual separate signup first
+
+INSTEAD:
+launch a dedicated upgrade flow:
+
+anonymous_upgrade_flow = {
+  selectedPlan: "pro" | "elite",
+  currentAnonymousUserId,
+  preservedWorkspaceContext
+}
+
+This flow should:
+1. prompt account creation
+2. convert anonymous user to registered account
+3. continue directly to checkout
+
+==================================================
+TASK 3 — ACCOUNT CREATION BEFORE CHECKOUT
+==================================================
+
+For anonymous upgrade flow:
+
+Step 1:
+- prompt: “Create your account to unlock Pro”
+- preserve current system/workspace
+- explain that their current program will be saved
+
+Step 2:
+- create/convert account using the existing anonymous → registered conversion path
+- preserve all owned data
+- flip isAnonymous → false
+
+Step 3:
+- immediately launch Stripe checkout for the selected plan
+
+This should feel like one continuous flow.
+
+==================================================
+TASK 4 — PRESERVE UPGRADE INTENT THROUGH CONVERSION
+==================================================
+
+If user clicked:
+- Get Pro
+or
+- Get Elite
+
+That intent must survive the conversion step.
+
+Store and carry through:
+- selected plan
+- billing interval if relevant
+- return path
+
+After successful account creation:
+- resume checkout automatically
+- do NOT dump them back into the app and make them click again
+
+==================================================
+TASK 5 — ATTACH STRIPE CHECKOUT TO NEW ACCOUNT
+==================================================
+
+Ensure the Stripe checkout session is created for the NEW registered account, not the old anonymous-only state.
+
+After checkout success:
+- subscription/customer IDs attach to registered account
+- current workspace remains owned by that account
+- user returns as paid, authenticated, non-anonymous user
+
+==================================================
+TASK 6 — HANDLE ABANDONED CHECKOUT SAFELY
+==================================================
+
+If user:
+- creates account
+- but does not complete payment
+
+Then:
+- keep the new free registered account
+- preserve their data
+- do NOT lose their workspace
+- allow them to upgrade later
+
+This is important for recovery and future conversion.
+
+==================================================
+TASK 7 — FIX BILLING CTA BEHAVIOR BY USER TYPE
+==================================================
+
+Define behavior clearly:
+
+ANONYMOUS / DEVICEID USER:
+- Upgrade CTA → create account → checkout
+
+REGISTERED UNPAID USER:
+- Upgrade CTA → direct checkout
+
+PAID USER:
+- Upgrade CTA → manage/upgrade subscription or no-op as appropriate
+
+No user type should get bounced back to the agent by mistake.
+
+==================================================
+TASK 8 — UPDATE UX COPY
+==================================================
+
+For anonymous users, use copy like:
+
+Title:
+“Create your account to unlock Pro”
+
+Subtitle:
+“We’ll save your current system and attach Pro to your account.”
+
+CTA:
+“Continue”
+
+Avoid copy that implies they are losing progress or starting over.
+
+==================================================
+TASK 9 — TEST REQUIRED SCENARIOS
+==================================================
+
+Test these exact cases:
+
+1. DeviceId user clicks Get Pro
+Expected:
+- account creation prompt appears
+- not redirected back to chat
+- after account creation, Stripe checkout opens
+
+2. DeviceId user clicks Get Elite
+Expected:
+- same flow, plan preserved correctly
+
+3. DeviceId user creates account but cancels checkout
+Expected:
+- free registered account remains
+- data preserved
+- can upgrade later
+
+4. Registered unpaid user clicks Get Pro
+Expected:
+- direct checkout, no conversion step
+
+5. Paid user
+Expected:
+- normal paid behavior, not anonymous flow
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What route/guard was causing anonymous users to bounce back to agent
+2. What anonymous upgrade flow was added
+3. How selected plan is preserved through conversion
+4. How account creation + checkout are chained
+5. How Stripe subscription is attached to the new account
+6. What happens if checkout is abandoned
+7. Which user-type behaviors now differ correctly
+
+==================================================
+FINAL STANDARD
+==================================================
+
+A deviceId user must now be able to:
+
+- try the product
+- click Upgrade to Pro
+- create an account
+- keep their current system
+- pay
+- return as a paid user
+
+No bounce back to the agent.
+No dead-end.
+No lost progress.
+
+Implement this now.
