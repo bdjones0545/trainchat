@@ -895,6 +895,13 @@ function matchesEditProgram(lower: string, hasActiveProgram: boolean): {
 } {
   const noMatch = { matched: false, confidence: "low" as const, subtype: "general_modification" as EditSubtype };
 
+  // Guard: messages that open with a question word are questions, not edit requests.
+  // e.g. "Is this program safe for me?", "Do you think this is too much?",
+  //      "Can I do this?", "Should I change anything?", "How does this work?"
+  // These should fall through to GENERAL_COACHING_QUESTION, not EDIT_PROGRAM.
+  const questionOpener = /^(is|are|do|does|did|can|could|should|would|will|was|were|what|how|why|which|who|when)\b/i;
+  if (questionOpener.test(lower.trim())) return noMatch;
+
   // High-confidence edit patterns — context-independent (clearly surgical modifications)
   const highConfidencePatterns: Array<{ pattern: RegExp; subtype: EditSubtype }> = [
     { pattern: /\b(add|include|insert|put in|incorporate|need|missing|no)\b.{0,40}\b(core|abs|abdominal|trunk|anti.?rotation|anti.?extension)\b/i, subtype: "add_core" },
@@ -915,7 +922,7 @@ function matchesEditProgram(lower: string, hasActiveProgram: boolean): {
     { pattern: /\b(less.{0,20}(days?|frequency|sessions?)|train.{0,20}(less|fewer)|reduce.{0,20}(frequency|days?))\b/i, subtype: "reduce_frequency" },
     { pattern: /\b(more.{0,20}(days?|frequency|sessions?)|train.{0,20}more|increase.{0,20}(frequency|days?))\b/i, subtype: "increase_frequency" },
     { pattern: /\b(i (just got|got|received|have|looking at)).{0,40}(my|the|this).{0,20}(program|plan|routine|workout)\b/i, subtype: "general_modification" },
-    { pattern: /\bthis program\b.{0,60}\b(needs?|should|doesn.t|does not|is|has no|lacks?)\b/i, subtype: "general_modification" },
+    { pattern: /\bthis program\b.{0,60}\b(needs?|should|doesn.t|does not|has no|lacks?)\b/i, subtype: "general_modification" },
     { pattern: /\b(noticed|see|saw|found|realized).{0,40}\b(no|missing|lack|without|not enough)\b/i, subtype: "general_modification" },
     // "Make this/it/day N harder/more challenging/more intense" — broad difficulty escalation requests
     { pattern: /\b(make|make it|make this|make (day|session|week))\b.{0,40}\b(harder|more challenging|more intense|more difficult|more demanding|tougher)\b/i, subtype: "general_modification" },
@@ -1026,6 +1033,10 @@ function matchesTrainingSignalEdit(lower: string): {
   trigger: string;
 } {
   const noMatch = { matched: false, direction: "general", trigger: "" };
+
+  // Guard: question-form sentences are not edit requests
+  const questionOpener = /^(is|are|do|does|did|can|could|should|would|will|was|were|what|how|why|which|who|when)\b/i;
+  if (questionOpener.test(lower.trim())) return noMatch;
 
   const hasModificationIntent = MODIFICATION_INTENT_SIGNALS.test(lower);
   const hasTrainingQuality = TRAINING_QUALITY_TERMS.test(lower);
