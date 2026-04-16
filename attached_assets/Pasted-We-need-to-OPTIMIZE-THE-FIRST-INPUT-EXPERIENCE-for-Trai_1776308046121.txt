@@ -1,0 +1,199 @@
+We need to OPTIMIZE THE FIRST INPUT EXPERIENCE for TrainChat (deviceId + new users).
+
+OBJECTIVE:
+Reduce hesitation, increase immediate engagement, and get users to their FIRST PROGRAM BUILD as fast as possible.
+
+Right now the UI is clean, but it is still passive. Users are being asked to think instead of act.
+
+We want:
+- instant action
+- zero confusion
+- fast dopamine (program builds immediately)
+- “vibe coding” feeling from the first input
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+The first 5 seconds determines everything.
+
+Users should feel:
+“I can just type anything and it will build for me”
+
+NOT:
+“I need to figure out what to say”
+
+==================================================
+PRIMARY GOALS
+==================================================
+
+1. Drive immediate first input
+2. Reduce cognitive load
+3. Make the agent feel alive
+4. Trigger instant program generation
+5. Eliminate hesitation
+
+==================================================
+TASK 1 — SIMPLIFY HERO SECTION
+==================================================
+
+Current:
+“Build your training system”
+
+Replace with something more action-driven:
+
+Examples:
+- “What do you want to build?”
+- “Describe your training — I’ll build it live”
+- “Tell me your goal. I’ll handle the rest.”
+
+Also shorten supporting text:
+Current is too long and passive.
+
+Target:
+1–2 short lines max.
+
+==================================================
+TASK 2 — REDUCE SUGGESTION CHIPS
+==================================================
+
+Current: too many (8)
+
+Limit to 3–4 max.
+
+Select highest-converting intents:
+- Build a 4-day split
+- Train around pain
+- Add speed & power
+- Home gym setup
+
+Remove low-impact or redundant chips.
+
+==================================================
+TASK 3 — ADD FIRST-ACTION BIAS
+==================================================
+
+We need to guide the user to act immediately.
+
+Implement ONE of the following:
+
+Option A (recommended):
+- visually highlight ONE suggestion chip (slightly brighter)
+
+Option B:
+- animate input placeholder
+
+Option C:
+- prefill input with example text (not submitted automatically)
+
+Example placeholder:
+“Try: Build me a 4-day strength program”
+
+==================================================
+TASK 4 — AUTO-FOCUS INPUT
+==================================================
+
+On page load:
+- input field should be focused
+- keyboard opens on mobile
+
+User should be ready to type instantly.
+
+==================================================
+TASK 5 — INSTANT FEEDBACK ON FIRST INPUT
+==================================================
+
+When user submits first input:
+
+1. Show immediate agent acknowledgment (no delay)
+2. Trigger program build instantly (SSE already exists)
+3. Open right panel ONLY if program is created
+4. Visually show:
+   - “Building your program...”
+   - streaming feedback
+
+User must feel:
+“This is happening LIVE”
+
+==================================================
+TASK 6 — REMOVE DEAD STATES
+==================================================
+
+Avoid:
+- empty waiting screens
+- passive placeholders
+- unclear “what next”
+
+Everything should push toward:
+👉 input → build → visible result
+
+==================================================
+TASK 7 — IMPROVE LIVE PROGRAM PANEL COPY
+==================================================
+
+Current:
+“Waiting to be built”
+
+Replace with:
+“Your program builds here in real time”
+
+Add sense of immediacy.
+
+==================================================
+TASK 8 — FIRST INPUT FLOW TEST
+==================================================
+
+Simulate a brand new user:
+
+1. Land on page
+2. Look for 3 seconds
+3. Decide what to do
+4. Enter input
+
+Expected:
+- user types within 3–5 seconds
+- program starts building immediately
+- right panel activates only on real build
+
+==================================================
+TASK 9 — SUCCESS CRITERIA
+==================================================
+
+After optimization:
+
+- user understands what to do instantly
+- user does not hesitate
+- user types quickly
+- program builds immediately
+- experience feels “alive”
+- no confusion about next step
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. New hero text
+2. Updated suggestion chip list
+3. What first-action bias was added
+4. Input behavior (auto-focus, placeholder)
+5. What happens on first input
+6. What dead states were removed
+7. Before vs after experience summary
+
+==================================================
+FINAL STANDARD
+==================================================
+
+The first experience should feel like:
+
+“Type anything — it builds your system instantly.”
+
+No thinking.
+No hesitation.
+Just action.
+
+TrainChat should feel like a live AI builder from the first interaction.
+
+Implement this now.
