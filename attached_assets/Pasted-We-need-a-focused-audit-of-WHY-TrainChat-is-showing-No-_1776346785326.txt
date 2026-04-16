@@ -1,0 +1,197 @@
+We need a focused audit of WHY TrainChat is showing “No cluster alternatives found” for swap actions across exercises.
+
+OBJECTIVE:
+Identify why the exercise swap system is failing to return alternatives for exercises like Box Jump — and whether this is happening broadly across the exercise library.
+
+Right now the UI shows:
+“No cluster alternatives found. Use Full Edit to swap manually.”
+
+If this is happening for most or all exercises, then the quick-swap system is effectively broken and the agent loses a major part of its value.
+
+==================================================
+PRIMARY GOALS
+==================================================
+
+Audit and explain:
+1. How swap alternatives are supposed to be found
+2. Why cluster alternatives are missing
+3. Whether this is a data problem, mapping problem, query problem, or filtering problem
+4. What exact files/tables/functions need to be patched
+5. The fastest path to restore usable swap alternatives
+
+==================================================
+TASK 1 — TRACE THE SWAP ALTERNATIVE FLOW
+==================================================
+
+Follow the full flow when the user taps “Swap” on an exercise.
+
+I want to know:
+- what frontend function is called
+- what API endpoint is called
+- what backend function resolves swap alternatives
+- what DB tables / relationships / graph / clusters are queried
+- what filtering/ranking is applied before results are returned
+
+Return the full path from button press → final “No cluster alternatives found” message.
+
+==================================================
+TASK 2 — IDENTIFY THE EXACT FAILURE POINT
+==================================================
+
+Find exactly where the system decides there are no alternatives.
+
+Examples of possible failure points:
+- no cluster ID on the exercise
+- cluster lookup returns empty
+- relation table missing rows
+- exercise names not matching cluster records
+- filters removing all candidates
+- equipment filter too strict
+- current exercise excluded and nothing else remains
+- only deterministic cluster path exists and no OpenAI fallback is used
+
+I want the exact reason(s), not guesses.
+
+==================================================
+TASK 3 — AUDIT THE DATA MODEL FOR ALTERNATIVES
+==================================================
+
+Inspect the relevant exercise data model.
+
+Determine whether alternatives are powered by:
+- exercise clusters
+- regression/progression graph
+- related exercise mapping table
+- tag/category similarity
+- any hybrid method
+
+For the exercises tested (start with Box Jump, Pull-Up, Back Squat), answer:
+- do they have cluster IDs?
+- do they have related alternatives in DB?
+- do they have progression/regression edges?
+- do they have enough metadata for alternative generation?
+
+==================================================
+TASK 4 — TEST MULTIPLE EXERCISES
+==================================================
+
+Audit these exact exercises and report what happens for each:
+
+1. Box Jump
+2. Pull-Up
+3. Back Squat
+4. Bulgarian Split Squat
+5. Conventional Deadlift
+
+For each one, report:
+- exercise ID / canonical name if relevant
+- whether cluster alternatives exist in DB
+- whether API returns candidates
+- if no candidates, why not
+
+==================================================
+TASK 5 — CHECK FOR FILTERS THAT ZERO OUT RESULTS
+==================================================
+
+Inspect filtering/ranking logic for swap candidates.
+
+Look for filters based on:
+- equipment availability
+- movement pattern
+- same category exclusion
+- current exercise exclusion
+- safety / intent filters
+- duplicate suppression
+- premium gating
+- unsupported exercise metadata
+
+I want to know whether candidates exist but are getting filtered down to zero.
+
+==================================================
+TASK 6 — VERIFY FRONTEND MESSAGE CONDITIONS
+==================================================
+
+Audit the frontend condition that renders:
+
+“No cluster alternatives found. Use Full Edit to swap manually.”
+
+Determine:
+- what response shape triggers this
+- whether empty array vs null vs error are treated the same
+- whether the frontend is masking backend errors as “no alternatives found”
+
+The UI should distinguish:
+- true no alternatives
+- lookup failure
+- backend error
+- fallback path not available
+
+==================================================
+TASK 7 — CHECK FOR MISSING OPENAI FALLBACK
+==================================================
+
+If deterministic/cluster alternatives are missing, determine whether the swap flow currently has any intelligent fallback.
+
+If there is no fallback:
+- confirm that explicitly
+- identify where OpenAI-assisted swap fallback should be inserted
+- explain whether current behavior dead-ends too early
+
+==================================================
+TASK 8 — DETERMINE WHETHER THIS IS LIBRARY-WIDE
+==================================================
+
+I want a judgment on whether this problem is:
+- isolated to a few exercises
+- common for certain categories (power / plyometrics / bodyweight)
+- or broadly broken across the entire exercise library
+
+If possible, estimate:
+- percentage of exercises with usable swap alternatives
+- percentage with missing/empty cluster relationships
+
+==================================================
+TASK 9 — RECOMMENDED FIX ORDER
+==================================================
+
+After finding root causes, give the fastest practical fix order.
+
+Examples:
+1. patch data seeding / cluster assignments
+2. patch query bug
+3. relax filters
+4. add fallback ranking
+5. add OpenAI-assisted swap when deterministic graph is empty
+
+I want the fix order prioritized by:
+- user impact
+- implementation speed
+- agent feel improvement
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+
+1. Full swap alternative resolution flow
+2. Exact failure point(s)
+3. Whether Box Jump / Pull-Up / Back Squat etc. have valid alternatives in data
+4. Whether results are missing in DB or filtered out in code
+5. Whether frontend is masking backend failure as “no alternatives found”
+6. Whether OpenAI fallback exists for swap and if not where it should go
+7. Whether this is isolated or library-wide
+8. Recommended fix order
+
+==================================================
+FINAL STANDARD
+==================================================
+
+After this audit we should know exactly why swap alternatives are failing and whether the issue is:
+- missing exercise relationship data
+- broken query logic
+- over-aggressive filtering
+- no fallback behavior
+- or some combination
+
+This should produce actionable root causes, not generic recommendations.
