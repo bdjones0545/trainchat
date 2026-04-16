@@ -40,6 +40,7 @@ import { buildSportContext, mapSportToProfile, detectSeasonContext } from "./spo
 import { buildPeriodizationContext, needsPeriodizationContext } from "./periodization-engine";
 import { buildReEntryContext, needsReEntryContext } from "./re-entry-engine";
 import { buildMobilityContext } from "./mobility-engine";
+import { buildSpecialConsiderationsContext, getSpecialConsiderationsClarification, validateSpecialConsiderationsOutput } from "./special-considerations-engine";
 import { resolveRoutingDecision, getResolvedSport, getResolvedSeason, type RoutingDecision } from "./message-router";
 import { validateProgrammingQuality, buildQualityRetryPrompt, type ProgrammingValidationInput } from "./program-quality-validator";
 
@@ -1005,6 +1006,29 @@ The conversion rule: show intelligence first → build tension → deliver parti
       })
     : "";
 
+  // Special Considerations engine — activated when user has meaningful physical limitations,
+  // neurological conditions, balance issues, frailty, or other special needs.
+  // This is a safety override mode that replaces standard athletic programming defaults
+  // with a conservative, support-based, OpenAI-guided construction approach.
+  const specialConsiderationsContext = routing.specialConsiderations.detected
+    ? "\n\n" + buildSpecialConsiderationsContext(
+        userMessage || profile.trainingGoal,
+        profile.trainingGoal,
+        profile.injuries ?? "",
+        profile.daysPerWeek,
+      )
+    : "";
+
+  // Special considerations clarification — inject a clarification suggestion if needed
+  const specialConsiderationsClarification = routing.specialConsiderations.detected
+    ? buildSpecialConsiderationsClarificationHint(
+        getSpecialConsiderationsClarification(
+          routing.specialConsiderations,
+          userMessage || "",
+        )
+      )
+    : "";
+
   // Priority routing hint — tells the AI which engine dominates when multiple are active
   const routingHint = buildRoutingHint(routing, userMessage);
 
@@ -1024,7 +1048,16 @@ ${profile.sportFocus ? `- Sport / Activity Focus: ${profile.sportFocus}` : ""}
 ${profile.exercisePreferences ? `- Exercise Preferences: ${profile.exercisePreferences}` : ""}
 ${profile.exercisesToAvoid ? `- Exercises to Avoid (NEVER program these): ${profile.exercisesToAvoid}` : ""}
 
-${routingHint}${reEntryContext}${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${conditioningContext}${powerSpeedContext}${sportContext}${periodizationContext}${mobilityContext}`;
+${routingHint}${reEntryContext}${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${conditioningContext}${powerSpeedContext}${sportContext}${periodizationContext}${mobilityContext}${specialConsiderationsContext}${specialConsiderationsClarification}`;
+}
+
+// ─── Special Considerations Clarification Hint ────────────────────────────────
+// Wraps a clarification question into a soft instruction if one is warranted.
+// Only fires for genuinely ambiguous high-risk contexts — NOT for normal requests.
+
+function buildSpecialConsiderationsClarificationHint(question: string | null): string {
+  if (!question) return "";
+  return `\n\n## SPECIAL CONSIDERATIONS CLARIFICATION OPPORTUNITY\nIf you are about to build a program and this safety-relevant detail is missing, you MAY ask this one question BEFORE or AFTER building (your judgment — if you can make a safe default assumption, build first then ask):\n"${question}"\nDo NOT ask this question if you can make a safe, reasonable default assumption. Do NOT ask multiple questions. Do NOT delay the build unnecessarily.`;
 }
 
 // ─── Routing Hint Builder ─────────────────────────────────────────────────────
@@ -1047,6 +1080,7 @@ function buildRoutingHint(routing: RoutingDecision, _userMessage: string): strin
   // Priority instruction
   const domainLabel: Record<string, string> = {
     reEntry: "RE-ENTRY / RETURN-TO-TRAINING (highest priority — overrides all other defaults)",
+    specialConsiderations: "SPECIAL CONSIDERATIONS MODE (safety-first — standard athletic programming defaults SUSPENDED; apply special_considerations engine rules exclusively)",
     powerSpeed: "POWER & SPEED (foregrounded — apply power/speed engine directives as primary framework)",
     conditioning: "CONDITIONING (foregrounded — apply conditioning engine directives as primary framework)",
     sport: "SPORT-SPECIFIC ARCHITECTURE (foregrounded — apply sport engine directives as primary framework)",
@@ -1071,6 +1105,12 @@ function buildRoutingHint(routing: RoutingDecision, _userMessage: string): strin
   // Re-entry dominance note
   if (dominantDomain === "reEntry") {
     lines.push("\nRE-ENTRY OVERRIDE ACTIVE: The user is returning from a training break. ALL programming decisions must be conservative. Do not apply aggressive strength, conditioning, or sport defaults — apply re-entry phase rules first.");
+  }
+
+  // Special considerations dominance note
+  if (dominantDomain === "specialConsiderations") {
+    const scType = routing.specialConsiderations.primaryType?.replace(/_/g, " ").toUpperCase() ?? "SPECIAL CONSIDERATIONS";
+    lines.push(`\nSPECIAL CONSIDERATIONS OVERRIDE ACTIVE [${scType}]: This user has meaningful physical limitations or special needs. The standard athletic programming framework (power-first, explosive B-block, high complexity, aggressive loading) is SUSPENDED. Apply the SPECIAL CONSIDERATIONS MODE rules defined below. Build for safety, function, and confidence — not athletic performance.`);
   }
 
   // Multi-engine integration note
@@ -1941,6 +1981,97 @@ Regenerate the complete program now with exactly ${extractedConstraints.daysPerW
         logger.info(
           { passedChecks: qualityResult.passedChecks },
           "[QualityValidator] Quality validation passed cleanly",
+        );
+      }
+    }
+
+    // ── Special Considerations Safety Validation + Auto-Retry ────────────
+    // Only runs when special considerations mode is active and a program was generated.
+    // This is a dedicated safety check to prevent unsafe exercise choices from
+    // passing through for users with meaningful physical limitations.
+    const shouldRunSpecialConsiderationsValidation =
+      structuredData !== null &&
+      isBuildIntent &&
+      routingDecision.specialConsiderations.detected;
+
+    if (shouldRunSpecialConsiderationsValidation && structuredData) {
+      const scProgram = { days: structuredData.days.map(d => ({ exercises: d.exercises })) };
+      const scValidationResult = validateSpecialConsiderationsOutput(
+        cleanContent + " " + JSON.stringify(structuredData),
+        scProgram,
+        routingDecision.specialConsiderations,
+      );
+
+      if (!scValidationResult.passed && !scValidationResult.isWarning) {
+        logger.warn(
+          {
+            reason: scValidationResult.reason,
+            primaryType: routingDecision.specialConsiderations.primaryType,
+            severity: routingDecision.specialConsiderations.severity,
+          },
+          "[SpecialConsiderationsValidator] Safety validation failed — running correction pass",
+        );
+
+        const scCorrectionPrompt = `SPECIAL CONSIDERATIONS SAFETY CORRECTION REQUIRED.
+
+The program you just generated has a safety violation for this special-considerations user.
+
+VIOLATION: ${scValidationResult.reason}
+
+Please regenerate the program correcting this specific issue. Remember:
+- This user is in SPECIAL CONSIDERATIONS MODE
+- NO explosive exercises (jumps, throws, Olympic derivatives)
+- NO max-effort prescriptions
+- Session density: 4–6 working exercises per session
+- Working sets: 2–3 per pattern
+- All balance-demanding exercises must have stated support options
+- Movements must be simpler, safer, and more functional than standard athletic choices
+
+Output the corrected program JSON and a brief confirmation.`;
+
+        const scRetryMessages = [
+          ...baseMessages,
+          { role: "assistant" as const, content: cleanContent },
+          { role: "user" as const, content: scCorrectionPrompt },
+        ];
+
+        try {
+          const scRetryResult = await callOpenAI(scRetryMessages, maxTokens);
+
+          if (scRetryResult.structuredData) {
+            const scRetryValidation = validateSpecialConsiderationsOutput(
+              scRetryResult.cleanContent + " " + JSON.stringify(scRetryResult.structuredData),
+              { days: scRetryResult.structuredData.days.map(d => ({ exercises: d.exercises })) },
+              routingDecision.specialConsiderations,
+            );
+
+            logger.info(
+              { retryPassed: scRetryValidation.passed, retryWarning: scRetryValidation.isWarning },
+              "[SpecialConsiderationsValidator] Safety correction pass complete",
+            );
+
+            if (scRetryValidation.passed) {
+              cleanContent = scRetryResult.cleanContent;
+              structuredData = scRetryResult.structuredData;
+            } else {
+              logger.error(
+                { reason: scRetryValidation.reason },
+                "[SpecialConsiderationsValidator] Safety correction still failing — returning best available output",
+              );
+            }
+          }
+        } catch (scRetryError) {
+          logger.warn({ scRetryError }, "[SpecialConsiderationsValidator] Safety correction call failed — returning original output");
+        }
+      } else if (scValidationResult.isWarning) {
+        logger.info(
+          { reason: scValidationResult.reason, primaryType: routingDecision.specialConsiderations.primaryType },
+          "[SpecialConsiderationsValidator] Safety validation passed with warning",
+        );
+      } else {
+        logger.info(
+          { primaryType: routingDecision.specialConsiderations.primaryType },
+          "[SpecialConsiderationsValidator] Safety validation passed cleanly",
         );
       }
     }

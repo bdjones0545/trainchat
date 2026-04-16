@@ -1,0 +1,329 @@
+We are now implementing:
+
+RETURN-FROM-INJURY ENGINE
+
+OBJECTIVE:
+Teach TrainChat to handle users returning from injury with a distinct programming mode that is more conservative, symptom-aware, and tissue-tolerance-focused than normal re-entry programming.
+
+This is NOT a medical diagnosis engine.
+This is NOT rehab treatment.
+This is a safer training-construction mode for users returning to exercise after an injury, pain flare, or tissue-specific setback.
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+Return from injury is NOT the same as:
+- generic re-entry
+- generic beginner training
+- “just go lighter”
+
+Return from injury IS:
+- symptom-aware load management
+- movement/regression selection based on affected region
+- gradual exposure
+- conservative progression
+- response-based adjustment
+- protecting confidence while rebuilding tolerance
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+When TrainChat detects return-from-injury context, it should:
+1. switch into a dedicated return_from_injury mode
+2. filter exercise selection and progression through injury-aware rules
+3. ask clarification only when safety-relevant details are missing
+4. still build a useful training plan instead of freezing or over-medicalizing
+5. avoid pretending to diagnose or replace a clinician
+
+==================================================
+TASK 1 — ADD DETECTION LAYER
+==================================================
+
+Detect return-from-injury signals from user language.
+
+Examples:
+- coming back from injury
+- returning after injury
+- recovering from knee injury
+- hamstring strain
+- shoulder injury
+- back injury
+- ankle sprain
+- pain flare
+- tweaked my back
+- knee has been bothering me
+- rebuilding after injury
+- post-injury
+- coming back from surgery (training-aware caution only)
+- cleared to train again
+- easing back in after injury
+
+Create a context object like:
+
+type ReturnFromInjuryContext = {
+  detected: boolean;
+  injuredRegion?: 
+    | "ankle"
+    | "knee"
+    | "hip"
+    | "hamstring"
+    | "adductor"
+    | "low_back"
+    | "thoracic"
+    | "shoulder"
+    | "elbow"
+    | "wrist"
+    | "neck"
+    | "multi_region"
+    | "unknown";
+  severity?: "mild" | "moderate" | "high" | "unknown";
+  stage?: "recent" | "subacute" | "returning" | "unclear";
+  matchedSignals: string[];
+  requiresConservativeProgramming: boolean;
+};
+
+==================================================
+TASK 2 — CREATE RETURN_FROM_INJURY MODE
+==================================================
+
+Add a distinct programming mode:
+- standard
+- re_entry
+- special_considerations
+- return_from_injury
+
+This mode should:
+- override aggressiveness
+- filter movement choices
+- bias simpler, safer, lower-irritation programming
+- keep the user training where possible
+
+==================================================
+TASK 3 — ADD REGION-SPECIFIC PROGRAMMING FILTERS
+==================================================
+
+Build first-pass region-aware rules.
+
+Examples:
+
+LOW BACK:
+- avoid high-fatigue spinal loading early
+- bias supported hinges/squats
+- reduce aggressive axial load early
+- add trunk stability/control work
+- simplify loading strategy
+
+KNEE:
+- manage deep knee flexion exposure progressively
+- use controlled quad/glute work
+- reduce ballistic decel early if needed
+- bias stable lower-body patterns
+
+HAMSTRING:
+- be conservative with sprinting and long-length aggressive loading early
+- progress hinge / bridge / split-stance patterns carefully
+- build posterior chain tolerance gradually
+
+SHOULDER:
+- be cautious with overhead and unstable pressing early
+- bias scapular control / supported pressing / pulling balance
+- avoid excessive pressing volume
+
+ANKLE:
+- reduce high-reactivity loading early
+- build calf/foot/ankle tolerance
+- progress impact and cutting gradually
+
+This is not rehab detail.
+It is safe training design.
+
+==================================================
+TASK 4 — ADD PAIN / IRRITABILITY AWARENESS
+==================================================
+
+When user indicates pain or sensitivity, bias toward:
+- lower symptom provocation
+- simpler movement options
+- lower novelty
+- lower fatigue
+- lower explosiveness
+- smaller exercise count
+- lower intensity and volume initially
+
+If the user explicitly says:
+- pain is still high
+- flares easily
+- unstable
+- not sure what is safe
+
+then the system should become more conservative and ask for one or two key clarifications if needed.
+
+==================================================
+TASK 5 — ADD CLARIFICATION RULES FOR SAFETY
+==================================================
+
+Ask clarifying questions only when truly useful.
+
+Examples:
+- “Are you currently able to do bodyweight squats without pain?”
+- “Should I assume we need to avoid high-impact or high-speed work for now?”
+- “Do you want me to keep this fully pain-sensitive and conservative?”
+
+Do NOT ask long medical questionnaires.
+Do NOT become a diagnostic intake form.
+
+==================================================
+TASK 6 — BUILD SAFE PROGRESSION RULES
+==================================================
+
+Return-from-injury programs should progress by:
+- tolerated exposure first
+- volume slowly
+- intensity later
+- complexity later
+- speed/reactivity last where relevant
+
+Rules:
+- conservative week 1
+- no aggressive jumps
+- keep progression gradual
+- use symptom-response logic:
+  if recent response is good → progress
+  if not → hold / reduce
+
+==================================================
+TASK 7 — CONNECT TO RE-ENTRY + SPECIAL CONSIDERATIONS
+==================================================
+
+This mode should combine intelligently with:
+- re-entry
+- older adult / balance-sensitive mode
+- sport engines
+- conditioning engine
+- mobility/support engine
+
+Examples:
+- older adult + return from knee injury
+- athlete + hamstring return
+- shoulder return + upper-body hypertrophy goal
+- low-back return + fat loss goal
+
+Return-from-injury should usually override aggressiveness and complexity.
+
+==================================================
+TASK 8 — ADD VALIDATION LAYER
+==================================================
+
+Create a return-from-injury validator.
+
+Check for:
+- too much volume early
+- too much intensity early
+- explosive or reactive work too soon
+- region-inappropriate loading
+- overly complex sessions
+- too many exercises
+- poor progression pace
+
+Examples:
+- hamstring return + max sprinting in week 1 → fail
+- shoulder return + high-volume overhead pressing → fail
+- low-back return + aggressive deadlift loading immediately → fail
+- knee return + high-impact plyos early → fail
+
+If validation fails:
+- retry with stricter instructions
+- or correct locally if possible
+
+==================================================
+TASK 9 — UPDATE AGENT LANGUAGE
+==================================================
+
+The agent should sound:
+- calm
+- practical
+- confidence-building
+- symptom-aware
+- not over-medical
+
+Examples:
+- “I’m keeping this conservative around your knee while rebuilding strength and tolerance.”
+- “Because you’re returning from a hamstring issue, I’m delaying aggressive sprinting and rebuilding posterior-chain capacity first.”
+- “I biased this toward lower irritation and simpler loading so you can train consistently and progress safely.”
+
+Avoid:
+- diagnosis language
+- treatment claims
+- rehab guarantees
+- “this will fix your injury”
+
+==================================================
+TASK 10 — PRESERVE USEFULNESS
+==================================================
+
+Do not let this mode become so cautious that it becomes useless.
+
+The user should still feel:
+- I can train
+- I have a plan
+- this is adjusted for me
+- the system is smart and safe
+
+Not:
+- I got generic “be careful” advice
+- everything is removed
+- the system froze
+
+==================================================
+TASK 11 — TEST REQUIRED SCENARIOS
+==================================================
+
+Test these exact prompts:
+
+1. “I’m coming back from a hamstring injury and want to rebuild safely.”
+2. “My knee has been bothering me and I want to get stronger.”
+3. “Returning after a shoulder injury — build me an upper body plan.”
+4. “I tweaked my low back and want to keep training.”
+5. “I’m an athlete coming back after an ankle sprain.”
+6. “I’m older and returning after a knee injury.”
+7. “I want fat loss but I’m coming back from injury.”
+8. “I was cleared to train again after shoulder surgery.” (training-aware caution only)
+
+For each verify:
+- the mode activates
+- exercise selection becomes region-aware
+- progression is more conservative
+- no diagnosis/treatment language appears
+- the plan remains useful
+
+==================================================
+TASK 12 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What detection logic was added
+2. What return-from-injury mode/rules were created
+3. What region-specific filters were added
+4. What clarification triggers were added
+5. What validator rules were added
+6. How it interacts with re-entry/special considerations
+7. Which example prompts now work appropriately that previously would not
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat should now be able to handle users returning from injury in a way that feels:
+- safer
+- smarter
+- more conservative
+- still useful
+
+It should not force them into standard athletic programming.
+It should not pretend to practice medicine.
+It should construct training with symptom-aware guardrails and gradual progression.
+
+Implement this now.

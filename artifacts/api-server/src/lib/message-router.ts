@@ -28,6 +28,7 @@ import { mapSportToProfile, detectSeasonContext, type SeasonContext } from "./sp
 import { needsPeriodizationContext } from "./periodization-engine";
 import { detectReEntryStatus, type ReEntryClassification } from "./re-entry-engine";
 import { detectMobilityRequest, needsMobilityContext } from "./mobility-engine";
+import { detectSpecialConsiderations, type SpecialConsiderationContext } from "./special-considerations-engine";
 import { type UserProfile } from "./training-intelligence";
 
 // ─── Routing Decision Types ───────────────────────────────────────────────────
@@ -39,6 +40,7 @@ export type DominantDomain =
   | "powerSpeed"
   | "periodization"
   | "mobility"
+  | "specialConsiderations"
   | "base";
 
 export interface SportDetection {
@@ -73,6 +75,7 @@ export interface RoutingDecision {
   reEntry: ReEntryDetection;
   periodization: boolean;
   mobility: boolean;
+  specialConsiderations: SpecialConsiderationContext;
   dominantDomain: DominantDomain;
   debug: RoutingDebug;
 }
@@ -205,39 +208,51 @@ function resolveDominantDomain(
   sportFromMessage: boolean,
   periodizationActive: boolean,
   mobilityFromMessage: boolean,
+  specialConsiderationsDetected: boolean,
   profileGoal: string,
 ): { dominant: DominantDomain; reason: string } {
+  // Priority 0: Special considerations — overrides athletic defaults (but not re-entry safety)
+  // Note: re-entry + special considerations can co-exist; re-entry still wins the dominant slot
+  // but special considerations context is always injected alongside
+
   // Priority 1: Re-entry always overrides
   if (reEntryActive) {
     return { dominant: "reEntry", reason: "Re-entry detected — overrides all other programming defaults" };
   }
 
-  // Priority 2: Explicit live message — power/speed
+  // Priority 2: Special considerations — overrides standard athletic engines
+  // This must come before power/speed/conditioning to prevent athletic-mode defaults
+  // from overriding the safety-first programming mode
+  if (specialConsiderationsDetected) {
+    return { dominant: "specialConsiderations", reason: "Special considerations detected — safety-first programming mode active, standard athletic defaults suspended" };
+  }
+
+  // Priority 3: Explicit live message — power/speed
   if (powerSpeedFromMessage) {
     return { dominant: "powerSpeed", reason: "Live message explicitly requests power or speed work" };
   }
 
-  // Priority 3: Explicit live message — conditioning
+  // Priority 4: Explicit live message — conditioning
   if (conditioningFromMessage) {
     return { dominant: "conditioning", reason: "Live message explicitly requests conditioning work" };
   }
 
-  // Priority 4: Explicit live message — mobility/movement support
+  // Priority 5: Explicit live message — mobility/movement support
   if (mobilityFromMessage) {
     return { dominant: "mobility", reason: "Live message explicitly requests mobility, warm-up, flexibility, or movement support work" };
   }
 
-  // Priority 5: Sport-specific context from message
+  // Priority 6: Sport-specific context from message
   if (sportFromMessage) {
     return { dominant: "sport", reason: "Live message contains sport-specific context" };
   }
 
-  // Priority 6: Periodization need
+  // Priority 7: Periodization need
   if (periodizationActive) {
     return { dominant: "periodization", reason: "Profile or request requires block periodization" };
   }
 
-  // Priority 7: Profile goal
+  // Priority 8: Profile goal
   const g = profileGoal.toLowerCase();
   if (isPowerRequest(g) || isSpeedRequest(g)) {
     return { dominant: "powerSpeed", reason: "Profile goal is power or speed" };
@@ -341,6 +356,21 @@ export function resolveRoutingDecision(
   if (mobilityFromMessage) messageSignals.push("mobility/movement support request detected from message");
   if (mobilityFromProfile && !mobilityFromMessage) profileSignals.push("mobility/recovery context from profile");
 
+  // ── Special considerations detection (message + profile) ─────────────────
+  // Checks both the live message and stored profile data (injuries, training goal)
+  // for signals indicating the user has meaningful physical limitations or special needs.
+  const profileInjuries = profile?.injuries ?? "";
+  const specialConsiderationsCtx = detectSpecialConsiderations(
+    userMessage,
+    profileGoal,
+    profileInjuries,
+  );
+  const specialConsiderationsActive = specialConsiderationsCtx.detected;
+
+  if (specialConsiderationsActive) {
+    messageSignals.push(`special considerations detected: ${specialConsiderationsCtx.primaryType} (${specialConsiderationsCtx.severity})`);
+  }
+
   // ── Priority resolution ───────────────────────────────────────────────────
   const { dominant, reason } = resolveDominantDomain(
     reEntryActive,
@@ -349,12 +379,14 @@ export function resolveRoutingDecision(
     !!sportFromMessage,
     periodizationActive,
     mobilityFromMessage,
+    specialConsiderationsActive,
     profileGoal,
   );
 
   // ── Active engines list (for debug) ─────────────────────────────────────
   const enginesActive: string[] = [];
   if (reEntryActive) enginesActive.push("re-entry");
+  if (specialConsiderationsActive) enginesActive.push(`special-considerations:${specialConsiderationsCtx.primaryType}`);
   if (conditioningActive) enginesActive.push("conditioning");
   if (powerSpeedActive) enginesActive.push("power-speed");
   if (sportActive) enginesActive.push(`sport:${resolvedSport}`);
@@ -389,6 +421,7 @@ export function resolveRoutingDecision(
     },
     periodization: periodizationActive,
     mobility: mobilityActive,
+    specialConsiderations: specialConsiderationsCtx,
     dominantDomain: dominant,
     debug,
   };
@@ -404,6 +437,9 @@ export function resolveRoutingDecision(
         sport: resolvedSport,
         season: resolvedSeason,
         reEntryStatus: reEntryClassification?.status ?? "none",
+        specialConsiderations: specialConsiderationsActive
+          ? { type: specialConsiderationsCtx.primaryType, severity: specialConsiderationsCtx.severity }
+          : null,
         sources: {
           sport: sportSource,
           season: seasonSource,
@@ -411,6 +447,7 @@ export function resolveRoutingDecision(
           conditioningFromMessage,
           powerSpeedFromMessage,
           mobilityFromMessage,
+          specialConsiderationsFromMessage: specialConsiderationsActive,
         },
       },
     },
