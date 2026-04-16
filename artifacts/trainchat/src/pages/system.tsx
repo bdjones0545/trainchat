@@ -47,12 +47,14 @@ import {
   LogOut,
   Lock,
   Library,
+  UserPlus,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useGetMe } from "@workspace/api-client-react";
 import { useLogout } from "@workspace/api-client-react";
 import { customFetch } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
+import { clearAuthState } from "@/lib/routing";
 import TopNav from "@/components/layout/TopNav";
 import MobileSlideLayout, { type SlidePanel } from "@/components/layout/MobileSlideLayout";
 import BlockStatusCard from "@/components/training/BlockStatusCard";
@@ -1863,34 +1865,66 @@ export default function SystemPage() {
           </div>
         )}
 
-        <div className="my-3 h-px bg-border" />
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-3">Account</p>
-        <button
-          onClick={() => { setLocation("/billing"); setMobilePanel(null); }}
-          className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
-        >
-          <Settings className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-          <span>Settings</span>
-        </button>
-        <button
-          onClick={() => { setLocation("/billing"); setMobilePanel(null); }}
-          className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
-        >
-          <CreditCard className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-          <span>Billing &amp; Plans</span>
-        </button>
+        {!isAnonymousUser && (
+          <>
+            <div className="my-3 h-px bg-border" />
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-3">Account</p>
+            <button
+              onClick={() => { setLocation("/billing"); setMobilePanel(null); }}
+              className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+            >
+              <Settings className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              <span>Settings</span>
+            </button>
+            <button
+              onClick={() => { setLocation("/billing"); setMobilePanel(null); }}
+              className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+            >
+              <CreditCard className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              <span>Billing &amp; Plans</span>
+            </button>
+          </>
+        )}
       </div>
 
-      {/* Logout */}
-      <div className="border-t border-border px-3 py-3">
-        <button
-          onClick={handleLogout}
-          disabled={logout.isPending}
-          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-muted-foreground hover:text-red-400 hover:bg-red-500/5 transition-all text-left"
-        >
-          <LogOut className="w-4 h-4 flex-shrink-0" />
-          <span>Sign Out</span>
-        </button>
+      {/* Account actions */}
+      <div className="border-t border-border px-3 py-3 space-y-1">
+        {isAnonymousUser ? (
+          <>
+            <button
+              onClick={() => { setLocation("/register"); setMobilePanel(null); }}
+              className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold text-primary hover:bg-primary/5 active:bg-primary/10 transition-all text-left"
+            >
+              <UserPlus className="w-4 h-4 flex-shrink-0" />
+              <span>Create Account</span>
+            </button>
+            <button
+              onClick={() => {
+                logout.mutate(undefined, {
+                  onSuccess: () => {
+                    queryClient.clear();
+                    clearAuthState();
+                    setLocation("/chat");
+                  },
+                });
+              }}
+              disabled={logout.isPending}
+              className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-all text-left"
+            >
+              <RotateCcw className="w-4 h-4 flex-shrink-0" />
+              <span>Start Fresh</span>
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={handleLogout}
+            disabled={logout.isPending}
+            className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-muted-foreground hover:text-red-400 hover:bg-red-500/5 transition-all text-left"
+          >
+            <LogOut className="w-4 h-4 flex-shrink-0" />
+            <span>Sign Out</span>
+          </button>
+        )}
       </div>
     </div>
   );
@@ -2001,7 +2035,7 @@ export default function SystemPage() {
 
       {/* ─── Desktop TopNav (desktop only) ─── */}
       <div className="hidden md:block">
-        <TopNav userName={userName} />
+        <TopNav userName={userName} isAnonymous={isAnonymousUser} />
       </div>
 
       {/* ─── Desktop page header (desktop only) ─── */}

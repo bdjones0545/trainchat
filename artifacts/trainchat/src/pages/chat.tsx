@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import {
   SendHorizontal, Zap, PanelLeftClose, PanelLeft, Activity,
-  Menu, Target, CreditCard, LogOut, Dumbbell,
+  Menu, Target, CreditCard, LogOut, Dumbbell, UserPlus,
   MessageSquare, Plus, RotateCcw, Brain, ChevronDown, ChevronRight,
   CheckCircle2, Library,
 } from "lucide-react";
@@ -998,13 +998,15 @@ export default function Chat() {
           <Activity className="w-4 h-4 text-muted-foreground flex-shrink-0" />
           <span>Check-In</span>
         </button>
-        <button
-          onClick={() => { setMobilePanel(null); setLocation("/billing"); }}
-          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
-        >
-          <CreditCard className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-          <span>Settings</span>
-        </button>
+        {!isAnonymousUser && (
+          <button
+            onClick={() => { setMobilePanel(null); setLocation("/billing"); }}
+            className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+          >
+            <CreditCard className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            <span>Settings</span>
+          </button>
+        )}
         {!isPremium && (
           <button
             onClick={() => { setShowPricing(true); setMobilePanel(null); }}
@@ -1038,16 +1040,36 @@ export default function Chat() {
         )}
       </div>
 
-      {/* Logout */}
-      <div className="border-t border-border px-3 py-3">
-        <button
-          onClick={handleLogout}
-          disabled={logout.isPending}
-          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-muted-foreground hover:text-red-400 hover:bg-red-500/5 transition-all text-left"
-        >
-          <LogOut className="w-4 h-4 flex-shrink-0" />
-          <span>Sign Out</span>
-        </button>
+      {/* Account actions */}
+      <div className="border-t border-border px-3 py-3 space-y-1">
+        {isAnonymousUser ? (
+          <>
+            <button
+              onClick={() => { setLocation("/register"); setMobilePanel(null); }}
+              className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold text-primary hover:bg-primary/5 active:bg-primary/10 transition-all text-left"
+            >
+              <UserPlus className="w-4 h-4 flex-shrink-0" />
+              <span>Create Account</span>
+            </button>
+            <button
+              onClick={handleLogout}
+              disabled={logout.isPending}
+              className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-all text-left"
+            >
+              <RotateCcw className="w-4 h-4 flex-shrink-0" />
+              <span>Start Fresh</span>
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={handleLogout}
+            disabled={logout.isPending}
+            className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-muted-foreground hover:text-red-400 hover:bg-red-500/5 transition-all text-left"
+          >
+            <LogOut className="w-4 h-4 flex-shrink-0" />
+            <span>Sign Out</span>
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1205,6 +1227,7 @@ export default function Chat() {
       <div className="hidden md:block">
         <TopNav
           userName={displayName}
+          isAnonymous={isAnonymousUser}
           extraContent={
             <div className="flex items-center gap-2">
               <StreakBadge streak={currentStreak} />

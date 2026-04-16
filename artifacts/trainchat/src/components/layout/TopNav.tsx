@@ -1,5 +1,5 @@
 import type React from "react";
-import { LogOut, Settings, Target, MessageSquare } from "lucide-react";
+import { LogOut, Settings, Target, MessageSquare, UserPlus } from "lucide-react";
 import { useLogout } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -7,10 +7,11 @@ import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_17752640
 
 interface Props {
   userName: string;
+  isAnonymous?: boolean;
   extraContent?: React.ReactNode;
 }
 
-export default function TopNav({ userName, extraContent }: Props) {
+export default function TopNav({ userName, isAnonymous = false, extraContent }: Props) {
   const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const logout = useLogout();
@@ -24,12 +25,14 @@ export default function TopNav({ userName, extraContent }: Props) {
     });
   }
 
-  const initials = userName
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  const initials = isAnonymous
+    ? "TC"
+    : userName
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase();
 
   const isOnSystem = location === "/system";
   const isOnChat = location === "/chat";
@@ -87,13 +90,15 @@ export default function TopNav({ userName, extraContent }: Props) {
 
       {/* Right side */}
       <div className="flex items-center gap-2">
-        <button
-          onClick={() => setLocation("/billing")}
-          className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-all duration-150"
-          title="Billing & Account"
-        >
-          <Settings className="w-4 h-4" />
-        </button>
+        {!isAnonymous && (
+          <button
+            onClick={() => setLocation("/billing")}
+            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-all duration-150"
+            title="Billing & Account"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+        )}
 
         <div className="flex items-center gap-2 pl-2 border-l border-border">
           <div
@@ -102,18 +107,32 @@ export default function TopNav({ userName, extraContent }: Props) {
           >
             {initials}
           </div>
-          <span className="text-xs font-medium text-foreground hidden sm:block">{userName}</span>
+          <span className="text-xs font-medium text-foreground hidden sm:block">
+            {isAnonymous ? "Guest" : userName}
+          </span>
         </div>
 
-        <button
-          data-testid="button-logout"
-          onClick={handleLogout}
-          disabled={logout.isPending}
-          className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-all duration-150"
-          title="Sign out"
-        >
-          <LogOut className="w-4 h-4" />
-        </button>
+        {isAnonymous ? (
+          <button
+            data-testid="button-create-account"
+            onClick={() => setLocation("/register")}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 transition-all duration-150"
+            title="Create a free account"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Create Account</span>
+          </button>
+        ) : (
+          <button
+            data-testid="button-logout"
+            onClick={handleLogout}
+            disabled={logout.isPending}
+            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-all duration-150"
+            title="Sign out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        )}
       </div>
     </div>
   );
