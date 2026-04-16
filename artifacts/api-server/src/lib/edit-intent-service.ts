@@ -13,6 +13,7 @@
 import { logger } from "./logger";
 import { buildSwapContext, getProgressions, findExerciseByName } from "./exercise-service";
 import { resolveHarderEasierFallback } from "./harder-easier-fallback";
+import { runIntentFamilyPipeline, logIntentFamilyDebug, type IntentFamilyPipelineResult } from "./intent-family-engine";
 import {
   classifyExerciseFamily,
   getExerciseFamilySchema,
@@ -278,7 +279,8 @@ function buildEditSystemPrompt(
   targetContext?: TargetContext,
   adaptationContext?: string,
   decisionMemoryContext?: string,
-  exerciseSwapContext?: string
+  exerciseSwapContext?: string,
+  intentFamilyDirective?: string
 ): string {
   let targetFocus = "";
   if (targetContext) {
@@ -308,6 +310,10 @@ function buildEditSystemPrompt(
     ? `\nEXERCISE SWAP INTELLIGENCE:\n${exerciseSwapContext}\nWhen performing a swap/replace:\n- If the user's request EXPLICITLY names a specific target exercise (e.g. "replace X with Pause Back Squat"), use EXACTLY that name — do not substitute with a candidate from the list.\n- If the user does NOT name a specific target (e.g. "swap this for something harder"), choose from the SWAP CANDIDATES or PROGRESSION OPTIONS list above.\n- Never invent exercise names not present in either the user's request or the candidates list.\n`
     : "";
 
+  const intentFamilySection = intentFamilyDirective
+    ? `\n${intentFamilyDirective}\n`
+    : "";
+
   return `You are an elite performance architect editing a user's structured training system. You program according to NSCA strength & conditioning principles.
 
 You know this athlete. You have worked with them before and remember the decisions you've made together.
@@ -315,7 +321,7 @@ You know this athlete. You have worked with them before and remember the decisio
 You will receive:
 1. The user's current structured training system (with IDs for every entity)
 2. A natural language modification request
-${targetFocus}${swapSection}
+${targetFocus}${swapSection}${intentFamilySection}
 Your job is to produce a structured JSON edit plan.
 
 RULES:
@@ -583,12 +589,13 @@ async function interpretWithAI(
   targetContext?: TargetContext,
   adaptationContext?: string,
   decisionMemoryContext?: string,
-  exerciseSwapContext?: string
+  exerciseSwapContext?: string,
+  intentFamilyDirective?: string
 ): Promise<EditPlan | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
-  const systemPrompt = buildEditSystemPrompt(systemContext, targetContext, adaptationContext, decisionMemoryContext, exerciseSwapContext);
+  const systemPrompt = buildEditSystemPrompt(systemContext, targetContext, adaptationContext, decisionMemoryContext, exerciseSwapContext, intentFamilyDirective);
 
   try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -2372,9 +2379,43 @@ export async function interpretEditRequest(
     }
   }
 
+  // ── Step 3.8: Run Intent Family Pipeline ─────────────────────────────────
+  // Normalizes user language into a stable intent family and builds a
+  // transformation directive to inject into the AI system prompt.
+  let intentFamilyPipelineResult: IntentFamilyPipelineResult | null = null;
+  let intentFamilyDirective: string | undefined;
+
+  try {
+    const sessionCount = (system.phases ?? []).reduce((acc: number, phase: any) =>
+      acc + (phase.weeks ?? []).reduce((wacc: number, week: any) =>
+        wacc + (week.sessions ?? []).filter((s: any) => !s.isRestDay).length, 0), 0);
+    const targetSessionLabel = targetContext?.type === "session" ? targetContext.label : undefined;
+
+    intentFamilyPipelineResult = runIntentFamilyPipeline(userRequest, {
+      dayCount: sessionCount,
+      sessionLabel: targetSessionLabel,
+    });
+
+    intentFamilyDirective = intentFamilyPipelineResult.promptDirective;
+
+    logIntentFamilyDebug({
+      originalRequest: userRequest,
+      normalizedFamily: intentFamilyPipelineResult.familyResult.family,
+      targetScope: intentFamilyPipelineResult.familyResult.targetScope,
+      scopeSource: intentFamilyPipelineResult.familyResult.scopeSource,
+      confidence: intentFamilyPipelineResult.familyResult.confidence,
+      chosenPath: "openai",
+      transformationBundle: intentFamilyPipelineResult.familyResult.family,
+      minimumStructuralChanges: intentFamilyPipelineResult.bundle.minimumStructuralChanges,
+      matchedPatterns: intentFamilyPipelineResult.familyResult.matchedPatterns,
+    });
+  } catch (err) {
+    logger.warn({ err }, "[IntentFamilyEngine] Pipeline failed — proceeding without directive");
+  }
+
   // ── Step 4: Call OpenAI ───────────────────────────────────────────────────
   logger.info(
-    { request: userRequest.slice(0, 100), hasTargetContext: !!targetContext, targetType: targetContext?.type, escalatedFrom: classification.route === "DETERMINISTIC" ? "deterministic" : undefined },
+    { request: userRequest.slice(0, 100), hasTargetContext: !!targetContext, targetType: targetContext?.type, escalatedFrom: classification.route === "DETERMINISTIC" ? "deterministic" : undefined, intentFamily: intentFamilyPipelineResult?.familyResult.family },
     "[EditRouter] Calling OpenAI — route: agent_openai"
   );
 
@@ -2384,7 +2425,8 @@ export async function interpretEditRequest(
     targetContext,
     adaptationContext,
     decisionMemoryContext,
-    exerciseSwapContext
+    exerciseSwapContext,
+    intentFamilyDirective
   );
 
   if (aiPlan && Array.isArray(aiPlan.changes) && aiPlan.changes.length > 0) {

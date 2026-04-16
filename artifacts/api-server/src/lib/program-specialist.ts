@@ -8,6 +8,13 @@
  */
 
 import { logger } from "./logger";
+import {
+  normalizeToIntentFamily,
+  bridgeToSpecialistIntent,
+  runIntentFamilyPipeline,
+  type IntentFamily,
+  type TargetScope,
+} from "./intent-family-engine";
 
 // ─── Intent Types ────────────────────────────────────────────────────────────
 
@@ -261,6 +268,8 @@ export function classifySpecialistRequest(
   primaryIntent: SpecialistIntentType;
   secondaryIntents: SpecialistIntentType[];
   metadata: Record<string, string | number | null>;
+  intentFamily?: IntentFamily;
+  targetScope?: TargetScope;
 } {
   const lower = message.toLowerCase();
   const matched: SpecialistIntentType[] = [];
@@ -272,12 +281,39 @@ export function classifySpecialistRequest(
     }
   }
 
+  // Run intent family normalization in parallel for richer classification
+  let intentFamily: IntentFamily | undefined;
+  let targetScope: TargetScope | undefined;
+  try {
+    const familyResult = normalizeToIntentFamily(message);
+    if (familyResult.family !== "clarification_required") {
+      intentFamily = familyResult.family;
+      targetScope = familyResult.targetScope;
+
+      // If the specialist patterns found no match, use the intent family bridge
+      if (matched.length === 0 && hasActiveProgram) {
+        const bridge = bridgeToSpecialistIntent(familyResult.family);
+        if (bridge.specialistIntent !== "AMBIGUOUS") {
+          matched.push(bridge.specialistIntent);
+          logger.debug(
+            { message: message.slice(0, 80), intentFamily: familyResult.family, bridged: bridge.specialistIntent },
+            "[ProgramSpecialist] Used intent family bridge for unmatched request",
+          );
+        }
+      }
+    }
+  } catch (err) {
+    logger.warn({ err }, "[ProgramSpecialist] Intent family normalization failed — using raw pattern match only");
+  }
+
   // No match — mark ambiguous
   if (matched.length === 0 || !hasActiveProgram) {
     return {
       primaryIntent: "AMBIGUOUS",
       secondaryIntents: [],
       metadata: {},
+      intentFamily,
+      targetScope,
     };
   }
 
@@ -293,7 +329,15 @@ export function classifySpecialistRequest(
     fatiguedRegion: detectFatiguedRegion(lower),
   };
 
-  return { primaryIntent, secondaryIntents, metadata };
+  // If we have an intent family that specifies a bias target more precisely, prefer it
+  if (intentFamily && !metadata.biasTarget) {
+    const bridge = bridgeToSpecialistIntent(intentFamily);
+    if (bridge.biasTarget) {
+      metadata.biasTarget = bridge.biasTarget;
+    }
+  }
+
+  return { primaryIntent, secondaryIntents, metadata, intentFamily, targetScope };
 }
 
 // ─── Decision Engine ─────────────────────────────────────────────────────────
@@ -304,7 +348,7 @@ export function decideProgramAdjustment(
   _context?: { profile?: Record<string, unknown> | null }
 ): SpecialistDecision {
   const lower = message.toLowerCase();
-  const { primaryIntent, secondaryIntents, metadata } = classifySpecialistRequest(
+  const { primaryIntent, secondaryIntents, metadata, intentFamily, targetScope } = classifySpecialistRequest(
     message,
     currentProgram !== null
   );
@@ -314,9 +358,11 @@ export function decideProgramAdjustment(
       primaryIntent,
       secondaryIntents,
       metadata,
+      intentFamily: intentFamily ?? "not_classified",
+      targetScope: targetScope ?? "program",
       messagePreview: message.slice(0, 100),
     },
-    "[ProgramSpecialist] Request classified"
+    "[ProgramSpecialist] Request classified",
   );
 
   if (primaryIntent === "AMBIGUOUS" || !currentProgram) {
