@@ -1,0 +1,470 @@
+// ======================================================
+// TRAINCHAT EXECUTION PLANNER (CORE AGENT LAYER)
+// ======================================================
+//
+// Centralized execution planner that determines EXACTLY how
+// every user message is handled.
+//
+// Replaces fragmented routing (intent.ts / decision.ts chaos)
+// with a single brain that:
+//
+// 1. Understands user intent (via the intent family system)
+// 2. Reads current program + system state
+// 3. Determines EXACT action (mutate, ask, rebuild, guide)
+// 4. Routes to the correct execution path
+//
+// ======================================================
+
+import { normalizeToIntentFamily, type IntentFamily } from "./intent-family-engine";
+import { type ProgramStructure } from "./ai";
+import { logger } from "./logger";
+
+// ─── Execution Action Types ───────────────────────────────────────────────────
+
+export type ExecutionAction =
+  | "APPLY_MUTATION"
+  | "ASK_CLARIFICATION"
+  | "GUIDANCE"
+  | "REBUILD_PROGRAM"
+  | "NO_OP";
+
+// ─── Scope ───────────────────────────────────────────────────────────────────
+
+export interface ExecutionScope {
+  type: "exercise" | "session" | "program" | null;
+  dayIndex?: number;
+  exerciseName?: string;
+}
+
+// ─── Mutation Descriptor ──────────────────────────────────────────────────────
+
+export interface ExecutionMutation {
+  type: "swap" | "transform" | "add" | "remove" | "progression" | "regression";
+  params: Record<string, unknown>;
+}
+
+// ─── Clarification Descriptor ─────────────────────────────────────────────────
+
+export interface ExecutionClarification {
+  question: string;
+  pendingAspect: "scope" | "target_day" | "exercise";
+}
+
+// ─── Execution Plan ───────────────────────────────────────────────────────────
+
+export interface ExecutionPlan {
+  action: ExecutionAction;
+  intentFamily: IntentFamily | null;
+  scope: ExecutionScope;
+  mutation?: ExecutionMutation;
+  clarification?: ExecutionClarification;
+  reasoning: string;
+}
+
+// ─── Pending Clarification Shape ──────────────────────────────────────────────
+//
+// Minimal interface that matches what getActivePendingClarification() returns
+// from the DB record — only the fields the planner actually needs.
+
+export interface PendingClarificationContext {
+  intentFamily: string;
+  pendingAspect: string;
+  originalRequest: string;
+  clarificationQuestion: string;
+}
+
+// ─── Entry Point ──────────────────────────────────────────────────────────────
+
+export async function buildExecutionPlan({
+  message,
+  userId,
+  conversationId,
+  program,
+  pendingClarification,
+}: {
+  message: string;
+  userId: string;
+  conversationId: string;
+  program: ProgramStructure | null;
+  pendingClarification: PendingClarificationContext | null;
+}): Promise<ExecutionPlan> {
+  // ── STEP 1: Handle clarification followup first ─────────────────────────────
+  if (pendingClarification) {
+    const plan = resolveClarification({ message, pendingClarification });
+
+    logger.debug(
+      {
+        conversationId,
+        userId,
+        action: plan.action,
+        intentFamily: plan.intentFamily,
+        scope: plan.scope,
+        reasoning: plan.reasoning,
+      },
+      "[ExecutionPlanner] Resolved from pending clarification"
+    );
+
+    return plan;
+  }
+
+  // ── STEP 2: Resolve intent family ──────────────────────────────────────────
+  const intentResult = normalizeToIntentFamily(message);
+  const intent = intentResult.family;
+
+  // ── STEP 3: Resolve target scope ──────────────────────────────────────────
+  const scope = resolveScope(message);
+
+  // ── STEP 4: Decision tree ─────────────────────────────────────────────────
+  let plan: ExecutionPlan;
+
+  // ── Exercise swap ────────────────────────────────────────────────────────
+  if (intent === "exercise_swap") {
+    const exerciseName = extractExerciseName(message);
+
+    if (!exerciseName) {
+      plan = {
+        action: "ASK_CLARIFICATION",
+        intentFamily: intent,
+        scope,
+        clarification: {
+          question: "Which exercise do you want to swap?",
+          pendingAspect: "exercise",
+        },
+        reasoning: "Swap intent detected but no specific exercise named",
+      };
+    } else {
+      plan = {
+        action: "APPLY_MUTATION",
+        intentFamily: intent,
+        scope: { ...scope, exerciseName },
+        mutation: {
+          type: "swap",
+          params: { targetExercise: exerciseName },
+        },
+        reasoning: "Valid swap request with named exercise",
+      };
+    }
+  }
+
+  // ── Endurance transformation ──────────────────────────────────────────────
+  else if (intent === "endurance_focus") {
+    if (!scope.type) {
+      plan = {
+        action: "ASK_CLARIFICATION",
+        intentFamily: intent,
+        scope,
+        clarification: {
+          question: "Should this apply to a specific day or the whole program?",
+          pendingAspect: "scope",
+        },
+        reasoning: "Endurance intent needs scope before applying transformation",
+      };
+    } else {
+      plan = {
+        action: "APPLY_MUTATION",
+        intentFamily: intent,
+        scope,
+        mutation: {
+          type: "transform",
+          params: { transformation: "endurance" },
+        },
+        reasoning: "Endurance transformation with resolved scope",
+      };
+    }
+  }
+
+  // ── Exercise progression ──────────────────────────────────────────────────
+  else if (intent === "exercise_progression") {
+    plan = {
+      action: "APPLY_MUTATION",
+      intentFamily: intent,
+      scope,
+      mutation: {
+        type: "progression",
+        params: { category: inferExerciseCategory(message) },
+      },
+      reasoning: "Exercise progression flow",
+    };
+  }
+
+  // ── Exercise regression ───────────────────────────────────────────────────
+  else if (intent === "exercise_regression") {
+    plan = {
+      action: "APPLY_MUTATION",
+      intentFamily: intent,
+      scope,
+      mutation: {
+        type: "regression",
+        params: { category: inferExerciseCategory(message) },
+      },
+      reasoning: "Exercise regression flow",
+    };
+  }
+
+  // ── Add exercise / session expansion ─────────────────────────────────────
+  else if (intent === "session_expansion" || intent === "increase_volume") {
+    plan = {
+      action: "APPLY_MUTATION",
+      intentFamily: intent,
+      scope,
+      mutation: {
+        type: "add",
+        params: { category: inferExerciseCategory(message) },
+      },
+      reasoning: "Add exercise flow via session expansion or volume increase",
+    };
+  }
+
+  // ── Remove exercise / session reduction ───────────────────────────────────
+  else if (intent === "session_reduction" || intent === "decrease_volume") {
+    plan = {
+      action: "APPLY_MUTATION",
+      intentFamily: intent,
+      scope,
+      mutation: {
+        type: "remove",
+        params: { category: inferExerciseCategory(message) },
+      },
+      reasoning: "Remove exercise or reduce session flow",
+    };
+  }
+
+  // ── All other family types that map to mutation ───────────────────────────
+  else if (isMutationFamily(intent)) {
+    plan = {
+      action: "APPLY_MUTATION",
+      intentFamily: intent,
+      scope,
+      mutation: {
+        type: "transform",
+        params: {
+          transformation: intent,
+          scope: scope.type ?? "program",
+        },
+      },
+      reasoning: `Mutation family '${intent}' → apply structural transformation`,
+    };
+  }
+
+  // ── No program exists → build one ─────────────────────────────────────────
+  else if (!program) {
+    plan = {
+      action: "REBUILD_PROGRAM",
+      intentFamily: intent === "clarification_required" ? null : intent,
+      scope,
+      reasoning: "No program exists → trigger program generation",
+    };
+  }
+
+  // ── Fallback → coaching guidance ──────────────────────────────────────────
+  else {
+    plan = {
+      action: "GUIDANCE",
+      intentFamily: intent === "clarification_required" ? null : intent,
+      scope,
+      reasoning: `Intent '${intent}' has no mutation path → coaching response`,
+    };
+  }
+
+  logger.debug(
+    {
+      conversationId,
+      userId,
+      action: plan.action,
+      intentFamily: plan.intentFamily,
+      scope: plan.scope,
+      mutationType: plan.mutation?.type ?? null,
+      reasoning: plan.reasoning,
+      intentConfidence: intentResult.confidence,
+    },
+    "[ExecutionPlanner] Plan resolved"
+  );
+
+  return plan;
+}
+
+// ─── Clarification Resolution ─────────────────────────────────────────────────
+
+function resolveClarification({
+  message,
+  pendingClarification,
+}: {
+  message: string;
+  pendingClarification: PendingClarificationContext;
+}): ExecutionPlan {
+  const lower = message.toLowerCase().trim();
+
+  // Resolve pending scope clarification
+  if (pendingClarification.pendingAspect === "scope") {
+    const dayMatch = lower.match(/day\s*(\d+)/i);
+
+    if (dayMatch) {
+      return {
+        action: "APPLY_MUTATION",
+        intentFamily: pendingClarification.intentFamily as IntentFamily,
+        scope: {
+          type: "session",
+          dayIndex: Number(dayMatch[1]) - 1,
+        },
+        mutation: {
+          type: "transform",
+          params: {
+            transformation: pendingClarification.intentFamily,
+          },
+        },
+        reasoning: "Resolved scope clarification → day target identified",
+      };
+    }
+
+    // Whole-program resolution
+    if (/\b(whole|entire|all|everything|program.?wide|every day)\b/.test(lower)) {
+      return {
+        action: "APPLY_MUTATION",
+        intentFamily: pendingClarification.intentFamily as IntentFamily,
+        scope: { type: "program" },
+        mutation: {
+          type: "transform",
+          params: {
+            transformation: pendingClarification.intentFamily,
+          },
+        },
+        reasoning: "Resolved scope clarification → program-wide target",
+      };
+    }
+  }
+
+  // Resolve pending exercise clarification
+  if (pendingClarification.pendingAspect === "target_exercise") {
+    const exerciseName = extractExerciseName(message) ?? message.trim();
+    return {
+      action: "APPLY_MUTATION",
+      intentFamily: pendingClarification.intentFamily as IntentFamily,
+      scope: { type: null, exerciseName },
+      mutation: {
+        type: "swap",
+        params: { targetExercise: exerciseName },
+      },
+      reasoning: "Resolved exercise clarification → exercise name extracted",
+    };
+  }
+
+  // Could not resolve — fall through to guidance
+  return {
+    action: "GUIDANCE",
+    intentFamily: null,
+    scope: { type: null },
+    reasoning: "Failed clarification resolution → fallback to coaching",
+  };
+}
+
+// ─── Scope Resolution ─────────────────────────────────────────────────────────
+
+function resolveScope(message: string): ExecutionScope {
+  const lower = message.toLowerCase();
+
+  // Explicit day index
+  const dayMatch = lower.match(/day\s*(\d+)/i);
+  if (dayMatch) {
+    return {
+      type: "session",
+      dayIndex: Number(dayMatch[1]) - 1,
+    };
+  }
+
+  // Explicit session reference
+  if (/\b(this session|this day|today's session|today)\b/.test(lower)) {
+    return { type: "session" };
+  }
+
+  // Explicit program-wide
+  if (/\b(whole program|entire program|all sessions|everything|program.?wide)\b/.test(lower)) {
+    return { type: "program" };
+  }
+
+  // Explicit exercise-level
+  if (/\b(this exercise|this movement|this lift)\b/.test(lower)) {
+    return { type: "exercise" };
+  }
+
+  return { type: null };
+}
+
+// ─── Exercise Name Extraction ─────────────────────────────────────────────────
+//
+// Attempts to extract a named exercise from swap-style requests.
+// e.g. "swap bench press for dumbbell press" → "bench press"
+
+function extractExerciseName(message: string): string | null {
+  const lower = message.toLowerCase();
+
+  // Pattern: swap/replace/substitute X (with/for Y)
+  const swapMatch = lower.match(
+    /\b(?:swap|replace|substitute|switch|change|take out|remove)\s+(?:out\s+)?(?:the\s+)?([a-z\s\-]+?)(?:\s+(?:with|for|to)\b|$)/i
+  );
+  if (swapMatch) {
+    const candidate = swapMatch[1].trim();
+    // Reject tiny fragments like "it" or "this"
+    if (candidate.length > 3 && !/^(it|this|that|the)$/.test(candidate)) {
+      return candidate;
+    }
+  }
+
+  // Pattern: instead of X / in place of X
+  const insteadMatch = lower.match(/\b(?:instead of|in place of|rather than)\s+(?:the\s+)?([a-z\s\-]+?)(?:\s+(?:with|for|to|,|$))/i);
+  if (insteadMatch) {
+    const candidate = insteadMatch[1].trim();
+    if (candidate.length > 3 && !/^(it|this|that|the)$/.test(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+// ─── Exercise Category Inference ─────────────────────────────────────────────
+
+function inferExerciseCategory(message: string): string {
+  const lower = message.toLowerCase();
+
+  if (/\b(jump|plyometric|box jump|depth jump|broad jump)\b/.test(lower)) return "plyometric";
+  if (/\b(core|abs|plank|crunch|carry|anti.?rotation)\b/.test(lower)) return "core";
+  if (/\b(conditioning|cardio|interval|aerobic|circuit|finisher)\b/.test(lower)) return "conditioning";
+  if (/\b(hamstring|rdl|curl|nordics?|glute.ham)\b/.test(lower)) return "hamstrings";
+  if (/\b(calf|calves|calf raise)\b/.test(lower)) return "calves";
+  if (/\b(glute|hip thrust|bridge)\b/.test(lower)) return "glutes";
+  if (/\b(shoulder|delt|press|lateral raise)\b/.test(lower)) return "shoulders";
+  if (/\b(upper back|row|pull|lat|rhomboid)\b/.test(lower)) return "upper_back";
+  if (/\b(mobility|stretch|hip|ankle|thoracic)\b/.test(lower)) return "mobility";
+
+  return "general";
+}
+
+// ─── Mutation Family Guard ────────────────────────────────────────────────────
+//
+// Returns true for intent families that map to a structural mutation
+// rather than guidance or no-op.
+
+function isMutationFamily(family: IntentFamily): boolean {
+  const mutationFamilies: IntentFamily[] = [
+    "increase_difficulty",
+    "decrease_difficulty",
+    "increase_volume",
+    "decrease_volume",
+    "reduce_time",
+    "increase_time",
+    "strength_focus",
+    "hypertrophy_focus",
+    "conditioning_focus",
+    "power_explosive_focus",
+    "speed_focus",
+    "athletic_performance_focus",
+    "fatigue_management",
+    "recovery_focus",
+    "mobility_support",
+    "injury_modification",
+    "joint_friendly_modification",
+    "equipment_constraint",
+  ];
+
+  return mutationFamilies.includes(family);
+}
