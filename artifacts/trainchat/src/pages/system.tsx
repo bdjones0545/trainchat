@@ -224,9 +224,13 @@ function ExerciseCard({ exercise, index, sessionLabel, highlightedIds, onEdit, o
     setSwapCandidates([]);
     setSwapError(false);
     try {
-      const result = await customFetch<any>(`/api/exercises/swap/${encodeURIComponent(exercise.name)}`);
+      const url = `/api/exercises/swap/${encodeURIComponent(exercise.name)}`;
+      if (import.meta.env.DEV) console.log("[swap] fetching", url, "exercise.name=", exercise.name);
+      const result = await customFetch<any>(url);
+      if (import.meta.env.DEV) console.log("[swap] result count=", result?.data?.length, "data=", result?.data);
       setSwapCandidates(result.data ?? []);
-    } catch {
+    } catch (err) {
+      if (import.meta.env.DEV) console.error("[swap] error", err);
       setSwapError(true);
       setSwapCandidates([]);
     } finally {

@@ -157,11 +157,13 @@ export async function getSwapCandidates(opts: {
   debugInfo.fallbackUsed = true;
   debugInfo.fallbackPattern = fallbackPattern;
 
+  // NOTE: Do NOT inherit exercise.unilateral here — in fallback mode we want the
+  // broadest set of alternatives possible, so let the explicit caller control unilateralOnly.
   const patternCandidates = await getByMovementPattern({
     pattern: fallbackPattern,
     equipmentLevel,
     injuryFlags,
-    unilateralOnly: unilateralOnly ?? exercise?.unilateral ?? false,
+    unilateralOnly,
     excludeNames: [exerciseName],
     maxNeuralDemand,
     maxTimeCost,
@@ -169,20 +171,65 @@ export async function getSwapCandidates(opts: {
   });
 
   debugInfo.patternCandidateCount = patternCandidates.length;
-  debugInfo.finalCount = patternCandidates.length;
-  debugInfo.path = patternCandidates.length > 0 ? "movement_pattern" : "empty";
 
+  if (patternCandidates.length > 0) {
+    debugInfo.finalCount = patternCandidates.length;
+    debugInfo.path = "movement_pattern";
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[swap:debug]", JSON.stringify(debugInfo));
+    }
+    return patternCandidates;
+  }
+
+  // ── Step 4: Super-pattern fallback ─────────────────────────────────────────
+  // Triggered when the exercise's own movement pattern has no active members.
+  // Map narrow/legacy patterns to the closest active broad pattern.
+  const SUPER_PATTERN_MAP: Record<string, string> = {
+    squat:                 "knee_dominant",
+    hinge:                 "hip_dominant",
+    push:                  "push_horizontal",
+    pull:                  "pull_horizontal",
+    carry:                 "hip_dominant",
+    conditioning:          "conditioning",
+    mobility:              "mobility_prep",
+    activation:            "mobility_prep",
+    iso_legs:              "knee_dominant",
+    plyometric:            "plyometric",
+    power:                 "power_explosive",
+  };
+
+  const superPattern = SUPER_PATTERN_MAP[fallbackPattern];
+  debugInfo.superPatternAttempted = superPattern ?? null;
+
+  if (superPattern && superPattern !== fallbackPattern) {
+    const superCandidates = await getByMovementPattern({
+      pattern: superPattern,
+      equipmentLevel,
+      injuryFlags,
+      unilateralOnly,
+      excludeNames: [exerciseName],
+      maxNeuralDemand,
+      maxTimeCost,
+      maxCount,
+    });
+
+    debugInfo.superPatternCandidateCount = superCandidates.length;
+    debugInfo.finalCount = superCandidates.length;
+    debugInfo.path = superCandidates.length > 0 ? "super_pattern" : "empty";
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[swap:debug]", JSON.stringify(debugInfo));
+    }
+
+    return superCandidates;
+  }
+
+  debugInfo.finalCount = 0;
+  debugInfo.path = "empty";
   if (process.env.NODE_ENV !== "production") {
     console.log("[swap:debug]", JSON.stringify(debugInfo));
   }
-
-  // ── Step 4: Intelligent fallback hook ─────────────────────────────────────
-  // TODO: When patternCandidates.length === 0, call an AI-assisted substitute function:
-  //   const aiCandidates = await findIntelligentSubstitute({ exerciseName, exercise, equipmentLevel, injuryFlags });
-  //   return aiCandidates;
-  // Insert above this return when ready.
-
-  return patternCandidates;
+  return [];
 }
 
 /**
