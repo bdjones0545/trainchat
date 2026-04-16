@@ -1,0 +1,683 @@
+We are now implementing a FULL INTENT FAMILY SYSTEM + TRANSFORMATION ENGINE for TrainChat.
+
+OBJECTIVE:
+Teach TrainChat to handle messy real-world user language consistently by collapsing many different phrasings into a controlled set of coaching intent families, then mapping those intent families into real programming transformations.
+
+This is NOT a phrase-matching hack.
+This is NOT just adding more prompts.
+This is a structured interpretation → transformation architecture.
+
+The goal is:
+
+1. User says something in natural language
+2. System maps it into a stable intent family
+3. System applies a real transformation bundle
+4. Program actually changes
+5. Agent explains the change clearly and briefly
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+Humans speak in infinite ways.
+Training changes in a finite number of ways.
+
+So:
+- do NOT try to memorize every phrase
+- DO collapse language into a stable set of coaching intent families
+
+Then:
+- every intent family gets a real transformation bundle
+- every transformation bundle must create actual structural changes
+- no cosmetic-only updates
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Build a complete intent family system that lets TrainChat interpret varied user language like:
+
+- “make it harder”
+- “too easy”
+- “I want more cardio”
+- “push hypertrophy more”
+- “less fatiguing”
+- “shorter workouts”
+- “more athletic”
+- “more explosive”
+- “my knee is bothering me”
+- “make this more endurance based”
+
+and turn those into real, repeatable program modifications.
+
+==================================================
+TASK 1 — DEFINE THE INTENT FAMILY SYSTEM
+==================================================
+
+Create a stable family set like:
+
+type IntentFamily =
+  | "increase_difficulty"
+  | "decrease_difficulty"
+  | "increase_volume"
+  | "decrease_volume"
+  | "reduce_time"
+  | "increase_time"
+  | "strength_focus"
+  | "hypertrophy_focus"
+  | "endurance_focus"
+  | "conditioning_focus"
+  | "power_explosive_focus"
+  | "speed_focus"
+  | "athletic_performance_focus"
+  | "fatigue_management"
+  | "recovery_focus"
+  | "mobility_support"
+  | "injury_modification"
+  | "joint_friendly_modification"
+  | "equipment_constraint"
+  | "session_expansion"
+  | "session_reduction"
+  | "exercise_swap"
+  | "exercise_progression"
+  | "exercise_regression"
+  | "clarification_required";
+
+If you already have related action types, keep them and map them cleanly into these intent families rather than creating conflicting parallel systems.
+
+==================================================
+TASK 2 — BUILD LANGUAGE NORMALIZATION INTO INTENT FAMILIES
+==================================================
+
+Map many surface phrases into the same family.
+
+Examples:
+
+INCREASE_DIFFICULTY
+- make it harder
+- too easy
+- not challenging enough
+- push me more
+- make this tougher
+- harder please
+
+DECREASE_DIFFICULTY
+- too hard
+- make it easier
+- lighten it up
+- this is too much
+- more manageable
+- less intense
+
+ENDURANCE_FOCUS
+- more endurance based
+- more cardio
+- more stamina
+- improve work capacity
+- I want to last longer
+- less strength, more endurance
+
+POWER_EXPLOSIVE_FOCUS
+- more explosive
+- more power
+- more athletic
+- faster and more powerful
+- jump higher
+- more pop
+
+REDUCE_TIME
+- shorter workouts
+- less time
+- 30 minute sessions
+- compress the workouts
+- make this more efficient
+
+SESSION_EXPANSION
+- add more exercises
+- make day 1 longer
+- expand this session
+- add more work
+- add more upper body work
+
+FATIGUE_MANAGEMENT
+- I’m beat up
+- this is too fatiguing
+- I’m drained
+- dial back fatigue
+- less crushing
+- easier to recover from
+
+INJURY_MODIFICATION
+- my knee hurts
+- my shoulder is bothering me
+- tweak around my back
+- train around pain
+- make it knee friendly
+
+Do this pattern-based, not just one-off hardcoding.
+
+==================================================
+TASK 3 — SEPARATE INTENT FAMILY FROM TARGET SCOPE
+==================================================
+
+The system must distinguish:
+
+A. WHAT the user wants
+(intent family)
+
+B. WHERE it should apply
+(target scope)
+
+Examples:
+
+“Make day 1 more endurance based”
+intentFamily = endurance_focus
+targetScope = session/day
+
+“Make this exercise easier”
+intentFamily = exercise_regression
+targetScope = exercise
+
+“Reduce overall volume”
+intentFamily = decrease_volume
+targetScope = program
+
+“Add more upper body work to day 2”
+intentFamily = session_expansion
+targetScope = session/day
+
+Do not mix intent family and target scope into one brittle category.
+
+==================================================
+TASK 4 — DEFINE TARGET SCOPES
+==================================================
+
+Support clean target scopes:
+
+type TargetScope =
+  | "exercise"
+  | "session"
+  | "day"
+  | "week"
+  | "program";
+
+Use:
+- explicit language
+- UIContext
+- active program structure
+- default execution assumptions
+
+to determine scope cleanly.
+
+==================================================
+TASK 5 — CREATE TRANSFORMATION BUNDLES FOR EACH INTENT FAMILY
+==================================================
+
+This is the most important step.
+
+Each intent family must map to a real transformation bundle.
+
+==================================================
+A. INCREASE_DIFFICULTY
+==================================================
+
+Possible changes:
+- increase sets
+- increase intensity/load bias
+- reduce rest
+- add complexity
+- swap to progression exercise
+- increase density
+
+Rule:
+Must create at least one real structural change.
+
+==================================================
+B. DECREASE_DIFFICULTY
+==================================================
+
+Possible changes:
+- reduce sets
+- reduce intensity/load bias
+- increase rest
+- simplify movement
+- swap to regression exercise
+- reduce density/fatigue
+
+==================================================
+C. INCREASE_VOLUME
+==================================================
+
+Possible changes:
+- add sets
+- add one or more support exercises
+- increase weekly exposure
+- increase total session work
+
+==================================================
+D. DECREASE_VOLUME
+==================================================
+
+Possible changes:
+- reduce sets
+- remove low-priority accessories
+- simplify session
+- preserve primary work while lowering total stress
+
+==================================================
+E. REDUCE_TIME
+==================================================
+
+Possible changes:
+- remove low-priority work
+- compress accessories into supersets
+- reduce exercise count
+- reduce total sets
+- preserve goal identity while cutting duration
+
+==================================================
+F. INCREASE_TIME
+==================================================
+
+Possible changes:
+- add warm-up/support block
+- add one or more relevant exercises
+- increase total work
+- deepen conditioning/accessory work
+
+==================================================
+G. STRENGTH_FOCUS
+==================================================
+
+Possible changes:
+- lower reps
+- increase rest
+- prioritize compound lifts
+- reduce fluff/accessory fatigue
+- adjust progression toward force output
+
+==================================================
+H. HYPERTROPHY_FOCUS
+==================================================
+
+Possible changes:
+- increase volume
+- increase accessory/isolation work
+- moderate rep ranges
+- increase time under tension
+- reduce purely explosive emphasis
+
+==================================================
+I. ENDURANCE_FOCUS
+==================================================
+
+Possible changes:
+- increase reps/time under tension
+- reduce rest
+- increase density
+- add circuit/superset structure
+- reduce heavy max-strength emphasis
+- optionally add conditioning work
+
+IMPORTANT:
+Endurance must not pass if only one tempo note changes.
+
+==================================================
+J. CONDITIONING_FOCUS
+==================================================
+
+Possible changes:
+- add structured conditioning work
+- add interval block / finisher
+- define work:rest ratios
+- bias aerobic/repeat-effort development
+- avoid pretending resistance circuits are enough if true conditioning is intended
+
+==================================================
+K. POWER_EXPLOSIVE_FOCUS
+==================================================
+
+Possible changes:
+- add explosive movement (jump/throw/power variation)
+- reduce reps to lower ranges
+- increase rest
+- add velocity intent
+- shift heavy strength toward faster output
+
+IMPORTANT:
+Power/explosive must not pass with only description text change.
+
+==================================================
+L. SPEED_FOCUS
+==================================================
+
+Possible changes:
+- add acceleration/max velocity work if context supports it
+- reduce fatigue-heavy accessories
+- prioritize sprint/mechanics or speed-support elements
+- protect quality over fatigue
+
+==================================================
+M. ATHLETIC_PERFORMANCE_FOCUS
+==================================================
+
+Possible changes:
+- blend power, speed-support, trunk/resilience, unilateral and coordination demands
+- maintain sport relevance if known
+- avoid generic bodybuilding structure if athletic output is the request
+
+==================================================
+N. FATIGUE_MANAGEMENT
+==================================================
+
+Possible changes:
+- reduce volume
+- reduce density
+- remove low-priority fatigue sources
+- simplify session
+- preserve key patterns while lowering recovery demand
+
+==================================================
+O. RECOVERY_FOCUS
+==================================================
+
+Possible changes:
+- reduce intensity/volume
+- add movement support
+- bias low-fatigue work
+- add restoration or movement-quality elements
+- create a recovery day feel if requested
+
+==================================================
+P. MOBILITY_SUPPORT
+==================================================
+
+Possible changes:
+- add prep block
+- add targeted mobility/activation work
+- add cooldown/recovery support
+- integrate movement support by region and purpose
+
+==================================================
+Q. INJURY_MODIFICATION / JOINT_FRIENDLY_MODIFICATION
+==================================================
+
+Possible changes:
+- swap aggravating patterns
+- simplify exercise selection
+- reduce provocative loading
+- add tolerance/support work
+- preserve training intent while filtering through injury/joint constraints
+
+==================================================
+R. EQUIPMENT_CONSTRAINT
+==================================================
+
+Possible changes:
+- swap exercises to available equipment
+- preserve intent while adjusting tools
+- remove unavailable modalities
+
+==================================================
+S. SESSION_EXPANSION
+==================================================
+
+Possible changes:
+- add 1–3 relevant exercises
+- increase support work
+- preserve day identity
+- optionally add core/conditioning/support depending intent
+
+==================================================
+T. SESSION_REDUCTION
+==================================================
+
+Possible changes:
+- remove low-priority exercises
+- shorten session
+- preserve primary purpose
+- reduce fatigue and time
+
+==================================================
+U. EXERCISE_SWAP
+==================================================
+
+Possible changes:
+- direct replacement of exercise
+- preserve movement pattern/session intent
+- validate replacement quality
+
+==================================================
+V. EXERCISE_PROGRESSION
+==================================================
+
+Possible changes:
+- progression exercise swap
+- harder prescription
+- increased complexity or load
+- stronger version of same pattern
+
+==================================================
+W. EXERCISE_REGRESSION
+==================================================
+
+Possible changes:
+- regression exercise swap
+- easier prescription
+- simplified pattern
+- reduced demand while preserving intent
+
+==================================================
+TASK 6 — REQUIRE MINIMUM STRUCTURAL CHANGE COUNTS
+==================================================
+
+Each family should have a minimum “real change” threshold.
+
+Examples:
+
+increase_difficulty:
+- at least 1 structural change
+
+endurance_focus:
+- at least 2 structural changes
+  (e.g. reps + rest, or density + added circuit)
+
+power_explosive_focus:
+- at least 2 structural changes
+  (e.g. exercise addition + rep/rest adjustment)
+
+session_expansion:
+- at least 1 added exercise or equivalent real workload increase
+
+fatigue_management:
+- at least 1 actual workload/fatigue reduction
+
+If the bundle only changes:
+- descriptive text
+- a cosmetic note
+- generic rationale
+
+Then validation must fail.
+
+==================================================
+TASK 7 — ADD VALIDATION RULES BY INTENT FAMILY
+==================================================
+
+For each family, define what counts as a valid success.
+
+Examples:
+
+ENDURANCE_FOCUS invalid if:
+- no rep/rest/density/conditioning changes occurred
+
+POWER_EXPLOSIVE_FOCUS invalid if:
+- only text changed
+- no velocity/power-related structural shift occurred
+
+REDUCE_TIME invalid if:
+- duration/workload is unchanged
+
+SESSION_EXPANSION invalid if:
+- no added work actually appears
+
+EXERCISE_REGRESSION invalid if:
+- no real regression or easier prescription occurred
+
+If invalid:
+- retry with stronger bundle
+- escalate to OpenAI if needed
+- do NOT pass weak no-op changes as success
+
+==================================================
+TASK 8 — CONNECT TO ROUTING / DEFAULT EXECUTION
+==================================================
+
+After language is normalized into an intent family:
+1. determine target scope
+2. determine whether deterministic or agent path should interpret details
+3. run default execution assumptions where safe
+4. generate transformation bundle
+5. validate
+6. commit
+
+The system must not fall back into:
+- unnecessary clarification
+- generic “be more specific”
+for known intent families when the target is reasonably clear.
+
+==================================================
+TASK 9 — HANDLE AMBIGUITY INTELLIGENTLY
+==================================================
+
+If intent family is clear but target scope is only mildly ambiguous:
+- use default execution assumptions
+- act if safe
+
+Examples:
+“make this harder”
+- selected exercise → exercise scope
+- selected session → session scope
+- otherwise program scope with conservative change
+
+Only ask clarification when:
+- no safe target can be inferred
+- the wrong target would materially matter
+- there is no active program/session/exercise context
+
+==================================================
+TASK 10 — BUILD AN ANTI-PATTERN LIST
+==================================================
+
+Create anti-patterns so the system knows what NOT to do.
+
+Examples:
+- endurance_focus should not become “same heavy lift with a note”
+- power_focus should not become “same bodybuilding day with explosive wording”
+- reduce_time should not preserve full workload unchanged
+- injury_modification should not ignore the affected region
+- increase_difficulty should not always mean just +1 set
+- session_expansion should not add random unrelated fluff
+
+Use these to fail weak outputs.
+
+==================================================
+TASK 11 — ADD DEBUG VISIBILITY
+==================================================
+
+In development, log:
+
+- original request
+- normalized intent family
+- target scope
+- chosen path (deterministic/openai/fallback)
+- transformation bundle used
+- structural changes count
+- validation result
+- whether clarification was bypassed via default execution
+
+This is critical for tuning.
+
+==================================================
+TASK 12 — TEST REQUIRED PROMPTS
+==================================================
+
+Run and validate these families with varied phrasings.
+
+INCREASE_DIFFICULTY
+- make it harder
+- too easy
+- not challenging enough
+
+DECREASE_DIFFICULTY
+- too hard
+- lighten it up
+- make this more manageable
+
+ENDURANCE_FOCUS
+- make day 1 more endurance based
+- add more stamina work
+- less strength, more endurance
+
+POWER_EXPLOSIVE_FOCUS
+- make this more explosive
+- add more power
+- make day 1 more athletic
+
+REDUCE_TIME
+- shorten the workouts
+- make this 35 minutes
+- trim this down
+
+SESSION_EXPANSION
+- add more exercises to day 1
+- make day 1 longer
+- add more upper body work here
+
+FATIGUE_MANAGEMENT
+- this is too fatiguing
+- make it easier to recover from
+- I’m getting beat up
+
+INJURY_MODIFICATION
+- my knee is bothering me
+- make this shoulder friendly
+- work around my back pain
+
+For each:
+- confirm normalized intent family
+- confirm target scope
+- confirm real structural mutation(s)
+- confirm no weak cosmetic-only pass
+
+==================================================
+TASK 13 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. The full list of intent families implemented
+2. How phrase normalization maps into them
+3. How target scope is determined separately
+4. What transformation bundles were added for each family
+5. What minimum structural change counts were enforced
+6. What validation rules now prevent weak passes
+7. What anti-patterns were added
+8. Which example prompts now behave consistently that previously did not
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat must stop depending on users prompting things “the right way.”
+
+Instead:
+- messy language gets normalized into stable intent families
+- stable intent families trigger real transformation bundles
+- real transformation bundles create real program changes
+- validation rejects weak cosmetic outputs
+
+The system should feel like:
+a coach that understands what people mean,
+not a parser that needs perfect wording.
+
+Implement this now.
