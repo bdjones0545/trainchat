@@ -30,6 +30,15 @@ import { getActiveTrainingSystem, getFullTrainingSystem, createTrainingSystemFro
 import { buildDecisionMemory } from "../lib/decision-memory-service";
 import { logger } from "../lib/logger";
 import { buildStageEvent, type BuildStage } from "../lib/build-pipeline";
+import {
+  writePendingClarification,
+  getActivePendingClarification,
+  resolvePendingClarification,
+  clearPendingClarificationsForConversation,
+  looksLikeClarificationAnswer,
+  buildReconstructedRequest,
+} from "../lib/pending-clarification-service";
+import { normalizeToIntentFamily } from "../lib/intent-family-engine";
 
 const router: IRouter = Router();
 
@@ -540,10 +549,50 @@ Keep it helpful and intelligent, never promotional.`;
     : (hasActiveProgram || hasActiveSystem);
 
   // Classify the intent — this is the single source of truth for routing
-  const intentResult = classifyIntent(parsed.data.content, {
+  let intentResult = classifyIntent(parsed.data.content, {
     hasActiveProgram: hasAnyProgram,
     conversationTurnCount: history.filter((m) => m.role === "user").length,
   });
+
+  // ── Pending Clarification Check ────────────────────────────────────────────
+  // Before acting on the classified intent, check whether there is an active
+  // pending clarification for this conversation. If the classified intent is
+  // GENERAL_COACHING_QUESTION (i.e. a short answer or location reference that
+  // doesn't match normal edit patterns) AND the message looks like a
+  // clarification answer, override to CLARIFICATION_FOLLOWUP so we resume
+  // the pending mutation instead of routing to GUIDANCE_ONLY.
+  const activePendingClarification = await getActivePendingClarification(params.data.id).catch(() => null);
+
+  if (activePendingClarification) {
+    const isStrongNewIntent =
+      intentResult.type === "CREATE_PROGRAM" ||
+      intentResult.type === "START_NEW_PROGRAM";
+
+    if (isStrongNewIntent) {
+      // User has explicitly moved to a new topic — clear the pending clarification
+      await clearPendingClarificationsForConversation(params.data.id).catch(() => {});
+      logger.info(
+        { pendingId: activePendingClarification.id, newIntent: intentResult.type },
+        "[PendingClarification] Strong new intent detected — clearing active pending clarification"
+      );
+    } else if (
+      intentResult.type === "GENERAL_COACHING_QUESTION" &&
+      looksLikeClarificationAnswer(parsed.data.content)
+    ) {
+      // Short answer that looks like a clarification resolution — override intent
+      intentResult = { type: "CLARIFICATION_FOLLOWUP", confidence: "high" };
+      logger.info(
+        {
+          pendingId: activePendingClarification.id,
+          userMessage: parsed.data.content.slice(0, 80),
+          originalRequest: activePendingClarification.originalRequest.slice(0, 80),
+          intentFamily: activePendingClarification.intentFamily,
+          pendingAspect: activePendingClarification.pendingAspect,
+        },
+        "[PendingClarification] Classified as CLARIFICATION_FOLLOWUP — resuming pending mutation"
+      );
+    }
+  }
 
   logIntentSummary(parsed.data.content, intentResult, hasAnyProgram);
 
@@ -619,8 +668,230 @@ Keep it helpful and intelligent, never promotional.`;
     logger.info("[IntentRouter] RETRIEVE_CURRENT_PROGRAM but no program found — routing to AI to explain");
   }
 
+  // ── CLARIFICATION_FOLLOWUP — resume a pending mutation with the user's answer ──
+  // This runs BEFORE the normal vibe edit path. When active, it reconstructs
+  // the original request + user answer and re-runs the edit pipeline on the
+  // pending intent family.
+  if (intentResult.type === "CLARIFICATION_FOLLOWUP" && activePendingClarification) {
+    const pending = activePendingClarification;
+
+    logger.info(
+      {
+        pendingId: pending.id,
+        intentFamily: pending.intentFamily,
+        pendingAspect: pending.pendingAspect,
+        originalRequest: pending.originalRequest.slice(0, 80),
+        userReply: parsed.data.content.slice(0, 80),
+        targetProgramId: pending.targetProgramId,
+      },
+      "[ClarificationFollowup] Resuming pending mutation"
+    );
+
+    const reconstructedRequest = buildReconstructedRequest(
+      pending.originalRequest,
+      parsed.data.content,
+      pending.pendingAspect
+    );
+
+    logger.info(
+      { reconstructedRequest: reconstructedRequest.slice(0, 200) },
+      "[ClarificationFollowup] Reconstructed request built"
+    );
+
+    // Resolve the active system for editing
+    let clarificationSystem = activeSystem;
+    if (!clarificationSystem && latestStructuredProgram) {
+      try {
+        clarificationSystem = await createTrainingSystemFromProgram(userId, latestStructuredProgram);
+        logger.info({ userId, systemId: clarificationSystem.id }, "[ClarificationFollowup] Auto-created system from chat program");
+      } catch {
+        // fall through to no-program response
+      }
+    }
+
+    if (!clarificationSystem) {
+      const noProgramContent = `You don't have a training program yet. Once you build one, I can apply targeted changes.\n\nTry something like: "Build me a 3-day strength program" — then I can handle any adjustments.`;
+      const [assistantMsg] = await db.insert(messagesTable).values({
+        conversationId: params.data.id, role: "assistant", content: noProgramContent, structuredData: null,
+      }).returning();
+      await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+      await resolvePendingClarification(pending.id, "no_program").catch(() => {});
+      if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+        stripeStorage.incrementMessageCount(userId).catch(() => {});
+      }
+      res.json({
+        userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
+        assistantMessage: { id: assistantMsg.id, conversationId: assistantMsg.conversationId, role: assistantMsg.role, content: assistantMsg.content, createdAt: assistantMsg.createdAt.toISOString(), structuredData: null },
+        planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+        intentDebug: { type: "CLARIFICATION_FOLLOWUP", confidence: "high" },
+        systemEdit: { applied: false },
+      });
+      return;
+    }
+
+    try {
+      const [clarificationFullSystem, clarificationDecisionMemory] = await Promise.all([
+        getFullTrainingSystem(clarificationSystem.id),
+        buildDecisionMemory(clarificationSystem.id, userId).catch(() => null),
+      ]);
+
+      if (clarificationFullSystem) {
+        const clarificationTarget = resolveTargetFromRequest(
+          reconstructedRequest,
+          clarificationFullSystem,
+          (req.body as any)?.uiContext ?? null
+        );
+
+        const clarificationEditPlan = await interpretEditRequest(
+          reconstructedRequest,
+          clarificationFullSystem,
+          clarificationTarget,
+          adaptationCtx || undefined,
+          clarificationDecisionMemory?.decisionMemoryContext || undefined
+        );
+
+        logger.info(
+          { intent: clarificationEditPlan.intent, scope: clarificationEditPlan.scope, changes: clarificationEditPlan.changes.length },
+          "[ClarificationFollowup] Edit plan generated from reconstructed request"
+        );
+
+        const clarificationEditResult = await applyEditPlan(clarificationEditPlan);
+
+        logger.info(
+          { applied: clarificationEditResult.appliedCount, skipped: clarificationEditResult.skippedCount },
+          "[ClarificationFollowup] Edit plan applied"
+        );
+
+        if (clarificationEditResult.appliedCount > 0) {
+          const verification = clarificationEditResult.verification;
+
+          if (verification.status === "failed") {
+            const failedContent = `I tried applying that change but it didn't land cleanly. Could you give me a bit more direction — the specific exercise name, which day it's in, or exactly what you'd like to change?`;
+            const [failedMsg] = await db.insert(messagesTable).values({
+              conversationId: params.data.id, role: "assistant", content: failedContent, structuredData: null,
+            }).returning();
+            await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+            await resolvePendingClarification(pending.id, "verification_failed").catch(() => {});
+            if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+              stripeStorage.incrementMessageCount(userId).catch(() => {});
+            }
+            res.json({
+              userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
+              assistantMessage: { id: failedMsg.id, conversationId: failedMsg.conversationId, role: failedMsg.role, content: failedMsg.content, createdAt: failedMsg.createdAt.toISOString(), structuredData: null },
+              planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+              intentDebug: { type: "CLARIFICATION_FOLLOWUP", confidence: "high" },
+              systemEdit: { applied: false }, editFailure: { reason: "verification_failed" },
+            });
+            return;
+          }
+
+          const whyChangedParts = clarificationEditPlan.changes.map((c) => c.reason).filter((r): r is string => !!r);
+          const whyChanged = whyChangedParts.length > 0 ? whyChangedParts.join("; ") : undefined;
+          const isStructuralVibeEdit = clarificationEditPlan.scope === "system" || clarificationEditPlan.scope === "block";
+
+          const changeLogId = await createChangeLogEntry({
+            userId,
+            trainingSystemId: clarificationSystem.id,
+            source: "ai_edit",
+            intent: clarificationEditPlan.intent,
+            scope: clarificationEditPlan.scope,
+            changeSummary: clarificationEditResult.changeSummary,
+            requestText: `[clarification followup] ${reconstructedRequest.slice(0, 300)}`,
+            beforeSnapshot: clarificationEditResult.beforeSnapshot,
+            afterSnapshot: clarificationEditResult.afterSnapshot,
+            appliedCount: clarificationEditResult.appliedCount,
+            skippedCount: clarificationEditResult.skippedCount,
+            versionOverrides: isStructuralVibeEdit ? { isMajorVersion: true } : undefined,
+            decisionMetadata: {
+              whyChanged,
+              intentType: "CLARIFICATION_FOLLOWUP",
+              intentFamily: pending.intentFamily,
+              pendingAspect: pending.pendingAspect,
+              originalRequest: pending.originalRequest,
+              userReply: parsed.data.content,
+              verification: {
+                status: verification.status,
+                verifiedCount: verification.verifiedChanges.length,
+                missingCount: verification.missingChanges.length,
+                requiresReview: verification.requiresReview ?? false,
+              },
+            },
+          });
+
+          const coachingContent = buildVibeEditCoachingResponse(clarificationEditResult);
+          const systemEditData = {
+            _type: "system_edit" as const,
+            changeSummary: clarificationEditResult.changeSummary,
+            changedIds: clarificationEditResult.changedIds,
+            systemId: clarificationSystem.id,
+            changeLogId,
+            verificationStatus: verification.status,
+          };
+
+          const [assistantMessage] = await db.insert(messagesTable).values({
+            conversationId: params.data.id,
+            role: "assistant",
+            content: coachingContent,
+            structuredData: JSON.stringify(systemEditData),
+          }).returning();
+
+          await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+          await resolvePendingClarification(pending.id, "mutation_applied").catch(() => {});
+
+          if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+            stripeStorage.incrementMessageCount(userId).catch(() => {});
+          }
+
+          res.json({
+            userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
+            assistantMessage: { id: assistantMessage.id, conversationId: assistantMessage.conversationId, role: assistantMessage.role, content: assistantMessage.content, createdAt: assistantMessage.createdAt.toISOString(), structuredData: assistantMessage.structuredData ?? null },
+            planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+            intentDebug: { type: "CLARIFICATION_FOLLOWUP", confidence: "high" },
+            systemEdit: {
+              applied: true,
+              changeSummary: clarificationEditResult.changeSummary,
+              changedIds: clarificationEditResult.changedIds,
+              changeTargets: clarificationEditResult.changeTargets,
+              systemId: clarificationSystem.id,
+              changeLogId,
+              verificationStatus: verification.status as VerificationStatus,
+              requiresReview: verification.requiresReview ?? false,
+            },
+          });
+          return;
+        }
+
+        // No changes applied — the reconstructed request still didn't produce edits
+        // Expire the pending clarification so we don't loop
+        await resolvePendingClarification(pending.id, "no_changes_after_followup").catch(() => {});
+        const noOpFollowupContent = `I couldn't find a clean match for that in your program. Try being more specific — for example: the exercise name, the day number, or exactly what you'd like to change (sets, reps, or movement).`;
+        const [noOpMsg] = await db.insert(messagesTable).values({
+          conversationId: params.data.id, role: "assistant", content: noOpFollowupContent, structuredData: null,
+        }).returning();
+        await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+          stripeStorage.incrementMessageCount(userId).catch(() => {});
+        }
+        res.json({
+          userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
+          assistantMessage: { id: noOpMsg.id, conversationId: noOpMsg.conversationId, role: noOpMsg.role, content: noOpMsg.content, createdAt: noOpMsg.createdAt.toISOString(), structuredData: null },
+          planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+          intentDebug: { type: "CLARIFICATION_FOLLOWUP", confidence: "high" },
+          systemEdit: { applied: false },
+          editFailure: { reason: "no_changes_after_followup" },
+        });
+        return;
+      }
+    } catch (err: any) {
+      logger.error({ err: err?.message }, "[ClarificationFollowup] Pipeline threw — falling through to standard AI response");
+      await resolvePendingClarification(pending.id, "pipeline_error").catch(() => {});
+      // Fall through to standard AI response if the pipeline fails
+    }
+  }
+
   // ASK_CLARIFYING_QUESTION — decision tree determined the request is genuinely ambiguous.
   // Skip AI call entirely; return the pre-formed question as the assistant response.
+  // Write a pending clarification record BEFORE returning so the next reply can resume.
   if (actionDecision.shouldAsk && actionDecision.clarifyingQuestion) {
     logger.info(
       { actionType: actionDecision.actionType, question: actionDecision.clarifyingQuestion },
@@ -639,6 +910,21 @@ Keep it helpful and intelligent, never promotional.`;
     }).returning();
 
     await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+
+    // Write pending clarification state so the next reply can resume the correct intent
+    if (intentResult.type === "EDIT_PROGRAM" || intentResult.type === "ADJUST_FOR_PAIN" || intentResult.type === "ADJUST_FOR_READINESS") {
+      const familyResult = normalizeToIntentFamily(parsed.data.content);
+      writePendingClarification({
+        conversationId: params.data.id,
+        userId,
+        targetProgramId: activeSystem?.id ?? null,
+        originalRequest: parsed.data.content,
+        intentFamily: familyResult.family,
+        pendingAspect: "scope",
+        clarificationQuestion: actionDecision.clarifyingQuestion,
+        editSubtype: intentResult.editSubtype ?? null,
+      }).catch((err) => logger.warn({ err }, "[PendingClarification] Failed to write record for decision-tree clarification — non-fatal"));
+    }
 
     res.json({
       userMessage: {
@@ -982,6 +1268,39 @@ Keep it helpful and intelligent, never promotional.`;
           intentResult.editSubtype,
           resolvedTarget
         );
+
+        // Detect when the response is a scope clarification question (block/system scope with no day ref)
+        // and write a pending clarification record so the next reply can resume the mutation.
+        const isNoOpScopeQuestion =
+          (editPlan.scope === "block" || editPlan.scope === "system" || intentResult.editSubtype === "program_transformation") &&
+          !/\bday\s+\d+\b|\bsession\s+\d+\b|\b(first|second|third|fourth|fifth|sixth|seventh)\s+(day|session)\b/.test(parsed.data.content.toLowerCase());
+
+        if (isNoOpScopeQuestion) {
+          const familyResult = normalizeToIntentFamily(parsed.data.content);
+          writePendingClarification({
+            conversationId: params.data.id,
+            userId,
+            targetProgramId: resolvedSystem.id,
+            targetSessionId: resolvedTarget?.type === "session" ? resolvedTarget.id : null,
+            originalRequest: parsed.data.content,
+            intentFamily: familyResult.family,
+            pendingAspect: "scope",
+            clarificationQuestion: noOpContent,
+            editSubtype: intentResult.editSubtype ?? null,
+            editIntent: editPlan.intent,
+          }).catch((err) => logger.warn({ err }, "[PendingClarification] Failed to write record for noOp scope question — non-fatal"));
+
+          logger.info(
+            {
+              conversationId: params.data.id,
+              intentFamily: familyResult.family,
+              editPlanIntent: editPlan.intent,
+              editPlanScope: editPlan.scope,
+            },
+            "[VibeEdit] Scope clarification question written as pending clarification"
+          );
+        }
+
         const [noOpMessage] = await db.insert(messagesTable).values({
           conversationId: params.data.id,
           role: "assistant",
@@ -1576,10 +1895,41 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     ? hasActiveProgram
     : (hasActiveProgram || hasActiveSystem);
 
-  const intentResult = classifyIntent(parsed.data.content, {
+  let intentResult = classifyIntent(parsed.data.content, {
     hasActiveProgram: hasAnyProgram,
     conversationTurnCount: history.filter((m) => m.role === "user").length,
   });
+
+  // ── Pending Clarification Check (SSE path) ─────────────────────────────────
+  const activePendingClarification = await getActivePendingClarification(params.data.id).catch(() => null);
+
+  if (activePendingClarification) {
+    const isStrongNewIntent =
+      intentResult.type === "CREATE_PROGRAM" ||
+      intentResult.type === "START_NEW_PROGRAM";
+
+    if (isStrongNewIntent) {
+      await clearPendingClarificationsForConversation(params.data.id).catch(() => {});
+      logger.info(
+        { pendingId: activePendingClarification.id, newIntent: intentResult.type },
+        "[PendingClarification:stream] Strong new intent — clearing pending clarification"
+      );
+    } else if (
+      intentResult.type === "GENERAL_COACHING_QUESTION" &&
+      looksLikeClarificationAnswer(parsed.data.content)
+    ) {
+      intentResult = { type: "CLARIFICATION_FOLLOWUP", confidence: "high" };
+      logger.info(
+        {
+          pendingId: activePendingClarification.id,
+          userMessage: parsed.data.content.slice(0, 80),
+          originalRequest: activePendingClarification.originalRequest.slice(0, 80),
+          intentFamily: activePendingClarification.intentFamily,
+        },
+        "[PendingClarification:stream] Classified as CLARIFICATION_FOLLOWUP — resuming pending mutation"
+      );
+    }
+  }
 
   logIntentSummary(parsed.data.content, intentResult, hasAnyProgram);
 
@@ -1665,6 +2015,119 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     return;
   }
 
+  // ── Short-circuit: CLARIFICATION_FOLLOWUP ────────────────────────────────
+  // Resume a pending mutation from a prior turn using the user's short answer.
+  // This mirrors the non-stream path; we run the full edit pipeline, then emit
+  // a complete event. Falls through to standard AI path on any pipeline error.
+  if (intentResult.type === "CLARIFICATION_FOLLOWUP" && activePendingClarification) {
+    const pending = activePendingClarification;
+
+    const reconstructedRequest = buildReconstructedRequest(
+      pending.originalRequest,
+      parsed.data.content,
+      pending.pendingAspect
+    );
+
+    logger.info(
+      { pendingId: pending.id, reconstructedRequest: reconstructedRequest.slice(0, 200) },
+      "[ClarificationFollowup:stream] Resuming pending mutation"
+    );
+
+    let clarificationSystem = activeSystem;
+    if (!clarificationSystem && latestStructuredProgram) {
+      try {
+        clarificationSystem = await createTrainingSystemFromProgram(userId, latestStructuredProgram);
+      } catch { /* fall through */ }
+    }
+
+    if (!clarificationSystem) {
+      const noProgramContent = `You don't have a training program yet. Once you build one, I can apply targeted changes.`;
+      const [assistantMessage] = await db.insert(messagesTable).values({
+        conversationId: params.data.id, role: "assistant", content: noProgramContent, structuredData: null,
+      }).returning();
+      await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+      await resolvePendingClarification(pending.id, "no_program").catch(() => {});
+      if (planInfo?.plan === "free" || planInfo?.plan === "starter") { stripeStorage.incrementMessageCount(userId).catch(() => {}); }
+      done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, systemEditVal: { applied: false }, outcomeTypeVal: "conversation_only" }));
+      return;
+    }
+
+    try {
+      const [clarificationFullSystem, clarificationDecisionMemory] = await Promise.all([
+        getFullTrainingSystem(clarificationSystem.id),
+        buildDecisionMemory(clarificationSystem.id, userId).catch(() => null),
+      ]);
+
+      if (clarificationFullSystem) {
+        const clarificationTarget = resolveTargetFromRequest(
+          reconstructedRequest, clarificationFullSystem, (req.body as any)?.uiContext ?? null
+        );
+        const clarificationEditPlan = await interpretEditRequest(
+          reconstructedRequest, clarificationFullSystem, clarificationTarget,
+          adaptationCtx || undefined, clarificationDecisionMemory?.decisionMemoryContext || undefined
+        );
+        const clarificationEditResult = await applyEditPlan(clarificationEditPlan);
+
+        if (clarificationEditResult.appliedCount > 0) {
+          const verification = clarificationEditResult.verification;
+          const whyChangedParts = clarificationEditPlan.changes.map((c) => c.reason).filter((r): r is string => !!r);
+          const whyChanged = whyChangedParts.length > 0 ? whyChangedParts.join("; ") : undefined;
+          const isStructuralVibeEdit = clarificationEditPlan.scope === "system" || clarificationEditPlan.scope === "block";
+
+          const changeLogId = await createChangeLogEntry({
+            userId, trainingSystemId: clarificationSystem.id, source: "ai_edit",
+            intent: clarificationEditPlan.intent, scope: clarificationEditPlan.scope,
+            changeSummary: clarificationEditResult.changeSummary,
+            requestText: `[clarification followup:stream] ${reconstructedRequest.slice(0, 300)}`,
+            beforeSnapshot: clarificationEditResult.beforeSnapshot,
+            afterSnapshot: clarificationEditResult.afterSnapshot,
+            appliedCount: clarificationEditResult.appliedCount, skippedCount: clarificationEditResult.skippedCount,
+            versionOverrides: isStructuralVibeEdit ? { isMajorVersion: true } : undefined,
+            decisionMetadata: { whyChanged, intentType: "CLARIFICATION_FOLLOWUP", intentFamily: pending.intentFamily, pendingAspect: pending.pendingAspect, originalRequest: pending.originalRequest, userReply: parsed.data.content, verification: { status: verification.status, verifiedCount: verification.verifiedChanges.length, missingCount: verification.missingChanges.length, requiresReview: verification.requiresReview ?? false } },
+          });
+
+          const coachingContent = buildVibeEditCoachingResponse(clarificationEditResult);
+          const systemEditData = {
+            _type: "system_edit" as const, changeSummary: clarificationEditResult.changeSummary,
+            changedIds: clarificationEditResult.changedIds, systemId: clarificationSystem.id, changeLogId,
+            verificationStatus: verification.status,
+          };
+          const [assistantMessage] = await db.insert(messagesTable).values({
+            conversationId: params.data.id, role: "assistant", content: coachingContent,
+            structuredData: JSON.stringify(systemEditData),
+          }).returning();
+          await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+          await resolvePendingClarification(pending.id, "mutation_applied").catch(() => {});
+          if (planInfo?.plan === "free" || planInfo?.plan === "starter") { stripeStorage.incrementMessageCount(userId).catch(() => {}); }
+
+          done(buildCompleteEvent({
+            userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo,
+            intentResultVal: intentResult, systemSavedVal: false,
+            systemIdVal: clarificationSystem.id, changeLogIdVal: changeLogId,
+            systemEditVal: { applied: true },
+            outcomeTypeVal: "mutation_applied",
+          }));
+          return;
+        }
+
+        // No changes — expire pending and return helpful message
+        await resolvePendingClarification(pending.id, "no_changes_after_followup").catch(() => {});
+        const noOpFollowupContent = `I couldn't find a clean match for that in your program. Try being more specific — for example: the exercise name, the day number, or exactly what you'd like to change.`;
+        const [noOpMsg] = await db.insert(messagesTable).values({
+          conversationId: params.data.id, role: "assistant", content: noOpFollowupContent, structuredData: null,
+        }).returning();
+        await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+        if (planInfo?.plan === "free" || planInfo?.plan === "starter") { stripeStorage.incrementMessageCount(userId).catch(() => {}); }
+        done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: noOpMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, systemEditVal: { applied: false }, outcomeTypeVal: "conversation_only" }));
+        return;
+      }
+    } catch (err: any) {
+      logger.error({ err: err?.message }, "[ClarificationFollowup:stream] Pipeline threw — falling through to standard AI response");
+      await resolvePendingClarification(pending.id, "pipeline_error").catch(() => {});
+      // Fall through to standard AI handling
+    }
+  }
+
   // ── Short-circuit: ASK_CLARIFYING_QUESTION ────────────────────────────────
   if (actionDecision.shouldAsk && actionDecision.clarifyingQuestion) {
     const clarifyContent = formatShortCircuitResponse({ mode: "CLARIFICATION_RESPONSE", hasActiveProgram, clarifyingQuestion: actionDecision.clarifyingQuestion });
@@ -1672,6 +2135,21 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       conversationId: params.data.id, role: "assistant", content: clarifyContent, structuredData: null,
     }).returning();
     await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+
+    // Write pending clarification state so the next reply can resume the correct intent
+    if (intentResult.type === "EDIT_PROGRAM" || intentResult.type === "ADJUST_FOR_PAIN" || intentResult.type === "ADJUST_FOR_READINESS") {
+      const familyResult = normalizeToIntentFamily(parsed.data.content);
+      writePendingClarification({
+        conversationId: params.data.id, userId,
+        targetProgramId: activeSystem?.id ?? null,
+        originalRequest: parsed.data.content,
+        intentFamily: familyResult.family,
+        pendingAspect: "scope",
+        clarificationQuestion: actionDecision.clarifyingQuestion,
+        editSubtype: intentResult.editSubtype ?? null,
+      }).catch((err) => logger.warn({ err }, "[PendingClarification:stream] Failed to write record for decision-tree clarification — non-fatal"));
+    }
+
     done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "clarification_needed" }));
     return;
   }
@@ -1907,6 +2385,32 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           intentResult.editSubtype,
           streamResolvedTarget
         );
+
+        // Detect scope clarification question and write pending state
+        const isNoOpScopeQuestion =
+          (editPlan.scope === "block" || editPlan.scope === "system" || intentResult.editSubtype === "program_transformation") &&
+          !/\bday\s+\d+\b|\bsession\s+\d+\b|\b(first|second|third|fourth|fifth|sixth|seventh)\s+(day|session)\b/.test(parsed.data.content.toLowerCase());
+
+        if (isNoOpScopeQuestion) {
+          const familyResult = normalizeToIntentFamily(parsed.data.content);
+          writePendingClarification({
+            conversationId: params.data.id, userId,
+            targetProgramId: resolvedSystem.id,
+            targetSessionId: streamResolvedTarget?.type === "session" ? streamResolvedTarget.id : null,
+            originalRequest: parsed.data.content,
+            intentFamily: familyResult.family,
+            pendingAspect: "scope",
+            clarificationQuestion: noOpContent,
+            editSubtype: intentResult.editSubtype ?? null,
+            editIntent: editPlan.intent,
+          }).catch((err) => logger.warn({ err }, "[PendingClarification:stream] Failed to write record for noOp scope question — non-fatal"));
+
+          logger.info(
+            { conversationId: params.data.id, intentFamily: normalizeToIntentFamily(parsed.data.content).family, editPlanIntent: editPlan.intent, editPlanScope: editPlan.scope },
+            "[VibeEdit:stream] Scope clarification question written as pending clarification"
+          );
+        }
+
         const [noOpMsg] = await db.insert(messagesTable).values({
           conversationId: params.data.id, role: "assistant", content: noOpContent, structuredData: null,
         }).returning();

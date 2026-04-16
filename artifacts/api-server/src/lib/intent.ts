@@ -311,7 +311,8 @@ export type IntentType =
   | "GENERAL_COACHING_QUESTION"
   | "RETRIEVE_CURRENT_PROGRAM"
   | "SAVE_PROGRAM"
-  | "START_NEW_PROGRAM";
+  | "START_NEW_PROGRAM"
+  | "CLARIFICATION_FOLLOWUP";
 
 export interface IntentResult {
   type: IntentType;
@@ -805,6 +806,7 @@ function matchesEditProgram(lower: string, hasActiveProgram: boolean): {
     { pattern: /\b(add|include|more|need|missing|no)\b.{0,40}\b(upper back|rhomboid|rear delt|face pull|band pull|scapula)\b/i, subtype: "add_upper_back" },
     { pattern: /\b(add|include|more|need|missing|no)\b.{0,40}\b(shoulder|deltoid|press|lateral raise|overhead)\b/i, subtype: "add_shoulders" },
     { pattern: /\b(add|include|more|need|missing|no)\b.{0,40}\b(cardio|conditioning|intervals?|hiit|aerobic|endurance|sled|finisher)\b/i, subtype: "add_conditioning" },
+    { pattern: /\b(add|include|more|incorporate|want|need)\b.{0,40}\b(jump|jumps|jumping|plyometric|plyometrics|explosive|box jump|broad jump|bound|bounding|hop|hops|hopping|depth jump|vertical)\b/i, subtype: "make_more_athletic" },
     { pattern: /\b(swap|replace|substitute|change|switch|swap out)\b.{0,60}(with|for|to)\b/i, subtype: "swap_exercise" },
     { pattern: /\bswap\b.{0,40}\b(incline|bench|squat|deadlift|press|row|curl|extension|fly|raise|dip|pulldown|pull.up)\b/i, subtype: "swap_exercise" },
     { pattern: /\b(remove|drop|take out|get rid of|cut|eliminate|ditch)\b.{0,40}\b(exercise|movement|it|that|the|this)\b/i, subtype: "remove_exercise" },

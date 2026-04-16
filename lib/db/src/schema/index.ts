@@ -13,3 +13,4 @@ export * from "./knowledge";
 export * from "./exercise-logs";
 export * from "./neural-profile";
 export * from "./global-learning";
+export * from "./pending-clarifications";

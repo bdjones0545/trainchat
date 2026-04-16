@@ -1,0 +1,373 @@
+We need to FIX REFINEMENT CONTEXT LOSS in TrainChat by adding pending clarification state and a clarification-followup execution path.
+
+OBJECTIVE:
+When the system asks a clarification question during a refinement/edit flow, the next user reply (for example: “Day 1”, “Program-wide”, “The pull-up”) must resume the pending mutation instead of being classified from scratch as a generic coaching question.
+
+Right now this is broken because:
+- there is no pending clarification state anywhere
+- intent family is lost after the turn ends
+- short answers fall into GENERAL_COACHING_QUESTION / GUIDANCE_ONLY
+- the system tries to reconstruct meaning from raw conversation history alone
+- the AI often responds generically instead of applying the intended edit
+
+This is a core agent seam bug.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Build a true pending clarification system so TrainChat can:
+
+1. ask a scoped clarification question during a refinement
+2. remember exactly what it was asking about
+3. accept a short follow-up reply
+4. resume the correct pending mutation
+5. execute the edit cleanly on the correct target
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+A clarification question is not just text.
+It is an unresolved mutation state.
+
+That unresolved mutation state must persist across turns.
+
+==================================================
+TASK 1 — ADD PENDING CLARIFICATION STORAGE
+==================================================
+
+Create persistent pending clarification state.
+
+This can be:
+- a DB table
+or
+- a durable conversation-linked state store
+or
+- another explicit persistent mechanism
+
+But it must survive from one request to the next.
+
+Minimum shape:
+
+pendingClarification {
+  id
+  conversationId
+  userId
+  targetProgramId
+  targetSessionId?: optional
+  originalRequest
+  intentFamily
+  pendingAspect
+  partialEditPlan?: optional
+  clarificationQuestion
+  expiresAfterTurns
+  createdAt
+  resolvedAt?: optional
+}
+
+Suggested pendingAspect values:
+- "scope"
+- "target_day"
+- "target_session"
+- "target_exercise"
+- "phase_or_block"
+- "confirmation"
+
+The system must be able to look up the active pending clarification by conversationId.
+
+==================================================
+TASK 2 — STORE PENDING CLARIFICATION WHEN ASKING A QUESTION
+==================================================
+
+Whenever the system asks a clarification question during an edit/refinement flow, it must write a pending clarification record BEFORE returning the response.
+
+This includes:
+1. Clarifications triggered by buildAgenticNoChangesResponse()
+2. Clarifications triggered by decision tree ambiguity handling
+3. Any other edit/refinement clarification path
+
+The stored record must preserve:
+- original request
+- normalized intent family
+- current target program
+- what specific thing is being asked for
+- any partial scope/plan already resolved
+
+Clarification text without state is no longer allowed.
+
+==================================================
+TASK 3 — ADD CLARIFICATION_FOLLOWUP INTENT TYPE
+==================================================
+
+Before normal classifyIntent() logic runs, add a first-pass check:
+
+IF there is an active pending clarification for this conversation
+AND the new user message looks like a possible resolution
+THEN classify as:
+- CLARIFICATION_FOLLOWUP
+
+This should run BEFORE all current regex-based intent classification.
+
+Examples of valid clarification-followup answers:
+- “Day 1”
+- “This session”
+- “Program-wide”
+- “The pull-up”
+- “Across all sessions”
+- “Only day 2”
+- “The lower day”
+
+These must NOT fall into GENERAL_COACHING_QUESTION.
+
+==================================================
+TASK 4 — RESUME THE PENDING MUTATION
+==================================================
+
+When message is classified as CLARIFICATION_FOLLOWUP:
+
+1. load pending clarification state
+2. combine the user’s answer with the original request
+3. reconstruct the pending intent
+4. resolve the pendingAspect
+5. route directly into the edit/mutation executor
+
+Do NOT:
+- send this into GUIDANCE_ONLY
+- ask generic discovery questions
+- re-run the full experience as if nothing was pending
+
+Example:
+originalRequest = “Make it more for endurance”
+intentFamily = endurance_focus
+pendingAspect = scope
+userReply = “Day 1”
+
+Result:
+- execute endurance_focus on targetScope = session/day 1
+
+==================================================
+TASK 5 — RETURN AND PERSIST INTENT FAMILY FROM EDIT PIPELINE
+==================================================
+
+Audit interpretEditRequest() and related edit pipeline code.
+
+When an edit attempt resolves:
+- intentFamily
+- targetScope
+- partial plan
+
+but cannot execute yet because it needs clarification,
+that resolved family/scope information must be returned to the caller and persisted into pending clarification state.
+
+Currently the family is computed and lost.
+
+Fix this so:
+- endurance_focus remains endurance_focus across turns
+- power_explosive_focus remains power_explosive_focus across turns
+- etc.
+
+==================================================
+TASK 6 — PATCH buildAgenticNoChangesResponse()
+==================================================
+
+The current behavior:
+- returns a clarification string
+- does NOT store pending state
+
+This must change.
+
+Before returning any clarification question from buildAgenticNoChangesResponse():
+- create pending clarification record
+- include target program ID
+- include resolved intent family
+- include pending aspect (for example “scope”)
+- include original user request
+- include any partial target already known
+
+Then return the question.
+
+==================================================
+TASK 7 — FIX SHORT-ANSWER CLASSIFICATION FAILURES
+==================================================
+
+Messages like:
+- “Day 1”
+- “Program-wide”
+- “This one”
+- “The pull-up”
+- “Lower day”
+
+must no longer be classified from scratch if a pending clarification exists.
+
+They should:
+- bypass generic intent classification
+- bypass GUIDANCE_ONLY
+- route to clarification resolution
+
+If there is NO pending clarification, then normal classification can continue.
+
+==================================================
+TASK 8 — PATCH “ADD MORE JUMPS” CLASSIFICATION
+==================================================
+
+Audit intent.ts atomic/program edit patterns.
+
+Add support for:
+- jump
+- jumps
+- plyometric
+- plyometrics
+- explosive
+- bound
+- bounding
+- hop
+- hops
+- box jump
+- broad jump
+
+These should resolve into edit/program transformation behavior instead of falling to GENERAL_COACHING_QUESTION.
+
+This is a separate but highly related miss.
+
+==================================================
+TASK 9 — FIX STALE PROGRAM DRIFT IN AI CONTEXT
+==================================================
+
+Right now:
+- UI panel shows DB system truth
+- AI prompt may use stale structured JSON from conversation history
+- resolveCurrentProgram() skips system_edit markers and can fall back to old pre-edit JSON
+
+Fix this.
+
+After a successful vibe edit, ensure the next AI turn is grounded in CURRENT DB PROGRAM TRUTH, not stale chat-history JSON.
+
+Acceptable options:
+A. write updated full system JSON back into conversation history after edit
+or
+B. always load latest DB program and inject that as currentProgram for refine/edit contexts
+
+The goal:
+- backend reasoning and UI panel must reference the same current program
+
+==================================================
+TASK 10 — EXPIRE / CLEAR PENDING CLARIFICATIONS SAFELY
+==================================================
+
+Pending clarifications should not live forever.
+
+Add rules:
+- expires after N turns (for example 2)
+- expires after time window if needed
+- clears immediately after successful resolution
+- clears if user explicitly starts a new topic/build
+- clears if active conversation changes
+
+Do not let stale pending state poison later unrelated prompts.
+
+==================================================
+TASK 11 — ADD DEBUG TRACING
+==================================================
+
+In development, log:
+
+For clarification creation:
+- original request
+- intent family
+- pending aspect
+- target program ID
+- target session if known
+- clarification question
+- pending clarification ID
+
+For clarification follow-up:
+- incoming user message
+- matched pending clarification ID
+- resolved aspect
+- reconstructed intent family
+- reconstructed scope
+- execution path
+- mutation result
+
+For stale-program fix:
+- which program source is used in prompt (DB vs conversation history)
+- activeProgramId
+- whether conversation JSON was skipped or replaced
+
+==================================================
+TASK 12 — TEST REQUIRED SCENARIOS
+==================================================
+
+Test these exact cases:
+
+CASE 1
+User: “Make it more for endurance”
+System: “Should this apply to Day 1 or program-wide?”
+User: “Day 1”
+Expected:
+- no generic coaching question
+- executes endurance_focus on Day 1
+- real mutation occurs
+
+CASE 2
+User: “Make it more explosive”
+System: asks scoped clarification if needed
+User: “Program-wide”
+Expected:
+- resumes power_explosive_focus
+- no loss of intent
+
+CASE 3
+User: “I want to add more jumps”
+Expected:
+- classified as edit/program transformation
+- not GUIDANCE_ONLY
+
+CASE 4
+User: “The pull-up”
+Expected:
+- if pending clarification was asking about target exercise, resume it correctly
+
+CASE 5
+After a successful vibe edit, next prompt should reason from current DB program
+Expected:
+- no stale old structured JSON mismatch
+
+==================================================
+TASK 13 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What pending clarification storage was added
+2. What fields are stored
+3. How/where pending clarification gets written
+4. How CLARIFICATION_FOLLOWUP is detected
+5. How pending mutations are resumed
+6. How intent family is now persisted across turns
+7. How buildAgenticNoChangesResponse() changed
+8. How “add more jumps” classification was patched
+9. How stale program drift was fixed
+10. What expiry/cleanup rules were added
+11. Which previously broken follow-up flows now work
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat must now be able to do this reliably:
+
+User: “Make it more for endurance”
+System: “Should this apply to Day 1 or program-wide?”
+User: “Day 1”
+System: applies endurance-focused transformation to Day 1
+
+No generic fallback.
+No loss of intent.
+No rebuilding from scratch.
+No stale program mismatch.
+
+A clarification question must now behave like a suspended mutation task, not just a line of chat text.
+
+Implement this now.
