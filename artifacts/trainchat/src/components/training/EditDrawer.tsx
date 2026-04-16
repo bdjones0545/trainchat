@@ -937,6 +937,11 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
   const editMutation = useMutation({
     mutationFn: (request: string) => submitTargetedEdit(request, target, uiContext),
     onSuccess: (data) => {
+      if (data.appliedCount === 0) {
+        setErrorMsg("No changes were applied — try being more specific or rephrasing your request.");
+        setPhase("error");
+        return;
+      }
       setEditResult(data);
       setPhase("success");
       setTimeout(() => onEditComplete(data), 800);
