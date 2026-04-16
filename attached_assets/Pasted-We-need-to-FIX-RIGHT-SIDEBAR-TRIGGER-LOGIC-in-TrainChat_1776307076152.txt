@@ -1,0 +1,97 @@
+We need to FIX RIGHT SIDEBAR TRIGGER LOGIC in TrainChat.
+
+OBJECTIVE:
+The right sidebar (program panel) must ONLY open when a real program mutation is applied.
+
+Currently it is opening after every input, including conversational responses, which breaks the UX.
+
+==================================================
+PROBLEM
+==================================================
+
+Current behavior:
+- user sends any message
+- sidebar opens regardless of whether a mutation occurred
+
+This is incorrect.
+
+==================================================
+GOAL
+==================================================
+
+Sidebar should ONLY open when:
+outcomeType === "mutation_applied"
+
+==================================================
+TASK 1 — IDENTIFY SIDEBAR TRIGGER LOGIC
+==================================================
+
+Find where the right panel is being opened:
+- chat.tsx
+- system.tsx
+- stream handlers
+- useStreamMessage
+- any mutation handlers
+
+==================================================
+TASK 2 — ADD STRICT CONDITION
+==================================================
+
+Replace current logic with:
+
+shouldOpenSidebar = (
+  result.outcomeType === "mutation_applied"
+)
+
+OR:
+result.changes.length > 0
+
+==================================================
+TASK 3 — BLOCK ALL OTHER OUTCOMES
+==================================================
+
+Explicitly prevent sidebar opening for:
+
+- conversation_only
+- clarification_needed
+- limit_reached
+- error/failure
+
+==================================================
+TASK 4 — ENSURE MUTATION CASES STILL WORK
+==================================================
+
+Sidebar MUST still open for:
+- new program build
+- exercise swap
+- sets/reps/rest changes
+- session restructuring
+- any editPlan with real changes
+
+==================================================
+TASK 5 — TEST
+==================================================
+
+1. Ask a question
+Expected: sidebar does NOT open
+
+2. Give coaching input
+Expected: sidebar does NOT open
+
+3. Make real edit (“make squat harder”)
+Expected: sidebar opens
+
+4. Hit input limit
+Expected: conversion modal only, no sidebar
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Sidebar reflects state change, not user input.
+
+It should feel like:
+“I changed something → I see it”
+
+NOT:
+“I typed something → something random opened”

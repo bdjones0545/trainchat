@@ -147,7 +147,7 @@ export default function Chat() {
   const [inputText, setInputText] = useState("");
   const [latestProgram, setLatestProgram] = useState<ProgramStructure | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [showReadiness, setShowReadiness] = useState(false);
@@ -201,6 +201,9 @@ export default function Chat() {
   const hasAttemptedConvoCreate = useRef(false);
   // Calibration nudge guard: one-shot, never auto-triggers twice
   const hasCheckedCalibrationNudge = useRef(false);
+  // Right-panel auto-open guard: opens panel once on load if user already has a program.
+  // Prevents the panel from re-opening after conversational (non-mutation) messages.
+  const hasAutoOpenedPanelRef = useRef(false);
   const [showCalibrationNudge, setShowCalibrationNudge] = useState(false);
 
   const logout = useLogout();
@@ -443,10 +446,11 @@ export default function Chat() {
     return () => vv.removeEventListener("resize", handleViewportResize);
   }, [me]);
 
-  // Panel auto-open is intentionally NOT triggered by stream.isActive.
-  // The panel only opens automatically when a mutation is confirmed (mutation_applied),
-  // which is handled in the handleSend result block below.
-  // This prevents conversational / clarification replies from opening the panel.
+  // Panel auto-open rules:
+  // 1. On load — opens once when the user's first program is detected (see useEffect below).
+  // 2. After a mutation — opens when result.systemSaved or result.systemEdit.applied (see handleSend).
+  // 3. NEVER opens for conversational, clarification, or failure outcomes.
+  // The right panel is NOT triggered by stream.isActive so chatting never forces it open.
 
   const buildingState = {
     isBuilding: stream.isActive,
@@ -496,6 +500,18 @@ export default function Chat() {
       if (messages.length === 0) setLatestProgram(null);
     }
   }, [messages, hasActiveSystem]);
+
+  // Auto-open the right panel exactly ONCE on load when the user already has a
+  // program (active DB system or a program in chat history). This ensures returning
+  // users see their program immediately without the panel auto-opening for every
+  // message they send. Subsequent opens are mutation-gated (systemSaved / systemEdit.applied).
+  useEffect(() => {
+    if (hasAutoOpenedPanelRef.current) return;
+    if (hasActiveSystem || latestProgram) {
+      hasAutoOpenedPanelRef.current = true;
+      setRightPanelOpen(true);
+    }
+  }, [hasActiveSystem, latestProgram]);
 
   // Check for checkout success in URL
   useEffect(() => {
