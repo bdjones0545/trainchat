@@ -1,0 +1,221 @@
+We need to add an OPENAI FALLBACK RESOLVER for Harder / Easier exercise edits when the local cluster/relationship graph has no alternatives.
+
+OBJECTIVE:
+When a user taps Harder or Easier on an exercise and the deterministic cluster graph has no valid alternatives, TrainChat should fall back to OpenAI to intelligently resolve a real replacement exercise (or a real prescription modification), then save that result to the database and optionally log the relationship for future deterministic use.
+
+Current problem:
+The UI can show:
+“No cluster alternatives found. Use Full Edit to swap manually.”
+This breaks the vibe-coding experience.
+
+We want:
+- deterministic first
+- OpenAI fallback second
+- validation always
+- saved result in DB
+- learning signal captured for future graph improvement
+
+==================================================
+PRIMARY RULE
+==================================================
+
+Harder/Easier should never dead-end just because the local graph is incomplete.
+
+If deterministic alternatives are missing, OpenAI should step in as the fallback interpreter/resolver.
+
+==================================================
+TASK 1 — TRACE THE HARDER/EASIER FLOW
+==================================================
+
+Audit the full quick-edit flow for:
+- Harder
+- Easier
+
+Determine:
+- where cluster alternatives are fetched
+- where the “No cluster alternatives found” state is produced
+- where the flow currently stops
+- where the current prescription-only fallback is applied
+
+Identify the exact insertion point for an OpenAI fallback resolver.
+
+==================================================
+TASK 2 — ADD OPENAI FALLBACK RESOLVER
+==================================================
+
+When:
+- user taps Harder or Easier
+- no deterministic cluster/graph alternatives are found
+
+Then:
+- call OpenAI with structured context
+- resolve a real replacement exercise OR a real prescription modification
+
+OpenAI input should include:
+- current exercise name
+- movement pattern / category if known
+- harder vs easier request
+- session identity
+- program goal
+- sport context if present
+- available equipment context if known
+- any special considerations / injury context if relevant
+
+==================================================
+TASK 3 — REQUIRE STRUCTURED OPENAI OUTPUT
+==================================================
+
+OpenAI should NOT return freeform coaching prose as the main result.
+
+It must return structured intent such as:
+
+{
+  "changeType": "replace_exercise" | "modify_prescription",
+  "replacementExerciseName": "Band-Assisted Pull-Up",
+  "prescriptionAdjustments": {
+    "sets": ...,
+    "reps": ...,
+    "rest": ...,
+    "tempo": ...
+  },
+  "reason": "regression for vertical pulling while preserving session intent"
+}
+
+The local system should then:
+- validate
+- apply
+- save to DB
+- render normal UI update
+
+==================================================
+TASK 4 — VALIDATE THE FALLBACK RESULT
+==================================================
+
+Before saving:
+- ensure replacement exercise name is real and usable
+- ensure it is not a generic placeholder
+- ensure the result fits the session identity
+- ensure it respects safety / injury / special-consideration rules
+- ensure it does not violate current program structure
+
+If exercise replacement cannot be validated:
+- fallback to prescription modification on the same exercise
+- do NOT dead-end unless truly necessary
+
+==================================================
+TASK 5 — SAVE RESULT TO DATABASE
+==================================================
+
+Once validated:
+- commit the replacement/prescription change to the existing training system tables
+- update UI exactly like other mutations
+- highlight the changed exercise
+- show standard mutation success flow
+
+Harder/Easier should still feel like a normal quick edit, even if OpenAI was needed behind the scenes.
+
+==================================================
+TASK 6 — LOG RELATIONSHIP FOR FUTURE LEARNING
+==================================================
+
+If OpenAI successfully resolves a substitution, log it as a relationship candidate for future deterministic use.
+
+Examples:
+- Pull-Up → Band-Assisted Pull-Up (easier)
+- Pull-Up → Weighted Pull-Up (harder)
+
+Store as:
+- progression/regression candidate
+- exercise relationship candidate
+- global learning event if appropriate
+
+This should NOT auto-rewrite the core graph immediately unless your promotion rules allow it.
+But the signal should be captured.
+
+==================================================
+TASK 7 — APPLY TO ALL EXERCISES, NOT JUST PULL-UP
+==================================================
+
+This fallback must work generally for any exercise where the graph is sparse.
+
+Examples:
+- Pull-Up
+- Split Squat
+- Deadlift
+- Push-Up
+- Row
+- Sprint drill
+- Mobility/support movement if applicable
+
+The system should:
+- try local graph first
+- then OpenAI fallback
+- then validation
+- then save
+
+==================================================
+TASK 8 — PRESERVE SPEED WHEN GRAPH EXISTS
+==================================================
+
+If local cluster alternatives exist:
+- do NOT call OpenAI
+- keep current fast path
+
+Only use OpenAI when:
+- deterministic graph returns no viable alternatives
+- or deterministic result is invalid
+
+==================================================
+TASK 9 — TEST REQUIRED SCENARIOS
+==================================================
+
+Test these exact cases:
+
+1. Easier on Pull-Up when no graph alternatives exist
+Expected:
+- OpenAI fallback runs
+- resolves Band-Assisted Pull-Up / Lat Pulldown / similar
+- saves to DB
+- no dead-end message
+
+2. Harder on Pull-Up
+Expected:
+- resolves Weighted Pull-Up / tempo progression / similar
+- saves to DB
+
+3. Easier on another sparse exercise
+4. Harder on another sparse exercise
+5. A case where graph DOES have alternatives
+Expected:
+- no OpenAI call
+- fast deterministic path preserved
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. Where the OpenAI fallback was inserted
+2. What structured output contract it uses
+3. How validation works
+4. How the result is saved to DB
+5. How relationship candidates are logged
+6. Which exercises now work that previously dead-ended
+7. What remains deterministic vs OpenAI-assisted
+
+==================================================
+FINAL STANDARD
+==================================================
+
+When a user taps Harder or Easier:
+- TrainChat should try deterministic alternatives first
+- if none exist, OpenAI should intelligently resolve the change
+- the result should be validated, saved, and shown like a normal mutation
+- the user should never hit a dead-end just because the graph is incomplete
+
+TrainChat should feel like:
+a fast system with intelligent fallback,
+not a brittle graph editor.
+
+Implement this now.
