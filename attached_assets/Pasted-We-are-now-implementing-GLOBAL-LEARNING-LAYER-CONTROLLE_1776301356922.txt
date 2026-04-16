@@ -1,0 +1,386 @@
+We are now implementing:
+
+GLOBAL LEARNING LAYER (CONTROLLED PRODUCT-WIDE LEARNING)
+
+OBJECTIVE:
+Allow TrainChat to improve over time from aggregate user interactions across all users — without allowing the live agent to self-rewrite unsafely from raw conversations.
+
+This is NOT a self-modifying AI brain.
+This is a controlled global learning pipeline.
+
+The goal is:
+- capture structured signals from product usage
+- identify repeated successful/unsuccessful patterns
+- aggregate them across users
+- surface high-confidence improvements
+- promote those improvements intentionally into the core system
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+The live agent should NOT directly learn from every conversation in an uncontrolled way.
+
+Instead:
+
+1. User interactions generate structured learning signals
+2. Signals are stored and aggregated
+3. Patterns are scored for confidence
+4. Candidate improvements are surfaced
+5. Only reviewed/high-confidence patterns are promoted into:
+   - routing rules
+   - prompts
+   - validators
+   - transformation rules
+   - exercise relationships
+   - anti-pattern filters
+   - example banks
+
+Stable Core + Global Learning Feedback Loop
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Build a Global Learning Layer that lets TrainChat become smarter from usage data while preserving:
+- safety
+- consistency
+- debuggability
+- trust
+- reproducibility
+
+==================================================
+TASK 1 — DEFINE LEARNING EVENT TYPES
+==================================================
+
+Create structured event categories for things the product can learn from.
+
+Examples:
+
+type GlobalLearningEventType =
+  | "edit_request"
+  | "route_decision"
+  | "mutation_success"
+  | "mutation_failure"
+  | "clarification_required"
+  | "clarification_resolved"
+  | "user_reverted_change"
+  | "user_accepted_change"
+  | "program_followup_edit"
+  | "session_completion"
+  | "session_skip"
+  | "session_feedback"
+  | "readiness_checkin"
+  | "adaptation_applied"
+  | "paywall_conversion"
+  | "exercise_substitution_accepted"
+  | "exercise_substitution_rejected";
+
+These events should be structured, not just raw logs.
+
+==================================================
+TASK 2 — CREATE GLOBAL LEARNING EVENT SCHEMA
+==================================================
+
+Create a data model like:
+
+type GlobalLearningEvent = {
+  id: string;
+  userId?: string;
+  eventType: GlobalLearningEventType;
+  timestamp: Date;
+  routeUsed?: "deterministic" | "openai" | "library_progression" | "rule_based";
+  intentType?: string;
+  editSubtype?: string;
+  programGoal?: string;
+  sport?: string;
+  trainingLevel?: string;
+  uiPage?: string;
+  targetScope?: string;
+  requestText?: string;
+  normalizedRequestKey?: string;
+  mutationApplied?: boolean;
+  validatorPassed?: boolean;
+  followupAction?: string;
+  metadata?: Record<string, any>;
+};
+
+Important:
+- allow structured analysis
+- avoid storing unnecessary raw content when not needed
+- preserve privacy and minimize over-collection where possible
+
+==================================================
+TASK 3 — DEFINE WHAT THE SYSTEM SHOULD LEARN GLOBALLY
+==================================================
+
+The global layer should learn patterns like:
+
+A. ROUTING IMPROVEMENTS
+- which phrases should route deterministic vs agent
+- where deterministic path fails too often
+- where default execution should auto-apply
+
+B. TRANSFORMATION IMPROVEMENTS
+- what users usually mean by “make it harder”
+- what “add more exercises” usually resolves to
+- what kinds of transformations are accepted vs reverted
+
+C. EXERCISE GRAPH IMPROVEMENTS
+- which substitutions are accepted frequently
+- which substitutions are often rejected or immediately re-edited
+- which harder/easier mappings work best
+
+D. CLARIFICATION REDUCTION
+- which prompts trigger unnecessary clarification
+- which assumptions were safe and well accepted
+
+E. ADHERENCE / PRACTICALITY SIGNALS
+- session length patterns
+- completion vs dropout patterns
+- where complexity is too high
+- where users skip certain modalities or movement types
+
+F. PROGRAM QUALITY SIGNALS
+- outputs that frequently require a second edit
+- outputs that cause immediate rollback or dissatisfaction
+- validators that fire repeatedly on specific request classes
+
+==================================================
+TASK 4 — NORMALIZE LEARNING SIGNALS
+==================================================
+
+Before aggregation, normalize events into reusable learning keys.
+
+Examples:
+- “make this harder”
+- “harder please”
+- “too easy”
+→ normalizedRequestKey = "increase_difficulty_general"
+
+- “add more to day 1”
+- “add more exercises to day 1”
+- “expand day 1”
+→ normalizedRequestKey = "expand_session_volume_day"
+
+This prevents the learning layer from fragmenting around surface wording.
+
+==================================================
+TASK 5 — BUILD AGGREGATION PIPELINES
+==================================================
+
+Create aggregate summaries over windows like:
+- 7 days
+- 30 days
+- all-time
+
+Examples of aggregate outputs:
+
+type LearningAggregate = {
+  key: string;
+  totalCount: number;
+  successRate: number;
+  clarificationRate: number;
+  revertRate: number;
+  acceptanceRate: number;
+  dominantContexts?: string[];
+  recommendedAction?: string;
+  confidenceScore: number;
+};
+
+Examples:
+- “increase_difficulty_general” resolves best when routed to AGENT + session-level transformation
+- “add more exercises to day 1” succeeds without clarification 84% of the time if auto-applied to current session/day
+- “harder” substitutions to X are often reverted, suggesting poor mapping quality
+
+==================================================
+TASK 6 — DEFINE LEARNING CANDIDATE TYPES
+==================================================
+
+Create candidate improvement categories such as:
+
+type LearningCandidateType =
+  | "routing_rule_update"
+  | "default_execution_rule"
+  | "exercise_relationship_update"
+  | "anti_pattern_rule"
+  | "transformation_rule_update"
+  | "prompt_guidance_update"
+  | "validator_rule_update"
+  | "clarification_policy_update";
+
+The global layer should not rewrite the core directly.
+It should produce candidate improvements.
+
+==================================================
+TASK 7 — CREATE A CONFIDENCE / PROMOTION MODEL
+==================================================
+
+Each candidate improvement should have:
+- evidence count
+- success/failure patterns
+- confidence score
+- safety sensitivity
+- promotion recommendation
+
+Examples:
+- low-risk routing improvements can promote faster
+- safety-sensitive clinical or injury-related patterns should require stricter review
+- programming-rule changes require stronger evidence than UI routing changes
+
+Add a model like:
+
+type LearningCandidate = {
+  id: string;
+  type: LearningCandidateType;
+  key: string;
+  summary: string;
+  evidenceCount: number;
+  confidenceScore: number;
+  riskLevel: "low" | "medium" | "high";
+  recommendation: "review" | "safe_to_promote" | "needs_more_data";
+  metadata?: Record<string, any>;
+};
+
+==================================================
+TASK 8 — DO NOT ALLOW DIRECT SELF-MODIFICATION
+==================================================
+
+This is critical.
+
+The live agent must NOT:
+- rewrite its own prompt automatically
+- change safety rules automatically
+- absorb user advice as truth automatically
+- modify validators automatically
+- change programming doctrine directly from production interactions
+
+The Global Learning Layer should only:
+- collect
+- aggregate
+- suggest
+
+Promotion into the core system should be:
+- explicitly reviewed
+- or tightly limited to low-risk categories with clear thresholds
+
+==================================================
+TASK 9 — ADD A REVIEW / INSPECTION SURFACE
+==================================================
+
+Create a development/admin-facing way to inspect:
+- top normalized request patterns
+- top failure patterns
+- most reverted substitutions
+- most common clarification triggers
+- candidate improvements
+- confidence scores
+- safe-to-promote suggestions
+
+This can be:
+- an admin page
+- structured logs
+- a dev-only dashboard
+- or a queryable report
+
+Do NOT expose this to end users.
+
+==================================================
+TASK 10 — DEFINE WHAT IS SAFE TO PROMOTE AUTOMATICALLY (OPTIONAL)
+==================================================
+
+Optionally allow extremely low-risk automatic promotion categories, such as:
+- routing threshold tweaks
+- clarification reduction rules
+- UI default execution assumptions
+- suggestion-chip ranking
+
+But do NOT allow auto-promotion for:
+- safety rules
+- injury/special populations
+- progression doctrine
+- major programming changes
+- clinical or risk-sensitive logic
+
+Default to conservative review-first behavior.
+
+==================================================
+TASK 11 — ADD EXAMPLE LEARNING QUERIES / REPORTS
+==================================================
+
+Support insights like:
+
+- Which edit requests most often fail?
+- Which requests most often escalate from deterministic to agent?
+- Which exercise substitutions are most often accepted?
+- Which transformations are most often followed by another edit within 60 seconds?
+- Which prompts trigger clarification most often?
+- Which user patterns correlate with better adherence?
+- Which contexts produce the highest revert rate?
+
+These reports are the real value of the layer.
+
+==================================================
+TASK 12 — TEST REQUIRED SCENARIOS
+==================================================
+
+Simulate or validate these patterns:
+
+1. Users repeatedly say “make this harder”
+Expected:
+- normalized into one request family
+- system learns preferred successful handling path
+
+2. Users frequently revert a specific harder/easier substitution
+Expected:
+- candidate created to weaken or replace that exercise mapping
+
+3. “add more exercises to day 1” succeeds repeatedly without clarification
+Expected:
+- candidate created to default-auto-apply this class of request
+
+4. A particular clarification question is asked too often
+Expected:
+- learning layer flags it as a clarification reduction opportunity
+
+5. A validator repeatedly catches the same drift pattern
+Expected:
+- candidate created for validator or prompt improvement
+
+6. Safety-sensitive injury-related requests vary widely
+Expected:
+- marked as review-required, not auto-promoted
+
+==================================================
+TASK 13 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What event schema was added
+2. What event types are now logged
+3. How normalization works
+4. What aggregate reports/candidate types were created
+5. What confidence/promotion model was added
+6. What review/admin visibility was added
+7. What categories are explicitly prevented from self-modifying
+8. Example candidate improvements the system can now surface
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat should now be able to learn from all users safely by:
+- collecting structured signals
+- identifying repeated patterns
+- surfacing high-confidence improvements
+- helping us improve the core system intentionally
+
+It should NOT:
+- rewrite its own brain live
+- absorb unsafe user beliefs
+- become inconsistent from raw conversations
+
+This is a controlled global learning layer, not autonomous self-modification.
+
+Implement this now.
