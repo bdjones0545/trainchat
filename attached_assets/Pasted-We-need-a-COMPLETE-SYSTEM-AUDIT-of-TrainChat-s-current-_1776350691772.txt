@@ -1,0 +1,222 @@
+We need a COMPLETE SYSTEM AUDIT of TrainChat’s current architecture.
+
+OBJECTIVE:
+Identify exactly what systems already exist, where logic is duplicated or fragmented, and what is missing — so we STOP rebuilding the same features in different places.
+
+This is NOT a surface-level review. This is a deep architectural inventory.
+
+==================================================
+PRIMARY GOALS
+==================================================
+
+1. Map ALL existing systems and layers
+2. Identify where logic overlaps or duplicates
+3. Identify where systems are partially implemented but not unified
+4. Identify gaps preventing agent-like behavior
+5. Clearly separate:
+   - what exists
+   - what is incomplete
+   - what is missing entirely
+
+==================================================
+TASK 1 — IDENTIFY ALL CORE SYSTEMS
+==================================================
+
+List every system currently implemented in the codebase, including but not limited to:
+
+- Intent classification system (intent.ts, patterns, etc.)
+- Intent Family Engine (normalizeToIntentFamily)
+- Execution Planner (buildExecutionPlan)
+- Decision tree (if still partially used)
+- Edit / mutation pipeline (interpretEditRequest, applyMutation, etc.)
+- Swap system (getSwapCandidates, cluster logic)
+- Exercise library system (exercise-service, DB schema)
+- Progression/regression logic
+- Program builder (initial generation)
+- Clarification system (pendingClarification storage + resolution)
+- AI response system (generateAIResponse, system prompts)
+- SSE streaming system
+- Any fallback systems (rule-based, AI-based, etc.)
+- Any experimental or partially implemented systems
+
+For each system:
+- name
+- file locations
+- purpose
+
+==================================================
+TASK 2 — TRACE DATA FLOW THROUGH THE SYSTEM
+==================================================
+
+Map the full lifecycle of a user message:
+
+User message →
+→ execution planner →
+→ action routing →
+→ mutation / AI / clarification →
+→ DB updates →
+→ UI render
+
+Show where each system is used in that flow.
+
+==================================================
+TASK 3 — FIND DUPLICATE / OVERLAPPING LOGIC
+==================================================
+
+Identify where the same responsibility exists in multiple places.
+
+Examples to look for:
+- intent detection in multiple files
+- swap logic vs AI substitution vs progression logic
+- transformation rules duplicated in multiple layers
+- exercise selection happening in:
+    - swap system
+    - mutation engine
+    - program builder
+    - AI prompts
+
+For each duplication:
+- where it exists
+- what it does
+- which one is actually used
+- which should be removed or unified
+
+==================================================
+TASK 4 — AUDIT EXERCISE INTELLIGENCE CAPABILITIES
+==================================================
+
+List everything currently used to select or modify exercises:
+
+- cluster relationships
+- movement pattern fallback
+- progression/regression mappings
+- category inference (plyometric, core, etc.)
+- AI-based suggestions (if any)
+- rule-based fallbacks
+
+Then answer:
+- where is exercise selection happening today?
+- is there a unified scoring/ranking system? (likely no)
+- or is it mostly “first valid candidate” logic?
+
+==================================================
+TASK 5 — AUDIT MUTATION DEPTH
+==================================================
+
+For each mutation type:
+- swap
+- transform (endurance, power, etc.)
+- add
+- remove
+
+Answer:
+- does it always produce structural changes?
+- does it consider program identity?
+- does it consider session role?
+- does it consider training goal?
+
+Or is it:
+- shallow (basic rule changes)
+- inconsistent
+- minimal-change oriented
+
+==================================================
+TASK 6 — AUDIT PROGRAM GENERATION
+==================================================
+
+Inspect the program builder.
+
+Answer:
+- how many templates or patterns exist?
+- does it randomize or vary structure?
+- does it adapt based on sport/context?
+- does it reuse the same exercise ordering repeatedly?
+
+Determine:
+- why programs feel repetitive
+- where variation is missing
+
+==================================================
+TASK 7 — AUDIT CLARIFICATION SYSTEM
+==================================================
+
+Confirm:
+- pendingClarification storage structure
+- how it is written
+- how it is resolved
+- what fields are stored (intentFamily, scope, etc.)
+
+Answer:
+- does it preserve full mutation intent?
+- does it integrate cleanly with execution planner?
+- any edge cases where it fails?
+
+==================================================
+TASK 8 — AUDIT PROGRAM STATE CONSISTENCY
+==================================================
+
+Confirm:
+- DB program vs conversation program consistency
+- use of dbSystemToProgramStructure
+- whether AI always receives current program
+
+Identify:
+- any remaining stale state risks
+- any mismatch between UI and AI state
+
+==================================================
+TASK 9 — IDENTIFY MISSING SYSTEMS
+==================================================
+
+Based on the audit, explicitly identify what is NOT present:
+
+Examples:
+- unified exercise scoring/ranking system
+- variation engine
+- program identity layer (strength vs endurance bias)
+- advanced substitution logic
+- fatigue/load balancing system
+
+Be explicit.
+
+==================================================
+TASK 10 — CLASSIFY SYSTEM MATURITY
+==================================================
+
+For each system, classify:
+
+- COMPLETE → works and is unified
+- PARTIAL → exists but fragmented or shallow
+- MISSING → not implemented
+
+==================================================
+TASK 11 — OUTPUT REQUIRED
+==================================================
+
+Return a structured report with:
+
+1. Full system map (all components)
+2. Message lifecycle flow
+3. Duplicated / overlapping logic
+4. Exercise intelligence audit (what exists vs missing)
+5. Mutation depth audit
+6. Program generation audit
+7. Clarification system audit
+8. Program state consistency audit
+9. Missing systems list
+10. System maturity table (complete / partial / missing)
+11. Top 5 highest-impact gaps to fix next
+
+==================================================
+FINAL STANDARD
+==================================================
+
+After this audit, we should know EXACTLY:
+- what TrainChat already has
+- what is duplicated
+- what is fragmented
+- what is actually missing
+
+This should eliminate guesswork and prevent rebuilding the same systems again.
+
+Return a precise, technical, non-generic report.
