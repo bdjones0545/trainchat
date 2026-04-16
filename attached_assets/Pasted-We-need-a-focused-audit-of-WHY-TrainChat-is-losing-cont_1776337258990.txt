@@ -1,0 +1,188 @@
+We need a focused audit of WHY TrainChat is losing context during follow-up refinements.
+
+OBJECTIVE:
+Find out why the system is failing on conversational refinement sequences like:
+
+1. User builds a program
+2. User asks for a refinement
+3. System asks a clarification question
+4. User answers the clarification
+5. System loses context, asks something generic, or falls back to the wrong program/build mode
+
+This is breaking the core “agent” feel.
+
+==================================================
+EXAMPLE FAILURE PATTERN
+==================================================
+
+Observed sequence:
+- User builds a 4-day soccer program
+- User asks: “I want to add more jumps”
+- System responds incorrectly / rebuilds / shifts context
+- User asks: “Make it more for endurance”
+- System asks whether this should apply to a specific block/phase or program-wide
+- User answers: “Day 1”
+- System then asks a generic question like:
+  “Tell me more about what you’re working toward...”
+
+This means the system is not correctly carrying forward the prior clarification thread and/or is resolving against the wrong active program/mode.
+
+==================================================
+PRIMARY GOALS
+==================================================
+
+Audit and explain:
+1. Why build vs refine mode is drifting
+2. Why active program context may be changing unexpectedly
+3. Why clarification follow-up answers are not being attached to the prior unresolved request
+4. Why generic fallback questions are firing instead of scoped mutation execution
+
+==================================================
+TASK 1 — TRACE THE ACTIVE PROGRAM RESOLUTION
+==================================================
+
+For a conversation where a user has already built a program, trace exactly how the backend determines:
+
+- activeProgramId
+- active conversation/session
+- active build mode vs refine mode
+- current target scope (program/session/day/exercise)
+
+I want to know whether the backend and frontend are resolving the SAME active program.
+
+Check for cases where:
+- UI header shows one program
+- but backend acts on another
+- or falls back to older/default program data
+
+==================================================
+TASK 2 — TRACE BUILD MODE VS REFINE MODE
+==================================================
+
+Audit how the system decides whether a user message is:
+
+- building a new program
+- refining an existing program
+- answering a clarification question for a prior refinement
+
+I want to know why messages like:
+- “I want to add more jumps”
+- “Make it more for endurance”
+- “Day 1”
+
+can end up routing into:
+- build mode
+- generic discovery questions
+- wrong fallback behavior
+
+==================================================
+TASK 3 — TRACE CLARIFICATION THREAD CONTINUITY
+==================================================
+
+Audit how clarification state is stored and resumed.
+
+Specifically:
+- when the system asks a clarification question,
+  where is that pending clarification stored?
+- when the user replies “Day 1”,
+  how does the system know which prior question this answer belongs to?
+- is there a pending intent / pending target / pending mutation state?
+- if so, is it getting lost across messages?
+
+If there is no persistent pending-clarification state, identify that explicitly.
+
+==================================================
+TASK 4 — TRACE INTENT FAMILY HANDOFF
+==================================================
+
+The intent family system is implemented.
+
+Audit whether the normalized family is actually being preserved into execution.
+
+Example:
+“Make it more for endurance”
+should normalize to:
+- intentFamily = endurance_focus
+
+Then if the system asks:
+“Should this apply to Day 1 or program-wide?”
+and the user says:
+“Day 1”
+
+the next step should be:
+- execute endurance_focus on targetScope = day/session
+
+Audit why that is not happening.
+
+==================================================
+TASK 5 — IDENTIFY GENERIC FALLBACK TRIGGERS
+==================================================
+
+Find where the system is falling back into generic questions such as:
+- “Tell me more about what you’re working toward”
+- “What’s your primary outcome?”
+- equipment/setup discovery questions
+
+These should NOT fire after the user is already in a refinement thread unless:
+- the refinement truly cannot be executed safely
+- and there is no active program context
+
+Identify the exact code paths that trigger these generic fallbacks.
+
+==================================================
+TASK 6 — AUDIT MESSAGE-TO-MESSAGE MEMORY FOR REFINEMENT
+==================================================
+
+Check whether follow-up refinement messages are being processed with access to:
+- last unresolved intent
+- last unresolved target
+- prior clarification prompt
+- active mutation thread
+
+If not, define what state needs to be stored so one-word answers like:
+- “Day 1”
+- “Program-wide”
+- “This session”
+- “The pull-up”
+
+can be interpreted correctly.
+
+==================================================
+TASK 7 — REPRODUCE WITH DEBUG OUTPUT
+==================================================
+
+For this exact conversation pattern, print a debug trace for each user message:
+
+- raw message
+- resolved activeProgramId
+- resolved activeConversationId
+- detected mode (build/refine/clarification-followup)
+- intent family
+- target scope
+- whether a pending clarification existed
+- path used (deterministic/openai/fallback)
+- final reason for any clarification or generic question
+
+I want a step-by-step explanation of where the wrong turn happens.
+
+==================================================
+TASK 8 — OUTPUT REQUIRED
+==================================================
+
+After the audit, return:
+
+1. Root cause(s)
+2. Whether active program drift exists
+3. Whether build/refine mode confusion exists
+4. Whether clarification follow-up state is missing or broken
+5. Where generic fallback questions are being triggered
+6. What exact files/functions need to be patched
+7. The recommended fix order
+
+==================================================
+FINAL STANDARD
+==================================================
+
+After this audit we should know exactly why TrainChat is losing context during refinement threads and why one-word clarification answers like “Day 1” are not being applied to the prior request.
+
+This audit should produce actionable root causes, not generic suggestions.
