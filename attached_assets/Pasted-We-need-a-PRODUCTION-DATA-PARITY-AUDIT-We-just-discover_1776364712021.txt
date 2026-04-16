@@ -1,0 +1,109 @@
+We need a PRODUCTION DATA PARITY AUDIT.
+
+We just discovered that exercise_library had zero rows in production, which means other required data may also be missing.
+
+OBJECTIVE:
+Identify any other required tables or datasets that exist in development but are NOT properly seeded or populated in production.
+
+Do NOT guess. Verify against the actual production database.
+
+==================================================
+TASK 1 — LIST ALL REQUIRED DATA TABLES
+==================================================
+
+List all tables that the application expects to contain data for core functionality, including but not limited to:
+
+- exercise_library
+- exercise clusters / relationships
+- progression / regression mappings
+- training system reference data
+- sport profiles
+- any seed-driven lookup tables
+- any config tables used by engines
+
+For each table:
+- name
+- purpose
+- whether it requires seed data
+
+==================================================
+TASK 2 — CHECK PRODUCTION ROW COUNTS
+==================================================
+
+For each required table, return:
+
+- row count in production
+- whether this is expected or missing
+- whether the app depends on this table being populated
+
+==================================================
+TASK 3 — COMPARE WITH DEVELOPMENT / SEED FILES
+==================================================
+
+Check:
+- seed scripts
+- seed data files
+- any hardcoded initial data
+
+Determine:
+- what data exists in seed scripts but is missing in production
+- whether seed scripts were ever run in production
+
+==================================================
+TASK 4 — IDENTIFY CRITICAL MISSING DATA
+==================================================
+
+Flag any tables where:
+- row count is 0 or unexpectedly low
+- app logic depends on this data
+- missing data would cause:
+    - swap failures
+    - fallback behavior
+    - repetitive outputs
+    - missing relationships
+
+==================================================
+TASK 5 — VERIFY EXERCISE SYSTEM COMPLETENESS
+==================================================
+
+Specifically verify:
+
+- exercise_library row count
+- how many are active (is_active = true)
+- number of clusters
+- cluster coverage (how many clusters have >1 active member)
+- progression / easier / harder relationships populated
+
+==================================================
+TASK 6 — CHECK FOR PARTIAL SEEDING
+==================================================
+
+Determine if any tables are:
+- partially seeded (some rows exist but incomplete)
+- missing relationships (e.g., exercises exist but clusters empty)
+
+==================================================
+TASK 7 — OUTPUT REQUIRED
+==================================================
+
+Return:
+
+1. Table-by-table status (OK / Missing / Partial)
+2. Any missing or empty critical tables
+3. Any partially seeded systems
+4. Whether seed scripts were likely run in production
+5. Exact commands or steps required to fix missing data
+6. Which missing data issues could impact:
+   - swap
+   - add
+   - program generation
+   - progression
+
+==================================================
+FINAL STANDARD
+==================================================
+
+After this audit, we should know with certainty:
+- whether production has all required data
+- what is missing
+- what must be seeded to ensure the app behaves correctly
