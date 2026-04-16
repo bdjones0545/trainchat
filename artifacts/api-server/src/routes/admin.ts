@@ -409,4 +409,52 @@ router.get("/admin/learning/events", requireAuth, requireAdmin, async (req, res)
   }
 });
 
+/**
+ * POST /api/admin/users/set-plan
+ * Directly set a user's plan for testing/admin purposes.
+ * Protected by X-Admin-Key header matching ADMIN_SECRET env var.
+ * Body: { email: string, plan: "free"|"starter"|"pro"|"elite", planStatus?: string }
+ */
+router.post("/admin/users/set-plan", async (req, res): Promise<void> => {
+  const adminSecret = process.env.ADMIN_SECRET;
+  if (!adminSecret) {
+    res.status(503).json({ error: "Admin secret not configured" });
+    return;
+  }
+  const providedKey = req.headers["x-admin-key"];
+  if (providedKey !== adminSecret) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const { email, plan, planStatus } = req.body ?? {};
+  if (!email || !plan) {
+    res.status(400).json({ error: "email and plan are required" });
+    return;
+  }
+
+  const validPlans = ["free", "starter", "pro", "elite"];
+  if (!validPlans.includes(plan)) {
+    res.status(400).json({ error: `plan must be one of: ${validPlans.join(", ")}` });
+    return;
+  }
+
+  const [updated] = await db
+    .update(usersTable)
+    .set({
+      plan,
+      planStatus: planStatus ?? "active",
+      updatedAt: new Date(),
+    })
+    .where(eq(usersTable.email, email))
+    .returning({ id: usersTable.id, email: usersTable.email, plan: usersTable.plan, planStatus: usersTable.planStatus });
+
+  if (!updated) {
+    res.status(404).json({ error: `User not found: ${email}` });
+    return;
+  }
+
+  res.json({ ok: true, user: updated });
+});
+
 export default router;
