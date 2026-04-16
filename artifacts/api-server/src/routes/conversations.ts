@@ -1095,8 +1095,30 @@ Keep it helpful and intelligent, never promotional.`;
       ]);
 
       if (!fullSystem) {
-        logger.warn({ systemId: resolvedSystem.id }, "[VibeEdit] Could not load full system — falling back to AI");
-        // Fall through to regular AI response below
+        // getFullTrainingSystem returned null — cannot run the edit pipeline.
+        // Return an edit-aware error response immediately. NEVER fall through to
+        // the standard AI path (which would produce generic build-style text).
+        logger.warn({ systemId: resolvedSystem.id }, "[VibeEdit] getFullTrainingSystem returned null — returning load error instead of falling through to build path");
+        const sysLoadErrContent = `I wasn't able to load your program data for that edit right now. Your program hasn't been modified — give it another try in a moment.`;
+        const [sysLoadErrMsg] = await db.insert(messagesTable).values({
+          conversationId: params.data.id,
+          role: "assistant",
+          content: sysLoadErrContent,
+          structuredData: null,
+        }).returning();
+        await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+          stripeStorage.incrementMessageCount(userId).catch(() => {});
+        }
+        res.json({
+          userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
+          assistantMessage: { id: sysLoadErrMsg.id, conversationId: sysLoadErrMsg.conversationId, role: sysLoadErrMsg.role, content: sysLoadErrMsg.content, createdAt: sysLoadErrMsg.createdAt.toISOString(), structuredData: null },
+          planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+          intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
+          systemEdit: { applied: false },
+          editFailure: { reason: "pipeline_error" },
+        });
+        return;
       } else {
         // For program_transformation intents, enrich the user request with
         // explicit block-level instructions so the edit engine makes real
@@ -1513,6 +1535,30 @@ Keep it helpful and intelligent, never promotional.`;
   // Warn if EDIT_PROGRAM was routed but no structured data returned
   if (intentResult.type === "EDIT_PROGRAM" && currentProgram && !structuredData) {
     logger.warn("[IntentRouter] EDIT_PROGRAM intent with program context, but AI did not return updated JSON. Right panel will NOT update.");
+  }
+
+  // ── HARD GUARD: Block build templates for edit/refinement intents ─────────
+  // If a vibe-edit intent somehow reached the standard AI path (should not happen
+  // after the fall-through fix above, but acts as an absolute safety net),
+  // the final message MUST NOT contain generic build language like "Built a X-day
+  // program" or "Check the Program tab" as a standalone completion phrase.
+  // This prevents the assistant from sounding like it forgot what it just did.
+  {
+    const isEditRefineIntent =
+      intentResult.type === "EDIT_PROGRAM" ||
+      intentResult.type === "ADJUST_FOR_PAIN" ||
+      intentResult.type === "ADJUST_FOR_READINESS";
+
+    if (isEditRefineIntent) {
+      const buildTemplatePattern = /^(built[\.\s]|got it[—\s]*i built\s|i built a \d|built a \d+[\s\-]day)/i;
+      if (buildTemplatePattern.test(aiContent.trim())) {
+        logger.warn(
+          { intentType: intentResult.type, contentPreview: aiContent.slice(0, 80) },
+          "[HardGuard] Build-template response detected for edit/refine intent — overriding with edit-aware fallback"
+        );
+        aiContent = `I processed your request and applied the change. Check the Program tab to see what was updated.`;
+      }
+    }
   }
 
   // ── Constraint Validation & Retry (for new program builds) ─────────────────
@@ -2487,6 +2533,25 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           editFailure: { reason: "no_changes_applied", skippedCount: editResult.skippedCount },
         });
         return;
+      } else {
+        // getFullTrainingSystem returned null — cannot run the edit pipeline.
+        // Return an edit-aware error response immediately. NEVER fall through to
+        // the standard AI path, which would produce generic build-style text.
+        logger.warn({ systemId: resolvedSystem.id }, "[VibeEdit:stream] getFullTrainingSystem returned null — returning load error instead of falling through to build path");
+        const sysLoadErrContent = `I wasn't able to load your program data for that edit right now. Your program hasn't been modified — give it another try in a moment.`;
+        const [sysLoadErrMsg] = await db.insert(messagesTable).values({
+          conversationId: params.data.id, role: "assistant", content: sysLoadErrContent, structuredData: null,
+        }).returning();
+        await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+          stripeStorage.incrementMessageCount(userId).catch(() => {});
+        }
+        done({
+          ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: sysLoadErrMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure" }),
+          systemEdit: { applied: false },
+          editFailure: { reason: "pipeline_error" },
+        });
+        return;
       }
     } catch (err: any) {
       logger.error({ err: err?.message }, "[VibeEdit:stream] Edit pipeline threw — returning error response to user");
@@ -2597,6 +2662,29 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       uiContext: safeUIContext,
     }
   );
+
+  // ── HARD GUARD: Block build templates for edit/refinement intents ─────────
+  // Safety net for the streaming path. If a vibe-edit intent somehow reached
+  // the standard AI path (prevented by the fall-through fix above, but guarded
+  // here as a second layer), the final message must NEVER use build-style
+  // language. Catches any "Built a X-day program" or similar build templates.
+  {
+    const isEditRefineIntentSSE =
+      intentResult.type === "EDIT_PROGRAM" ||
+      intentResult.type === "ADJUST_FOR_PAIN" ||
+      intentResult.type === "ADJUST_FOR_READINESS";
+
+    if (isEditRefineIntentSSE) {
+      const buildTemplatePatternSSE = /^(built[\.\s]|got it[—\s]*i built\s|i built a \d|built a \d+[\s\-]day)/i;
+      if (buildTemplatePatternSSE.test(aiContent.trim())) {
+        logger.warn(
+          { intentType: intentResult.type, contentPreview: aiContent.slice(0, 80) },
+          "[HardGuard:stream] Build-template response detected for edit/refine intent — overriding with edit-aware fallback"
+        );
+        aiContent = `I processed your request and applied the change. Check the Program tab to see what was updated.`;
+      }
+    }
+  }
 
   // ── Constraint Validation & Retry ─────────────────────────────────────────
   if (
