@@ -32,6 +32,8 @@ export interface ExtractedConstraints {
   seasonContext: SeasonContext | null;
   gameFrequencyPerWeek: number | null;
   practiceFrequencyPerWeek: number | null;
+  userAge: number | null;
+  isOlderAdult: boolean;
 }
 
 // ─── Constraint Extractor ─────────────────────────────────────────────────────
@@ -128,6 +130,33 @@ export function extractConstraints(message: string): ExtractedConstraints {
     experienceLevel = "advanced";
   }
 
+  // ── Age extraction ────────────────────────────────────────────────────────
+  let userAge: number | null = null;
+  const agePatterns = [
+    /\bi(?:'m| am)\s+(\d{2})\s*(?:year[s]?\s*old|y\.?o\.?|years?)\b/i,
+    /\b(\d{2})\s*(?:year[s]?\s*old|y\.?o\.?)\b/i,
+    /\bage[d]?\s+(\d{2})\b/i,
+    /\b(\d{2})\s*(?:year[s]?)-?old\b/i,
+    /\bin\s+(?:my|her|his)\s+(50s|60s|70s|80s)\b/i,
+  ];
+  for (const pat of agePatterns) {
+    const m = lower.match(pat);
+    if (m) {
+      const raw = m[1];
+      if (raw === "50s") { userAge = 55; break; }
+      if (raw === "60s") { userAge = 65; break; }
+      if (raw === "70s") { userAge = 75; break; }
+      if (raw === "80s") { userAge = 80; break; }
+      const parsed = parseInt(raw, 10);
+      if (parsed >= 18 && parsed <= 100) { userAge = parsed; break; }
+    }
+  }
+  // Also detect "senior" or "older" references without explicit age
+  if (!userAge && /\b(senior|older adult|elderly|retiree|retired)\b/i.test(lower)) {
+    userAge = 65; // conservative estimate for "senior" references
+  }
+  const isOlderAdult = userAge !== null && userAge >= 50;
+
   // ── Training bias / style ─────────────────────────────────────────────────
   let trainingBias: string | null = null;
   if (/\b(compound|powerlifting|barbell-based|strength-based)\b/i.test(lower)) {
@@ -192,6 +221,8 @@ export function extractConstraints(message: string): ExtractedConstraints {
     seasonContext,
     gameFrequencyPerWeek,
     practiceFrequencyPerWeek,
+    userAge,
+    isOlderAdult,
   };
 }
 
@@ -232,6 +263,18 @@ export function buildConstraintContract(
   }
   if (constraints.limitations) {
     parts.push(`- limitations = "${constraints.limitations}" → Avoid exercises conflicting with this limitation.`);
+  }
+  if (constraints.isOlderAdult && constraints.userAge !== null) {
+    parts.push(`- userAge = ${constraints.userAge} → THIS IS A ${constraints.userAge}-YEAR-OLD USER. OLDER ADULT PROGRAMMING FRAMEWORK APPLIES. THIS IS NON-NEGOTIABLE:`);
+    parts.push(`  • DO NOT include box jumps, broad jumps, power cleans, hang cleans, or any plyometric/Olympic lifting movements`);
+    parts.push(`  • Use MODERATE rep ranges: 8–12 for primary compound lifts, 12–15 for accessory work`);
+    parts.push(`  • Maximum 2–3 sets per exercise`);
+    parts.push(`  • Prioritize joint-friendly exercises: goblet squat > back squat, hip thrust > conventional deadlift, dumbbell press > heavy barbell press`);
+    parts.push(`  • Session structure: Prep (mobility/activation) → Primary Strength → Secondary → Accessory/Unilateral → Trunk`);
+    parts.push(`  • The B block (power/explosive) is REMOVED from this program — do not include it`);
+    parts.push(`  • Program name and description must be appropriate for a ${constraints.userAge}-year-old — not an "intermediate strength program" or "performance program"`);
+  } else if (constraints.userAge !== null) {
+    parts.push(`- userAge = ${constraints.userAge} → User is ${constraints.userAge} years old. Adjust exercise selection and intensity accordingly.`);
   }
   if (constraints.seasonContext) {
     const seasonLabels: Record<string, string> = {
