@@ -11,7 +11,7 @@
  */
 
 import { logger } from "./logger";
-import { buildSwapContext, getProgressions, findExerciseByName } from "./exercise-service";
+import { buildSwapContext, getProgressions, findExerciseByName, getSwapCandidates } from "./exercise-service";
 import { resolveHarderEasierFallback } from "./harder-easier-fallback";
 import { runIntentFamilyPipeline, logIntentFamilyDebug, type IntentFamilyPipelineResult } from "./intent-family-engine";
 import {
@@ -307,7 +307,7 @@ function buildEditSystemPrompt(
     : "";
 
   const swapSection = exerciseSwapContext
-    ? `\nEXERCISE SWAP INTELLIGENCE:\n${exerciseSwapContext}\nWhen performing a swap/replace:\n- If the user's request EXPLICITLY names a specific target exercise (e.g. "replace X with Pause Back Squat"), use EXACTLY that name — do not substitute with a candidate from the list.\n- If the user does NOT name a specific target (e.g. "swap this for something harder"), choose from the SWAP CANDIDATES or PROGRESSION OPTIONS list above.\n- Never invent exercise names not present in either the user's request or the candidates list.\n`
+    ? `\nEXERCISE SWAP INTELLIGENCE:\n${exerciseSwapContext}\nWhen performing a swap/replace:\n- If the user's request EXPLICITLY names a specific target exercise (e.g. "replace X with Pause Back Squat"), use EXACTLY that name — do not substitute with a candidate from the list.\n- If the user does NOT name a specific target (e.g. "swap this for something harder", "give me a different exercise", "replace this with something else"), this is an OPEN-ENDED SWAP. Choose the BEST candidate from the SWAP CANDIDATES list above automatically. Do NOT write vague placeholder text as the exercise name.\n- Never use placeholder phrases like "a different exercise", "another exercise", "something else", "another variation", or any similar generic text as an exercise name in a replace_exercise change.\n- Never invent exercise names not present in either the user's request or the candidates list.\n- The changeSummary must always state the EXACT exercise name chosen (e.g. "Broad Jump replaced with Box Jump") — never say "replaced with a different exercise".\n`
     : "";
 
   const intentFamilySection = intentFamilyDirective
@@ -650,11 +650,201 @@ const GENERIC_PLACEHOLDER_PATTERNS = [
   /^a\s+(progression|regression|substitution|alternative|modification)$/i,
   /^(more (challenging|difficult)|less (challenging|difficult))\s*(variation|option|exercise|version|alternative)?$/i,
   /^(harder|easier|simpler|advanced|beginner)\s+(squat|deadlift|bench|press|row|pull|push|hinge|lunge|carry|swing)\s+(variation|alternative|option|version)?$/i,
+  // ── Open-ended swap language (user wants system to choose, not a literal exercise name) ──
+  /^(a\s+)?(different|another|alternative|other|new)\s+(exercise|movement|variation|jump|squat|lift|drill|option|one)$/i,
+  /^something\s+(else|different|similar|better|new|other|more\s+suitable|appropriate)$/i,
+  /^(another|a\s+different)\s+one$/i,
+  /^(any|a)\s+(good\s+)?(alternative|substitute|replacement|option|choice|movement|exercise)$/i,
+  /^(a\s+)?different\s+(movement|exercise|option|variation|drill)$/i,
+  /^(a\s+)?(suitable|appropriate|better|similar)\s+(alternative|substitute|replacement|exercise|movement|option)$/i,
+  /^(another|a\s+different)\s+(jump|squat|press|pull|push|hinge|row|carry|drill|variation)$/i,
+  /^(a\s+)?(new|fresh)\s+(exercise|movement|option|variation|alternative)$/i,
+  /^something\s+(else\s+)?(here|instead)$/i,
+  /^(any|another)\s+(exercise|movement|option|variation|one)(\s+(here|instead))?$/i,
 ];
 
 export function isGenericPlaceholder(name: string): boolean {
   if (!name || name.trim().length === 0) return true;
   return GENERIC_PLACEHOLDER_PATTERNS.some((p) => p.test(name.trim()));
+}
+
+// ─── Open-Ended Swap Detection ────────────────────────────────────────────────
+//
+// Detects when a user's message contains swap intent with a vague/open-ended
+// replacement target — meaning the system should automatically choose the best
+// substitute from the library rather than treating the phrase as a literal name.
+//
+// Examples that match:
+//   "Swap broad jump for a different exercise"
+//   "Give me another jump here"
+//   "Replace this with something else"
+//   "Use a different movement"
+//   "Swap this for another variation"
+
+const OPEN_ENDED_SWAP_PATTERNS = [
+  /\b(a|an)?\s*(different|another|alternative|other|new)\s+(exercise|movement|variation|jump|squat|lift|drill|option|one)\b/i,
+  /\bsomething\s+(else|different|similar|better|new|other|more\s+suitable|appropriate)\b/i,
+  /\b(another|a\s+different)\s+one\b/i,
+  /\b(any|a)\s+(good\s+)?(alternative|substitute|replacement|option|choice)\b/i,
+  /\b(a\s+)?different\s+(movement|exercise|option|variation|drill)\b/i,
+  /\b(give\s+me|show\s+me|find\s+me)\s+(a|another)\s+(exercise|movement|variation|jump|option|alternative)\b/i,
+  /\b(replace|swap)\s+(this|it)\s+(out\s+)?(?:for|with)\s+(something|anything|another|a\s+different)\b/i,
+  /\b(another|a\s+different)\s+(jump|squat|press|pull|push|hinge|row|carry|drill|variation)\b/i,
+  /\b(use|try)\s+a\s+(different|new|alternative)\s+(exercise|movement|variation|option)\b/i,
+  /\b(a\s+)?new\s+(exercise|movement|option|variation|alternative)\b/i,
+  /\bswap\s+.+?\s+(?:for|with)\s+(a\s+)?(different|another|alternative)\b/i,
+  /\b(change|switch)\s+.+?\s+to\s+(something|anything|another)\b/i,
+];
+
+export function isOpenEndedSwapLanguage(text: string): boolean {
+  return OPEN_ENDED_SWAP_PATTERNS.some((p) => p.test(text));
+}
+
+// ─── Swap Source Name Extractor ───────────────────────────────────────────────
+// When a swap request lacks a specific target context but names the source exercise
+// in the text, extract that source name so we can find candidates for it.
+
+function extractSwapSourceName(userRequest: string): string | null {
+  const match =
+    userRequest.match(/(?:swap|replace)\s+(.+?)\s+(?:for|with)\s+/i)?.[1]?.trim() ||
+    userRequest.match(/(?:change|switch)\s+(.+?)\s+to\s+/i)?.[1]?.trim() ||
+    null;
+
+  if (!match) return null;
+
+  const lower = match.toLowerCase().trim();
+  // Skip generic source references
+  if (/^(this|it|out|the exercise|the movement|this exercise|this movement)$/.test(lower)) return null;
+  if (match.length > 60) return null; // too long to be an exercise name
+
+  return match;
+}
+
+// ─── Equipment Level Resolver ─────────────────────────────────────────────────
+
+function resolveEquipmentLevel(system: any): string {
+  const access = (system.equipmentAccess ?? "").toLowerCase();
+  if ((access.includes("dumbbell") && !access.includes("barbell")) || access.includes("dumbbells_only")) {
+    return "dumbbells_only";
+  }
+  if (access.includes("bodyweight") || access.includes("no equipment") || access.includes("bodyweight_only")) {
+    return "bodyweight";
+  }
+  return "full_gym";
+}
+
+// ─── Injury Flags Resolver ────────────────────────────────────────────────────
+
+function resolveInjuryFlags(system: any): string[] {
+  const flags = system.injuryFlags ?? system.specialConsiderations;
+  if (!flags) return [];
+  return [flags].flat().filter(Boolean) as string[];
+}
+
+// ─── Open-Ended Swap Auto-Selector ───────────────────────────────────────────
+//
+// When the user's swap intent is clear but the replacement is open-ended,
+// this function automatically selects the best valid substitute from the library.
+//
+// Ranking policy:
+//   1. Cluster members (same movement family / direct swap alternatives)
+//   2. Movement-pattern fallback (same pattern, filtered by equipment/injury)
+//   3. null (no safe substitute found — fall through to AGENT or clarification)
+//
+// The selected substitute is immediately committed as a canonical exercise.
+// No vague placeholder text is ever written.
+
+async function autoSelectOpenEndedSwap(opts: {
+  exerciseName: string;
+  exerciseId: number;
+  userRequest: string;
+  system: any;
+}): Promise<EditPlan | null> {
+  const { exerciseName, exerciseId, userRequest, system } = opts;
+
+  const equipmentLevel = resolveEquipmentLevel(system);
+  const injuryFlags = resolveInjuryFlags(system);
+
+  const debugInfo: Record<string, unknown> = {
+    originalRequest: userRequest.slice(0, 120),
+    swapMode: "OPEN_ENDED_SWAP",
+    currentExercise: exerciseName,
+    equipmentLevel,
+    injuryFlags,
+  };
+
+  let candidates: Awaited<ReturnType<typeof getSwapCandidates>> = [];
+
+  try {
+    candidates = await getSwapCandidates({
+      exerciseName,
+      equipmentLevel,
+      injuryFlags,
+      maxCount: 8,
+    });
+  } catch (err) {
+    logger.warn({ err, exerciseName }, "[OpenEndedSwap] getSwapCandidates threw — cannot auto-resolve");
+    return null;
+  }
+
+  debugInfo.candidateList = candidates.map((c) => c.name);
+  debugInfo.candidateCount = candidates.length;
+
+  if (candidates.length === 0) {
+    debugInfo.result = "no_candidates";
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[open-ended-swap:debug]", JSON.stringify(debugInfo));
+    }
+    logger.warn({ exerciseName }, "[OpenEndedSwap] No candidates found — cannot auto-resolve");
+    return null;
+  }
+
+  // Pick best candidate (already ranked: cluster → pattern)
+  const selected = candidates[0];
+  const selectedName = selected.name;
+
+  // Build a human rationale for the change summary
+  const patternLabel = selected.movementPattern?.replace(/_/g, " ") ?? "similar movement";
+  const rationale = selected.clusterId
+    ? `to preserve the same movement family`
+    : `to maintain the ${patternLabel} pattern`;
+
+  debugInfo.selectedSubstitute = selectedName;
+  debugInfo.rankingReason = selected.clusterId ? "cluster_match" : "movement_pattern_fallback";
+  debugInfo.clarificationBypassed = true;
+  debugInfo.result = "auto_selected";
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[open-ended-swap:debug]", JSON.stringify(debugInfo));
+  }
+
+  logger.info(
+    {
+      exerciseName,
+      selectedSubstitute: selectedName,
+      rankingReason: debugInfo.rankingReason,
+      candidateCount: candidates.length,
+      swapMode: "OPEN_ENDED_SWAP",
+    },
+    "[OpenEndedSwap] Auto-selected substitute — committing canonical exercise"
+  );
+
+  return {
+    intent: "swap_exercise",
+    scope: "exercise",
+    changeSummary: `${exerciseName} replaced with ${selectedName} — chosen ${rationale}. Sets, reps, and rest carried over from the original slot.`,
+    changes: [
+      {
+        type: "replace_exercise",
+        id: exerciseId,
+        replacement: {
+          name: selectedName,
+          notes: `Substituted for ${exerciseName} (${patternLabel} pattern preserved).`,
+        },
+        reason: `Open-ended swap auto-selection: ${exerciseName} → ${selectedName} (${rationale})`,
+      },
+    ],
+  };
 }
 
 // ─── Exercise-Aware Harder / Easier Mutation Builders ────────────────────────
@@ -1875,6 +2065,16 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
     if (forMatch && currentSession) {
       const fromName = forMatch[1].trim();
       const toName = forMatch[2].trim();
+      // Guard: if the replacement target is open-ended/vague, do NOT commit it as an exercise name.
+      // The open-ended swap path in interpretEditRequest (Step 2.5) will handle this asynchronously.
+      if (isGenericPlaceholder(toName) || isOpenEndedSwapLanguage(toName)) {
+        logger.info(
+          { fromName, toName: toName.slice(0, 60), reason: "open_ended_target" },
+          "[interpretWithRules] Open-ended swap target detected — skipping rule commit, deferring to auto-select"
+        );
+        // Return empty changes — caller (interpretEditRequest Step 2.5) handles this
+        return { intent: "swap_exercise", scope: "exercise", changeSummary: "", changes: [] };
+      }
       const targetEx = currentSession.exercises?.find((e: any) => e.name.toLowerCase().includes(fromName.toLowerCase()));
       if (targetEx) {
         return {
@@ -2259,6 +2459,110 @@ export async function interpretEditRequest(
       "[EditRouter] Deterministic path produced no changes — auto-escalating to AGENT"
     );
     // Fall through to AGENT path
+  }
+
+  // ── Step 2.5: OPEN-ENDED SWAP auto-resolution ────────────────────────────
+  //
+  // Triggered when:
+  //   a) The user's message contains swap intent with a vague/open-ended replacement
+  //      (e.g. "swap broad jump for a different exercise", "replace this with something else")
+  //   b) We have enough information to identify the source exercise
+  //
+  // The system automatically picks the best valid substitute from the exercise library.
+  // This is a deterministic async step — no OpenAI cost. Skips AGENT entirely when
+  // a valid candidate is found.
+  //
+  // Swap modes:
+  //   EXACT_SWAP        — user names a specific replacement → DETERMINISTIC (handled above)
+  //   OPEN_ENDED_SWAP   — user uses vague language → THIS STEP auto-selects
+  //   CLARIFICATION_REQ — no safe substitute found → falls through to AGENT
+  {
+    const openEndedDetected = isOpenEndedSwapLanguage(userRequest);
+
+    if (openEndedDetected) {
+      let swapSourceName: string | null = null;
+      let swapSourceId: number | undefined;
+
+      // Case A: Exercise target context provided (user clicked the exercise)
+      if (targetContext?.type === "exercise" && targetContext.label) {
+        swapSourceName = targetContext.label;
+        swapSourceId = targetContext.id;
+      }
+      // Case B: No exercise context — try to extract source name from request text
+      else {
+        const extracted = extractSwapSourceName(userRequest);
+        if (extracted) {
+          // Try to find this exercise in the system by name match
+          outer: for (const phase of system.phases ?? []) {
+            for (const week of phase.weeks ?? []) {
+              for (const session of week.sessions ?? []) {
+                const found = (session.exercises ?? []).find(
+                  (ex: any) => ex.name.toLowerCase().includes(extracted.toLowerCase())
+                );
+                if (found) {
+                  swapSourceName = found.name;
+                  swapSourceId = found.id;
+                  break outer;
+                }
+              }
+            }
+          }
+          if (!swapSourceId) {
+            // Use the extracted text even without a DB id — let autoSelect try
+            swapSourceName = extracted;
+          }
+        }
+      }
+
+      if (swapSourceName && swapSourceId) {
+        logger.info(
+          { swapSourceName, swapSourceId, request: userRequest.slice(0, 100), swapMode: "OPEN_ENDED_SWAP" },
+          "[EditRouter] Open-ended swap detected — attempting auto-selection from library"
+        );
+
+        try {
+          const openEndedPlan = await autoSelectOpenEndedSwap({
+            exerciseName: swapSourceName,
+            exerciseId: swapSourceId,
+            userRequest,
+            system,
+          });
+
+          if (openEndedPlan && openEndedPlan.changes.length > 0) {
+            logger.info(
+              {
+                exerciseName: swapSourceName,
+                selectedSubstitute: (openEndedPlan.changes[0] as any)?.replacement?.name,
+                swapMode: "OPEN_ENDED_SWAP",
+                route: "auto_selected_no_ai",
+              },
+              "[EditRouter] Open-ended swap auto-resolved — OpenAI not called"
+            );
+            return {
+              ...openEndedPlan,
+              _debugRoute: {
+                openaiCalled: false,
+                openaiSucceeded: false,
+                pathUsed: "deterministic",
+              },
+            };
+          }
+
+          // No candidates found — log and fall through to AGENT for intelligent fallback
+          logger.warn(
+            { exerciseName: swapSourceName, swapMode: "OPEN_ENDED_SWAP" },
+            "[EditRouter] Open-ended swap: no library candidates — escalating to AGENT"
+          );
+        } catch (err) {
+          logger.warn({ err, swapSourceName }, "[EditRouter] Open-ended swap resolution threw — falling through to AGENT");
+        }
+      } else {
+        logger.info(
+          { request: userRequest.slice(0, 100), swapMode: "OPEN_ENDED_SWAP" },
+          "[EditRouter] Open-ended swap: source exercise unclear — escalating to AGENT for interpretation"
+        );
+      }
+    }
   }
 
   // ── Step 3: AGENT path — build exercise intelligence context ─────────────
