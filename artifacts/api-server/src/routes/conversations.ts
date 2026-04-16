@@ -24,7 +24,8 @@ import { stripeStorage } from "../lib/stripeStorage";
 import { interpretEditRequest, resolveTargetFromRequest } from "../lib/edit-intent-service";
 import { applyEditPlan, type EditResult } from "../lib/edit-engine";
 import type { VerificationStatus } from "../lib/mutation-verifier";
-import { createChangeLogEntry } from "../lib/change-log-service";
+import { createChangeLogEntry, type SystemSnapshot } from "../lib/change-log-service";
+import { applyMutation } from "../lib/mutation-engine";
 import { interpretNeuralGraph, buildNeuralAdjustmentSummary, type NeuralBias, type Imbalance } from "../lib/neural-graph-interpreter";
 import { getActiveTrainingSystem, getFullTrainingSystem, createTrainingSystemFromProgram, upsertTrainingSystemFromProgram, dbSystemToProgramStructure } from "../lib/training-system-service";
 import { buildDecisionMemory } from "../lib/decision-memory-service";
@@ -1149,28 +1150,22 @@ Keep it helpful and intelligent, never promotional.`;
     }
 
     logger.info(
-      { userId, systemId: resolvedSystem.id, intentType: intentResult.type, editSubtype: intentResult.editSubtype, wasAutoCreated: systemAutoCreatedForEdit },
-      "[VibeEdit] Entering vibe edit mode — editing real training system from chat"
+      { userId, systemId: resolvedSystem.id, intentType: intentResult.type, mutationType: execPlan.mutation?.type ?? null, wasAutoCreated: systemAutoCreatedForEdit },
+      "[MutationEngine] Entering mutation mode — deterministic edit, no AI interpretation"
     );
 
     try {
-      // Load full system + decision memory in parallel
-      const [fullSystem, decisionMemory] = await Promise.all([
-        getFullTrainingSystem(resolvedSystem.id),
-        buildDecisionMemory(resolvedSystem.id, userId).catch(() => null),
-      ]);
+      // ── 1. Resolve the program to mutate ──────────────────────────────────
+      let programToMutate: ProgramStructure | null = latestStructuredProgram;
+      if (!programToMutate && resolvedSystem) {
+        const fullSys = await getFullTrainingSystem(resolvedSystem.id);
+        programToMutate = fullSys ? dbSystemToProgramStructure(fullSys) : null;
+      }
 
-      if (!fullSystem) {
-        // getFullTrainingSystem returned null — cannot run the edit pipeline.
-        // Return an edit-aware error response immediately. NEVER fall through to
-        // the standard AI path (which would produce generic build-style text).
-        logger.warn({ systemId: resolvedSystem.id }, "[VibeEdit] getFullTrainingSystem returned null — returning load error instead of falling through to build path");
-        const sysLoadErrContent = `I wasn't able to load your program data for that edit right now. Your program hasn't been modified — give it another try in a moment.`;
-        const [sysLoadErrMsg] = await db.insert(messagesTable).values({
-          conversationId: params.data.id,
-          role: "assistant",
-          content: sysLoadErrContent,
-          structuredData: null,
+      if (!programToMutate) {
+        const errContent = `I need a structured training program to apply that change. Build a program first, then I can handle any adjustments you need.`;
+        const [errMsg] = await db.insert(messagesTable).values({
+          conversationId: params.data.id, role: "assistant", content: errContent, structuredData: null,
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
         if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
@@ -1178,261 +1173,98 @@ Keep it helpful and intelligent, never promotional.`;
         }
         res.json({
           userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
-          assistantMessage: { id: sysLoadErrMsg.id, conversationId: sysLoadErrMsg.conversationId, role: sysLoadErrMsg.role, content: sysLoadErrMsg.content, createdAt: sysLoadErrMsg.createdAt.toISOString(), structuredData: null },
+          assistantMessage: { id: errMsg.id, conversationId: errMsg.conversationId, role: errMsg.role, content: errMsg.content, createdAt: errMsg.createdAt.toISOString(), structuredData: null },
           planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
           intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
           systemEdit: { applied: false },
-          editFailure: { reason: "pipeline_error" },
-        });
-        return;
-      } else {
-        // For program_transformation intents, enrich the user request with
-        // explicit block-level instructions so the edit engine makes real
-        // structural changes instead of trying to find a specific entity.
-        const isProgramTransformation = intentResult.editSubtype === "program_transformation";
-        const transformationDirection = isProgramTransformation
-          ? (intentResult.metadata?.direction as string) ?? "focus shift"
-          : null;
-
-        const effectiveEditRequest = isProgramTransformation
-          ? `[PROGRAM TRANSFORMATION — GLOBAL FOCUS SHIFT]\nUser request: "${parsed.data.content}"\n\nTransformation direction: ${transformationDirection}\n\nThis is a program-wide transformation, NOT a surgical exercise edit. You MUST:\n- Use scope: "block" (affects the whole phase/block)\n- Apply the matching BLOCK MUTATION RULE from your instructions (e.g., ENDURANCE_TRANSFORMATION, CONDITIONING_TRANSFORMATION, SPEED_TRANSFORMATION, INTENSITY_TRANSFORMATION, INCREASE_POWER_BIAS, INCREASE_HYPERTROPHY_BIAS, or INCREASE_SPORT_SPECIFICITY)\n- Make real structural changes: update exercises, rest intervals, rep ranges, session emphases, and phase goal across MULTIPLE sessions\n- Do NOT produce a notes-only update — exercise-level and session-level changes are required\n- Keep all primary compound lifts (squats, deadlifts, presses) intact\n- changeSummary must name specific exercises added/changed and sessions affected`
-          : parsed.data.content;
-
-        // DEFAULT EXECUTION LAYER — resolve day/session references before calling OpenAI
-        const nonStreamUIContext = (req.body as any)?.uiContext ?? null;
-        const resolvedTarget = isProgramTransformation
-          ? undefined
-          : resolveTargetFromRequest(parsed.data.content, fullSystem, nonStreamUIContext);
-
-        if (resolvedTarget) {
-          logger.info(
-            { targetType: resolvedTarget.type, targetId: resolvedTarget.id, targetLabel: resolvedTarget.label },
-            "[VibeEdit] DefaultExecution resolved target context — skipping ambiguous ID inference"
-          );
-        }
-
-        // Interpret + apply the edit
-        const editPlan = await interpretEditRequest(
-          effectiveEditRequest,
-          fullSystem,
-          resolvedTarget,
-          adaptationCtx || undefined,
-          decisionMemory?.decisionMemoryContext || undefined,
-        );
-
-        logger.info(
-          { intent: editPlan.intent, scope: editPlan.scope, changes: editPlan.changes.length },
-          "[VibeEdit] Edit plan generated"
-        );
-
-        const editResult = await applyEditPlan(editPlan);
-
-        logger.info(
-          { applied: editResult.appliedCount, skipped: editResult.skippedCount, summary: editResult.changeSummary },
-          "[VibeEdit] Edit plan applied"
-        );
-
-        if (editResult.appliedCount > 0) {
-          const verification = editResult.verification;
-
-          // Phase 2: If verification fails — the DB wrote but the state didn't change
-          if (verification.status === "failed") {
-            logger.warn(
-              { intent: editPlan.intent, summary: verification.summary },
-              "[VibeEdit] Verification FAILED — changes applied but not detected in post-state"
-            );
-            const failedContent = `I applied the change but something didn't land cleanly in your program. Let me take another pass at it.\n\nCould you give me a little more direction? For example: the specific exercise name, which day or session it's in, or exactly what you want to change (sets, reps, rest, or movement). That'll help me lock it in precisely.`;
-            const [failedMsg] = await db.insert(messagesTable).values({
-              conversationId: params.data.id, role: "assistant",
-              content: failedContent, structuredData: null,
-            }).returning();
-            await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-            if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-              stripeStorage.incrementMessageCount(userId).catch(() => {});
-            }
-            res.json({
-              userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
-              assistantMessage: { id: failedMsg.id, conversationId: failedMsg.conversationId, role: failedMsg.role, content: failedMsg.content, createdAt: failedMsg.createdAt.toISOString(), structuredData: null },
-              planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
-              intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
-              systemEdit: { applied: false },
-              editFailure: { reason: "verification_failed", verificationSummary: verification.summary },
-            });
-            return;
-          }
-
-          // Aggregate the AI's per-change reasons into a single "whyChanged" string
-          const whyChangedParts = editPlan.changes
-            .map((c) => c.reason)
-            .filter((r): r is string => !!r);
-          const whyChanged = whyChangedParts.length > 0 ? whyChangedParts.join("; ") : undefined;
-
-          const isStructuralVibeEdit = editPlan.scope === "system" || editPlan.scope === "block";
-
-          // Log the change to system_change_log (only reached when verification passes)
-          const changeLogId = await createChangeLogEntry({
-            userId,
-            trainingSystemId: resolvedSystem.id,
-            source: "ai_edit",
-            intent: editPlan.intent,
-            scope: editPlan.scope,
-            changeSummary: editResult.changeSummary,
-            requestText: parsed.data.content,
-            beforeSnapshot: editResult.beforeSnapshot,
-            afterSnapshot: editResult.afterSnapshot,
-            appliedCount: editResult.appliedCount,
-            skippedCount: editResult.skippedCount,
-            versionOverrides: isStructuralVibeEdit ? { isMajorVersion: true } : undefined,
-            decisionMetadata: {
-              whyChanged,
-              intentType: intentResult.type,
-              editSubtype: intentResult.editSubtype ?? undefined,
-              verification: {
-                status: verification.status,
-                verifiedCount: verification.verifiedChanges.length,
-                missingCount: verification.missingChanges.length,
-                requiresReview: verification.requiresReview ?? false,
-              },
-            },
-          });
-
-          // Build coaching response — now verification-aware
-          const coachingContent = buildVibeEditCoachingResponse(editResult);
-
-          // Store the systemEdit marker in structuredData so MessageBubble
-          // can render a SystemUpdateCard in the conversation history
-          const systemEditData = {
-            _type: "system_edit" as const,
-            changeSummary: editResult.changeSummary,
-            changedIds: editResult.changedIds,
-            systemId: resolvedSystem.id,
-            changeLogId,
-            verificationStatus: verification.status,
-          };
-
-          const [assistantMessage] = await db.insert(messagesTable).values({
-            conversationId: params.data.id,
-            role: "assistant",
-            content: coachingContent,
-            structuredData: JSON.stringify(systemEditData),
-          }).returning();
-
-          await db.update(conversationsTable)
-            .set({ updatedAt: new Date() })
-            .where(eq(conversationsTable.id, params.data.id));
-
-          if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-            stripeStorage.incrementMessageCount(userId).catch(() => {});
-          }
-
-          res.json({
-            userMessage: {
-              id: userMessage.id,
-              conversationId: userMessage.conversationId,
-              role: userMessage.role,
-              content: userMessage.content,
-              createdAt: userMessage.createdAt.toISOString(),
-              structuredData: null,
-            },
-            assistantMessage: {
-              id: assistantMessage.id,
-              conversationId: assistantMessage.conversationId,
-              role: assistantMessage.role,
-              content: assistantMessage.content,
-              createdAt: assistantMessage.createdAt.toISOString(),
-              structuredData: assistantMessage.structuredData ?? null,
-            },
-            planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
-            intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
-            ...(process.env.NODE_ENV !== "production" && editPlan._debugRoute ? { routeDebug: { ...editPlan._debugRoute, intentType: intentResult.type, editSubtype: intentResult.editSubtype ?? null, requestPreview: parsed.data.content.slice(0, 120) } } : {}),
-            systemEdit: {
-              applied: true,
-              changeSummary: editResult.changeSummary,
-              changedIds: editResult.changedIds,
-              changeTargets: editResult.changeTargets,
-              systemId: resolvedSystem.id,
-              changeLogId,
-              verificationStatus: verification.status as VerificationStatus,
-              requiresReview: verification.requiresReview ?? false,
-            },
-          });
-          return;
-        }
-
-        // Edit plan produced no applied changes — return agentic coaching response, do NOT pretend success
-        logger.warn(
-          { intent: editPlan.intent, scope: editPlan.scope, skipped: editResult.skippedCount, editSubtype: intentResult.editSubtype },
-          "[VibeEdit] No changes applied — returning agentic clarification response"
-        );
-        const noOpContent = buildAgenticNoChangesResponse(
-          parsed.data.content,
-          editPlan.intent,
-          editPlan.scope,
-          intentResult.editSubtype,
-          resolvedTarget
-        );
-
-        // Detect when the response is a scope clarification question (block/system scope with no day ref)
-        // and write a pending clarification record so the next reply can resume the mutation.
-        const isNoOpScopeQuestion =
-          (editPlan.scope === "block" || editPlan.scope === "system" || intentResult.editSubtype === "program_transformation") &&
-          !/\bday\s+\d+\b|\bsession\s+\d+\b|\b(first|second|third|fourth|fifth|sixth|seventh)\s+(day|session)\b/.test(parsed.data.content.toLowerCase());
-
-        if (isNoOpScopeQuestion) {
-          const familyResult = normalizeToIntentFamily(parsed.data.content);
-          writePendingClarification({
-            conversationId: params.data.id,
-            userId,
-            targetProgramId: resolvedSystem.id,
-            targetSessionId: resolvedTarget?.type === "session" ? resolvedTarget.id : null,
-            originalRequest: parsed.data.content,
-            intentFamily: familyResult.family,
-            pendingAspect: "scope",
-            clarificationQuestion: noOpContent,
-            editSubtype: intentResult.editSubtype ?? null,
-            editIntent: editPlan.intent,
-          }).catch((err) => logger.warn({ err }, "[PendingClarification] Failed to write record for noOp scope question — non-fatal"));
-
-          logger.info(
-            {
-              conversationId: params.data.id,
-              intentFamily: familyResult.family,
-              editPlanIntent: editPlan.intent,
-              editPlanScope: editPlan.scope,
-            },
-            "[VibeEdit] Scope clarification question written as pending clarification"
-          );
-        }
-
-        const [noOpMessage] = await db.insert(messagesTable).values({
-          conversationId: params.data.id,
-          role: "assistant",
-          content: noOpContent,
-          structuredData: null,
-        }).returning();
-        await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-          stripeStorage.incrementMessageCount(userId).catch(() => {});
-        }
-        res.json({
-          userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
-          assistantMessage: { id: noOpMessage.id, conversationId: noOpMessage.conversationId, role: noOpMessage.role, content: noOpMessage.content, createdAt: noOpMessage.createdAt.toISOString(), structuredData: null },
-          planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
-          intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
-          ...(process.env.NODE_ENV !== "production" && editPlan._debugRoute ? { routeDebug: { ...editPlan._debugRoute, intentType: intentResult.type, editSubtype: intentResult.editSubtype ?? null, requestPreview: parsed.data.content.slice(0, 120) } } : {}),
-          systemEdit: { applied: false },
-          editFailure: { reason: "no_changes_applied", skippedCount: editResult.skippedCount },
         });
         return;
       }
-    } catch (err: any) {
-      logger.error({ err: err?.message, stack: err?.stack }, "[VibeEdit] Edit pipeline threw — returning error response to user");
-      const errContent = `Something went wrong on my end while applying that change — your program hasn't been modified.\n\nGive it another try. If it keeps happening, try being a bit more specific: name the exercise, the day, or exactly what you want to change and I'll lock it in.`;
-      const [errMessage] = await db.insert(messagesTable).values({
+
+      // ── 2. Apply the mutation deterministically ────────────────────────────
+      const mutResult = await applyMutation({ plan: execPlan, program: programToMutate });
+      logger.info(
+        { summary: mutResult.changeSummary, systemId: resolvedSystem.id, mutationType: execPlan.mutation?.type },
+        "[MutationEngine] Mutation applied — persisting to DB"
+      );
+
+      // ── 3. Persist updated program (updates in place — keeps same system ID) ─
+      await upsertTrainingSystemFromProgram(userId, mutResult.updatedProgram);
+
+      // ── 4. Log the change ──────────────────────────────────────────────────
+      const emptySnapshot: SystemSnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
+      const mutScope = execPlan.scope.type === "program" ? "block" : execPlan.scope.type === "session" ? "session" : "exercise";
+      const changeLogId = await createChangeLogEntry({
+        userId,
+        trainingSystemId: resolvedSystem.id,
+        source: "ai_edit",
+        intent: execPlan.intentFamily ?? "edit_program",
+        scope: mutScope as any,
+        changeSummary: mutResult.changeSummary,
+        requestText: parsed.data.content,
+        beforeSnapshot: emptySnapshot,
+        afterSnapshot: emptySnapshot,
+        fullProgramSnapshot: mutResult.updatedProgram as unknown as Record<string, unknown>,
+        appliedCount: 1,
+        skippedCount: 0,
+        decisionMetadata: {
+          intentType: intentResult.type,
+          editSubtype: intentResult.editSubtype ?? undefined,
+          executionPlanAction: execPlan.action,
+          mutationType: execPlan.mutation?.type ?? null,
+          scope: execPlan.scope,
+        },
+      });
+
+      // ── 5. Coaching response + persist message ─────────────────────────────
+      const coachingContent = mutResult.changeSummary.endsWith(".")
+        ? mutResult.changeSummary
+        : `${mutResult.changeSummary}.`;
+
+      const systemEditData = {
+        _type: "system_edit" as const,
+        changeSummary: mutResult.changeSummary,
+        changedIds: [] as number[],
+        systemId: resolvedSystem.id,
+        changeLogId,
+        verificationStatus: "verified",
+      };
+
+      const [assistantMessage] = await db.insert(messagesTable).values({
         conversationId: params.data.id,
         role: "assistant",
-        content: errContent,
-        structuredData: null,
+        content: coachingContent,
+        structuredData: JSON.stringify(systemEditData),
+      }).returning();
+
+      await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+      if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+        stripeStorage.incrementMessageCount(userId).catch(() => {});
+      }
+
+      res.json({
+        userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
+        assistantMessage: { id: assistantMessage.id, conversationId: assistantMessage.conversationId, role: assistantMessage.role, content: assistantMessage.content, createdAt: assistantMessage.createdAt.toISOString(), structuredData: assistantMessage.structuredData ?? null },
+        planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+        intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
+        systemEdit: {
+          applied: true,
+          changeSummary: mutResult.changeSummary,
+          changedIds: [],
+          changeTargets: [],
+          systemId: resolvedSystem.id,
+          changeLogId,
+          verificationStatus: "verified" as VerificationStatus,
+          requiresReview: false,
+        },
+      });
+      return;
+
+    } catch (err: any) {
+      logger.error({ err: err?.message, stack: err?.stack }, "[MutationEngine] Mutation threw — returning error response");
+      const errContent = `Something went wrong applying that change — your program hasn't been modified. Give it another try, and if it keeps happening, try being more specific about which exercise or day you mean.`;
+      const [errMessage] = await db.insert(messagesTable).values({
+        conversationId: params.data.id, role: "assistant", content: errContent, structuredData: null,
       }).returning();
       await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
       if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
@@ -1444,7 +1276,7 @@ Keep it helpful and intelligent, never promotional.`;
         planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
         intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
         systemEdit: { applied: false },
-        editFailure: { reason: "pipeline_error" },
+        editFailure: { reason: "mutation_engine_error" },
       });
       return;
     }
@@ -2473,208 +2305,122 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     }
 
     try {
-      const [fullSystem, decisionMemory] = await Promise.all([
-        getFullTrainingSystem(resolvedSystem.id),
-        buildDecisionMemory(resolvedSystem.id, userId).catch(() => null),
-      ]);
+      // ── Stage 4: Plan ──────────────────────────────────────────────────────
+      emit(buildStageEvent("planning", intentResult.type, actionDecision.actionType));
 
-      if (fullSystem) {
-        // Stage 4: Plan Modifications — interpretEditRequest analyses what needs to change
-        emit(buildStageEvent("planning", intentResult.type, actionDecision.actionType));
+      // ── 1. Resolve the program to mutate ──────────────────────────────────
+      let programToMutate: ProgramStructure | null = latestStructuredProgram;
+      if (!programToMutate && resolvedSystem) {
+        const fullSys = await getFullTrainingSystem(resolvedSystem.id);
+        programToMutate = fullSys ? dbSystemToProgramStructure(fullSys) : null;
+      }
 
-        // DEFAULT EXECUTION LAYER — resolve day/session/week references before calling OpenAI.
-        // Converts "add exercises to day 1" or "change week 2" into a concrete TargetContext
-        // so the AI receives an explicit entity ID rather than inferring it from serialized text.
-        const streamResolvedTarget = resolveTargetFromRequest(
-          parsed.data.content, fullSystem, streamUIContext
-        );
-
-        if (streamResolvedTarget) {
-          logger.info(
-            { targetType: streamResolvedTarget.type, targetId: streamResolvedTarget.id, targetLabel: streamResolvedTarget.label },
-            "[VibeEdit:stream] DefaultExecution resolved target context — skipping ambiguous ID inference"
-          );
-        }
-
-        const editPlan = await interpretEditRequest(
-          parsed.data.content, fullSystem, streamResolvedTarget,
-          adaptationCtx || undefined, decisionMemory?.decisionMemoryContext || undefined,
-        );
-
-        // Stage 5: Apply Changes — edit engine modifies the program object
-        emit(buildStageEvent("applying", intentResult.type, actionDecision.actionType));
-
-        const editResult = await applyEditPlan(editPlan);
-
-        if (editResult.appliedCount > 0) {
-          const verification = editResult.verification;
-
-          // Phase 2: Verification gate — only proceed to success if state actually changed
-          if (verification.status === "failed") {
-            logger.warn(
-              { intent: editPlan.intent, summary: verification.summary },
-              "[VibeEdit:stream] Verification FAILED — changes applied but not detected in post-state"
-            );
-            const failedContent = `I applied the change but something didn't land cleanly in your program. Let me take another pass at it.\n\nCould you give me a little more direction? For example: the specific exercise name, which day or session it's in, or exactly what you want to change (sets, reps, rest, or movement). That'll help me lock it in precisely.`;
-            const [failedMsg] = await db.insert(messagesTable).values({
-              conversationId: params.data.id, role: "assistant", content: failedContent, structuredData: null,
-            }).returning();
-            await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-            if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-              stripeStorage.incrementMessageCount(userId).catch(() => {});
-            }
-            done({
-              ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: failedMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure" }),
-              systemEdit: { applied: false },
-              editFailure: { reason: "verification_failed", verificationSummary: verification.summary },
-              mutationApplied: true,
-              ...(editPlan._debugRoute ? { routeDebug: { ...editPlan._debugRoute } } : {}),
-            });
-            return;
-          }
-
-          // Stage 6: Validate — verification passed; then save
-          emit(buildStageEvent("validating", intentResult.type, actionDecision.actionType));
-
-          // Stage 7: Save Program State
-          emit(buildStageEvent("saving", intentResult.type, actionDecision.actionType));
-
-          const isStructuralVibeEdit = editPlan.scope === "system" || editPlan.scope === "block";
-          const whyChangedParts = editPlan.changes.map((c: any) => c.reason).filter((r: any): r is string => !!r);
-          const vibeWhyChanged = whyChangedParts.length > 0 ? whyChangedParts.join("; ") : undefined;
-
-          const changeLogId = await createChangeLogEntry({
-            userId, trainingSystemId: resolvedSystem.id, source: "ai_edit",
-            intent: editPlan.intent, scope: editPlan.scope,
-            changeSummary: editResult.changeSummary, requestText: parsed.data.content,
-            beforeSnapshot: editResult.beforeSnapshot, afterSnapshot: editResult.afterSnapshot,
-            appliedCount: editResult.appliedCount, skippedCount: editResult.skippedCount,
-            versionOverrides: isStructuralVibeEdit ? { isMajorVersion: true } : undefined,
-            decisionMetadata: {
-              whyChanged: vibeWhyChanged,
-              intentType: intentResult.type,
-              editSubtype: intentResult.editSubtype ?? undefined,
-              verification: {
-                status: verification.status,
-                verifiedCount: verification.verifiedChanges.length,
-                missingCount: verification.missingChanges.length,
-                requiresReview: verification.requiresReview ?? false,
-              },
-            },
-          });
-
-          const coachingContent = buildVibeEditCoachingResponse(editResult);
-          const systemEditData = {
-            _type: "system_edit" as const,
-            changeSummary: editResult.changeSummary,
-            changedIds: editResult.changedIds,
-            systemId: resolvedSystem.id,
-            changeLogId,
-            verificationStatus: verification.status,
-          };
-
-          const [assistantMessage] = await db.insert(messagesTable).values({
-            conversationId: params.data.id, role: "assistant",
-            content: coachingContent, structuredData: JSON.stringify(systemEditData),
-          }).returning();
-
-          await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-
-          if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-            stripeStorage.incrementMessageCount(userId).catch(() => {});
-          }
-
-          done({
-            ...buildCompleteEvent({
-              userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo,
-              intentResultVal: intentResult, systemSavedVal: systemAutoCreatedForEdit,
-              systemIdVal: systemAutoCreatedForEdit ? resolvedSystem.id : undefined,
-              outcomeTypeVal: "mutation_applied",
-            }),
-            systemEdit: {
-              applied: true,
-              changeSummary: editResult.changeSummary,
-              changedIds: editResult.changedIds,
-              changeTargets: editResult.changeTargets,
-              systemId: resolvedSystem.id,
-              changeLogId,
-              verificationStatus: verification.status as VerificationStatus,
-              requiresReview: verification.requiresReview ?? false,
-            },
-          });
-          return;
-        }
-        // No changes applied — return agentic coaching response, do NOT fall through to AI
-        logger.warn({ intent: editPlan.intent, scope: editPlan.scope, skipped: editResult.skippedCount, editSubtype: intentResult.editSubtype }, "[VibeEdit:stream] No changes applied — returning agentic clarification response");
-        const noOpContent = buildAgenticNoChangesResponse(
-          parsed.data.content,
-          editPlan.intent,
-          editPlan.scope,
-          intentResult.editSubtype,
-          streamResolvedTarget
-        );
-
-        // Detect scope clarification question and write pending state
-        const isNoOpScopeQuestion =
-          (editPlan.scope === "block" || editPlan.scope === "system" || intentResult.editSubtype === "program_transformation") &&
-          !/\bday\s+\d+\b|\bsession\s+\d+\b|\b(first|second|third|fourth|fifth|sixth|seventh)\s+(day|session)\b/.test(parsed.data.content.toLowerCase());
-
-        if (isNoOpScopeQuestion) {
-          const familyResult = normalizeToIntentFamily(parsed.data.content);
-          writePendingClarification({
-            conversationId: params.data.id, userId,
-            targetProgramId: resolvedSystem.id,
-            targetSessionId: streamResolvedTarget?.type === "session" ? streamResolvedTarget.id : null,
-            originalRequest: parsed.data.content,
-            intentFamily: familyResult.family,
-            pendingAspect: "scope",
-            clarificationQuestion: noOpContent,
-            editSubtype: intentResult.editSubtype ?? null,
-            editIntent: editPlan.intent,
-          }).catch((err) => logger.warn({ err }, "[PendingClarification:stream] Failed to write record for noOp scope question — non-fatal"));
-
-          logger.info(
-            { conversationId: params.data.id, intentFamily: normalizeToIntentFamily(parsed.data.content).family, editPlanIntent: editPlan.intent, editPlanScope: editPlan.scope },
-            "[VibeEdit:stream] Scope clarification question written as pending clarification"
-          );
-        }
-
-        const [noOpMsg] = await db.insert(messagesTable).values({
-          conversationId: params.data.id, role: "assistant", content: noOpContent, structuredData: null,
+      if (!programToMutate) {
+        const errContent = `I need a structured training program to apply that change. Build a program first, then I can handle any adjustments you need.`;
+        const [errMsg] = await db.insert(messagesTable).values({
+          conversationId: params.data.id, role: "assistant", content: errContent, structuredData: null,
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
         if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
           stripeStorage.incrementMessageCount(userId).catch(() => {});
         }
         done({
-          ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: noOpMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "clarification_needed" }),
+          ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: errMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure" }),
           systemEdit: { applied: false },
-          editFailure: { reason: "no_changes_applied", skippedCount: editResult.skippedCount },
-        });
-        return;
-      } else {
-        // getFullTrainingSystem returned null — cannot run the edit pipeline.
-        // Return an edit-aware error response immediately. NEVER fall through to
-        // the standard AI path, which would produce generic build-style text.
-        logger.warn({ systemId: resolvedSystem.id }, "[VibeEdit:stream] getFullTrainingSystem returned null — returning load error instead of falling through to build path");
-        const sysLoadErrContent = `I wasn't able to load your program data for that edit right now. Your program hasn't been modified — give it another try in a moment.`;
-        const [sysLoadErrMsg] = await db.insert(messagesTable).values({
-          conversationId: params.data.id, role: "assistant", content: sysLoadErrContent, structuredData: null,
-        }).returning();
-        await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-          stripeStorage.incrementMessageCount(userId).catch(() => {});
-        }
-        done({
-          ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: sysLoadErrMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure" }),
-          systemEdit: { applied: false },
-          editFailure: { reason: "pipeline_error" },
         });
         return;
       }
+
+      // ── 2. Apply the mutation deterministically ────────────────────────────
+      emit(buildStageEvent("applying", intentResult.type, actionDecision.actionType));
+
+      logger.info(
+        { userId, systemId: resolvedSystem.id, mutationType: execPlan.mutation?.type ?? null },
+        "[MutationEngine:stream] Applying deterministic mutation — skipping AI interpretation"
+      );
+
+      const mutResult = await applyMutation({ plan: execPlan, program: programToMutate });
+      logger.info(
+        { summary: mutResult.changeSummary, systemId: resolvedSystem.id },
+        "[MutationEngine:stream] Mutation applied — persisting to DB"
+      );
+
+      // ── 3. Persist updated program (in place — same system ID) ────────────
+      emit(buildStageEvent("saving", intentResult.type, actionDecision.actionType));
+      await upsertTrainingSystemFromProgram(userId, mutResult.updatedProgram);
+
+      // ── 4. Log the change ──────────────────────────────────────────────────
+      emit(buildStageEvent("validating", intentResult.type, actionDecision.actionType));
+      const streamEmptySnapshot: SystemSnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
+      const streamMutScope = execPlan.scope.type === "program" ? "block" : execPlan.scope.type === "session" ? "session" : "exercise";
+      const changeLogId = await createChangeLogEntry({
+        userId,
+        trainingSystemId: resolvedSystem.id,
+        source: "ai_edit",
+        intent: execPlan.intentFamily ?? "edit_program",
+        scope: streamMutScope as any,
+        changeSummary: mutResult.changeSummary,
+        requestText: parsed.data.content,
+        beforeSnapshot: streamEmptySnapshot,
+        afterSnapshot: streamEmptySnapshot,
+        fullProgramSnapshot: mutResult.updatedProgram as unknown as Record<string, unknown>,
+        appliedCount: 1,
+        skippedCount: 0,
+        decisionMetadata: {
+          intentType: intentResult.type,
+          editSubtype: intentResult.editSubtype ?? undefined,
+          executionPlanAction: execPlan.action,
+          mutationType: execPlan.mutation?.type ?? null,
+          scope: execPlan.scope,
+        },
+      });
+
+      // ── 5. Coaching response + persist message ─────────────────────────────
+      const coachingContent = mutResult.changeSummary.endsWith(".")
+        ? mutResult.changeSummary
+        : `${mutResult.changeSummary}.`;
+
+      const systemEditData = {
+        _type: "system_edit" as const,
+        changeSummary: mutResult.changeSummary,
+        changedIds: [] as number[],
+        systemId: resolvedSystem.id,
+        changeLogId,
+        verificationStatus: "verified",
+      };
+
+      const [assistantMessage] = await db.insert(messagesTable).values({
+        conversationId: params.data.id, role: "assistant",
+        content: coachingContent, structuredData: JSON.stringify(systemEditData),
+      }).returning();
+
+      await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+      if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+        stripeStorage.incrementMessageCount(userId).catch(() => {});
+      }
+
+      done({
+        ...buildCompleteEvent({
+          userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo,
+          intentResultVal: intentResult, systemSavedVal: systemAutoCreatedForEdit,
+          systemIdVal: systemAutoCreatedForEdit ? resolvedSystem.id : undefined,
+          outcomeTypeVal: "mutation_applied",
+        }),
+        systemEdit: {
+          applied: true,
+          changeSummary: mutResult.changeSummary,
+          changedIds: [],
+          changeTargets: [],
+          systemId: resolvedSystem.id,
+          changeLogId,
+          verificationStatus: "verified" as VerificationStatus,
+          requiresReview: false,
+        },
+      });
+      return;
     } catch (err: any) {
-      logger.error({ err: err?.message }, "[VibeEdit:stream] Edit pipeline threw — returning error response to user");
-      const errContent = `Something went wrong on my end while applying that change — your program hasn't been modified.\n\nGive it another try. If it keeps happening, try being a bit more specific: name the exercise, the day, or exactly what you want to change and I'll lock it in.`;
+      logger.error({ err: err?.message }, "[MutationEngine:stream] Mutation threw — returning error response");
+      const errContent = `Something went wrong applying that change — your program hasn't been modified. Give it another try, and if it keeps happening, try being more specific about which exercise or day you mean.`;
       const [errMsg] = await db.insert(messagesTable).values({
         conversationId: params.data.id, role: "assistant", content: errContent, structuredData: null,
       }).returning();
@@ -2685,8 +2431,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       done({
         ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: errMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure" }),
         systemEdit: { applied: false },
-        editFailure: { reason: "pipeline_error" },
-        mutationApplied: false,
+        editFailure: { reason: "mutation_engine_error" },
       });
       return;
     }
