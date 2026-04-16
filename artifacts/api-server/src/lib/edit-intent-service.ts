@@ -226,6 +226,21 @@ export function resolveTargetFromRequest(
   return undefined;
 }
 
+// ─── Deictic Session Reference Detector ──────────────────────────────────────
+// Detects phrases like "this day", "this session", "today", "today's workout"
+// where the user clearly refers to ONE specific session but without naming it
+// by number or label. When this returns true and resolveTargetFromRequest
+// returned undefined (no UIContext session is active), the edit engine cannot
+// determine which session the user means and must ask for clarification instead
+// of silently applying a program-wide change.
+
+const DEICTIC_SESSION_RE =
+  /\b(?:this\s+(?:day|session|workout|training\s+(?:session|day))|today(?:'s)?(?:\s+(?:session|workout|training|day))?)\b/i;
+
+export function hasDeiticSessionReference(userRequest: string): boolean {
+  return DEICTIC_SESSION_RE.test(userRequest);
+}
+
 // ─── System Context Serializer ───────────────────────────────────────────────
 
 export function serializeSystemForPrompt(system: any): string {

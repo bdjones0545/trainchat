@@ -20,7 +20,7 @@ import { syncMemoriesFromData, listMemories, buildMemoryContext, extractMemories
 import { generateInsights, buildInsightPromptHint } from "../lib/insights";
 import { getUserPlanInfo } from "../lib/planGating";
 import { stripeStorage } from "../lib/stripeStorage";
-import { interpretEditRequest, resolveTargetFromRequest } from "../lib/edit-intent-service";
+import { interpretEditRequest, resolveTargetFromRequest, hasDeiticSessionReference } from "../lib/edit-intent-service";
 import { applyEditPlan, type EditResult } from "../lib/edit-engine";
 import type { VerificationStatus } from "../lib/mutation-verifier";
 import { createChangeLogEntry, type SystemSnapshot } from "../lib/change-log-service";
@@ -1186,6 +1186,30 @@ Keep it helpful and intelligent, never promotional.`;
         directFullSystem,
         ((req.body as unknown as Record<string, unknown>)?.uiContext ?? null) as Record<string, unknown> | null
       );
+
+      // ── 2.5 Deictic session reference guard ────────────────────────────────
+      // "this day" / "this session" / "today" — user clearly means one session
+      // but without a UIContext selectedSessionId we cannot tell which one.
+      // Ask for clarification instead of silently mutating the whole program.
+      if (!directTarget && hasDeiticSessionReference(parsed.data.content)) {
+        const clarContent = `Which session did you have in mind? You can say something like "day 3", "the upper body session", or "week 2". Or open the session from your program view and tap the quick-edit button for precise targeting.`;
+        const [clarMsg] = await db.insert(messagesTable).values({
+          conversationId: params.data.id, role: "assistant", content: clarContent, structuredData: null,
+        }).returning();
+        await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+          stripeStorage.incrementMessageCount(userId).catch(() => {});
+        }
+        res.json({
+          userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
+          assistantMessage: { id: clarMsg.id, conversationId: clarMsg.conversationId, role: clarMsg.role, content: clarMsg.content, createdAt: clarMsg.createdAt.toISOString(), structuredData: null },
+          planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+          intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
+          outcomeType: "clarification_needed",
+          systemEdit: { applied: false },
+        });
+        return;
+      }
 
       const directEditPlan = await interpretEditRequest(
         parsed.data.content,
@@ -2407,6 +2431,26 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         streamFullSystem,
         ((req.body as unknown as Record<string, unknown>)?.uiContext ?? null) as Record<string, unknown> | null
       );
+
+      // ── 2.5 Deictic session reference guard ────────────────────────────────
+      // "this day" / "this session" / "today" — user clearly means one session
+      // but without a UIContext selectedSessionId we cannot tell which one.
+      // Ask for clarification instead of silently mutating the whole program.
+      if (!streamTarget && hasDeiticSessionReference(parsed.data.content)) {
+        const clarContent = `Which session did you have in mind? You can say something like "day 3", "the upper body session", or "week 2". Or open the session from your program view and tap the quick-edit button for precise targeting.`;
+        const [clarMsg] = await db.insert(messagesTable).values({
+          conversationId: params.data.id, role: "assistant", content: clarContent, structuredData: null,
+        }).returning();
+        await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+          stripeStorage.incrementMessageCount(userId).catch(() => {});
+        }
+        done(buildCompleteEvent({
+          userMsg: userMessage, assistantMsg: clarMsg, planInfoVal: planInfo,
+          intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "clarification_needed",
+        }));
+        return;
+      }
 
       const streamEditPlan = await interpretEditRequest(
         parsed.data.content,
