@@ -700,15 +700,16 @@ const OPEN_ENDED_SWAP_PATTERNS = [
   /\b(a|an)?\s*(different|another|alternative|other|new)\s+(exercise|movement|variation|jump|squat|lift|drill|option|one)\b/i,
   /\bsomething\s+(else|different|similar|better|new|other|more\s+suitable|appropriate)\b/i,
   /\b(another|a\s+different)\s+one\b/i,
-  /\b(any|a)\s+(good\s+)?(alternative|substitute|replacement|option|choice)\b/i,
+  /\b(any|a)\s+(good|suitable|appropriate|better|similar|reasonable|great)?\s*(alternative|substitute|replacement|option|choice)\b/i,
   /\b(a\s+)?different\s+(movement|exercise|option|variation|drill)\b/i,
   /\b(give\s+me|show\s+me|find\s+me)\s+(a|another)\s+(exercise|movement|variation|jump|option|alternative)\b/i,
   /\b(replace|swap)\s+(this|it)\s+(out\s+)?(?:for|with)\s+(something|anything|another|a\s+different)\b/i,
   /\b(another|a\s+different)\s+(jump|squat|press|pull|push|hinge|row|carry|drill|variation)\b/i,
   /\b(use|try)\s+a\s+(different|new|alternative)\s+(exercise|movement|variation|option)\b/i,
   /\b(a\s+)?new\s+(exercise|movement|option|variation|alternative)\b/i,
-  /\bswap\s+.+?\s+(?:for|with)\s+(a\s+)?(different|another|alternative)\b/i,
+  /\bswap\s+.+?\s+(?:for|with)\s+(a\s+)?(different|another|alternative|suitable|similar|good|appropriate|better)\b/i,
   /\b(change|switch)\s+.+?\s+to\s+(something|anything|another)\b/i,
+  /\b(?:for|with)\s+(?:a\s+)?(?:suitable|appropriate|good|better|similar|reasonable)\s+(?:alternative|substitute|replacement|option)\b/i,
 ];
 
 export function isOpenEndedSwapLanguage(text: string): boolean {

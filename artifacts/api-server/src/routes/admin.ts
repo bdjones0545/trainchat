@@ -13,6 +13,7 @@ import {
   promoteCandidate,
   dismissCandidate,
 } from "../lib/globalLearningService";
+import { seedExerciseLibrary, isExerciseLibraryEmpty } from "../lib/exercise-seeder";
 
 const router: IRouter = Router();
 
@@ -404,6 +405,40 @@ router.get("/admin/learning/events", requireAuth, requireAdmin, async (req, res)
   try {
     const events = await getRecentLearningEvents(limit, window as 7 | 30 | "all");
     res.json({ range, count: events.length, events });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/seed-exercises
+ * Seed or re-seed the exercise library.
+ * Protected by X-Admin-Key header matching ADMIN_SECRET env var.
+ * Query params: force=true to re-seed even if library already has data.
+ */
+router.post("/admin/seed-exercises", async (req, res): Promise<void> => {
+  const adminSecret = process.env.ADMIN_SECRET;
+  if (!adminSecret) {
+    res.status(503).json({ error: "Admin secret not configured" });
+    return;
+  }
+  const providedKey = req.headers["x-admin-key"];
+  if (providedKey !== adminSecret) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const force = req.query.force === "true";
+
+  try {
+    const empty = await isExerciseLibraryEmpty();
+    if (!empty && !force) {
+      res.json({ ok: true, skipped: true, message: "Exercise library already populated. Use ?force=true to re-seed." });
+      return;
+    }
+
+    const { inserted, updated } = await seedExerciseLibrary();
+    res.json({ ok: true, inserted, updated, forced: force });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

@@ -4,6 +4,7 @@ import { runMigrations } from "stripe-replit-sync";
 import { getStripeSync } from "./lib/stripeClient";
 import { validateBillingConfig } from "./lib/billingUtils";
 import { startBillingReconciliation } from "./lib/billingReconciliation";
+import { seedExerciseLibraryIfEmpty } from "./lib/exercise-seeder";
 
 const rawPort = process.env["PORT"];
 
@@ -70,6 +71,7 @@ async function initStripe() {
 }
 
 await initStripe();
+await seedExerciseLibraryIfEmpty();
 
 app.listen(port, (err) => {
   if (err) {

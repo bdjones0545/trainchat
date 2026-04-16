@@ -1,0 +1,156 @@
+We need a FORENSIC TRACE for the Active Program swap failure on this exact exercise:
+
+Exercise shown in UI:
+- Conventional Deadlift
+Context:
+- Active Program / Today view
+- User taps Swap
+- UI shows: “No alternatives found. Use Full Edit to swap manually.”
+
+This should not happen if the canonical exercise library lookup is working, because Conventional Deadlift is known to have valid alternatives.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Trace this exact failure end to end and identify the precise point where the lookup breaks.
+
+Do NOT do a generic swap audit.
+Do NOT suggest broad architecture changes.
+Do a concrete trace for this one exercise in the live program.
+
+==================================================
+TASK 1 — TRACE THE EXACT FRONTEND PAYLOAD
+==================================================
+
+When the user taps Swap on this exact Conventional Deadlift card in Active Program, log:
+
+- sessionExerciseId
+- raw exercise name from UI state
+- exerciseLibraryId if present
+- active program ID
+- request URL
+- request query params
+- full backend payload/context
+
+I want the exact values being sent for this one exercise.
+
+==================================================
+TASK 2 — TRACE THE EXACT BACKEND LOOKUP
+==================================================
+
+For this one request, log step by step:
+
+1. incoming identifier(s)
+2. whether lookup is by:
+   - sessionExerciseId
+   - exerciseLibraryId
+   - name
+3. result of canonical exercise lookup
+4. clusterId found or not
+5. cluster member count
+6. movement-pattern fallback count
+7. final filtered candidate count
+8. whether any exception/error occurred
+
+==================================================
+TASK 3 — CHECK WHETHER THIS LIVE EXERCISE IS CANONICAL
+==================================================
+
+Inspect the actual DB row for the live session exercise corresponding to this Conventional Deadlift card.
+
+Report:
+- sessionExercise row
+- stored exercise name
+- stored exerciseLibraryId
+- whether that library row exists
+- whether the canonical library row is active
+- whether the stored name exactly matches canonical name
+
+I want to know whether the live exercise identity is clean or corrupted.
+
+==================================================
+TASK 4 — DISTINGUISH EMPTY RESULT VS ERROR
+==================================================
+
+Determine whether this “No alternatives found” state is truly:
+- zero valid candidates
+OR
+- backend error
+OR
+- failed lookup
+OR
+- invalid live exercise identity
+
+Do not treat all of these as equivalent.
+
+==================================================
+TASK 5 — ADD TEMPORARY HARD DEBUG OUTPUT
+==================================================
+
+In non-production/dev mode, for this swap endpoint, print a single structured debug object like:
+
+{
+  source: "active_program_swap",
+  sessionExerciseId,
+  exerciseLibraryId,
+  rawExerciseName,
+  canonicalExerciseFound,
+  canonicalExerciseName,
+  clusterId,
+  clusterCandidates,
+  fallbackCandidates,
+  finalCandidates,
+  error
+}
+
+I want to see one definitive object for this exact request.
+
+==================================================
+TASK 6 — FIX ONLY THE EXACT BREAKPOINT
+==================================================
+
+Once the precise failure point is found, patch only that issue.
+
+Examples:
+- if exerciseLibraryId is missing, fall back correctly
+- if name normalization fails, fix normalization
+- if Active Program is sending wrong name/ID, fix that mapping
+- if backend error is masked as empty, fix UI state
+- if sessionExercise records are missing canonical IDs, repair lookup path
+
+Do not do a broad refactor in this step.
+
+==================================================
+TASK 7 — VERIFY WITH THESE EXACT EXERCISES
+==================================================
+
+After patching, verify swap from Active Program works for:
+
+- Conventional Deadlift
+- Back Squat
+- Pull-Up
+- Box Jump
+
+For each one, report:
+- identifier used
+- candidates found
+- whether swap UI now loads correctly
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+Return:
+1. the exact failure point
+2. the exact values seen in the request
+3. whether the live exercise record was canonical or not
+4. whether this was a true empty result or a masked error
+5. the precise code patch applied
+6. verification results for the 4 exercises above
+
+==================================================
+FINAL STANDARD
+==================================================
+
+For this exact Conventional Deadlift card in Active Program, tapping Swap must now load alternatives correctly, and the UI must no longer show “No alternatives found” unless the backend truly exhausted valid candidates.
