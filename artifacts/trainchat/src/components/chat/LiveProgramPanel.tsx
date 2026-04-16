@@ -326,7 +326,7 @@ function EmptyProgramState() {
         </div>
         <div>
           <p className="text-[11px] font-bold text-foreground">Your Program</p>
-          <p className="text-[10px] text-muted-foreground">Waiting to be built</p>
+          <p className="text-[10px] text-muted-foreground">Your program builds here in real time</p>
         </div>
       </div>
 

@@ -89,11 +89,10 @@ async function trackFunnelEvent(deviceId: string, event: string, metadata?: Reco
 // prompt  – full conversational sentence sent to the AI when tapped
 
 const QUICK_START = [
-  { label: "Hypertrophy plan",      prompt: "Build me a hypertrophy plan",                icon: "💪" },
-  { label: "4-day split",           prompt: "Make me a 4-day training split",             icon: "📅" },
-  { label: "Athletic performance",  prompt: "Build an athletic performance program",       icon: "⚡" },
-  { label: "Train around an injury",prompt: "Help me train around an injury",             icon: "🩺" },
-  { label: "Home equipment",        prompt: "Build a plan using only home equipment",     icon: "🏠" },
+  { label: "Build a 4-day split",   prompt: "Make me a 4-day training split",             icon: "📅", highlight: true },
+  { label: "Train around pain",     prompt: "Help me train around an injury or pain",     icon: "🩺", highlight: false },
+  { label: "Add speed & power",     prompt: "Add speed, power, and athletic development to my program", icon: "⚡", highlight: false },
+  { label: "Home gym setup",        prompt: "Build a plan using only home equipment",     icon: "🏠", highlight: false },
 ];
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
@@ -394,6 +393,13 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      inputRef.current?.focus();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (landingTracked.current || !deviceId) return;
@@ -705,11 +711,11 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
               <div>
                 {/* Primary — strongest text on the screen */}
                 <p className="text-lg sm:text-xl font-bold leading-snug" style={{ color: "rgba(255,255,255,0.93)" }}>
-                  Let's build your training system.
+                  What do you want to build?
                 </p>
                 {/* Secondary — readable, clearly supporting the headline */}
                 <p className="text-xs sm:text-sm mt-1.5 leading-relaxed" style={{ color: "rgba(255,255,255,0.60)" }}>
-                  Tell me your goal, schedule, equipment, and any limitations — I'll design it with you.
+                  Describe your training — I'll build it live.
                 </p>
               </div>
             </div>
@@ -724,7 +730,12 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
                   key={opt.label}
                   onClick={() => handleSend(opt.prompt)}
                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all duration-150 active:scale-[0.96]"
-                  style={{
+                  style={opt.highlight ? {
+                    background: "hsl(199 89% 48% / 0.18)",
+                    border: "1px solid hsl(199 89% 48% / 0.55)",
+                    color: "rgba(255,255,255,0.95)",
+                    minHeight: "30px",
+                  } : {
                     background: "rgba(255,255,255,0.06)",
                     border: "1px solid rgba(255,255,255,0.13)",
                     color: "rgba(255,255,255,0.65)",
@@ -732,13 +743,19 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
                   }}
                   onMouseEnter={(e) => {
                     (e.currentTarget).style.borderColor = "hsl(199 89% 48% / 0.55)";
-                    (e.currentTarget).style.background = "hsl(199 89% 48% / 0.10)";
-                    (e.currentTarget).style.color = "rgba(255,255,255,0.92)";
+                    (e.currentTarget).style.background = "hsl(199 89% 48% / 0.18)";
+                    (e.currentTarget).style.color = "rgba(255,255,255,0.95)";
                   }}
                   onMouseLeave={(e) => {
-                    (e.currentTarget).style.borderColor = "rgba(255,255,255,0.13)";
-                    (e.currentTarget).style.background = "rgba(255,255,255,0.06)";
-                    (e.currentTarget).style.color = "rgba(255,255,255,0.65)";
+                    if (opt.highlight) {
+                      (e.currentTarget).style.borderColor = "hsl(199 89% 48% / 0.55)";
+                      (e.currentTarget).style.background = "hsl(199 89% 48% / 0.18)";
+                      (e.currentTarget).style.color = "rgba(255,255,255,0.95)";
+                    } else {
+                      (e.currentTarget).style.borderColor = "rgba(255,255,255,0.13)";
+                      (e.currentTarget).style.background = "rgba(255,255,255,0.06)";
+                      (e.currentTarget).style.color = "rgba(255,255,255,0.65)";
+                    }
                   }}
                 >
                   <span className="text-xs">{opt.icon}</span>
@@ -795,15 +812,6 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
             paddingBottom: "max(16px, env(safe-area-inset-bottom))",
           }}
         >
-          {/* Tertiary prompt label — guides without competing with headline */}
-          {isBeforeFirstInput && (
-            <p
-              className="text-[10px] font-medium mb-1.5 px-1"
-              style={{ color: "rgba(255,255,255,0.38)" }}
-            >
-              Tell your coach what you want →
-            </p>
-          )}
           {/* Input container — visibly elevated above page, clear focus ring */}
           <div
             className="flex items-end gap-2 rounded-2xl transition-all duration-200"
@@ -820,7 +828,7 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyDown}
               rows={1}
-              placeholder="Describe your goal..."
+              placeholder="Try: Build me a 4-day strength program"
               className="flex-1 resize-none bg-transparent px-4 py-3 text-sm focus:outline-none leading-relaxed placeholder:text-zinc-500"
               style={{
                 minHeight: "46px",

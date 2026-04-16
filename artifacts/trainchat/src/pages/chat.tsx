@@ -44,14 +44,10 @@ import { clearAuthState, markOnboardingComplete, logRouteDecision, readDeviceId,
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 
 const SUGGESTION_CHIPS = [
-  { label: "Build a hypertrophy plan", prompt: "Build me a hypertrophy-focused training program based on my goals and schedule" },
-  { label: "Make me a 4-day split", prompt: "Design a 4-day training split for me" },
-  { label: "Add speed and power work", prompt: "I want to add speed, power, and athletic development to my program" },
-  { label: "Adjust around knee pain", prompt: "I have knee pain and need to modify my program to work around it" },
-  { label: "Cut this to 45 minutes", prompt: "My sessions are too long — help me cut them down to 45 minutes" },
-  { label: "Swap for home equipment", prompt: "Help me swap exercises to fit a home gym setup" },
-  { label: "Build around basketball", prompt: "Build a program designed around basketball performance and athleticism" },
-  { label: "Strength without bulk", prompt: "Help me build strength without adding too much size or bulk" },
+  { label: "Build a 4-day split", prompt: "Design a 4-day training split for me", highlight: true },
+  { label: "Train around pain", prompt: "Help me train around an injury or pain", highlight: false },
+  { label: "Add speed & power", prompt: "I want to add speed, power, and athletic development to my program", highlight: false },
+  { label: "Home gym setup", prompt: "Build a program using only home gym equipment", highlight: false },
 ];
 
 async function fetchSubscription() {
@@ -505,6 +501,15 @@ export default function Chat() {
       }).catch(() => {});
     }
   }, []);
+
+  useEffect(() => {
+    if (messages.length === 0 && !messagesLoading) {
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 400);
+      return () => clearTimeout(timer);
+    }
+  }, [messages.length, messagesLoading]);
 
   function handleNewConversation() {
     createConvo.mutate(
@@ -1507,17 +1512,21 @@ export default function Chat() {
                   <Dumbbell className="w-6 h-6 text-primary" />
                 </div>
                 <h2 className="text-base font-semibold text-foreground mb-1.5">
-                  Build your training system
+                  What do you want to build?
                 </h2>
                 <p className="text-sm text-muted-foreground max-w-xs leading-relaxed mb-8">
-                  Tell me your goal, schedule, equipment, and any limitations. I'll structure your program in real time.
+                  Describe your training — I'll build it live.
                 </p>
                 <div className="flex flex-wrap justify-center gap-2 w-full max-w-md">
                   {SUGGESTION_CHIPS.map((chip) => (
                     <button
                       key={chip.label}
                       onClick={() => handleSend(chip.prompt)}
-                      className="px-3.5 py-2 text-xs font-medium text-foreground bg-card border border-border rounded-full hover:border-primary/40 hover:text-primary hover:bg-primary/5 active:scale-95 transition-all duration-150"
+                      className={`px-3.5 py-2 text-xs font-medium rounded-full active:scale-95 transition-all duration-150 ${
+                        chip.highlight
+                          ? "text-primary border border-primary/50 bg-primary/10 hover:bg-primary/15"
+                          : "text-foreground bg-card border border-border hover:border-primary/40 hover:text-primary hover:bg-primary/5"
+                      }`}
                     >
                       {chip.label}
                     </button>
@@ -1702,7 +1711,7 @@ export default function Chat() {
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleKeyDown}
                   rows={1}
-                  placeholder="Describe the training you want to build or adjust…"
+                  placeholder="Try: Build me a 4-day strength program"
                   disabled={stream.isActive}
                   className="flex-1 resize-none bg-transparent px-4 py-3.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none leading-relaxed max-h-40 overflow-y-auto disabled:opacity-60"
                   style={{ minHeight: "52px" }}
