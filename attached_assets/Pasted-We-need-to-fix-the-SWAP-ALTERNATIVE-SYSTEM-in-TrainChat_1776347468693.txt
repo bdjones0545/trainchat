@@ -1,0 +1,201 @@
+We need to fix the SWAP ALTERNATIVE SYSTEM in TrainChat.
+
+OBJECTIVE:
+Restore usable swap alternatives for exercises when the current cluster lookup returns empty, especially for cases like Box Jump where the exercise has a clusterId but every member of that cluster is inactive.
+
+Right now the system often shows:
+“No cluster alternatives found. Use Full Edit to swap manually.”
+
+The audit found that this is happening for most of the library because:
+- many exercises have cluster IDs
+- but their clusters have zero active members
+- the code only falls back to movement-pattern search when clusterId is null
+- if clusterId exists but clusterMembers returns empty, the fallback is never reached
+- frontend also hides real API errors behind the same empty-state message
+
+We need to fix this now.
+
+==================================================
+PRIMARY GOALS
+==================================================
+
+1. If a cluster lookup returns zero active members, automatically fall back to movement-pattern search
+2. Distinguish “no alternatives found” from “couldn’t load alternatives”
+3. Restore high-value clusters like plyometric_jump
+4. Prepare the swap path for an intelligent fallback when deterministic results are still empty
+
+==================================================
+TASK 1 — PATCH EMPTY-CLUSTER FALLBACK LOGIC
+==================================================
+
+Audit getSwapCandidates() in exercise-service.ts.
+
+Current broken behavior:
+- findExerciseByName() returns an exercise with clusterId
+- getClusterMembers(clusterId, exerciseName) returns []
+- because clusterId exists, code never reaches getByMovementPattern()
+- returns empty array immediately
+
+Fix this logic.
+
+New desired behavior:
+- if exercise is missing → fallback to movement pattern search if possible
+- if clusterId is missing → fallback to movement pattern search
+- if clusterId exists but clusterMembers.length === 0 → fallback to movement pattern search
+- only return empty if BOTH cluster path and movement-pattern fallback fail
+
+This is the highest-priority fix.
+
+==================================================
+TASK 2 — PRESERVE EXISTING FILTERING, BUT ONLY AFTER RESULTS EXIST
+==================================================
+
+Make sure equipment/injury/neural demand/time cost filters still apply,
+but do not let them block fallback from even running.
+
+Expected logic:
+1. find exercise
+2. try cluster alternatives
+3. if cluster alternatives empty → try movement-pattern alternatives
+4. then filter/rank
+5. return candidates
+
+==================================================
+TASK 3 — ACTIVATE PLYOMETRIC CLUSTER MEMBERS
+==================================================
+
+The audit found the plyometric_jump cluster is entirely inactive.
+
+At minimum, reactivate the key plyometric exercises needed for swap to feel sane, such as:
+- Box Jump
+- Broad Jump
+- Tuck Jump
+- another 1–3 strong power/plyometric alternatives that fit your programming style
+
+Do this either through:
+- a targeted migration/update
+or
+- a seed patch
+
+The goal is not to activate all 574 inactive exercises blindly.
+The goal is to restore a strong, high-value cluster first.
+
+==================================================
+TASK 4 — PATCH FRONTEND EMPTY VS ERROR STATES
+==================================================
+
+In system.tsx / swap UI flow:
+
+Current behavior:
+- API error
+- timeout
+- empty results
+all produce:
+“No cluster alternatives found”
+
+This is wrong.
+
+Add distinct frontend states:
+
+A. swapCandidates loaded, empty
+→ “No alternatives found. Use Full Edit to swap manually.”
+
+B. swap lookup failed / network error / backend error
+→ “Couldn’t load alternatives. Try again.”
+
+Do NOT collapse these into the same UI message.
+
+==================================================
+TASK 5 — ADD DEBUG VISIBILITY
+==================================================
+
+In development, log for each swap request:
+
+- exercise name requested
+- exercise found? yes/no
+- clusterId
+- clusterMembers count before filtering
+- whether movement-pattern fallback ran
+- movement-pattern candidate count
+- final returned candidate count
+- whether error state or empty state was returned
+
+This should make swap failures easy to diagnose.
+
+==================================================
+TASK 6 — PREPARE INTELLIGENT FALLBACK HOOK
+==================================================
+
+Do not fully implement the OpenAI fallback yet unless it is trivial,
+but add a clean insertion point in getSwapCandidates() for future intelligent fallback.
+
+Desired future flow:
+1. cluster alternatives
+2. movement-pattern fallback
+3. intelligent substitute fallback
+4. true empty state
+
+For now:
+- add the hook point or TODO cleanly
+- structure the code so the intelligent fallback can be inserted without rewriting the whole function later
+
+==================================================
+TASK 7 — TEST EXACT EXERCISES
+==================================================
+
+Run and verify these exact cases:
+
+1. Box Jump
+Expected:
+- no longer dead-ends just because cluster is empty
+- movement-pattern fallback and/or reactivated cluster returns usable candidates
+
+2. Pull-Up
+Expected:
+- still works normally
+- no regression
+
+3. Back Squat
+Expected:
+- still works normally
+- no regression
+
+4. Bulgarian Split Squat / RFESS naming case
+Expected:
+- identify if name mismatch or inactive alias is causing empty results
+- document current behavior clearly
+
+5. Conventional Deadlift
+Expected:
+- still works normally
+- no regression
+
+==================================================
+TASK 8 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What fallback logic changed in getSwapCandidates()
+2. Whether empty cluster now triggers movement-pattern fallback
+3. Which plyometric exercises were reactivated
+4. How frontend now distinguishes empty vs error
+5. What debug logging was added
+6. Which of the audited exercises now return candidates correctly
+7. Where intelligent fallback should be inserted next
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Swap should no longer dead-end just because an exercise has a clusterId whose active members are zero.
+
+The system must now:
+- try cluster alternatives
+- recover via movement-pattern fallback when cluster is empty
+- show a true error when lookup fails
+- show a true empty state only when all deterministic options are exhausted
+
+TrainChat should feel like a resilient system, not a brittle cluster lookup.
+
+Implement this now.

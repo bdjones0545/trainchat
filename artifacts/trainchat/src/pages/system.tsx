@@ -176,6 +176,7 @@ function ExerciseCard({ exercise, index, sessionLabel, highlightedIds, onEdit, o
   const [swapOpen, setSwapOpen] = useState(false);
   const [swapCandidates, setSwapCandidates] = useState<any[]>([]);
   const [swapLoading, setSwapLoading] = useState(false);
+  const [swapError, setSwapError] = useState(false);
 
   const categoryColors: Record<string, string> = {
     warmup:      "bg-sky-500/10 text-sky-400 border-sky-500/20",
@@ -221,10 +222,12 @@ function ExerciseCard({ exercise, index, sessionLabel, highlightedIds, onEdit, o
     setSwapOpen(true);
     setSwapLoading(true);
     setSwapCandidates([]);
+    setSwapError(false);
     try {
       const result = await customFetch<any>(`/api/exercises/swap/${encodeURIComponent(exercise.name)}`);
       setSwapCandidates(result.data ?? []);
     } catch {
+      setSwapError(true);
       setSwapCandidates([]);
     } finally {
       setSwapLoading(false);
@@ -264,7 +267,7 @@ function ExerciseCard({ exercise, index, sessionLabel, highlightedIds, onEdit, o
         </div>
         <div className="flex-1 min-w-0">
           <button
-            onClick={() => { setShowActions((v) => !v); setSwapOpen(false); }}
+            onClick={() => { setShowActions((v) => !v); setSwapOpen(false); setSwapError(false); }}
             className="w-full text-left"
           >
             <div className="flex items-center gap-2 flex-wrap mb-1.5">
@@ -316,7 +319,7 @@ function ExerciseCard({ exercise, index, sessionLabel, highlightedIds, onEdit, o
               {/* Swap picker */}
               <div>
                 <button
-                  onClick={swapOpen ? () => setSwapOpen(false) : handleSwapOpen}
+                  onClick={swapOpen ? () => { setSwapOpen(false); setSwapError(false); } : handleSwapOpen}
                   disabled={quickMutation.isPending}
                   className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border transition-all duration-150 ${
                     swapOpen || activeChip === "Swap"
@@ -338,8 +341,18 @@ function ExerciseCard({ exercise, index, sessionLabel, highlightedIds, onEdit, o
                         <RotateCcw className="w-3 h-3 animate-spin" />
                         Finding alternatives…
                       </div>
+                    ) : swapError ? (
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs text-red-400">Couldn't load alternatives. Try again.</p>
+                        <button
+                          onClick={handleSwapOpen}
+                          className="text-[10px] font-semibold text-muted-foreground hover:text-foreground underline underline-offset-2 flex-shrink-0"
+                        >
+                          Retry
+                        </button>
+                      </div>
                     ) : swapCandidates.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">No cluster alternatives found. Use Full Edit to swap manually.</p>
+                      <p className="text-xs text-muted-foreground">No alternatives found. Use Full Edit to swap manually.</p>
                     ) : (
                       <div className="space-y-1.5">
                         <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
@@ -408,7 +421,7 @@ function ExerciseCard({ exercise, index, sessionLabel, highlightedIds, onEdit, o
             <Youtube className="w-3.5 h-3.5" />
           </a>
           <button
-            onClick={() => { setShowActions((v) => !v); setSwapOpen(false); }}
+            onClick={() => { setShowActions((v) => !v); setSwapOpen(false); setSwapError(false); }}
             className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-all duration-150 ${
               showActions
                 ? "bg-primary/10 border-primary/30 text-primary"

@@ -68,7 +68,12 @@ export async function getClusterMembers(clusterId: string, excludeName?: string)
 /**
  * Find smart swap candidates for an exercise.
  * Respects equipment, injury, neural demand, and time constraints.
- * Falls back to movement pattern search if no cluster exists.
+ *
+ * Resolution order:
+ *   1. Cluster members (same clusterId, isActive=true, excluding current exercise)
+ *   2. Movement-pattern fallback (if cluster is missing OR returns zero active members)
+ *   3. [Hook] Intelligent / AI-assisted fallback — insert here when ready
+ *   4. Empty result (true dead-end — both deterministic paths exhausted)
  */
 export async function getSwapCandidates(opts: {
   exerciseName: string;
@@ -89,28 +94,13 @@ export async function getSwapCandidates(opts: {
     maxCount = 6,
   } = opts;
 
-  const exercise = await findExerciseByName(exerciseName);
-  if (!exercise || !exercise.clusterId) {
-    return getByMovementPattern({
-      pattern: exercise?.movementPattern ?? "knee_dominant",
-      equipmentLevel,
-      injuryFlags,
-      unilateralOnly: unilateralOnly ?? exercise?.unilateral ?? false,
-      excludeNames: [exerciseName],
-      maxNeuralDemand,
-      maxTimeCost,
-      maxCount,
-    });
-  }
-
-  const clusterMembers = await getClusterMembers(exercise.clusterId, exerciseName);
   const allowed = EQUIPMENT_LEVEL_MAP[equipmentLevel] ?? EQUIPMENT_LEVEL_MAP.full_gym;
   const neuralOrder: Record<string, number> = { low: 0, moderate: 1, high: 2 };
   const maxNeuralLevel = maxNeuralDemand ? neuralOrder[maxNeuralDemand] : 2;
   const maxTimeLevel = maxTimeCost ? neuralOrder[maxTimeCost] : 2;
 
-  return clusterMembers
-    .filter((ex) => {
+  function applyConstraints(candidates: Awaited<ReturnType<typeof getClusterMembers>>) {
+    return candidates.filter((ex) => {
       const hasEquipment = (ex.equipment as string[]).some((eq) => allowed.includes(eq));
       if (!hasEquipment) return false;
       if (injuryFlags.length > 0) {
@@ -125,8 +115,74 @@ export async function getSwapCandidates(opts: {
         if ((neuralOrder[ex.timeCost] ?? 1) > maxTimeLevel) return false;
       }
       return true;
-    })
-    .slice(0, maxCount);
+    });
+  }
+
+  // ── Step 1: Locate exercise (no isActive filter — inactive exercises can still be swapped) ──
+  const exercise = await findExerciseByName(exerciseName);
+
+  const debugInfo: Record<string, unknown> = {
+    exerciseName,
+    found: !!exercise,
+    clusterId: exercise?.clusterId ?? null,
+    movementPattern: exercise?.movementPattern ?? null,
+    isActive: exercise?.isActive ?? null,
+  };
+
+  // ── Step 2: Try cluster path ───────────────────────────────────────────────
+  let clusterMembersRaw: Awaited<ReturnType<typeof getClusterMembers>> = [];
+  if (exercise?.clusterId) {
+    clusterMembersRaw = await getClusterMembers(exercise.clusterId, exerciseName);
+  }
+
+  debugInfo.clusterMembersBeforeFilter = clusterMembersRaw.length;
+
+  const clusterFiltered = applyConstraints(clusterMembersRaw);
+  debugInfo.clusterMembersAfterFilter = clusterFiltered.length;
+
+  if (clusterFiltered.length > 0) {
+    const result = clusterFiltered.slice(0, maxCount);
+    debugInfo.fallbackUsed = false;
+    debugInfo.finalCount = result.length;
+    debugInfo.path = "cluster";
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[swap:debug]", JSON.stringify(debugInfo));
+    }
+    return result;
+  }
+
+  // ── Step 3: Movement-pattern fallback ─────────────────────────────────────
+  // Triggered when: exercise not found, clusterId is missing, OR cluster returned zero active members.
+  const fallbackPattern = exercise?.movementPattern ?? "knee_dominant";
+  debugInfo.fallbackUsed = true;
+  debugInfo.fallbackPattern = fallbackPattern;
+
+  const patternCandidates = await getByMovementPattern({
+    pattern: fallbackPattern,
+    equipmentLevel,
+    injuryFlags,
+    unilateralOnly: unilateralOnly ?? exercise?.unilateral ?? false,
+    excludeNames: [exerciseName],
+    maxNeuralDemand,
+    maxTimeCost,
+    maxCount,
+  });
+
+  debugInfo.patternCandidateCount = patternCandidates.length;
+  debugInfo.finalCount = patternCandidates.length;
+  debugInfo.path = patternCandidates.length > 0 ? "movement_pattern" : "empty";
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[swap:debug]", JSON.stringify(debugInfo));
+  }
+
+  // ── Step 4: Intelligent fallback hook ─────────────────────────────────────
+  // TODO: When patternCandidates.length === 0, call an AI-assisted substitute function:
+  //   const aiCandidates = await findIntelligentSubstitute({ exerciseName, exercise, equipmentLevel, injuryFlags });
+  //   return aiCandidates;
+  // Insert above this return when ready.
+
+  return patternCandidates;
 }
 
 /**
