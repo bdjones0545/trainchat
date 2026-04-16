@@ -760,6 +760,67 @@ export async function getFullTrainingSystem(systemId: number) {
   return { ...system, phases: phasesWithContent };
 }
 
+/**
+ * Converts a full training system (DB-backed hierarchical structure) into a flat
+ * ProgramStructure suitable for AI context injection via generateAIResponse.
+ *
+ * Source-of-truth rule: when a DB-backed active system exists in refine/edit mode,
+ * the AI must reason from DB state — not from stale conversation-history JSON.
+ *
+ * Algorithm:
+ *   1. Find the current/active phase (status === "current"), else first phase.
+ *   2. Find the current week within that phase, else first week.
+ *   3. Map each session in that week → ProgramDay.
+ *   4. Map each exercise in each session → Exercise.
+ *
+ * Falls back gracefully (returns null) if the system has no usable sessions.
+ */
+export function dbSystemToProgramStructure(
+  fullSystem: NonNullable<Awaited<ReturnType<typeof getFullTrainingSystem>>>
+): { programName: string; description: string; splitType?: string; progressionStrategy?: string; days: Array<{ dayNumber: number; name: string; focus?: string; notes?: string; exercises: Array<{ name: string; sets: number; reps: string; rest: string; classification?: string; intent?: string; notes?: string }> }> } | null {
+  const phases = fullSystem.phases ?? [];
+  if (phases.length === 0) return null;
+
+  const activePhase =
+    phases.find((p) => p.status === "current") ?? phases[0];
+
+  const weeks = activePhase.weeks ?? [];
+  if (weeks.length === 0) return null;
+
+  const activeWeek =
+    weeks.find((w) => w.status === "current") ?? weeks[0];
+
+  const sessions = activeWeek.sessions ?? [];
+  if (sessions.length === 0) return null;
+
+  const days = sessions.map((session, idx) => {
+    const dayNumber = typeof session.dayOfWeek === "number" ? session.dayOfWeek + 1 : idx + 1;
+    const dayName = session.label ?? `Day ${dayNumber}`;
+    const focus = session.emphasis ?? session.sessionType ?? undefined;
+    const notes = [session.warmupNotes, session.coachingNotes].filter(Boolean).join(" | ") || undefined;
+
+    const exercises = (session.exercises ?? []).map((ex) => ({
+      name: ex.name,
+      sets: ex.sets ?? 3,
+      reps: ex.reps ?? "8",
+      rest: ex.rest ?? "60s",
+      classification: ex.category ?? undefined,
+      intent: ex.notes ?? undefined,
+      notes: ex.tempo ? `tempo: ${ex.tempo}` : undefined,
+    }));
+
+    return { dayNumber, name: dayName, focus, notes, exercises };
+  });
+
+  return {
+    programName: fullSystem.name,
+    description: [fullSystem.overarchingGoal, fullSystem.constraints].filter(Boolean).join(" — ") || "Training program",
+    splitType: fullSystem.trainingStyle ?? undefined,
+    progressionStrategy: `Phase: ${activePhase.name} | Week ${activeWeek.weekNumber}`,
+    days,
+  };
+}
+
 export async function getTodaySession(userId: number) {
   const system = await getActiveTrainingSystem(userId);
   if (!system || !system.currentPhaseId) return null;

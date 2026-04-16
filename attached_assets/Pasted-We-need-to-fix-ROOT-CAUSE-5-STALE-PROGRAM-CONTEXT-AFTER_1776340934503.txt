@@ -1,0 +1,214 @@
+We need to fix ROOT CAUSE 5: STALE PROGRAM CONTEXT AFTER VIBE EDIT in TrainChat.
+
+OBJECTIVE:
+After a successful vibe edit/refinement, the next AI turn must reason from the CURRENT DB program truth, not the stale pre-edit structured JSON pulled from conversation history.
+
+Right now:
+- the UI panel shows the updated DB-backed program
+- but the SSE handler can still inject currentProgram from old conversation-history JSON
+- so the AI reasons from stale program state on the next turn
+
+This causes:
+- edits to feel forgotten
+- follow-up refinements to act on old structure
+- mismatch between what the user sees and what the AI believes
+- loss of trust
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Ensure that after a successful vibe edit/refinement, all subsequent AI reasoning uses the fresh updated program from the DB as the source of truth.
+
+The AI and the right panel must be looking at the same program.
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+For refine/edit flows:
+DB program truth must override stale conversation-history JSON.
+
+Conversation history may still be useful as context,
+but it must not be the canonical current program if it is older than the DB state.
+
+==================================================
+TASK 1 — TRACE CURRENT PROGRAM INJECTION IN SSE PATH
+==================================================
+
+Audit the SSE streaming handler and identify exactly where:
+
+- latestStructuredProgram / resolveCurrentProgram(history)
+- currentProgram
+- activeSystem / DB-backed training system
+
+are being resolved and passed into generateAIResponse() or equivalent.
+
+I want the exact place where stale conversation-history JSON is currently winning over the updated DB program.
+
+==================================================
+TASK 2 — DEFINE SOURCE-OF-TRUTH RULES
+==================================================
+
+Implement a clear source-of-truth policy:
+
+For BUILD mode:
+- conversation-built structured JSON may still be the active source while initial program is being generated
+
+For REFINE / EDIT / CLARIFICATION_FOLLOWUP mode:
+- if a DB-backed active system exists, use that as currentProgram
+- do NOT use stale conversation-history JSON as the canonical program
+
+If both exist:
+- DB active system wins for current program reasoning
+- conversation JSON remains supplemental context only
+
+==================================================
+TASK 3 — LOAD FRESH DB PROGRAM AFTER SUCCESSFUL VIBE EDIT
+==================================================
+
+After a successful vibe edit/mutation:
+- reload or reconstruct the updated full program from the DB
+- store/use that as the fresh currentProgram for the next turn
+- do not let the next SSE request reason from the old structured message history snapshot
+
+This can be done by:
+A. always querying DB active system fresh in refine/edit contexts
+or
+B. invalidating/overriding the in-memory currentProgram after successful mutation
+
+Either is acceptable, but the result must be:
+next turn sees updated DB truth
+
+==================================================
+TASK 4 — PATCH SSE HANDLER PROGRAM INJECTION
+==================================================
+
+In the streaming path specifically:
+- replace stale conversation-based currentProgram injection for refine/edit contexts
+- inject the DB-backed updated system instead
+
+If the current code currently does:
+currentProgram = latestStructuredProgram
+
+then change it to something like:
+- if in refine/edit/clarification-followup mode and DB active system exists:
+  currentProgram = dbActiveSystemAsStructuredProgram
+- else fallback to latestStructuredProgram only when appropriate
+
+==================================================
+TASK 5 — PATCH NON-STREAM PATH IF NEEDED
+==================================================
+
+Audit the non-stream path too.
+
+If the same stale-currentProgram issue exists there, patch it as well.
+
+Goal:
+streaming and non-stream paths should use the same current-program truth policy.
+
+==================================================
+TASK 6 — DEFINE HOW DB PROGRAM IS SERIALIZED FOR AI CONTEXT
+==================================================
+
+Make sure the DB-backed active system can be transformed into the same structured format the AI expects.
+
+If needed, create or reuse a helper like:
+- serializeTrainingSystemForPrompt()
+- dbProgramToStructuredProgram()
+
+The AI should receive a consistent structured program shape regardless of whether it came from:
+- initial conversation JSON
+or
+- DB-backed active system
+
+==================================================
+TASK 7 — PREVENT OLD CONVERSATION JSON FROM OVERRIDING DB
+==================================================
+
+Explicitly prevent this case:
+
+- old assistant build message has structuredData JSON
+- later edits updated the DB only
+- resolveCurrentProgram(history) finds the old structuredData
+- system mistakenly uses it as currentProgram
+
+If DB active system is newer/relevant in refine mode, old conversation JSON must not override it.
+
+==================================================
+TASK 8 — ADD DEBUG TRACING
+==================================================
+
+In development, log for every refine/edit request:
+
+- mode (build / refine / clarification_followup / edit)
+- currentProgram source:
+  - conversation_history
+  - db_active_system
+  - hybrid
+- activeProgramId
+- latestStructuredProgram timestamp/source if applicable
+- whether DB source overrode conversation JSON
+- whether a recent vibe edit occurred
+
+I want to see clearly which program source the AI is reasoning from.
+
+==================================================
+TASK 9 — TEST REQUIRED SCENARIOS
+==================================================
+
+Test these exact flows:
+
+CASE 1
+- Build a program
+- Make a vibe edit that changes the DB system
+- Immediately send another refinement request
+Expected:
+- next request uses updated DB program
+- no stale old structure in reasoning
+
+CASE 2
+- Build program
+- Edit Day 1
+- Ask follow-up about Day 1
+Expected:
+- AI references edited Day 1, not original pre-edit version
+
+CASE 3
+- Clarification follow-up after edit
+Expected:
+- pending clarification resumes against fresh DB program truth
+
+CASE 4
+- Initial build flow with no DB-backed active system yet
+Expected:
+- conversation structured JSON still works appropriately
+- no regression to build path
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. Where stale currentProgram injection was happening
+2. What new source-of-truth rule was added
+3. How SSE handler program injection changed
+4. Whether non-stream path was also patched
+5. What serialization/helper is used for DB program → AI context
+6. What debug traces were added
+7. Which stale-context failures are now resolved
+
+==================================================
+FINAL STANDARD
+==================================================
+
+After a successful vibe edit, the next AI turn must reason from the current updated program shown in the right panel.
+
+TrainChat must no longer have this mismatch:
+- UI sees DB truth
+- AI sees old conversation JSON
+
+The DB-backed active system must become the canonical current program for refine/edit flows.
+
+Implement this now.

@@ -26,7 +26,7 @@ import { applyEditPlan, type EditResult } from "../lib/edit-engine";
 import type { VerificationStatus } from "../lib/mutation-verifier";
 import { createChangeLogEntry } from "../lib/change-log-service";
 import { interpretNeuralGraph, buildNeuralAdjustmentSummary, type NeuralBias, type Imbalance } from "../lib/neural-graph-interpreter";
-import { getActiveTrainingSystem, getFullTrainingSystem, createTrainingSystemFromProgram, upsertTrainingSystemFromProgram } from "../lib/training-system-service";
+import { getActiveTrainingSystem, getFullTrainingSystem, createTrainingSystemFromProgram, upsertTrainingSystemFromProgram, dbSystemToProgramStructure } from "../lib/training-system-service";
 import { buildDecisionMemory } from "../lib/decision-memory-service";
 import { logger } from "../lib/logger";
 import { buildStageEvent, type BuildStage } from "../lib/build-pipeline";
@@ -624,47 +624,62 @@ Keep it helpful and intelligent, never promotional.`;
 
   // ── Intent-specific routing ───────────────────────────────────────────────
 
-  // RETRIEVE_CURRENT_PROGRAM — no AI call needed, return current program directly
-  if (intentResult.type === "RETRIEVE_CURRENT_PROGRAM" && latestStructuredProgram) {
-    logger.info("[IntentRouter] Handling RETRIEVE_CURRENT_PROGRAM — returning current program without AI call");
-    const retrieveContent = formatShortCircuitResponse({
-      mode: "EXECUTION_RESPONSE",
-      hasActiveProgram: true,
-    });
-    const [assistantMessage] = await db.insert(messagesTable).values({
-      conversationId: params.data.id,
-      role: "assistant",
-      content: retrieveContent,
-      structuredData: JSON.stringify(latestStructuredProgram),
-    }).returning();
+  // RETRIEVE_CURRENT_PROGRAM — no AI call needed, return current program directly.
+  // Source-of-truth: DB-backed active system wins over stale conversation-history JSON.
+  if (intentResult.type === "RETRIEVE_CURRENT_PROGRAM") {
+    // Prefer DB-fresh state; fall back to conversation JSON; fall through to AI if neither exists
+    let retrieveProgram: ProgramStructure | null = null;
+    if (activeSystem) {
+      const freshFull = await getFullTrainingSystem(activeSystem.id).catch(() => null);
+      if (freshFull) retrieveProgram = dbSystemToProgramStructure(freshFull) as ProgramStructure | null;
+    }
+    if (!retrieveProgram) retrieveProgram = latestStructuredProgram;
 
-    await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+    if (retrieveProgram) {
+      logger.info(
+        {
+          source: activeSystem && retrieveProgram !== latestStructuredProgram ? "db_active_system" : "conversation_history",
+          systemId: activeSystem?.id,
+        },
+        "[IntentRouter] Handling RETRIEVE_CURRENT_PROGRAM — returning current program without AI call"
+      );
+      const retrieveContent = formatShortCircuitResponse({
+        mode: "EXECUTION_RESPONSE",
+        hasActiveProgram: true,
+      });
+      const [assistantMessage] = await db.insert(messagesTable).values({
+        conversationId: params.data.id,
+        role: "assistant",
+        content: retrieveContent,
+        structuredData: JSON.stringify(retrieveProgram),
+      }).returning();
 
-    res.json({
-      userMessage: {
-        id: userMessage.id,
-        conversationId: userMessage.conversationId,
-        role: userMessage.role,
-        content: userMessage.content,
-        createdAt: userMessage.createdAt.toISOString(),
-        structuredData: null,
-      },
-      assistantMessage: {
-        id: assistantMessage.id,
-        conversationId: assistantMessage.conversationId,
-        role: assistantMessage.role,
-        content: assistantMessage.content,
-        createdAt: assistantMessage.createdAt.toISOString(),
-        structuredData: assistantMessage.structuredData ?? null,
-      },
-      planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
-      intentDebug: { type: intentResult.type, confidence: intentResult.confidence },
-    });
-    return;
-  }
+      await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
 
-  // RETRIEVE_CURRENT_PROGRAM but no program exists — fall through to AI
-  if (intentResult.type === "RETRIEVE_CURRENT_PROGRAM" && !latestStructuredProgram) {
+      res.json({
+        userMessage: {
+          id: userMessage.id,
+          conversationId: userMessage.conversationId,
+          role: userMessage.role,
+          content: userMessage.content,
+          createdAt: userMessage.createdAt.toISOString(),
+          structuredData: null,
+        },
+        assistantMessage: {
+          id: assistantMessage.id,
+          conversationId: assistantMessage.conversationId,
+          role: assistantMessage.role,
+          content: assistantMessage.content,
+          createdAt: assistantMessage.createdAt.toISOString(),
+          structuredData: assistantMessage.structuredData ?? null,
+        },
+        planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+        intentDebug: { type: intentResult.type, confidence: intentResult.confidence },
+      });
+      return;
+    }
+
+    // No program from either source — fall through to AI to explain
     logger.info("[IntentRouter] RETRIEVE_CURRENT_PROGRAM but no program found — routing to AI to explain");
   }
 
@@ -1358,7 +1373,39 @@ Keep it helpful and intelligent, never promotional.`;
     intentResult.type === "ADJUST_FOR_READINESS" ||
     intentResult.type === "RETRIEVE_CURRENT_PROGRAM"
   );
-  const currentProgram = isModificationIntent ? latestStructuredProgram : null;
+
+  // ── SOURCE-OF-TRUTH RULE ──────────────────────────────────────────────────
+  // BUILD mode (CREATE_PROGRAM / START_NEW_PROGRAM):
+  //   conversation-built JSON is the source (DB system may not exist yet).
+  // REFINE / EDIT / RETRIEVE mode:
+  //   if a DB-backed active system exists, use that as currentProgram.
+  //   DB state wins over stale conversation-history JSON — the AI and right panel
+  //   must see the same program after any vibe edit.
+  let currentProgram: ProgramStructure | null = null;
+  if (isModificationIntent) {
+    if (activeSystem) {
+      // DB system exists — load fresh state and convert to ProgramStructure
+      const freshFullSystem = await getFullTrainingSystem(activeSystem.id).catch(() => null);
+      if (freshFullSystem) {
+        const dbProgram = dbSystemToProgramStructure(freshFullSystem) as ProgramStructure | null;
+        if (dbProgram) {
+          currentProgram = dbProgram;
+          logger.info(
+            { source: "db_active_system", systemId: activeSystem.id, intentType: intentResult.type, days: dbProgram.days.length },
+            "[ProgramContext] Using fresh DB program as currentProgram — overrides stale conversation JSON"
+          );
+        }
+      }
+    }
+    if (!currentProgram) {
+      // Fall back: build mode or no DB system yet
+      currentProgram = latestStructuredProgram;
+      logger.info(
+        { source: "conversation_history", intentType: intentResult.type, hasProgram: !!latestStructuredProgram },
+        "[ProgramContext] Using conversation-history program as currentProgram (no DB system)"
+      );
+    }
+  }
 
   // ── STRUCTURAL_REBUILD pre-transform ──────────────────────────────────────
   // When the decision tree resolves a STRUCTURAL_REBUILD, run the transformation
@@ -2004,15 +2051,31 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   }
 
   // ── Short-circuit: RETRIEVE_CURRENT_PROGRAM ───────────────────────────────
-  if (intentResult.type === "RETRIEVE_CURRENT_PROGRAM" && latestStructuredProgram) {
-    const retrieveContent = formatShortCircuitResponse({ mode: "EXECUTION_RESPONSE", hasActiveProgram: true });
-    const [assistantMessage] = await db.insert(messagesTable).values({
-      conversationId: params.data.id, role: "assistant", content: retrieveContent,
-      structuredData: JSON.stringify(latestStructuredProgram),
-    }).returning();
-    await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-    done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "conversation_only" }));
-    return;
+  // DB-backed active system wins over stale conversation-history JSON.
+  if (intentResult.type === "RETRIEVE_CURRENT_PROGRAM") {
+    let retrieveProgram: ProgramStructure | null = null;
+    if (activeSystem) {
+      const freshFull = await getFullTrainingSystem(activeSystem.id).catch(() => null);
+      if (freshFull) retrieveProgram = dbSystemToProgramStructure(freshFull) as ProgramStructure | null;
+    }
+    if (!retrieveProgram) retrieveProgram = latestStructuredProgram;
+
+    if (retrieveProgram) {
+      logger.info(
+        { source: activeSystem && retrieveProgram !== latestStructuredProgram ? "db_active_system" : "conversation_history", systemId: activeSystem?.id },
+        "[IntentRouter:stream] Handling RETRIEVE_CURRENT_PROGRAM — returning fresh program"
+      );
+      const retrieveContent = formatShortCircuitResponse({ mode: "EXECUTION_RESPONSE", hasActiveProgram: true });
+      const [assistantMessage] = await db.insert(messagesTable).values({
+        conversationId: params.data.id, role: "assistant", content: retrieveContent,
+        structuredData: JSON.stringify(retrieveProgram),
+      }).returning();
+      await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+      done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "conversation_only" }));
+      return;
+    }
+    // No program from either source — fall through to AI to explain
+    logger.info("[IntentRouter:stream] RETRIEVE_CURRENT_PROGRAM but no program found — routing to AI to explain");
   }
 
   // ── Short-circuit: CLARIFICATION_FOLLOWUP ────────────────────────────────
@@ -2455,7 +2518,35 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     intentResult.type === "ADJUST_FOR_READINESS" ||
     intentResult.type === "RETRIEVE_CURRENT_PROGRAM"
   );
-  const currentProgram = isModificationIntent ? latestStructuredProgram : null;
+
+  // ── SOURCE-OF-TRUTH RULE (SSE path) ───────────────────────────────────────
+  // BUILD mode: conversation JSON is the source (DB system may not exist yet).
+  // REFINE / EDIT / RETRIEVE mode: DB-backed active system wins over stale
+  // conversation-history JSON. The AI and the right panel must see the same
+  // program. After any vibe edit, only the DB has the updated truth.
+  let currentProgram: ProgramStructure | null = null;
+  if (isModificationIntent) {
+    if (activeSystem) {
+      const freshFullSystem = await getFullTrainingSystem(activeSystem.id).catch(() => null);
+      if (freshFullSystem) {
+        const dbProgram = dbSystemToProgramStructure(freshFullSystem) as ProgramStructure | null;
+        if (dbProgram) {
+          currentProgram = dbProgram;
+          logger.info(
+            { source: "db_active_system", systemId: activeSystem.id, intentType: intentResult.type, days: dbProgram.days.length },
+            "[ProgramContext:stream] Using fresh DB program as currentProgram — overrides stale conversation JSON"
+          );
+        }
+      }
+    }
+    if (!currentProgram) {
+      currentProgram = latestStructuredProgram;
+      logger.info(
+        { source: "conversation_history", intentType: intentResult.type, hasProgram: !!latestStructuredProgram },
+        "[ProgramContext:stream] Using conversation-history program as currentProgram (no DB system)"
+      );
+    }
+  }
 
   let preTransformedProgram: ProgramStructure | null = currentProgram;
   let transformHint: string | null = null;
