@@ -150,15 +150,26 @@ function buildSessionsForDayCount(
   variationSeed?: number,
 ): SessionArchitecture[] {
   const isHockey = sport?.toLowerCase().includes("hockey") ?? false;
+  const s = sport?.toLowerCase() ?? "";
+
+  // Category 1 — Power/Force Sports
   const isAthletic = isHockey
-    || sport?.toLowerCase().includes("soccer")
-    || sport?.toLowerCase().includes("football")
-    || sport?.toLowerCase().includes("basketball")
-    || sport?.toLowerCase().includes("rugby")
-    || sport?.toLowerCase().includes("lacrosse")
-    || sport?.toLowerCase().includes("track")
-    || sport?.toLowerCase().includes("sprint")
-    || false;
+    || s.includes("soccer") || s.includes("football") || s.includes("basketball")
+    || s.includes("rugby") || s.includes("lacrosse") || s.includes("volleyball")
+    || s.includes("track") || s.includes("sprint");
+
+  // Category 3 — Rotational / Skill Sports
+  const isCategory3 = s.includes("tennis") || s.includes("pickleball") || s.includes("squash")
+    || s.includes("padel") || s.includes("baseball") || s.includes("softball") || s.includes("golf");
+
+  // Category 4 — Endurance / Corrective Sports
+  const isCategory4 = s.includes("swim") || s.includes("rowing") || s.includes("cycling")
+    || s.includes("triathlon") || s.includes("cyclist") || s.includes("rower");
+
+  // Category 5 — Combat / Mixed Sports
+  const isCategory5 = s.includes("mma") || s.includes("boxing") || s.includes("wrestling")
+    || s.includes("bjj") || s.includes("judo") || s.includes("muay thai")
+    || s.includes("kickboxing") || s.includes("martial art") || s.includes("jiu-jitsu");
 
   const isHypertrophy = goal?.toLowerCase().includes("hypertrophy")
     || goal?.toLowerCase().includes("muscle")
@@ -175,6 +186,364 @@ function buildSessionsForDayCount(
     goal?.toLowerCase().includes("work capacity") ||
     goal?.toLowerCase().includes("stamina")
   );
+
+  // ─── Category 3: Rotational / Skill Sports ───────────────────────────────────
+  // Tennis, pickleball, squash, padel, baseball, softball, golf
+  // No plyometrics. Rotational power (med ball) is the power modality. Moderate reps.
+  if (isCategory3) {
+    if (daysPerWeek === 3) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Rotational Power + Lower Strength",
+          intent: "Rotational med ball work as the power anchor; moderate bilateral lower compound; unilateral lateral control",
+          neuralDemand: "moderate",
+          primaryPattern: "rotational",
+          emphasizedPatterns: ["rotational", "hinge", "unilateral_lower", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Hip and thoracic mobility: hip CARs, thoracic rotation, half-kneeling hip flexor" },
+            { role: "power", description: "Rotational med ball: med ball rotational throw or scoop toss (not plyometrics — rotational power only)" },
+            { role: "primary", description: "Lower compound: goblet squat, trap bar deadlift, or RDL (moderate load, 6–10 reps)" },
+            { role: "unilateral", description: "Unilateral: split squat, lateral lunge, or RFESS (8–12 reps per side)" },
+            { role: "trunk", description: "Anti-rotation trunk: Pallof press or half-kneeling cable chop" },
+          ],
+        },
+        {
+          dayNumber: 2,
+          identity: "Upper Pulling + Shoulder Structural Care",
+          intent: "Pull-dominant upper session; rotational power; mandatory shoulder and elbow structural care",
+          neuralDemand: "moderate",
+          primaryPattern: "upper_pull",
+          emphasizedPatterns: ["upper_pull", "rotational", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Scapular prep: wall slides, band pull-apart, thoracic extension over foam roller" },
+            { role: "power", description: "Rotational med ball: rotational throw or overhead backward slam" },
+            { role: "primary", description: "Vertical or horizontal pull (pull-up, lat pulldown, or barbell row — 6–10 reps)" },
+            { role: "secondary", description: "Horizontal push complement (moderate — not the session anchor)" },
+            { role: "trunk", description: "Anti-extension trunk: dead bug or ab wheel rollout" },
+            { role: "finisher", description: "MANDATORY SHOULDER/ELBOW CARE: face pull + band external rotation (3 sets each — non-negotiable for rotational sport athletes)" },
+          ],
+        },
+        {
+          dayNumber: 3,
+          identity: "Hip Strength + Thoracic Mobility",
+          intent: "Hinge-dominant posterior chain; thoracic rotation; lateral movement and anti-rotation trunk",
+          neuralDemand: "low",
+          primaryPattern: "hinge",
+          emphasizedPatterns: ["hinge", "lateral", "rotational", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Full lower and thoracic prep: hip circles, thoracic rotation, ankle mobility" },
+            { role: "primary", description: "Hinge pattern (RDL, single-leg RDL, or hip thrust — 8–12 reps)" },
+            { role: "secondary", description: "Lateral movement: lateral lunge, Copenhagen plank, or lateral step-up" },
+            { role: "trunk", description: "Rotational and lateral trunk: landmine rotation + Copenhagen plank" },
+            { role: "finisher", description: "Thoracic rotation mobility: thoracic CARs, seated rotation with dowel, or half-kneeling reach" },
+          ],
+        },
+      ];
+    }
+    if (daysPerWeek === 4) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Rotational Power + Lower Strength",
+          intent: "Rotational power anchor; moderate lower compound; unilateral lower control",
+          neuralDemand: "moderate",
+          primaryPattern: "rotational",
+          emphasizedPatterns: ["rotational", "squat", "unilateral_lower", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Hip and thoracic mobility prep" },
+            { role: "power", description: "Med ball rotational throw or scoop toss" },
+            { role: "primary", description: "Squat-pattern compound (goblet squat, front squat, or trap bar — 6–10 reps)" },
+            { role: "unilateral", description: "Split squat or RFESS (8–12 per side)" },
+            { role: "trunk", description: "Anti-rotation: Pallof press" },
+          ],
+        },
+        {
+          dayNumber: 2,
+          identity: "Upper Pulling + Shoulder Care",
+          intent: "Pull-dominant; rotational power; mandatory shoulder and elbow structural care",
+          neuralDemand: "moderate",
+          primaryPattern: "upper_pull",
+          emphasizedPatterns: ["upper_pull", "rotational", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Scapular positioning and thoracic mobility" },
+            { role: "power", description: "Med ball overhead backward slam or rotational throw" },
+            { role: "primary", description: "Vertical pull (pull-up or lat pulldown — 6–10 reps)" },
+            { role: "secondary", description: "Horizontal push (moderate load)" },
+            { role: "trunk", description: "Anti-extension: dead bug or ab wheel" },
+            { role: "finisher", description: "Face pull + band external rotation (MANDATORY — 3 sets each)" },
+          ],
+        },
+        {
+          dayNumber: 3,
+          identity: "Hip Posterior Chain + Lateral Strength",
+          intent: "Hinge-dominant; lateral movement control; anti-rotation trunk",
+          neuralDemand: "low",
+          primaryPattern: "hinge",
+          emphasizedPatterns: ["hinge", "lateral", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Hip flexor and ankle mobility" },
+            { role: "primary", description: "RDL or single-leg RDL (8–12 reps)" },
+            { role: "secondary", description: "Hip thrust or glute bridge" },
+            { role: "unilateral", description: "Lateral lunge or Copenhagen plank" },
+            { role: "trunk", description: "Lateral stability: side plank or suitcase carry" },
+          ],
+        },
+        {
+          dayNumber: 4,
+          identity: "Full Rotational Integration + Thoracic Mobility",
+          intent: "Rotational power; upper structural care; thoracic mobility finisher",
+          neuralDemand: "low",
+          primaryPattern: "rotational",
+          emphasizedPatterns: ["rotational", "upper_pull", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Full thoracic + hip rotation mobility prep" },
+            { role: "power", description: "Med ball rotational complex (2 variations)" },
+            { role: "primary", description: "Horizontal pull (bent-over row or cable row — 8–12 reps)" },
+            { role: "trunk", description: "Rotational trunk: landmine rotation, half-kneeling chop" },
+            { role: "finisher", description: "Face pull + band external rotation + thoracic mobility (structural care)" },
+          ],
+        },
+      ];
+    }
+  }
+
+  // ─── Category 4: Endurance / Corrective Sports ────────────────────────────────
+  // Swimming, rowing, cycling, triathlon
+  // No explosive work. Corrective/structural emphasis. No gym conditioning added.
+  if (isCategory4) {
+    if (daysPerWeek === 3) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Posterior Chain + Pulling Strength",
+          intent: "Hinge-dominant posterior chain; vertical or horizontal pull; shoulder structural care",
+          neuralDemand: "moderate",
+          primaryPattern: "hinge",
+          emphasizedPatterns: ["hinge", "upper_pull", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Hip and scapular prep: hip CARs, wall slides, band pull-apart" },
+            { role: "primary", description: "Hinge compound: RDL, deadlift, or trap bar deadlift (10–15 reps)" },
+            { role: "secondary", description: "Vertical or horizontal pull: pull-up, lat pulldown, or cable row (10–15 reps)" },
+            { role: "unilateral", description: "Single-leg RDL or hip thrust (10–12 per side)" },
+            { role: "trunk", description: "Anti-extension trunk: dead bug or hollow body hold" },
+            { role: "finisher", description: "Shoulder care: face pull + band external rotation (3 sets each — mandatory)" },
+          ],
+        },
+        {
+          dayNumber: 2,
+          identity: "Upper Structural Health + Scapular Stability",
+          intent: "Pull-dominant upper session; scapular care; trunk stiffness — counterbalances sport-specific overuse patterns",
+          neuralDemand: "low",
+          primaryPattern: "upper_pull",
+          emphasizedPatterns: ["upper_pull", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Thoracic extension + scapular positioning: foam roller thoracic, wall slides, Y/T/W" },
+            { role: "primary", description: "Horizontal pull primary (bent-over row or cable row — 10–15 reps)" },
+            { role: "secondary", description: "Vertical pull (lat pulldown or assisted pull-up — 10–15 reps)" },
+            { role: "trunk", description: "Anti-rotation and bracing: Pallof press, RKC plank, or suitcase carry" },
+            { role: "finisher", description: "Y/T/W scapular exercises + band external rotation (structural care mandatory)" },
+          ],
+        },
+        {
+          dayNumber: 3,
+          identity: "Corrective Lower + Hip Balance",
+          intent: "Single-leg corrective work; hip extension and abductor balance; posterior chain accessory — addresses imbalances from sport loading",
+          neuralDemand: "low",
+          primaryPattern: "unilateral_lower",
+          emphasizedPatterns: ["unilateral_lower", "hinge", "trunk", "lateral"],
+          cnsFlow: [
+            { role: "prep", description: "Hip flexor mobility + glute activation: couch stretch, banded clamshell, lateral band walk" },
+            { role: "primary", description: "Single-leg strength: RFESS, split squat, or step-up (10–12 per side)" },
+            { role: "secondary", description: "Hip thrust or glute bridge for hip extension (10–15 reps)" },
+            { role: "unilateral", description: "Hip flexor eccentric loading or Copenhagen plank (tissue balance)" },
+            { role: "trunk", description: "Lateral stability: Copenhagen plank or side plank with hip abduction" },
+          ],
+        },
+      ];
+    }
+    if (daysPerWeek === 4) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Posterior Chain + Pulling Strength",
+          intent: "Hinge primary; pulling compound; shoulder care to open the week",
+          neuralDemand: "moderate",
+          primaryPattern: "hinge",
+          emphasizedPatterns: ["hinge", "upper_pull", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Hip and scapular prep" },
+            { role: "primary", description: "Hinge compound: RDL or deadlift (10–15 reps)" },
+            { role: "secondary", description: "Vertical pull: pull-up or lat pulldown (10–15 reps)" },
+            { role: "unilateral", description: "Single-leg RDL or hip thrust (10–12 per side)" },
+            { role: "trunk", description: "Anti-extension: dead bug or hollow body" },
+            { role: "finisher", description: "Face pull + band external rotation (mandatory)" },
+          ],
+        },
+        {
+          dayNumber: 2,
+          identity: "Upper Structural Health + Scapular Stability",
+          intent: "Pull-dominant; scapular care; trunk bracing",
+          neuralDemand: "low",
+          primaryPattern: "upper_pull",
+          emphasizedPatterns: ["upper_pull", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Thoracic extension + scapular positioning" },
+            { role: "primary", description: "Horizontal pull: bent-over row or cable row (10–15 reps)" },
+            { role: "secondary", description: "Vertical pull: lat pulldown (10–15 reps)" },
+            { role: "trunk", description: "Anti-rotation: Pallof press or suitcase carry" },
+            { role: "finisher", description: "Y/T/W + band external rotation" },
+          ],
+        },
+        {
+          dayNumber: 3,
+          identity: "Corrective Lower + Hip Balance",
+          intent: "Single-leg corrective; hip extension; hip flexor care",
+          neuralDemand: "low",
+          primaryPattern: "unilateral_lower",
+          emphasizedPatterns: ["unilateral_lower", "lateral", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Hip flexor mobility + glute activation" },
+            { role: "primary", description: "Single-leg strength: RFESS or step-up (10–12 per side)" },
+            { role: "secondary", description: "Hip thrust (12–15 reps)" },
+            { role: "unilateral", description: "Copenhagen plank or lateral hip abductor work" },
+            { role: "trunk", description: "Lateral stability trunk" },
+          ],
+        },
+        {
+          dayNumber: 4,
+          identity: "Full Structural Integration + Posterior Chain",
+          intent: "Closing the week with pulling strength, posterior chain support, and shoulder care",
+          neuralDemand: "low",
+          primaryPattern: "upper_pull",
+          emphasizedPatterns: ["upper_pull", "hinge", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Hip and thoracic mobility" },
+            { role: "primary", description: "Horizontal pull compound (10–15 reps)" },
+            { role: "secondary", description: "Hinge accessory: single-leg RDL or hip thrust" },
+            { role: "trunk", description: "Anti-extension + anti-rotation pairing" },
+            { role: "finisher", description: "Shoulder care: face pull + external rotation + Y/T/W" },
+          ],
+        },
+      ];
+    }
+  }
+
+  // ─── Category 5: Combat / Mixed Sports ───────────────────────────────────────
+  // MMA, boxing, wrestling, BJJ, judo, muay thai, kickboxing, martial arts
+  // Pull-dominant, functional strength, conditioning rounds mandatory
+  if (isCategory5) {
+    if (daysPerWeek === 3) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Functional Strength + Grappling Capacity",
+          intent: "Pull-dominant compound strength; loaded carry; isometric tolerance; conditioning rounds",
+          neuralDemand: "moderate",
+          primaryPattern: "upper_pull",
+          emphasizedPatterns: ["upper_pull", "hinge", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Full-body dynamic prep: hip circles, arm swings, inchworm, scapular activation" },
+            { role: "primary", description: "Pull-dominant compound: weighted pull-up, trap bar deadlift, or barbell row (5–8 reps)" },
+            { role: "secondary", description: "Push complement: bench or overhead press (5–8 reps) — not the session anchor" },
+            { role: "trunk", description: "Isometric and anti-rotation: RKC plank, Pallof press, or farmer carry" },
+            { role: "finisher", description: "CONDITIONING ROUNDS: 4–5 × 3–5 min rounds (shadow boxing, kettlebell complex, assault bike, or grappling-specific drill) with short rest matching sport work:rest ratio" },
+          ],
+        },
+        {
+          dayNumber: 2,
+          identity: "Lower Strength + Energy System Work",
+          intent: "Hinge and single-leg strength base; trunk stiffness; conditioning rounds",
+          neuralDemand: "moderate",
+          primaryPattern: "hinge",
+          emphasizedPatterns: ["hinge", "unilateral_lower", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Hip and ankle mobility: hip CARs, couch stretch, ankle circles" },
+            { role: "primary", description: "Hinge compound: deadlift, RDL, or trap bar deadlift (5–8 reps)" },
+            { role: "unilateral", description: "Single-leg: split squat or RFESS (8–10 per side)" },
+            { role: "trunk", description: "Isometric carry: farmer carry or suitcase carry" },
+            { role: "finisher", description: "CONDITIONING ROUNDS: 3–4 × 3–4 min efforts — interval-based (bike, row, or fight-specific drill) with short rest" },
+          ],
+        },
+        {
+          dayNumber: 3,
+          identity: "Structural Accessory + Active Recovery Conditioning",
+          intent: "Supplementary pulling; grip and shoulder care; lower-intensity conditioning",
+          neuralDemand: "low",
+          primaryPattern: "upper_pull",
+          emphasizedPatterns: ["upper_pull", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Thoracic and shoulder mobility: wall slides, thoracic rotation, shoulder CARs" },
+            { role: "primary", description: "Supplementary pull: cable row, face pull, or kettlebell row (10–12 reps)" },
+            { role: "trunk", description: "Anti-rotation and anti-extension trunk: dead bug + Pallof press" },
+            { role: "finisher", description: "CONDITIONING (lighter): 3 × 5 min aerobic base — steady-state row, bike, or shadow work at 60–70% effort" },
+          ],
+        },
+      ];
+    }
+    if (daysPerWeek === 4) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Upper Pull Strength + Conditioning",
+          intent: "Vertical and horizontal pull; conditioning rounds to close",
+          neuralDemand: "moderate",
+          primaryPattern: "upper_pull",
+          emphasizedPatterns: ["upper_pull", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Full-body dynamic prep + scapular activation" },
+            { role: "primary", description: "Weighted pull-up or barbell row (5–8 reps)" },
+            { role: "secondary", description: "Push complement (moderate load)" },
+            { role: "trunk", description: "Farmer carry or suitcase carry" },
+            { role: "finisher", description: "CONDITIONING: 4–5 rounds × 3 min with 1 min rest" },
+          ],
+        },
+        {
+          dayNumber: 2,
+          identity: "Lower Strength + Unilateral",
+          intent: "Hinge-dominant lower strength; single-leg stability; trunk",
+          neuralDemand: "moderate",
+          primaryPattern: "hinge",
+          emphasizedPatterns: ["hinge", "unilateral_lower", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Hip mobility and activation" },
+            { role: "primary", description: "Deadlift or RDL (5–8 reps)" },
+            { role: "unilateral", description: "RFESS or split squat (8–10 per side)" },
+            { role: "trunk", description: "Anti-rotation: Pallof press or half-kneeling cable chop" },
+          ],
+        },
+        {
+          dayNumber: 3,
+          identity: "Functional Strength + Energy System",
+          intent: "Pull-dominant; carries; conditioning rounds",
+          neuralDemand: "moderate",
+          primaryPattern: "upper_pull",
+          emphasizedPatterns: ["upper_pull", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Dynamic full-body prep" },
+            { role: "primary", description: "Trap bar deadlift or kettlebell swing (5–8 reps)" },
+            { role: "secondary", description: "Pull complex: pull-up + face pull" },
+            { role: "trunk", description: "Isometric: RKC plank" },
+            { role: "finisher", description: "CONDITIONING: 4 rounds × 4 min with short rest" },
+          ],
+        },
+        {
+          dayNumber: 4,
+          identity: "Structural + Active Recovery",
+          intent: "Supplementary pull; grip and shoulder care; lighter conditioning",
+          neuralDemand: "low",
+          primaryPattern: "trunk",
+          emphasizedPatterns: ["upper_pull", "trunk"],
+          cnsFlow: [
+            { role: "prep", description: "Thoracic and shoulder mobility" },
+            { role: "primary", description: "Cable row + face pull (10–12 reps each)" },
+            { role: "trunk", description: "Dead bug + Copenhagen plank" },
+            { role: "finisher", description: "CONDITIONING (aerobic): 3 × 5 min at 60–70% effort" },
+          ],
+        },
+      ];
+    }
+  }
 
   // Individual sport-specific architectures are handled below
   // (football, basketball, soccer, baseball each have dedicated 3-day and 4-day blocks)
@@ -1537,6 +1906,17 @@ export function buildArchitectureBrief(
   const isSoccer = !!(sport && /soccer|association football/i.test(sport));
   const isBaseball = !!(sport && /baseball|softball/i.test(sport));
   const hasSportProfile = isFootball || isBasketball || isSoccer || isBaseball || isHockey;
+
+  // Sport category detection for validation rules
+  const sportLc = sport?.toLowerCase() ?? "";
+  const isCat3Sport = sportLc.includes("tennis") || sportLc.includes("pickleball") || sportLc.includes("squash")
+    || sportLc.includes("padel") || sportLc.includes("baseball") || sportLc.includes("softball") || sportLc.includes("golf");
+  const isCat4Sport = sportLc.includes("swim") || sportLc.includes("rowing") || sportLc.includes("cycling")
+    || sportLc.includes("triathlon") || sportLc.includes("cyclist") || sportLc.includes("rower");
+  const isCat5Sport = sportLc.includes("mma") || sportLc.includes("boxing") || sportLc.includes("wrestling")
+    || sportLc.includes("bjj") || sportLc.includes("judo") || sportLc.includes("muay thai")
+    || sportLc.includes("kickboxing") || sportLc.includes("martial art");
+  const isPowerOptional = isCat3Sport || isCat4Sport || isCat5Sport;
   const isConditioningGoal = !!(
     goal?.toLowerCase().includes("conditioning") ||
     goal?.toLowerCase().includes("endurance") ||
@@ -1706,7 +2086,13 @@ Only AFTER the above architecture is locked, select exercises that:
 - [ ] Squat and hinge not on back-to-back days
 - [ ] Push and pull balanced across the week
 - [ ] Every session has trunk work
-- [ ] Every session has power/explosive work (unless injury contraindicates)
+${isPowerOptional
+  ? isCat3Sport
+    ? "- [ ] Every session has rotational med ball power work (NOT plyometrics or Olympic lifts — rotational power only for this sport category)"
+    : isCat4Sport
+      ? "- [ ] NO explosive or plyometric work — Category 4 sport (swimming/rowing/cycling) never uses explosive blocks in the gym"
+      : "- [ ] Conditioning rounds present in every session (Category 5 combat sport — conditioning is mandatory, not optional)"
+  : "- [ ] Every session has power/explosive work (unless injury contraindicates)"}
 - [ ] Every session has at least one unilateral lower-body movement (lower/full-body days)
 - [ ] No repeated primary lifts across sessions
 - [ ] Exercise intents are performance cues, not muscle labels${sportValidationLines}${isConditioningGoal ? "\n- [ ] Dedicated conditioning sessions include named energy system (aerobic base / lactate threshold / VO2max / anaerobic capacity / RSA)\n- [ ] Every conditioning exercise has work duration, rest duration, and interval count\n- [ ] Conditioning sessions do NOT default to circuits — real intervals required\n- [ ] Progression is stated: Week 1 → Week 3 → Week 5" : ""}`;
@@ -1745,15 +2131,28 @@ export function validateProgramArchitecture(
       warnings.push(`Day ${i + 1} (${day.name}) is missing trunk/core work.`);
     }
 
-    const hasPower = ex.some((e) => {
-      const c = (e.classification ?? "").toLowerCase();
-      const n = (e.name ?? "").toLowerCase();
-      return c.includes("power") || c.includes("explosive") || c.includes("prep")
-        || n.includes("jump") || n.includes("bound") || n.includes("throw") || n.includes("clean")
-        || n.includes("snatch") || n.includes("slam");
-    });
-    if (!hasPower) {
-      warnings.push(`Day ${i + 1} (${day.name}) is missing power/explosive work.`);
+    // Only warn about missing power for Category 1/2 sports.
+    // Category 3 uses rotational med ball (not classified as "power"), Category 4 never uses explosives, Category 5 uses conditioning rounds.
+    const sportStr = (sport ?? "").toLowerCase();
+    const isCat3 = sportStr.includes("tennis") || sportStr.includes("pickleball") || sportStr.includes("squash")
+      || sportStr.includes("padel") || sportStr.includes("baseball") || sportStr.includes("softball") || sportStr.includes("golf");
+    const isCat4 = sportStr.includes("swim") || sportStr.includes("rowing") || sportStr.includes("cycling")
+      || sportStr.includes("triathlon");
+    const isCat5 = sportStr.includes("mma") || sportStr.includes("boxing") || sportStr.includes("wrestling")
+      || sportStr.includes("bjj") || sportStr.includes("judo") || sportStr.includes("muay thai") || sportStr.includes("kickboxing");
+    const skipPowerCheck = isCat3 || isCat4 || isCat5;
+
+    if (!skipPowerCheck) {
+      const hasPower = ex.some((e) => {
+        const c = (e.classification ?? "").toLowerCase();
+        const n = (e.name ?? "").toLowerCase();
+        return c.includes("power") || c.includes("explosive") || c.includes("prep")
+          || n.includes("jump") || n.includes("bound") || n.includes("throw") || n.includes("clean")
+          || n.includes("snatch") || n.includes("slam");
+      });
+      if (!hasPower) {
+        warnings.push(`Day ${i + 1} (${day.name}) is missing power/explosive work.`);
+      }
     }
 
     const missingIntent = ex.filter((e) => !e.intent || e.intent.trim().length < 15);
