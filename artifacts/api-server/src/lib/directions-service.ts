@@ -596,21 +596,17 @@ function checkSpecificity(
       return { isSpecific: true, directEditRequest: request };
     }
 
-    // ── Block-level command WITHOUT a phase target context ───────────────────
-    // User may be in an exercise/session drawer but phrasing a block-level
-    // intent (e.g. "I want to focus more on power"). Check if request matches
-    // block intent patterns independent of targetContext.
-    const blockLabel = targetContext?.parentLabel ?? targetContext?.label ?? "this block";
-    const dummyPhaseContext: TargetContext = {
-      type: "phase",
-      id: targetContext?.id ?? 0,
-      label: blockLabel,
-      parentLabel: targetContext?.parentLabel,
-    };
-    const blockMatch = checkBlockSpecificity(request, dummyPhaseContext);
-    if (blockMatch) {
-      logCommandRouting(request, true, "block", "parser", `block intent without phase context: ${blockMatch.intent}`);
-      return { isSpecific: true, directEditRequest: blockMatch.directEditRequest };
+    // ── Session / exercise target with a direct command ──────────────────────
+    // For session and exercise targets, do NOT reframe the request using
+    // block-level language. Block-level builders produce text like "across the
+    // week" that confuses the edit engine when the target is a single session,
+    // leading to wrong outcomes (e.g. converting a session to recovery when the
+    // user asked for more explosive work).
+    // Instead, pass the original request through — the edit engine receives the
+    // targetContext separately and knows it is scoped to this session/exercise.
+    if (targetContext?.type === "session" || targetContext?.type === "exercise") {
+      logCommandRouting(request, true, targetContext.type, "parser", "direct command on session/exercise — passing original request through");
+      return { isSpecific: true, directEditRequest: request };
     }
 
     // ── Named exercise command ───────────────────────────────────────────────
