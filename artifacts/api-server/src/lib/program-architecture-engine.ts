@@ -147,6 +147,7 @@ function buildSessionsForDayCount(
   daysPerWeek: number,
   sport: string | null,
   goal: string | null,
+  variationSeed?: number,
 ): SessionArchitecture[] {
   const isHockey = sport?.toLowerCase().includes("hockey") ?? false;
   const isAthletic = isHockey
@@ -1077,6 +1078,41 @@ function buildSessionsForDayCount(
   }
 
   if (daysPerWeek === 3) {
+    // Variant B: Hinge-first / posterior-chain-emphasis 3-day split
+    if ((variationSeed ?? 0) % 2 === 1) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Hinge-Dominant Lower + Posterior Chain Power",
+          intent: "Deadlift-pattern force production as the weekly base; posterior chain capacity and reactive power expression",
+          neuralDemand: "high",
+          primaryPattern: "hinge",
+          emphasizedPatterns: ["hinge", "power", "unilateral_lower", "trunk"],
+          cnsFlow: buildCNSFlow(["hinge", "power", "unilateral_lower", "trunk"], "high"),
+          sportNotes: isHockey ? "RDL + single-leg RDL for edge mechanics; reactive bound after hinge warm-up" : undefined,
+        },
+        {
+          dayNumber: 2,
+          identity: "Horizontal Push + Shoulder Structural Health",
+          intent: "Bench press or dumbbell press as the force baseline; overhead pressing for shoulder resilience; upper trunk anti-extension",
+          neuralDemand: "moderate",
+          primaryPattern: "upper_push",
+          emphasizedPatterns: ["upper_push", "upper_pull", "trunk"],
+          cnsFlow: buildCNSFlow(["upper_push", "upper_pull", "trunk"], "moderate"),
+          sportNotes: isHockey ? "Landmine press for rotational load transfer; face pull between sets" : undefined,
+        },
+        {
+          dayNumber: 3,
+          identity: "Squat + Upper Pull Integration",
+          intent: "Bilateral squat strength as the lower anchor; vertical and horizontal pull for structural balance; unilateral coordination",
+          neuralDemand: "high",
+          primaryPattern: "squat",
+          emphasizedPatterns: ["squat", "upper_pull", "unilateral_lower", "rotational", "trunk"],
+          cnsFlow: buildCNSFlow(["squat", "upper_pull", "unilateral_lower", "rotational"], "high"),
+          sportNotes: isHockey ? "Lateral squat variant; weighted chin-up; Copenhagen plank for groin health" : undefined,
+        },
+      ];
+    }
     return [
       {
         dayNumber: 1,
@@ -1157,6 +1193,47 @@ function buildSessionsForDayCount(
       ];
     }
 
+    // Variant B: Upper/Lower split emphasis — pull-dominant Day 2, power-focused Day 3
+    if ((variationSeed ?? 0) % 2 === 1) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Lower Hypertrophy + Power",
+          intent: "Volume-biased squat-pattern training; higher rep ranges build structural capacity; power primer to open",
+          neuralDemand: "high",
+          primaryPattern: "squat",
+          emphasizedPatterns: ["squat", "power", "unilateral_lower", "trunk"],
+          cnsFlow: buildCNSFlow(["squat", "power", "unilateral_lower", "trunk"], "high"),
+        },
+        {
+          dayNumber: 2,
+          identity: "Pull + Shoulder Structural Integrity",
+          intent: "Pull-dominant upper session; scapular integrity before any pressing; vertical and horizontal pull compound work",
+          neuralDemand: "moderate",
+          primaryPattern: "upper_pull",
+          emphasizedPatterns: ["upper_pull", "upper_push", "trunk"],
+          cnsFlow: buildCNSFlow(["upper_pull", "upper_push", "trunk"], "moderate"),
+        },
+        {
+          dayNumber: 3,
+          identity: "Hinge Power + Single-Leg Resilience",
+          intent: "Deadlift-pattern peak output; posterior chain and hamstring volume; unilateral control and reactive power",
+          neuralDemand: "moderate",
+          primaryPattern: "hinge",
+          emphasizedPatterns: ["hinge", "unilateral_lower", "power", "lateral", "trunk"],
+          cnsFlow: buildCNSFlow(["hinge", "unilateral_lower", "power", "lateral", "trunk"], "moderate"),
+        },
+        {
+          dayNumber: 4,
+          identity: "Push Strength + Full Body Integration",
+          intent: "Press-dominant upper strength; horizontal and vertical press volume; full-body finisher for integration",
+          neuralDemand: "high",
+          primaryPattern: "upper_push",
+          emphasizedPatterns: ["upper_push", "power", "squat", "unilateral_lower", "trunk"],
+          cnsFlow: buildCNSFlow(["upper_push", "power", "squat", "trunk"], "high"),
+        },
+      ];
+    }
     return [
       {
         dayNumber: 1,
@@ -1198,6 +1275,61 @@ function buildSessionsForDayCount(
   }
 
   if (daysPerWeek === 5) {
+    // Variant B: Push/Pull/Legs emphasis — dedicated push and pull days
+    if ((variationSeed ?? 0) % 2 === 1) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Squat-Dominant Lower + Power",
+          intent: "Squat-first lower session; vertical force production base; power primer before main lift",
+          neuralDemand: "high",
+          primaryPattern: "squat",
+          emphasizedPatterns: ["squat", "power", "unilateral_lower", "trunk"],
+          cnsFlow: buildCNSFlow(["squat", "power", "unilateral_lower", "trunk"], "high"),
+          sportNotes: isHockey ? "Lateral drive bias from squat; lateral bound" : undefined,
+        },
+        {
+          dayNumber: 2,
+          identity: "Push: Chest + Shoulders + Triceps",
+          intent: "Press-dominant upper strength; horizontal bench and overhead pressing as primary movers; anterior delt and tricep volume",
+          neuralDemand: "moderate",
+          primaryPattern: "upper_push",
+          emphasizedPatterns: ["upper_push", "trunk"],
+          cnsFlow: buildCNSFlow(["upper_push", "trunk"], "moderate"),
+          sportNotes: isHockey ? "Landmine press; rotational med ball work; face pull between sets" : undefined,
+        },
+        {
+          dayNumber: 3,
+          identity: "Pull: Back + Biceps + Posterior Chain",
+          intent: "Pull-dominant upper session; vertical and horizontal pull compound work; posterior chain volume finisher",
+          neuralDemand: "moderate",
+          primaryPattern: "upper_pull",
+          emphasizedPatterns: ["upper_pull", "hinge", "trunk"],
+          cnsFlow: buildCNSFlow(["upper_pull", "hinge", "trunk"], "moderate"),
+          sportNotes: isHockey ? "Bent-over row; weighted chin-up; rotational trunk work" : undefined,
+        },
+        {
+          dayNumber: 4,
+          identity: "Hinge-Dominant Lower + Unilateral Resilience",
+          intent: "Deadlift-pattern peak force; posterior chain and hamstring depth; single-leg stability and asymmetry work",
+          neuralDemand: "moderate",
+          primaryPattern: "hinge",
+          emphasizedPatterns: ["hinge", "unilateral_lower", "lateral", "trunk"],
+          cnsFlow: buildCNSFlow(["hinge", "unilateral_lower", "lateral", "trunk"], "moderate"),
+          sportNotes: isHockey ? "Single-leg RDL; lateral lunge; Copenhagen plank" : undefined,
+        },
+        {
+          dayNumber: 5,
+          identity: "Full Body Power + Integration",
+          intent: "Week-closing power expression; full-body integration; explosive compound movements",
+          neuralDemand: "high",
+          primaryPattern: "power",
+          emphasizedPatterns: ["power", "squat", "hinge", "rotational", "lateral", "trunk"],
+          cnsFlow: buildCNSFlow(["power", "squat", "lateral", "rotational", "trunk"], "high"),
+          sportNotes: isHockey ? "Broad jump + lateral bound complex; sled push; rotational med ball; carry" : undefined,
+        },
+      ];
+    }
     return [
       {
         dayNumber: 1,
@@ -1357,9 +1489,10 @@ export function computeWeeklyArchitecture(
   daysPerWeek: number,
   sport: string | null,
   goal: string | null,
+  variationSeed?: number,
 ): WeeklyArchitecture {
   const days = Math.max(2, Math.min(6, daysPerWeek));
-  const sessions = buildSessionsForDayCount(days, sport, goal);
+  const sessions = buildSessionsForDayCount(days, sport, goal, variationSeed);
   const movementAllocation = computeMovementAllocation(sessions, sport);
 
   const isHockey = sport?.toLowerCase().includes("hockey") ?? false;
@@ -1393,10 +1526,11 @@ export function buildArchitectureBrief(
   sport: string | null,
   goal: string | null,
   userRequest: string,
+  variationSeed?: number,
 ): string | null {
   if (!daysPerWeek || daysPerWeek < 2) return null;
 
-  const arch = computeWeeklyArchitecture(daysPerWeek, sport, goal);
+  const arch = computeWeeklyArchitecture(daysPerWeek, sport, goal, variationSeed);
   const isHockey = sport?.toLowerCase().includes("hockey") ?? false;
   const isFootball = !!(sport && /\bfootball\b/i.test(sport) && !/soccer/.test(sport.toLowerCase()));
   const isBasketball = !!(sport && /basketball/i.test(sport));

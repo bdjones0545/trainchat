@@ -1764,7 +1764,7 @@ export async function generateAIResponse(
     const sport = extractSportFromRequest(userMessage, extractedConstraints?.sportFocus ?? null);
     const goal = extractedConstraints?.primaryGoal ?? null;
     try {
-      architectureBriefText = buildArchitectureBrief(days, sport, goal, userMessage);
+      architectureBriefText = buildArchitectureBrief(days, sport, goal, userMessage, Math.random());
       if (architectureBriefText) {
         logger.info(
           { days, sport, goal, intentType: intentResult?.type },

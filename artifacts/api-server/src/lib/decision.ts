@@ -1,5 +1,20 @@
 // ─── TrainChat Decision Tree & Reasoning Layer ────────────────────────────────
 //
+// ⚠️  LEGACY MODULE — DO NOT ADD NEW ROUTING LOGIC HERE
+//
+// This module was the original routing authority for TrainChat conversations.
+// It has been superseded by the Execution Planner (execution-planner.ts), which
+// is now the single-brain routing system. This module is retained because:
+//   - ai.ts still accepts ActionDecision in its AIResponseOptions interface
+//   - response-templates.ts ACTION_TO_MODE map still references ActionType
+//   - tests and other callers may reference exported types
+//
+// Migration status:
+//   - conversations.ts no longer calls resolveAction() — fully migrated
+//   - ai.ts accepts actionDecision=null and handles gracefully
+//   - NEXT STEP: remove ActionDecision from ai.ts AIResponseOptions, then
+//     remove this module entirely
+//
 // Sits between intent classification and response generation.
 // Resolves: what action to take, what to preserve, and whether to infer or ask.
 // This is a pure function module — no DB calls, no AI calls, no side effects.

@@ -7,6 +7,20 @@
  * - Generates rich AI prompt context to guide OpenAI responses
  * - Powers the fallback program generator with intelligent selection
  *
+ * ⚠️  TRANSITIONAL LAYER — DO NOT ADD NEW LOGIC HERE
+ *
+ * This module contains a second in-memory exercise catalogue (~50-80 exercises)
+ * that overlaps with exercise-intelligence.ts and predates the DB exercise
+ * library (exercise-service.ts).
+ *
+ * Migration target:
+ * - Exercise selection → exercise-service.ts (DB canonical source)
+ * - Training spec computation → retained here until DB-backed version exists
+ * - AI context building → retained here (buildIntelligenceContext, buildTrainingSpec)
+ *
+ * The in-memory exercise catalogue in this file should NOT be extended.
+ * New exercises belong in the DB exerciseLibrary table.
+ *
  * Architecture note: This module is intentionally decoupled from AI/OpenAI.
  * It represents the "training brain" that can evolve independently.
  */

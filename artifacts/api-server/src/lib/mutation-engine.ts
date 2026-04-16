@@ -11,6 +11,11 @@
 // - ALWAYS mutate structure
 // - ALWAYS produce a VALID exercise
 //
+// NOTE: For conversation-route mutations, all APPLY_MUTATION actions are
+// now routed through interpretEditRequest + applyEditPlan (DB-backed pipeline).
+// This module remains the canonical mutation engine for any direct callers
+// and future use, but is no longer the primary mutation path for chat turns.
+//
 // ======================================================
 
 import { type ExecutionPlan, type ExecutionScope } from "./execution-planner";
@@ -25,14 +30,30 @@ import {
 } from "./exercise-intelligence";
 import { logger } from "./logger";
 
+// ─── User Context ─────────────────────────────────────────────────────────────
+//
+// Real user context passed into mutations so exercise selection reflects
+// the actual user's goal, equipment, and experience — not hardcoded defaults.
+
+export interface UserMutationContext {
+  goal?: string;
+  equipment?: string;
+  experience?: string;
+  sport?: string | null;
+  injuryFlags?: string[];
+  sessionDurationMinutes?: number;
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function applyMutation({
   plan,
   program,
+  userContext,
 }: {
   plan: ExecutionPlan;
   program: ProgramStructure;
+  userContext?: UserMutationContext;
 }): Promise<{
   updatedProgram: ProgramStructure;
   changeSummary: string;
@@ -45,22 +66,22 @@ export async function applyMutation({
 
   switch (plan.mutation.type) {
     case "swap":
-      return handleSwap(cloned, plan);
+      return handleSwap(cloned, plan, userContext);
 
     case "transform":
       return handleTransformation(cloned, plan);
 
     case "add":
-      return handleAdd(cloned, plan);
+      return handleAdd(cloned, plan, userContext);
 
     case "remove":
       return handleRemove(cloned, plan);
 
     case "progression":
-      return handleProgression(cloned, plan);
+      return handleProgression(cloned, plan, userContext);
 
     case "regression":
-      return handleRegression(cloned, plan);
+      return handleRegression(cloned, plan, userContext);
 
     default: {
       const exhaustive: never = plan.mutation.type;
@@ -80,7 +101,8 @@ export async function applyMutation({
 
 async function handleSwap(
   program: ProgramStructure,
-  plan: ExecutionPlan
+  plan: ExecutionPlan,
+  userContext?: UserMutationContext
 ): Promise<{ updatedProgram: ProgramStructure; changeSummary: string }> {
   const targetName = String(plan.mutation?.params?.targetExercise ?? "");
 
@@ -102,7 +124,7 @@ async function handleSwap(
   }
 
   const original = day.exercises[index];
-  const replacement = await findBestSwapSubstitute(original);
+  const replacement = await findBestSwapSubstitute(original, userContext);
 
   day.exercises[index] = {
     ...original,
@@ -250,14 +272,15 @@ function formatTransformationLabel(type: string): string {
 
 async function handleAdd(
   program: ProgramStructure,
-  plan: ExecutionPlan
+  plan: ExecutionPlan,
+  userContext?: UserMutationContext
 ): Promise<{ updatedProgram: ProgramStructure; changeSummary: string }> {
   const categoryRaw = String(plan.mutation?.params?.category ?? "general");
   const day = getTargetDay(program, plan.scope);
 
   if (!day) throw new Error("[MutationEngine] No target day resolved for add");
 
-  const exercise = pickAdditionExercise(categoryRaw, day.exercises.map((e) => e.name));
+  const exercise = pickAdditionExercise(categoryRaw, day.exercises.map((e) => e.name), userContext);
 
   day.exercises.push(exercise);
 
@@ -272,16 +295,20 @@ async function handleAdd(
   };
 }
 
-function pickAdditionExercise(category: string, currentNames: string[]): Exercise {
+function pickAdditionExercise(
+  category: string,
+  currentNames: string[],
+  userContext?: UserMutationContext
+): Exercise {
   const additionCategory = mapToAdditionCategory(category);
 
   const result = findAdditions({
     category: additionCategory,
-    goal: "general_fitness",
-    equipment: "full_gym",
-    experience: "intermediate",
-    injuryFlags: [],
-    sessionDurationMinutes: 75,
+    goal: (userContext?.goal ?? "general_fitness") as Parameters<typeof findAdditions>[0]["goal"],
+    equipment: (userContext?.equipment ?? "full_gym") as Parameters<typeof findAdditions>[0]["equipment"],
+    experience: (userContext?.experience ?? "intermediate") as Parameters<typeof findAdditions>[0]["experience"],
+    injuryFlags: (userContext?.injuryFlags ?? []) as import("./training-intelligence").JointStress[],
+    sessionDurationMinutes: userContext?.sessionDurationMinutes ?? 75,
     currentExerciseNames: currentNames,
     limit: 1,
   });
@@ -401,7 +428,8 @@ function handleRemove(
 
 function handleProgression(
   program: ProgramStructure,
-  plan: ExecutionPlan
+  plan: ExecutionPlan,
+  userContext?: UserMutationContext
 ): { updatedProgram: ProgramStructure; changeSummary: string } {
   const day = getTargetDay(program, plan.scope);
   if (!day) throw new Error("[MutationEngine] No target day resolved for progression");
@@ -426,10 +454,10 @@ function handleProgression(
       const sub = findSubstitute({
         originalName: original.name,
         reason: "progression",
-        goal: "general_fitness",
-        equipment: "full_gym",
-        experience: "intermediate",
-        injuryFlags: [],
+        goal: (userContext?.goal ?? "general_fitness") as Parameters<typeof findSubstitute>[0]["goal"],
+        equipment: (userContext?.equipment ?? "full_gym") as Parameters<typeof findSubstitute>[0]["equipment"],
+        experience: (userContext?.experience ?? "intermediate") as Parameters<typeof findSubstitute>[0]["experience"],
+        injuryFlags: (userContext?.injuryFlags ?? []) as import("./training-intelligence").JointStress[],
         sessionRole: "secondary_compound",
       });
       if (sub.chosen) {
@@ -460,7 +488,8 @@ function handleProgression(
 
 function handleRegression(
   program: ProgramStructure,
-  plan: ExecutionPlan
+  plan: ExecutionPlan,
+  userContext?: UserMutationContext
 ): { updatedProgram: ProgramStructure; changeSummary: string } {
   const day = getTargetDay(program, plan.scope);
   if (!day) throw new Error("[MutationEngine] No target day resolved for regression");
@@ -483,10 +512,10 @@ function handleRegression(
       const sub = findSubstitute({
         originalName: original.name,
         reason: "regression",
-        goal: "general_fitness",
-        equipment: "full_gym",
-        experience: "intermediate",
-        injuryFlags: [],
+        goal: (userContext?.goal ?? "general_fitness") as Parameters<typeof findSubstitute>[0]["goal"],
+        equipment: (userContext?.equipment ?? "full_gym") as Parameters<typeof findSubstitute>[0]["equipment"],
+        experience: (userContext?.experience ?? "intermediate") as Parameters<typeof findSubstitute>[0]["experience"],
+        injuryFlags: (userContext?.injuryFlags ?? []) as import("./training-intelligence").JointStress[],
         sessionRole: "secondary_compound",
       });
       if (sub.chosen) {
@@ -515,7 +544,10 @@ function handleRegression(
 // SUBSTITUTE LOGIC — DB cluster → intelligence → hard fallback
 // ======================================================
 
-async function findBestSwapSubstitute(original: Exercise): Promise<{ name: string; classification?: string; notes?: string }> {
+async function findBestSwapSubstitute(
+  original: Exercise,
+  userContext?: UserMutationContext
+): Promise<{ name: string; classification?: string; notes?: string }> {
   // ── Step 1: DB cluster swap candidates ────────────────────────────────────
   const candidates = await getSwapCandidates({ exerciseName: original.name });
 
@@ -532,10 +564,10 @@ async function findBestSwapSubstitute(original: Exercise): Promise<{ name: strin
   const sub = findSubstitute({
     originalName: original.name,
     reason: "swap",
-    goal: "general_fitness",
-    equipment: "full_gym",
-    experience: "intermediate",
-    injuryFlags: [],
+    goal: (userContext?.goal ?? "general_fitness") as Parameters<typeof findSubstitute>[0]["goal"],
+    equipment: (userContext?.equipment ?? "full_gym") as Parameters<typeof findSubstitute>[0]["equipment"],
+    experience: (userContext?.experience ?? "intermediate") as Parameters<typeof findSubstitute>[0]["experience"],
+    injuryFlags: (userContext?.injuryFlags ?? []) as import("./training-intelligence").JointStress[],
     sessionRole: "secondary_compound",
   });
 

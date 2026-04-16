@@ -1,0 +1,227 @@
+We are executing a HIGH-FOCUS ARCHITECTURE SPRINT for TrainChat.
+
+GOAL:
+Eliminate inconsistency, repetition, and weak mutations by fixing ONLY the highest-leverage issues identified in the system audit.
+
+This sprint is NOT for adding features.
+This sprint is for UNIFYING and STRENGTHENING existing systems.
+
+==================================================
+SPRINT RULES
+==================================================
+
+- Do NOT introduce new experimental systems
+- Do NOT expand feature surface area
+- Only modify or unify existing systems
+- Prefer deletion + consolidation over addition
+- All changes must improve consistency across ALL flows
+
+==================================================
+PRIORITY 1 — UNIFY MUTATION PIPELINE (CRITICAL)
+==================================================
+
+PROBLEM:
+There are two mutation pipelines:
+- In-memory (mutation-engine.ts)
+- DB-backed (edit-engine.ts via edit route)
+
+They produce different results and overwrite each other.
+
+OBJECTIVE:
+All program mutations must go through ONE pipeline.
+
+TASKS:
+
+1. Route APPLY_MUTATION from execution-planner to DB-backed pipeline:
+   - Replace applyMutation() usage in conversation route
+   - Call interpretEditRequest() + applyEditPlan() instead
+
+2. Ensure conversation route:
+   - Loads full training system
+   - Executes DB mutation
+   - Returns updated program structure
+
+3. Preserve:
+   - mutation-verifier
+   - change-log
+   - memory sync
+
+4. Remove or bypass mutation-engine.ts for conversation mutations
+
+SUCCESS CRITERIA:
+- Same request produces SAME result in both conversation and edit routes
+- No in-memory-only mutations remain
+
+==================================================
+PRIORITY 2 — FIX ADD() USER CONTEXT (HIGH)
+==================================================
+
+PROBLEM:
+pickAdditionExercise() hardcodes:
+- goal: "general_fitness"
+- equipment: "full_gym"
+- experience: "intermediate"
+
+OBJECTIVE:
+Add mutations must respect REAL user context.
+
+TASKS:
+
+1. Pass into add mutation:
+   - user goal
+   - equipment level
+   - experience tier
+   - sport (if available)
+
+2. Replace hardcoded values in pickAdditionExercise()
+
+3. Ensure exercise selection adapts based on:
+   - equipment constraints
+   - goal
+   - user level
+
+SUCCESS CRITERIA:
+- Same add request produces different exercises for different users
+- No hardcoded defaults remain
+
+==================================================
+PRIORITY 3 — DEPRECATE LEGACY INTENT SYSTEM
+==================================================
+
+PROBLEM:
+Two intent systems exist:
+- classifyIntent() (legacy)
+- normalizeToIntentFamily() (current)
+
+They can conflict.
+
+OBJECTIVE:
+Single source of truth for intent.
+
+TASKS:
+
+1. Remove classifyIntent() usage from:
+   - ai.ts
+   - decision.ts
+   - any routing logic
+
+2. Ensure ALL routing uses:
+   - normalizeToIntentFamily()
+   - execution-planner
+
+3. Remove or isolate decision.ts if no longer used
+
+SUCCESS CRITERIA:
+- Only ONE intent system determines behavior
+- No conflicting classifications
+
+==================================================
+PRIORITY 4 — CONSOLIDATE EXERCISE SOURCE OF TRUTH
+==================================================
+
+PROBLEM:
+Three exercise catalogues exist:
+- DB library (exercise-service.ts)
+- exercise-intelligence.ts
+- training-intelligence.ts
+
+They are not synchronized.
+
+OBJECTIVE:
+DB becomes canonical source.
+
+TASKS:
+
+1. Ensure ALL exercise selection flows use DB library first:
+   - swap
+   - add
+   - progression
+   - AI context
+
+2. Begin migration plan:
+   - identify key metadata missing in DB:
+     (sessionRole, fatigueCost, prescriptions, etc.)
+
+3. Stop introducing new logic that depends on in-memory catalogues
+
+4. Mark exercise-intelligence.ts and training-intelligence.ts as transitional layers
+
+SUCCESS CRITERIA:
+- DB library is primary selection source
+- No new logic depends on duplicate catalogues
+
+==================================================
+PRIORITY 5 — PATCH REPETITION (LIGHT VARIATION LAYER)
+==================================================
+
+PROBLEM:
+Program architecture is deterministic:
+Same inputs → same structure
+
+OBJECTIVE:
+Introduce minimal variation WITHOUT rewriting architecture engine.
+
+TASKS:
+
+1. Add variation seed per generation:
+   - random or hash-based
+
+2. Allow architecture engine to:
+   - rotate between 2–3 variants per goal × days
+   - slightly vary movement allocation
+
+3. Store last program signature:
+   - prevent exact repeat
+
+SUCCESS CRITERIA:
+- Same input does NOT produce identical program structure twice
+- Variation is controlled, not random chaos
+
+==================================================
+TESTING REQUIREMENTS
+==================================================
+
+Test these flows after changes:
+
+1. Build program → modify → modify again
+→ Must remain consistent
+
+2. Same edit request via:
+- conversation route
+- edit route
+→ Must produce identical results
+
+3. Add exercise for:
+- beginner / dumbbells only
+- advanced / full gym
+→ Must differ appropriately
+
+4. Generate same program twice
+→ Must show structural variation
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+Return:
+
+1. Which mutation pipeline is now canonical
+2. Where mutation-engine.ts is removed/bypassed
+3. Where classifyIntent() was removed
+4. How user context now flows into add()
+5. How DB library is now used as source of truth
+6. How variation is introduced
+7. Which inconsistencies are now resolved
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat must now behave like a consistent system:
+
+- same inputs → consistent outputs
+- mutations → always real and persistent
+- no conflicting logic paths
+- no repeated identical programs
+
+This sprint is complete when the system feels stable, not experimental.

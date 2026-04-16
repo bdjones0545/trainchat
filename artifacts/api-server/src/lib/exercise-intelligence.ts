@@ -4,10 +4,24 @@
 // decision engine for intelligent selection, substitution, addition,
 // and progression/regression across all constraint dimensions.
 //
+// ⚠️  TRANSITIONAL LAYER — DO NOT ADD NEW LOGIC HERE
+//
+// This module is an in-memory exercise catalogue (~100 exercises) that
+// predates the DB exercise library (exercise-service.ts). It remains active
+// as a fallback for cases where the DB library does not return candidates.
+//
+// Migration target: All exercise metadata (sessionRole, fatigueCost,
+// prescriptions, progressionTo/From chains) should be migrated to DB fields
+// in the exerciseLibrary table. Once that migration is complete, this module
+// can be retired.
+//
+// Until migration: exercise-service.ts (DB) is the PRIMARY source of truth.
+// This module is a SECONDARY fallback only.
+//
 // Used by:
+//   - mutation-engine.ts          (fallback swap/add when DB has no candidate)
 //   - exercise-redistribution.ts  (replacement and addition logic)
 //   - ai.ts                       (atomic edit guidance)
-//   - training-intelligence.ts    (exercise selection queries)
 //
 // Exports:
 //   queryExercises()     — multi-factor exercise search
