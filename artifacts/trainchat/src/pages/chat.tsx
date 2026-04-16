@@ -37,6 +37,7 @@ import SessionLogModal from "@/components/chat/SessionLogModal";
 import PaywallModal from "@/components/PaywallModal";
 import PricingModal from "@/components/PricingModal";
 import AnonymousConversionFloor from "@/components/AnonymousConversionFloor";
+import AnonymousUpgradeModal from "@/components/AnonymousUpgradeModal";
 import CalibrationModal from "@/components/chat/CalibrationModal";
 import CoachMemoryPanel from "@/components/chat/CoachMemoryPanel";
 import { useStreamMessage } from "@/hooks/useStreamMessage";
@@ -176,6 +177,7 @@ export default function Chat() {
   }>>([]);
   const [showProgramLibrary, setShowProgramLibrary] = useState(false);
   const [isSwitchingProgram, setIsSwitchingProgram] = useState(false);
+  const [anonymousUpgradePlan, setAnonymousUpgradePlan] = useState<{ planId: string; priceId: string } | null>(null);
   // Delete confirmation state — tracks which item is pending user confirmation
   const [deleteConfirm, setDeleteConfirm] = useState<{
     type: "program" | "convo";
@@ -829,6 +831,12 @@ export default function Chat() {
       return;
     }
 
+    // Anonymous users must create an account before checkout
+    if (isAnonymousUser) {
+      setAnonymousUpgradePlan({ planId, priceId });
+      return;
+    }
+
     try {
       const { url } = await postCheckout(priceId);
       if (url) window.location.href = url;
@@ -1363,6 +1371,13 @@ export default function Chat() {
           onClose={() => setShowPricing(false)}
           onSelectPlan={handleSelectPlan}
           currentPlan={currentPlan}
+        />
+      )}
+      {anonymousUpgradePlan && (
+        <AnonymousUpgradeModal
+          planId={anonymousUpgradePlan.planId}
+          priceId={anonymousUpgradePlan.priceId}
+          onClose={() => setAnonymousUpgradePlan(null)}
         />
       )}
       {showSessionLog && (

@@ -3,6 +3,8 @@ import { useLocation } from "wouter";
 import { ArrowLeft, CreditCard, Calendar, RefreshCw, AlertCircle, CheckCircle, XCircle, Zap, Crown, Star } from "lucide-react";
 import { useState } from "react";
 import PricingModal from "@/components/PricingModal";
+import AnonymousUpgradeModal from "@/components/AnonymousUpgradeModal";
+import { useGetMe } from "@workspace/api-client-react";
 
 // ─── Data fetching ────────────────────────────────────────────────────────────
 
@@ -123,6 +125,10 @@ export default function BillingPage() {
   const queryClient = useQueryClient();
   const [showPricing, setShowPricing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [anonymousUpgradePlan, setAnonymousUpgradePlan] = useState<{ planId: string; priceId: string } | null>(null);
+
+  const { data: me } = useGetMe();
+  const isAnonymousUser = !!(me as any)?.isAnonymous;
 
   const { data: sub, isLoading } = useQuery({
     queryKey: ["subscription"],
@@ -146,12 +152,19 @@ export default function BillingPage() {
     },
   });
 
-  async function handleSelectPlan(_planId: string, priceId?: string) {
+  async function handleSelectPlan(planId: string, priceId?: string) {
     setShowPricing(false);
     if (!priceId) {
       setError("Price ID not available. Please try again.");
       return;
     }
+
+    // Anonymous users must create an account before checkout
+    if (isAnonymousUser) {
+      setAnonymousUpgradePlan({ planId, priceId });
+      return;
+    }
+
     try {
       const url = await startCheckout(priceId);
       if (url) window.location.href = url;
@@ -402,6 +415,13 @@ export default function BillingPage() {
           onClose={() => setShowPricing(false)}
           onSelectPlan={handleSelectPlan}
           currentPlan={plan}
+        />
+      )}
+      {anonymousUpgradePlan && (
+        <AnonymousUpgradeModal
+          planId={anonymousUpgradePlan.planId}
+          priceId={anonymousUpgradePlan.priceId}
+          onClose={() => setAnonymousUpgradePlan(null)}
         />
       )}
     </div>
