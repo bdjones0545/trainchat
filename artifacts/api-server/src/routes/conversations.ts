@@ -21,7 +21,7 @@ import { syncMemoriesFromData, listMemories, buildMemoryContext, extractMemories
 import { generateInsights, buildInsightPromptHint } from "../lib/insights";
 import { getUserPlanInfo } from "../lib/planGating";
 import { stripeStorage } from "../lib/stripeStorage";
-import { interpretEditRequest } from "../lib/edit-intent-service";
+import { interpretEditRequest, resolveTargetFromRequest } from "../lib/edit-intent-service";
 import { applyEditPlan, type EditResult } from "../lib/edit-engine";
 import type { VerificationStatus } from "../lib/mutation-verifier";
 import { createChangeLogEntry } from "../lib/change-log-service";
@@ -144,12 +144,19 @@ function buildAgenticNoChangesResponse(
   userRequest: string,
   editIntent: string,
   editScope: string,
-  editSubtype: string | undefined
+  editSubtype: string | undefined,
+  resolvedTarget?: { type: string; label?: string } | null
 ): string {
   const lower = userRequest.toLowerCase();
 
-  // Broad program transformation that got no changes — ask for scope clarity
-  if (editScope === "block" || editScope === "system" || editSubtype === "program_transformation") {
+  // If the user mentioned a specific day/session and we still got 0 changes,
+  // the problem is with what to change — not where. Ask about the action, not the location.
+  const hasExplicitDayRef = /\bday\s+\d+\b|\bsession\s+\d+\b|\b(first|second|third|fourth|fifth|sixth|seventh)\s+(day|session)\b/.test(lower);
+  const hasExplicitWeekRef = /\bweek\s+\d+\b/.test(lower);
+  const hadResolvedTarget = !!resolvedTarget;
+
+  // Broad program transformation — still need scope clarity (program-wide vs single block)
+  if ((editScope === "block" || editScope === "system" || editSubtype === "program_transformation") && !hasExplicitDayRef) {
     const directionMap: Record<string, string> = {
       endurance_transformation: "endurance focus",
       conditioning_transformation: "conditioning emphasis",
@@ -160,21 +167,27 @@ function buildAgenticNoChangesResponse(
       add_explosive_emphasis: "explosive and power qualities",
     };
     const directionLabel = directionMap[editIntent] ?? "the focus shift you described";
-    return `I want to make that ${directionLabel} change — let me ask one thing first so I apply it right.\n\nIs there a specific block, phase, or training week you want this applied to? Or should I make it a program-wide change across all your current sessions?\n\nJust let me know and I'll get it done.`;
+    return `I want to make that ${directionLabel} change — one quick thing: should this apply to a specific block or phase, or across all your current sessions as a program-wide shift?\n\nJust confirm and I'll get it done.`;
   }
 
-  // Session-scoped failure — sound like a coach, ask which session
-  if (editScope === "session" || lower.match(/\bday\b|\bsession\b/)) {
-    return `Got it — let me apply that to the right session. Which day are you working on? (e.g. "Day 1", "Monday's session", or "the upper body day") and I'll make the change directly.`;
+  // Request explicitly named a day/session — don't ask "which day?" again
+  if (hasExplicitDayRef || hadResolvedTarget) {
+    const targetLabel = resolvedTarget?.label ? `"${resolvedTarget.label}"` : "that session";
+    return `I found ${targetLabel} in your program but couldn't match a clean change to it based on your request. Could you be a bit more specific about what you'd like to do — for example: "add a Romanian deadlift", "remove the leg curl", or "reduce sets on the accessories"? Once I know exactly what to change, I'll apply it right away.`;
   }
 
-  // Volume or intensity request with no current week found
+  // Request explicitly named a week — don't ask "which week?" again
+  if (hasExplicitWeekRef) {
+    return `I located that week in your program but couldn't determine what to change. Could you be a bit more specific — for example: "make it a deload", "reduce volume", or "add an extra conditioning finisher"? I'll apply it directly once I understand the change.`;
+  }
+
+  // Volume or intensity request with no resolved target — ask about which week/session
   if (editIntent.match(/volume|intensity|fatigue/)) {
-    return `I see what you're going for — let me dig into your current week and apply that. To make sure I'm targeting the right place: are you looking to adjust this week's sessions, or the overall program structure?\n\nOnce you confirm, I'll get it updated.`;
+    return `I see what you're going for. To target the right place: are you looking to adjust this week's sessions, the overall program structure, or a specific day?\n\nOnce I know the scope, I'll apply it.`;
   }
 
-  // Generic coaching-style fallback — sounds agentic, not like a resolver error
-  return `I processed your request but didn't find a clean match for it in your current program structure. Let me try a slightly different approach.\n\nCould you tell me which day or session this should apply to? Or if it's a program-wide change, just say "all sessions" and I'll handle it across the board.`;
+  // Generic fallback — don't ask "which session" if the request has no program structure
+  return `I couldn't find a clean match for that in your current program. Try being more specific — for example: the day or session ("Day 1", "the upper body day"), the exercise name, or exactly what you want to change (sets, reps, or movement). That gives me enough to act directly.`;
 }
 
 /**
@@ -747,11 +760,24 @@ Keep it helpful and intelligent, never promotional.`;
           ? `[PROGRAM TRANSFORMATION — GLOBAL FOCUS SHIFT]\nUser request: "${parsed.data.content}"\n\nTransformation direction: ${transformationDirection}\n\nThis is a program-wide transformation, NOT a surgical exercise edit. You MUST:\n- Use scope: "block" (affects the whole phase/block)\n- Apply the matching BLOCK MUTATION RULE from your instructions (e.g., ENDURANCE_TRANSFORMATION, CONDITIONING_TRANSFORMATION, SPEED_TRANSFORMATION, INTENSITY_TRANSFORMATION, INCREASE_POWER_BIAS, INCREASE_HYPERTROPHY_BIAS, or INCREASE_SPORT_SPECIFICITY)\n- Make real structural changes: update exercises, rest intervals, rep ranges, session emphases, and phase goal across MULTIPLE sessions\n- Do NOT produce a notes-only update — exercise-level and session-level changes are required\n- Keep all primary compound lifts (squats, deadlifts, presses) intact\n- changeSummary must name specific exercises added/changed and sessions affected`
           : parsed.data.content;
 
+        // DEFAULT EXECUTION LAYER — resolve day/session references before calling OpenAI
+        const nonStreamUIContext = (req.body as any)?.uiContext ?? null;
+        const resolvedTarget = isProgramTransformation
+          ? undefined
+          : resolveTargetFromRequest(parsed.data.content, fullSystem, nonStreamUIContext);
+
+        if (resolvedTarget) {
+          logger.info(
+            { targetType: resolvedTarget.type, targetId: resolvedTarget.id, targetLabel: resolvedTarget.label },
+            "[VibeEdit] DefaultExecution resolved target context — skipping ambiguous ID inference"
+          );
+        }
+
         // Interpret + apply the edit
         const editPlan = await interpretEditRequest(
           effectiveEditRequest,
           fullSystem,
-          undefined,
+          resolvedTarget,
           adaptationCtx || undefined,
           decisionMemory?.decisionMemoryContext || undefined,
         );
@@ -904,7 +930,8 @@ Keep it helpful and intelligent, never promotional.`;
           parsed.data.content,
           editPlan.intent,
           editPlan.scope,
-          intentResult.editSubtype
+          intentResult.editSubtype,
+          resolvedTarget
         );
         const [noOpMessage] = await db.insert(messagesTable).values({
           conversationId: params.data.id,
@@ -1686,8 +1713,22 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         // Stage 4: Plan Modifications — interpretEditRequest analyses what needs to change
         emit(buildStageEvent("planning", intentResult.type, actionDecision.actionType));
 
+        // DEFAULT EXECUTION LAYER — resolve day/session/week references before calling OpenAI.
+        // Converts "add exercises to day 1" or "change week 2" into a concrete TargetContext
+        // so the AI receives an explicit entity ID rather than inferring it from serialized text.
+        const streamResolvedTarget = resolveTargetFromRequest(
+          parsed.data.content, fullSystem, streamUIContext
+        );
+
+        if (streamResolvedTarget) {
+          logger.info(
+            { targetType: streamResolvedTarget.type, targetId: streamResolvedTarget.id, targetLabel: streamResolvedTarget.label },
+            "[VibeEdit:stream] DefaultExecution resolved target context — skipping ambiguous ID inference"
+          );
+        }
+
         const editPlan = await interpretEditRequest(
-          parsed.data.content, fullSystem, undefined,
+          parsed.data.content, fullSystem, streamResolvedTarget,
           adaptationCtx || undefined, decisionMemory?.decisionMemoryContext || undefined,
         );
 
@@ -1798,7 +1839,8 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           parsed.data.content,
           editPlan.intent,
           editPlan.scope,
-          intentResult.editSubtype
+          intentResult.editSubtype,
+          streamResolvedTarget
         );
         const [noOpMsg] = await db.insert(messagesTable).values({
           conversationId: params.data.id, role: "assistant", content: noOpContent, structuredData: null,

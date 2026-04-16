@@ -87,6 +87,143 @@ export interface TargetContext {
   parentLabel?: string;
 }
 
+// ─── Default Execution Layer ──────────────────────────────────────────────────
+//
+// Resolves natural-language day/session/week references into a concrete
+// TargetContext BEFORE OpenAI is called. This eliminates the most common
+// source of "no changes applied" outcomes by ensuring the AI receives an
+// explicit entity ID instead of trying to infer it from the serialized system.
+//
+// Priority order:
+//  1. UIContext explicit selection (selectedSessionId, selectedExerciseId, …)
+//  2. "day N" / "session N" → Nth training session across the whole system
+//  3. Ordinal words ("first session", "second day") → same positional logic
+//  4. "week N" → Nth week by weekNumber
+//  5. Session label keyword match ("upper body", "push day", etc.)
+//  6. undefined → let OpenAI reason from the serialized system alone
+
+export function resolveTargetFromRequest(
+  userRequest: string,
+  system: any,
+  uiContext?: Record<string, unknown> | null
+): TargetContext | undefined {
+  // ── Priority 1: UIContext explicit selection ──────────────────────────────
+  if (uiContext?.selectedExerciseId && uiContext.selectedExerciseName) {
+    return {
+      type: "exercise",
+      id: uiContext.selectedExerciseId as number,
+      label: uiContext.selectedExerciseName as string,
+    };
+  }
+
+  if (uiContext?.selectedSessionId) {
+    return {
+      type: "session",
+      id: uiContext.selectedSessionId as number,
+      label: (uiContext.selectedSessionName as string | null | undefined) ?? undefined,
+    };
+  }
+
+  if (uiContext?.selectedWeek != null) {
+    const targetWeekNum = uiContext.selectedWeek as number;
+    for (const phase of system.phases ?? []) {
+      for (const week of phase.weeks ?? []) {
+        if (week.weekNumber === targetWeekNum) {
+          return { type: "week", id: week.id, label: week.label ?? `Week ${targetWeekNum}` };
+        }
+      }
+    }
+  }
+
+  // ── Collect all training sessions (non-rest, in document order) ───────────
+  const allSessions: { id: number; label: string; weekLabel?: string }[] = [];
+  for (const phase of system.phases ?? []) {
+    for (const week of phase.weeks ?? []) {
+      for (const session of week.sessions ?? []) {
+        if (!session.isRestDay) {
+          allSessions.push({
+            id: session.id,
+            label: session.label ?? "Session",
+            weekLabel: week.label ?? undefined,
+          });
+        }
+      }
+    }
+  }
+
+  // ── Collect all weeks ─────────────────────────────────────────────────────
+  const allWeeks: { id: number; weekNumber: number; label?: string }[] = [];
+  for (const phase of system.phases ?? []) {
+    for (const week of phase.weeks ?? []) {
+      allWeeks.push({ id: week.id, weekNumber: week.weekNumber, label: week.label });
+    }
+  }
+
+  const lower = userRequest.toLowerCase();
+
+  // ── Priority 2: "day N" / "session N" → positional session ───────────────
+  const dayNumMatch = lower.match(/\bday\s+(\d+)\b/) ?? lower.match(/\bsession\s+(\d+)\b/);
+  if (dayNumMatch) {
+    const dayIndex = parseInt(dayNumMatch[1], 10) - 1;
+    if (dayIndex >= 0 && allSessions[dayIndex]) {
+      const s = allSessions[dayIndex];
+      return { type: "session", id: s.id, label: s.label, parentLabel: s.weekLabel };
+    }
+  }
+
+  // ── Priority 3: ordinal day words ("first session", "second day") ─────────
+  const ordinalMap: Record<string, number> = {
+    first: 0, second: 1, third: 2, fourth: 3, fifth: 4, sixth: 5, seventh: 6,
+  };
+  const ordinalMatch = lower.match(
+    /\b(first|second|third|fourth|fifth|sixth|seventh)\s+(?:day|session|training\s+day)\b/
+  );
+  if (ordinalMatch) {
+    const dayIndex = ordinalMap[ordinalMatch[1]];
+    if (dayIndex != null && allSessions[dayIndex]) {
+      const s = allSessions[dayIndex];
+      return { type: "session", id: s.id, label: s.label, parentLabel: s.weekLabel };
+    }
+  }
+
+  // ── Priority 4: "week N" → specific week ─────────────────────────────────
+  const weekNumMatch = lower.match(/\bweek\s+(\d+)\b/);
+  if (weekNumMatch) {
+    const weekNum = parseInt(weekNumMatch[1], 10);
+    const week = allWeeks.find((w) => w.weekNumber === weekNum);
+    if (week) {
+      return { type: "week", id: week.id, label: week.label ?? `Week ${weekNum}` };
+    }
+  }
+
+  // ── Priority 5: session label keyword match ───────────────────────────────
+  const labelPatterns: [RegExp, string][] = [
+    [/\bupper[\s-]?body\b/, "upper"],
+    [/\blower[\s-]?body\b/, "lower"],
+    [/\bpush\s+day\b/, "push"],
+    [/\bpull\s+day\b/, "pull"],
+    [/\bleg\s+day\b|\blegs?\s+day\b/, "leg"],
+    [/\bfull[\s-]?body\b/, "full"],
+    [/\bback\s+day\b/, "back"],
+    [/\bchest\s+day\b/, "chest"],
+    [/\bshoulder\s+day\b/, "shoulder"],
+    [/\barm\s+day\b/, "arm"],
+    [/\bcore\s+day\b/, "core"],
+    [/\bcondition(?:ing)?\s+day\b/, "condition"],
+    [/\bstrength\s+day\b/, "strength"],
+  ];
+  for (const [pattern, keyword] of labelPatterns) {
+    if (pattern.test(lower)) {
+      const matched = allSessions.find((s) => s.label.toLowerCase().includes(keyword));
+      if (matched) {
+        return { type: "session", id: matched.id, label: matched.label, parentLabel: matched.weekLabel };
+      }
+    }
+  }
+
+  return undefined;
+}
+
 // ─── System Context Serializer ───────────────────────────────────────────────
 
 export function serializeSystemForPrompt(system: any): string {
@@ -142,9 +279,21 @@ function buildEditSystemPrompt(
   decisionMemoryContext?: string,
   exerciseSwapContext?: string
 ): string {
-  const targetFocus = targetContext
-    ? `\nEDIT FOCUS:\nThe user is specifically targeting: ${targetContext.type.toUpperCase()} [id:${targetContext.id}]${targetContext.label ? ` "${targetContext.label}"` : ""}${targetContext.parentLabel ? ` in ${targetContext.parentLabel}` : ""}.\nFocus ALL changes on this specific object. Only expand scope if the user's request explicitly requires broader changes. Prefer targeted, surgical edits to this one object.\n`
-    : "";
+  let targetFocus = "";
+  if (targetContext) {
+    const typeLabel = targetContext.type.toUpperCase();
+    const idLabel = `[id:${targetContext.id}]`;
+    const nameLabel = targetContext.label ? ` "${targetContext.label}"` : "";
+    const parentLabel = targetContext.parentLabel ? ` in ${targetContext.parentLabel}` : "";
+
+    // For session targets: also provide the exact sessionId to use in add_exercise changes.
+    // This prevents the AI from guessing the wrong sessionId when the user says "day N".
+    const sessionIdHint = targetContext.type === "session"
+      ? `\nFor any add_exercise changes, use "sessionId": ${targetContext.id} — this is the exact SESSION id for this day.`
+      : "";
+
+    targetFocus = `\nEDIT FOCUS:\nThe user is specifically targeting: ${typeLabel} ${idLabel}${nameLabel}${parentLabel}.\nFocus ALL changes on this specific object. Only expand scope if the user's request explicitly requires broader changes. Prefer targeted, surgical edits to this one object.${sessionIdHint}\n`;
+  }
 
   const adaptationSection = adaptationContext
     ? `\n${adaptationContext}\n\nIncorporate the above readiness and adaptation signals naturally when they are relevant to the edit being requested. A coach who knows the user's current state will make smarter, more contextual recommendations.\n`
@@ -1364,19 +1513,35 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function findCurrentWeek(system: any): any | null {
+  // 1st: exact "current" status
   for (const phase of system.phases ?? []) {
     for (const week of phase.weeks ?? []) {
       if (week.status === "current") return week;
     }
   }
-  return null;
+  // 2nd: in-progress / active
+  for (const phase of system.phases ?? []) {
+    for (const week of phase.weeks ?? []) {
+      if (week.status === "in_progress" || week.status === "active") return week;
+    }
+  }
+  // 3rd: first non-completed week
+  for (const phase of system.phases ?? []) {
+    for (const week of phase.weeks ?? []) {
+      if (week.status !== "completed" && week.status !== "done") return week;
+    }
+  }
+  // Last resort: very first week
+  return system.phases?.[0]?.weeks?.[0] ?? null;
 }
 
 function findCurrentSession(system: any): any | null {
   const dow = new Date().getDay();
   const week = findCurrentWeek(system);
   if (!week) return null;
-  return week.sessions?.find((s: any) => s.dayOfWeek === dow) ?? week.sessions?.[0] ?? null;
+  const byday = week.sessions?.find((s: any) => s.dayOfWeek === dow && !s.isRestDay);
+  if (byday) return byday;
+  return week.sessions?.find((s: any) => !s.isRestDay) ?? week.sessions?.[0] ?? null;
 }
 
 // ─── Intent Router ───────────────────────────────────────────────────────────

@@ -1,0 +1,321 @@
+We need to implement a DEFAULT EXECUTION LAYER for TrainChat so the agent behaves like a true vibe-coding system: it should ACT on reasonable assumptions instead of over-asking for clarification.
+
+OBJECTIVE:
+Reduce unnecessary clarification questions for safe, common coaching requests by allowing the system to make intelligent defaults and apply changes immediately when the ambiguity is low-risk.
+
+Right now, the system is too cautious:
+- it often asks follow-up questions when it could reasonably assume the target
+- this breaks the vibe-coding feel
+- it makes the agent feel like a strict assistant instead of a confident coach-builder
+
+We want:
+- confident execution when safe
+- clarification only when necessary
+- visible real changes
+- preserved safety and coherence
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+ACT unless ambiguity is dangerous.
+
+That means:
+
+If the user request is:
+- reasonably interpretable
+- low risk
+- scoped enough from active program + UIContext
+
+→ the system should apply the change
+
+Only ask clarification when:
+- there is real ambiguity that could lead to the wrong program being changed
+- safety could be compromised
+- there is no active target
+- multiple equally plausible interpretations exist and the wrong one would be meaningful
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Build a default execution layer that sits after intent interpretation but before clarification.
+
+Flow should become:
+
+1. User request
+2. Intent classification / OpenAI interpretation
+3. Default execution resolver decides:
+   - safe to assume and apply
+   - OR clarification required
+4. Mutation plan generated
+5. Validation
+6. Commit
+7. UI update
+
+==================================================
+TASK 1 — ADD A DEFAULT EXECUTION DECISION LAYER
+==================================================
+
+Create a resolver like:
+
+type DefaultExecutionDecision = {
+  shouldAutoApply: boolean;
+  assumedTarget?: {
+    programId?: string;
+    weekId?: string;
+    sessionId?: string;
+    sessionName?: string;
+    exerciseId?: string;
+    exerciseName?: string;
+  };
+  assumptionReason?: string;
+  clarificationRequired?: boolean;
+  clarificationReason?: string;
+};
+
+Add a function concept like:
+resolveDefaultExecution(userRequest, intent, uiContext, activeProgram)
+
+This function should decide whether the system can safely proceed without asking a question.
+
+==================================================
+TASK 2 — DEFINE SAFE AUTO-APPLY RULES
+==================================================
+
+By default, the system SHOULD auto-apply when all of the following are true:
+- active program exists
+- user is clearly referencing the current program/session/day
+- requested change is low-risk
+- there is one dominant reasonable interpretation
+
+Examples that should auto-apply:
+
+1. “add more exercises to day 1”
+→ assume current active program, current visible structure, target day 1
+
+2. “make this session harder”
+→ assume current selected session from UIContext
+
+3. “add more upper body work”
+→ assume current active program or visible session, depending context
+
+4. “make this more explosive”
+→ assume current active program or current session, depending scope
+
+5. “reduce overall volume”
+→ assume active program-wide transformation
+
+6. “add more core work”
+→ assume current visible session if on system page, otherwise active program
+
+==================================================
+TASK 3 — DEFINE WHEN TO ASK FOR CLARIFICATION
+==================================================
+
+Clarification should happen only when at least one of these is true:
+
+- no active program exists
+- multiple programs exist and there is no active selection
+- referenced day/session does not exist
+- request conflicts with safety rules
+- request is too vague to identify scope even with context
+- multiple interpretations are equally plausible and would materially differ
+
+Examples where clarification is justified:
+- “make it better” with no target context
+- “change day 6” when there are only 4 days
+- “add more to the second block” when block identity is ambiguous
+- “make this harder” when no selected session/exercise/program context exists
+
+==================================================
+TASK 4 — ADD ASSUMPTION HIERARCHY
+==================================================
+
+Use this priority order when making assumptions:
+
+1. UIContext selected target
+   - selectedExerciseName
+   - selectedSessionName
+   - current page
+   - activeProgramId
+
+2. Explicit request language
+   - “day 1”
+   - “session 2”
+   - “program”
+   - “this”
+
+3. Active program structure
+   - first matching day/session
+
+4. Current visible/active view state
+   - if on /system and Today tab, bias current session
+   - if on /chat and no session selected, bias program-level change
+
+If the hierarchy produces one clear answer, apply it.
+
+==================================================
+TASK 5 — SUPPORT SCOPE DEFAULTS
+==================================================
+
+Map vague-but-common requests to safe default scopes.
+
+Examples:
+
+“make this harder”
+- if selected exercise → exercise-level
+- else if selected session → session-level
+- else → program-level with modest difficulty increase
+
+“add more exercises to day 1”
+- day/session-level structural edit
+
+“focus more on endurance”
+- program-level transformation
+
+“add more upper body work”
+- session-level if on a session page, else program-level
+
+“add more core”
+- session-level by default if session is selected
+- otherwise program-level light addition
+
+==================================================
+TASK 6 — LIMIT AUTO-APPLY AGGRESSIVENESS
+==================================================
+
+Default execution should be decisive, but not reckless.
+
+Guardrails:
+- do not apply to the wrong program if active program is unclear
+- do not guess between multiple programs with equal plausibility
+- do not exceed session coherence limits
+- do not create junk volume
+- do not override re-entry/safety/season logic
+- do not skip clarification when safety is materially involved
+
+This is decisive execution with guardrails.
+
+==================================================
+TASK 7 — SURFACE ASSUMPTION IN RESPONSE
+==================================================
+
+When the system auto-applies based on a reasonable assumption, the response should mention it briefly.
+
+Examples:
+- “I added two exercises to Day 1 of your current program.”
+- “I treated that as a change to your currently selected session.”
+- “I shifted your active program toward more endurance.”
+
+Do NOT sound hesitant.
+Do NOT ask permission after the fact.
+Just be clear about what was assumed.
+
+==================================================
+TASK 8 — CONNECT DEFAULT EXECUTION TO ROUTING
+==================================================
+
+The router currently determines deterministic vs agent path.
+
+After the agent path returns structured intent:
+- run default execution decision
+- if shouldAutoApply = true → proceed
+- if clarificationRequired = true → ask the question
+
+This should reduce unnecessary clarifying questions without weakening safety.
+
+==================================================
+TASK 9 — ADD DEV DEBUG VISIBILITY
+==================================================
+
+In development, log:
+- request
+- intent type
+- auto-apply vs clarification
+- assumed target
+- assumption reason
+
+I want to be able to inspect:
+- why the system acted
+- or why it asked
+
+No ugly debug text in production UI.
+
+==================================================
+TASK 10 — TEST REQUIRED SCENARIOS
+==================================================
+
+These should now AUTO-APPLY:
+
+1. “I want to add more exercises to day 1”
+Expected:
+- no clarification
+- day 1 modified
+
+2. “Make this session harder”
+Expected:
+- if selected session exists, no clarification
+- session modified
+
+3. “Add more upper body work”
+Expected:
+- use current context and apply
+
+4. “Focus more on endurance”
+Expected:
+- program-level transformation, no clarification
+
+5. “Add more core work”
+Expected:
+- session/program resolved intelligently
+
+These should still ASK if needed:
+
+6. “Make it better”
+Expected:
+- clarification if no scope can be inferred safely
+
+7. “Change day 6”
+Expected:
+- clarification or truthful failure if no day 6 exists
+
+8. “Adjust the second block”
+Expected:
+- clarification if block identity is unclear
+
+==================================================
+TASK 11 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What default execution decision layer was added
+2. What the safe auto-apply rules are
+3. What still triggers clarification
+4. What assumption hierarchy is used
+5. How responses now explain assumptions
+6. What routing/orchestration changes were made
+7. Which previously over-cautious prompts now auto-apply correctly
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat must now behave like a confident coach-builder.
+
+When a request is reasonably clear and safe:
+- it should act
+
+When ambiguity is truly meaningful or risky:
+- it should ask
+
+The product should no longer default to over-clarifying on normal coaching requests.
+
+It should feel like:
+- intelligent
+- decisive
+- safe
+- coach-like
+
+Implement this now.

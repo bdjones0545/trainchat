@@ -191,6 +191,9 @@ const INTENT_PATTERNS: Record<SpecialistIntentType, RegExp[]> = {
     /\b(too much volume|too many sets?|too much work|too much accessory)\b/i,
     /\b(add|increase|more).{0,20}(volume|sets?|total work|training volume)\b/i,
     /\b(volume (is|feels|seems).{0,20}(too|very|way).{0,10}(high|much|low|light))\b/i,
+    // "add (more) exercises" / "add a finisher" / "throw in some work"
+    /\b(add|throw in|include|put in).{0,30}(more exercises?|exercises?|a finisher|conditioning|accessories?|core work|extra work|an exercise)\b/i,
+    /\b(remove|cut|drop|take out|eliminate).{0,20}(an exercise|some exercises?|exercises?|the finisher|accessories?|accessory work)\b/i,
   ],
 
   INTENSITY_CHANGE: [
@@ -699,15 +702,52 @@ function buildRecoveryMutations(region: string | null): SpecialistMutation[] {
 // ─── Ambiguous Request Handler ────────────────────────────────────────────────
 
 function buildAmbiguousDecision(lower: string): SpecialistDecision {
-  // Try to give a productive escalation prompt rather than failing silently
-  let clarificationPrompt = "Got it — what direction do you want to push this: more strength, more endurance, more athletic carryover, or lower fatigue overall?";
+  // DEFAULT EXECUTION: attempt a best-effort mutation rather than asking for clarification.
+  // Only fall back to clarification when the request is truly uninterpretable.
 
-  if (/better|improve|good|fix/.test(lower)) {
-    clarificationPrompt = "Got it — what direction do you want to push it: more strength, more endurance, more explosive, or lower overall fatigue?";
+  // "optimize / improve / make it better" → apply a safe general improvement:
+  // trim lowest-priority accessories and sharpen primary compound loading
+  if (/\b(optimize|improve|make.*better|better|fix|clean up|tighten|sharpen)\b/.test(lower)) {
+    return {
+      primaryIntent: "AMBIGUOUS",
+      secondaryIntents: [],
+      coachingMove: "Apply general program quality improvement",
+      preserve: ["primary compound lifts", "training frequency", "program structure"],
+      modify: ["accessory selection", "loading intent cues"],
+      explanation: `Got it — applying a general quality pass to the program.\n\nTrimming lowest-priority accessories that add fatigue without proportional benefit. Primary compound work stays intact, intent cues sharpened.\n\nYour update is live.`,
+      mutations: [
+        { type: "trim_accessories", target: "lowest_priority", reason: "General optimization — remove weakest ROI accessories" },
+        { type: "update_load_emphasis", target: "primary_lifts", value: "maximal_strength", reason: "Sharpen compound loading intent" },
+      ],
+      requiresClarification: false,
+      logContext: { intent: "AMBIGUOUS_RESOLVED", lower: lower.slice(0, 80), defaultAction: "general_optimize" },
+    };
   }
-  if (/change|different|not (right|great|working|ideal)/.test(lower)) {
-    clarificationPrompt = "Got it — what feels off? More volume, less volume, different exercises, or a different training emphasis?";
+
+  // "change it / switch it up / something different" → apply a neutral bias shift toward athletic
+  if (/\b(change|switch|different|mix it up|shake it up|vary|something else)\b/.test(lower)) {
+    return {
+      primaryIntent: "AMBIGUOUS",
+      secondaryIntents: [],
+      coachingMove: "Apply a moderate athletic emphasis shift as a safe default change",
+      preserve: ["primary compound lifts", "training frequency"],
+      modify: ["accessory selection", "conditioning emphasis"],
+      explanation: `Got it — refreshing the emphasis a bit.\n\nAdding an explosive opener to appropriate sessions and a conditioning finisher to push athletic carry-over. Primary compound work stays unchanged — this adds quality without disrupting the base.\n\nIf you had something specific in mind, let me know and I'll adjust.`,
+      mutations: [
+        { type: "add_explosive_opener", target: "strength_sessions", reason: "Default change — adding explosive quality to refresh program stimulus" },
+        { type: "add_conditioning_finisher", target: "appropriate_sessions", reason: "Default change — adding conditioning carry-over" },
+      ],
+      requiresClarification: false,
+      logContext: { intent: "AMBIGUOUS_RESOLVED", lower: lower.slice(0, 80), defaultAction: "athletic_shift" },
+    };
   }
+
+  // Truly uninterpretable — brief, action-oriented clarification prompt
+  const clarificationPrompt = /\bmore|add|increase\b/.test(lower)
+    ? "What would you like to add — strength, endurance, power, or just more volume on a specific area?"
+    : /\bless|reduce|cut|remove\b/.test(lower)
+    ? "What would you like to reduce — volume, intensity, a specific exercise, or overall fatigue?"
+    : "What direction do you want to push this: more strength, more conditioning, more explosive work, or pull things back to recover?";
 
   return {
     primaryIntent: "AMBIGUOUS",
