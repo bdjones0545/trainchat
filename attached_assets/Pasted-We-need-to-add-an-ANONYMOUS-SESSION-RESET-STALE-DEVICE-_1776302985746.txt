@@ -1,0 +1,129 @@
+We need to add an ANONYMOUS SESSION RESET / STALE DEVICE STATE RECOVERY path for TrainChat.
+
+OBJECTIVE:
+Prevent deviceId / anonymous users from getting stuck in old bugged conversations, cached program state, or stale local/session storage after major architecture changes.
+
+Right now it is possible that a device started on an older buggy system and is still carrying polluted state, which can make the app appear stuck in loops or show outdated behavior even though the code is now fixed.
+
+We need a clean way to detect, reset, or recover from stale anonymous/device state.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Allow anonymous/deviceId users to safely start fresh when their existing state is stale, corrupted, or tied to older bugged behavior.
+
+This should support:
+- debugging
+- QA
+- recovery from old anonymous state
+- safer migration after major product changes
+
+==================================================
+TASK 1 — AUDIT ANONYMOUS DEVICE STATE SOURCES
+==================================================
+
+Identify every place anonymous/deviceId state may persist, including:
+- localStorage
+- sessionStorage
+- cookies
+- deviceId
+- anonymous user record in DB
+- active conversation
+- active training system
+- cached query state
+- any other persisted client state
+
+Return a clear map of what can keep an anonymous user stuck in legacy behavior.
+
+==================================================
+TASK 2 — CREATE A SAFE RESET FLOW
+==================================================
+
+Add a reset mechanism for anonymous/deviceId users that can:
+- clear local persisted client state
+- clear cached query state
+- optionally create a fresh anonymous conversation/program context
+- prevent immediate reattachment to stale broken session state
+
+For now, this can be:
+- dev/debug-only
+- hidden behind a debug trigger
+- or an admin/test action
+
+But it must work end to end.
+
+==================================================
+TASK 3 — DEFINE WHAT GETS RESET
+==================================================
+
+The reset should explicitly handle:
+- active conversation pointer
+- active program pointer
+- stale anonymous session markers
+- localStorage/sessionStorage values tied to onboarding/agent/program state
+- cached React Query data for anonymous state
+- any device-bound session assumptions
+
+Do NOT accidentally delete registered user data.
+Scope carefully to anonymous/device debugging/recovery.
+
+==================================================
+TASK 4 — ADD STALE SESSION DETECTION (OPTIONAL FIRST PASS)
+==================================================
+
+If possible, add lightweight detection for suspicious legacy state, such as:
+- invalid active conversation/program references
+- session linked to removed/retired flow versions
+- missing expected fields after upgrades
+- repeated loop/repair conditions
+
+This can be used to:
+- log warnings
+- suggest a reset
+- or trigger a safe fallback
+
+==================================================
+TASK 5 — TEST REQUIRED SCENARIOS
+==================================================
+
+Test these cases:
+
+1. Device started on old bugged anonymous flow
+Expected:
+- reset produces clean fresh anonymous experience
+
+2. Clean anonymous user
+Expected:
+- reset still works without breaking app
+
+3. Registered/logged-in user
+Expected:
+- reset does NOT wipe legitimate account data
+
+4. After reset
+Expected:
+- new prompts behave according to current architecture, not legacy state
+
+==================================================
+TASK 6 — OUTPUT REQUIRED
+==================================================
+
+Return:
+
+1. What state sources were found
+2. What reset path was added
+3. What exactly gets cleared/reset
+4. Whether stale-state detection was added
+5. How to trigger the reset in testing
+6. Any remaining edge cases
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Anonymous/deviceId users should not remain trapped in legacy bugged state after the product architecture changes.
+
+There must be a reliable way to start fresh and verify current behavior cleanly.
+
+Implement this now.
