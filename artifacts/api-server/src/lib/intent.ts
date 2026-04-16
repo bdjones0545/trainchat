@@ -537,6 +537,31 @@ export function classifyIntent(
     };
   }
 
+  // ── Priority 6d: EDIT_PROGRAM (training signal fallback) ─────────────────
+  // Broad vibe-based catch for when there is an active program and the user's
+  // message combines ANY modification-intent word with ANY training quality
+  // term. Regex can never enumerate every way a person phrases a request
+  // ("lean it into power", "gear it toward explosiveness", "I want it hitting
+  // harder on strength", etc.).  Rather than chasing every phrasing, we check
+  // two loose signals: (a) the user is indicating change/direction, and
+  // (b) a training quality is named.  The edit engine's own AI layer then
+  // figures out exactly what to change — we just need to route correctly.
+  if (context.hasActiveProgram) {
+    const trainingSignalResult = matchesTrainingSignalEdit(lower);
+    if (trainingSignalResult.matched) {
+      logger.info(
+        { direction: trainingSignalResult.direction, trigger: trainingSignalResult.trigger },
+        "[IntentRouter] → EDIT_PROGRAM (training_signal_fallback)"
+      );
+      return {
+        type: "EDIT_PROGRAM",
+        confidence: "medium",
+        editSubtype: "program_transformation",
+        metadata: { direction: trainingSignalResult.direction, via: "training_signal_fallback" },
+      };
+    }
+  }
+
   // ── Priority 7: CREATE_PROGRAM ───────────────────────────────────────────
   const createResult = matchesCreateProgram(lower, context);
   if (createResult.matched) {
@@ -895,6 +920,84 @@ function matchesEditProgram(lower: string, hasActiveProgram: boolean): {
   }
 
   return noMatch;
+}
+
+// ─── Training Signal Fallback ─────────────────────────────────────────────────
+//
+// Broad vibe-based intent detector. Called as Priority 6d — after all specific
+// edit matchers — but ONLY when an active program exists.
+//
+// The problem with regex-only classification: there are effectively infinite
+// natural-language ways to say "make my program more powerful":
+//   "lean it into power", "gear it toward explosiveness", "I want it hitting
+//   harder on strength", "make it feel more athletic", "push the power side more"
+//
+// Rather than enumerating every phrasing, we detect TWO independent signals:
+//
+//   Signal A — MODIFICATION INTENT
+//     Any word indicating the user wants to change, shift, or redirect something.
+//     ("make", "more", "lean", "push", "gear", "shift", "turn", "take", ...)
+//
+//   Signal B — TRAINING QUALITY TERM
+//     A named training quality or adaptation target.
+//     ("power", "explosive", "strength", "speed", "athletic", "endurance", ...)
+//
+// If BOTH are present in a message from a user who already has a program,
+// it is almost certainly a program modification request.  We route it to the
+// edit engine (program_transformation) and let the AI inside the engine
+// determine exactly what changes to make — it is far better at semantics than
+// this classifier.
+//
+// FALSE-POSITIVE GUARD: Pure coaching/knowledge questions ("what are the
+// benefits of power training?", "how do I build more speed?") almost never
+// combine a modification-intent verb with a first-person program reference, so
+// we also require either a first-person or "it/this/the program" anchor when
+// the modification signal alone is ambiguous.
+
+const MODIFICATION_INTENT_SIGNALS = /\b(make|more|shift|lean|push|gear|pivot|turn|take|move|add|bring|go|get|feel|hit|want|need|adjust|change|convert|flip|focus|bias|swing|dial|tune|skew|tilt|weight)\b/i;
+
+const TRAINING_QUALITY_TERMS = /\b(power|powerful|explosive|explosiveness|plyometric|speed|fast|quickness|agility|strength|strong|stronger|athletic|athleticism|performance|endurance|aerobic|cardio|conditioning|hypertrophy|muscle|size|gains?|mass|lean|fat.loss|cutting|metabolic|functional|sport.?specific|reactive|ballistic)\b/i;
+
+// Anchor: user is talking about their own program or themselves, not asking a
+// generic coaching question.
+const PROGRAM_ANCHOR = /\b(it|this|the program|my program|the plan|my plan|the routine|my routine|i want|i need|i.d like|can you|make it|make this|let.s|we should)\b/i;
+
+function matchesTrainingSignalEdit(lower: string): {
+  matched: boolean;
+  direction: string;
+  trigger: string;
+} {
+  const noMatch = { matched: false, direction: "general", trigger: "" };
+
+  const hasModificationIntent = MODIFICATION_INTENT_SIGNALS.test(lower);
+  const hasTrainingQuality = TRAINING_QUALITY_TERMS.test(lower);
+
+  if (!hasModificationIntent || !hasTrainingQuality) return noMatch;
+
+  // Require a program anchor to avoid false-positives on pure coaching questions
+  // ("how do I get more powerful?") — those rarely have "it / this / the program" refs
+  const hasProgramAnchor = PROGRAM_ANCHOR.test(lower);
+  if (!hasProgramAnchor) return noMatch;
+
+  // Exclude messages that are clearly pure knowledge questions, not requests for change
+  const isKnowledgeQuestion = /\b(what is|what are|how do|how does|why is|why does|can you explain|tell me about|what.s the difference|should i|is it better|which is)\b/i;
+  if (isKnowledgeQuestion.test(lower) && !/\b(make|shift|change|adjust|convert)\b/i.test(lower)) return noMatch;
+
+  // Identify the most likely direction from the training quality present
+  let direction = "general";
+  if (/\b(power|powerful|explosive|explosiveness|plyometric|ballistic|reactive)\b/i.test(lower)) direction = "power";
+  else if (/\b(speed|fast|quickness|agility)\b/i.test(lower)) direction = "speed";
+  else if (/\b(strength|strong|stronger)\b/i.test(lower)) direction = "strength";
+  else if (/\b(endurance|aerobic|cardio)\b/i.test(lower)) direction = "endurance";
+  else if (/\b(conditioning|metabolic|sport.?specific)\b/i.test(lower)) direction = "conditioning";
+  else if (/\b(athletic|athleticism|performance|functional|reactive)\b/i.test(lower)) direction = "athletic";
+  else if (/\b(hypertrophy|muscle|size|gains?|mass)\b/i.test(lower)) direction = "hypertrophy";
+  else if (/\b(lean|fat.loss|cutting)\b/i.test(lower)) direction = "fat_loss";
+
+  const qualityMatch = lower.match(TRAINING_QUALITY_TERMS);
+  const trigger = qualityMatch ? qualityMatch[0] : "training_quality";
+
+  return { matched: true, direction, trigger };
 }
 
 function matchesCreateProgram(lower: string, context: ClassificationContext): {
