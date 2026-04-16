@@ -1,0 +1,265 @@
+// ======================================================
+// TRAINCHAT EXECUTION PLANNER (CORE AGENT LAYER)
+// ======================================================
+//
+// GOAL:
+// Create a centralized execution planner that determines
+// EXACTLY how every user message is handled.
+//
+// This replaces fragmented routing (intent.ts, decision.ts chaos)
+// with a single brain that:
+//
+// 1. Understands user intent (via intent family system)
+// 2. Reads current program + system state
+// 3. Determines EXACT action (mutate, ask, rebuild, guide)
+// 4. Routes to the correct execution path
+//
+// ======================================================
+
+export type ExecutionAction =
+  | "APPLY_MUTATION"
+  | "ASK_CLARIFICATION"
+  | "GUIDANCE"
+  | "REBUILD_PROGRAM"
+  | "NO_OP";
+
+export interface ExecutionPlan {
+  action: ExecutionAction;
+
+  intentFamily: string | null;
+
+  scope: {
+    type: "exercise" | "session" | "program" | null;
+    dayIndex?: number;
+    exerciseName?: string;
+  };
+
+  mutation?: {
+    type:
+      | "swap"
+      | "transform"
+      | "add"
+      | "remove"
+      | "progression"
+      | "regression";
+
+    params: Record<string, any>;
+  };
+
+  clarification?: {
+    question: string;
+    pendingAspect: "scope" | "target_day" | "exercise";
+  };
+
+  reasoning: string; // DEBUG ONLY
+}
+
+// ======================================================
+// MAIN ENTRY POINT
+// ======================================================
+
+export async function buildExecutionPlan({
+  message,
+  userId,
+  conversationId,
+  program,
+  pendingClarification,
+}: {
+  message: string;
+  userId: string;
+  conversationId: string;
+  program: ProgramStructure | null;
+  pendingClarification: PendingClarification | null;
+}): Promise<ExecutionPlan> {
+  // ======================================================
+  // STEP 1 — HANDLE CLARIFICATION FOLLOWUP FIRST
+  // ======================================================
+
+  if (pendingClarification) {
+    return resolveClarification({
+      message,
+      pendingClarification,
+    });
+  }
+
+  // ======================================================
+  // STEP 2 — RESOLVE INTENT FAMILY
+  // ======================================================
+
+  const intent = normalizeToIntentFamily(message);
+
+  // ======================================================
+  // STEP 3 — RESOLVE TARGET SCOPE
+  // ======================================================
+
+  const scope = resolveScope(message);
+
+  // ======================================================
+  // STEP 4 — DECISION TREE (THE BRAIN)
+  // ======================================================
+
+  // ---------- SWAP ----------
+  if (intent === "exercise_swap") {
+    if (!scope.exerciseName) {
+      return {
+        action: "ASK_CLARIFICATION",
+        intentFamily: intent,
+        scope,
+        clarification: {
+          question: "Which exercise do you want to swap?",
+          pendingAspect: "exercise",
+        },
+        reasoning: "Swap intent but no exercise specified",
+      };
+    }
+
+    return {
+      action: "APPLY_MUTATION",
+      intentFamily: intent,
+      scope,
+      mutation: {
+        type: "swap",
+        params: {
+          targetExercise: scope.exerciseName,
+        },
+      },
+      reasoning: "Valid swap request",
+    };
+  }
+
+  // ---------- ENDURANCE / TRANSFORMATION ----------
+  if (intent === "endurance_focus") {
+    if (!scope.type) {
+      return {
+        action: "ASK_CLARIFICATION",
+        intentFamily: intent,
+        scope,
+        clarification: {
+          question:
+            "Should this apply to a specific day or the whole program?",
+          pendingAspect: "scope",
+        },
+        reasoning: "Endurance intent needs scope",
+      };
+    }
+
+    return {
+      action: "APPLY_MUTATION",
+      intentFamily: intent,
+      scope,
+      mutation: {
+        type: "transform",
+        params: {
+          transformation: "endurance",
+        },
+      },
+      reasoning: "Apply endurance transformation",
+    };
+  }
+
+  // ---------- ADD EXERCISE ----------
+  if (intent === "exercise_progression" || message.includes("add")) {
+    return {
+      action: "APPLY_MUTATION",
+      intentFamily: intent,
+      scope,
+      mutation: {
+        type: "add",
+        params: {
+          category: inferExerciseCategory(message),
+        },
+      },
+      reasoning: "Add exercise flow",
+    };
+  }
+
+  // ---------- PROGRAM CREATION ----------
+  if (!program) {
+    return {
+      action: "REBUILD_PROGRAM",
+      intentFamily: intent,
+      scope,
+      reasoning: "No program exists → build",
+    };
+  }
+
+  // ---------- FALLBACK ----------
+  return {
+    action: "GUIDANCE",
+    intentFamily: intent,
+    scope,
+    reasoning: "Fallback to coaching",
+  };
+}
+
+// ======================================================
+// CLARIFICATION RESOLUTION
+// ======================================================
+
+function resolveClarification({
+  message,
+  pendingClarification,
+}: {
+  message: string;
+  pendingClarification: PendingClarification;
+}): ExecutionPlan {
+  if (pendingClarification.pendingAspect === "scope") {
+    const dayMatch = message.match(/day\s*(\d+)/i);
+
+    if (dayMatch) {
+      return {
+        action: "APPLY_MUTATION",
+        intentFamily: pendingClarification.intentFamily,
+        scope: {
+          type: "session",
+          dayIndex: Number(dayMatch[1]) - 1,
+        },
+        mutation: {
+          type: "transform",
+          params: {
+            transformation: pendingClarification.intentFamily,
+          },
+        },
+        reasoning: "Resolved scope clarification → day",
+      };
+    }
+  }
+
+  return {
+    action: "GUIDANCE",
+    intentFamily: null,
+    scope: { type: null },
+    reasoning: "Failed clarification resolution fallback",
+  };
+}
+
+// ======================================================
+// SCOPE RESOLUTION
+// ======================================================
+
+function resolveScope(message: string) {
+  const dayMatch = message.match(/day\s*(\d+)/i);
+
+  if (dayMatch) {
+    return {
+      type: "session" as const,
+      dayIndex: Number(dayMatch[1]) - 1,
+    };
+  }
+
+  return {
+    type: null,
+  };
+}
+
+// ======================================================
+// CATEGORY INFERENCE (BASIC)
+// ======================================================
+
+function inferExerciseCategory(message: string) {
+  if (message.includes("jump")) return "plyometric";
+  if (message.includes("core")) return "core";
+  if (message.includes("conditioning")) return "conditioning";
+
+  return "general";
+}
