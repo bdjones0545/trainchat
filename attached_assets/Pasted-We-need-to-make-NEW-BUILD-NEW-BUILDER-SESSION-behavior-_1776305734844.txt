@@ -1,0 +1,203 @@
+We need to make NEW BUILD / NEW BUILDER SESSION behavior a true clean slate for all users in TrainChat.
+
+OBJECTIVE:
+When a user starts a new build, it should begin as a fresh program workspace with no inherited build-specific context from previous builds.
+
+Right now, previous build/program state may be leaking into new builds, which makes the agent feel confusing and non-deterministic.
+
+We want a clear separation between:
+1. build-specific state (should reset)
+2. durable user memory (should persist)
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+A new build should forget:
+- what the user was previously building
+
+But it should still remember:
+- who the user is
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+When a user creates a new build:
+- start with a fresh build context
+- clear prior active program/build mutation context
+- clear temporary session-specific assumptions
+- preserve durable user memory and profile data
+- ensure the new build does not accidentally behave like an edit of the old one
+
+==================================================
+TASK 1 — AUDIT WHAT STATE CURRENTLY LEAKS INTO NEW BUILDS
+==================================================
+
+Identify all state sources that may incorrectly influence a new build, including:
+- active program pointer
+- active conversation pointer
+- last mutation targets
+- selected session/exercise context
+- cached program structure
+- previous build-specific AI context
+- temporary transformation state
+- UIContext leftovers
+- React Query cached active build state
+- backend “current program” assumptions
+
+Return a clear map of what is:
+- build-scoped and should reset
+- user-scoped and should persist
+
+==================================================
+TASK 2 — DEFINE BUILD-SCOPED VS USER-SCOPED CONTEXT
+==================================================
+
+Explicitly separate context into:
+
+A. BUILD-SCOPED (RESET ON NEW BUILD)
+Examples:
+- current active program under construction
+- previous build’s session structure
+- previous build’s mutation targets
+- selected session/exercise UI state
+- prior build-specific chat assumptions
+- current conversation’s build references
+
+B. USER-SCOPED (PERSIST)
+Examples:
+- profile
+- equipment access
+- sport
+- training age
+- preferences
+- tolerance patterns
+- injury / special considerations
+- session length preference
+- learned durable memory
+
+==================================================
+TASK 3 — IMPLEMENT TRUE NEW BUILD RESET
+==================================================
+
+When user triggers:
+- New Build
+- New Builder Session
+
+The system should:
+- create a fresh build session/context
+- detach from prior active build/program state
+- clear build-scoped temporary context
+- reset selected session/exercise references
+- reset prior mutation target memory
+- ensure the next prompt is interpreted as building something new, not editing the old program
+
+This must apply for:
+- anonymous/device users
+- authenticated users
+
+==================================================
+TASK 4 — PRESERVE DURABLE USER MEMORY
+==================================================
+
+Do NOT wipe:
+- durable user preferences
+- special consideration flags
+- return-from-injury context if persistent
+- equipment access
+- training background
+- preference/adherence memory
+
+A new build should still benefit from knowing the user.
+
+==================================================
+TASK 5 — PREVENT OLD PROGRAM BLEED-THROUGH
+==================================================
+
+After a new build starts:
+- old program sessions/exercises should not be used implicitly
+- old active mutation targets should not be reused
+- agent should not assume “continue editing the last build”
+- the system should not silently carry over the old split or structure
+
+Only carry old program context if the user explicitly asks for it.
+
+==================================================
+TASK 6 — SUPPORT EXPLICIT REUSE WHEN REQUESTED
+==================================================
+
+If the user explicitly says things like:
+- “build me a new version based on my last program”
+- “use my old split as a starting point”
+- “make a new build from that one”
+
+Then allow intentional inheritance.
+
+But default behavior for New Build must be clean slate.
+
+==================================================
+TASK 7 — FIX UI / ACTIVE POINTERS
+==================================================
+
+After starting a new build:
+- active program pointer should reflect fresh build state
+- old program should move to saved/history as appropriate
+- chat/system should not show stale previous-build data as active
+- selected session/exercise UI state should clear
+
+==================================================
+TASK 8 — TEST REQUIRED SCENARIOS
+==================================================
+
+Test these exact cases:
+
+1. User builds Program A, then starts New Build
+Expected:
+- Program B starts fresh
+- no Program A structure leaks in
+
+2. User has durable preferences (e.g. short sessions, dumbbells)
+Expected:
+- new build still reflects those preferences
+
+3. User starts New Build and asks for something completely different
+Expected:
+- old build does not bias the new one
+
+4. User explicitly asks to base new build on old one
+Expected:
+- old build context can be intentionally reused
+
+5. Authenticated + anonymous users
+Expected:
+- same clean-slate build behavior for both
+
+==================================================
+TASK 9 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What build-scoped state is now reset
+2. What user-scoped memory is preserved
+3. How new build behavior changed
+4. How old program bleed-through was prevented
+5. How explicit old-build reuse is still supported
+6. What active pointer/UI fixes were made
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Starting a new build in TrainChat must now feel like:
+- a true fresh workspace
+- with the same user identity and preferences
+- but without accidental inheritance from the last build
+
+The system should no longer blur:
+- “new program”
+with
+- “edit previous program”
+
+Implement this now.
