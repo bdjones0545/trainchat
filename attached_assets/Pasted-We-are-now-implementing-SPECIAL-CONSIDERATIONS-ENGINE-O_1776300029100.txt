@@ -1,0 +1,375 @@
+We are now implementing:
+
+SPECIAL CONSIDERATIONS ENGINE
+
+OBJECTIVE:
+Allow TrainChat to intelligently handle users with special considerations — including older adults, Parkinson’s, neurological limitations, balance issues, frailty, major mobility limitations, and similar cases — by switching from normal library-first programming to a safer OpenAI-guided construction mode with hard guardrails.
+
+This should expand TrainChat beyond standard athletic/general fitness programming without forcing these users into a rigid exercise database that may not contain the right supported, simplified, or symptom-aware options.
+
+IMPORTANT:
+This is NOT a medical diagnosis engine.
+This is NOT rehab or treatment.
+This is a safer programming mode for users with meaningful limitations or special considerations.
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+Normal users:
+- library-first
+- deterministic exercise selection
+- standard programming engines
+
+Special-consideration users:
+- OpenAI-guided construction allowed beyond the normal exercise DB
+- stricter safety constraints
+- more conservative progression
+- validator-enforced output quality
+- lower fall risk / lower coordination risk / lower complexity by default
+
+The system should not become reckless or hallucination-prone.
+It should become more flexible while remaining more conservative.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+When TrainChat detects a special-consideration context, it should:
+1. switch into Special Considerations Mode
+2. let OpenAI construct safer, more context-specific programming beyond the normal exercise library if needed
+3. still apply strong safety and structure validation before output is accepted
+
+==================================================
+TASK 1 — ADD DETECTION LAYER
+==================================================
+
+Create detection logic for special-consideration signals in user language, profile context, or ongoing conversation.
+
+Examples of triggering inputs:
+- Parkinson’s
+- tremor
+- balance issues
+- fall risk
+- frailty
+- walker
+- cane
+- older adult
+- elderly
+- arthritis limitations
+- osteoporosis
+- joint replacement
+- neuropathy
+- neurological condition
+- MS
+- stroke history
+- limited mobility
+- very deconditioned
+- chair-based exercise
+- unstable gait
+- difficulty getting off the floor
+- coordination issues
+
+Create a classification like:
+
+type SpecialConsiderationType =
+  | "none"
+  | "older_adult"
+  | "parkinsons"
+  | "neurological_limitations"
+  | "balance_fall_risk"
+  | "frailty_deconditioning"
+  | "mobility_limitations"
+  | "joint_sensitive"
+  | "multi_factor_special_consideration";
+
+Create a detection result like:
+
+type SpecialConsiderationContext = {
+  detected: boolean;
+  primaryType: SpecialConsiderationType;
+  matchedSignals: string[];
+  severity?: "mild" | "moderate" | "high";
+  requiresConservativeProgramming: boolean;
+  notes?: string[];
+};
+
+==================================================
+TASK 2 — CREATE SPECIAL CONSIDERATIONS MODE
+==================================================
+
+Add a programming mode switch:
+
+ProgrammingMode:
+- standard
+- special_considerations
+
+When special considerations are detected:
+- the request should route into special_considerations mode
+- OpenAI is allowed to construct exercise selections beyond the existing exercise DB if needed
+- but only inside a constrained safety-oriented instruction set
+
+This mode should not require every exercise to exist in the current library.
+
+==================================================
+TASK 3 — DEFINE SAFETY-FIRST PROGRAMMING RULES
+==================================================
+
+In special_considerations mode, enforce rules like:
+
+- prioritize stability and support
+- prefer lower complexity
+- reduce coordination demands unless clearly appropriate
+- minimize fall risk
+- bias toward supported or constrained environments
+- use conservative volume and intensity
+- slower progression
+- fewer exercises per session
+- simple transitions between movements
+- reduce unnecessary novelty
+- avoid explosive/reactive work by default unless clearly appropriate
+- avoid max-effort loading
+- avoid dense fatigue-driven circuits by default
+- emphasize movement quality, tolerance, confidence, and repeatability
+
+For Parkinson’s / neurological / balance-sensitive users:
+- bias toward gait, balance, postural control, sit-to-stand patterns, supported lower-body work, manageable trunk work, and simple strength patterns
+
+For older adults:
+- bias toward strength for function, chair-supported work, balance confidence, controlled mobility, and manageable conditioning
+
+==================================================
+TASK 4 — ALLOW OPENAI TO CONSTRUCT MOVEMENTS OUTSIDE THE DB
+==================================================
+
+When in special_considerations mode, do NOT require all exercise recommendations to come strictly from the standard exercise library.
+
+Allow OpenAI to construct reasonable movement recommendations such as:
+- chair-supported sit-to-stand
+- supported marching
+- assisted split-stance weight shift
+- wall-supported calf raise
+- balance hold with support
+- seated or supported trunk rotation
+- gait-focused drills
+- step-over patterns
+- hand-supported hinge/squat variants
+- breathing/reset drills
+- low-complexity mobility/resilience circuits
+
+IMPORTANT:
+This freedom only applies in special_considerations mode.
+Standard athletic programming should remain library-first.
+
+==================================================
+TASK 5 — ADD SPECIAL-CONSIDERATIONS SESSION ARCHETYPES
+==================================================
+
+Create session archetypes such as:
+- strength_for_function
+- supported_balance_and_gait
+- movement_confidence_session
+- chair_supported_strength
+- controlled_mobility_and_tolerance
+- low_complexity_conditioning
+- recovery_and_movement_day
+
+These should be selectable depending on the user’s limitations and goals.
+
+Examples:
+Parkinson’s:
+- gait + balance + lower-body function + trunk posture + manageable strength
+
+Older adult:
+- sit-to-stand / hinge / carry / step / balance / confidence / low fatigue conditioning
+
+Frailty / deconditioning:
+- reacclimation strength + tolerance + movement confidence
+
+==================================================
+TASK 6 — ADD GOAL FILTERING THROUGH SPECIAL CONSIDERATIONS
+==================================================
+
+If the user also has a goal:
+- strength
+- fat loss
+- conditioning
+- general fitness
+- mobility
+- longevity
+- athletic feel
+- return to training
+
+The system should still honor the goal, but through a special-considerations lens.
+
+Examples:
+- fat loss + older adult → low-risk sustainable strength + walking / light conditioning
+- Parkinson’s + strength → functional strength with stability-first exercise choices
+- balance limitations + conditioning → low-complexity conditioning, not demanding circuits
+- joint-sensitive + mobility → tolerated mobility/flexibility plan
+
+Special-considerations logic should override aggressiveness.
+
+==================================================
+TASK 7 — ADD SPECIAL-CONSIDERATIONS VALIDATOR
+==================================================
+
+Create a validation layer specifically for special_considerations mode.
+
+Validator should check for issues such as:
+- too many exercises in one session
+- too much total volume
+- excessive coordination demands
+- unsupported balance challenges
+- high fall-risk patterns without support
+- unnecessary explosive work
+- high-intensity conditioning too early
+- unrealistic transitions for limited users
+- overly complex or ambiguous instructions
+
+Example checks:
+- if Parkinson’s / balance risk and exercise is highly reactive without support → fail
+- if older adult / frailty and session density is too high → fail
+- if re-entry + older adult and progression is too aggressive → fail
+- if special_considerations mode and language implies max effort → fail
+
+Output should be retried or corrected if validator fails.
+
+==================================================
+TASK 8 — ADD CLARIFICATION RULES FOR HIGH-RISK CONTEXT
+==================================================
+
+Unlike normal vibe-coding mode, in special_considerations mode the system should ask clarification more readily when safety-relevant details are missing.
+
+Examples where clarification is appropriate:
+- severe balance limitation but no support environment mentioned
+- Parkinson’s mentioned with unclear current function
+- stroke history with unclear mobility level
+- joint replacement with unclear movement tolerance
+- significant pain / instability language
+
+But do NOT over-ask for trivial details.
+Still be useful.
+
+Examples:
+- “Do you have a stable chair or counter available for support?”
+- “Are you able to get up and down from a chair comfortably?”
+- “Should I assume we need low-balance-risk options only?”
+
+==================================================
+TASK 9 — UPDATE AGENT LANGUAGE
+==================================================
+
+In special_considerations mode, the agent should sound:
+- calm
+- conservative
+- clear
+- coach-like
+- confidence-building
+
+Examples:
+- “I’m keeping this conservative and support-based so it feels stable and repeatable.”
+- “Because of Parkinson’s, I’m prioritizing posture, gait, balance confidence, and manageable strength.”
+- “I built this around lower fall risk, simpler transitions, and functional strength.”
+- “I’m biasing toward supported movements first, then we can progress complexity over time.”
+
+Avoid:
+- over-medical language
+- diagnosis language
+- false rehab claims
+- hypey athlete language when context is fragile
+
+==================================================
+TASK 10 — PRESERVE NORMAL SYSTEM BEHAVIOR
+==================================================
+
+This engine must NOT weaken the existing athletic/standard system.
+
+Rules:
+- only switch to special_considerations mode when signals are present
+- otherwise preserve:
+  - library-first programming
+  - sport engines
+  - power/speed logic
+  - conditioning logic
+  - deterministic fast paths
+
+This must be a conditional expansion, not a global regression.
+
+==================================================
+TASK 11 — TEST REQUIRED SCENARIOS
+==================================================
+
+Test these exact prompts:
+
+1. “I have Parkinson’s and want to stay strong and mobile.”
+Expected:
+- special_considerations mode
+- support-based, lower-risk programming
+- not generic athletic programming
+
+2. “I’m older and have balance limitations.”
+Expected:
+- special_considerations mode
+- balance/fall-risk-aware plan
+- no reckless exercise choices
+
+3. “I’m 72 and want to build strength safely.”
+Expected:
+- older-adult strength-for-function structure
+- conservative progression
+
+4. “I use a cane and want to improve confidence walking.”
+Expected:
+- gait / balance confidence emphasis
+- support-aware structure
+
+5. “I have arthritis and limited mobility.”
+Expected:
+- joint-sensitive movement choices
+- lower aggressiveness
+
+6. “I want a chair-based workout because I’m very deconditioned.”
+Expected:
+- no rigid exercise-library failure
+- OpenAI constructs an appropriate session
+
+7. “I’m an older adult getting back into training after 8 months off.”
+Expected:
+- special_considerations + re-entry both active
+- conservative ramp
+
+8. “I have Parkinson’s but still want conditioning.”
+Expected:
+- conditioning filtered through safety and complexity constraints
+- no generic circuits
+
+==================================================
+TASK 12 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What detection logic was added
+2. What special consideration types/modes were created
+3. What safety rules now govern this mode
+4. How OpenAI is allowed to go outside the DB in this mode
+5. What validator rules were added
+6. What clarification triggers were added
+7. Which example prompts now work appropriately that previously would not
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat should now be able to handle users with meaningful limitations or special considerations in a way that feels:
+- safer
+- more flexible
+- more human
+- more context-aware
+
+It should not force these users into the normal athletic exercise DB when that DB is too narrow.
+
+It should use OpenAI-guided construction with strong guardrails, so the product feels capable without becoming reckless.
+
+Implement this now.
