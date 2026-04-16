@@ -1,0 +1,132 @@
+We need to FIX SCROLL BEHAVIOR in TrainChat.
+
+OBJECTIVE:
+Users should never be forced back to the top of the page when scrolling.
+
+Currently:
+- if the user scrolls down and then scrolls up, the page automatically jumps back to the top
+- this creates a broken, unusable experience
+
+==================================================
+PRIMARY PROBLEM
+==================================================
+
+Something in the app is forcing scroll position reset on render or update.
+
+Likely causes:
+- window.scrollTo(0, 0)
+- scrollIntoView called too aggressively
+- component remounting due to changing keys
+- layout container re-render resetting scroll
+- message streaming logic triggering scroll incorrectly
+
+==================================================
+GOAL
+==================================================
+
+1. Preserve scroll position across renders
+2. Only auto-scroll when new messages are added
+3. Only auto-scroll if user is near the bottom
+4. Never force scroll-to-top on interaction
+
+==================================================
+TASK 1 — FIND SCROLL RESET LOGIC
+==================================================
+
+Search for:
+- window.scrollTo
+- scrollIntoView
+- useEffect tied to messages or conversation state
+- layout components that re-render on every update
+
+Identify where scroll is being reset.
+
+==================================================
+TASK 2 — REMOVE FORCED SCROLL TO TOP
+==================================================
+
+Remove any:
+- window.scrollTo(0, 0)
+- auto-scroll logic that runs on every render
+
+Scroll should NEVER reset globally.
+
+==================================================
+TASK 3 — IMPLEMENT SMART AUTO-SCROLL
+==================================================
+
+Add logic:
+
+- detect if user is near bottom (within ~100px)
+- only scroll to bottom if:
+  - a new message is added
+  - AND user is near bottom
+
+If user has scrolled up:
+- do NOT auto-scroll
+- let them stay where they are
+
+==================================================
+TASK 4 — FIX COMPONENT REMOUNT ISSUES
+==================================================
+
+Check for dynamic keys like:
+- key={conversationId}
+- key={messages.length}
+
+Remove or stabilize keys so components are not remounted unnecessarily.
+
+Remounting resets scroll position.
+
+==================================================
+TASK 5 — VERIFY CONTAINER SCROLL
+==================================================
+
+If scroll is inside a container (not window):
+- ensure the container preserves scrollTop across updates
+- avoid resetting scrollTop unless intentional
+
+==================================================
+TASK 6 — TEST SCENARIOS
+==================================================
+
+1. Scroll down → scroll up
+Expected:
+- no jump to top
+
+2. New message arrives while at bottom
+Expected:
+- auto-scroll to bottom
+
+3. New message arrives while scrolled up
+Expected:
+- no forced scroll
+
+4. Switching sessions/builds
+Expected:
+- controlled scroll behavior, not erratic jumps
+
+==================================================
+TASK 7 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. Where scroll reset was happening
+2. What logic was removed
+3. What new scroll logic was added
+4. Whether any component remount issues were fixed
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Scrolling must feel stable and predictable.
+
+Users should:
+- stay where they scroll
+- not be forced anywhere
+- only be auto-scrolled when appropriate
+
+The app should feel like a modern chat/product UI, not a glitchy page.
+
+Fix this now.
