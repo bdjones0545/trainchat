@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
 import { trainingSystems } from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, ne } from "drizzle-orm";
 import {
   getActiveTrainingSystem,
   getFullTrainingSystem,
@@ -355,6 +355,78 @@ router.post("/training-system/set-active/:id", requireAuth, async (req, res): Pr
   } catch (err) {
     logger.error({ err }, "[training-system] POST /set-active error");
     res.status(500).json({ error: "Failed to switch active program" });
+  }
+});
+
+// ─── DELETE /training-system/:id ─────────────────────────────────────────────
+// Hard-deletes a training system (all phases/weeks/sessions/exercises/change
+// logs cascade). If the deleted system was the active one, the most-recently-
+// updated archived system is promoted to active. Ownership is enforced.
+router.delete("/training-system/:id", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const userId = req.session.userId!;
+    const id = parseInt(req.params.id as string, 10);
+
+    if (isNaN(id)) {
+      res.status(400).json({ error: "Invalid training system id" });
+      return;
+    }
+
+    const [target] = await db
+      .select()
+      .from(trainingSystems)
+      .where(and(eq(trainingSystems.id, id), eq(trainingSystems.userId, userId)));
+
+    if (!target) {
+      res.status(404).json({ error: "Training system not found" });
+      return;
+    }
+
+    const wasActive = target.status === "active";
+    let newActiveSystemId: number | null = null;
+
+    // If deleting the active system, promote the most-recently-updated archived one
+    if (wasActive) {
+      const [next] = await db
+        .select()
+        .from(trainingSystems)
+        .where(
+          and(
+            eq(trainingSystems.userId, userId),
+            eq(trainingSystems.status, "archived"),
+            ne(trainingSystems.id, id)
+          )
+        )
+        .orderBy(desc(trainingSystems.updatedAt))
+        .limit(1);
+
+      if (next) {
+        await db
+          .update(trainingSystems)
+          .set({ status: "active", updatedAt: new Date() })
+          .where(eq(trainingSystems.id, next.id));
+        newActiveSystemId = next.id;
+        logger.info(
+          { userId, deletedId: id, promotedId: next.id },
+          "[training-system] DELETE /:id — active system deleted, next system promoted"
+        );
+      } else {
+        logger.info(
+          { userId, deletedId: id },
+          "[training-system] DELETE /:id — active system deleted, no fallback available (workspace will be empty)"
+        );
+      }
+    }
+
+    // Hard delete — cascade removes phases → weeks → sessions → exercises → change logs
+    await db.delete(trainingSystems).where(eq(trainingSystems.id, id));
+
+    logger.info({ userId, systemId: id, wasActive, newActiveSystemId }, "[training-system] DELETE /:id — deleted");
+
+    res.json({ success: true, wasActive, newActiveSystemId });
+  } catch (err) {
+    logger.error({ err }, "[training-system] DELETE /:id error");
+    res.status(500).json({ error: "Failed to delete training system" });
   }
 });
 

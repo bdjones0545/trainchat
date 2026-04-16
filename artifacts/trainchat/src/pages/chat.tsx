@@ -4,7 +4,7 @@ import {
   SendHorizontal, Zap, PanelLeftClose, PanelLeft, Activity,
   Menu, Target, CreditCard, LogOut, Dumbbell, UserPlus,
   MessageSquare, Plus, RotateCcw, Brain, ChevronDown, ChevronRight,
-  CheckCircle2, Library,
+  CheckCircle2, Library, Trash2, AlertTriangle,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -180,6 +180,13 @@ export default function Chat() {
   }>>([]);
   const [showProgramLibrary, setShowProgramLibrary] = useState(false);
   const [isSwitchingProgram, setIsSwitchingProgram] = useState(false);
+  // Delete confirmation state — tracks which item is pending user confirmation
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    type: "program" | "convo";
+    id: number;
+    name: string;
+  } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   /**
    * True when the user has just clicked "New Build" / "New Builder Session".
    * Keeps the right panel in clean-slate state (no old program shown) and
@@ -847,6 +854,74 @@ export default function Chat() {
     setIsNewBuildSession(false);
   }
 
+  async function handleDeleteProgram(id: number) {
+    if (isDeleting) return;
+    setIsDeleting(true);
+    try {
+      const result = await customFetch<{ success: boolean; wasActive: boolean; newActiveSystemId: number | null }>(
+        `/api/training-system/${id}`,
+        { method: "DELETE" }
+      );
+      // Invalidate all training system queries so the UI reflects the deletion
+      queryClient.invalidateQueries({ queryKey: ["training-system-library"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
+      queryClient.refetchQueries({ queryKey: ["training-system-week"] });
+      // If the deleted system had a live draft in the right panel, clear it
+      if (result.wasActive) {
+        setLatestProgram(null);
+        setIsSaved(false);
+      }
+    } catch (err) {
+      console.error("[DeleteProgram] Failed:", err);
+      if (operationErrorTimeoutRef.current) clearTimeout(operationErrorTimeoutRef.current);
+      setOperationError("Couldn't delete that program. Please try again.");
+      operationErrorTimeoutRef.current = setTimeout(() => setOperationError(null), 5000);
+    } finally {
+      setIsDeleting(false);
+      setDeleteConfirm(null);
+    }
+  }
+
+  async function handleDeleteConversation(id: number) {
+    if (isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await customFetch(`/api/conversations/${id}`, { method: "DELETE" });
+      // Repair active pointer: if we just deleted the active conversation,
+      // switch to the most recent remaining one (or create a new one)
+      if (id === activeConvoId) {
+        const remaining = conversations.filter((c: any) => c.id !== id);
+        if (remaining.length > 0) {
+          handleSelectConvo(remaining[0].id);
+        } else {
+          // No conversations left — create a fresh one
+          setActiveConvoId(null);
+          createConvo.mutate(
+            { data: { title: "New Session" } },
+            {
+              onSuccess: (convo) => {
+                queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+                setActiveConvoId(convo.id);
+              },
+            }
+          );
+        }
+      }
+      queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+    } catch (err) {
+      console.error("[DeleteConversation] Failed:", err);
+      if (operationErrorTimeoutRef.current) clearTimeout(operationErrorTimeoutRef.current);
+      setOperationError("Couldn't delete that session. Please try again.");
+      operationErrorTimeoutRef.current = setTimeout(() => setOperationError(null), 5000);
+    } finally {
+      setIsDeleting(false);
+      setDeleteConfirm(null);
+    }
+  }
+
   function handleLogout() {
     logout.mutate(undefined, {
       onSuccess: () => {
@@ -984,47 +1059,60 @@ export default function Chat() {
         {showProgramLibrary && programLibrary.length > 0 && (
           <div className="ml-2 space-y-0.5 mb-1">
             {programLibrary.map((prog: any) => (
-              <button
-                key={prog.id}
-                type="button"
-                style={{ touchAction: "manipulation" }}
-                onClick={() => {
-                  if (prog.status === "active") {
-                    setLocation("/system");
-                    setMobilePanel(null);
-                  } else if (!isSwitchingProgram) {
-                    handleSwitchProgram(prog.id);
-                  }
-                }}
-                disabled={isSwitchingProgram && prog.status !== "active"}
-                className={`w-full flex items-start gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all ${
-                  prog.status === "active"
-                    ? "bg-primary/8 border border-primary/20 hover:bg-primary/12 cursor-pointer"
-                    : isSwitchingProgram
-                    ? "opacity-50 cursor-default"
-                    : "hover:bg-muted/60 active:bg-muted/80 cursor-pointer"
-                }`}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-[11px] font-semibold text-foreground truncate">{prog.name}</p>
-                    {prog.status === "active" && (
-                      <CheckCircle2 className="w-3 h-3 text-green-400 flex-shrink-0" />
-                    )}
+              <div key={prog.id} className="group relative">
+                <button
+                  type="button"
+                  style={{ touchAction: "manipulation" }}
+                  onClick={() => {
+                    if (prog.status === "active") {
+                      setLocation("/system");
+                      setMobilePanel(null);
+                    } else if (!isSwitchingProgram) {
+                      handleSwitchProgram(prog.id);
+                    }
+                  }}
+                  disabled={isSwitchingProgram && prog.status !== "active"}
+                  className={`w-full flex items-start gap-2.5 px-3 py-2.5 pr-8 rounded-lg text-left transition-all ${
+                    prog.status === "active"
+                      ? "bg-primary/8 border border-primary/20 hover:bg-primary/12 cursor-pointer"
+                      : isSwitchingProgram
+                      ? "opacity-50 cursor-default"
+                      : "hover:bg-muted/60 active:bg-muted/80 cursor-pointer"
+                  }`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-[11px] font-semibold text-foreground truncate">{prog.name}</p>
+                      {prog.status === "active" && (
+                        <CheckCircle2 className="w-3 h-3 text-green-400 flex-shrink-0" />
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
+                      {[prog.weeklyFrequency ? `${prog.weeklyFrequency}x/week` : null, prog.trainingStyle].filter(Boolean).join(" · ")}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+                      {new Date(prog.updatedAt).toLocaleDateString([], { month: "short", day: "numeric" })}
+                    </p>
                   </div>
-                  <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
-                    {[prog.weeklyFrequency ? `${prog.weeklyFrequency}x/week` : null, prog.trainingStyle].filter(Boolean).join(" · ")}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground/50 mt-0.5">
-                    {new Date(prog.updatedAt).toLocaleDateString([], { month: "short", day: "numeric" })}
-                  </p>
-                </div>
-                {prog.status === "active" ? (
-                  <span className="text-[9px] text-primary/70 flex-shrink-0 mt-0.5">View</span>
-                ) : !isSwitchingProgram ? (
-                  <span className="text-[9px] text-primary/70 flex-shrink-0 mt-0.5">Load</span>
-                ) : null}
-              </button>
+                  {prog.status === "active" ? (
+                    <span className="text-[9px] text-primary/70 flex-shrink-0 mt-0.5">View</span>
+                  ) : !isSwitchingProgram ? (
+                    <span className="text-[9px] text-primary/70 flex-shrink-0 mt-0.5">Load</span>
+                  ) : null}
+                </button>
+                {/* Delete icon — visible on hover */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteConfirm({ type: "program", id: prog.id, name: prog.name });
+                  }}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-muted-foreground/0 group-hover:text-muted-foreground/50 hover:!text-destructive hover:bg-destructive/10 transition-all"
+                  title="Delete program"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
             ))}
           </div>
         )}
@@ -1071,18 +1159,31 @@ export default function Chat() {
           <p className="text-[11px] text-muted-foreground/50 px-3 py-2">No sessions yet</p>
         ) : (
           conversations.slice(0, 12).map((convo: any) => (
-            <button
-              key={convo.id}
-              onClick={() => { handleSelectConvo(convo.id); setMobilePanel(null); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all text-left ${
-                convo.id === activeConvoId
-                  ? "bg-primary/10 text-primary font-semibold"
-                  : "font-medium text-foreground hover:bg-muted/60 active:bg-muted/80"
-              }`}
-            >
-              <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 opacity-50" />
-              <span className="truncate">{convo.title ?? "Session"}</span>
-            </button>
+            <div key={convo.id} className="group relative">
+              <button
+                onClick={() => { handleSelectConvo(convo.id); setMobilePanel(null); }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 pr-8 rounded-xl text-sm transition-all text-left ${
+                  convo.id === activeConvoId
+                    ? "bg-primary/10 text-primary font-semibold"
+                    : "font-medium text-foreground hover:bg-muted/60 active:bg-muted/80"
+                }`}
+              >
+                <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 opacity-50" />
+                <span className="truncate">{convo.title ?? "Session"}</span>
+              </button>
+              {/* Delete icon — visible on hover */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDeleteConfirm({ type: "convo", id: convo.id, name: convo.title ?? "Session" });
+                }}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-muted-foreground/0 group-hover:text-muted-foreground/40 hover:!text-destructive hover:bg-destructive/10 transition-all"
+                title="Delete session"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
           ))
         )}
       </div>
@@ -1166,6 +1267,65 @@ export default function Chat() {
       leftPanel={chatLeftPanel}
       rightPanel={liveProgramPanel}
     >
+      {/* ─── Delete Confirmation Modal ─── */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !isDeleting && setDeleteConfirm(null)} />
+          <div
+            className="relative w-full max-w-sm rounded-2xl border border-border bg-[#0c1220] shadow-2xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-destructive/40 to-transparent rounded-t-2xl" />
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-9 h-9 rounded-xl bg-destructive/10 border border-destructive/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <AlertTriangle className="w-4 h-4 text-destructive" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">
+                  {deleteConfirm.type === "program" ? "Delete program?" : "Delete session?"}
+                </h3>
+                <p className="text-[12px] text-muted-foreground mt-1 leading-relaxed">
+                  <span className="font-medium text-foreground/80">"{deleteConfirm.name}"</span>
+                  {deleteConfirm.type === "program"
+                    ? " and all its versions will be permanently removed."
+                    : " and all its messages will be permanently removed."}
+                  {" "}This cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-border text-muted-foreground hover:bg-muted/40 transition-all disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (deleteConfirm.type === "program") handleDeleteProgram(deleteConfirm.id);
+                  else handleDeleteConversation(deleteConfirm.id);
+                }}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-destructive/90 text-white hover:bg-destructive active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isDeleting ? (
+                  <>
+                    <div className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                    Deleting…
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── Modals ─── */}
       {showReadiness && (
         <ReadinessModal

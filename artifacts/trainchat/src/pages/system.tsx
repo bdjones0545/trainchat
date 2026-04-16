@@ -48,6 +48,8 @@ import {
   Lock,
   Library,
   UserPlus,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useGetMe } from "@workspace/api-client-react";
@@ -1520,6 +1522,10 @@ export default function SystemPage() {
   const [feedbackSessionLabel, setFeedbackSessionLabel] = useState<string | undefined>(undefined);
   const [showProgramLibrary, setShowProgramLibrary] = useState(false);
   const [isSwitchingProgram, setIsSwitchingProgram] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; name: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteErrorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const queryClient = useQueryClient();
   const { data: me } = useGetMe();
@@ -1565,6 +1571,31 @@ export default function SystemPage() {
       console.error("[SwitchProgram] Failed:", err);
     } finally {
       setIsSwitchingProgram(false);
+    }
+  }
+
+  async function handleDeleteProgram(id: number) {
+    if (isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await customFetch<{ success: boolean; wasActive: boolean; newActiveSystemId: number | null }>(
+        `/api/training-system/${id}`,
+        { method: "DELETE" }
+      );
+      queryClient.invalidateQueries({ queryKey: ["training-system-library"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+    } catch (err) {
+      console.error("[DeleteProgram] Failed:", err);
+      if (deleteErrorTimeoutRef.current) clearTimeout(deleteErrorTimeoutRef.current);
+      setDeleteError("Couldn't delete that program. Please try again.");
+      deleteErrorTimeoutRef.current = setTimeout(() => setDeleteError(null), 5000);
+    } finally {
+      setIsDeleting(false);
+      setDeleteConfirm(null);
     }
   }
 
@@ -1820,47 +1851,60 @@ export default function SystemPage() {
         {showProgramLibrary && programLibrary.length > 0 && (
           <div className="ml-2 space-y-0.5 mb-1">
             {(programLibrary as any[]).map((prog) => (
-              <button
-                key={prog.id}
-                type="button"
-                style={{ touchAction: "manipulation" }}
-                onClick={() => {
-                  if (prog.status === "active") {
-                    setShowProgramLibrary(false);
-                    setMobilePanel(null);
-                  } else if (!isSwitchingProgram) {
-                    handleSwitchProgramInSystem(prog.id);
-                  }
-                }}
-                disabled={isSwitchingProgram && prog.status !== "active"}
-                className={`w-full flex items-start gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all ${
-                  prog.status === "active"
-                    ? "bg-primary/8 border border-primary/20 cursor-default"
-                    : isSwitchingProgram
-                    ? "opacity-50 cursor-default"
-                    : "hover:bg-muted/60 active:bg-muted/80 cursor-pointer"
-                }`}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-[11px] font-semibold text-foreground truncate">{prog.name}</p>
-                    {prog.status === "active" && (
-                      <CheckCircle2 className="w-3 h-3 text-green-400 flex-shrink-0" />
-                    )}
+              <div key={prog.id} className="group relative">
+                <button
+                  type="button"
+                  style={{ touchAction: "manipulation" }}
+                  onClick={() => {
+                    if (prog.status === "active") {
+                      setShowProgramLibrary(false);
+                      setMobilePanel(null);
+                    } else if (!isSwitchingProgram) {
+                      handleSwitchProgramInSystem(prog.id);
+                    }
+                  }}
+                  disabled={isSwitchingProgram && prog.status !== "active"}
+                  className={`w-full flex items-start gap-2.5 px-3 py-2.5 pr-8 rounded-lg text-left transition-all ${
+                    prog.status === "active"
+                      ? "bg-primary/8 border border-primary/20 cursor-default"
+                      : isSwitchingProgram
+                      ? "opacity-50 cursor-default"
+                      : "hover:bg-muted/60 active:bg-muted/80 cursor-pointer"
+                  }`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-[11px] font-semibold text-foreground truncate">{prog.name}</p>
+                      {prog.status === "active" && (
+                        <CheckCircle2 className="w-3 h-3 text-green-400 flex-shrink-0" />
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
+                      {[prog.weeklyFrequency ? `${prog.weeklyFrequency}x/week` : null, prog.trainingStyle].filter(Boolean).join(" · ")}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+                      {new Date(prog.updatedAt).toLocaleDateString([], { month: "short", day: "numeric" })}
+                    </p>
                   </div>
-                  <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
-                    {[prog.weeklyFrequency ? `${prog.weeklyFrequency}x/week` : null, prog.trainingStyle].filter(Boolean).join(" · ")}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground/50 mt-0.5">
-                    {new Date(prog.updatedAt).toLocaleDateString([], { month: "short", day: "numeric" })}
-                  </p>
-                </div>
-                {prog.status === "active" ? (
-                  <span className="text-[9px] text-green-400/80 flex-shrink-0 mt-0.5">Active</span>
-                ) : !isSwitchingProgram ? (
-                  <span className="text-[9px] text-primary/70 flex-shrink-0 mt-0.5">Load</span>
-                ) : null}
-              </button>
+                  {prog.status === "active" ? (
+                    <span className="text-[9px] text-green-400/80 flex-shrink-0 mt-0.5">Active</span>
+                  ) : !isSwitchingProgram ? (
+                    <span className="text-[9px] text-primary/70 flex-shrink-0 mt-0.5">Load</span>
+                  ) : null}
+                </button>
+                {/* Delete icon — visible on hover */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteConfirm({ id: prog.id, name: prog.name });
+                  }}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-muted-foreground/0 group-hover:text-muted-foreground/50 hover:!text-destructive hover:bg-destructive/10 transition-all"
+                  title="Delete program"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
             ))}
           </div>
         )}
@@ -2276,6 +2320,60 @@ export default function SystemPage() {
               <span className="text-[11px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full">Pro</span>
             </button>
           )}
+        </div>
+      )}
+
+      {/* ─── Delete Confirmation Modal ─── */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !isDeleting && setDeleteConfirm(null)} />
+          <div
+            className="relative w-full max-w-sm rounded-2xl border border-border bg-[#0c1220] shadow-2xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-destructive/40 to-transparent rounded-t-2xl" />
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-9 h-9 rounded-xl bg-destructive/10 border border-destructive/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <AlertTriangle className="w-4 h-4 text-destructive" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Delete program?</h3>
+                <p className="text-[12px] text-muted-foreground mt-1 leading-relaxed">
+                  <span className="font-medium text-foreground/80">"{deleteConfirm.name}"</span>
+                  {" "}and all its versions will be permanently removed. This cannot be undone.
+                </p>
+              </div>
+            </div>
+            {deleteError && (
+              <p className="text-[11px] text-destructive mb-3">{deleteError}</p>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-border text-muted-foreground hover:bg-muted/40 transition-all disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteProgram(deleteConfirm.id)}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-destructive/90 text-white hover:bg-destructive active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isDeleting ? (
+                  <>
+                    <div className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                    Deleting…
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
