@@ -665,6 +665,10 @@ const TRANSFORMATION_PATTERNS: Array<{ pattern: RegExp; direction: string }> = [
   { pattern: /\bshift(?:ing)?\s+(?:toward?|to(?:ward)?)\s+(?:power|explosiveness?)\b/i, direction: "power" },
   { pattern: /\bwant\s+(?:to\s+be\s+|to\s+get\s+)?more\s+(?:explosive|powerful)\b/i, direction: "power" },
   { pattern: /\bmake\s+(?:this|it|the\s+program|my\s+program)\s+(?:more\s+)?(?:power|explosive)[\s-](?:based?|focused?|oriented?)\b/i, direction: "power" },
+  // "make it more for power/explosiveness" — casual phrasing not covered above
+  { pattern: /\bmake\s+(?:this|it|the\s+program|my\s+program)\s+(?:more\s+)?(?:for\s+)?(?:power|explosiveness?|explosive)\b/i, direction: "power" },
+  { pattern: /\b(?:more|geared)\s+(?:toward[s]?\s+|for\s+)?(?:power|explosiveness?|explosive\s+(?:work|training))\b/i, direction: "power" },
+  { pattern: /\bpower(?:ful|fulness)?\s+(?:focused|based|training|development|work|program)\b/i, direction: "power" },
 
   // Speed focus
   { pattern: /\bfocus\s+(?:more\s+)?on\s+speed\b/i, direction: "speed" },
@@ -681,6 +685,17 @@ const TRANSFORMATION_PATTERNS: Array<{ pattern: RegExp; direction: string }> = [
   { pattern: /\bfocus\s+(?:more\s+)?on\s+(?:pure\s+)?strength\b/i, direction: "strength" },
   { pattern: /\bshift(?:ing)?\s+(?:toward?|to(?:ward)?)\s+(?:pure\s+)?strength\b/i, direction: "strength" },
   { pattern: /\bmake\s+(?:this|it|the\s+program|my\s+program)\s+(?:more\s+)?strength[\s-](?:based?|focused?)\b/i, direction: "strength" },
+  // "make it more for strength" — casual phrasing
+  { pattern: /\bmake\s+(?:this|it|the\s+program|my\s+program)\s+(?:more\s+)?(?:for\s+)?(?:strength|strength\s+training)\b/i, direction: "strength" },
+  { pattern: /\b(?:more|geared)\s+(?:toward[s]?\s+|for\s+)?strength(?:\s+training)?\b/i, direction: "strength" },
+
+  // Hypertrophy focus — add "for X" casual phrasing
+  { pattern: /\bmake\s+(?:this|it|the\s+program|my\s+program)\s+(?:more\s+)?(?:for\s+)?(?:hypertrophy|muscle\s+(?:building|growth|gain))\b/i, direction: "hypertrophy" },
+  { pattern: /\b(?:more|geared)\s+(?:toward[s]?\s+|for\s+)?(?:hypertrophy|muscle\s+(?:building|growth|gain))\b/i, direction: "hypertrophy" },
+
+  // Speed focus — add "for X" casual phrasing
+  { pattern: /\bmake\s+(?:this|it|the\s+program|my\s+program)\s+(?:more\s+)?(?:for\s+)?speed\b/i, direction: "speed" },
+  { pattern: /\b(?:more|geared)\s+(?:toward[s]?\s+|for\s+)?speed(?:\s+(?:work|training|development))?\b/i, direction: "speed" },
 
   // Overall intensity (program-wide)
   { pattern: /\bmake\s+(?:this|it|the\s+program|my\s+program)\s+(?:more|less)\s+intense(?:ity)?\b/i, direction: "intensity" },
@@ -845,6 +860,10 @@ function matchesEditProgram(lower: string, hasActiveProgram: boolean): {
       { pattern: /\b(more athletic|athletic (focus|training|style)|sport(s)?.specific|explosive|power (work|development)|make.*athletic)\b/i, subtype: "make_more_athletic" },
       { pattern: /\b(more.{0,20}strength|strength.{0,20}focus|heavier|lower reps?|stronger|make.*strength|strength.?based)\b/i, subtype: "make_more_strength" },
       { pattern: /\b(more.{0,20}(hypertrophy|muscle|gains?|size)|make.*hypertrophy|bodybuilding style|pump)\b/i, subtype: "make_more_hypertrophy" },
+      // "make it more for power/explosive" — catch casual "for X" phrasing that slips past TRANSFORMATION_PATTERNS
+      { pattern: /\bmake\s+(?:this|it|the\s+program|my\s+program)\s+(?:more\s+)?(?:for\s+)?(?:power|explosiveness?|explosive)\b/i, subtype: "make_more_athletic" },
+      { pattern: /\bmake\s+(?:this|it|the\s+program|my\s+program)\s+(?:more\s+)?(?:for\s+)?(?:strength|strength\s+training)\b/i, subtype: "make_more_strength" },
+      { pattern: /\bmake\s+(?:this|it|the\s+program|my\s+program)\s+(?:more\s+)?(?:for\s+)?(?:hypertrophy|muscle\s+(?:building|growth|gain))\b/i, subtype: "make_more_hypertrophy" },
     ];
     for (const { pattern, subtype } of goalShiftPatterns) {
       if (pattern.test(lower)) {

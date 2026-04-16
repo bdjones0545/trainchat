@@ -293,6 +293,9 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
       /\b(more pop|first step|acceleration|change of direction|quickness)\b/i,
       /\b(faster and more powerful|faster.{0,20}powerful|power (output|development))\b/i,
       /\b(speed.?strength|rate of force|reactive strength|ballistic)\b/i,
+      // "make it more for power" — casual "for X" phrasing
+      /\bmake\s+(?:this|it|the\s+program|my\s+program)\s+(?:more\s+)?(?:for\s+)?(?:power|explosiveness?|explosive)\b/i,
+      /\b(?:more|geared)\s+(?:toward[s]?\s+|for\s+)?(?:power|explosiveness?|explosive\s+(?:work|training))\b/i,
     ],
   },
 
@@ -323,7 +326,10 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
       /\b(more strength|strength.?focused|strength.?based|push (the )?strength|heavier|more heavy)\b/i,
       /\b(maximal strength|strength (emphasis|focus|bias)|pull (the )?weight up|go heavier)\b/i,
       /\b(make (it|this|day\s*\d).{0,20}(strength.?(based|focused)|heavier))\b/i,
-      /\b(push (hypertrophy|strength) more)\b/i, // "push strength more"
+      /\b(push (hypertrophy|strength) more)\b/i,
+      // "make it more for strength" — casual "for X" phrasing
+      /\bmake\s+(?:this|it|the\s+program|my\s+program)\s+(?:more\s+)?(?:for\s+)?strength\b/i,
+      /\b(?:more|geared)\s+(?:toward[s]?\s+|for\s+)?strength(?:\s+training)?\b/i,
     ],
   },
 
