@@ -1,0 +1,84 @@
+Fix AGENT routing to prevent false clarification loops for known training intents.
+
+PROBLEM:
+Requests like "make day 1 more endurance based" are being rejected as ambiguous,
+even though they represent valid high-level coaching transformations.
+
+GOAL:
+Recognize known training intents and FORCE execution instead of clarification.
+
+--------------------------------------------------
+STEP 1 — ADD KNOWN INTENT MAP
+--------------------------------------------------
+
+Create a list of recognized transformation intents:
+
+KNOWN_INTENTS = [
+  "endurance",
+  "explosive",
+  "power",
+  "strength",
+  "hypertrophy",
+  "conditioning",
+  "fat loss",
+  "speed"
+]
+
+--------------------------------------------------
+STEP 2 — INTENT CONFIDENCE OVERRIDE
+--------------------------------------------------
+
+In classifyEditRequest or agent routing layer:
+
+IF request contains ANY KNOWN_INTENTS keyword
+AND a valid target exists (day/session/exercise)
+
+→ FORCE AGENT PATH
+→ BYPASS clarification logic entirely
+
+--------------------------------------------------
+STEP 3 — BLOCK CLARIFICATION FOR THESE CASES
+--------------------------------------------------
+
+Add rule:
+
+IF intentType === AGENT
+AND intentSubtype === "training_transformation"
+
+→ NEVER return clarification_required
+→ MUST return a mutation plan
+
+--------------------------------------------------
+STEP 4 — FALLBACK ESCALATION
+--------------------------------------------------
+
+If transformation bundle fails:
+
+→ escalate to OpenAI immediately
+→ DO NOT ask user for specificity
+
+--------------------------------------------------
+STEP 5 — LOGGING
+--------------------------------------------------
+
+Log:
+[EditRouter] Intent override → forcing transformation execution
+
+--------------------------------------------------
+STEP 6 — TEST
+--------------------------------------------------
+
+Input:
+"Make day 1 more endurance based"
+
+Expected:
+- NO clarification message
+- program updates immediately
+- multiple structural changes applied
+
+--------------------------------------------------
+FINAL RULE
+--------------------------------------------------
+
+TrainChat must interpret coaching language like a coach,
+not reject it like a parser.

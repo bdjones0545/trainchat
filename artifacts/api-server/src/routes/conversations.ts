@@ -140,6 +140,12 @@ function buildInitialBuildSummary(
  * Language is intentional, context-aware, and never sounds like an entity-resolution error.
  * Used instead of the brittle "couldn't resolve to specific exercises/sessions" fallback.
  */
+// ── Known training transformation intents ─────────────────────────────────────
+// RULE: If a request contains a recognized coaching intent keyword AND a valid
+// target was resolved, NEVER return a clarification question. These are unambiguous
+// coaching commands — TrainChat must respond like a coach, not a parser.
+const KNOWN_TRAINING_INTENT_PATTERN = /\b(endurance|aerobic|cardio|metabolic|work.capacity|conditioning|explosive|power|athletic|hypertrophy|muscle.build|muscle.growth|strength|stronger|fat.loss|cutting|leaner|speed|fast.twitch)\b/i;
+
 function buildAgenticNoChangesResponse(
   userRequest: string,
   editIntent: string,
@@ -154,6 +160,35 @@ function buildAgenticNoChangesResponse(
   const hasExplicitDayRef = /\bday\s+\d+\b|\bsession\s+\d+\b|\b(first|second|third|fourth|fifth|sixth|seventh)\s+(day|session)\b/.test(lower);
   const hasExplicitWeekRef = /\bweek\s+\d+\b/.test(lower);
   const hadResolvedTarget = !!resolvedTarget;
+
+  // ── KNOWN INTENT OVERRIDE — NEVER ask for clarification ─────────────────────
+  // A known coaching transformation keyword + a resolved target = unambiguous request.
+  // Return a proactive coaching response instead of a clarification question.
+  const isKnownIntent = KNOWN_TRAINING_INTENT_PATTERN.test(lower);
+  if (isKnownIntent && (hadResolvedTarget || hasExplicitDayRef)) {
+    const targetLabel = resolvedTarget?.label ? `"${resolvedTarget.label}"` : "that session";
+
+    // Map known intent keywords to what was attempted, so the response is specific
+    const intentDescriptions: [RegExp, string][] = [
+      [/\b(endurance|aerobic|cardio|work.capacity|stamina)\b/i, "endurance conditioning (finisher added, rest tightened, rep ranges pushed up)"],
+      [/\b(explosive|power|athletic)\b/i, "explosive output (Box Jump or Med Ball added, primary lifts shifted to power rep range with 3-1-X-0 tempo)"],
+      [/\b(hypertrophy|muscle.build|muscle.growth)\b/i, "hypertrophy (rep ranges moved to 6-15, isolation accessory added, rest shortened)"],
+      [/\b(strength|stronger)\b/i, "maximal strength (rep ranges moved to 3-6, rest extended to 3-5 min, load target 85-92%)"],
+      [/\b(conditioning|metabolic)\b/i, "conditioning (circuit finisher added, rest density increased)"],
+      [/\b(fat.loss|cutting|leaner)\b/i, "fat loss focus (rest tightened, conditioning finisher added)"],
+      [/\b(speed|fast.twitch)\b/i, "speed and power (plyometrics added, load reduced to 60-70%)"],
+    ];
+
+    let attemptedDesc = "the coaching transformation you described";
+    for (const [pattern, desc] of intentDescriptions) {
+      if (pattern.test(lower)) {
+        attemptedDesc = desc;
+        break;
+      }
+    }
+
+    return `I targeted ${targetLabel} for ${attemptedDesc}, but the session doesn't have enough exercise data to apply all the structural changes yet.\n\nIf this session has exercises programmed in, try the request again — or add the exercises first and I'll apply the full transformation right away.`;
+  }
 
   // Broad program transformation — still need scope clarity (program-wide vs single block)
   if ((editScope === "block" || editScope === "system" || editSubtype === "program_transformation") && !hasExplicitDayRef) {
@@ -173,12 +208,12 @@ function buildAgenticNoChangesResponse(
   // Request explicitly named a day/session — don't ask "which day?" again
   if (hasExplicitDayRef || hadResolvedTarget) {
     const targetLabel = resolvedTarget?.label ? `"${resolvedTarget.label}"` : "that session";
-    return `I found ${targetLabel} in your program but couldn't match a clean change to it based on your request. Could you be a bit more specific about what you'd like to do — for example: "add a Romanian deadlift", "remove the leg curl", or "reduce sets on the accessories"? Once I know exactly what to change, I'll apply it right away.`;
+    return `I found ${targetLabel} in your program but couldn't match a clean change to it based on your request. Try being a bit more specific — for example: "add a Romanian deadlift", "remove the leg curl", or "reduce sets on the accessories". Once I know exactly what to change, I'll apply it right away.`;
   }
 
   // Request explicitly named a week — don't ask "which week?" again
   if (hasExplicitWeekRef) {
-    return `I located that week in your program but couldn't determine what to change. Could you be a bit more specific — for example: "make it a deload", "reduce volume", or "add an extra conditioning finisher"? I'll apply it directly once I understand the change.`;
+    return `I located that week in your program but couldn't determine what to change. Try being a bit more specific — for example: "make it a deload", "reduce volume", or "add an extra conditioning finisher". I'll apply it directly once I understand the change.`;
   }
 
   // Volume or intensity request with no resolved target — ask about which week/session

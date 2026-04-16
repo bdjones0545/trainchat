@@ -1376,6 +1376,320 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
       // fall through to return { changes: [] }, which triggers auto-escalation to AGENT.
     }
 
+    if (lower.match(/endurance|aerobic|cardio|metabolic|work.capacity|stamina|conditioning/)) {
+      // ── ENDURANCE TRANSFORMATION BUNDLE ─────────────────────────────────────
+      // Requirements (minimum 2 structural changes):
+      //   1. Add conditioning finisher (if no conditioning work exists)
+      //   2. Tighten rest on primary lifts (metabolic density → 90s)
+      //   3. Push accessories to higher rep range (12-15) for endurance adaptation
+      const targetSession = findSessionById(system, sessionId);
+      const endChanges: EditChange[] = [];
+      const endAddedNames: string[] = [];
+      const endModifiedNames: string[] = [];
+
+      if (targetSession) {
+        const exercises: any[] = targetSession.exercises ?? [];
+
+        // CHANGE 1: Add conditioning finisher (mandatory if none exists)
+        const hasConditioningWork = exercises.some((ex: any) =>
+          /\b(bike|row|sled|finisher|conditioning|cardio|run|sprint|interval|treadmill|assault|hiit|circuit|rower)\b/i.test(ex.name)
+        );
+        if (!hasConditioningWork) {
+          const hasLowerBody = exercises.some((ex: any) =>
+            /squat|deadlift|lunge|leg|hip|glute|hamstring/i.test(ex.name)
+          );
+          const finisherName = hasLowerBody ? "Rowing Machine Intervals" : "Assault Bike Intervals";
+          endChanges.push({
+            type: "add_exercise",
+            id: 0,
+            sessionId,
+            exercise: {
+              name: finisherName,
+              category: "conditioning",
+              sets: 8,
+              reps: "30s on / 30s off",
+              rest: "30s",
+              notes: "Endurance finisher. Target 75-80% max HR. Controlled, sustainable effort — not all-out.",
+            },
+            reason: "Adding conditioning finisher for endurance session",
+          });
+          endAddedNames.push(finisherName);
+        }
+
+        // CHANGE 2: Tighten rest on primaries for metabolic density
+        const primaryLifts = exercises.filter((ex: any) => ex.category === "primary");
+        for (const ex of primaryLifts) {
+          const repsStr: string = ex.reps ?? "";
+          const rangeMatch = repsStr.match(/(\d+)-(\d+)/);
+          const singleMatch = repsStr.match(/^(\d+)$/);
+          const currentMin = rangeMatch ? parseInt(rangeMatch[1]) : (singleMatch ? parseInt(singleMatch[1]) : 0);
+
+          const endUpdates: Record<string, unknown> = {
+            rest: "90s",
+            notes: "Endurance focus: moderate load (60-70% of max), controlled pace, 90s rest to build work capacity.",
+          };
+          if (currentMin < 8) {
+            endUpdates.reps = "8-12";
+          }
+          endChanges.push({
+            type: "update_exercise",
+            id: ex.id,
+            updates: endUpdates,
+            reason: "Adjusting primary lift for endurance density: tighter rest, higher rep range",
+          });
+          endModifiedNames.push(ex.name);
+        }
+
+        // CHANGE 3: Push accessories to endurance rep zone (12-15)
+        const accessories = exercises.filter((ex: any) => ex.category === "accessory");
+        for (const ex of accessories) {
+          const repsStr: string = ex.reps ?? "";
+          const rangeMatch = repsStr.match(/(\d+)-(\d+)/);
+          const singleMatch = repsStr.match(/^(\d+)$/);
+          const currentMax = rangeMatch ? parseInt(rangeMatch[2]) : (singleMatch ? parseInt(singleMatch[1]) : 0);
+          if (currentMax < 12) {
+            endChanges.push({
+              type: "update_exercise",
+              id: ex.id,
+              updates: { reps: "12-15", rest: "60s", notes: "Pushed to endurance rep zone — tight rest, sustainable effort." },
+              reason: "Extending accessory to endurance rep range",
+            });
+            endModifiedNames.push(ex.name);
+          }
+        }
+      }
+
+      // Minimum 2 structural changes required
+      const enduranceStructural = endChanges.filter(c =>
+        c.type === "add_exercise" || c.type === "replace_exercise" ||
+        (c.type === "update_exercise" && c.updates &&
+          Object.keys(c.updates).some(k => ["sets", "reps", "rest"].includes(k)))
+      );
+
+      if (enduranceStructural.length >= 2) {
+        endChanges.push({
+          type: "update_session",
+          id: sessionId,
+          updates: {
+            emphasis: "Endurance and work capacity — metabolic density, sustained output",
+            coachingNotes: "Endurance session: tighter rest, higher reps, conditioning finisher to close. Quality reps with minimal recovery between sets.",
+          },
+          reason: "Updating session emphasis for endurance focus",
+        });
+
+        const summaryParts: string[] = [];
+        if (endAddedNames.length) summaryParts.push(`added ${endAddedNames.join(" and ")}`);
+        if (endModifiedNames.length) {
+          const named = endModifiedNames.slice(0, 3).join(" and ");
+          summaryParts.push(`adjusted ${named} for endurance output (90s rest, rep range pushed to 8-15)`);
+        }
+
+        return {
+          intent: "endurance_session_transformation",
+          scope: "session",
+          changeSummary: `${label} restructured for endurance and work capacity: ${summaryParts.join("; ")}. Rest pulled tight and conditioning finisher added — builds sustained output without losing structural integrity.`,
+          changes: endChanges,
+        };
+      }
+      // < 2 structural changes → fall through to AGENT
+    }
+
+    if (lower.match(/hypertrophy|muscle.build|muscle.growth|muscle.mass|bodybuilding|bigger|size/)) {
+      // ── HYPERTROPHY TRANSFORMATION BUNDLE ────────────────────────────────────
+      // Requirements (minimum 2 structural changes):
+      //   1. Add 1-2 isolation accessories targeting session's primary muscle group
+      //   2. Move primary lifts to hypertrophy rep range (6-10)
+      //   3. Adjust accessories to 10-15 rep range with 60-90s rest
+      const targetSession = findSessionById(system, sessionId);
+      const hypChanges: EditChange[] = [];
+      const hypAddedNames: string[] = [];
+      const hypModifiedNames: string[] = [];
+
+      if (targetSession) {
+        const exercises: any[] = targetSession.exercises ?? [];
+        const isLowerBodySession = exercises.some((ex: any) =>
+          /squat|deadlift|lunge|leg|hip|glute|hamstring/i.test(ex.name)
+        );
+
+        // CHANGE 1: Add isolation accessory
+        const isolationChoice = isLowerBodySession ? "Leg Extension" : "Cable Fly";
+        const alreadyHasIsolation = exercises.some((ex: any) =>
+          /cable.*fly|fly|leg.*extension|leg.*curl|lateral.*raise|curl|pushdown|kickback/i.test(ex.name)
+        );
+        if (!alreadyHasIsolation) {
+          hypChanges.push({
+            type: "add_exercise",
+            id: 0,
+            sessionId,
+            exercise: {
+              name: isolationChoice,
+              category: "accessory",
+              sets: 3,
+              reps: "12-15",
+              rest: "60s",
+              notes: "Hypertrophy isolation work. High rep, feel the muscle. 2-sec contraction at peak.",
+            },
+            reason: "Adding isolation accessory for hypertrophy focus",
+          });
+          hypAddedNames.push(isolationChoice);
+        }
+
+        // CHANGE 2: Primary lifts → hypertrophy rep range (6-10)
+        const primaryLifts = exercises.filter((ex: any) => ex.category === "primary");
+        for (const ex of primaryLifts) {
+          const repsStr: string = ex.reps ?? "";
+          const rangeMatch = repsStr.match(/(\d+)-(\d+)/);
+          const singleMatch = repsStr.match(/^(\d+)$/);
+          const currentMax = rangeMatch ? parseInt(rangeMatch[2]) : (singleMatch ? parseInt(singleMatch[1]) : 0);
+          if (currentMax < 6 || currentMax > 12) {
+            hypChanges.push({
+              type: "update_exercise",
+              id: ex.id,
+              updates: { reps: "6-10", rest: "90s", notes: "Hypertrophy zone: moderate load, control the eccentric, squeeze the contraction." },
+              reason: "Moving primary lift to hypertrophy rep range",
+            });
+            hypModifiedNames.push(ex.name);
+          }
+        }
+
+        // CHANGE 3: Accessories → 10-15 rep range, 60s rest
+        const accessories = exercises.filter((ex: any) => ex.category === "accessory");
+        for (const ex of accessories) {
+          const repsStr: string = ex.reps ?? "";
+          const rangeMatch = repsStr.match(/(\d+)-(\d+)/);
+          const singleMatch = repsStr.match(/^(\d+)$/);
+          const currentMin = rangeMatch ? parseInt(rangeMatch[1]) : (singleMatch ? parseInt(singleMatch[1]) : 0);
+          if (currentMin < 10) {
+            hypChanges.push({
+              type: "update_exercise",
+              id: ex.id,
+              updates: { reps: "10-15", rest: "60-75s", notes: "Hypertrophy range — keep rest tight for metabolic demand." },
+              reason: "Moving accessory into hypertrophy rep range",
+            });
+            hypModifiedNames.push(ex.name);
+          }
+        }
+      }
+
+      // Minimum 2 structural changes required
+      const hypStructural = hypChanges.filter(c =>
+        c.type === "add_exercise" || c.type === "replace_exercise" ||
+        (c.type === "update_exercise" && c.updates &&
+          Object.keys(c.updates).some(k => ["sets", "reps", "rest"].includes(k)))
+      );
+
+      if (hypStructural.length >= 2) {
+        hypChanges.push({
+          type: "update_session",
+          id: sessionId,
+          updates: {
+            emphasis: "Hypertrophy — mechanical tension, metabolic stress, volume accumulation",
+            coachingNotes: "Hypertrophy session: moderate loads, controlled eccentrics, 60-90s rest to keep metabolic demand high. Feel every rep.",
+          },
+          reason: "Updating session emphasis for hypertrophy focus",
+        });
+
+        const summaryParts: string[] = [];
+        if (hypAddedNames.length) summaryParts.push(`added ${hypAddedNames.join(" and ")}`);
+        if (hypModifiedNames.length) {
+          const named = hypModifiedNames.slice(0, 3).join(" and ");
+          summaryParts.push(`adjusted ${named} for hypertrophy output (6-10 rep range, 60-90s rest)`);
+        }
+
+        return {
+          intent: "hypertrophy_session_transformation",
+          scope: "session",
+          changeSummary: `${label} restructured for hypertrophy: ${summaryParts.join("; ")}. Rep ranges in growth zone, rest intervals tightened to drive metabolic stress.`,
+          changes: hypChanges,
+        };
+      }
+      // < 2 structural changes → fall through to AGENT
+    }
+
+    if (lower.match(/strength|stronger|heavier|max.strength|strength.focus|strength.based/)) {
+      // ── STRENGTH TRANSFORMATION BUNDLE ───────────────────────────────────────
+      // Requirements (minimum 2 structural changes):
+      //   1. Reduce primary lift reps to strength zone (3-6)
+      //   2. Extend rest to 3-5 min for CNS recovery
+      //   3. Add load progression note targeting 85-92% of max
+      const targetSession = findSessionById(system, sessionId);
+      const strChanges: EditChange[] = [];
+      const strModifiedNames: string[] = [];
+
+      if (targetSession) {
+        const exercises: any[] = targetSession.exercises ?? [];
+
+        // CHANGE 1+2: Primary lifts → strength rep range + full rest
+        const primaryLifts = exercises.filter((ex: any) => ex.category === "primary");
+        for (const ex of primaryLifts) {
+          const repsStr: string = ex.reps ?? "";
+          const rangeMatch = repsStr.match(/(\d+)-(\d+)/);
+          const singleMatch = repsStr.match(/^(\d+)$/);
+          const currentMin = rangeMatch ? parseInt(rangeMatch[1]) : (singleMatch ? parseInt(singleMatch[1]) : 0);
+
+          const strUpdates: Record<string, unknown> = {
+            rest: "3-5 min",
+            notes: "Strength focus: target 85-92% of max. Full recovery between sets. Quality over speed — brace hard, lift heavy.",
+          };
+          if (currentMin > 6) {
+            strUpdates.reps = "3-6";
+          }
+          strChanges.push({
+            type: "update_exercise",
+            id: ex.id,
+            updates: strUpdates,
+            reason: "Applying strength bundle: low reps, heavy load, full rest",
+          });
+          strModifiedNames.push(ex.name);
+        }
+
+        // CHANGE 3: Reduce accessories — trim volume to preserve strength output
+        const accessories = exercises.filter((ex: any) => ex.category === "accessory");
+        for (const ex of accessories) {
+          const repsStr: string = ex.reps ?? "";
+          const rangeMatch = repsStr.match(/(\d+)-(\d+)/);
+          const singleMatch = repsStr.match(/^(\d+)$/);
+          const currentMax = rangeMatch ? parseInt(rangeMatch[2]) : (singleMatch ? parseInt(singleMatch[1]) : 0);
+          if (currentMax > 10) {
+            strChanges.push({
+              type: "update_exercise",
+              id: ex.id,
+              updates: { reps: "6-8", rest: "2 min", notes: "Pulled back from high-rep range to preserve strength capacity on primaries." },
+              reason: "Reducing accessory volume to preserve strength output",
+            });
+            strModifiedNames.push(ex.name);
+          }
+        }
+      }
+
+      // Minimum 2 structural changes required
+      const strStructural = strChanges.filter(c =>
+        c.type === "update_exercise" && c.updates &&
+        Object.keys(c.updates).some(k => ["sets", "reps", "rest"].includes(k))
+      );
+
+      if (strStructural.length >= 2) {
+        strChanges.push({
+          type: "update_session",
+          id: sessionId,
+          updates: {
+            emphasis: "Maximal strength — heavy loads, full recovery, neural drive",
+            coachingNotes: "Strength session: target top-end intensity. Low reps, full rest, every set counts. Leave 1-2 reps in reserve on primaries.",
+          },
+          reason: "Updating session emphasis for strength focus",
+        });
+
+        const named = strModifiedNames.slice(0, 3).join(" and ");
+        return {
+          intent: "strength_session_transformation",
+          scope: "session",
+          changeSummary: `${label} restructured for maximal strength: adjusted ${named} to strength zone (3-6 reps, 3-5 min rest, 85-92% load target). Accessories pulled back to preserve neural output.`,
+          changes: strChanges,
+        };
+      }
+      // < 2 structural changes → fall through to AGENT
+    }
+
     if (lower.match(/equipment|dumbbell|hotel|travel|minimal/)) {
       return {
         intent: "equipment_constraint",
@@ -1829,12 +2143,24 @@ export function classifyEditRequest(
     }
   }
 
-  // ── Rule 5: Session-level coaching transformations with structural rules → DETERMINISTIC ──
-  // Explosive/power/athletic requests against a session target are handled by interpretWithRules
-  // which produces real structural changes (add_exercise, update_exercise for sets/reps/tempo/rest).
+  // ── Rule 5: Session-level coaching transformations → DETERMINISTIC ──────────
+  // ALL recognized training intents for session targets are handled by interpretWithRules
+  // which produces real structural changes. This prevents false clarification loops for
+  // known coaching language like "more endurance based", "more explosive", "hypertrophy
+  // focused", etc.
+  //
+  // KNOWN_INTENTS: endurance, explosive, power, strength, hypertrophy, conditioning,
+  //   fat loss, speed, athletic
+  //
+  // If the deterministic bundle produces < 2 structural changes, it falls through to AGENT.
   if (targetContext?.type === "session") {
-    if (/\bexplosive\b|\bpower\b|\bathletic\b|\bmore\s+(explosive|powerful|athletic)\b/i.test(lower)) {
-      return { route: "DETERMINISTIC", reason: "session_explosive_transformation" };
+    const KNOWN_INTENT_SESSION = /\b(explosive|power|athletic|more\s+(explosive|powerful|athletic)|endurance|aerobic|cardio|metabolic|work.capacity|stamina|conditioning|hypertrophy|muscle.building|muscle.growth|strength|stronger|speed|fast.twitch|fat.loss|weight.loss|cutting|leaner)\b/i;
+    if (KNOWN_INTENT_SESSION.test(lower)) {
+      logger.info(
+        { lower: lower.slice(0, 100), targetType: targetContext.type },
+        "[EditRouter] Intent override → forcing transformation execution (known session intent)"
+      );
+      return { route: "DETERMINISTIC", reason: "session_known_intent_transformation" };
     }
   }
 
