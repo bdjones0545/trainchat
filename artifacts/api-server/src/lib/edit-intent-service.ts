@@ -12,6 +12,7 @@
 
 import { logger } from "./logger";
 import { buildSwapContext, getProgressions, findExerciseByName } from "./exercise-service";
+import { resolveHarderEasierFallback } from "./harder-easier-fallback";
 import {
   classifyExerciseFamily,
   getExerciseFamilySchema,
@@ -1721,6 +1722,83 @@ export async function interpretEditRequest(
       }
     } catch (err) {
       logger.warn({ err, exerciseName }, "[EditRouter] Failed to load exercise swap context — proceeding without it");
+    }
+  }
+
+  // ── Step 3.5: Structured Harder/Easier fallback (OpenAI) ─────────────────
+  // ONLY runs when:
+  //   a) swapIntent is "harder" or "easier"
+  //   b) the exercise library returned zero progressions in that direction
+  //   c) the exercise has a target context
+  //
+  // This is a TARGETED structured call — much tighter than the general OpenAI
+  // edit prompt. It returns { changeType, replacementExerciseName, prescriptionAdjustments }
+  // which is validated and converted to an EditPlan before the general call runs.
+  // If it succeeds we return immediately; the general OpenAI call (Step 4) is skipped.
+
+  if (
+    (resolvedSwapIntent === "harder" || resolvedSwapIntent === "easier") &&
+    fetchedProgressions !== null &&
+    fetchedProgressions[resolvedSwapIntent].length === 0 &&
+    targetContext?.type === "exercise" &&
+    targetContext.label
+  ) {
+    const exerciseName = targetContext.label;
+    const direction = resolvedSwapIntent;
+    const equipmentLevel = system.equipmentAccess
+      ? (system.equipmentAccess.toLowerCase().includes("dumbbell") && !system.equipmentAccess.toLowerCase().includes("barbell")
+          ? "dumbbells_only"
+          : system.equipmentAccess.toLowerCase().includes("bodyweight") || system.equipmentAccess.toLowerCase().includes("no equipment")
+          ? "bodyweight"
+          : "full_gym")
+      : "full_gym";
+
+    // Extract exercise metadata from the system for richer context
+    let movementPattern: string | undefined;
+    let category: string | undefined;
+    let sessionLabel: string | undefined;
+
+    outer: for (const phase of system.phases ?? []) {
+      for (const week of phase.weeks ?? []) {
+        for (const session of week.sessions ?? []) {
+          const found = (session.exercises ?? []).find((ex: any) => ex.id === targetContext.id);
+          if (found) {
+            category = found.category;
+            sessionLabel = session.label ?? session.sessionType;
+            break outer;
+          }
+        }
+      }
+    }
+
+    const fallbackCtx = {
+      exerciseName,
+      exerciseId: targetContext.id,
+      direction,
+      movementPattern,
+      category,
+      sessionLabel,
+      programGoal: system.goal ?? system.programGoal,
+      sport: system.sport,
+      equipmentLevel,
+      injuryFlags: system.injuryFlags ?? system.specialConsiderations
+        ? [system.injuryFlags ?? system.specialConsiderations].flat().filter(Boolean)
+        : [],
+      notes: system.specialConsiderations,
+      userId: system.userId,
+    };
+
+    try {
+      const fallbackPlan = await resolveHarderEasierFallback(fallbackCtx);
+      if (fallbackPlan) {
+        logger.info(
+          { exercise: exerciseName, direction, intent: fallbackPlan.intent },
+          "[EditRouter] Structured harder/easier fallback succeeded — skipping general OpenAI call"
+        );
+        return fallbackPlan;
+      }
+    } catch (err) {
+      logger.warn({ err, exerciseName }, "[EditRouter] Structured harder/easier fallback threw — continuing to general OpenAI");
     }
   }
 
