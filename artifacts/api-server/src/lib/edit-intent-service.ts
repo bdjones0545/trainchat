@@ -345,6 +345,34 @@ When the user states an explicit numeric or field change — reps, sets, rest, l
 The changeSummary MUST confirm exactly what changed: field name + old value (if known) + new value.
 Good: "Updated Shrimp Squat to 10 reps each side." Bad: "Done" or "1 change applied."
 
+CRITICAL — SESSION COACHING TRANSFORMATION REQUESTS:
+When the target is a SESSION and the request contains coaching transformation language (explosive, power, athletic, hypertrophy, strength, endurance), you MUST make REAL structural changes — not just update emphasis or coachingNotes text fields. A session-description-only response is a FAILURE.
+
+SESSION COACHING TRANSFORMATION RULES:
+
+EXPLOSIVE / POWER SESSION ("make day 1 more explosive", "add power to this session"):
+- Add 1 explosive/plyometric movement (Box Jump, Broad Jump, Jump Squat, Med Ball Slam) if none exists in the session
+- Reduce primary lift reps to power range: 2-4 reps
+- Add 3-1-X-0 tempo to primary lifts (3-sec eccentric, controlled pause, explosive concentric)
+- Set rest to 2-3 min on primary lifts for full CNS recovery
+- Reduce or remove slow high-rep hypertrophy accessories (12+ rep accessories → 8-10 or remove)
+- Update session emphasis (secondary change, after structural changes)
+- changeSummary MUST name specific exercise(s) added and prescription changes made (NOT "refocused toward explosive qualities")
+
+HYPERTROPHY SESSION ("make this a hypertrophy session", "focus on muscle building"):
+- Move primary lift reps to 6-10 range
+- Add 1-2 isolation accessory exercises targeting the session's primary muscle group
+- Extend sets on accessories by 1 set
+- Set rest to 60-90s on accessories (metabolic demand)
+- changeSummary must name added exercises and rep range changes
+
+CONDITIONING SESSION ("add conditioning to this session", "make this more metabolic"):
+- Add a conditioning finisher (10-15 min assault bike, rowing intervals, or similar)
+- Reduce rest on accessories to 60s
+- changeSummary must name the finisher and sessions affected
+
+RULE: If a coaching transformation only produces update_session, update_week, or update_phase changes (text fields only) with NO add_exercise, replace_exercise, or update_exercise changes touching sets/reps/tempo/rest → the response is INVALID. You must include at least one structural change.
+
 CRITICAL — BLOCK / PHASE MUTATION REQUESTS (highest priority after prescription commands):
 When the target is a PHASE and the request contains a block-level mutation intent, you MUST make REAL structural changes to the sessions and exercises — not just update the phase label or notes. A phase update-only response is NOT acceptable.
 
@@ -1180,12 +1208,126 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
     }
 
     if (lower.match(/athletic|explosive|sport|power|dynamic/)) {
-      return {
-        intent: "athletic_emphasis",
-        scope: "session",
-        changeSummary: `${label} refocused toward athletic and explosive qualities. Primaries updated with speed cues; conditioning emphasis added.`,
-        changes: [{ type: "update_session", id: sessionId, updates: { emphasis: "Athletic performance — explosive and dynamic emphasis", coachingNotes: "Athletic day: primaries should feel powerful, not heavy. Move bar with intent." }, reason: "User requested athletic emphasis" }],
-      };
+      // ── Structural explosive transformation ──────────────────────────────────
+      // Must produce real programming changes — not just description text updates.
+      // Rule: at least one of add_exercise, or update_exercise with sets/reps/tempo/rest
+      // must be produced. If no structural changes are possible, fall through to the
+      // generic fallback (changes: []) so auto-escalation to AGENT fires.
+      const targetSession = findSessionById(system, sessionId);
+      const changes: EditChange[] = [];
+      const addedExerciseNames: string[] = [];
+      const modifiedExerciseNames: string[] = [];
+
+      if (targetSession) {
+        const exercises: any[] = targetSession.exercises ?? [];
+
+        // 1. Add an explosive movement if none exists in this session
+        const hasExplosiveMovement = exercises.some((ex: any) =>
+          /\b(box|broad)\s+jump|jump\s+squat|power\s+clean|power\s+snatch|med\s+ball|medicine\s+ball|bound|plyometric/i.test(ex.name)
+        );
+
+        if (!hasExplosiveMovement) {
+          const hasLowerBodyLift = exercises.some((ex: any) =>
+            /squat|deadlift|lunge|leg\s+press|hip\s+thrust|romanian|rdl|hamstring|glute/i.test(ex.name)
+          );
+          const explosiveChoice = hasLowerBodyLift ? "Box Jump" : "Med Ball Slam";
+          changes.push({
+            type: "add_exercise",
+            id: 0,
+            sessionId,
+            exercise: {
+              name: explosiveChoice,
+              category: "explosive",
+              sets: 4,
+              reps: "5",
+              rest: "2-3 min",
+              tempo: "X10X",
+              notes: "Max intent every rep. Full reset between sets — quality, not fatigue. Reset posture completely before each set.",
+            },
+            reason: "Adding explosive power movement to session",
+          });
+          addedExerciseNames.push(explosiveChoice);
+        }
+
+        // 2. Adjust primary lifts into power rep range with tempo and rest for CNS recovery
+        for (const ex of exercises) {
+          if (ex.category === "primary") {
+            const repsStr: string = ex.reps ?? "";
+            const repUpdates: Record<string, unknown> = {
+              tempo: "3-1-X-0",
+              rest: "2-3 min",
+              notes: "Power focus: 3-sec eccentric, controlled pause, explosive concentric. Target 70-80% of max.",
+            };
+            const rangeMatch = repsStr.match(/(\d+)-(\d+)/);
+            const singleMatch = repsStr.match(/^(\d+)$/);
+            if (rangeMatch && parseInt(rangeMatch[2]) > 5) {
+              repUpdates.reps = "2-4";
+            } else if (singleMatch && parseInt(singleMatch[1]) > 5) {
+              repUpdates.reps = "3-5";
+            }
+            changes.push({
+              type: "update_exercise",
+              id: ex.id,
+              updates: repUpdates,
+              reason: "Adjusting primary lift for explosive power output",
+            });
+            modifiedExerciseNames.push(ex.name);
+          }
+        }
+
+        // 3. Reduce slow high-rep hypertrophy accessories that conflict with power focus
+        for (const ex of exercises) {
+          if (ex.category === "accessory") {
+            const repsStr: string = ex.reps ?? "";
+            const rangeMatch = repsStr.match(/(\d+)-(\d+)/);
+            if (rangeMatch && parseInt(rangeMatch[1]) >= 12) {
+              changes.push({
+                type: "update_exercise",
+                id: ex.id,
+                updates: { reps: "8-10", rest: "90s", notes: "Pulled back to strength-accessory range to preserve power focus of this session." },
+                reason: "Reducing hypertrophy-rep accessory to preserve power session quality",
+              });
+              modifiedExerciseNames.push(ex.name);
+            }
+          }
+        }
+      }
+
+      // Validation: only commit if at least one structural change was produced.
+      // "Structural" = add_exercise, replace_exercise, or update_exercise touching
+      // a programming field (sets, reps, tempo, rest) — NOT just text fields.
+      const hasStructuralChange = changes.some(c =>
+        c.type === "add_exercise" ||
+        c.type === "replace_exercise" ||
+        (c.type === "update_exercise" && c.updates &&
+          Object.keys(c.updates).some(k => ["sets", "reps", "tempo", "rest"].includes(k)))
+      );
+
+      if (hasStructuralChange) {
+        // Add session description update as secondary (after structural changes confirmed)
+        changes.push({
+          type: "update_session",
+          id: sessionId,
+          updates: {
+            emphasis: "Power and force expression — explosive and athletic emphasis",
+            coachingNotes: "Power session: start with max-intent explosive work. Primaries at 70-80% with bar speed focus. Rest fully between sets — quality, not fatigue.",
+          },
+          reason: "Updating session description to reflect explosive focus",
+        });
+
+        const summaryParts: string[] = [];
+        if (addedExerciseNames.length) summaryParts.push(`Added ${addedExerciseNames.join(", ")}`);
+        if (modifiedExerciseNames.length) summaryParts.push(`adjusted ${modifiedExerciseNames.join(", ")} for power output (3-1-X-0 tempo, 2-4 reps, 2-3 min rest)`);
+
+        return {
+          intent: "explosive_session_transformation",
+          scope: "session",
+          changeSummary: `${label} restructured for explosive output: ${summaryParts.join("; ")}. Power rep ranges and extended rest locked in for full CNS recovery between sets.`,
+          changes,
+        };
+      }
+      // No structural changes possible (e.g. session has no exercises yet) →
+      // fall through to generic fallback (changes: []) to auto-escalate to AGENT.
     }
 
     if (lower.match(/equipment|dumbbell|hotel|travel|minimal/)) {
@@ -1545,6 +1687,17 @@ function findCurrentSession(system: any): any | null {
   return week.sessions?.find((s: any) => !s.isRestDay) ?? week.sessions?.[0] ?? null;
 }
 
+function findSessionById(system: any, sessionId: number): any | null {
+  for (const phase of system.phases ?? []) {
+    for (const week of phase.weeks ?? []) {
+      for (const session of week.sessions ?? []) {
+        if (session.id === sessionId) return session;
+      }
+    }
+  }
+  return null;
+}
+
 // ─── Intent Router ───────────────────────────────────────────────────────────
 //
 // Classifies each edit request as DETERMINISTIC or AGENT before any mutation logic.
@@ -1630,6 +1783,15 @@ export function classifyEditRequest(
     }
   }
 
+  // ── Rule 5: Session-level coaching transformations with structural rules → DETERMINISTIC ──
+  // Explosive/power/athletic requests against a session target are handled by interpretWithRules
+  // which produces real structural changes (add_exercise, update_exercise for sets/reps/tempo/rest).
+  if (targetContext?.type === "session") {
+    if (/\bexplosive\b|\bpower\b|\bathletic\b|\bmore\s+(explosive|powerful|athletic)\b/i.test(lower)) {
+      return { route: "DETERMINISTIC", reason: "session_explosive_transformation" };
+    }
+  }
+
   // ── Everything else → AGENT ───────────────────────────────────────────────
   // Includes: harder/easier, explosive/endurance coaching language, session/week/phase
   // transforms, and any request without a deterministic exercise target.
@@ -1666,17 +1828,47 @@ export async function interpretEditRequest(
     const rulePlan = interpretWithRules(userRequest, system, targetContext);
 
     if (rulePlan.changes.length > 0) {
-      logger.info(
-        { intent: rulePlan.intent, scope: rulePlan.scope, changes: rulePlan.changes.length, route: "deterministic" },
-        "[EditRouter] Deterministic path resolved — OpenAI not called"
-      );
-      return {
-        ...rulePlan,
-        _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
-      };
+      // ── Validation layer: coaching intents must produce structural changes ─
+      // If the plan only contains text-field updates (update_session/update_phase/update_week
+      // with no exercise selection or prescription changes), reject and escalate to AGENT.
+      const isCoachingIntent = /\b(explosive|power|athletic|hypertrophy|endurance|more\s+intense|stronger|faster|more\s+(powerful|athletic|explosive))\b/i.test(userRequest);
+      if (isCoachingIntent) {
+        const hasStructuralChange = rulePlan.changes.some(c =>
+          c.type === "add_exercise" ||
+          c.type === "replace_exercise" ||
+          c.type === "delete_exercise" ||
+          (c.type === "update_exercise" && c.updates &&
+            Object.keys(c.updates).some(k => ["sets", "reps", "tempo", "rest"].includes(k)))
+        );
+        if (!hasStructuralChange) {
+          logger.warn(
+            { intent: rulePlan.intent, changes: rulePlan.changes.length },
+            "[EditRouter] Coaching intent produced text-only changes — rejecting, escalating to AGENT"
+          );
+          // Fall through to AGENT — do NOT return here
+        } else {
+          logger.info(
+            { intent: rulePlan.intent, scope: rulePlan.scope, changes: rulePlan.changes.length, route: "deterministic" },
+            "[EditRouter] Deterministic coaching path resolved with structural changes — OpenAI not called"
+          );
+          return {
+            ...rulePlan,
+            _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+          };
+        }
+      } else {
+        logger.info(
+          { intent: rulePlan.intent, scope: rulePlan.scope, changes: rulePlan.changes.length, route: "deterministic" },
+          "[EditRouter] Deterministic path resolved — OpenAI not called"
+        );
+        return {
+          ...rulePlan,
+          _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+        };
+      }
     }
 
-    // Auto-escalation: deterministic rules produced no changes → escalate to AGENT
+    // Auto-escalation: deterministic rules produced no changes (or coaching validation failed) → escalate to AGENT
     logger.warn(
       { reason: classification.reason, intent: rulePlan.intent },
       "[EditRouter] Deterministic path produced no changes — auto-escalating to AGENT"
@@ -1837,10 +2029,29 @@ export async function interpretEditRequest(
       return false;
     });
 
+    // Guard 3: coaching transformation produced text-only changes → reject
+    // A coaching intent (explosive, power, athletic, hypertrophy) that only updates
+    // description text fields is a FAILURE — must have at least one structural change.
+    const isCoachingTransformIntent = /\b(explosive|power|athletic|hypertrophy|endurance|more\s+intense|stronger|faster)\b/i.test(userRequest) &&
+      (targetContext?.type === "session" || targetContext?.type === "week" || targetContext?.type === "phase" || !targetContext);
+    const aiHasStructuralChange = aiPlan.changes.some(c =>
+      c.type === "add_exercise" ||
+      c.type === "replace_exercise" ||
+      c.type === "delete_exercise" ||
+      (c.type === "update_exercise" && c.updates &&
+        Object.keys(c.updates).some(k => ["sets", "reps", "tempo", "rest"].includes(k)))
+    );
+    const isCoachingTextOnly = isCoachingTransformIntent && !aiHasStructuralChange && aiPlan.changes.length > 0;
+    if (isCoachingTextOnly) {
+      logger.warn({ intent: aiPlan.intent, changes: aiPlan.changes.length }, "[EditRouter] AI returned text-only changes for coaching transformation — rejecting");
+    }
+
     if (isProgressionIntent && onlyNotesChange) {
       logger.warn({ intent: aiPlan.intent, changes: aiPlan.changes.length }, "[EditRouter] AI returned note-only mutation for progression — rejecting");
     } else if (hasGenericReplacementName) {
       logger.warn({ intent: aiPlan.intent }, "[EditRouter] AI returned generic placeholder in replace_exercise — rejecting");
+    } else if (isCoachingTextOnly) {
+      // Already logged above — fall through to library/rules fallback
     } else {
       logger.info(
         { intent: aiPlan.intent, scope: aiPlan.scope, changes: aiPlan.changes.length, route: "agent_openai" },
