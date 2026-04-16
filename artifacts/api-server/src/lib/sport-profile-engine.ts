@@ -23,7 +23,13 @@ export type SportKey =
   | "lacrosse"
   | "hockey"
   | "track"
-  | "volleyball";
+  | "volleyball"
+  | "tennis"
+  | "combat_sports"
+  | "swimming"
+  | "golf"
+  | "rowing"
+  | "cycling";
 
 export type SeasonContext = "off_season" | "pre_season" | "in_season" | "post_season" | null;
 
@@ -881,6 +887,326 @@ export const SPORT_PROFILES: Record<SportKey, SportProfile> = {
     validationRules: ["Vertical jump training mandatory", "Face pull mandatory every upper session", "Shoulder care present every upper session"],
     architectureDistinctions: "Volleyball combines basketball's vertical demands with baseball's arm care requirements — both must be addressed in every program.",
   },
+
+  // ── TENNIS ────────────────────────────────────────────────────────────────────
+  tennis: {
+    key: "tennis",
+    displayName: "Tennis / Racket Sports",
+    tagline: "Rotational power, deceleration, wrist/elbow tolerance, and reactive multi-directional speed",
+    physicalQualities: [
+      { quality: "Rotational power", priority: "primary", description: "Ground stroke and serve mechanics originate from the hips — rotational force is the primary athletic currency" },
+      { quality: "Multi-directional reactive speed", priority: "primary", description: "Court coverage — lateral, diagonal, and forward/back sprint with immediate deceleration" },
+      { quality: "Deceleration and split-step mechanics", priority: "primary", description: "The split-step and first-step explosion: reactive preparation before every shot" },
+      { quality: "Shoulder and elbow structural health", priority: "secondary", description: "Serving and rallying create high repetitive stress — rotator cuff and medial elbow care is non-negotiable" },
+      { quality: "Single-leg stability", priority: "secondary", description: "Open-stance forehand, serve stance, lateral lunge — tennis is played on one leg repeatedly" },
+      { quality: "Grip and forearm strength", priority: "tertiary", description: "Racket control and wrist stability — forearm resilience supports longevity" },
+    ],
+    conditioning: {
+      primaryEnergySystem: "Alactic + glycolytic — points are short explosive bursts; sets and matches extend into glycolytic and aerobic support",
+      secondaryEnergySystem: "Aerobic base for match endurance and recovery between points",
+      weeklyVolume: "1–2 conditioning sessions — court conditioning preferred over gym-based",
+      sessionFormat: "Repeat sprint: 4–6 × 10–15m multi-directional at 90–100% with 45–90 sec rest | OR: split-step + first-step reactive drill complex",
+      antiPattern: "Do not prescribe heavy aerobic volume without sport-specific movement patterns. Tennis conditioning must include reactive and directional components.",
+      sportNote: "Tennis conditioning should mirror court demands: short burst, reactive, directional — not long-distance running.",
+    },
+    sessionArchetypes: [
+      { name: "Rotational Power + Lower Strength", intent: "Med ball rotational throws + hip-driven lower strength — the foundation of every ground stroke and serve", primaryFocus: ["rotational", "power", "squat", "hinge"], recoveryPriority: "high" },
+      { name: "Shoulder Health + Upper Structural", intent: "Rotator cuff care, scapular stability, press/pull balance — protect the most vulnerable joint in tennis", primaryFocus: ["upper_push", "upper_pull", "trunk", "rotational"], recoveryPriority: "moderate" },
+      { name: "Deceleration + Reactive Speed + Unilateral", intent: "COD mechanics, split-step reactive work, single-leg stability — court movement quality", primaryFocus: ["lateral", "power", "unilateral_lower", "trunk"], recoveryPriority: "moderate" },
+    ],
+    exerciseEmphasis: {
+      mustInclude: ["Med ball rotational throws (every lower or full-body session)", "Split-step + first-step reactive drill", "Rotator cuff care (external rotation, face pull)", "Pallof press anti-rotation", "Copenhagen plank"],
+      preferred: ["Lateral lunge and lateral step-up", "Single-leg RDL", "Hip thrust", "Band external rotation and face pull", "Lateral bound", "Wrist and forearm rolling (if wrist stress is present)"],
+      reduced: ["Heavy bilateral barbell work without rotational transfer emphasis", "High-rep overhead pressing without arm care balance"],
+      eliminated: ["Long aerobic runs as primary conditioning", "Neglecting shoulder and elbow care work — injury risk is too high"],
+      tissueConsiderations: [
+        "Medial elbow (golfer's elbow in servers) — forearm eccentric loading, wrist flexor care",
+        "Rotator cuff — external rotation work mandatory every upper session",
+        "Knee (patellar) — manage jump and sprint volume",
+        "Adductor / groin — wide lateral lunges and Copenhagen plank",
+        "Lumbar spine — rotational load management, anti-extension for serve hyperextension",
+      ],
+    },
+    weeklyArchitectureGuidance: {
+      threeDayShape: "Day 1: Rotational Power + Lower Strength | Day 2: Shoulder Health + Upper | Day 3: Deceleration + Reactive + Unilateral",
+      fourDayShape: "Day 1: Rotational Power + Lower | Day 2: Shoulder + Upper | Day 3: Decel + Reactive | Day 4: Full Body Integration + Trunk",
+    },
+    seasonModulation: {
+      off_season: { volumeModifier: 1.0, intensityModifier: 1.0, conditioningReduction: 1.0, priorityShift: "Build rotational power, deceleration quality, and structural durability", mandatoryAdjustments: ["Full rotational work", "Full conditioning volume", "Progressive shoulder loading"] },
+      pre_season: { volumeModifier: 0.8, intensityModifier: 0.9, conditioningReduction: 0.8, priorityShift: "Sharpen reactive speed and serve mechanics", mandatoryAdjustments: ["Increase court-specific conditioning", "Reduce absolute strength volume"] },
+      in_season: { volumeModifier: 0.55, intensityModifier: 0.85, conditioningReduction: 0.3, priorityShift: "Maintenance — shoulder care is non-negotiable during match play", mandatoryAdjustments: ["2× sessions max", "Face pull and external rotation every session", "No heavy pressing the day before match"] },
+      post_season: { volumeModifier: 0.4, intensityModifier: 0.65, conditioningReduction: 0.2, priorityShift: "Shoulder and elbow restoration", mandatoryAdjustments: ["No heavy rotational loading", "Focus on tissue recovery and mobility"] },
+    },
+    positionOverlays: {},
+    validationRules: ["Med ball rotational throw mandatory", "Face pull or external rotation every upper session", "Pallof press mandatory", "No heavy aerobic-only conditioning"],
+    architectureDistinctions: "Tennis is rotational power + shoulder durability + reactive multi-directional speed. Programs must address all three — neglecting any one creates either injury or performance gaps.",
+  },
+
+  // ── COMBAT SPORTS ─────────────────────────────────────────────────────────────
+  combat_sports: {
+    key: "combat_sports",
+    displayName: "Combat Sports / MMA",
+    tagline: "Functional strength, isometric tolerance, grappling-specific trunk, and sport-specific conditioning",
+    physicalQualities: [
+      { quality: "Functional strength under fatigue", priority: "primary", description: "The ability to produce force in compromised, non-standard positions — wrestling, clinch work, submission escapes" },
+      { quality: "Isometric and grip strength", priority: "primary", description: "Holding positions, controlling the clinch, escaping submissions — isometric force tolerance is critical" },
+      { quality: "Rotational and anti-rotation trunk strength", priority: "primary", description: "Punch generation, hip escape, guard pass — the trunk transfers force in every direction" },
+      { quality: "Explosive power (striking and takedowns)", priority: "secondary", description: "First-step takedown explosion, punch power — alactic power for decisive moments" },
+      { quality: "Aerobic + glycolytic conditioning capacity", priority: "secondary", description: "MMA rounds are 5 minutes of mixed-intensity effort — aerobic base matters more than in team sports" },
+      { quality: "Structural resilience", priority: "secondary", description: "Neck, shoulder, hip, and knee durability for contact and ground work" },
+    ],
+    conditioning: {
+      primaryEnergySystem: "Mixed: alactic (explosive attacks), glycolytic (scrambles), aerobic (round-length pacing)",
+      secondaryEnergySystem: "Aerobic base matters — fighters gas out when aerobic capacity is insufficient",
+      weeklyVolume: "2–3 conditioning sessions integrated with sparring/drilling schedule",
+      sessionFormat: "Rounds-based: 4–6 × 5 min with 1 min rest (mirror fight rounds) | OR: Energy system work: 30 sec on / 30 sec off × 10–15 rounds on bag or partner",
+      antiPattern: "Do not program conditioning as if this is a sprint sport — fighters need both power AND aerobic capacity. Don't neglect aerobic base.",
+      sportNote: "Combat sports conditioning must develop all three energy systems — fighters who only train power gas out; fighters who only do cardio lose explosive capacity.",
+    },
+    sessionArchetypes: [
+      { name: "Strength + Power Foundation", intent: "Loaded carries, compound pulls, explosive work — functional strength for takedowns, clinch, and positional dominance", primaryFocus: ["hinge", "squat", "power", "trunk"], recoveryPriority: "high" },
+      { name: "Upper Structural + Rotational Trunk", intent: "Pull-dominant upper body, rotational trunk for punch mechanics, anti-rotation for grappling positions", primaryFocus: ["upper_pull", "upper_push", "rotational", "trunk"], recoveryPriority: "moderate" },
+      { name: "Grip + Isometric + Conditioning", intent: "Grip strength, isometric trunk holds, kettlebell work, and energy system conditioning for round-length output", primaryFocus: ["trunk", "hinge", "power"], conditioningRole: "Mixed energy system — rounds-based conditioning", recoveryPriority: "high" },
+    ],
+    exerciseEmphasis: {
+      mustInclude: ["Farmer carry and cross-body carry (grip + trunk)", "Pallof press (anti-rotation for grappling)", "RKC plank or hollow body hold", "Pull-up or weighted pull-up", "Trap bar or conventional deadlift"],
+      preferred: ["Kettlebell swing", "Sled push and drag (grappling transfer)", "Single-leg RDL", "Band face pull (shoulder care)", "Copenhagen plank", "Rotational med ball throws (punch power)", "Single-arm work (mirrors asymmetric fight positions)"],
+      reduced: ["Pure isolation work without functional transfer", "Heavy overhead pressing without rotator cuff balance"],
+      eliminated: ["Bodybuilding-style pump training without functional application", "Neglecting conditioning — fighters need energy system work, not just gym strength"],
+      tissueConsiderations: [
+        "Neck — neck strengthening if in contact sport (appropriate for fighter populations)",
+        "Shoulder — high volume of clinch and ground work creates rotator cuff stress",
+        "Wrist and grip — grip endurance work mandatory",
+        "Knee (BJJ/wrestling) — kneeling position stress, single-leg stability work",
+        "Hip flexor — guard work creates chronic hip flexion load",
+      ],
+    },
+    weeklyArchitectureGuidance: {
+      threeDayShape: "Day 1: Strength + Power | Day 2: Upper + Rotational Trunk | Day 3: Grip + Isometric + Conditioning",
+      fourDayShape: "Day 1: Strength + Power | Day 2: Upper + Rotational | Day 3: Lower + Explosive | Day 4: Conditioning + Grip + Trunk",
+    },
+    seasonModulation: {
+      off_season: { volumeModifier: 1.0, intensityModifier: 1.0, conditioningReduction: 1.0, priorityShift: "Build strength base, improve conditioning capacity, increase volume tolerance", mandatoryAdjustments: ["Full conditioning prescription", "Heavy compound loading", "Energy system development"] },
+      pre_season: { volumeModifier: 0.8, intensityModifier: 0.9, conditioningReduction: 0.85, priorityShift: "Camp preparation — conditioning quality increases, strength maintained", mandatoryAdjustments: ["Integrate with fight camp sparring schedule", "Reduce absolute loading — maintain intensity"] },
+      in_season: { volumeModifier: 0.55, intensityModifier: 0.85, conditioningReduction: 0.4, priorityShift: "Fight week — taper everything. Sparring IS the conditioning.", mandatoryAdjustments: ["Reduce to 2 sessions max", "No heavy lower body day before weigh-ins", "Maintain grip and trunk work"] },
+      post_season: { volumeModifier: 0.4, intensityModifier: 0.65, conditioningReduction: 0.3, priorityShift: "Recovery — tissue restoration, rehydration, structural health", mandatoryAdjustments: ["No sparring", "Light movement only", "Shoulder and hip restoration priority"] },
+    },
+    positionOverlays: {},
+    validationRules: ["Farmer carry or loaded carry mandatory", "Pallof press mandatory (anti-rotation for grappling)", "Pull-dominant upper body", "Conditioning component required (energy system work)", "Grip work present"],
+    architectureDistinctions: "Combat sports demand functional strength in non-standard positions, isometric resilience for grappling, rotational power for striking, and real conditioning across all three energy systems. Programs must address all of these — not just gym strength.",
+  },
+
+  // ── SWIMMING ─────────────────────────────────────────────────────────────────
+  swimming: {
+    key: "swimming",
+    displayName: "Swimming",
+    tagline: "Shoulder structural integrity, rotational power, trunk stiffness, and pulling strength",
+    physicalQualities: [
+      { quality: "Shoulder structural health and range of motion", priority: "primary", description: "High-volume shoulder rotation in water creates overuse risk — structural balance and scapular control are critical" },
+      { quality: "Pulling strength and lat development", priority: "primary", description: "The catch and pull phase is the primary propulsion — vertical pulling strength directly transfers" },
+      { quality: "Trunk stiffness and streamline position", priority: "primary", description: "The streamline is an anti-extension and anti-rotation position — trunk stiffness improves efficiency" },
+      { quality: "Hip and ankle flexibility for kick mechanics", priority: "secondary", description: "Ankle plantar flexion and hip rotation range of motion — flutter and dolphin kick efficiency" },
+      { quality: "Rotational power (freestyle and butterfly)", priority: "secondary", description: "Body rotation drives pull mechanics — rotational trunk training has direct stroke transfer" },
+    ],
+    conditioning: {
+      primaryEnergySystem: "Aerobic dominant (distance) — alactic for sprinters (50m, 100m)",
+      secondaryEnergySystem: "Glycolytic for middle-distance (200m–400m)",
+      weeklyVolume: "Gym conditioning is minimal — pool sessions provide primary cardiovascular training",
+      sessionFormat: "Gym work serves the pool, not the other way around. No additional cardio unless specified by coach.",
+      antiPattern: "Do NOT program heavy shoulder pressing without extensive rotator cuff care balance. Do NOT treat gym work as the primary training stimulus — the pool is.",
+      sportNote: "Swimmers train very high pool volume. Gym work must be complementary and targeted — not adding to an already high training load.",
+    },
+    sessionArchetypes: [
+      { name: "Pulling Strength + Shoulder Health", intent: "Vertical pulling (pull-up, lat pull-down) + rotator cuff care — build the pull pattern that drives freestyle and butterfly", primaryFocus: ["upper_pull", "upper_push", "trunk"], recoveryPriority: "moderate" },
+      { name: "Trunk + Hip Flexibility + Rotational Power", intent: "Anti-extension and anti-rotation trunk work + rotational power + hip and ankle mobility — streamline position and rotation efficiency", primaryFocus: ["trunk", "rotational", "hinge", "lateral"], recoveryPriority: "moderate" },
+      { name: "Lower Body Strength + Kick Support", intent: "Lower body strength for turns and starts + hip/ankle mobility for kick mechanics", primaryFocus: ["squat", "hinge", "unilateral_lower"], recoveryPriority: "low" },
+    ],
+    exerciseEmphasis: {
+      mustInclude: ["Pull-up or lat pull-down (vertical pull)", "Face pull and band external rotation (every session)", "Dead bug or hollow body hold (streamline trunk)", "Shoulder scapular positioning work (wall slides, Y/T/W)"],
+      preferred: ["Rotational med ball throw", "Hip thrust (turn mechanics)", "Pallof press", "Band pull-apart", "Ankle mobility drills", "Hip flexor eccentric loading"],
+      reduced: ["Heavy overhead barbell pressing — high shoulder stress without structural benefit", "Excessive knee-dominant loading without hip and posterior chain balance"],
+      eliminated: ["Neglecting rotator cuff care — shoulder injury risk in swimmers is the highest of any overhead sport", "Additional aerobic conditioning in the gym — pool training already provides this"],
+      tissueConsiderations: [
+        "Rotator cuff — swimmer's shoulder is a real syndrome; external rotation and scapular care is mandatory",
+        "Bicep tendon (long head) — high pulling volume creates stress; eccentric care",
+        "Knee (breaststroke) — medial knee stress in breaststroke kick; single-leg stability",
+        "Lumbar spine — butterfly and hyperlordotic position in streamline; anti-extension mandatory",
+        "Ankle — ankle plantar flexion flexibility directly impacts kick efficiency",
+      ],
+    },
+    weeklyArchitectureGuidance: {
+      threeDayShape: "Day 1: Pulling Strength + Shoulder Health | Day 2: Trunk + Rotational Power + Hip Mobility | Day 3: Lower Body + Kick Support",
+      fourDayShape: "Day 1: Pulling + Shoulder | Day 2: Trunk + Rotational | Day 3: Lower + Hip Mobility | Day 4: Integrated Full Body + Arm Care",
+    },
+    seasonModulation: {
+      off_season: { volumeModifier: 1.0, intensityModifier: 1.0, conditioningReduction: 1.0, priorityShift: "Build pulling strength, shoulder structure, and trunk stiffness", mandatoryAdjustments: ["Progressive pulling volume", "Full shoulder care program"] },
+      pre_season: { volumeModifier: 0.8, intensityModifier: 0.9, conditioningReduction: 0.8, priorityShift: "Sharpen specificity — pulling strength peaks, shoulder care maintained", mandatoryAdjustments: ["Reduce lower body volume", "Emphasize shoulder care as pool volume increases"] },
+      in_season: { volumeModifier: 0.55, intensityModifier: 0.8, conditioningReduction: 0.2, priorityShift: "Maintenance — pool training is maximal; gym work is supportive only", mandatoryAdjustments: ["2× gym sessions max", "Face pull every session", "No heavy pressing — pool load is already high"] },
+      post_season: { volumeModifier: 0.4, intensityModifier: 0.65, conditioningReduction: 0.15, priorityShift: "Shoulder restoration — rest the overused joint complex", mandatoryAdjustments: ["Rotator cuff restoration focus", "No heavy pulling for first 2 weeks"] },
+    },
+    positionOverlays: {},
+    validationRules: ["Face pull or external rotation mandatory every session", "Vertical pull (pull-up or lat pull-down) mandatory", "Dead bug or hollow body hold mandatory", "No additional cardiovascular conditioning in gym"],
+    architectureDistinctions: "Swimmers have the highest shoulder overuse risk of any sport. The gym program must protect the shoulder first and build pull strength second. Gym work is supplementary — never additive to an already high pool training load.",
+  },
+
+  // ── GOLF ──────────────────────────────────────────────────────────────────────
+  golf: {
+    key: "golf",
+    displayName: "Golf",
+    tagline: "Rotational power, anti-rotation stability, hip mobility, and structural balance for 18+ holes",
+    physicalQualities: [
+      { quality: "Rotational power and speed", priority: "primary", description: "The golf swing is a rotational power expression — hip drive, X-factor stretch, and separation generate clubhead speed" },
+      { quality: "Anti-rotation and lead-side stability", priority: "primary", description: "The ability to resist and control rotation through impact — trunk anti-rotation is what protects the lower back and generates power transfer" },
+      { quality: "Hip mobility and thoracic rotation", priority: "primary", description: "Full backswing requires thoracic rotation and hip internal/external range of motion — restriction here directly limits swing mechanics" },
+      { quality: "Lower body stability and balance", priority: "secondary", description: "Weight transfer, single-leg control through impact — lower body is the foundation, not just the driver" },
+      { quality: "Lumbar spine health", priority: "secondary", description: "The golf swing repeatedly loads the lumbar spine in rotation and lateral flexion — posterior chain strength protects the lower back" },
+    ],
+    conditioning: {
+      primaryEnergySystem: "Aerobic — 18 holes is 4–5 hours of low-intensity activity with brief explosions",
+      secondaryEnergySystem: "Minimal glycolytic demand — golf is largely skill and power expression, not metabolic endurance",
+      weeklyVolume: "Minimal dedicated conditioning — walking the course provides cardiovascular work",
+      sessionFormat: "Walking tolerance, hip mobility circuit, and rotational warm-up are more valuable than traditional conditioning for golf performance",
+      antiPattern: "Do NOT program heavy aerobic conditioning. Do NOT program heavy hip extension loading that tightens the hip flexors and restricts the backswing.",
+      sportNote: "Golf fitness is about mobility + stability + rotational power. Conditioning is secondary unless the player is physically deconditioned.",
+    },
+    sessionArchetypes: [
+      { name: "Rotational Power + Hip Drive", intent: "Med ball rotational throws + hip thrust + anti-rotation Pallof press — the swing power sequence", primaryFocus: ["rotational", "power", "hinge", "trunk"], recoveryPriority: "moderate" },
+      { name: "Hip and Thoracic Mobility + Structural Balance", intent: "Hip flexor, thoracic rotation, ankle — mobility restrictions that limit backswing and rotation", primaryFocus: ["lateral", "trunk", "hinge", "upper_pull"], recoveryPriority: "low" },
+      { name: "Lower Body Strength + Balance", intent: "Single-leg strength and balance — weight transfer and follow-through stability", primaryFocus: ["squat", "unilateral_lower", "trunk"], recoveryPriority: "moderate" },
+    ],
+    exerciseEmphasis: {
+      mustInclude: ["Med ball rotational throws (every session)", "Pallof press anti-rotation", "Hip thrust", "Single-leg work", "Thoracic rotation mobility work"],
+      preferred: ["90/90 hip mobility", "Hip flexor stretch and eccentric loading", "Cable woodchop and reverse woodchop", "Lateral lunge", "Band pull-apart", "Face pull", "Glute bridge"],
+      reduced: ["Heavy overhead pressing — shoulder restriction affects backswing", "High-volume hip flexor loading (squats, RDLs in excess) without mobility counterbalance"],
+      eliminated: ["Long aerobic conditioning sessions", "Exercises that increase spinal compression without improving rotational mechanics"],
+      tissueConsiderations: [
+        "Lumbar spine — the most common golf injury; posterior chain strengthening and anti-rotation mandatory",
+        "Lead knee (lateral collapse through impact) — single-leg stability work",
+        "Lead wrist (impact shock) — wrist and forearm tolerance",
+        "Hip (limited IR/ER) — hip mobility is a primary performance and injury limiter",
+        "Thoracic spine — thoracic rotation restriction limits backswing; mobilization mandatory",
+      ],
+    },
+    weeklyArchitectureGuidance: {
+      threeDayShape: "Day 1: Rotational Power + Hip Drive | Day 2: Mobility + Structural Balance | Day 3: Lower Strength + Balance",
+      fourDayShape: "Day 1: Rotational Power + Lower | Day 2: Upper + Anti-Rotation | Day 3: Mobility + Hip Drive | Day 4: Lower Balance + Trunk",
+    },
+    seasonModulation: {
+      off_season: { volumeModifier: 1.0, intensityModifier: 1.0, conditioningReduction: 1.0, priorityShift: "Build rotational power, hip mobility, and structural balance — the three pillars of golf fitness", mandatoryAdjustments: [] },
+      pre_season: { volumeModifier: 0.85, intensityModifier: 0.9, conditioningReduction: 0.9, priorityShift: "Sharpen rotation quality and mobility — reduce loading that creates tightness near the swing", mandatoryAdjustments: ["Reduce heavy hip flexor loading", "Increase mobility volume"] },
+      in_season: { volumeModifier: 0.55, intensityModifier: 0.8, conditioningReduction: 0.3, priorityShift: "Maintenance — protect mobility and keep rotational power sharp", mandatoryAdjustments: ["2× sessions max around tournament schedule", "Mobility circuit before every session", "No heavy loading within 48h of tournament round"] },
+      post_season: { volumeModifier: 0.4, intensityModifier: 0.65, conditioningReduction: 0.2, priorityShift: "Lumbar and hip restoration", mandatoryAdjustments: ["Focus on tissue recovery", "Mobility emphasis"] },
+    },
+    positionOverlays: {},
+    validationRules: ["Med ball rotational throw mandatory", "Pallof press mandatory", "Hip mobility work present every session", "Lumbar spine health accounted for in exercise selection"],
+    architectureDistinctions: "Golf fitness is not a strength sport — it is a mobility + stability + rotational power sport. Programs that look like powerlifting blocks will restrict the swing. Every exercise must either produce rotational power, protect the spine, or improve the ranges of motion required by the swing.",
+  },
+
+  // ── ROWING ────────────────────────────────────────────────────────────────────
+  rowing: {
+    key: "rowing",
+    displayName: "Rowing",
+    tagline: "Posterior chain strength, pulling endurance, aerobic capacity, and hip drive for the rowing stroke",
+    physicalQualities: [
+      { quality: "Hip drive and posterior chain strength", priority: "primary", description: "The drive phase of the rowing stroke is a hip extension — deadlift and hip hinge patterns directly transfer" },
+      { quality: "Pulling strength and endurance", priority: "primary", description: "The catch-to-finish arm pull — vertical and horizontal pull strength in a fatigued state" },
+      { quality: "Aerobic capacity", priority: "primary", description: "Rowing races are aerobic (2,000m is ~6–8 min) — the aerobic system is the primary energy system" },
+      { quality: "Trunk stiffness and force transfer", priority: "secondary", description: "The trunk transfers leg drive to the handle — anti-flexion and anti-extension under load is essential" },
+      { quality: "Leg drive and quad strength", priority: "secondary", description: "The catch position loads the legs in a compressed squat — leg press and squat patterns develop this" },
+    ],
+    conditioning: {
+      primaryEnergySystem: "Aerobic dominant — 2,000m race is ~6–8 minutes at near-maximal aerobic intensity",
+      secondaryEnergySystem: "Glycolytic (1,000m sprint) and alactic (racing start)",
+      weeklyVolume: "2–3 conditioning sessions complementing on-water training",
+      sessionFormat: "Ergo intervals: 6 × 500m with 3 min rest | OR: 4 × 8 min at threshold with 4 min rest | OR: 20–30 min steady-state aerobic",
+      antiPattern: "Do NOT skip aerobic conditioning — rowing is an aerobic sport. Gym strength without aerobic capacity does not transfer to rowing performance.",
+      sportNote: "Rowing is one of the most aerobically demanding sports — both aerobic capacity AND posterior chain strength must be developed.",
+    },
+    sessionArchetypes: [
+      { name: "Hip Drive + Posterior Chain Strength", intent: "Deadlift / RDL / hip thrust — the foundational strength of the drive phase", primaryFocus: ["hinge", "squat", "trunk"], recoveryPriority: "high" },
+      { name: "Pulling Strength + Upper Structural", intent: "Pull-up, bent-over row, face pull — the pull phase under accumulating fatigue", primaryFocus: ["upper_pull", "upper_push", "trunk"], recoveryPriority: "moderate" },
+      { name: "Ergo Conditioning + Core Endurance", intent: "Aerobic energy system work + trunk endurance under fatigue — mirror race demands", primaryFocus: ["trunk", "hinge"], conditioningRole: "Aerobic — ergo intervals or steady-state", recoveryPriority: "high" },
+    ],
+    exerciseEmphasis: {
+      mustInclude: ["Conventional or trap bar deadlift", "Pull-up or weighted pull-up", "Bent-over row", "Hip thrust or glute bridge", "Dead bug or RKC plank (trunk transfer)"],
+      preferred: ["RDL", "Single-arm row", "Face pull", "Lat pull-down", "Goblet squat or leg press", "Pallof press", "Good morning"],
+      reduced: ["Heavy pressing without pulling balance — rowers are already pull-dominant from training", "High-rep plyometrics without recovery consideration"],
+      eliminated: ["Pure hypertrophy-driven programs without aerobic integration", "Neglecting aerobic conditioning — the ergo is the primary tool"],
+      tissueConsiderations: [
+        "Lumbar spine — repeated flexion under load; anti-flexion trunk work is protective",
+        "Rib stress fractures — common in high-volume rowers; manage trunk compression loading",
+        "Knee — compressed catch position; quad strength and knee tolerance",
+        "Shoulder — high pulling volume; rotator cuff and scapular care",
+        "Wrist and forearm — handle grip under fatigue",
+      ],
+    },
+    weeklyArchitectureGuidance: {
+      threeDayShape: "Day 1: Hip Drive + Posterior Chain | Day 2: Pulling + Upper | Day 3: Ergo Conditioning + Core",
+      fourDayShape: "Day 1: Hip Drive + Posterior Chain | Day 2: Pulling + Upper | Day 3: Ergo Conditioning | Day 4: Full Body Integration + Trunk",
+    },
+    seasonModulation: {
+      off_season: { volumeModifier: 1.0, intensityModifier: 1.0, conditioningReduction: 1.0, priorityShift: "Build posterior chain strength and aerobic base — the two pillars of rowing performance", mandatoryAdjustments: ["Full ergo conditioning volume", "Progressive deadlift loading", "Pull-up volume"] },
+      pre_season: { volumeModifier: 0.8, intensityModifier: 0.9, conditioningReduction: 0.85, priorityShift: "Race-specific conditioning emphasis — ergo intervals replace steady-state, gym maintained", mandatoryAdjustments: ["Reduce gym volume 20%", "Increase ergo interval intensity"] },
+      in_season: { volumeModifier: 0.6, intensityModifier: 0.85, conditioningReduction: 0.4, priorityShift: "On-water training is primary — gym work is supportive", mandatoryAdjustments: ["2× gym sessions max", "Face pull mandatory for shoulder care", "No heavy deadlift day before race"] },
+      post_season: { volumeModifier: 0.4, intensityModifier: 0.65, conditioningReduction: 0.3, priorityShift: "Rest and lumbar restoration", mandatoryAdjustments: ["Unload the spine", "Light aerobic only", "Shoulder and hip mobility focus"] },
+    },
+    positionOverlays: {},
+    validationRules: ["Deadlift or RDL mandatory", "Pull-up or vertical pull mandatory", "Aerobic conditioning component required", "Anti-flexion trunk work present"],
+    architectureDistinctions: "Rowing demands posterior chain strength AND aerobic capacity together — it is one of the most complete athletic demands. The gym must develop both, and ergo conditioning must be part of the program.",
+  },
+
+  // ── CYCLING ───────────────────────────────────────────────────────────────────
+  cycling: {
+    key: "cycling",
+    displayName: "Cycling",
+    tagline: "Quad and posterior chain strength, single-leg power, aerobic capacity, and positional resilience",
+    physicalQualities: [
+      { quality: "Single-leg pushing force", priority: "primary", description: "Every pedal stroke is a single-leg push — unilateral lower body strength directly transfers to power output" },
+      { quality: "Quad and posterior chain strength balance", priority: "primary", description: "Cycling overloads quads and underloads hamstrings, glutes, and upper back — imbalance creates injury and limits power" },
+      { quality: "Aerobic capacity", priority: "primary", description: "Cycling is aerobic — endurance performance depends on VO2max, lactate threshold, and aerobic efficiency" },
+      { quality: "Positional resilience (hip flexors, neck, upper back)", priority: "secondary", description: "Prolonged riding position shortens hip flexors, loads the neck, and rounds the upper back — these must be counterbalanced" },
+      { quality: "Core stability under sustained load", priority: "secondary", description: "Trunk stiffness transfers leg power through the bike — a soft trunk loses watts on every pedal stroke" },
+    ],
+    conditioning: {
+      primaryEnergySystem: "Aerobic — road cycling and endurance events are primarily aerobic",
+      secondaryEnergySystem: "Alactic and glycolytic (sprints, climbs, race attacks)",
+      weeklyVolume: "Gym conditioning is minimal — bike sessions provide primary aerobic training",
+      sessionFormat: "Gym work serves the bike, not the other way around. No additional aerobic conditioning in gym unless athlete is very deconditioned.",
+      antiPattern: "Do NOT program gym cardio for cyclists who already ride 10+ hours per week. Do NOT program exclusively quad-dominant lower body — cycling already overdevelops quads.",
+      sportNote: "Cyclists are already in high aerobic training volume. Gym work must counterbalance cycling imbalances (hip flexor tightness, quad dominance, upper back rounding) and build single-leg force production.",
+    },
+    sessionArchetypes: [
+      { name: "Single-Leg Strength + Posterior Chain", intent: "RFESS, single-leg RDL, hip thrust — counterbalance quad dominance and build the posterior chain that cycling neglects", primaryFocus: ["unilateral_lower", "hinge", "squat"], recoveryPriority: "high" },
+      { name: "Upper Back + Postural Resilience", intent: "Row, face pull, thoracic extension — reverse the forward-flexed cycling position and rebuild upper structural balance", primaryFocus: ["upper_pull", "upper_push", "trunk"], recoveryPriority: "low" },
+      { name: "Core + Hip Mobility + Power", intent: "Anti-extension trunk, hip flexor eccentric loading, lateral bounds — positional resilience and torque transfer through the pelvis", primaryFocus: ["trunk", "lateral", "power", "hinge"], recoveryPriority: "moderate" },
+    ],
+    exerciseEmphasis: {
+      mustInclude: ["RFESS or Bulgarian split squat (single-leg quad and glute)", "Hip thrust or single-leg RDL (posterior chain counterbalance)", "Bent-over row or TRX row (reverse upper back rounding)", "Dead bug or hollow body (trunk for power transfer)", "Hip flexor eccentric loading (counterbalance shortened hip flexors)"],
+      preferred: ["Face pull", "Pallof press", "Copenhagen plank (adductor for saddle position)", "Step-up with control", "Band pull-apart", "Thoracic extension over foam roller"],
+      reduced: ["Quad-dominant bilateral exercises (leg press, leg extension) as primary work — cycling already overdevelops these", "Heavy aerobic conditioning in gym on top of riding volume"],
+      eliminated: ["Additional long aerobic sessions in the gym — riders already have sufficient cardiovascular load", "Pure quad-dominant programs that worsen the cycling imbalance"],
+      tissueConsiderations: [
+        "Hip flexor — chronic shortening from riding position; eccentric loading and stretching mandatory",
+        "Knee (IT band and patellar tracking) — single-leg strength and lateral stability",
+        "Lower back — sustained flexion; posterior chain and anti-extension trunk work protective",
+        "Neck and upper traps — forward riding position creates chronic upper trap loading",
+        "Saddle pressure issues — Copenhagen plank and adductor strengthening",
+      ],
+    },
+    weeklyArchitectureGuidance: {
+      threeDayShape: "Day 1: Single-Leg + Posterior Chain | Day 2: Upper Back + Postural | Day 3: Core + Hip Mobility + Power",
+      fourDayShape: "Day 1: Single-Leg + Posterior | Day 2: Upper + Postural | Day 3: Core + Power | Day 4: Full Body Balance + Trunk",
+    },
+    seasonModulation: {
+      off_season: { volumeModifier: 1.0, intensityModifier: 1.0, conditioningReduction: 1.0, priorityShift: "Build posterior chain strength, single-leg power, and structural imbalance correction", mandatoryAdjustments: ["Full posterior chain development", "Hip flexor eccentric program", "Upper back structural work"] },
+      pre_season: { volumeModifier: 0.8, intensityModifier: 0.9, conditioningReduction: 0.8, priorityShift: "Sharpen single-leg power — transition from bilateral to fully unilateral emphasis", mandatoryAdjustments: ["Increase single-leg work", "Reduce heavy bilateral volume", "Maintain postural work"] },
+      in_season: { volumeModifier: 0.5, intensityModifier: 0.8, conditioningReduction: 0.2, priorityShift: "Maintenance — bike training load is at peak; gym is minimal and specific", mandatoryAdjustments: ["2× sessions max", "Face pull every session", "No heavy lower body day before key rides or races"] },
+      post_season: { volumeModifier: 0.4, intensityModifier: 0.65, conditioningReduction: 0.15, priorityShift: "Structural restoration — hip flexor recovery, upper back restoration", mandatoryAdjustments: ["Hip mobility priority", "Deload lower body", "Shoulder and upper back restoration"] },
+    },
+    positionOverlays: {},
+    validationRules: ["RFESS or single-leg lower body mandatory", "Hip thrust or posterior chain mandatory", "Row or upper back pulling work mandatory", "Hip flexor care present", "No additional gym cardio"],
+    architectureDistinctions: "Cyclists already have extreme aerobic volume and quad-dominant training. Gym work must counterbalance — posterior chain, single-leg strength, upper back, and hip mobility. Adding more quad work or aerobic conditioning in the gym makes imbalances worse, not better.",
+  },
 };
 
 // ─── Sport Normalization ──────────────────────────────────────────────────────
@@ -896,8 +1222,14 @@ export function mapSportToProfile(sport: string | null): SportProfile | null {
   if (s.includes("hockey")) return SPORT_PROFILES.hockey;
   if (s.includes("rugby")) return SPORT_PROFILES.rugby;
   if (s.includes("lacrosse")) return SPORT_PROFILES.lacrosse;
-  if (s.includes("track") || s.includes("sprint")) return SPORT_PROFILES.track;
+  if (s.includes("track") || s.includes("sprint") || s.includes("sprinting")) return SPORT_PROFILES.track;
   if (s.includes("volleyball")) return SPORT_PROFILES.volleyball;
+  if (s.includes("tennis") || s.includes("racket") || s.includes("racquet") || s.includes("squash") || s.includes("pickleball") || s.includes("padel")) return SPORT_PROFILES.tennis;
+  if (s.includes("mma") || s.includes("jiu-jitsu") || s.includes("jiu jitsu") || s.includes("bjj") || s.includes("wrestling") || s.includes("judo") || s.includes("boxing") || s.includes("muay thai") || s.includes("martial arts") || s.includes("combat") || s.includes("grappling") || s.includes("kickboxing")) return SPORT_PROFILES.combat_sports;
+  if (s.includes("swim") || s.includes("swimming") || s.includes("pool")) return SPORT_PROFILES.swimming;
+  if (s.includes("golf") || s.includes("golfer")) return SPORT_PROFILES.golf;
+  if (s.includes("rowing") || s.includes("crew") || s.includes("sculling") || s.includes("ergo") || s.includes("ergometer")) return SPORT_PROFILES.rowing;
+  if (s.includes("cycling") || s.includes("cyclist") || s.includes("biking") || s.includes("triathlon") || s.includes("triathlete") || s.includes("road bike") || s.includes("mountain bike")) return SPORT_PROFILES.cycling;
 
   // Keyword-based detection for non-standard sport names
   if (/\b(lineman|linebacker|defensive|quarterback|wide receiver|running back|corner|safety)\b/.test(s)) return SPORT_PROFILES.football;

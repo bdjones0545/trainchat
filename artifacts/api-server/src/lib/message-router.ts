@@ -95,6 +95,12 @@ const SPORT_MESSAGE_PATTERNS: Record<string, RegExp> = {
   hockey: /\b(hockey|ice hockey|nhl|puck)\b/i,
   track: /\b(track|sprinter|distance.runner|100m|200m|400m|800m|track.and.field|cross.country)\b/i,
   volleyball: /\b(volleyball|setter|libero|outside.hitter|middle.blocker)\b/i,
+  tennis: /\b(tennis|racket|racquet|squash|pickleball|padel|serve|forehand|backhand|deuce|match point|tennis player|racket sport)\b/i,
+  combat_sports: /\b(mma|ufc|jiu.?jitsu|bjj|wrestling|judo|boxing|muay thai|kickboxing|martial arts|combat sports|grappling|fighter|fight camp|cage|ring|submission|takedown|sparring)\b/i,
+  swimming: /\b(swimming|swimmer|swim team|freestyle|backstroke|breaststroke|butterfly|swim meet|pool|lap swimming|open water|aquatics)\b/i,
+  golf: /\b(golf|golfer|pga|tee|fairway|swing|drive|iron|wedge|putt|course|handicap|golf fitness|golf performance)\b/i,
+  rowing: /\b(rowing|crew|sculling|rower|regatta|ergo|ergometer|erg|boat|coxswain|sweep|scull)\b/i,
+  cycling: /\b(cycling|cyclist|road bike|mountain bike|triathlon|triathlete|velodrome|gran.?fondo|century ride|bike race|criterium|peloton|biking|pedaling|watts|cadence|vo2 max cycling)\b/i,
 };
 
 // ─── Season Detection Vocabulary ──────────────────────────────────────────────

@@ -538,11 +538,19 @@ When the user mentions a sport, the program MUST reflect the demands of that spo
 
 **BASEBALL / SOFTBALL:** Rotational power, scapular and cuff control, trunk stiffness, anti-rotation, single-leg strength. Minimal high-volume overhead pressing. Include: med ball rotational throw, Pallof press, landmine press, single-leg RDL, face pull.
 
-**TENNIS / RACKET SPORTS:** Rotational power, deceleration, wrist/elbow tolerance, unilateral lower body, scapular stability, anti-rotation trunk. Include: med ball rotational throw, split squat, lateral lunge, Copenhagen plank.
+**TENNIS / RACKET SPORTS (tennis, squash, pickleball, padel):** Rotational power, deceleration, reactive split-step mechanics, wrist/elbow tolerance, unilateral lower body, scapular stability, anti-rotation trunk. Include: med ball rotational throw, split squat, lateral lunge, Copenhagen plank, face pull and external rotation every upper session.
 
 **TRACK / SPRINTING:** Acceleration mechanics, single-leg power, hip extension, posterior chain strength, minimal hypertrophy volume. Include: broad jumps, bounds, trap bar deadlift, single-leg RDL, hip thrust, sled push.
 
-**COMBAT SPORTS / MMA:** Functional strength, isometric tolerance, grip and trunk stiffness, conditioning integration. Include: farmer carry, Pallof press, RKC plank, kettlebell swing, single-leg work.
+**COMBAT SPORTS / MMA / MARTIAL ARTS (boxing, wrestling, BJJ, judo, muay thai, kickboxing):** Functional strength, isometric tolerance, grip and trunk stiffness, conditioning integration across all energy systems. Include: farmer carry, Pallof press, RKC plank, kettlebell swing, pull-ups, single-leg work, and rounds-based conditioning.
+
+**GOLF:** Rotational power, hip-to-shoulder separation, anti-rotation trunk stability, lumbar spine protection, hip and thoracic mobility. Do NOT program heavy explosive or plyometric work — golf is a skill and power sport, not an explosive athletic one. Include: med ball rotational throw, Pallof press, hip thrust, thoracic rotation mobility, hip flexor eccentric loading, single-leg balance.
+
+**SWIMMING:** Shoulder structural health is the FIRST priority — external rotation and scapular care mandatory every session. Pulling strength (vertical and horizontal) transfers directly to stroke mechanics. Trunk stiffness supports streamline position. Do NOT program additional gym cardio — pool training provides this. Include: pull-up or lat pull-down, face pull, band external rotation, dead bug, hollow body hold, Y/T/W scapular exercises.
+
+**ROWING:** Posterior chain strength (hip drive) and pulling endurance are the two pillars. Ergo-based conditioning must be included. Trunk stiffness transfers leg power through the stroke. Include: deadlift or RDL, pull-up, bent-over row, hip thrust, anti-extension trunk work. Include ergo intervals or steady-state conditioning.
+
+**CYCLING:** The gym MUST counterbalance cycling imbalances — quads are already overdeveloped, hip flexors are chronically shortened, upper back is rounded. Do NOT program additional aerobic conditioning — riders already have sufficient load. Include: single-leg RDL, RFESS or Bulgarian split squat, hip thrust, bent-over row, face pull, hip flexor eccentric loading. Prioritize posterior chain and upper back over anything else.
 
 Exercise selection, day focus names, and coaching cues must all reflect the sport context — not just have a generic note tacked on at the end.
 
