@@ -1,0 +1,219 @@
+We are now implementing:
+
+PHASE — MOBILITY / FLEXIBILITY / MOVEMENT SUPPORT SCHEMA
+
+OBJECTIVE:
+Add a real schema and programming layer for mobility, flexibility, activation, tissue tolerance, and movement-support work so TrainChat can program like a more complete coach.
+
+Right now, TrainChat is strong in:
+- strength
+- hypertrophy
+- conditioning
+- power/speed
+- sport architecture
+- re-entry
+
+But it lacks a structured schema for:
+- mobility
+- flexibility
+- movement prep
+- activation
+- recovery / restoration
+- tissue tolerance / resilience work
+
+This is a meaningful gap.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Build a Mobility & Movement Support Engine that allows TrainChat to:
+- prescribe movement prep intelligently
+- add mobility/flexibility work by body region and purpose
+- support re-entry and recovery programming
+- improve sport-specific tissue support
+- respond intelligently to user requests around stiffness, prep, recovery, and resilience
+
+==================================================
+TASK 1 — CREATE MOVEMENT SUPPORT CATEGORIES
+==================================================
+
+Create a schema with categories such as:
+- mobility
+- flexibility
+- activation
+- tissue_tolerance
+- positional_stability
+- recovery_restoration
+- movement_prep
+- cooldown_downregulation
+
+==================================================
+TASK 2 — ADD BODY REGION TAGS
+==================================================
+
+Support tags such as:
+- ankle
+- foot
+- calf
+- knee
+- hip
+- adductor
+- hamstring
+- thoracic_spine
+- shoulder
+- scapular
+- trunk
+- wrist
+- elbow
+- neck if needed
+
+==================================================
+TASK 3 — ADD PURPOSE TAGS
+==================================================
+
+Every mobility/support drill should support one or more purposes:
+- pre_lift_prep
+- sprint_prep
+- upper_body_prep
+- lower_body_prep
+- landing_decel_prep
+- overhead_prep
+- post_session_recovery
+- reentry_support
+- inseason_support
+- sport_resilience
+- warmup
+- cooldown
+
+==================================================
+TASK 4 — ADD MOVEMENT SUPPORT EXERCISE FIELDS
+==================================================
+
+Extend the exercise schema/library so these drills can be programmed meaningfully.
+
+Include fields like:
+- category
+- bodyRegions
+- purposes
+- dosageType (reps, seconds, breaths, distance)
+- defaultDosage
+- sessionPlacement
+- equipment
+- intensityLevel
+- sportTags
+- contraindicationNotes if useful
+- progression/regression relationships
+
+==================================================
+TASK 5 — DEFINE SESSION PLACEMENT RULES
+==================================================
+
+TrainChat should know where to put movement-support work:
+
+- warm-up / prep block
+- primer before main lift
+- between-set filler
+- accessory support block
+- finisher
+- recovery day
+- cooldown
+
+Examples:
+- ankle/hip mobility before squat day
+- decel prep before basketball lower-body session
+- adductor/calf tissue support in soccer plans
+- thoracic/shoulder prep before upper-body or overhead work
+
+==================================================
+TASK 6 — BUILD TRIGGER LOGIC
+==================================================
+
+Activate this engine when user language includes things like:
+- mobility
+- flexibility
+- stiff
+- tight
+- warm-up
+- recovery
+- cooldown
+- activation
+- prep
+- resilience
+- movement quality
+
+Examples:
+- “add mobility”
+- “my hips feel tight”
+- “I need a better warm-up”
+- “add recovery work”
+- “make this more resilient for soccer”
+- “I want a recovery day”
+
+==================================================
+TASK 7 — CONNECT TO EXISTING ENGINES
+==================================================
+
+This schema should enhance current engines:
+
+- re-entry → more movement quality and tissue tolerance
+- soccer → adductor/calf/hamstring resilience
+- basketball → decel/landing prep
+- baseball → shoulder/scap/trunk prep
+- strength days → joint-specific prep blocks
+- in-season → recovery / tissue support emphasis
+
+==================================================
+TASK 8 — SUPPORT USER REQUEST TYPES
+==================================================
+
+TrainChat should be able to handle:
+- “add mobility to this day”
+- “give me a better warm-up”
+- “my hips are tight”
+- “I want more flexibility work”
+- “add recovery work after lower body”
+- “make this more shoulder friendly”
+- “build me a recovery / movement day”
+
+==================================================
+TASK 9 — DEFINE PROGRAMMING RULES
+==================================================
+
+Create basic rules like:
+- warm-up/prep work should be concise and relevant
+- don’t overload sessions with random mobility fluff
+- support work should match the session’s demands
+- flexibility/static work is usually better post-session or separate, unless context says otherwise
+- activation/primer work should sharpen the main work, not fatigue it
+- tissue tolerance work should be targeted and progressive where relevant
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What schema fields/categories were added
+2. What trigger logic was added
+3. How mobility/support work is now placed in sessions
+4. How existing sport/re-entry engines use it
+5. What new request types now work
+6. What exercise library additions are still needed
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat should no longer feel like it only knows:
+- strength work
+- conditioning work
+- power work
+
+It should also know:
+- how to prepare movement
+- how to support tissue
+- how to improve mobility/flexibility intelligently
+- how to build recovery and resilience into the system
+
+Implement this now.
