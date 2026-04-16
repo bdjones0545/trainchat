@@ -1,0 +1,97 @@
+Upgrade TrainChat from single-change mutation → transformation bundles.
+
+PROBLEM:
+“Make day 1 more explosive” only triggers minimal safe change (tempo).
+This is technically correct but not high-quality coaching.
+
+GOAL:
+Each coaching intent must trigger MULTIPLE coordinated changes.
+
+--------------------------------------------------
+STEP 1 — DEFINE TRANSFORMATION BUNDLES
+--------------------------------------------------
+
+Create bundle: EXPLOSIVE_TRANSFORMATION
+
+Minimum required changes (must hit at least 2–3):
+
+1. Primary modification:
+   - reduce reps to 2–4 OR
+   - add velocity intent OR
+   - reduce load % (70–80%)
+
+2. Add explosive movement:
+   - box jump OR
+   - broad jump OR
+   - med ball throw
+
+3. Adjust tempo:
+   - eccentric controlled
+   - concentric explosive
+
+4. Adjust rest:
+   - increase to 2–3+ min
+
+5. Optional:
+   - move explosive work to top of session
+
+--------------------------------------------------
+STEP 2 — ENFORCE MINIMUM TRANSFORMATION COUNT
+--------------------------------------------------
+
+Add validation:
+
+IF intent === explosive
+AND totalStructuralChanges < 2
+→ reject result
+→ escalate to stronger transformation
+
+--------------------------------------------------
+STEP 3 — PRIORITIZE EXERCISE ADDITION
+--------------------------------------------------
+
+If no explosive movement exists:
+→ MUST insert one
+
+This is non-optional.
+
+--------------------------------------------------
+STEP 4 — PREVENT LOW-QUALITY PASS
+--------------------------------------------------
+
+A change is NOT valid if ONLY:
+- description changed
+- tempo changed alone
+
+Must include:
+- exercise OR rep scheme change
+
+--------------------------------------------------
+STEP 5 — UPDATE RESPONSE MESSAGE
+--------------------------------------------------
+
+Instead of:
+“refocused toward explosive qualities”
+
+Say:
+“Added box jumps and adjusted squat for explosive output”
+
+--------------------------------------------------
+STEP 6 — TEST
+--------------------------------------------------
+
+Input:
+“Make day 1 more explosive”
+
+Expected:
+- new explosive movement appears
+- squat adjusted OR replaced
+- reps shift OR tempo shift
+- visible structural difference
+
+--------------------------------------------------
+FINAL RULE
+--------------------------------------------------
+
+TrainChat must behave like a coach making decisions,
+not a system making minimal edits.
