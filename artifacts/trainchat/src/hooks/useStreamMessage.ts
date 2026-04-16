@@ -219,7 +219,38 @@ export function useStreamMessage(): UseStreamMessageResult {
 
         if (!response.ok) {
           const status = response.status;
-          setState((s) => ({ ...s, phase: "error", error: `Request failed (${status})` }));
+          if (status === 402) {
+            // Paywall response — parse body to extract isAnonymous and message.
+            // This is NOT a generic error; it is a conversion trigger.
+            // Set paywallTriggered so the UI can show the correct upgrade modal
+            // instead of a generic error toast.
+            try {
+              const body = await response.json() as {
+                code?: string;
+                error?: string;
+                message?: string;
+                isAnonymous?: boolean;
+              };
+              const isPaywall = body.code === "PAYWALL" || body.error === "MESSAGE_LIMIT_REACHED";
+              setState((s) => ({
+                ...s,
+                phase: "error",
+                error: body.message ?? `Request failed (${status})`,
+                paywallTriggered: isPaywall,
+                paywallIsAnonymous: isPaywall ? (body.isAnonymous ?? false) : false,
+              }));
+            } catch {
+              setState((s) => ({
+                ...s,
+                phase: "error",
+                error: `Request failed (${status})`,
+                paywallTriggered: true,
+                paywallIsAnonymous: false,
+              }));
+            }
+          } else {
+            setState((s) => ({ ...s, phase: "error", error: `Request failed (${status})` }));
+          }
           return null;
         }
 

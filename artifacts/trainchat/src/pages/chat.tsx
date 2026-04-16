@@ -371,6 +371,19 @@ export default function Chat() {
     }
   }, [latestProgram, calibrationScore]);
 
+  // ── Paywall trigger watcher ─────────────────────────────────────────────────
+  // Watches stream.state.paywallTriggered to show the correct conversion modal.
+  // This useEffect is required to avoid stale closure issues: handleSend captures
+  // stream.state at render time, so reading it inside the async callback after
+  // `await stream.send()` returns always sees the pre-send snapshot.
+  // A useEffect that reacts to the live state update is the correct pattern.
+  useEffect(() => {
+    if (stream.state.paywallTriggered) {
+      setPaywallIsAnon(stream.state.paywallIsAnonymous);
+      setShowPaywall(true);
+    }
+  }, [stream.state.paywallTriggered, stream.state.paywallIsAnonymous]);
+
   // ── Scroll handler: detect intentional upward scroll ───────────────────────
   // Attaches to the messages container. If the user scrolls more than 80px above
   // the bottom we mark them as "scrolled up" so we stop fighting their scroll.
@@ -553,11 +566,9 @@ export default function Chat() {
     const result = await stream.send(activeConvoId, content, chatUIContext);
 
     if (!result) {
-      // Check if it was a paywall error (phase = error means stream errored)
-      if (stream.state.error?.includes("402") || stream.state.error?.toLowerCase().includes("limit")) {
-        setPaywallIsAnon(stream.state.paywallIsAnonymous);
-        setShowPaywall(true);
-      }
+      // Paywall and error display is handled by the useEffect that watches
+      // stream.state.paywallTriggered — reading stream.state here would see
+      // a stale closure snapshot from before the async send completed.
       return;
     }
 

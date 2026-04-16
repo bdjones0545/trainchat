@@ -1,0 +1,171 @@
+We need to add DELETE CONTROLS for saved programs and session history in TrainChat.
+
+OBJECTIVE:
+Allow users to clean up old saved programs and old builder/session history safely, without breaking active pointers or the workspace state.
+
+Right now users can create builds, saved programs, and session history, but there is no clean way to delete them. This will quickly create clutter and make the product feel messy.
+
+We need safe deletion behavior with proper pointer repair and confirmation UX.
+
+==================================================
+PRIMARY GOALS
+==================================================
+
+1. Users can delete saved programs
+2. Users can delete session/conversation history
+3. Deleting an active item does not break the app
+4. The workspace always falls back to a safe valid state
+
+==================================================
+TASK 1 — AUDIT DATA OWNERSHIP / RELATIONSHIPS
+==================================================
+
+Before implementing delete, trace the relationships between:
+- saved programs
+- active program pointer
+- conversations/session history
+- messages
+- training system records
+- change logs / version history
+- readiness/session feedback linkage if relevant
+
+I want a clear understanding of:
+- what gets deleted when a program is deleted
+- what gets deleted when a session is deleted
+- what must be preserved
+- what active pointers must be repaired
+
+==================================================
+TASK 2 — ADD DELETE SAVED PROGRAM
+==================================================
+
+Add a safe delete action for saved programs.
+
+Requirements:
+- user can delete a saved program from the appropriate UI
+- confirmation modal required
+- deleting a saved program removes the correct underlying records
+- if the deleted program is the active program:
+  - automatically switch active pointer to another valid program
+  - OR set a clean empty/default workspace
+- no broken active program references after deletion
+
+==================================================
+TASK 3 — ADD DELETE SESSION HISTORY / CONVERSATION
+==================================================
+
+Add a safe delete action for builder/session history entries.
+
+Requirements:
+- user can delete a conversation/session from session history
+- confirmation modal required
+- deleting the active conversation must repair the active pointer
+- no stale conversation route/state after deletion
+- if no sessions remain, fall back to a clean empty workspace
+
+==================================================
+TASK 4 — DEFINE SAFE FALLBACK RULES
+==================================================
+
+After deletion, use this kind of fallback order:
+
+For programs:
+1. most recent remaining valid program
+2. if none remain, empty workspace / no active program state
+
+For conversations/sessions:
+1. most recent remaining valid conversation
+2. if none remain, fresh empty builder state
+
+The app must never remain pointed at deleted objects.
+
+==================================================
+TASK 5 — ADD FRONTEND UI CONTROLS
+==================================================
+
+Add visible delete controls in:
+- saved programs / your systems
+- session history list
+
+Requirements:
+- clean, intentional UI
+- delete control not too easy to hit accidentally
+- confirmation dialog/modal
+- loading state while deleting
+- success state after deletion
+
+If an archive flow does not exist yet, just implement delete cleanly.
+
+==================================================
+TASK 6 — HANDLE DEVICEID + AUTHENTICATED USERS
+==================================================
+
+Deletion must work for:
+- anonymous/device users
+- authenticated users
+
+But:
+- only allow users to delete items they own
+- preserve account data not targeted for deletion
+- repair anonymous/authenticated active pointers correctly
+
+==================================================
+TASK 7 — HANDLE EDGE CASES
+==================================================
+
+Test:
+- delete active program
+- delete inactive program
+- delete only remaining program
+- delete active session
+- delete inactive session
+- delete only remaining session
+- delete on anonymous user
+- delete on authenticated user
+
+Expected:
+- no broken pointers
+- no stale UI
+- no infinite loops
+- no crash when last item disappears
+
+==================================================
+TASK 8 — OPTIONAL SOFT DELETE / ARCHIVE REVIEW
+==================================================
+
+If the current architecture makes hard delete risky, evaluate whether soft delete/archive is preferable.
+
+But if hard delete is already safe and clean, implement that first.
+
+If soft delete is chosen, explain why.
+
+==================================================
+TASK 9 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. What ownership relationships were identified
+2. What delete endpoints/actions were added
+3. How saved program deletion now works
+4. How session history deletion now works
+5. How active pointer repair now works
+6. What frontend controls/modals were added
+7. What edge cases were handled
+8. Whether hard delete or soft delete was used
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Users must be able to clean up their workspace.
+
+Deleting old saved programs and session history should:
+- feel simple
+- feel safe
+- not break the app
+- always leave the system in a valid active state
+
+TrainChat should feel like a controlled workspace, not a cluttered accumulation of old builds.
+
+Implement this now.
