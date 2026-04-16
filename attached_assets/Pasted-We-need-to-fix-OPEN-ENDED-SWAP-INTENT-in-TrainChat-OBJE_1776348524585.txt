@@ -1,0 +1,256 @@
+We need to fix OPEN-ENDED SWAP INTENT in TrainChat.
+
+OBJECTIVE:
+When a user says something like:
+
+- “Swap broad jump for a different exercise”
+- “Give me another exercise here”
+- “Replace this with something else”
+- “Swap this for another jump”
+- “Use a different movement”
+
+the system should AUTOMATICALLY choose a valid substitute exercise and commit it.
+
+Right now the system is treating phrases like “a different exercise” as if they were the literal replacement target, which led to invalid behavior like writing:
+- “a different exercise”
+into the live program.
+
+That is wrong.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Teach TrainChat to handle OPEN-ENDED SWAP REQUESTS as a valid agentic behavior:
+
+1. detect the user wants a swap
+2. detect that the replacement target is OPEN-ENDED, not explicit
+3. automatically choose the best substitute from valid candidates
+4. commit a real canonical exercise
+5. summarize the change clearly
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+If swap intent is clear but replacement target is broad/vague,
+the system should choose a valid substitute automatically.
+
+It should NOT:
+- treat vague language as a literal exercise name
+- fail immediately
+- require unnecessary handholding when safe alternatives exist
+
+==================================================
+TASK 1 — ADD OPEN-ENDED SWAP MODE
+==================================================
+
+In the swap / edit interpretation layer, distinguish between:
+
+A. EXACT_SWAP
+Example:
+- “swap broad jump for box jump”
+
+B. OPEN_ENDED_SWAP
+Example:
+- “swap broad jump for a different exercise”
+- “replace this with something else”
+- “give me another jump”
+- “swap this for another movement”
+
+C. CLARIFICATION_REQUIRED_SWAP
+Only when the target is too unclear or no safe substitute can be chosen
+
+The system currently handles A better than B.
+We need to implement B properly.
+
+==================================================
+TASK 2 — DETECT GENERIC REPLACEMENT LANGUAGE AS INTENT, NOT LITERAL NAME
+==================================================
+
+Phrases like:
+- a different exercise
+- another exercise
+- something else
+- another movement
+- different movement
+- another jump
+- another variation
+- a new exercise here
+
+must be interpreted as:
+OPEN_ENDED_SWAP
+
+NOT as the literal replacement text.
+
+This is a semantic instruction:
+“choose a valid substitute automatically”
+
+not a candidate exercise name.
+
+==================================================
+TASK 3 — AUTO-SELECT BEST SUBSTITUTE FOR OPEN-ENDED SWAP
+==================================================
+
+When swap intent is clear and the replacement is open-ended:
+
+1. identify the current exercise being replaced
+2. retrieve candidate alternatives using:
+   - cluster alternatives
+   - movement-pattern fallback
+   - any valid deterministic substitute source
+   - future intelligent fallback if needed
+3. rank candidates by:
+   - session role
+   - movement similarity
+   - exercise category
+   - training goal / sport context
+   - safety / equipment constraints
+4. select the best valid substitute automatically
+
+Then:
+- commit that real canonical exercise
+- never commit vague placeholder text
+
+==================================================
+TASK 4 — DEFINE DEFAULT SUBSTITUTE SELECTION POLICY
+==================================================
+
+The default substitute should preserve as much of the training intent as possible.
+
+For example:
+Broad Jump → another power / plyometric / jump variation
+not a random unrelated exercise
+
+Priority order should generally be:
+1. same movement family / cluster
+2. same movement pattern + same training role
+3. nearby substitute preserving intent
+4. intelligent fallback if deterministic options are exhausted
+
+==================================================
+TASK 5 — ONLY ASK CLARIFICATION WHEN IT ACTUALLY MATTERS
+==================================================
+
+If multiple alternatives exist but one is clearly the best fit,
+the system should just choose it.
+
+Only ask clarification when:
+- no substitute can be selected safely
+- the user’s direction is materially ambiguous
+- there are multiple very different substitute directions with no best default
+
+Example:
+“Swap broad jump for a different exercise”
+→ no clarification needed, choose best jump/power alternative
+
+Example:
+“Swap this for something better”
+→ clarification may be needed if target and direction are both unclear
+
+==================================================
+TASK 6 — ENFORCE CANONICAL EXERCISE VALIDATION BEFORE COMMIT
+==================================================
+
+Before any swap is written to DB:
+
+Require:
+- replacementExerciseId exists
+- replacementExerciseName is canonical
+- replacement exercise exists in library
+
+Open-ended swap mode must still pass full validation.
+No raw free text may be committed.
+
+==================================================
+TASK 7 — IMPROVE FINAL RESPONSE FOR OPEN-ENDED SWAP
+==================================================
+
+When the system chooses a substitute automatically, final response should say exactly what it selected.
+
+Examples:
+- “Broad Jump replaced with Box Jump.”
+- “Broad Jump replaced with Countermovement Jump to preserve lower-body power intent.”
+- “Pull-Up replaced with Assisted Pull-Up to keep the vertical pull pattern while reducing difficulty.”
+
+Do NOT say:
+- “replaced with a different exercise”
+- “swapped for something else”
+- “a new movement was added”
+
+The user should always know what was actually chosen.
+
+==================================================
+TASK 8 — ADD DEBUG LOGGING
+==================================================
+
+In development, log:
+- original request
+- detected swap mode (exact / open-ended / clarification-required)
+- current exercise
+- candidate list
+- selected substitute
+- ranking reason
+- whether clarification was bypassed
+- whether DB commit succeeded
+
+==================================================
+TASK 9 — TEST REQUIRED SCENARIOS
+==================================================
+
+Test these exact prompts:
+
+1. “Swap broad jump for a different exercise”
+Expected:
+- detects OPEN_ENDED_SWAP
+- chooses a real substitute automatically
+- commits canonical exercise
+- no placeholder text
+
+2. “Give me another jump here”
+Expected:
+- selects another jump/power exercise
+- no clarification unless truly needed
+
+3. “Replace pull-up with something easier”
+Expected:
+- detects open-ended regression swap
+- chooses valid easier substitute automatically
+
+4. “Swap this for another movement”
+Expected:
+- if current target is clear, choose valid substitute
+- if current target is unclear, ask clarification safely
+
+5. “Swap broad jump for box jump”
+Expected:
+- exact swap still works
+- no regression
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. How swap modes are now distinguished
+2. How generic replacement phrases are interpreted
+3. How open-ended swap candidate selection works
+4. What ranking/default selection policy was added
+5. When clarification is still required
+6. How canonical validation before commit is enforced
+7. Which open-ended swap prompts now work correctly
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat must now be able to handle requests like:
+“Swap broad jump for a different exercise”
+
+by automatically choosing a real valid substitute and committing it.
+
+The system should behave like an agent making a sensible swap decision,
+not a parser waiting for the user to specify the exact replacement.
+
+Implement this now.
