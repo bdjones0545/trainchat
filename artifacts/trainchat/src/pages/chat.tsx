@@ -180,6 +180,13 @@ export default function Chat() {
   }>>([]);
   const [showProgramLibrary, setShowProgramLibrary] = useState(false);
   const [isSwitchingProgram, setIsSwitchingProgram] = useState(false);
+  /**
+   * True when the user has just clicked "New Build" / "New Builder Session".
+   * Keeps the right panel in clean-slate state (no old program shown) and
+   * tells the backend to treat this as a fresh build context — not an edit
+   * of the previous program. Cleared once the new program is saved.
+   */
+  const [isNewBuildSession, setIsNewBuildSession] = useState(false);
 
   // Startup state: fail-safe lets the agent render even if auth hangs
   const [forceReady, setForceReady] = useState(false);
@@ -286,11 +293,14 @@ export default function Chat() {
       : null;
 
   // Priority: chat-derived draft > DB system > null (empty state)
-  const displayProgram = latestProgram ?? dbSystemProgram;
+  // During a new build session: suppress the old DB system from the right panel so
+  // the user gets a true clean slate. The panel shows empty state until the new
+  // program is generated and saved.
+  const displayProgram = isNewBuildSession ? latestProgram : (latestProgram ?? dbSystemProgram);
 
   // The program is "in system" if explicitly saved this session OR if
-  // we're showing the DB-backed program (no chat draft, system active)
-  const isInSystem = isSaved || (hasActiveSystem && !latestProgram);
+  // we're showing the DB-backed program (no chat draft, system active, not a new build).
+  const isInSystem = isSaved || (!isNewBuildSession && hasActiveSystem && !latestProgram);
 
   // FIX 8: log auth/user state transitions for debugging
   useEffect(() => {
@@ -491,8 +501,19 @@ export default function Chat() {
         onSuccess: (convo) => {
           queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
           setActiveConvoId(convo.id);
+          // ── New Build Clean Slate ──────────────────────────────────────────
+          // Reset all build-scoped state so the new session starts fresh.
+          // isNewBuildSession suppresses the old DB program from the right panel
+          // and signals the backend to treat this as a clean-context build.
           setLatestProgram(null);
           setIsSaved(false);
+          setIsNewBuildSession(true);
+          setChangeTargets([]);
+          setLastChangeSummary(null);
+          setUndoChangeLogId(null);
+          setUndoVerificationStatus(null);
+          setOperationError(null);
+          // ─────────────────────────────────────────────────────────────────
         },
       }
     );
@@ -520,10 +541,14 @@ export default function Chat() {
       window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
     }
 
+    // During a new build session: strip old program identity from the UI context
+    // so the backend cannot inject the old program name into the AI system prompt.
     const chatUIContext = {
       page: "chat",
-      activeProgramId: activeSystem?.id ?? null,
-      activeProgramName: (activeSystem as any)?.programName ?? null,
+      activeProgramId: isNewBuildSession ? null : (activeSystem?.id ?? null),
+      activeProgramName: isNewBuildSession ? null : ((activeSystem as any)?.programName ?? null),
+      // Signal backend to use only this conversation's history for intent routing
+      newBuildSession: isNewBuildSession || undefined,
     };
     const result = await stream.send(activeConvoId, content, chatUIContext);
 
@@ -573,6 +598,12 @@ export default function Chat() {
 
       if (result.systemSaved) {
         setIsSaved(true);
+        // New program was successfully saved — the build session is complete.
+        // Clear the new-build flag so subsequent edits work normally against
+        // the newly saved program (not treated as another fresh build).
+        if (isNewBuildSession) {
+          setIsNewBuildSession(false);
+        }
       }
       // Vibe edit mutated the DB system — clear the chat draft so the
       // right panel switches to showing the live DB-backed program
@@ -710,6 +741,8 @@ export default function Chat() {
       setIsSaved(true);
       // Clear the chat draft — panel will now show the live DB system
       setLatestProgram(null);
+      // Manual save also completes the new build session
+      setIsNewBuildSession(false);
     } catch (err) {
       console.error("[SaveProgram] Failed:", err);
       setIsSaving(false);
@@ -798,6 +831,9 @@ export default function Chat() {
     setActiveConvoId(id);
     setLatestProgram(null);
     setIsSaved(false);
+    // Switching to an existing conversation is NOT a new build — clear the flag
+    // so the right panel shows whatever program that conversation has in context.
+    setIsNewBuildSession(false);
   }
 
   function handleLogout() {

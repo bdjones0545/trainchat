@@ -474,10 +474,21 @@ Keep it helpful and intelligent, never promotional.`;
 
   // ── Phase A: Intent Classification & Request Routing ─────────────────────
 
+  // Read the new-build-session flag from the request body uiContext.
+  // When true, the user has explicitly started a fresh builder session.
+  // We scope hasAnyProgram to only this conversation's history so the intent
+  // classifier doesn't treat the old DB system as "current program context",
+  // which would bias ambiguous first messages toward EDIT instead of CREATE.
+  const nonStreamUiCtx = (req.body as any)?.uiContext ?? null;
+  const isFreshBuildSession = nonStreamUiCtx?.newBuildSession === true;
+
   // Load both conversation history program AND DB system in parallel.
   // This is critical for cross-conversation continuity: if the user opens a new
   // chat while having an existing program in the DB, the intent classifier must
   // know a program exists so it routes edit requests correctly.
+  // Exception: when isFreshBuildSession = true, we treat the DB system as
+  // non-existent for intent purposes so the agent is not biased toward editing
+  // the old program.
   const [latestStructuredProgram, activeSystem] = await Promise.all([
     Promise.resolve(resolveCurrentProgram(history)),
     getActiveTrainingSystem(userId).catch(() => null),
@@ -488,7 +499,10 @@ Keep it helpful and intelligent, never promotional.`;
 
   // For intent classification, combine both signals: a program exists if it's
   // in either the conversation history OR the live DB system.
-  const hasAnyProgram = hasActiveProgram || hasActiveSystem;
+  // Exception: during a fresh build session, only use conversation-scoped history.
+  const hasAnyProgram = isFreshBuildSession
+    ? hasActiveProgram
+    : (hasActiveProgram || hasActiveSystem);
 
   // Classify the intent — this is the single source of truth for routing
   const intentResult = classifyIntent(parsed.data.content, {
@@ -1352,6 +1366,16 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   }
 
   const streamUIContext = (req.body as any)?.uiContext ?? null;
+  // Read the fresh-build flag passed by the frontend when the user starts a new builder session.
+  // When true: scope intent classification to conversation history only (ignore DB active system)
+  // and strip old program name from the AI system prompt uiContext section.
+  const isFreshBuildSession = streamUIContext?.newBuildSession === true;
+  if (isFreshBuildSession) {
+    logger.info(
+      { conversationId: params.data.id },
+      "[SSE/NewBuild] Fresh build session detected — DB system excluded from intent classification and uiContext stripped from AI prompt"
+    );
+  }
 
   // ── SSE setup ─────────────────────────────────────────────────────────────
   res.setHeader("Content-Type", "text/event-stream");
@@ -1511,7 +1535,11 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
   const hasActiveProgram = latestStructuredProgram !== null;
   const hasActiveSystem = activeSystem !== null;
-  const hasAnyProgram = hasActiveProgram || hasActiveSystem;
+  // During a fresh build session, only use conversation-scoped history for intent classification.
+  // This prevents the old DB system from biasing routing toward EDIT on ambiguous first messages.
+  const hasAnyProgram = isFreshBuildSession
+    ? hasActiveProgram
+    : (hasActiveProgram || hasActiveSystem);
 
   const intentResult = classifyIntent(parsed.data.content, {
     hasActiveProgram: hasAnyProgram,
@@ -1906,6 +1934,14 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   // Stage 5: Apply Changes — AI generates the program (this is the longest stage)
   emit(buildStageEvent("applying", intentResult.type, actionDecision.actionType));
 
+  // For new program builds (or explicit fresh-build sessions), do NOT pass the old
+  // uiContext to the AI. The buildUIContextSection would otherwise inject the old
+  // program's name (e.g. "Active program: 'Program A'") into the system prompt,
+  // causing the AI to anchor on the previous build instead of starting clean.
+  const isNewBuildIntent =
+    intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM";
+  const safeUIContext = (isFreshBuildSession || isNewBuildIntent) ? null : streamUIContext;
+
   let { content: aiContent, structuredData } = await generateAIResponse(
     parsed.data.content,
     history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
@@ -1925,7 +1961,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       neuralContext: streamNeuralContextStr,
       neuralBias: streamNeuralBias,
       neuralImbalances: streamNeuralImbalances,
-      uiContext: streamUIContext,
+      uiContext: safeUIContext,
     }
   );
 

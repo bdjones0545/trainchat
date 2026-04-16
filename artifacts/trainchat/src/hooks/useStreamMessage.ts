@@ -147,6 +147,14 @@ export interface UIContext {
   selectedExerciseId?: number | null;
   selectedExerciseName?: string | null;
   panelState?: string | null;
+  /**
+   * True when the user has explicitly started a new builder session.
+   * Tells the backend to treat this conversation as a clean slate:
+   * - Only use conversation-scoped history for intent classification
+   * - Do NOT inject old active program context into the AI prompt
+   * - Route ambiguous messages toward CREATE rather than EDIT
+   */
+  newBuildSession?: boolean;
 }
 
 interface UseStreamMessageResult {

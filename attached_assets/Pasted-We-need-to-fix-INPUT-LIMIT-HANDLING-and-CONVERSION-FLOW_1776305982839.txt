@@ -1,0 +1,194 @@
+We need to fix INPUT LIMIT HANDLING and CONVERSION FLOW in TrainChat.
+
+OBJECTIVE:
+When a user reaches their input/message limit, the system must NOT show a generic error toast.
+
+Instead, it must trigger the correct conversion flow based on user type:
+- anonymous (deviceId) → prompt free account creation
+- registered unpaid → prompt subscription
+- paid users → should not hit limit (true error if they do)
+
+==================================================
+PRIMARY PROBLEM
+==================================================
+
+Currently:
+- limit reached is treated as a generic error
+- frontend shows “An error occurred” toast
+- no conversion UI is shown
+
+This is incorrect.
+
+Limit reached is NOT an error.
+It is a conversion trigger.
+
+==================================================
+GOAL
+==================================================
+
+Introduce a new outcomeType:
+limit_reached
+
+and handle it explicitly across backend and frontend.
+
+==================================================
+TASK 1 — DETECT LIMIT REACHED IN BACKEND
+==================================================
+
+Wherever input/message limits are enforced:
+
+Instead of:
+- throwing generic errors
+- returning 500/400
+
+Return a structured response:
+
+{
+  "outcomeType": "limit_reached",
+  "userType": "anonymous" | "registered_unpaid" | "paid",
+  "message": "input limit reached"
+}
+
+Ensure this flows through:
+- conversations endpoint
+- edit endpoints
+- any message/send routes
+
+==================================================
+TASK 2 — DETERMINE USER TYPE
+==================================================
+
+User types:
+
+anonymous:
+- isAnonymous === true
+
+registered_unpaid:
+- isAnonymous === false
+- no active subscription
+
+paid:
+- has active subscription
+
+Return correct userType in the limit response.
+
+==================================================
+TASK 3 — FIX FRONTEND OUTCOME HANDLING
+==================================================
+
+Update stream/response handlers:
+
+If outcomeType === "limit_reached":
+
+DO NOT:
+- show error toast
+- treat as failure
+- open right panel
+
+INSTEAD:
+- trigger conversion modal
+
+==================================================
+TASK 4 — CONVERSION MODAL LOGIC
+==================================================
+
+If userType === "anonymous":
+
+Show modal:
+Title: “Save your system — it’s free”
+Description: “Create a free account to keep your progress and continue building”
+CTA: “Create Account (Free)”
+Route: /register (or conversion flow)
+
+--------------------------------------------------
+
+If userType === "registered_unpaid":
+
+Show modal:
+Title: “Unlock your full system”
+Description: “Continue building and evolving your training with full access”
+CTA: “Upgrade to Pro”
+Route: billing/checkout
+
+--------------------------------------------------
+
+If userType === "paid":
+
+- this should not normally happen
+- fallback to error handling/logging
+
+==================================================
+TASK 5 — REMOVE ERROR TOAST FOR LIMIT CASES
+==================================================
+
+Audit all toast triggers.
+
+Ensure:
+limit_reached does NOT trigger:
+- error toast
+- generic failure UI
+
+Only true_failure should trigger error toast.
+
+==================================================
+TASK 6 — PRESERVE CHAT EXPERIENCE
+==================================================
+
+When limit is reached:
+- the last user message should still render
+- the assistant response may show a short message (optional)
+- modal overlays should appear cleanly
+- no broken state
+
+==================================================
+TASK 7 — TEST REQUIRED SCENARIOS
+==================================================
+
+1. DeviceId user hits limit
+Expected:
+- no error toast
+- “Create Account” modal appears
+
+2. Registered unpaid user hits limit
+Expected:
+- no error toast
+- “Upgrade” modal appears
+
+3. Paid user
+Expected:
+- never hits limit
+- or logs real error
+
+4. Normal message
+Expected:
+- no change in behavior
+
+==================================================
+TASK 8 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. Where limit detection was added
+2. How outcomeType is returned
+3. How userType is determined
+4. How frontend handles limit_reached
+5. What modals were added
+6. Where error toast logic changed
+7. Which broken flows are now fixed
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Hitting the input limit should feel like:
+a natural upgrade moment
+
+NOT:
+a system error.
+
+Users should always see the correct next step:
+- Create account (if anonymous)
+- Upgrade (if unpaid)
+
+Implement this now.
