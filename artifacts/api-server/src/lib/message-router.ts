@@ -27,6 +27,7 @@ import { isPowerRequest, isSpeedRequest } from "./power-speed-engine";
 import { mapSportToProfile, detectSeasonContext, type SeasonContext } from "./sport-profile-engine";
 import { needsPeriodizationContext } from "./periodization-engine";
 import { detectReEntryStatus, type ReEntryClassification } from "./re-entry-engine";
+import { detectMobilityRequest, needsMobilityContext } from "./mobility-engine";
 import { type UserProfile } from "./training-intelligence";
 
 // ─── Routing Decision Types ───────────────────────────────────────────────────
@@ -37,6 +38,7 @@ export type DominantDomain =
   | "conditioning"
   | "powerSpeed"
   | "periodization"
+  | "mobility"
   | "base";
 
 export interface SportDetection {
@@ -70,6 +72,7 @@ export interface RoutingDecision {
   season: SeasonDetection;
   reEntry: ReEntryDetection;
   periodization: boolean;
+  mobility: boolean;
   dominantDomain: DominantDomain;
   debug: RoutingDebug;
 }
@@ -201,6 +204,7 @@ function resolveDominantDomain(
   conditioningFromMessage: boolean,
   sportFromMessage: boolean,
   periodizationActive: boolean,
+  mobilityFromMessage: boolean,
   profileGoal: string,
 ): { dominant: DominantDomain; reason: string } {
   // Priority 1: Re-entry always overrides
@@ -218,17 +222,22 @@ function resolveDominantDomain(
     return { dominant: "conditioning", reason: "Live message explicitly requests conditioning work" };
   }
 
-  // Priority 4: Sport-specific context from message
+  // Priority 4: Explicit live message — mobility/movement support
+  if (mobilityFromMessage) {
+    return { dominant: "mobility", reason: "Live message explicitly requests mobility, warm-up, flexibility, or movement support work" };
+  }
+
+  // Priority 5: Sport-specific context from message
   if (sportFromMessage) {
     return { dominant: "sport", reason: "Live message contains sport-specific context" };
   }
 
-  // Priority 5: Periodization need
+  // Priority 6: Periodization need
   if (periodizationActive) {
     return { dominant: "periodization", reason: "Profile or request requires block periodization" };
   }
 
-  // Priority 6: Profile goal
+  // Priority 7: Profile goal
   const g = profileGoal.toLowerCase();
   if (isPowerRequest(g) || isSpeedRequest(g)) {
     return { dominant: "powerSpeed", reason: "Profile goal is power or speed" };
@@ -324,6 +333,14 @@ export function resolveRoutingDecision(
 
   if (periodizationActive) profileSignals.push("periodization context active");
 
+  // ── Mobility detection (message OR goal) ────────────────────────────────
+  const mobilityFromMessage = detectMobilityRequest(userMessage);
+  const mobilityFromProfile = needsMobilityContext("", profileGoal, resolvedSport);
+  const mobilityActive = mobilityFromMessage || mobilityFromProfile;
+
+  if (mobilityFromMessage) messageSignals.push("mobility/movement support request detected from message");
+  if (mobilityFromProfile && !mobilityFromMessage) profileSignals.push("mobility/recovery context from profile");
+
   // ── Priority resolution ───────────────────────────────────────────────────
   const { dominant, reason } = resolveDominantDomain(
     reEntryActive,
@@ -331,6 +348,7 @@ export function resolveRoutingDecision(
     conditioningFromMessage,
     !!sportFromMessage,
     periodizationActive,
+    mobilityFromMessage,
     profileGoal,
   );
 
@@ -342,6 +360,7 @@ export function resolveRoutingDecision(
   if (sportActive) enginesActive.push(`sport:${resolvedSport}`);
   if (resolvedSeason) enginesActive.push(`season:${resolvedSeason}`);
   if (periodizationActive) enginesActive.push("periodization");
+  if (mobilityActive) enginesActive.push("mobility");
   if (enginesActive.length === 0) enginesActive.push("base");
 
   const debug: RoutingDebug = {
@@ -369,6 +388,7 @@ export function resolveRoutingDecision(
       classification: reEntryClassification,
     },
     periodization: periodizationActive,
+    mobility: mobilityActive,
     dominantDomain: dominant,
     debug,
   };
@@ -390,6 +410,7 @@ export function resolveRoutingDecision(
           reEntryFromMessage: !!reEntryFromMsg,
           conditioningFromMessage,
           powerSpeedFromMessage,
+          mobilityFromMessage,
         },
       },
     },

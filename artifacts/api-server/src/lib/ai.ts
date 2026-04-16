@@ -39,6 +39,7 @@ import { buildPowerSpeedContext, isPowerRequest, isSpeedRequest } from "./power-
 import { buildSportContext, mapSportToProfile, detectSeasonContext } from "./sport-profile-engine";
 import { buildPeriodizationContext, needsPeriodizationContext } from "./periodization-engine";
 import { buildReEntryContext, needsReEntryContext } from "./re-entry-engine";
+import { buildMobilityContext } from "./mobility-engine";
 import { resolveRoutingDecision, getResolvedSport, getResolvedSeason, type RoutingDecision } from "./message-router";
 import { validateProgrammingQuality, buildQualityRetryPrompt, type ProgrammingValidationInput } from "./program-quality-validator";
 
@@ -992,6 +993,18 @@ The conversion rule: show intelligence first → build tension → deliver parti
       )
     : "";
 
+  // Mobility & Movement Support engine — activated by live message OR profile recovery/resilience context
+  // Handles: mobility, flexibility, activation, tissue tolerance, warm-up, recovery, sport resilience
+  const mobilityContext = routing.mobility
+    ? "\n\n" + buildMobilityContext({
+        message: userMessage || profile.trainingGoal,
+        sport: resolvedSport,
+        sessionType: profile.trainingGoal,
+        isInSeason: routing.season.context === "in_season",
+        isReEntry: routing.reEntry.active,
+      })
+    : "";
+
   // Priority routing hint — tells the AI which engine dominates when multiple are active
   const routingHint = buildRoutingHint(routing, userMessage);
 
@@ -1011,7 +1024,7 @@ ${profile.sportFocus ? `- Sport / Activity Focus: ${profile.sportFocus}` : ""}
 ${profile.exercisePreferences ? `- Exercise Preferences: ${profile.exercisePreferences}` : ""}
 ${profile.exercisesToAvoid ? `- Exercises to Avoid (NEVER program these): ${profile.exercisesToAvoid}` : ""}
 
-${routingHint}${reEntryContext}${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${conditioningContext}${powerSpeedContext}${sportContext}${periodizationContext}`;
+${routingHint}${reEntryContext}${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${conditioningContext}${powerSpeedContext}${sportContext}${periodizationContext}${mobilityContext}`;
 }
 
 // ─── Routing Hint Builder ─────────────────────────────────────────────────────
@@ -1038,6 +1051,7 @@ function buildRoutingHint(routing: RoutingDecision, _userMessage: string): strin
     conditioning: "CONDITIONING (foregrounded — apply conditioning engine directives as primary framework)",
     sport: "SPORT-SPECIFIC ARCHITECTURE (foregrounded — apply sport engine directives as primary framework)",
     periodization: "BLOCK PERIODIZATION (foregrounded — apply block structure as the primary programming framework)",
+    mobility: "MOBILITY & MOVEMENT SUPPORT (foregrounded — apply mobility engine directives; build targeted prep, tissue tolerance, or recovery work as directed)",
     base: "GENERAL BASE PROGRAMMING",
   };
   lines.push(`Dominant context: ${domainLabel[dominantDomain] ?? dominantDomain}`);
