@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, sessionFeedbackTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
+import { trackLearningEvent } from "../lib/globalLearningService";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -33,6 +34,19 @@ router.post("/session-feedback", requireAuth, async (req, res): Promise<void> =>
         notes: notes ?? null,
       })
       .returning();
+
+    // ── Learning signal: session feedback submitted ────────────────────────
+    trackLearningEvent({
+      userId,
+      eventType: "session_feedback",
+      mutationApplied: false,
+      metadata: {
+        difficultyScore,
+        painResponseScore,
+        energyResponseScore,
+        savedProgramId: savedProgramId ?? null,
+      },
+    });
 
     res.status(201).json({ ...entry, createdAt: entry.createdAt.toISOString() });
   } catch (err) {

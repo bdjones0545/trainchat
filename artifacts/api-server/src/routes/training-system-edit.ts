@@ -29,6 +29,7 @@ import {
   getCurrentWeek,
   getBlockSummary,
 } from "../lib/training-system-service";
+import { trackLearningEvent } from "../lib/globalLearningService";
 import { z } from "zod/v4";
 import { logger } from "../lib/logger";
 
@@ -129,6 +130,19 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       "[SystemEdit] Edit plan ready — applying"
     );
 
+    // ── Learning signal: capture the edit request ──────────────────────────
+    trackLearningEvent({
+      userId,
+      eventType: "edit_request",
+      routeUsed: "deterministic",
+      intentType: editPlan.intent,
+      editSubtype: editPlan.scope,
+      targetScope: targetContext?.type,
+      uiPage: (uiContext as any)?.page,
+      requestText: userRequest,
+      metadata: { source, targetLabel: targetContext?.label },
+    });
+
     // 4. Apply the edit plan to the database
     const editResult = await applyEditPlan(editPlan);
 
@@ -154,6 +168,24 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
     } catch (logErr) {
       logger.error({ logErr, userId }, "[SystemEdit] Failed to persist change log entry (non-fatal)");
     }
+
+    // ── Learning signal: mutation succeeded ───────────────────────────────
+    trackLearningEvent({
+      userId,
+      eventType: "mutation_success",
+      routeUsed: "deterministic",
+      intentType: editPlan.intent,
+      editSubtype: editPlan.scope,
+      targetScope: targetContext?.type,
+      requestText: userRequest,
+      mutationApplied: true,
+      validatorPassed: true,
+      metadata: {
+        appliedCount: editResult.appliedCount,
+        skippedCount: editResult.skippedCount,
+        changeLogId,
+      },
+    });
 
     // 6. Sync coach memories from the edit — same path as the conversation pipeline.
     //    Fire-and-forget: never block the response on memory operations.
@@ -182,6 +214,18 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
     });
   } catch (err) {
     logger.error({ err, userId, userRequest }, "[SystemEdit] Training system edit failed");
+
+    // ── Learning signal: mutation failed ──────────────────────────────────
+    trackLearningEvent({
+      userId,
+      eventType: "mutation_failure",
+      routeUsed: "deterministic",
+      requestText: userRequest,
+      mutationApplied: false,
+      validatorPassed: false,
+      metadata: { errorMessage: err instanceof Error ? err.message : String(err) },
+    });
+
     res.status(500).json({ error: "Failed to process edit request." });
   }
 });

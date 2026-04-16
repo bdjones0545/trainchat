@@ -12,3 +12,4 @@ export * from "./exercises";
 export * from "./knowledge";
 export * from "./exercise-logs";
 export * from "./neural-profile";
+export * from "./global-learning";

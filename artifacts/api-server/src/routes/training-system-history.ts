@@ -12,6 +12,7 @@ import { getActiveTrainingSystem } from "../lib/training-system-service";
 import { getChangeHistory, getChangeDetail } from "../lib/change-log-service";
 import { restoreFromChange } from "../lib/restore-service";
 import { getTodaySession, getCurrentWeek, getBlockSummary } from "../lib/training-system-service";
+import { trackLearningEvent } from "../lib/globalLearningService";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -82,6 +83,14 @@ router.post("/training-system/restore/:changeId", requireAuth, async (req, res):
     }
 
     const result = await restoreFromChange(userId, changeId, activeSystem.id);
+
+    // ── Learning signal: user reverted a change ────────────────────────────
+    trackLearningEvent({
+      userId,
+      eventType: "user_reverted_change",
+      mutationApplied: true,
+      metadata: { changeId, restoredChangeLogId: changeId },
+    });
 
     // Return fresh data alongside the restore result
     const [today, week, block] = await Promise.all([

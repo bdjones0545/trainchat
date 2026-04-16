@@ -3,6 +3,16 @@ import { db, usersTable, conversationsTable, messagesTable, savedProgramsTable, 
 import { eq, count, sql, gte, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { getFunnelMetrics, getRecentEvents } from "../lib/analyticsService";
+import {
+  getLearningReport,
+  buildAllAggregates,
+  buildAggregateForKey,
+  getOpenCandidates,
+  getRecentLearningEvents,
+  generateCandidates,
+  promoteCandidate,
+  dismissCandidate,
+} from "../lib/globalLearningService";
 
 const router: IRouter = Router();
 
@@ -248,6 +258,155 @@ router.delete("/admin/knowledge/:id", requireAuth, requireAdmin, async (req, res
 
   await db.delete(coachingKnowledgeTable).where(eq(coachingKnowledgeTable.id, id));
   res.json({ ok: true });
+});
+
+// ─── Global Learning Layer — Admin Routes ─────────────────────────────────────
+// All routes below are restricted to admins only.
+// They provide read-only visibility and controlled review actions.
+// The live agent NEVER reads from these routes.
+
+/**
+ * GET /api/admin/learning/report
+ * Summary report: top patterns, failures, clarifications, revert rates, candidate counts.
+ * Query params: range ("7d" | "30d" | "all", default "30d")
+ */
+router.get("/admin/learning/report", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const range = (req.query.range as string) ?? "30d";
+  const window = range === "7d" ? 7 : range === "all" ? "all" : 30;
+  try {
+    const report = await getLearningReport(window as 7 | 30 | "all");
+    res.json({ range, ...report });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/admin/learning/aggregates
+ * All normalized key aggregates with success/revert/clarification rates and confidence scores.
+ * Query params: range ("7d" | "30d" | "all", default "30d")
+ */
+router.get("/admin/learning/aggregates", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const range = (req.query.range as string) ?? "30d";
+  const window = range === "7d" ? 7 : range === "all" ? "all" : 30;
+  try {
+    const aggregates = await buildAllAggregates(window as 7 | 30 | "all");
+    res.json({ range, count: aggregates.length, aggregates });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/admin/learning/aggregates/:key
+ * Aggregate for a single normalized request key.
+ * Query params: range ("7d" | "30d" | "all", default "30d")
+ */
+router.get("/admin/learning/aggregates/:key", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const key = req.params.key as string;
+  const range = (req.query.range as string) ?? "30d";
+  const window = range === "7d" ? 7 : range === "all" ? "all" : 30;
+  try {
+    const aggregate = await buildAggregateForKey(key, window as 7 | 30 | "all");
+    res.json({ range, aggregate });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/admin/learning/candidates
+ * All open (non-promoted, non-dismissed) improvement candidates, sorted by confidence.
+ * Query params: limit (default 50)
+ */
+router.get("/admin/learning/candidates", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const limit = Math.min(Number(req.query.limit ?? 50), 200);
+  try {
+    const candidates = await getOpenCandidates(limit);
+    res.json({ count: candidates.length, candidates });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/learning/candidates/generate
+ * Run the aggregation pipeline and generate/update improvement candidates.
+ * This is safe to call repeatedly — it will upsert existing open candidates.
+ * Query params: range ("7d" | "30d" | "all", default "30d")
+ */
+router.post("/admin/learning/candidates/generate", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const range = (req.query.range as string) ?? "30d";
+  const window = range === "7d" ? 7 : range === "all" ? "all" : 30;
+  try {
+    const newCount = await generateCandidates(window as 7 | 30 | "all");
+    res.json({ ok: true, newCandidatesCreated: newCount, range });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/learning/candidates/:id/promote
+ * Mark a candidate as reviewed and accepted (promoted).
+ * This records the decision but does NOT auto-modify any live system logic.
+ * The actual core change must be implemented by an engineer after reviewing this signal.
+ */
+router.post("/admin/learning/candidates/:id/promote", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  try {
+    const ok = await promoteCandidate(id);
+    if (!ok) {
+      res.status(404).json({ error: "Candidate not found" });
+      return;
+    }
+    res.json({ ok: true, id, promoted: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/learning/candidates/:id/dismiss
+ * Dismiss a candidate (will not resurface unless regenerated with stronger evidence).
+ */
+router.post("/admin/learning/candidates/:id/dismiss", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  try {
+    const ok = await dismissCandidate(id);
+    if (!ok) {
+      res.status(404).json({ error: "Candidate not found" });
+      return;
+    }
+    res.json({ ok: true, id, dismissed: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/admin/learning/events
+ * Recent raw learning events (structured signals, not raw chat logs).
+ * Query params: range ("7d" | "30d" | "all", default "30d"), limit (default 100)
+ */
+router.get("/admin/learning/events", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const range = (req.query.range as string) ?? "30d";
+  const limit = Math.min(Number(req.query.limit ?? 100), 500);
+  const window = range === "7d" ? 7 : range === "all" ? "all" : 30;
+  try {
+    const events = await getRecentLearningEvents(limit, window as 7 | 30 | "all");
+    res.json({ range, count: events.length, events });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;
