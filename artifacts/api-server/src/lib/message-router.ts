@@ -29,12 +29,14 @@ import { needsPeriodizationContext } from "./periodization-engine";
 import { detectReEntryStatus, type ReEntryClassification } from "./re-entry-engine";
 import { detectMobilityRequest, needsMobilityContext } from "./mobility-engine";
 import { detectSpecialConsiderations, type SpecialConsiderationContext } from "./special-considerations-engine";
+import { detectReturnFromInjury, type ReturnFromInjuryContext } from "./return-from-injury-engine";
 import { type UserProfile } from "./training-intelligence";
 
 // ─── Routing Decision Types ───────────────────────────────────────────────────
 
 export type DominantDomain =
   | "reEntry"
+  | "returnFromInjury"
   | "sport"
   | "conditioning"
   | "powerSpeed"
@@ -76,6 +78,7 @@ export interface RoutingDecision {
   periodization: boolean;
   mobility: boolean;
   specialConsiderations: SpecialConsiderationContext;
+  returnFromInjury: ReturnFromInjuryContext;
   dominantDomain: DominantDomain;
   debug: RoutingDebug;
 }
@@ -102,6 +105,24 @@ const SEASON_MESSAGE_PATTERNS: Record<NonNullable<SeasonContext>, RegExp> = {
   pre_season: /\b(pre.?season|preseason|training camp|before.?(the.)?season|preparing for season|season starts soon|season.?about to start|camp starts)\b/i,
   post_season: /\b(post.?season|after.?(the.)?season|season.?just ended|recovery.?season|off.?season start)\b/i,
 };
+
+// ─── Return-From-Injury Vocabulary ────────────────────────────────────────────
+
+const RETURN_FROM_INJURY_QUICK_PATTERNS = [
+  /coming\s*back\s*(from|after)\s*(an?\s*)?(\w+\s+)?(injury|sprain|strain|tear|surgery)/i,
+  /returning\s*(from|after)\s*(an?\s*)?(\w+\s+)?(injury|surgery|procedure|sprain|strain)/i,
+  /recovering\s*(from|after)\s*(an?\s*)?(\w+\s+)?(injury|surgery|procedure|sprain|strain)/i,
+  /post.?injury/i,
+  /post.?surgery/i,
+  /post.?op\b/i,
+  /cleared\s*(to train|to exercise|to lift|to return)/i,
+  /tweaked\s*my\s*(knee|shoulder|back|hamstring|hip|ankle|elbow|wrist)/i,
+  /\b(strained|sprained|hurt|injured)\s*my\s*(knee|shoulder|back|hamstring|hip|ankle|elbow|wrist)/i,
+  /my\s*(knee|shoulder|back|hamstring|hip|ankle|elbow|wrist)\s*(has been|keeps?|been)\s*(bothering|hurting|aching|sore)/i,
+  /pain\s*flare/i,
+  /rebuilding\s*after\s*(an?\s*)?(\w+\s+)?(injury|surgery)/i,
+  /easing\s*back\s*(in|into)\s*(training|the gym|lifting)?\s*(after|following)/i,
+];
 
 // ─── Re-Entry Vocabulary ──────────────────────────────────────────────────────
 
@@ -174,6 +195,38 @@ function detectSeasonFromMessage(message: string): SeasonContext | null {
   return null;
 }
 
+// ─── Return-From-Injury Detection from Message ───────────────────────────────
+
+function detectReturnFromInjuryFromMessage(
+  message: string,
+  profileGoal: string,
+  profileInjuries: string,
+): ReturnFromInjuryContext {
+  const hasQuickSignal = RETURN_FROM_INJURY_QUICK_PATTERNS.some((p) => p.test(message));
+  // Also check profile injuries field for stored injury return context
+  const hasProfileInjurySignal =
+    profileInjuries.length > 0 &&
+    /return|recovering|coming\s*back|post.?injury|post.?surgery|cleared|easing\s*back|rebuilding\s*after/i.test(
+      profileInjuries,
+    );
+
+  if (!hasQuickSignal && !hasProfileInjurySignal) {
+    return {
+      detected: false,
+      injuredRegion: "unknown",
+      severity: "unknown",
+      stage: "unclear",
+      matchedSignals: [],
+      requiresConservativeProgramming: false,
+      hasMultipleRegions: false,
+      goalContext: "",
+      notes: [],
+    };
+  }
+
+  return detectReturnFromInjury(message, profileGoal, profileInjuries);
+}
+
 // ─── Re-Entry Detection from Message ─────────────────────────────────────────
 
 function detectReEntryFromMessage(message: string, profileGoal: string): ReEntryClassification | null {
@@ -203,6 +256,7 @@ function detectPowerSpeedFromMessage(message: string): boolean {
 
 function resolveDominantDomain(
   reEntryActive: boolean,
+  returnFromInjuryDetected: boolean,
   powerSpeedFromMessage: boolean,
   conditioningFromMessage: boolean,
   sportFromMessage: boolean,
@@ -211,48 +265,52 @@ function resolveDominantDomain(
   specialConsiderationsDetected: boolean,
   profileGoal: string,
 ): { dominant: DominantDomain; reason: string } {
-  // Priority 0: Special considerations — overrides athletic defaults (but not re-entry safety)
-  // Note: re-entry + special considerations can co-exist; re-entry still wins the dominant slot
-  // but special considerations context is always injected alongside
-
   // Priority 1: Re-entry always overrides
+  // Note: re-entry + return-from-injury or special considerations can co-exist;
+  // re-entry still wins the dominant slot but injury/SC context is always injected alongside
   if (reEntryActive) {
     return { dominant: "reEntry", reason: "Re-entry detected — overrides all other programming defaults" };
   }
 
-  // Priority 2: Special considerations — overrides standard athletic engines
+  // Priority 2: Return from injury — overrides all athletic defaults
+  // More specific and acute than special considerations; takes priority for active injury return
+  if (returnFromInjuryDetected) {
+    return { dominant: "returnFromInjury", reason: "Return-from-injury detected — conservative, region-aware programming mode active; standard athletic defaults suspended" };
+  }
+
+  // Priority 3: Special considerations — overrides standard athletic engines
   // This must come before power/speed/conditioning to prevent athletic-mode defaults
   // from overriding the safety-first programming mode
   if (specialConsiderationsDetected) {
     return { dominant: "specialConsiderations", reason: "Special considerations detected — safety-first programming mode active, standard athletic defaults suspended" };
   }
 
-  // Priority 3: Explicit live message — power/speed
+  // Priority 4: Explicit live message — power/speed
   if (powerSpeedFromMessage) {
     return { dominant: "powerSpeed", reason: "Live message explicitly requests power or speed work" };
   }
 
-  // Priority 4: Explicit live message — conditioning
+  // Priority 5: Explicit live message — conditioning
   if (conditioningFromMessage) {
     return { dominant: "conditioning", reason: "Live message explicitly requests conditioning work" };
   }
 
-  // Priority 5: Explicit live message — mobility/movement support
+  // Priority 6: Explicit live message — mobility/movement support
   if (mobilityFromMessage) {
     return { dominant: "mobility", reason: "Live message explicitly requests mobility, warm-up, flexibility, or movement support work" };
   }
 
-  // Priority 6: Sport-specific context from message
+  // Priority 7: Sport-specific context from message
   if (sportFromMessage) {
     return { dominant: "sport", reason: "Live message contains sport-specific context" };
   }
 
-  // Priority 7: Periodization need
+  // Priority 8: Periodization need
   if (periodizationActive) {
     return { dominant: "periodization", reason: "Profile or request requires block periodization" };
   }
 
-  // Priority 8: Profile goal
+  // Priority 9: Profile goal
   const g = profileGoal.toLowerCase();
   if (isPowerRequest(g) || isSpeedRequest(g)) {
     return { dominant: "powerSpeed", reason: "Profile goal is power or speed" };
@@ -371,9 +429,26 @@ export function resolveRoutingDecision(
     messageSignals.push(`special considerations detected: ${specialConsiderationsCtx.primaryType} (${specialConsiderationsCtx.severity})`);
   }
 
+  // ── Return-from-injury detection (message + profile injuries) ────────────
+  // Detects users who are actively returning from injury, pain flare, or
+  // tissue-specific setbacks. Activates region-specific conservative programming.
+  const returnFromInjuryCtx = detectReturnFromInjuryFromMessage(
+    userMessage,
+    profileGoal,
+    profileInjuries,
+  );
+  const returnFromInjuryActive = returnFromInjuryCtx.detected;
+
+  if (returnFromInjuryActive) {
+    messageSignals.push(
+      `return-from-injury detected: region=${returnFromInjuryCtx.injuredRegion} severity=${returnFromInjuryCtx.severity} stage=${returnFromInjuryCtx.stage}`,
+    );
+  }
+
   // ── Priority resolution ───────────────────────────────────────────────────
   const { dominant, reason } = resolveDominantDomain(
     reEntryActive,
+    returnFromInjuryActive,
     powerSpeedFromMessage,
     conditioningFromMessage,
     !!sportFromMessage,
@@ -386,6 +461,7 @@ export function resolveRoutingDecision(
   // ── Active engines list (for debug) ─────────────────────────────────────
   const enginesActive: string[] = [];
   if (reEntryActive) enginesActive.push("re-entry");
+  if (returnFromInjuryActive) enginesActive.push(`return-from-injury:${returnFromInjuryCtx.injuredRegion}`);
   if (specialConsiderationsActive) enginesActive.push(`special-considerations:${specialConsiderationsCtx.primaryType}`);
   if (conditioningActive) enginesActive.push("conditioning");
   if (powerSpeedActive) enginesActive.push("power-speed");
@@ -422,6 +498,7 @@ export function resolveRoutingDecision(
     periodization: periodizationActive,
     mobility: mobilityActive,
     specialConsiderations: specialConsiderationsCtx,
+    returnFromInjury: returnFromInjuryCtx,
     dominantDomain: dominant,
     debug,
   };
@@ -440,6 +517,9 @@ export function resolveRoutingDecision(
         specialConsiderations: specialConsiderationsActive
           ? { type: specialConsiderationsCtx.primaryType, severity: specialConsiderationsCtx.severity }
           : null,
+        returnFromInjury: returnFromInjuryActive
+          ? { region: returnFromInjuryCtx.injuredRegion, severity: returnFromInjuryCtx.severity, stage: returnFromInjuryCtx.stage }
+          : null,
         sources: {
           sport: sportSource,
           season: seasonSource,
@@ -448,6 +528,7 @@ export function resolveRoutingDecision(
           powerSpeedFromMessage,
           mobilityFromMessage,
           specialConsiderationsFromMessage: specialConsiderationsActive,
+          returnFromInjuryFromMessage: returnFromInjuryActive,
         },
       },
     },

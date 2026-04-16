@@ -41,6 +41,7 @@ import { buildPeriodizationContext, needsPeriodizationContext } from "./periodiz
 import { buildReEntryContext, needsReEntryContext } from "./re-entry-engine";
 import { buildMobilityContext } from "./mobility-engine";
 import { buildSpecialConsiderationsContext, getSpecialConsiderationsClarification, validateSpecialConsiderationsOutput } from "./special-considerations-engine";
+import { buildReturnFromInjuryContext, getReturnFromInjuryClarification, validateReturnFromInjuryOutput } from "./return-from-injury-engine";
 import { resolveRoutingDecision, getResolvedSport, getResolvedSeason, type RoutingDecision } from "./message-router";
 import { validateProgrammingQuality, buildQualityRetryPrompt, type ProgrammingValidationInput } from "./program-quality-validator";
 
@@ -1029,6 +1030,20 @@ The conversion rule: show intelligence first → build tension → deliver parti
       )
     : "";
 
+  // Return-from-injury context — conservative, region-specific programming mode
+  // Injected when return-from-injury is detected from message or profile injuries.
+  // Uses the pre-computed context from the routing decision.
+  const returnFromInjuryContext = routing.returnFromInjury.detected
+    ? "\n\n" + buildReturnFromInjuryContext(routing.returnFromInjury)
+    : "";
+
+  // Return-from-injury clarification — inject a clarification suggestion if needed
+  const returnFromInjuryClarification = routing.returnFromInjury.detected
+    ? buildReturnFromInjuryClarificationHint(
+        getReturnFromInjuryClarification(routing.returnFromInjury)
+      )
+    : "";
+
   // Priority routing hint — tells the AI which engine dominates when multiple are active
   const routingHint = buildRoutingHint(routing, userMessage);
 
@@ -1048,7 +1063,7 @@ ${profile.sportFocus ? `- Sport / Activity Focus: ${profile.sportFocus}` : ""}
 ${profile.exercisePreferences ? `- Exercise Preferences: ${profile.exercisePreferences}` : ""}
 ${profile.exercisesToAvoid ? `- Exercises to Avoid (NEVER program these): ${profile.exercisesToAvoid}` : ""}
 
-${routingHint}${reEntryContext}${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${conditioningContext}${powerSpeedContext}${sportContext}${periodizationContext}${mobilityContext}${specialConsiderationsContext}${specialConsiderationsClarification}`;
+${routingHint}${reEntryContext}${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${conditioningContext}${powerSpeedContext}${sportContext}${periodizationContext}${mobilityContext}${specialConsiderationsContext}${specialConsiderationsClarification}${returnFromInjuryContext}${returnFromInjuryClarification}`;
 }
 
 // ─── Special Considerations Clarification Hint ────────────────────────────────
@@ -1058,6 +1073,15 @@ ${routingHint}${reEntryContext}${intelligenceContext}${exerciseLibraryContext}${
 function buildSpecialConsiderationsClarificationHint(question: string | null): string {
   if (!question) return "";
   return `\n\n## SPECIAL CONSIDERATIONS CLARIFICATION OPPORTUNITY\nIf you are about to build a program and this safety-relevant detail is missing, you MAY ask this one question BEFORE or AFTER building (your judgment — if you can make a safe default assumption, build first then ask):\n"${question}"\nDo NOT ask this question if you can make a safe, reasonable default assumption. Do NOT ask multiple questions. Do NOT delay the build unnecessarily.`;
+}
+
+// ─── Return-From-Injury Clarification Hint ────────────────────────────────────
+// Wraps a clarification question into a soft instruction if one is warranted.
+// Only fires for genuinely ambiguous high-risk injury contexts — NOT for normal requests.
+
+function buildReturnFromInjuryClarificationHint(question: string | null): string {
+  if (!question) return "";
+  return `\n\n## RETURN-FROM-INJURY CLARIFICATION OPPORTUNITY\nIf this safety-relevant detail is missing and would meaningfully change your approach, you MAY ask this one question BEFORE or AFTER building (your judgment — if you can make a safe conservative default assumption, build first then ask):\n"${question}"\nDo NOT ask this question if you can make a safe, reasonable conservative default assumption. Do NOT ask multiple questions. Do NOT delay the build unnecessarily.`;
 }
 
 // ─── Routing Hint Builder ─────────────────────────────────────────────────────
@@ -1080,6 +1104,7 @@ function buildRoutingHint(routing: RoutingDecision, _userMessage: string): strin
   // Priority instruction
   const domainLabel: Record<string, string> = {
     reEntry: "RE-ENTRY / RETURN-TO-TRAINING (highest priority — overrides all other defaults)",
+    returnFromInjury: "RETURN-FROM-INJURY MODE (safety-first — conservative, region-specific programming; standard athletic defaults SUSPENDED; apply return_from_injury engine rules)",
     specialConsiderations: "SPECIAL CONSIDERATIONS MODE (safety-first — standard athletic programming defaults SUSPENDED; apply special_considerations engine rules exclusively)",
     powerSpeed: "POWER & SPEED (foregrounded — apply power/speed engine directives as primary framework)",
     conditioning: "CONDITIONING (foregrounded — apply conditioning engine directives as primary framework)",
@@ -1105,6 +1130,14 @@ function buildRoutingHint(routing: RoutingDecision, _userMessage: string): strin
   // Re-entry dominance note
   if (dominantDomain === "reEntry") {
     lines.push("\nRE-ENTRY OVERRIDE ACTIVE: The user is returning from a training break. ALL programming decisions must be conservative. Do not apply aggressive strength, conditioning, or sport defaults — apply re-entry phase rules first.");
+  }
+
+  // Return-from-injury dominance note
+  if (dominantDomain === "returnFromInjury") {
+    const region = routing.returnFromInjury.injuredRegion?.replace(/_/g, " ").toUpperCase() ?? "UNKNOWN REGION";
+    const stage = routing.returnFromInjury.stage ?? "unclear";
+    const severity = routing.returnFromInjury.severity ?? "unknown";
+    lines.push(`\nRETURN-FROM-INJURY OVERRIDE ACTIVE [${region}]: This user is returning from injury (stage: ${stage}, severity: ${severity}). Standard athletic programming defaults are SUSPENDED. Apply the RETURN-FROM-INJURY MODE rules defined below. Build conservatively, using region-specific filters, gradual progression, and confidence-building language. DO NOT diagnose or prescribe treatment.`);
   }
 
   // Special considerations dominance note
@@ -2072,6 +2105,108 @@ Output the corrected program JSON and a brief confirmation.`;
         logger.info(
           { primaryType: routingDecision.specialConsiderations.primaryType },
           "[SpecialConsiderationsValidator] Safety validation passed cleanly",
+        );
+      }
+    }
+
+    // ── Return-From-Injury Safety Validation + Auto-Retry ─────────────────
+    // Only runs when return-from-injury mode is active and a program was generated.
+    // Checks for region-specific violations (hamstring + sprints, shoulder + overhead,
+    // low back + heavy axial load, knee + plyos, excessive volume/intensity).
+    const shouldRunReturnFromInjuryValidation =
+      structuredData !== null &&
+      isBuildIntent &&
+      routingDecision.returnFromInjury.detected;
+
+    if (shouldRunReturnFromInjuryValidation && structuredData) {
+      const rfiProgram = { days: structuredData.days.map((d) => ({ exercises: d.exercises })) };
+      const rfiValidationResult = validateReturnFromInjuryOutput(
+        cleanContent + " " + JSON.stringify(structuredData),
+        rfiProgram,
+        routingDecision.returnFromInjury,
+      );
+
+      if (!rfiValidationResult.passed && !rfiValidationResult.isWarning) {
+        logger.warn(
+          {
+            reason: rfiValidationResult.reason,
+            injuredRegion: routingDecision.returnFromInjury.injuredRegion,
+            severity: routingDecision.returnFromInjury.severity,
+            stage: routingDecision.returnFromInjury.stage,
+          },
+          "[ReturnFromInjuryValidator] Safety validation failed — running correction pass",
+        );
+
+        const regionLabel = (routingDecision.returnFromInjury.injuredRegion ?? "unknown").replace(/_/g, " ");
+        const rfiCorrectionPrompt = `RETURN-FROM-INJURY SAFETY CORRECTION REQUIRED.
+
+The program you just generated has a safety violation for this return-from-injury user.
+
+VIOLATION: ${rfiValidationResult.reason}
+
+Injured region: ${regionLabel}
+Stage: ${routingDecision.returnFromInjury.stage}
+Severity: ${routingDecision.returnFromInjury.severity}
+
+Please regenerate the program correcting this specific issue. Remember:
+- This user is in RETURN-FROM-INJURY MODE
+- NO explosive/ballistic exercises for the affected region
+- NO max-effort prescriptions or sprint work (especially for hamstring return)
+- NO heavy axial loading for low back return in early stages
+- NO high-impact plyometrics for knee return in early stages
+- NO overhead pressing for shoulder return in early stages
+- Volume: 3–5 working exercises per session, 2–3 sets per pattern
+- Intensity: RPE 4–7, controlled tempo, no near-maximal loading
+- Use regression patterns appropriate to the injured region
+
+Output the corrected program JSON and a brief calm confirmation.`;
+
+        const rfiRetryMessages = [
+          ...baseMessages,
+          { role: "assistant" as const, content: cleanContent },
+          { role: "user" as const, content: rfiCorrectionPrompt },
+        ];
+
+        try {
+          const rfiRetryResult = await callOpenAI(rfiRetryMessages, maxTokens);
+
+          if (rfiRetryResult.structuredData) {
+            const rfiRetryValidation = validateReturnFromInjuryOutput(
+              rfiRetryResult.cleanContent + " " + JSON.stringify(rfiRetryResult.structuredData),
+              { days: rfiRetryResult.structuredData.days.map((d) => ({ exercises: d.exercises })) },
+              routingDecision.returnFromInjury,
+            );
+
+            logger.info(
+              { retryPassed: rfiRetryValidation.passed, retryWarning: rfiRetryValidation.isWarning },
+              "[ReturnFromInjuryValidator] Safety correction pass complete",
+            );
+
+            if (rfiRetryValidation.passed) {
+              cleanContent = rfiRetryResult.cleanContent;
+              structuredData = rfiRetryResult.structuredData;
+            } else {
+              logger.error(
+                { reason: rfiRetryValidation.reason },
+                "[ReturnFromInjuryValidator] Safety correction still failing — returning best available output",
+              );
+            }
+          }
+        } catch (rfiRetryError) {
+          logger.warn({ rfiRetryError }, "[ReturnFromInjuryValidator] Safety correction call failed — returning original output");
+        }
+      } else if (rfiValidationResult.isWarning) {
+        logger.info(
+          {
+            reason: rfiValidationResult.reason,
+            injuredRegion: routingDecision.returnFromInjury.injuredRegion,
+          },
+          "[ReturnFromInjuryValidator] Safety validation passed with warning",
+        );
+      } else {
+        logger.info(
+          { injuredRegion: routingDecision.returnFromInjury.injuredRegion },
+          "[ReturnFromInjuryValidator] Safety validation passed cleanly",
         );
       }
     }
