@@ -23,6 +23,7 @@ import exerciseLogsRouter from "./exercise-logs";
 import neuralProfileRouter from "./neural-profile";
 import predictionsRouter from "./predictions";
 import blockIntelligenceRouter from "./block-intelligence";
+import debugRouter from "./debug";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -60,5 +61,6 @@ router.use(exerciseLogsRouter);
 router.use(neuralProfileRouter);
 router.use(predictionsRouter);
 router.use(blockIntelligenceRouter);
+router.use(debugRouter);
 
 export default router;

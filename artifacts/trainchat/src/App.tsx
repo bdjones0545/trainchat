@@ -14,6 +14,7 @@ import BillingPage from "@/pages/billing";
 import { useGetMe, getGetMeQueryKey, setDefaultHeaders } from "@workspace/api-client-react";
 import { computeRoute, readDeviceId, type UserMode } from "@/lib/routing";
 import { getOrCreateDeviceId } from "@/lib/deviceId";
+import { DeviceResetPanel } from "@/components/debug/DeviceResetPanel";
 
 // Attach the device ID to every API request immediately on module load.
 // Anonymous users are identified server-side via this header when there is
@@ -272,6 +273,49 @@ function Router() {
   );
 }
 
+/**
+ * DebugGate — Reads URL params and exposes console trigger.
+ *
+ * Renders the DeviceResetPanel when:
+ *   - URL contains ?__debug=reset   → full reset flow
+ *   - URL contains ?__debug=inspect → read-only state inspection
+ *   - window.__trainchat_reset() is called in the browser console
+ *
+ * Hidden in normal use — no UI element points to it.
+ */
+function DebugGate() {
+  const queryClient = useQueryClient();
+  const [debugMode, setDebugMode] = useState<"reset" | "inspect" | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const d = params.get("__debug");
+    if (d === "reset") return "reset";
+    if (d === "inspect") return "inspect";
+    return null;
+  });
+
+  useEffect(() => {
+    // Expose a console trigger: window.__trainchat_reset()
+    (window as any).__trainchat_reset = () => setDebugMode("reset");
+    (window as any).__trainchat_inspect = () => setDebugMode("inspect");
+    return () => {
+      delete (window as any).__trainchat_reset;
+      delete (window as any).__trainchat_inspect;
+    };
+  }, [queryClient]);
+
+  if (!debugMode) return null;
+
+  const handleClose = () => {
+    setDebugMode(null);
+    // Remove the debug param from URL without reload
+    const url = new URL(window.location.href);
+    url.searchParams.delete("__debug");
+    window.history.replaceState({}, "", url.toString());
+  };
+
+  return <DeviceResetPanel mode={debugMode} onClose={handleClose} />;
+}
+
 function App() {
   return (
     <ErrorBoundary>
@@ -280,6 +324,7 @@ function App() {
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <Router />
           </WouterRouter>
+          <DebugGate />
           <Toaster />
         </TooltipProvider>
       </QueryClientProvider>
