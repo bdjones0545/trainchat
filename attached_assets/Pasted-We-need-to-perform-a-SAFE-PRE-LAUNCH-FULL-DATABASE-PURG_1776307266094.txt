@@ -1,0 +1,217 @@
+We need to perform a SAFE PRE-LAUNCH FULL DATABASE PURGE for TrainChat.
+
+OBJECTIVE:
+Wipe all existing live/test app data so we can start from a clean slate before real users and real paid usage begin.
+
+IMPORTANT CONTEXT:
+- There are currently NO paying users
+- The live database has only been used for testing
+- We want to preserve the schema, migrations, and infrastructure
+- We want to remove all test/user-generated data and stale state
+- We want to do this safely, deliberately, and with a backup/export first
+
+This is a one-time prelaunch reset.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Remove all test-generated app data while preserving:
+- database schema
+- migrations
+- app configuration
+- environment variables
+- secrets
+- codebase
+- required admin/developer accounts only if explicitly chosen
+
+==================================================
+SAFETY REQUIREMENTS
+==================================================
+
+Before deleting anything:
+
+1. Create a backup/export of the current database state
+2. Print exactly what will be deleted
+3. Require an explicit confirmation variable/flag before executing destructive actions
+4. Preserve schema and migrations
+5. Do NOT touch Stripe configuration or external services unless explicitly required
+6. Do NOT proceed silently
+
+==================================================
+TASK 1 — AUDIT TABLES AND DATA CATEGORIES
+==================================================
+
+Identify all user-generated / runtime data tables that should be purged.
+
+Examples likely include:
+- users (except optional preserved admin accounts if specified)
+- conversations
+- messages
+- training systems / saved programs
+- training phases / session weeks / training sessions / session exercises
+- change logs / version history
+- neural profiles / memory data
+- readiness entries
+- session feedback
+- session logs
+- anonymous/device-auth state data
+- global learning events
+- learning candidates
+- active pointer tables if present
+- any other generated app data
+
+Return a clear list of:
+- table name
+- what it contains
+- whether it should be purged
+
+==================================================
+TASK 2 — CREATE A BACKUP / EXPORT FIRST
+==================================================
+
+Before purge:
+- export or dump the current DB
+- save it with a clear timestamped filename
+- confirm where the backup was written
+
+This backup is mandatory even if the data is “just test data.”
+
+==================================================
+TASK 3 — DEFINE PURGE SCOPE
+==================================================
+
+By default, purge all runtime/test data.
+
+Preserve:
+- schema
+- migrations
+- seed data required for app functionality
+- static reference tables if applicable
+- admin/developer accounts ONLY if explicitly preserved
+
+If there are special tables that should NOT be purged, list them clearly.
+
+==================================================
+TASK 4 — HANDLE FOREIGN KEY ORDER CORRECTLY
+==================================================
+
+Delete in a safe order so foreign key relationships do not break the purge.
+
+If truncation with cascade is appropriate and safe in this DB setup, use it carefully.
+If not, delete in dependency order.
+
+I want the purge to be robust and clean.
+
+==================================================
+TASK 5 — OPTIONALLY PRESERVE ADMIN / DEV ACCESS
+==================================================
+
+If there are specific developer/admin accounts needed for immediate testing after purge, allow an explicit preserve list.
+
+Otherwise:
+- purge all users too
+
+Make this behavior explicit and configurable.
+
+==================================================
+TASK 6 — CLEAR AUTH / ANONYMOUS STATE TABLES
+==================================================
+
+Ensure purge removes:
+- anonymous/deviceId-linked records
+- stale active session pointers
+- stale auth-related app records that would recreate test-state weirdness
+
+We want a true clean slate.
+
+==================================================
+TASK 7 — CLEAR LEARNING / MEMORY / ADAPTATION DATA
+==================================================
+
+Purge:
+- neural profiles
+- user memory
+- readiness/adaptation history
+- session feedback
+- global learning events
+- learning candidates
+
+We do NOT want test behavior influencing the real launch.
+
+==================================================
+TASK 8 — VERIFY STRIPE / BILLING APP DATA STATE
+==================================================
+
+Because there are no paying users, inspect billing-related tables/fields in the app DB.
+
+If there are test-linked customer/subscription records in the app DB:
+- purge them too
+
+But:
+- do NOT modify Stripe products/prices/settings externally
+- do NOT touch real external Stripe configuration unless explicitly needed
+
+Only clean app-side billing records if they are test data.
+
+==================================================
+TASK 9 — ADD EXPLICIT EXECUTION GUARD
+==================================================
+
+Require a deliberate confirmation variable / flag before destructive execution.
+
+Examples:
+- PURGE_MODE=true
+- CONFIRM_PURGE=I_UNDERSTAND_THIS_DELETES_ALL_TEST_DATA
+
+The script/tooling should refuse to execute without explicit confirmation.
+
+==================================================
+TASK 10 — EXECUTE THE PURGE
+==================================================
+
+Once backup is done and confirmation is explicit:
+- perform the purge
+- report row counts removed by table if possible
+- confirm completion
+
+==================================================
+TASK 11 — POST-PURGE VERIFICATION
+==================================================
+
+After purge, verify:
+- schema still exists
+- required static/seed/reference data still exists
+- runtime tables are empty or reset as intended
+- app can still boot
+- no broken foreign key issues remain
+
+Also verify:
+- no stale active program/session/user state remains in DB
+
+==================================================
+TASK 12 — OUTPUT REQUIRED
+==================================================
+
+After completion, return:
+
+1. What tables/data categories were purged
+2. What was preserved
+3. Where the backup/export was saved
+4. Whether any admin/dev accounts were preserved
+5. Any billing-related app records that were purged
+6. Post-purge verification results
+7. Any manual follow-up steps recommended
+
+==================================================
+FINAL STANDARD
+==================================================
+
+After this purge:
+- the database should be clean
+- the app should still boot normally
+- all prior test users/programs/conversations/memory should be gone
+- TrainChat should be ready for fresh real-user testing and launch
+
+This is a one-time prelaunch wipe.
+Do it safely, explicitly, and completely.
