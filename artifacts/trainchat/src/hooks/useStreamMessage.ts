@@ -77,6 +77,10 @@ export interface CompleteEvent {
   };
   editFailure?: { reason: "no_changes_applied" | "pipeline_error" | "verification_failed"; skippedCount?: number; verificationSummary?: string };
   saveFailure?: { reason: string };
+  /** Whether the DB mutation was actually executed, independent of verification outcome. */
+  mutationApplied?: boolean;
+  /** Debug info from the edit-intent routing layer. Present in dev and when pathUsed is available. */
+  routeDebug?: { pathUsed?: "deterministic" | "library_progression" | "rule_based" | "openai"; openaiCalled?: boolean; openaiSucceeded?: boolean; [key: string]: unknown };
 }
 
 export interface StreamErrorEvent {

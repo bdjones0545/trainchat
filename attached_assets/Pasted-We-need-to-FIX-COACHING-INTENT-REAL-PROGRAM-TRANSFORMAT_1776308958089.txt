@@ -1,0 +1,106 @@
+We need to FIX “COACHING INTENT → REAL PROGRAM TRANSFORMATION” in TrainChat.
+
+PROBLEM:
+Requests like “make day 1 more explosive” only update text descriptions, not actual programming structure.
+
+This breaks the core promise of the system.
+
+==================================================
+GOAL
+==================================================
+
+Translate coaching intent into REAL structural changes.
+
+No cosmetic updates.
+Only real program modifications.
+
+==================================================
+TASK 1 — DEFINE EXPLOSIVE TRANSFORMATION RULES
+==================================================
+
+For “explosive”, apply:
+
+1. Primary lift adjustments:
+   - reduce reps (2–4)
+   - maintain or slightly reduce load
+   - add velocity cue
+
+2. Add explosive movement:
+   - box jump
+   - broad jump
+   - med ball throw
+   - jump squat
+
+3. Adjust tempo:
+   - eccentric controlled
+   - concentric explosive
+
+4. Increase rest:
+   - 2–3+ minutes
+
+5. Remove slow hypertrophy accessories if needed
+
+==================================================
+TASK 2 — FORCE STRUCTURAL MUTATION
+==================================================
+
+If intentType === exercise_coaching_transformation:
+
+- must modify at least ONE of:
+  - exercise selection
+  - sets/reps
+  - tempo
+  - rest
+
+If only description changed:
+→ treat as FAILURE
+
+==================================================
+TASK 3 — VALIDATION LAYER
+==================================================
+
+Add validation:
+
+IF mutation does not change:
+- exercises OR
+- sets/reps OR
+- tempo
+
+THEN:
+→ reject result
+→ escalate to OpenAI or fallback logic
+
+==================================================
+TASK 4 — UI CONFIRMATION
+==================================================
+
+Update “Program Updated” card to reflect real changes:
+
+Instead of:
+“refocused toward explosive qualities”
+
+Show:
+“Added box jumps and adjusted squat for explosive output”
+
+==================================================
+TASK 5 — TEST
+==================================================
+
+Input:
+“Make day 1 more explosive”
+
+Expected:
+- visible new exercise OR modified rep scheme
+- not just description text
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Every coaching request must result in a real program change.
+
+No cosmetic updates allowed.
+
+TrainChat is a SYSTEM BUILDER, not a text editor.
+
+Fix this now.

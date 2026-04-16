@@ -578,21 +578,29 @@ export default function Chat() {
       setMessagesUsed(messagesUsed + 1);
     }
 
-    // Error toasts fire ONLY for true_failure outcomes.
+    // Error toasts fire ONLY for true_failure outcomes where the mutation was NOT applied.
     // clarification_needed and conversation_only are never errors — the agent
     // replied normally and may be asking for more information.
     // no_changes_applied is classified as clarification_needed on the backend,
     // so it does NOT trigger an error toast here.
+    // If a non-OpenAI path (deterministic / library_progression / rule_based) was used,
+    // treat it as success regardless of OpenAI outcome.
+    // If the OpenAI path was used, only show error if mutationApplied is explicitly false.
     if (result.outcomeType === "true_failure") {
-      if (operationErrorTimeoutRef.current) clearTimeout(operationErrorTimeoutRef.current);
-      let msg = "Something went wrong while applying that change. Your program has not been modified.";
-      if (result.editFailure?.reason === "verification_failed") {
-        msg = "That change was processed but couldn't be confirmed in your program. Try again with more specifics.";
-      } else if (result.saveFailure) {
-        msg = "Your program couldn't be saved due to a system error. Please try again.";
+      const pathUsed = result.routeDebug?.pathUsed;
+      const nonOpenAIPath = pathUsed && pathUsed !== "openai";
+      const mutationApplied = nonOpenAIPath || result.mutationApplied === true;
+      if (!mutationApplied) {
+        if (operationErrorTimeoutRef.current) clearTimeout(operationErrorTimeoutRef.current);
+        let msg = "Something went wrong while applying that change. Your program has not been modified.";
+        if (result.editFailure?.reason === "verification_failed") {
+          msg = "That change was processed but couldn't be confirmed in your program. Try again with more specifics.";
+        } else if (result.saveFailure) {
+          msg = "Your program couldn't be saved due to a system error. Please try again.";
+        }
+        setOperationError(msg);
+        operationErrorTimeoutRef.current = setTimeout(() => setOperationError(null), 7000);
       }
-      setOperationError(msg);
-      operationErrorTimeoutRef.current = setTimeout(() => setOperationError(null), 7000);
     }
 
     if (result.systemEdit?.applied || result.systemSaved) {

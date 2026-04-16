@@ -1786,6 +1786,8 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
               ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: failedMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure" }),
               systemEdit: { applied: false },
               editFailure: { reason: "verification_failed", verificationSummary: verification.summary },
+              mutationApplied: true,
+              ...(editPlan._debugRoute ? { routeDebug: { ...editPlan._debugRoute } } : {}),
             });
             return;
           }
@@ -1898,6 +1900,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: errMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure" }),
         systemEdit: { applied: false },
         editFailure: { reason: "pipeline_error" },
+        mutationApplied: false,
       });
       return;
     }
