@@ -1116,7 +1116,7 @@ export default function Chat() {
                     e.stopPropagation();
                     setDeleteConfirm({ type: "program", id: prog.id, name: prog.name });
                   }}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-muted-foreground/0 group-hover:text-muted-foreground/50 hover:!text-destructive hover:bg-destructive/10 transition-all"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-muted-foreground/40 hover:!text-destructive active:!text-destructive hover:bg-destructive/10 active:bg-destructive/10 transition-all"
                   title="Delete program"
                 >
                   <Trash2 className="w-3 h-3" />
@@ -1187,7 +1187,7 @@ export default function Chat() {
                   e.stopPropagation();
                   setDeleteConfirm({ type: "convo", id: convo.id, name: convo.title ?? "Session" });
                 }}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-muted-foreground/0 group-hover:text-muted-foreground/40 hover:!text-destructive hover:bg-destructive/10 transition-all"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-muted-foreground/40 hover:!text-destructive active:!text-destructive hover:bg-destructive/10 active:bg-destructive/10 transition-all"
                 title="Delete session"
               >
                 <Trash2 className="w-3 h-3" />
