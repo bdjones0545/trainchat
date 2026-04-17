@@ -4,7 +4,7 @@ import {
   Dumbbell, Save, CheckCircle, Loader2, Lock, Zap, PlayCircle,
   MessageSquare, ChevronDown, ChevronUp, TrendingUp, LayoutGrid,
   Calendar, Clock, RotateCcw, GitBranch, Activity, Layers,
-  AlertCircle, RefreshCw,
+  AlertCircle, RefreshCw, Send,
 } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
 import type { ProgramStructure } from "./ChatOutput";
@@ -355,13 +355,13 @@ function EmptyProgramState() {
 
 // ─── Vibe refinement chip definitions ────────────────────────────────────────
 
-const GLOBAL_CHIPS: { label: string; message: string; icon: string }[] = [
-  { label: "More Explosive", message: "Make this program more explosive", icon: "⚡" },
-  { label: "More Strength", message: "Make this program more strength focused", icon: "💪" },
-  { label: "More Endurance", message: "Add more endurance work to this program", icon: "🔁" },
-  { label: "Shorter Sessions", message: "Shorten all sessions", icon: "⏱" },
-  { label: "Lower Impact", message: "Make this program lower impact", icon: "🦵" },
-  { label: "Home Gym Version", message: "Convert this to a home gym version", icon: "🏠" },
+const GLOBAL_CHIPS: { label: string; message: string }[] = [
+  { label: "More Explosive", message: "Make this program more explosive" },
+  { label: "More Strength", message: "Make this program more strength focused" },
+  { label: "More Endurance", message: "Add more endurance work to this program" },
+  { label: "Shorter Sessions", message: "Shorten all sessions" },
+  { label: "Lower Impact", message: "Make this program lower impact" },
+  { label: "Home Gym Version", message: "Convert this program for a home gym" },
 ];
 
 const SESSION_ACTIONS: { label: string; buildMessage: (dayNum: number) => string }[] = [
@@ -370,6 +370,12 @@ const SESSION_ACTIONS: { label: string; buildMessage: (dayNum: number) => string
   { label: "Harder", buildMessage: (d) => `Make Day ${d} harder` },
   { label: "Shorter", buildMessage: (d) => `Make Day ${d} shorter` },
   { label: "Add Exercise", buildMessage: (d) => `Add an exercise to Day ${d}` },
+];
+
+const EXERCISE_ACTIONS: { label: string; buildMessage: (name: string) => string }[] = [
+  { label: "Swap", buildMessage: (n) => `Swap ${n} with something similar` },
+  { label: "Easier", buildMessage: (n) => `Make ${n} easier` },
+  { label: "Harder", buildMessage: (n) => `Make ${n} harder` },
 ];
 
 function ProgramTab({
@@ -418,7 +424,11 @@ function ProgramTab({
     };
   }, [buildingState?.isBuilding, pendingRefinement]);
 
-  function sendRefinement(message: string, key: string, options?: Record<string, unknown>) {
+  function sendRefinement(
+    message: string,
+    key: string,
+    options?: Record<string, unknown>,
+  ) {
     if (!onSendMessage || buildingState?.isBuilding) return;
     setPendingRefinement(key);
     onSendMessage(message, { source: "right_panel", ...options });
@@ -428,7 +438,7 @@ function ProgramTab({
     const msg = refineInput.trim();
     if (!msg || !onSendMessage || buildingState?.isBuilding) return;
     setRefineInput("");
-    sendRefinement(msg, "refine-input");
+    sendRefinement(msg, "refine-input", { interactionType: "freeform_refine" });
   }
 
   // ── Session mode ─────────────────────────────────────────────────────────
@@ -682,61 +692,66 @@ function ProgramTab({
         </div>
       )}
 
-      {/* Program header */}
-      <div className="p-4 border-b border-border flex-shrink-0">
-        {(program.weekNumber || program.blockLabel) && (
-          <div className="flex items-center gap-1.5 mb-2">
-            <Calendar className="w-3 h-3 text-primary/60" />
-            <span className="text-[10px] text-primary/70 font-medium">
-              {program.weekNumber && `Week ${program.weekNumber}`}
-              {program.weekNumber && program.blockLabel && " · "}
-              {program.blockLabel}
+      {/* ── Program Summary Card ───────────────────────────────────────────── */}
+      <div className="px-4 pt-4 pb-3 border-b border-border flex-shrink-0">
+        {/* Live status row */}
+        <div className="flex items-center gap-2 mb-3">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse flex-shrink-0" style={{ animationDuration: "2s" }} />
+            <span className="text-[9px] font-bold text-primary uppercase tracking-[0.14em] truncate">
+              Live Program
             </span>
           </div>
-        )}
-
-        <div className="flex items-center gap-1.5 mb-1.5">
-          <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" style={{ animationDuration: "2s" }} />
-          <span className="text-[9px] font-bold text-primary uppercase tracking-[0.12em]">
-            Live Program (Auto-Updating)
-          </span>
+          {(program.weekNumber || program.blockLabel) && (
+            <span className="ml-1 text-[9px] text-muted-foreground/60 font-medium truncate">
+              {program.weekNumber ? `Week ${program.weekNumber}` : ""}
+              {program.weekNumber && program.blockLabel ? " · " : ""}
+              {program.blockLabel ?? ""}
+            </span>
+          )}
           {!isPremium && (
-            <span className="ml-auto text-[9px] font-semibold text-amber-400/70 flex items-center gap-1">
+            <span className="ml-auto text-[9px] font-semibold text-amber-400/80 flex items-center gap-1 flex-shrink-0">
               <Lock className="w-2.5 h-2.5" /> Preview
             </span>
           )}
         </div>
 
-        <h3 className="text-sm font-semibold text-foreground leading-snug mb-2">
+        {/* Program title */}
+        <h3 className="text-[15px] font-bold text-foreground leading-snug mb-2.5 tracking-tight">
           {program.programName}
         </h3>
 
+        {/* Meta chips */}
         {(program.splitType || days.length > 0) && (
-          <div className="flex items-center gap-3 mb-2">
+          <div className="flex flex-wrap items-center gap-2 mb-2.5">
             {program.splitType && (
-              <div className="flex items-center gap-1">
-                <LayoutGrid className="w-3 h-3 text-muted-foreground" />
-                <span className="text-[10px] text-muted-foreground">{program.splitType}</span>
-              </div>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent/50 border border-border/60 text-[10px] text-muted-foreground font-medium">
+                <LayoutGrid className="w-3 h-3 opacity-60" />
+                {program.splitType}
+              </span>
             )}
-            <div className="flex items-center gap-1">
-              <Dumbbell className="w-3 h-3 text-muted-foreground" />
-              <span className="text-[10px] text-muted-foreground">{days.length} days/week</span>
-            </div>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent/50 border border-border/60 text-[10px] text-muted-foreground font-medium">
+              <Dumbbell className="w-3 h-3 opacity-60" />
+              {days.length} days/week
+            </span>
           </div>
         )}
 
+        {/* Description — clamped to 3 lines */}
         {program.description && (
-          <p className="text-[11px] text-foreground/70 leading-relaxed mb-3 font-medium">
+          <p
+            className="text-[11px] text-foreground/65 leading-relaxed mb-3"
+            style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+          >
             {program.description}
           </p>
         )}
 
-        {/* Continuity chip — last applied change */}
+        {/* Last change continuity */}
         {!isUpdating && lastChangeSummary && (
           <div className="flex items-center gap-1.5 mb-3 px-2.5 py-1.5 rounded-lg bg-primary/5 border border-primary/10">
             <div className="w-1.5 h-1.5 rounded-full bg-green-400/70 flex-shrink-0" />
-            <span className="text-[10px] text-muted-foreground/75 truncate leading-snug">
+            <span className="text-[10px] text-muted-foreground/70 truncate leading-snug">
               Last change: {lastChangeSummary}
             </span>
           </div>
@@ -748,41 +763,8 @@ function ProgramTab({
             className="flex items-center gap-1.5 mb-3 px-2.5 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20"
             style={{ animation: "fadeSlideIn 0.2s ease both" }}
           >
-            <CheckCircle className="w-3 h-3 text-green-400 flex-shrink-0" />
+            <CheckCircle className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
             <span className="text-[10px] font-semibold text-green-400">Program Updated</span>
-          </div>
-        )}
-
-        {/* Global refinement chips */}
-        {onSendMessage && (
-          <div className="mb-3">
-            <p className="text-[9px] font-bold text-muted-foreground/50 uppercase tracking-[0.1em] mb-1.5">Quick Refine</p>
-            <div className="flex flex-wrap gap-1.5">
-              {GLOBAL_CHIPS.map((chip) => {
-                const key = `global-${chip.label}`;
-                const isLoading = pendingRefinement === key;
-                const isDisabled = !!buildingState?.isBuilding;
-                return (
-                  <button
-                    key={chip.label}
-                    onClick={() => sendRefinement(chip.message, key)}
-                    disabled={isDisabled}
-                    className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold border transition-all duration-150 active:scale-95 ${
-                      isLoading
-                        ? "bg-primary/20 border-primary/40 text-primary"
-                        : "bg-muted/40 border-border/60 text-muted-foreground hover:bg-accent hover:text-foreground hover:border-primary/30"
-                    } disabled:opacity-40 disabled:cursor-not-allowed`}
-                  >
-                    {isLoading ? (
-                      <Loader2 className="w-2.5 h-2.5 animate-spin flex-shrink-0" />
-                    ) : (
-                      <span className="text-[10px] leading-none">{chip.icon}</span>
-                    )}
-                    {chip.label}
-                  </button>
-                );
-              })}
-            </div>
           </div>
         )}
 
@@ -827,6 +809,76 @@ function ProgramTab({
           )}
         </div>
       </div>
+
+      {/* ── Refinement Section: Chips + Freeform Input ─────────────────────── */}
+      {onSendMessage && (
+        <div className="px-4 py-3.5 border-b border-border flex-shrink-0 space-y-3">
+          {/* Section label */}
+          <p className="text-[9px] font-bold text-muted-foreground/50 uppercase tracking-[0.14em]">
+            Refine this program
+          </p>
+
+          {/* Global chips — 36px height */}
+          <div className="flex flex-wrap gap-2">
+            {GLOBAL_CHIPS.map((chip) => {
+              const key = `global-${chip.label}`;
+              const isLoading = pendingRefinement === key;
+              const isDisabled = !!buildingState?.isBuilding;
+              return (
+                <button
+                  key={chip.label}
+                  onClick={() => sendRefinement(chip.message, key, { interactionType: "global_chip" })}
+                  disabled={isDisabled}
+                  className={`h-9 inline-flex items-center gap-1.5 px-3.5 rounded-full text-[11px] font-semibold border transition-all duration-150 active:scale-95 select-none ${
+                    isLoading
+                      ? "bg-primary/15 border-primary/50 text-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.2)]"
+                      : "bg-muted/30 border-border text-muted-foreground hover:border-primary/40 hover:text-foreground hover:bg-accent/60"
+                  } disabled:opacity-40 disabled:cursor-not-allowed`}
+                >
+                  {isLoading && (
+                    <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
+                  )}
+                  {chip.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Freeform refine input */}
+          <div>
+            <div
+              className={`flex items-center gap-2 rounded-xl border bg-muted/20 px-3 transition-colors ${
+                buildingState?.isBuilding ? "opacity-50" : "border-border focus-within:border-primary/40 focus-within:bg-muted/30"
+              }`}
+              style={{ minHeight: 48 }}
+            >
+              <input
+                type="text"
+                value={refineInput}
+                onChange={(e) => setRefineInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleRefineSubmit(); } }}
+                disabled={!!buildingState?.isBuilding}
+                placeholder="Refine this program…"
+                className="flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground/40 outline-none py-2.5 min-w-0"
+              />
+              <button
+                onClick={handleRefineSubmit}
+                disabled={!refineInput.trim() || !!buildingState?.isBuilding}
+                className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-primary bg-primary/10 hover:bg-primary/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                {pendingRefinement === "refine-input" ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Send className="w-3.5 h-3.5" />
+                )}
+              </button>
+            </div>
+            <p className="mt-1.5 text-[10px] text-muted-foreground/45 leading-relaxed px-1">
+              Try: "add more jumps to day 1" or "make day 2 shorter"
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* What Changed / Why Changed */}
       {(program.whatChanged || program.whyChanged) && (
@@ -1016,9 +1068,9 @@ function ProgramTab({
                         </div>
                       )}
 
-                      {/* Session refine actions */}
+                      {/* Session refine actions — 32px pills */}
                       {onSendMessage && (
-                        <div className="px-3 py-2 flex flex-wrap gap-1.5 border-b border-border/30">
+                        <div className="px-3 py-2.5 flex flex-wrap gap-1.5 border-b border-border/30">
                           {SESSION_ACTIONS.map((action) => {
                             const key = `day-${idx}-${action.label}`;
                             const isLoading = pendingRefinement === key;
@@ -1027,13 +1079,16 @@ function ProgramTab({
                               <button
                                 key={action.label}
                                 onClick={() =>
-                                  sendRefinement(action.buildMessage(day.dayNumber), key, { dayIndex: idx })
+                                  sendRefinement(action.buildMessage(day.dayNumber), key, {
+                                    dayIndex: idx,
+                                    interactionType: "session_action",
+                                  })
                                 }
                                 disabled={isDisabled}
-                                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold border transition-all duration-150 active:scale-95 ${
+                                className={`h-8 inline-flex items-center gap-1.5 px-3 rounded-full text-[10px] font-semibold border transition-all duration-150 active:scale-95 select-none ${
                                   isLoading
-                                    ? "bg-primary/20 border-primary/40 text-primary"
-                                    : "bg-muted/30 border-border/50 text-muted-foreground hover:bg-accent hover:text-foreground hover:border-primary/25"
+                                    ? "bg-primary/15 border-primary/40 text-primary"
+                                    : "bg-muted/20 border-border/60 text-muted-foreground hover:border-primary/30 hover:text-foreground hover:bg-accent/50"
                                 } disabled:opacity-40 disabled:cursor-not-allowed`}
                               >
                                 {isLoading && (
@@ -1118,6 +1173,38 @@ function ProgramTab({
                             {ex.notes && (
                               <p className="text-[10px] text-muted-foreground/70 mt-1.5 italic leading-relaxed">{ex.notes}</p>
                             )}
+                            {/* Exercise action row — Swap / Easier / Harder */}
+                            {onSendMessage && (
+                              <div className="flex flex-wrap gap-1.5 mt-2">
+                                {EXERCISE_ACTIONS.map((action) => {
+                                  const exActionKey = `ex-${idx}-${exIdx}-${action.label}`;
+                                  const isLoading = pendingRefinement === exActionKey;
+                                  return (
+                                    <button
+                                      key={action.label}
+                                      onClick={() =>
+                                        sendRefinement(action.buildMessage(ex.name), exActionKey, {
+                                          dayIndex: idx,
+                                          exerciseId: ex.name,
+                                          interactionType: "exercise_action",
+                                        })
+                                      }
+                                      disabled={!!buildingState?.isBuilding}
+                                      className={`h-7 inline-flex items-center gap-1 px-2.5 rounded-full text-[10px] font-medium border transition-all duration-150 active:scale-95 select-none ${
+                                        isLoading
+                                          ? "bg-primary/12 border-primary/35 text-primary"
+                                          : "bg-transparent border-border/50 text-muted-foreground/70 hover:border-primary/25 hover:text-foreground hover:bg-accent/40"
+                                      } disabled:opacity-30 disabled:cursor-not-allowed`}
+                                    >
+                                      {isLoading && (
+                                        <Loader2 className="w-2.5 h-2.5 animate-spin flex-shrink-0" />
+                                      )}
+                                      {action.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
                             {isPremium && isSaved && (
                               <ExerciseLogInline
                                 exerciseName={ex.name}
@@ -1148,41 +1235,6 @@ function ProgramTab({
         })}
       </div>
 
-      {/* Freeform refinement input — anchored at the panel bottom */}
-      {onSendMessage && (
-        <div className="flex-shrink-0 border-t border-border/50 bg-background/80 backdrop-blur-sm px-3 py-2">
-          <div className="flex items-center gap-2 bg-card border border-border/60 rounded-xl focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/15 transition-all duration-150">
-            <input
-              type="text"
-              value={refineInput}
-              onChange={(e) => setRefineInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleRefineSubmit();
-                }
-              }}
-              placeholder="Refine this program…"
-              disabled={!!buildingState?.isBuilding}
-              className="flex-1 bg-transparent px-3 py-2 text-[11px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none disabled:opacity-50"
-            />
-            <button
-              onClick={handleRefineSubmit}
-              disabled={!refineInput.trim() || !!buildingState?.isBuilding}
-              className="mr-2 p-1.5 rounded-lg bg-primary/15 text-primary hover:bg-primary/25 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 active:scale-95 flex-shrink-0"
-              aria-label="Send refinement"
-            >
-              {pendingRefinement === "refine-input" ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M14 2L2 8.5l4.5 1.5L8 14l2-4.5L14 2z" />
-                </svg>
-              )}
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,0 +1,405 @@
+We are implementing the RIGHT PANEL VIBE CODING UI for TrainChat.
+
+OBJECTIVE:
+Turn the existing “Live Program” right panel into the primary post-build refinement surface.
+
+The panel should no longer be just a passive viewer.
+It should become the place where users:
+- review the built program
+- make quick global changes
+- refine individual days
+- adjust exercises
+- send freeform natural-language refinements
+
+This must feel premium, clean, mobile-first, and coach-like.
+
+IMPORTANT:
+This is a UI implementation prompt.
+Reuse the existing backend and routing:
+- POST /api/conversations/:id/messages
+- execution-planner
+- DB-backed mutation pipeline
+Do NOT create a new mutation API.
+Do NOT duplicate business logic.
+
+==================================================
+DESIGN INTENT
+==================================================
+
+The right panel should feel like:
+- a coaching console
+NOT:
+- a spreadsheet
+- an admin editor
+- a static viewer
+
+Keep it:
+- minimal
+- premium
+- fast
+- interactive
+
+==================================================
+SECTION 1 — PANEL LAYOUT
+==================================================
+
+Update the right panel / Live Program side sheet to follow this vertical structure:
+
+1. Header
+2. Tabs
+3. Program Summary Card
+4. Global Refinement Chips
+5. Freeform Refine Input
+6. Day Cards
+   - each with session-level refine actions
+   - then exercise list
+7. Sticky bottom refine bar (optional if simple to implement cleanly)
+
+Use the existing visual style of the app:
+- dark navy surfaces
+- subtle borders
+- blue accent for active/program-level actions
+- gold/orange role tags
+- green only for success state
+
+==================================================
+SECTION 2 — HEADER + TABS
+==================================================
+
+Keep existing:
+- “Live Program” header
+- close button
+- Program / Changes / History / Forecast tabs
+
+Polish spacing only if needed:
+- top padding ~20px
+- tab row spacing cleaner
+- active tab underline should feel precise, not oversized
+
+==================================================
+SECTION 3 — PROGRAM SUMMARY CARD
+==================================================
+
+Refactor the summary area into a cleaner card.
+
+Requirements:
+- title
+- week/phase metadata
+- live status label
+- program title
+- days/week chip or inline meta
+- short summary paragraph (max ~3 visible lines)
+- existing “Preview” state if applicable
+
+Add spacing/padding so it reads like a premium summary card, not raw text.
+
+Reduce paragraph length visually:
+- clamp to ~3 lines
+- keep readable
+
+==================================================
+SECTION 4 — GLOBAL REFINEMENT CHIPS
+==================================================
+
+Add a new section directly below the summary card.
+
+Section label:
+- “Refine this program”
+
+Add clickable chips:
+- More Explosive
+- More Strength
+- More Endurance
+- Shorter Sessions
+- Lower Impact
+- Home Gym Version
+
+UI requirements:
+- chip height ~36px
+- rounded pill style
+- wrap across rows
+- spacing between chips ~8px
+- active/loading state per chip
+- premium dark outlined style with blue active state
+
+Behavior:
+On click, send the corresponding natural-language message through the existing conversation route.
+
+Examples:
+- “Make this program more explosive”
+- “Make this program more strength focused”
+- “Make this program more endurance based”
+- “Shorten all sessions”
+- “Make this program lower impact”
+- “Convert this program for a home gym”
+
+Payload additions:
+- source: "right_panel"
+- interactionType: "global_chip"
+
+After success:
+- refresh/reload program from current DB-backed state
+- briefly show success state
+- do not force full panel remount if avoidable
+
+==================================================
+SECTION 5 — FREEFORM REFINE INPUT
+==================================================
+
+Add a compact natural-language input directly below the chip section.
+
+Placeholder:
+- “Refine this program…”
+
+Helper text below input:
+- “Try: add more jumps to day 1”
+- “or: make day 2 shorter”
+
+UI requirements:
+- rounded input
+- submit icon button inside or aligned right
+- consistent with dark UI style
+- must feel native to the panel
+
+Behavior:
+- sends user text through the same existing conversation endpoint
+- include source: "right_panel"
+- include interactionType: "freeform_refine"
+
+Do NOT create a second parallel prompt system.
+
+==================================================
+SECTION 6 — DAY CARD REFINEMENT ACTIONS
+==================================================
+
+For each Day Card, add a compact session-level action row directly beneath the day title/subtitle and above the exercise list.
+
+Buttons/chips:
+- More Explosive
+- Easier
+- Harder
+- Shorter
+- Add Exercise
+
+UI requirements:
+- small pill buttons (~32px height)
+- wrap cleanly if needed
+- compact enough for mobile
+- visually secondary to the global chips
+
+Behavior:
+Each button sends a contextual message via the existing conversation route.
+
+Examples:
+- “Make Day 1 more explosive”
+- “Make Day 2 easier”
+- “Make Day 3 harder”
+- “Make Day 1 shorter”
+- “Add an exercise to Day 4”
+
+Payload additions:
+- source: "right_panel"
+- interactionType: "session_action"
+- dayIndex
+
+After mutation:
+- refresh that day/program state from DB-backed truth
+- briefly highlight changed session if possible
+
+==================================================
+SECTION 7 — EXERCISE-LEVEL CONTROLS
+==================================================
+
+Keep existing exercise-level controls:
+- Swap
+- Easier
+- Harder
+- Full Edit
+
+But clean their presentation:
+- reduce clutter
+- remove unnecessary duplication
+- keep only the highest-value controls visible by default
+
+Preferred layout:
+Row 1:
+- Swap
+- Easier
+- Harder
+
+Row 2:
+- Full Edit
+
+If there are additional controls like +Set / -Set and they make the UI feel crowded, hide them behind Full Edit for now.
+
+IMPORTANT:
+Do not redesign the backend for these. This is a UI polish/layout improvement, not a new logic system.
+
+==================================================
+SECTION 8 — CHANGED-STATE FEEDBACK
+==================================================
+
+When any refine action succeeds:
+
+- show a light “Program Updated” or existing success state
+- briefly highlight the modified day or exercise card
+- if the mutation is local to one day, prefer scrolling/highlighting that day section
+- if the mutation affects the whole program, refresh summary and visible days
+
+Do NOT:
+- freeze the whole panel
+- remount the entire interface unnecessarily
+- lose panel open/close state
+
+==================================================
+SECTION 9 — ERROR / LOADING STATES
+==================================================
+
+Per-interaction loading:
+- chip pressed → only that chip loads
+- day action pressed → only that button/day action area loads
+- freeform input submit → input shows pending state
+
+Per-interaction error:
+- show compact inline feedback if the refine action fails
+- do not collapse all failures into generic toast only
+- keep the panel usable after error
+
+==================================================
+SECTION 10 — COMPONENTIZATION
+==================================================
+
+Break this into reusable components where cleanly appropriate.
+
+Recommended components:
+- LiveProgramSummaryCard
+- RefinementChips
+- ProgramRefineInput
+- SessionRefineActions
+- ExerciseActionRow
+
+Do not over-engineer.
+Keep components close to current architecture and styling conventions.
+
+==================================================
+SECTION 11 — DATA / INTEGRATION REQUIREMENTS
+==================================================
+
+All right-panel actions must:
+- route through existing conversation mutation path
+- use execution-planner
+- use DB-backed edit pipeline
+- refresh UI from current DB-backed state
+
+Do NOT:
+- directly mutate the rendered program in frontend state as the source of truth
+- create a client-only fake mutation layer
+- create new duplicate APIs
+
+The right panel should be a UI surface for the existing agent, not a separate agent.
+
+==================================================
+SECTION 12 — MOBILE-FIRST SPACING / VISUAL SPEC
+==================================================
+
+Implement these general layout constraints:
+
+Panel shell:
+- width: mobile-friendly side sheet
+- outer padding ~20px
+- rounded corners consistent with current app
+
+Global chips:
+- 36px height
+- 8px gaps
+- wrapping rows
+
+Session actions:
+- 32px height
+- compact wrapping layout
+
+Input:
+- min-height ~48px
+- rounded
+- right-aligned send button
+
+Day cards:
+- slightly elevated surface
+- subtle border
+- generous padding
+- clear separation between day header, action row, and exercise list
+
+Typography:
+- program title: strong
+- session titles: medium/strong
+- metadata: smaller, muted
+- cue text: readable, not overly faded
+
+==================================================
+SECTION 13 — DO NOT BREAK
+==================================================
+
+Do not break:
+- existing Program / Changes / History / Forecast tabs
+- existing day expand/collapse behavior
+- existing exercise controls functionality
+- existing right panel open/close behavior
+- DB-backed refresh behavior
+- existing Preview state
+
+==================================================
+SECTION 14 — TESTING REQUIREMENTS
+==================================================
+
+Verify these exact flows:
+
+1. Build a program → open right panel
+Expected:
+- user immediately sees summary, refinement chips, and refine input
+
+2. Tap “More Explosive”
+Expected:
+- request goes through existing conversation route
+- program updates
+- panel reflects DB-backed change
+
+3. Tap “Add Exercise” on Day 2
+Expected:
+- contextual day-level request
+- mutation succeeds
+- day updates in panel
+
+4. Type freeform:
+- “add more jumps to day 1”
+Expected:
+- natural-language refine works from panel
+- no special-case backend required
+
+5. Exercise controls still function
+Expected:
+- Swap / Easier / Harder / Full Edit still work after layout update
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+
+1. Components created/updated
+2. Where the new right-panel actions are wired into existing backend flow
+3. How loading/success/error states were handled
+4. Any UI compromises made for mobile clarity
+5. Screens/areas changed
+
+==================================================
+FINAL STANDARD
+==================================================
+
+After a program build, the right panel must feel like the primary place to shape and refine the program.
+
+It should feel like:
+- a premium coaching console
+not:
+- a static program viewer
+
+Implement this now.
