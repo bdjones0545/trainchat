@@ -1,0 +1,101 @@
+Upgrade the right sidebar (Live Program panel) from an instructional UI into a system-state-driven UI.
+
+==================================================
+GOAL
+==================================================
+
+Make the sidebar feel like:
+- a live system panel
+- intelligent
+- reactive
+- minimal but powerful
+
+NOT:
+- onboarding instructions
+- tutorial content
+
+==================================================
+STEP 1 — REPLACE HEADER
+==================================================
+
+Replace:
+
+"Your Program"
+
+With:
+
+"Live System"
+
+Subtext:
+
+"Your training system builds here in real time"
+
+==================================================
+STEP 2 — REMOVE INSTRUCTION LIST
+==================================================
+
+Remove:
+- Describe your goal
+- Program builds live
+- Evolve week over week
+
+Replace with 3 max bullets:
+
+- Builds instantly in real time
+- Adapts as you refine
+- Tracks every change
+
+==================================================
+STEP 3 — ADD SYSTEM STATUS
+==================================================
+
+If NO active system:
+
+Show:
+
+● Ready to build  
+"Describe your goal to generate your program"
+
+If ACTIVE system:
+
+Show:
+
+● Live  
+"System updating in real time"
+
+==================================================
+STEP 4 — ADD VISUAL HIERARCHY
+==================================================
+
+- Add divider under header
+- Reduce bullet spacing
+- Make status line slightly brighter
+
+==================================================
+STEP 5 — ADD MICRO INTERACTION
+==================================================
+
+When user sends message:
+
+- change status to "Building..."
+- subtle pulse animation
+- slight glow increase
+
+==================================================
+STEP 6 — KEEP IT MINIMAL
+==================================================
+
+No more than:
+- 1 header
+- 1 subtext
+- 1 status line
+- 3 bullets
+
+==================================================
+RESULT
+==================================================
+
+Sidebar should feel like:
+- a live system panel
+- not a tutorial
+- not static
