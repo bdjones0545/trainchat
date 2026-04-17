@@ -612,6 +612,7 @@ Keep it helpful and intelligent, never promotional.`;
           clarificationQuestion: activePendingClarification.clarificationQuestion,
         }
       : null,
+    uiContext: nonStreamUiCtx,
   });
 
   logger.info(
@@ -2043,6 +2044,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           clarificationQuestion: activePendingClarification.clarificationQuestion,
         }
       : null,
+    uiContext: streamUIContext,
   });
 
   logger.info(

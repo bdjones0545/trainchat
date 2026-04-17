@@ -81,13 +81,52 @@ export async function buildExecutionPlan({
   conversationId,
   program,
   pendingClarification,
+  uiContext,
 }: {
   message: string;
   userId: string;
   conversationId: string;
   program: ProgramStructure | null;
   pendingClarification: PendingClarificationContext | null;
+  uiContext?: Record<string, unknown> | null;
 }): Promise<ExecutionPlan> {
+  // ── STEP 0: Button signal override ─────────────────────────────────────────
+  // Day-level Harder/Easier buttons send an explicit button signal via uiContext.
+  // These are DETERMINISTIC CONTROLS — they must never route to ASK_CLARIFICATION.
+  // The button signal overrides all text-based intent classification.
+  const buttonSignal = uiContext?.button as string | undefined;
+  if (buttonSignal === "day_progression" || buttonSignal === "day_regression") {
+    const scope = resolveScope(message);
+    const resolvedScope: ExecutionScope = scope.type === "session"
+      ? scope
+      : { type: "session", dayIndex: scope.dayIndex };
+
+    const plan: ExecutionPlan = {
+      action: "APPLY_MUTATION",
+      intentFamily: buttonSignal as IntentFamily,
+      scope: resolvedScope,
+      mutation: {
+        type: buttonSignal === "day_progression" ? "progression" : "regression",
+        params: { dayLevel: true, preserveIdentity: true },
+      },
+      reasoning: `Button-driven ${buttonSignal} — forced APPLY_MUTATION without clarification. Session identity preserved.`,
+    };
+
+    logger.debug(
+      {
+        conversationId,
+        userId,
+        action: plan.action,
+        intentFamily: plan.intentFamily,
+        scope: plan.scope,
+        buttonSignal,
+      },
+      "[ExecutionPlanner] Button override — day-level progression/regression forced"
+    );
+
+    return plan;
+  }
+
   // ── STEP 1: Handle clarification followup first ─────────────────────────────
   if (pendingClarification) {
     const plan = resolveClarification({ message, pendingClarification });
@@ -171,6 +210,34 @@ export async function buildExecutionPlan({
         reasoning: "Endurance transformation with resolved scope",
       };
     }
+  }
+
+  // ── Day-level progression (text-matched, no button override needed) ─────────
+  else if (intent === "day_progression") {
+    plan = {
+      action: "APPLY_MUTATION",
+      intentFamily: intent,
+      scope: scope.type ? scope : { type: "session" },
+      mutation: {
+        type: "progression",
+        params: { dayLevel: true, preserveIdentity: true },
+      },
+      reasoning: "Day-level progression — same identity, harder execution. Never clarify.",
+    };
+  }
+
+  // ── Day-level regression (text-matched, no button override needed) ─────────
+  else if (intent === "day_regression") {
+    plan = {
+      action: "APPLY_MUTATION",
+      intentFamily: intent,
+      scope: scope.type ? scope : { type: "session" },
+      mutation: {
+        type: "regression",
+        params: { dayLevel: true, preserveIdentity: true },
+      },
+      reasoning: "Day-level regression — same identity, easier execution. Never clarify.",
+    };
   }
 
   // ── Exercise progression ──────────────────────────────────────────────────
@@ -483,6 +550,9 @@ function isMutationFamily(family: IntentFamily): boolean {
     "joint_friendly_modification",
     "equipment_constraint",
     "add_exercise",
+    // Day-level progression/regression — always APPLY_MUTATION, never clarify
+    "day_progression",
+    "day_regression",
   ];
 
   return mutationFamilies.includes(family);

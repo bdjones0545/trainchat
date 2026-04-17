@@ -47,6 +47,9 @@ export type IntentFamily =
   | "exercise_swap"
   | "exercise_progression"
   | "exercise_regression"
+  // ── Day-level progression / regression (button-driven, identity-preserving) ──
+  | "day_progression"
+  | "day_regression"
   | "clarification_required";
 
 // ─── Target Scopes ────────────────────────────────────────────────────────────
@@ -371,6 +374,40 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
       /\b(more mobility|mobility work|flexibility work|movement prep)\b/i,
       /\b(tight (hips?|hamstrings?|shoulders?|back|ankles?|thoracic))\b/i,
       /\b(improve (flexibility|mobility|range of motion|movement quality))\b/i,
+    ],
+  },
+
+  // ── Day-Level Progression (MUST appear before increase_difficulty) ──────────
+  // Triggered by button (day_progression) or text explicitly targeting a day.
+  // "Make Day 3 harder" — same session, same intent, just harder.
+  {
+    family: "day_progression",
+    patterns: [
+      // "Make Day 3 harder / more challenging"
+      /\b(make|making)\s+day\s*\d+\s.{0,30}(harder|tougher|more\s+(challenging|difficult|demanding|intense))\b/i,
+      // "Day 3 harder" / "harder on day 3"
+      /\bday\s*\d+\s.{0,20}(harder|progression|more\s+(challenging|difficult|demanding))\b/i,
+      /\b(harder|more\s+(challenging|difficult|demanding))\s+on\s+day\s*\d+\b/i,
+      // "progress day 3" / "day 3 progression"
+      /\b(progress|progress\s+up|advance)\s+day\s*\d+\b/i,
+      /\bday\s*\d+\s+(progression|step\s+up)\b/i,
+    ],
+  },
+
+  // ── Day-Level Regression (MUST appear before decrease_difficulty) ───────────
+  // Triggered by button (day_regression) or text explicitly targeting a day.
+  // "Make Day 3 easier" — same session, same intent, just easier.
+  {
+    family: "day_regression",
+    patterns: [
+      // "Make Day 3 easier / less demanding"
+      /\b(make|making)\s+day\s*\d+\s.{0,30}(easier|lighter|less\s+(demanding|challenging|difficult|intense))\b/i,
+      // "Day 3 easier" / "easier on day 3"
+      /\bday\s*\d+\s.{0,20}(easier|regression|less\s+(demanding|challenging|difficult))\b/i,
+      /\b(easier|less\s+(challenging|demanding|difficult))\s+on\s+day\s*\d+\b/i,
+      // "regress day 3" / "day 3 regression"
+      /\b(regress|step\s+down)\s+day\s*\d+\b/i,
+      /\bday\s*\d+\s+(regression|step\s+down)\b/i,
     ],
   },
 
@@ -1112,6 +1149,94 @@ const TRANSFORMATION_BUNDLES: Record<IntentFamily, TransformationBundle> = {
     ],
     aiDirective: "EXERCISE REGRESSION: Swap to an easier variation of the exercise. Example: Barbell Back Squat → Goblet Squat → Box Squat. Or: Pull-up → Band-Assisted Pull-up → Lat Pulldown. Preserve movement pattern family.",
     scopeGuidance: "Apply only to the targeted exercise.",
+  },
+
+  // ── Day-Level Progression ─────────────────────────────────────────────────
+  // Same session, same training identity — just increased difficulty.
+  // IDENTITY IS PRESERVED — do NOT change session label or emphasis.
+  day_progression: {
+    intentFamily: "day_progression",
+    minimumStructuralChanges: 1,
+    primaryChanges: [
+      { type: "swap_to_progression", description: "Replace exercises with harder progression variants from the library", countAs: 2 },
+      { type: "reduce_rest", description: "Tighten rest intervals to increase session demand", countAs: 1 },
+      { type: "shift_rep_range_strength", description: "Tighten rep range to reflect higher intensity (e.g. 8-10 → 6-8)", countAs: 1 },
+      { type: "add_sets", description: "Add 1 set to primary movements to increase volume demand", countAs: 1 },
+    ],
+    secondaryChanges: [
+      { type: "add_velocity_intent", description: "Add a tempo constraint (e.g. 3-1-X-0) to an existing primary exercise", countAs: 1 },
+      { type: "add_exercise", description: "Add ONE aligned challenge (e.g. unilateral, trunk, elastic) if session can support it", countAs: 1 },
+    ],
+    antiPatterns: [
+      "NEVER change the session label or emphasis — identity MUST be preserved",
+      "NEVER add exercises unrelated to the session's existing identity",
+      "NEVER duplicate existing primary or anchor movements",
+      "NEVER ask a clarification question — execute the progression",
+      "NEVER just add a coaching note without structural change",
+      "Do NOT change training intent (that is handled by strength_focus, power_explosive_focus, etc.)",
+    ],
+    validationRules: [
+      "At least 1 replace_exercise to a harder variant OR at least 2 prescription updates (rest, reps, sets, tempo)",
+      "Session label and emphasis must remain unchanged",
+      "Added exercises (if any) must match the session's existing training character",
+    ],
+    aiDirective: `DAY-LEVEL PROGRESSION: Make this training session HARDER while PRESERVING its current training identity completely.
+
+SESSION IDENTITY IS FROZEN — do NOT produce any update_session changes. The label and emphasis stay exactly as they are.
+
+EXECUTION ORDER (strict priority):
+1. PRIMARY — Exercise upgrades: For each primary/secondary exercise, check if a harder progression exists (e.g. Back Squat → Pause Back Squat, Pull-Up → Weighted Pull-Up, Box Jump → Depth Jump). Use replace_exercise changes. The new exercise MUST stay in the same category role.
+2. SECONDARY — Prescription tightening: Tighten rest intervals (e.g. 90 sec → 60 sec), reduce rep range by 2 (e.g. 8-10 → 6-8), add 1 set to primary lifts, or add tempo constraint (e.g. "3-1-X-0").
+3. OPTIONAL — ONE complementary challenge only if the session has room and it aligns with existing identity (e.g. add unilateral variation, trunk stability, elastic primer if already present). Do not add random exercises.
+
+RULES:
+- Produce at least 1 replace_exercise OR at least 2 prescription updates (rest, sets, reps, or tempo)
+- changeSummary must state specifically what got harder and how — name the exercises and changes
+- Do NOT route to clarification — execute directly`,
+    scopeGuidance: "Apply to the specified session only. All changes stay within that session.",
+  },
+
+  // ── Day-Level Regression ──────────────────────────────────────────────────
+  // Same session, same training identity — just decreased difficulty.
+  // IDENTITY IS PRESERVED — do NOT change session label or emphasis.
+  day_regression: {
+    intentFamily: "day_regression",
+    minimumStructuralChanges: 1,
+    primaryChanges: [
+      { type: "swap_to_regression", description: "Replace exercises with easier regression variants from the library", countAs: 2 },
+      { type: "increase_rest", description: "Extend rest intervals to reduce session demand", countAs: 1 },
+      { type: "shift_rep_range_hypertrophy", description: "Widen rep range to reflect lower intensity (e.g. 4-6 → 6-10)", countAs: 1 },
+      { type: "remove_sets", description: "Remove 1 set from accessories to reduce session load", countAs: 1 },
+    ],
+    secondaryChanges: [
+      { type: "reduce_accessories", description: "Remove lowest-priority accessory if simplification is needed", countAs: 1 },
+    ],
+    antiPatterns: [
+      "NEVER change the session label or emphasis — identity MUST be preserved",
+      "NEVER gut the session — the core compound structure stays intact",
+      "NEVER remove primary compound lifts — cut accessories and sets first",
+      "NEVER ask a clarification question — execute the regression",
+      "Do NOT change training intent (that is handled by recovery_focus, fatigue_management, etc.)",
+    ],
+    validationRules: [
+      "At least 1 replace_exercise to an easier variant OR at least 2 prescription reductions (rest, reps, sets)",
+      "Session label and emphasis must remain unchanged",
+      "Primary compound movements must be preserved",
+    ],
+    aiDirective: `DAY-LEVEL REGRESSION: Make this training session EASIER while PRESERVING its current training identity completely.
+
+SESSION IDENTITY IS FROZEN — do NOT produce any update_session changes. The label and emphasis stay exactly as they are.
+
+EXECUTION ORDER (strict priority):
+1. PRIMARY — Exercise regressions: For each primary/secondary exercise, use an easier regression variant if one exists (e.g. Back Squat → Box Squat or Goblet Squat, Pull-Up → Band-Assisted Pull-Up, Depth Jump → Box Jump). Use replace_exercise changes. The replacement MUST stay in the same category role.
+2. SECONDARY — Reduce prescription load: extend rest intervals (e.g. 60 sec → 90 sec), reduce sets by 1 on accessories, shift rep range to an easier zone (e.g. 4-6 → 6-10), remove any tempo constraints that increase difficulty.
+3. OPTIONAL — Remove 1 lowest-priority accessory if the session needs further simplification. Protect all primary and secondary movements.
+
+RULES:
+- Produce at least 1 replace_exercise OR at least 2 prescription reductions (rest, sets, reps)
+- changeSummary must state specifically what got easier and how — name the exercises and changes
+- Do NOT route to clarification — execute directly`,
+    scopeGuidance: "Apply to the specified session only. Protect primary compound movements.",
   },
 
   clarification_required: {

@@ -1,0 +1,271 @@
+We need to FIX the behavior of the DAY-LEVEL “Harder” and “Easier” buttons in TrainChat.
+
+PROBLEM:
+When the user presses:
+- “Harder”
+- “Easier”
+
+on a Day Card in the right panel, the system sometimes responds with a clarification question like:
+“What direction do you want to push this: more strength, more conditioning, more explosive work…”
+
+This is incorrect for a button-driven interaction.
+
+These buttons should NOT behave like open-ended coaching prompts.
+They should behave like deterministic progression/regression controls.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make Day-level “Harder” and “Easier”:
+
+- intent-preserving
+- library-driven (progressions/regressions first)
+- deterministic (no clarification unless absolutely necessary)
+
+==================================================
+CORE RULE
+==================================================
+
+“Harder” and “Easier” MUST:
+
+- preserve the current session identity (do NOT change training intent)
+- adjust difficulty within that identity
+- prioritize exercise-level progression/regression from the exercise library
+
+They must NOT:
+- ask broad clarification questions
+- change the training direction (that is handled by “More Explosive”, “More Strength”, etc.)
+
+==================================================
+TASK 1 — CREATE NEW INTENT FAMILIES
+==================================================
+
+Add two explicit intent families:
+
+- day_progression
+- day_regression
+
+These must be separate from:
+- strength_focus
+- power_explosive_focus
+- conditioning_focus
+- session_expansion
+
+These represent:
+- SAME DAY, SAME INTENT, DIFFERENT DIFFICULTY
+
+==================================================
+TASK 2 — MAP UI BUTTONS TO THESE INTENTS
+==================================================
+
+Right panel buttons must send:
+
+Harder:
+{
+  message: "Make Day X harder",
+  uiContext: {
+    interactionType: "session_action",
+    dayIndex: X,
+    button: "day_progression"
+  }
+}
+
+Easier:
+{
+  message: "Make Day X easier",
+  uiContext: {
+    interactionType: "session_action",
+    dayIndex: X,
+    button: "day_regression"
+  }
+}
+
+The backend must respect the button signal over raw text interpretation.
+
+==================================================
+TASK 3 — EXECUTION PLANNER ROUTING
+==================================================
+
+In execution-planner:
+
+- day_progression → APPLY_MUTATION (progression path)
+- day_regression → APPLY_MUTATION (regression path)
+
+DO NOT route these to ASK_CLARIFICATION unless:
+- no valid progression/regression path exists AND
+- multiple equally valid fallback strategies exist
+
+This should be rare.
+
+==================================================
+TASK 4 — IMPLEMENT DAY-LEVEL PROGRESSION PIPELINE
+==================================================
+
+Create a dedicated function:
+
+applyDayProgression(session, context)
+
+This must follow this strict order:
+
+STEP 1 — Exercise-level progression (PRIMARY)
+- for each exercise:
+  - attempt getProgressions() from exercise-service (DB library)
+  - or use exercise-intelligence progression chains
+- replace exercises with valid progressed variants where appropriate
+- preserve session role (primary stays primary, etc.)
+
+STEP 2 — Prescription tightening (SECONDARY)
+If progression options are limited:
+- slightly increase intensity
+- reduce rest
+- adjust reps to reflect higher difficulty
+- add tempo constraints (only if needed)
+
+STEP 3 — Add ONE complementary challenge (OPTIONAL)
+Only if:
+- session can support it
+- it aligns with session identity
+Examples:
+- add trunk stability
+- add unilateral challenge
+- add explosive primer if already present in identity
+
+DO NOT:
+- add random exercises
+- duplicate anchors
+- change session intent
+
+==================================================
+TASK 5 — IMPLEMENT DAY-LEVEL REGRESSION PIPELINE
+==================================================
+
+Create:
+
+applyDayRegression(session, context)
+
+Order:
+
+STEP 1 — Exercise-level regression (PRIMARY)
+- use easier_variations from DB
+- or regression chains from exercise-intelligence
+
+STEP 2 — Reduce prescription load (SECONDARY)
+- reduce sets
+- increase rest
+- reduce intensity / reps
+
+STEP 3 — Simplify session (OPTIONAL)
+- remove lowest-priority accessory if needed
+- maintain core structure
+
+==================================================
+TASK 6 — STRICT IDENTITY PRESERVATION
+==================================================
+
+During progression/regression:
+
+- DO NOT change session intent
+- DO NOT trigger session identity recompute
+
+Example:
+“Lower Force Production + Acceleration Support”
+should remain that — just harder or easier
+
+==================================================
+TASK 7 — STRUCTURAL VERIFICATION
+==================================================
+
+For progression:
+- verify at least one of:
+  - exercise upgraded
+  - prescription made more demanding
+
+For regression:
+- verify at least one of:
+  - exercise regressed
+  - prescription reduced
+
+If nothing changed:
+- return NO_OP
+- do NOT say “Program Updated”
+
+==================================================
+TASK 8 — RESPONSE TEXT RULES
+==================================================
+
+Harder response should say:
+- what got harder
+- what changed
+
+Examples:
+- “Upgraded primary lower-body work and tightened rest intervals to increase session difficulty.”
+- “Progressed posterior chain work and increased overall intensity.”
+
+Easier response:
+- “Regressed lower-body movements and reduced overall session load.”
+
+DO NOT say:
+- “What direction do you want…”
+- “More strength or conditioning…”
+
+==================================================
+TASK 9 — REMOVE CLARIFICATION FOR THESE BUTTONS
+==================================================
+
+In both conversation and streaming handlers:
+
+If uiContext.button is:
+- "day_progression"
+- "day_regression"
+
+Then:
+- skip clarification branch
+- force mutation execution
+
+==================================================
+TASK 10 — TEST CASES
+==================================================
+
+1. Press “Harder” on Day 1
+Expected:
+- exercises progress OR prescriptions tighten
+- no clarification question
+- identity unchanged
+
+2. Press “Easier” on Day 1
+Expected:
+- regressions applied
+- load reduced
+- no clarification
+
+3. Chat: “Make Day 1 harder”
+Expected:
+- same behavior as button
+
+4. Chat: “Make Day 1 more explosive”
+Expected:
+- goes to transformation pipeline, not progression pipeline
+
+==================================================
+TASK 11 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. new intent families added
+2. how UI context is mapped
+3. progression/regression pipeline logic
+4. how clarification was removed
+5. test results
+
+==================================================
+FINAL STANDARD
+==================================================
+
+“Harder” and “Easier” are NOT coaching questions.
+
+They are deterministic progression/regression controls that:
+- preserve session identity
+- use the exercise library first
+- adjust prescriptions second
+- never ask the user what they meant unless absolutely necessary

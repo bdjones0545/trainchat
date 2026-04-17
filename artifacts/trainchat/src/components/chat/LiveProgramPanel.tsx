@@ -373,8 +373,8 @@ const GLOBAL_CHIPS: { label: string; message: string }[] = [
 
 const SESSION_ACTIONS: { label: string; button?: string; buildMessage: (dayNum: number) => string }[] = [
   { label: "More Explosive", buildMessage: (d) => `Make Day ${d} more explosive` },
-  { label: "Easier", buildMessage: (d) => `Make Day ${d} easier` },
-  { label: "Harder", buildMessage: (d) => `Make Day ${d} harder` },
+  { label: "Easier", button: "day_regression", buildMessage: (d) => `Make Day ${d} easier` },
+  { label: "Harder", button: "day_progression", buildMessage: (d) => `Make Day ${d} harder` },
   { label: "Shorter", buildMessage: (d) => `Make Day ${d} shorter` },
   { label: "Add Exercise", button: "add_exercise", buildMessage: (d) => `Add a new exercise to Day ${d}` },
 ];
