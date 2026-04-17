@@ -24,6 +24,7 @@ import neuralProfileRouter from "./neural-profile";
 import predictionsRouter from "./predictions";
 import blockIntelligenceRouter from "./block-intelligence";
 import debugRouter from "./debug";
+import supportRouter from "./support";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -62,5 +63,6 @@ router.use(neuralProfileRouter);
 router.use(predictionsRouter);
 router.use(blockIntelligenceRouter);
 router.use(debugRouter);
+router.use(supportRouter);
 
 export default router;

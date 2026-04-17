@@ -1,0 +1,253 @@
+We need to turn the SUPPORT section in Settings into a fully working, user-friendly support system.
+
+CURRENT SUPPORT OPTIONS:
+- Contact support
+- Report a bug
+- Request a feature
+
+All submissions must be sent to:
+Bryan.jones@trainchat.ai
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Create a clean, mobile-friendly support flow where each support action opens a polished form, validates inputs, and sends the submission to Bryan.jones@trainchat.ai.
+
+The experience should feel premium, simple, and trustworthy.
+
+==================================================
+SUPPORT TYPES
+==================================================
+
+Create 3 distinct support flows:
+
+1. Contact Support
+Purpose:
+- general questions
+- billing help
+- account help
+- subscription issues
+- general help requests
+
+2. Report a Bug
+Purpose:
+- broken feature
+- visual glitch
+- settings issue
+- program generation issue
+- payment issue
+
+3. Request a Feature
+Purpose:
+- user suggests a new feature
+- user requests a workflow improvement
+- user asks for a new integration / setting / coaching capability
+
+==================================================
+TASK 1 — CREATE USER-FRIENDLY MODAL / SHEET FOR EACH SUPPORT ACTION
+==================================================
+
+When the user taps:
+- Contact support
+- Report a bug
+- Request a feature
+
+Open a mobile-friendly modal / sheet / full-screen panel with:
+- clear title
+- short explanation
+- required fields
+- submit button
+- cancel / close button
+
+The form should match the TrainChat premium dark theme.
+
+==================================================
+TASK 2 — FORM FIELDS BY SUPPORT TYPE
+==================================================
+
+A. CONTACT SUPPORT
+Fields:
+- Name (prefill if available)
+- Email (prefill if available)
+- Topic dropdown:
+  - Account
+  - Billing
+  - Subscription
+  - Program question
+  - Technical issue
+  - Other
+- Message (required)
+
+B. REPORT A BUG
+Fields:
+- Name (prefill if available)
+- Email (prefill if available)
+- Bug category dropdown:
+  - Program generation
+  - Settings
+  - Billing
+  - UI / design
+  - Login / account
+  - Other
+- What happened? (required)
+- What did you expect to happen? (required)
+- Steps to reproduce (optional but encouraged)
+- Device / browser info (auto-capture if possible)
+- Screenshot upload (optional if easy)
+
+C. REQUEST A FEATURE
+Fields:
+- Name (prefill if available)
+- Email (prefill if available)
+- Feature title (required)
+- What do you want added? (required)
+- Why would this help you? (required)
+- Priority dropdown:
+  - Nice to have
+  - Important
+  - Very important
+
+==================================================
+TASK 3 — VALIDATION
+==================================================
+
+Add friendly validation:
+- required fields must be filled
+- email must be valid
+- show inline validation messages
+- disable submit until valid if clean
+- prevent duplicate rapid submissions
+
+Error messages should feel human and polished.
+
+==================================================
+TASK 4 — SEND ALL SUBMISSIONS TO BRYAN.JONES@TRAINCHAT.AI
+==================================================
+
+Implement the submission pipeline so all support requests are sent to:
+Bryan.jones@trainchat.ai
+
+Preferred options, in order:
+1. Backend API route that sends email
+2. Fallback: create a structured support record in DB + email send
+3. If email transport is not yet configured, log/store the request and clearly flag setup needed
+
+Each email should include:
+- support type
+- user name
+- user email
+- submission timestamp
+- all form fields
+- user ID if available
+- environment (dev/prod)
+- app version if available
+- device/browser info if available
+
+Email subject format examples:
+- [TrainChat Support] Account help — user@email.com
+- [TrainChat Bug] Settings issue — user@email.com
+- [TrainChat Feature] New feature request — user@email.com
+
+==================================================
+TASK 5 — ADD SUCCESS / FAILURE UX
+==================================================
+
+After submit:
+- show a clean success state
+- message should confirm it was sent
+- tell user support will follow up by email if appropriate
+
+Example:
+“Thanks — your message has been sent to TrainChat support.”
+
+If submit fails:
+- show a clear error
+- allow retry
+- do not lose the form contents
+
+==================================================
+TASK 6 — PREFILL USEFUL CONTEXT AUTOMATICALLY
+==================================================
+
+If available, automatically include:
+- logged-in user name
+- logged-in user email
+- user ID
+- subscription tier / plan
+- active system ID if one exists
+- current route/page
+- browser/device info
+- app environment
+
+For bug reports, this context should be appended automatically behind the scenes so Bryan gets useful debugging info.
+
+==================================================
+TASK 7 — OPTIONAL: STORE SUPPORT SUBMISSIONS IN DB
+==================================================
+
+If clean and useful, create a support_submissions table to persist requests.
+
+Suggested columns:
+- id
+- userId
+- type ("contact" | "bug" | "feature")
+- name
+- email
+- subject/title
+- category
+- message
+- metadata JSON
+- createdAt
+
+This gives backup tracking even if email delivery has issues.
+
+If implemented, email still must be sent.
+
+==================================================
+TASK 8 — SETTINGS BUTTONS MUST BE WIRED
+==================================================
+
+Update these settings rows:
+- Contact support
+- Report a bug
+- Request a feature
+
+So they open the correct support flow instead of acting like dead links/placeholders.
+
+==================================================
+TASK 9 — MOBILE-FIRST UX
+==================================================
+
+This must feel excellent on iPhone/mobile Safari:
+- large tap targets
+- smooth modal animation
+- easy keyboard behavior
+- safe spacing near bottom
+- no clipped submit button
+- scrollable form if needed
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. support components/screens created
+2. backend route(s) created
+3. how emails are sent to Bryan.jones@trainchat.ai
+4. whether submissions are also stored in DB
+5. validation rules added
+6. success/failure UX added
+
+==================================================
+FINAL STANDARD
+==================================================
+
+The Support section should feel like a real premium support center.
+
+Every support submission must:
+- be easy for the user
+- collect the right info
+- send successfully to Bryan.jones@trainchat.ai
+- give the user clear confirmation
+- help Bryan respond efficiently

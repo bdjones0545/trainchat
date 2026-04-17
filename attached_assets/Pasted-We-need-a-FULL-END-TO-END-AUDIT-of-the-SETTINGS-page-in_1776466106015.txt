@@ -1,0 +1,334 @@
+We need a FULL END-TO-END AUDIT of the SETTINGS page in TrainChat and we need to FIX any broken, cosmetic-only, stale, or non-functional settings behavior.
+
+OBJECTIVE:
+The Settings page now includes multiple sections such as:
+- Account
+- Subscription & Billing
+- Training Preferences
+- AI Coach Settings
+- Privacy & Data
+- Support
+
+We need to verify that every visible setting, button, link, toggle, and edit flow:
+1. renders correctly
+2. persists correctly
+3. reflects actual saved state
+4. affects agent behavior if applicable
+5. works cleanly on mobile
+6. has no dead paths, stale UI, or placeholder behavior unless explicitly labeled
+
+We are not guessing.
+We are auditing the full settings system from UI → state → backend → agent behavior.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make the Settings page fully trustworthy and production-ready.
+
+That means:
+- all controls work
+- all values persist
+- all links resolve correctly
+- all toggles actually affect behavior where intended
+- all placeholders are intentional and clearly labeled
+- mobile UX is polished
+
+==================================================
+TASK 1 — INVENTORY EVERY SETTINGS ITEM
+==================================================
+
+Produce a complete inventory of every settings item currently visible in the app.
+
+Audit every section and row, including at minimum:
+- Account items
+- Billing / Stripe management
+- Training preferences
+- AI Coach Settings
+- Privacy & Data items
+- Support items
+- Any subscriber-only settings
+- Any toggles
+- Any edit modals / forms
+- Any external links
+
+For each item, classify it as:
+- fully functional
+- partially functional
+- cosmetic only
+- placeholder / coming soon
+- broken
+
+==================================================
+TASK 2 — AUDIT UI RENDERING / MOBILE UX
+==================================================
+
+Inspect the Settings page on mobile/iPhone-style layout and verify:
+- no clipping
+- no overflow issues
+- no hidden buttons
+- no z-index issues
+- good spacing
+- large tap targets
+- readable labels and descriptions
+- toggles aligned properly
+- modal/forms scroll correctly
+- external-link affordances make sense
+
+Fix anything visually broken or awkward.
+
+==================================================
+TASK 3 — AUDIT PERSISTENCE OF ALL EDITABLE SETTINGS
+==================================================
+
+For every editable setting, verify:
+- where it is stored
+- how it is loaded
+- how it is updated
+- whether it survives reload / app reopen
+- whether the UI reflects the saved value correctly after refresh
+
+Audit this for:
+- training preferences
+- AI coach toggles
+- any account settings
+- any plan/billing metadata shown in-app
+
+If a setting changes visually but does not persist, fix it.
+
+==================================================
+TASK 4 — AUDIT AGENT BEHAVIOR INTEGRATION
+==================================================
+
+For every AI-related setting, verify whether it actually changes the agent behavior.
+
+At minimum audit:
+- Concise responses
+- Proactive insights
+- Auto-adjust recommendations
+- Memory personalization
+- Training preferences as constraints
+
+For each one, trace:
+UI toggle/value
+→ saved setting
+→ settings resolver
+→ agent settings contract
+→ execution planner / fallback / prompt / memory layer
+
+If any setting is cosmetic only, wire it properly.
+
+==================================================
+TASK 5 — AUDIT TRAINING PREFERENCES END TO END
+==================================================
+
+Training preferences must not just save — they must affect real program logic.
+
+Audit:
+- primary goal
+- experience
+- training style
+- days per week
+- session length
+- equipment
+- sport focus
+- limitations
+
+Verify they influence:
+- build constraint contract
+- architecture engine
+- exercise scoring/selection
+- special population detection if relevant
+- refinement behavior if relevant
+
+If preferences are saved but ignored in builds, fix that.
+
+==================================================
+TASK 6 — AUDIT BILLING / SUBSCRIPTION SECTION
+==================================================
+
+Verify that subscriber settings correctly handle:
+- current plan display
+- plan status
+- renewal/cancel state if available
+- Stripe portal link
+- “Managed via Stripe” messaging
+- account behavior if not subscribed
+
+Check:
+- does billing section open Stripe correctly?
+- does it fail gracefully if portal URL is unavailable?
+- is the section accurate for subscriber vs non-subscriber?
+
+Fix any misleading or incomplete behavior.
+
+==================================================
+TASK 7 — AUDIT PRIVACY & DATA LINKS
+==================================================
+
+Verify that:
+- Privacy policy opens correctly
+- Terms of service opens correctly
+- link behavior is intentional (in-app route vs external)
+- no dead links
+- coming soon items are clearly non-interactive or intentionally disabled
+
+Audit:
+- Export my data
+- Clear coach memory
+- Privacy policy
+- Terms of service
+
+If “coming soon” items are clickable in a confusing way, fix that.
+
+==================================================
+TASK 8 — AUDIT SUPPORT FLOWS
+==================================================
+
+Verify full behavior for:
+- Contact support
+- Report a bug
+- Request a feature
+
+Check:
+- correct modal/sheet opens
+- fields validate
+- submission succeeds
+- email goes to Bryan.jones@trainchat.ai
+- success/failure UX works
+- no duplicate submit bug
+- bug reports include useful context
+- forms behave well on mobile
+
+If any support route is unfinished, fix it.
+
+==================================================
+TASK 9 — AUDIT ACCOUNT-STATE EDGE CASES
+==================================================
+
+Test settings behavior under different user states:
+- logged-in subscriber
+- logged-in non-subscriber
+- no active program
+- active program present
+- settings partially filled
+- fresh account with no preferences
+
+Make sure settings page behaves coherently in each case and does not expose broken states.
+
+==================================================
+TASK 10 — ADD SETTINGS AUDIT LOGGING
+==================================================
+
+Add concise development logs for major settings flows, such as:
+
+[SettingsAudit:Load]
+[SettingsAudit:Save]
+[SettingsAudit:AgentIntegration]
+[SettingsAudit:Billing]
+[SettingsAudit:Support]
+
+These should make it easy to confirm:
+- what loaded
+- what saved
+- what affected agent behavior
+- what links/actions fired
+
+==================================================
+TASK 11 — FIX ANY COSMETIC-ONLY SETTINGS
+==================================================
+
+If a setting exists visually but has no real function, do one of the following:
+1. wire it fully
+2. clearly label it as coming soon
+3. temporarily hide it
+
+Do NOT leave fake settings in production-looking UI.
+
+==================================================
+TASK 12 — VERIFY EMPTY / DEFAULT STATES
+==================================================
+
+If a field is “Not set,” verify:
+- user can actually set it
+- save works
+- display updates
+- setting is loaded on refresh
+
+If no value exists, empty state should feel intentional, not broken.
+
+==================================================
+TASK 13 — TEST MATRIX
+==================================================
+
+Run this exact test matrix:
+
+A. Toggle concise responses ON/OFF
+Expected:
+- setting persists
+- agent responses materially change
+
+B. Toggle proactive insights ON/OFF
+Expected:
+- unsolicited suggestions allowed or suppressed accordingly
+
+C. Toggle auto-adjust recommendations ON/OFF
+Expected:
+- mutation authority/suggest-only behavior changes accordingly
+
+D. Toggle memory personalization ON/OFF
+Expected:
+- memory read/write behavior changes accordingly
+
+E. Edit training preferences
+Expected:
+- values save
+- reload persists
+- future builds respect them
+
+F. Open Privacy policy / Terms
+Expected:
+- correct pages load
+
+G. Submit each support type
+Expected:
+- valid submission
+- confirmation shown
+- sent to Bryan.jones@trainchat.ai
+
+H. Open billing management
+Expected:
+- Stripe flow opens correctly
+
+==================================================
+TASK 14 — OUTPUT REQUIRED
+==================================================
+
+Return a full audit report with:
+
+1. complete inventory of settings items
+2. which ones were fully functional vs broken/cosmetic
+3. persistence issues found
+4. agent integration issues found
+5. billing/privacy/support issues found
+6. exact fixes applied
+7. before/after behavior summary
+8. any intentionally remaining “coming soon” items
+
+==================================================
+FINAL STANDARD
+==================================================
+
+The Settings page must be fully trustworthy.
+
+Every visible item must be one of:
+- fully working
+- intentionally disabled / coming soon
+- clearly routed to the correct system
+
+No fake toggles.
+No dead links.
+No cosmetic-only controls.
+No settings that claim to affect the coach but do nothing.
+
+The user should feel that Settings is a real control center for their account, coach, preferences, privacy, billing, and support.

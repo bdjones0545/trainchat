@@ -34,6 +34,7 @@ import {
 import { useState } from "react";
 import PricingModal from "@/components/PricingModal";
 import AnonymousUpgradeModal from "@/components/AnonymousUpgradeModal";
+import { SupportModal, type SupportType } from "@/components/chat/SupportModal";
 import { useGetMe, useLogout } from "@workspace/api-client-react";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
@@ -555,6 +556,7 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [anonymousUpgradePlan, setAnonymousUpgradePlan] = useState<{ planId: string; priceId: string } | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [supportModalType, setSupportModalType] = useState<SupportType | null>(null);
 
   const { data: me } = useGetMe();
   const isAnonymousUser = !!(me as any)?.isAnonymous;
@@ -932,18 +934,18 @@ export default function SettingsPage() {
             <Card>
               <SettingsRow
                 label="Contact support"
-                onClick={() => window.open("mailto:support@trainchat.app", "_blank")}
-                rightElement={<ExternalLink className="w-3.5 h-3.5 text-muted-foreground/50" />}
+                onClick={() => setSupportModalType("contact")}
+                rightElement={<ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />}
               />
               <SettingsRow
                 label="Report a bug"
-                onClick={() => window.open("mailto:bugs@trainchat.app?subject=Bug+Report", "_blank")}
-                rightElement={<ExternalLink className="w-3.5 h-3.5 text-muted-foreground/50" />}
+                onClick={() => setSupportModalType("bug")}
+                rightElement={<ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />}
               />
               <SettingsRow
                 label="Request a feature"
-                onClick={() => window.open("mailto:hello@trainchat.app?subject=Feature+Request", "_blank")}
-                rightElement={<ExternalLink className="w-3.5 h-3.5 text-muted-foreground/50" />}
+                onClick={() => setSupportModalType("feature")}
+                rightElement={<ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />}
               />
             </Card>
           </section>
@@ -967,6 +969,18 @@ export default function SettingsPage() {
           planId={anonymousUpgradePlan.planId}
           priceId={anonymousUpgradePlan.priceId}
           onClose={() => setAnonymousUpgradePlan(null)}
+        />
+      )}
+      {supportModalType && (
+        <SupportModal
+          type={supportModalType}
+          onClose={() => setSupportModalType(null)}
+          prefill={{
+            name: (me as any)?.name ?? (me as any)?.displayName ?? "",
+            email: (me as any)?.email ?? "",
+            userId: (me as any)?.id ?? undefined,
+            plan: plan ?? undefined,
+          }}
         />
       )}
     </div>

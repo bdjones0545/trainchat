@@ -54,6 +54,10 @@ The user interface features a dark theme with electric blue accents and the Inte
 - **Session Identity Sync**: A post-mutation guard that ensures session `label` and `emphasis` remain consistent with the session's training intent after any refinement, using both AI prompt instructions and a deterministic fallback with rule-based templates.
 - **Vibe Coding Interface (Right Panel Behavioral Layer)**: Integrates three refinement surfaces directly into the right panel's Program tab—RefinementChips, SessionRefineActions, and ProgramRefineInput—all routing through the existing `POST /conversations/:id/messages/stream` pipeline for contextual program adjustments.
 
+- **Support Form System**: Three-mode in-app support modal (Contact, Bug Report, Feature Request) accessible from Settings. Submissions are persisted to a `support_submissions` table in Postgres and, when SMTP is configured via env vars (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`), emailed to Bryan.jones@trainchat.ai. Gracefully logs and succeeds without email if SMTP is not configured.
+- **Agent Settings Integration Layer**: User preferences (tone, proactive insights, auto-adjust, memory) stored in localStorage are resolved server-side and injected into the AI system prompt for every request. The `suggest_only` intercept prevents plan mutations when Coach Memory is disabled.
+- **Privacy & Terms Pages**: Public `/privacy` and `/terms` routes with full policy content, dark theme, mobile-friendly sticky headers, accessible from the billing/settings page.
+
 ### System Design Choices
 - **Database Schema**: Comprehensive tables for user data, training programs, conversation history, analytics, and coaching knowledge.
 - **Authentication**: Session-based using `express-session` with a PostgreSQL store, supporting anonymous users via `deviceId`.
