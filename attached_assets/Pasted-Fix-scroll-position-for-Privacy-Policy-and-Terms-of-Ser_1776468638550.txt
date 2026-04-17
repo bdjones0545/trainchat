@@ -1,0 +1,103 @@
+Fix scroll position for Privacy Policy and Terms of Service pages so they always open at the top.
+
+==================================================
+GOAL
+==================================================
+
+When navigating to:
+- /privacy
+- /terms
+
+The page should ALWAYS start at scroll position 0.
+
+==================================================
+STEP 1 — ADD SCROLL RESET ON MOUNT
+==================================================
+
+In both:
+
+PrivacyPolicy.tsx
+TermsOfService.tsx
+
+Add:
+
+import { useEffect } from "react";
+
+useEffect(() => {
+  window.scrollTo(0, 0);
+}, []);
+
+==================================================
+STEP 2 — HANDLE CUSTOM SCROLL CONTAINER (IMPORTANT)
+==================================================
+
+If the app uses a scroll container (common in mobile layouts):
+
+Example:
+<div className="overflow-y-auto h-full" ref={containerRef}>
+
+Then use:
+
+useEffect(() => {
+  const container = document.querySelector("[data-scroll-container]");
+  if (container) {
+    container.scrollTop = 0;
+  } else {
+    window.scrollTo(0, 0);
+  }
+}, []);
+
+AND mark your scroll container:
+
+<div data-scroll-container className="overflow-y-auto h-full">
+
+==================================================
+STEP 3 — (BEST PRACTICE) GLOBAL ROUTE FIX
+==================================================
+
+Create:
+
+src/components/ScrollToTop.tsx
+
+--------------------------------------------------
+
+import { useEffect } from "react";
+import { useLocation } from "wouter"; // or react-router
+
+export default function ScrollToTop() {
+  const [location] = useLocation();
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+
+    const container = document.querySelector("[data-scroll-container]");
+    if (container) container.scrollTop = 0;
+  }, [location]);
+
+  return null;
+}
+
+--------------------------------------------------
+
+Then add it at app root:
+
+<App>
+  <ScrollToTop />
+  {/* rest of app */}
+</App>
+
+==================================================
+STEP 4 — QA CHECK
+==================================================
+
+Test:
+- Open Privacy Policy → should start at top
+- Scroll halfway → go back → reopen → still top
+- Same for Terms
+
+==================================================
+RESULT
+==================================================
+
+No more mid-page loading.
+Clean, predictable navigation behavior.
