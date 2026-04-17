@@ -12,6 +12,7 @@
     "reset:dev-programs": "pnpm exec tsx scripts/reset-dev-programs.ts"
   },
   "dependencies": {
+    "@sendgrid/mail": "^8.1.6",
     "@types/connect-pg-simple": "^7.0.3",
     "@types/express-session": "^1.18.2",
     "@types/nodemailer": "^8.0.0",

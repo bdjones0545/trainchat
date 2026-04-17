@@ -8,6 +8,7 @@ import { requireAuth } from "../middlewares/auth";
 import { logger } from "../lib/logger";
 import { mergeAnonymousToRegistered } from "../lib/anonymousMerge";
 import { getUncachableStripeClient } from "../lib/stripeClient";
+import { sendWelcomeEmail } from "../lib/email";
 
 const router: IRouter = Router();
 
@@ -242,6 +243,13 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     await new Promise<void>((resolve, reject) =>
       req.session.save((err) => (err ? reject(err) : resolve())),
     );
+
+    // Send welcome email — fire-and-forget, never blocks the response
+    if (user.email) {
+      sendWelcomeEmail({ name: user.name ?? "there", email: user.email }).catch((err) =>
+        logger.error({ err, userId: user.id }, "auth/register: welcome email fire-and-forget failed"),
+      );
+    }
 
     res.status(201).json({ user: toPublicUser(user) });
   } catch (err: any) {

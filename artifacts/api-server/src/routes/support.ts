@@ -2,13 +2,22 @@ import { Router, type IRouter } from "express";
 import { db, supportSubmissionsTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
-import { sendSupportEmail } from "../lib/email";
+import {
+  sendSupportSubmissionToAdmin,
+  sendSupportConfirmationToUser,
+  sendBugReportToAdmin,
+  sendBugConfirmationToUser,
+  sendFeatureRequestToAdmin,
+  sendFeatureRequestConfirmationToUser,
+} from "../lib/email";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
 // ─── POST /api/support ───────────────────────────────────────────────────────
-// Stores a support submission in DB and sends email to Bryan.jones@trainchat.ai.
+// Stores a support submission in DB and sends emails:
+//   A. Internal notification to Bryan.jones@trainchat.ai
+//   B. Confirmation email to the user
 // Auth optional — anonymous users can also submit support requests.
 
 router.post("/support", async (req, res): Promise<void> => {
@@ -78,15 +87,15 @@ router.post("/support", async (req, res): Promise<void> => {
       emailSent: "pending",
     }).returning({ id: supportSubmissionsTable.id });
     submissionId = row.id;
-    logger.info({ submissionId, type, email, userId }, "[SettingsAudit:Support] Submission stored in DB");
+    logger.info({ submissionId, type, email, userId }, "[Support] Submission stored in DB");
   } catch (err) {
     logger.error({ err, type, email }, "[Support] Failed to store submission in DB");
     res.status(500).json({ error: "Failed to save your submission. Please try again." });
     return;
   }
 
-  // ── Send email ────────────────────────────────────────────────────────────
-  const emailResult = await sendSupportEmail({
+  // ── Build the payload used by all email functions ─────────────────────────
+  const emailPayload = {
     type: type as "contact" | "bug" | "feature",
     name: name.trim(),
     email: email.trim(),
@@ -95,13 +104,31 @@ router.post("/support", async (req, res): Promise<void> => {
     message: message.trim(),
     metadata: enrichedMetadata,
     userId,
-  });
+  };
 
-  // Update DB with email send status
+  // ── Send both emails in parallel ─────────────────────────────────────────
+  const sendAdmin =
+    type === "contact" ? sendSupportSubmissionToAdmin(emailPayload) :
+    type === "bug"     ? sendBugReportToAdmin(emailPayload) :
+                         sendFeatureRequestToAdmin(emailPayload);
+
+  const sendUser =
+    type === "contact" ? sendSupportConfirmationToUser(emailPayload) :
+    type === "bug"     ? sendBugConfirmationToUser(emailPayload) :
+                         sendFeatureRequestConfirmationToUser(emailPayload);
+
+  const [adminResult, userResult] = await Promise.all([sendAdmin, sendUser]);
+
+  logger.info(
+    { submissionId, adminSent: adminResult.sent, userSent: userResult.sent, type, email },
+    "[Support] Email delivery complete"
+  );
+
+  // ── Update DB with email send status ──────────────────────────────────────
   if (submissionId) {
     try {
       await db.update(supportSubmissionsTable)
-        .set({ emailSent: emailResult.sent ? "sent" : (emailResult.reason ?? "failed") })
+        .set({ emailSent: adminResult.sent ? "sent" : (adminResult.reason ?? "failed") })
         .where(eq(supportSubmissionsTable.id, submissionId));
     } catch {
       // non-blocking
@@ -111,8 +138,9 @@ router.post("/support", async (req, res): Promise<void> => {
   res.json({
     success: true,
     submissionId,
-    emailSent: emailResult.sent,
-    message: emailResult.sent
+    emailSent: adminResult.sent,
+    confirmationSent: userResult.sent,
+    message: adminResult.sent
       ? "Your message has been sent to TrainChat support."
       : "Your message has been received and logged. Our team will follow up.",
   });
