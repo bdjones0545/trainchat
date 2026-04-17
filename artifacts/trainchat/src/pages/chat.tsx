@@ -1177,13 +1177,13 @@ export default function Chat() {
       {/* User identity */}
       <div className="px-5 py-5 border-b border-border">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-sm font-bold text-primary flex-shrink-0">
+          <div className="w-11 h-11 rounded-full bg-primary/20 border-2 border-primary/40 flex items-center justify-center text-sm font-bold text-primary flex-shrink-0 shadow-[0_0_10px_rgba(var(--primary-rgb,99,102,241),0.25)]">
             {initials}
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-foreground truncate">{displayName}</p>
-            <p className="text-[11px] text-muted-foreground">
-              {isAnonymousUser ? "Performance Athlete" : (currentStreak > 0 ? `${currentStreak} day streak 🔥` : "Performance Athlete")}
+            <p className="text-[10px] text-muted-foreground/60">
+              AI Coach Active
             </p>
           </div>
           {calibrationScore > 0 && (
@@ -1206,22 +1206,31 @@ export default function Chat() {
 
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
         {/* Training System — primary nav */}
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-3">Training System</p>
+        <div className="mb-3">
+          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/35 px-3 mb-2">Training System</p>
+          <div className="h-px bg-border/60 mx-3" />
+        </div>
         <button
           onClick={() => { setLocation("/system"); setMobilePanel(null); }}
-          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+          className="relative w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold text-foreground bg-primary/8 border border-primary/15 hover:bg-primary/12 active:scale-[0.98] transition-all text-left overflow-hidden"
         >
-          <Dumbbell className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-          <span>Active Program</span>
-          {hasActiveSystem && (
-            <span className="ml-auto w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
-          )}
+          <span className="absolute left-0 top-0 bottom-0 w-0.5 rounded-l-xl bg-primary/60" />
+          <Dumbbell className="w-4 h-4 text-primary/70 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <span className="text-foreground">Active Program</span>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${hasActiveSystem ? "bg-green-400" : "bg-muted-foreground/30"}`} />
+              <span className="text-[10px] text-muted-foreground/60 font-normal">
+                {hasActiveSystem ? "Live system" : "Ready"}
+              </span>
+            </div>
+          </div>
         </button>
         <button
           type="button"
           style={{ touchAction: "manipulation" }}
           onClick={() => setShowProgramLibrary((v) => !v)}
-          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 active:scale-[0.98] transition-all text-left"
         >
           <Library className="w-4 h-4 text-muted-foreground flex-shrink-0" />
           <span>Saved Programs</span>
@@ -1303,17 +1312,17 @@ export default function Chat() {
         )}
         <button
           onClick={() => { handleNewConversation(); setMobilePanel(null); }}
-          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 active:scale-[0.98] transition-all text-left"
         >
           <Plus className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-          <span>New Builder Session</span>
+          <span>New Program</span>
         </button>
 
         {/* Tools */}
         <div className="my-3 h-px bg-border" />
         <button
           onClick={() => { setShowReadiness(true); setMobilePanel(null); }}
-          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 active:scale-[0.98] transition-all text-left"
         >
           <Activity className="w-4 h-4 text-muted-foreground flex-shrink-0" />
           <span>Check-In</span>
@@ -1321,7 +1330,7 @@ export default function Chat() {
         {!isAnonymousUser && (
           <button
             onClick={() => { setMobilePanel(null); setLocation("/billing"); }}
-            className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
+            className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 active:scale-[0.98] transition-all text-left"
           >
             <CreditCard className="w-4 h-4 text-muted-foreground flex-shrink-0" />
             <span>Settings</span>
@@ -1330,7 +1339,7 @@ export default function Chat() {
         {!isPremium && (
           <button
             onClick={() => { setShowPricing(true); setMobilePanel(null); }}
-            className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-primary hover:bg-primary/5 active:bg-primary/10 transition-all text-left"
+            className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-primary hover:bg-primary/5 active:bg-primary/10 active:scale-[0.98] transition-all text-left"
           >
             <Zap className="w-4 h-4 flex-shrink-0" />
             <span>Upgrade to Pro</span>
@@ -1338,16 +1347,21 @@ export default function Chat() {
         )}
 
         {/* Session History — de-emphasized */}
-        <div className="my-3 h-px bg-border" />
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-3">Session History</p>
+        <div className="mt-3 mb-3">
+          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/35 px-3 mb-2">Session History</p>
+          <div className="h-px bg-border/60 mx-3" />
+        </div>
         {conversations.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground/50 px-3 py-2">No sessions yet</p>
+          <div className="px-3 py-2">
+            <p className="text-[11px] text-muted-foreground/50">No sessions yet</p>
+            <p className="text-[10px] text-muted-foreground/35 mt-0.5">Start a program to begin your history</p>
+          </div>
         ) : (
           conversations.slice(0, 12).map((convo: any) => (
             <div key={convo.id} className="group relative">
               <button
                 onClick={() => { handleSelectConvo(convo.id); setMobilePanel(null); }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 pr-8 rounded-xl text-sm transition-all text-left ${
+                className={`w-full flex items-center gap-3 px-3 py-2.5 pr-8 rounded-xl text-sm transition-all text-left active:scale-[0.98] ${
                   convo.id === activeConvoId
                     ? "bg-primary/10 text-primary font-semibold"
                     : "font-medium text-foreground hover:bg-muted/60 active:bg-muted/80"
