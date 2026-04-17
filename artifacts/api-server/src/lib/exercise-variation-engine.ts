@@ -100,6 +100,7 @@ interface CandidateScore {
     noveltyBonus: number;
     fatiguePenalty: number;
     overusePenalty: number;
+    contrastPenalty: number;
     exactRepeatPenalty: number;
     seedTiebreaker: number;
   };
@@ -115,35 +116,60 @@ export interface SlotDebugInfo {
 }
 
 // ─── Overuse Registry ─────────────────────────────────────────────────────────
-// Tracks how many times each exercise has been selected in recent builds.
-// Resets after MAX_REGISTRY_AGE_MS or REGISTRY_MAX_BUILDS builds.
+// Per-build sliding window: tracks which exercises appeared in each of the last
+// REGISTRY_MAX_BUILDS builds. Overuse count = how many builds contained that
+// exercise. Eviction removes the oldest builds (not timestamp-based clearing).
+//
+// Also maintains a two-build contrast memory for immediate repeat avoidance:
+// exercises from the immediately prior build receive a strong extra penalty;
+// exercises from two builds ago receive a moderate penalty.
 
-const OVERUSE_REGISTRY: Map<string, number> = new Map();
-const REGISTRY_TIMESTAMPS: number[] = [];
+interface BuildRecord {
+  timestamp: number;
+  exercises: string[];
+}
+
+const REGISTRY_BUILDS: BuildRecord[] = [];
 const REGISTRY_MAX_BUILDS = 20;
-const MAX_REGISTRY_AGE_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_REGISTRY_AGE_MS = 15 * 60 * 1000; // 15 minutes
+
+// Contrast memory: most recent two builds for strong intra-session penalty
+let LAST_BUILD_SELECTIONS: Set<string> = new Set();
+let SECOND_LAST_BUILD_SELECTIONS: Set<string> = new Set();
 
 function registerBuildSelections(selections: Record<string, string>): void {
   const now = Date.now();
-  REGISTRY_TIMESTAMPS.push(now);
+  const exercises = Object.values(selections).filter(Boolean);
 
-  // Evict old entries
+  // Rotate contrast memory
+  SECOND_LAST_BUILD_SELECTIONS = new Set(LAST_BUILD_SELECTIONS);
+  LAST_BUILD_SELECTIONS = new Set(exercises);
+
+  // Evict builds that are too old or exceed the cap
   const cutoff = now - MAX_REGISTRY_AGE_MS;
-  while (REGISTRY_TIMESTAMPS.length > REGISTRY_MAX_BUILDS || (REGISTRY_TIMESTAMPS[0] && REGISTRY_TIMESTAMPS[0] < cutoff)) {
-    REGISTRY_TIMESTAMPS.shift();
-    if (REGISTRY_TIMESTAMPS.length === 0) {
-      OVERUSE_REGISTRY.clear();
-      break;
-    }
+  while (
+    REGISTRY_BUILDS.length > 0 &&
+    (REGISTRY_BUILDS.length >= REGISTRY_MAX_BUILDS || REGISTRY_BUILDS[0].timestamp < cutoff)
+  ) {
+    REGISTRY_BUILDS.shift();
   }
 
-  for (const name of Object.values(selections)) {
-    OVERUSE_REGISTRY.set(name, (OVERUSE_REGISTRY.get(name) ?? 0) + 1);
-  }
+  REGISTRY_BUILDS.push({ timestamp: now, exercises });
 }
 
+/** How many of the last N builds included this exercise (proper sliding count). */
 function getOveruseCount(name: string): number {
-  return OVERUSE_REGISTRY.get(name) ?? 0;
+  return REGISTRY_BUILDS.filter((b) => b.exercises.includes(name)).length;
+}
+
+/**
+ * Extra penalty for exercises used in the most recent builds.
+ * Last build: −3, second-to-last: −1.5  → forces real contrast on repeated prompts.
+ */
+function getContrastPenalty(name: string): number {
+  if (LAST_BUILD_SELECTIONS.has(name)) return 3.0;
+  if (SECOND_LAST_BUILD_SELECTIONS.has(name)) return 1.5;
+  return 0;
 }
 
 // ─── Scoring System ────────────────────────────────────────────────────────────
@@ -217,6 +243,22 @@ function hasEquipment(exerciseName: string, equipmentLevel: string): boolean {
   });
 }
 
+/**
+ * Explicit per-exercise overused-anchor extra penalty.
+ * Applied ON TOP of the isDefaultAnchor flag for the worst repeat offenders.
+ * Does not ban these exercises — just requires competitors to earn significantly
+ * lower scores before these can win again.
+ */
+const ANCHOR_EXTRA_PENALTY: Record<string, number> = {
+  "Broad Jump": 1.5,
+  "Back Squat": 1.5,
+  "Weighted Pull-Up": 1.0,
+  "Bulgarian Split Squat": 1.0,
+  "Pallof Press": 1.0,
+  "Conventional Deadlift": 1.0,
+  "Dead Bug": 0.5,
+};
+
 function scoreCandidate(
   meta: ExerciseMeta,
   ctx: ScoreContext,
@@ -243,10 +285,13 @@ function scoreCandidate(
   // ── Equipment fit (0–1) ───────────────────────────────────────────────────
   const equipFit = hasEquipment(meta.name, ctx.equipmentLevel) ? 1 : -3;
 
-  // ── Novelty bonus (0–2) ───────────────────────────────────────────────────
-  // Bonus for exercises that are NOT default anchors and have been used less.
-  const defaultAnchorPenalty = meta.isDefaultAnchor ? -1 : 1;
-  const noveltyBonus = defaultAnchorPenalty;
+  // ── Novelty bonus ─────────────────────────────────────────────────────────
+  // isDefaultAnchor: −2.5 (was −1) — substantially reduces win rate of over-used classics.
+  // Non-anchors: +1.0 — gives alternatives a meaningful head-start.
+  // Explicit per-exercise extra penalty for the worst repeat offenders.
+  const defaultAnchorPenalty = meta.isDefaultAnchor ? -2.5 : 1.0;
+  const anchorExtraPenalty = ANCHOR_EXTRA_PENALTY[meta.name] ?? 0;
+  const noveltyBonus = defaultAnchorPenalty - anchorExtraPenalty;
 
   // ── Fatigue penalty (0–2) ─────────────────────────────────────────────────
   let fatiguePenalty = 0;
@@ -256,19 +301,26 @@ function scoreCandidate(
     fatiguePenalty = 1;
   }
 
-  // ── Overuse penalty (0–3) ─────────────────────────────────────────────────
+  // ── Overuse penalty — proper sliding window (0–6) ────────────────────────
+  // Each build that contained this exercise adds 1.2 penalty points (was 1.0, capped at 3).
+  // Cap raised to 6 so heavily repeated exercises truly fall behind alternatives.
   const usageCount = getOveruseCount(meta.name);
-  const overusePenalty = Math.min(3, usageCount);
+  const overusePenalty = Math.min(6, usageCount * 1.2);
+
+  // ── Contrast penalty — immediate build-to-build rotation (0–3) ───────────
+  // Last build: −3.0, second-to-last: −1.5 — the strongest variety lever.
+  const contrastPenalty = getContrastPenalty(meta.name);
 
   // ── Exact repeat penalty (0–5) ────────────────────────────────────────────
   const exactRepeatPenalty = ctx.alreadySelected.has(meta.name) ? 5 : 0;
 
-  // ── Seed tiebreaker (0–0.99) ──────────────────────────────────────────────
-  // Deterministic within a build, varied across builds.
-  const seedTiebreaker = ((ctx.seed * slotPrimeMultiplier * 2654435761) % 1 + 1) % 1;
+  // ── Seed tiebreaker (0–1.5) ───────────────────────────────────────────────
+  // Raised from 0–0.99 → 0–1.5 so tiebreaks have meaningful spread.
+  // Deterministic within a build (same seed produces same ranking), varied across builds.
+  const seedTiebreaker = (((ctx.seed * slotPrimeMultiplier * 2654435761) % 1) + 1) % 1 * 1.5;
 
   const total = sportFit + intentFit + neuralFit + equipFit + noveltyBonus
-    - fatiguePenalty - overusePenalty - exactRepeatPenalty + seedTiebreaker;
+    - fatiguePenalty - overusePenalty - contrastPenalty - exactRepeatPenalty + seedTiebreaker;
 
   return {
     name: meta.name,
@@ -281,6 +333,7 @@ function scoreCandidate(
       noveltyBonus,
       fatiguePenalty,
       overusePenalty,
+      contrastPenalty,
       exactRepeatPenalty,
       seedTiebreaker,
     },
@@ -309,8 +362,10 @@ function ranked(pool: ExerciseMeta[], ctx: ScoreContext, primeMultiplier: number
       sport: ctx.sport,
       intent: ctx.sessionIntent,
       poolSize: pool.length,
-      top3: top3.map((c) => ({ name: c.name, score: Number(c.score.toFixed(2)), ...c.breakdown })),
+      top5: scored.slice(0, 5).map((c) => ({ name: c.name, score: Number(c.score.toFixed(2)), ...c.breakdown })),
       chosen,
+      contrastPenaltyActive: LAST_BUILD_SELECTIONS.size > 0,
+      lastBuildAnchors: [...LAST_BUILD_SELECTIONS].slice(0, 6),
     }));
   }
 
@@ -348,15 +403,16 @@ const LOWER_POWER_POOL_SUBMAXIMAL: ExerciseMeta[] = [
 
 const BILATERAL_SQUAT_POOL: ExerciseMeta[] = [
   { name: "Back Squat", sportTags: [], intentTags: ["strength", "hypertrophy", "power"], neuralDemand: "high", fatigueCost: "high", isDefaultAnchor: true },
-  { name: "Front Squat", sportTags: ["olympic", "soccer", "basketball"], intentTags: ["strength", "hypertrophy"], neuralDemand: "high", fatigueCost: "high" },
-  { name: "Pause Back Squat", sportTags: [], intentTags: ["strength", "stability"], neuralDemand: "high", fatigueCost: "high" },
-  { name: "Safety Bar Squat", sportTags: [], intentTags: ["strength", "hypertrophy"], neuralDemand: "high", fatigueCost: "high" },
-  { name: "Box Squat", sportTags: ["football", "powerlifting"], intentTags: ["power", "strength"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Front Squat", sportTags: ["olympic", "soccer", "basketball", "lacrosse"], intentTags: ["strength", "hypertrophy"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Pause Back Squat", sportTags: ["football", "rugby", "powerlifting"], intentTags: ["strength", "stability"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Safety Bar Squat", sportTags: ["football", "rugby", "hockey"], intentTags: ["strength", "hypertrophy"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Box Squat", sportTags: ["football", "powerlifting", "rugby"], intentTags: ["power", "strength"], neuralDemand: "high", fatigueCost: "moderate" },
   { name: "Low-Bar Back Squat", sportTags: ["powerlifting"], intentTags: ["strength"], neuralDemand: "high", fatigueCost: "high" },
-  { name: "Cambered Bar Squat", sportTags: [], intentTags: ["strength", "stability"], neuralDemand: "high", fatigueCost: "high" },
-  { name: "Heel-Elevated Back Squat", sportTags: [], intentTags: ["hypertrophy"], neuralDemand: "moderate", fatigueCost: "moderate" },
-  { name: "Trap Bar Deadlift (squat-mode, low handles)", sportTags: ["football", "rugby", "hockey"], intentTags: ["strength", "power"], neuralDemand: "high", fatigueCost: "high" },
-  { name: "Zercher Squat", sportTags: [], intentTags: ["strength", "stability"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Cambered Bar Squat", sportTags: ["football", "rugby"], intentTags: ["strength", "stability"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Heel-Elevated Back Squat", sportTags: ["soccer", "basketball", "volleyball"], intentTags: ["hypertrophy", "mobility"], neuralDemand: "moderate", fatigueCost: "moderate" },
+  { name: "Trap Bar Deadlift (squat-mode, low handles)", sportTags: ["football", "rugby", "hockey", "basketball"], intentTags: ["strength", "power"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Zercher Squat", sportTags: ["wrestling", "mma", "football"], intentTags: ["strength", "stability"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Hatfield Squat", sportTags: ["football", "rugby", "powerlifting"], intentTags: ["strength", "power"], neuralDemand: "high", fatigueCost: "high" },
 ];
 
 const BILATERAL_SQUAT_JOINT_FRIENDLY: ExerciseMeta[] = [
@@ -371,12 +427,15 @@ const BILATERAL_SQUAT_JOINT_FRIENDLY: ExerciseMeta[] = [
 
 const BILATERAL_SQUAT_STRENGTH_FOCUS: ExerciseMeta[] = [
   { name: "Back Squat", sportTags: [], intentTags: ["strength"], neuralDemand: "high", fatigueCost: "high", isDefaultAnchor: true },
-  { name: "Pause Back Squat", sportTags: [], intentTags: ["strength", "stability"], neuralDemand: "high", fatigueCost: "high" },
-  { name: "Safety Bar Squat", sportTags: [], intentTags: ["strength", "hypertrophy"], neuralDemand: "high", fatigueCost: "high" },
-  { name: "Cambered Bar Squat", sportTags: [], intentTags: ["strength", "stability"], neuralDemand: "high", fatigueCost: "high" },
-  { name: "Box Squat", sportTags: [], intentTags: ["power", "strength"], neuralDemand: "high", fatigueCost: "moderate" },
-  { name: "Low-Bar Back Squat", sportTags: [], intentTags: ["strength"], neuralDemand: "high", fatigueCost: "high" },
-  { name: "Front Squat", sportTags: [], intentTags: ["strength"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Pause Back Squat", sportTags: ["football", "rugby", "powerlifting"], intentTags: ["strength", "stability"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Safety Bar Squat", sportTags: ["football", "rugby", "hockey"], intentTags: ["strength", "hypertrophy"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Cambered Bar Squat", sportTags: ["football", "rugby"], intentTags: ["strength", "stability"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Box Squat", sportTags: ["football", "powerlifting", "rugby"], intentTags: ["power", "strength"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Low-Bar Back Squat", sportTags: ["powerlifting"], intentTags: ["strength"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Front Squat", sportTags: ["soccer", "basketball", "lacrosse"], intentTags: ["strength"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Trap Bar Deadlift (squat-mode, low handles)", sportTags: ["football", "rugby", "hockey", "basketball"], intentTags: ["strength", "power"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Hatfield Squat", sportTags: ["football", "rugby", "powerlifting"], intentTags: ["strength", "power"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Zercher Squat", sportTags: ["wrestling", "mma", "football"], intentTags: ["strength", "stability"], neuralDemand: "high", fatigueCost: "high" },
 ];
 
 const BILATERAL_SQUAT_HYPERTROPHY_FOCUS: ExerciseMeta[] = [
@@ -393,16 +452,18 @@ const BILATERAL_SQUAT_HYPERTROPHY_FOCUS: ExerciseMeta[] = [
 
 const BILATERAL_HINGE_POOL: ExerciseMeta[] = [
   { name: "Conventional Deadlift", sportTags: [], intentTags: ["strength", "power"], neuralDemand: "high", fatigueCost: "high", isDefaultAnchor: true },
-  { name: "Romanian Deadlift", sportTags: ["soccer", "football", "basketball"], intentTags: ["hypertrophy", "strength", "stability"], neuralDemand: "moderate", fatigueCost: "moderate" },
-  { name: "Trap Bar Deadlift", sportTags: ["football", "hockey", "rugby"], intentTags: ["strength", "power"], neuralDemand: "high", fatigueCost: "high" },
-  { name: "Sumo Deadlift", sportTags: ["powerlifting", "football"], intentTags: ["strength"], neuralDemand: "high", fatigueCost: "high" },
-  { name: "Rack Pull (from knee)", sportTags: [], intentTags: ["strength"], neuralDemand: "high", fatigueCost: "moderate" },
-  { name: "Dumbbell Romanian Deadlift", sportTags: [], intentTags: ["hypertrophy", "stability"], neuralDemand: "moderate", fatigueCost: "low" },
-  { name: "Hex Bar RDL", sportTags: ["football", "rugby"], intentTags: ["strength", "hypertrophy"], neuralDemand: "moderate", fatigueCost: "moderate" },
-  { name: "Good Morning", sportTags: ["soccer", "track"], intentTags: ["strength", "mobility"], neuralDemand: "moderate", fatigueCost: "moderate" },
-  { name: "Snatch-Grip Deadlift", sportTags: ["olympic", "track"], intentTags: ["strength", "power"], neuralDemand: "high", fatigueCost: "high" },
-  { name: "Romanian Deadlift (heavy)", sportTags: [], intentTags: ["strength", "hypertrophy"], neuralDemand: "high", fatigueCost: "high" },
-  { name: "Banded Deadlift", sportTags: ["powerlifting", "football"], intentTags: ["power", "strength"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Romanian Deadlift", sportTags: ["soccer", "football", "basketball", "lacrosse"], intentTags: ["hypertrophy", "strength", "stability"], neuralDemand: "moderate", fatigueCost: "moderate" },
+  { name: "Trap Bar Deadlift", sportTags: ["football", "hockey", "rugby", "basketball"], intentTags: ["strength", "power"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Sumo Deadlift", sportTags: ["powerlifting", "football", "rugby"], intentTags: ["strength"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Rack Pull (from knee)", sportTags: ["football", "rugby", "powerlifting"], intentTags: ["strength", "power"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Dumbbell Romanian Deadlift", sportTags: ["soccer", "basketball", "lacrosse"], intentTags: ["hypertrophy", "stability"], neuralDemand: "moderate", fatigueCost: "low" },
+  { name: "Hex Bar RDL", sportTags: ["football", "rugby", "hockey"], intentTags: ["strength", "hypertrophy"], neuralDemand: "moderate", fatigueCost: "moderate" },
+  { name: "Good Morning", sportTags: ["soccer", "track", "football"], intentTags: ["strength", "mobility"], neuralDemand: "moderate", fatigueCost: "moderate" },
+  { name: "Snatch-Grip Deadlift", sportTags: ["olympic", "track", "football"], intentTags: ["strength", "power"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Romanian Deadlift (heavy)", sportTags: ["football", "rugby"], intentTags: ["strength", "hypertrophy"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Banded Deadlift", sportTags: ["powerlifting", "football", "rugby"], intentTags: ["power", "strength"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Hip Thrust (barbell)", sportTags: ["soccer", "football", "sprint", "track"], intentTags: ["strength", "hypertrophy", "power"], neuralDemand: "moderate", fatigueCost: "moderate" },
+  { name: "Stiff-Leg Deadlift", sportTags: ["track", "soccer", "football"], intentTags: ["strength", "hypertrophy"], neuralDemand: "high", fatigueCost: "high" },
 ];
 
 const BILATERAL_HINGE_MODERATE_FATIGUE: ExerciseMeta[] = [
@@ -419,15 +480,17 @@ const BILATERAL_HINGE_MODERATE_FATIGUE: ExerciseMeta[] = [
 
 const UNILATERAL_LOWER_SQUAT_POOL: ExerciseMeta[] = [
   { name: "Bulgarian Split Squat", sportTags: [], intentTags: ["strength", "hypertrophy", "stability"], neuralDemand: "moderate", fatigueCost: "high", isDefaultAnchor: true },
-  { name: "Rear-Foot Elevated Split Squat (RFESS)", sportTags: ["soccer", "football", "basketball"], intentTags: ["strength", "stability"], neuralDemand: "moderate", fatigueCost: "high" },
-  { name: "Lateral Step-Up", sportTags: ["soccer", "hockey", "basketball"], intentTags: ["stability", "strength", "speed"], neuralDemand: "moderate", fatigueCost: "moderate" },
-  { name: "Single-Leg Squat to Box", sportTags: ["football", "basketball"], intentTags: ["stability", "strength"], neuralDemand: "moderate", fatigueCost: "moderate" },
-  { name: "Reverse Lunge", sportTags: ["soccer", "basketball", "lacrosse"], intentTags: ["stability", "strength"], neuralDemand: "moderate", fatigueCost: "moderate" },
-  { name: "Lateral Lunge", sportTags: ["hockey", "soccer", "basketball", "lacrosse"], intentTags: ["mobility", "stability", "strength"], neuralDemand: "moderate", fatigueCost: "moderate" },
-  { name: "Walking Lunge (weighted)", sportTags: ["soccer", "football", "track"], intentTags: ["strength", "endurance"], neuralDemand: "moderate", fatigueCost: "high" },
+  { name: "Rear-Foot Elevated Split Squat (RFESS)", sportTags: ["soccer", "football", "basketball", "rugby"], intentTags: ["strength", "stability", "power"], neuralDemand: "moderate", fatigueCost: "high" },
+  { name: "Lateral Step-Up", sportTags: ["soccer", "hockey", "basketball", "football"], intentTags: ["stability", "strength", "speed"], neuralDemand: "moderate", fatigueCost: "moderate" },
+  { name: "Single-Leg Squat to Box", sportTags: ["football", "basketball", "lacrosse"], intentTags: ["stability", "strength"], neuralDemand: "moderate", fatigueCost: "moderate" },
+  { name: "Reverse Lunge", sportTags: ["soccer", "basketball", "lacrosse", "football"], intentTags: ["stability", "strength"], neuralDemand: "moderate", fatigueCost: "moderate" },
+  { name: "Lateral Lunge", sportTags: ["hockey", "soccer", "basketball", "lacrosse", "football"], intentTags: ["mobility", "stability", "strength"], neuralDemand: "moderate", fatigueCost: "moderate" },
+  { name: "Walking Lunge (weighted)", sportTags: ["soccer", "football", "track", "rugby"], intentTags: ["strength", "endurance"], neuralDemand: "moderate", fatigueCost: "high" },
   { name: "Cossack Squat", sportTags: ["hockey", "soccer", "mma", "wrestling"], intentTags: ["mobility", "stability"], neuralDemand: "low", fatigueCost: "low" },
-  { name: "Deficit Reverse Lunge", sportTags: [], intentTags: ["strength", "stability"], neuralDemand: "moderate", fatigueCost: "high" },
-  { name: "Step-Up (front, loaded)", sportTags: ["football", "rugby", "soccer"], intentTags: ["strength", "stability"], neuralDemand: "moderate", fatigueCost: "moderate" },
+  { name: "Deficit Reverse Lunge", sportTags: ["football", "rugby", "track"], intentTags: ["strength", "stability"], neuralDemand: "moderate", fatigueCost: "high" },
+  { name: "Step-Up (front, loaded)", sportTags: ["football", "rugby", "soccer", "hockey"], intentTags: ["strength", "stability", "power"], neuralDemand: "moderate", fatigueCost: "moderate" },
+  { name: "Elevated Split Squat (barbell)", sportTags: ["football", "powerlifting", "rugby"], intentTags: ["strength", "hypertrophy"], neuralDemand: "moderate", fatigueCost: "high" },
+  { name: "Heel-Elevated Goblet Split Squat", sportTags: ["soccer", "basketball", "volleyball"], intentTags: ["mobility", "strength", "stability"], neuralDemand: "moderate", fatigueCost: "moderate" },
 ];
 
 const UNILATERAL_LOWER_HINGE_POOL: ExerciseMeta[] = [
@@ -498,15 +561,18 @@ const UPPER_PUSH_SECONDARY_POOL: ExerciseMeta[] = [
 // ── Upper Pull ────────────────────────────────────────────────────────────────
 
 const UPPER_PULL_PRIMARY_POOL: ExerciseMeta[] = [
-  { name: "Weighted Pull-Up", sportTags: ["basketball", "gymnastics", "mma", "swimming"], intentTags: ["strength", "hypertrophy"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Weighted Pull-Up", sportTags: ["basketball", "gymnastics", "mma", "swimming"], intentTags: ["strength", "hypertrophy"], neuralDemand: "high", fatigueCost: "high", isDefaultAnchor: true },
   { name: "Barbell Bent-Over Row", sportTags: ["football", "powerlifting", "rugby"], intentTags: ["strength", "hypertrophy"], neuralDemand: "high", fatigueCost: "high" },
-  { name: "Weighted Chin-Up", sportTags: ["gymnastics", "mma", "basketball"], intentTags: ["strength", "hypertrophy"], neuralDemand: "high", fatigueCost: "high" },
-  { name: "Seated Cable Row", sportTags: ["swimming", "rowing"], intentTags: ["hypertrophy", "stability"], neuralDemand: "moderate", fatigueCost: "moderate" },
-  { name: "Pendlay Row", sportTags: ["football", "rugby"], intentTags: ["strength", "power"], neuralDemand: "high", fatigueCost: "high" },
-  { name: "Single-Arm Dumbbell Row", sportTags: [], intentTags: ["hypertrophy", "stability"], neuralDemand: "moderate", fatigueCost: "moderate" },
-  { name: "T-Bar Row", sportTags: ["football", "rugby"], intentTags: ["strength", "hypertrophy"], neuralDemand: "high", fatigueCost: "high" },
-  { name: "Chest-Supported Dumbbell Row", sportTags: [], intentTags: ["hypertrophy", "stability"], neuralDemand: "moderate", fatigueCost: "low" },
-  { name: "Meadows Row", sportTags: [], intentTags: ["hypertrophy"], neuralDemand: "moderate", fatigueCost: "moderate" },
+  { name: "Weighted Chin-Up", sportTags: ["gymnastics", "mma", "basketball", "soccer"], intentTags: ["strength", "hypertrophy"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Seated Cable Row", sportTags: ["swimming", "rowing", "soccer"], intentTags: ["hypertrophy", "stability"], neuralDemand: "moderate", fatigueCost: "moderate" },
+  { name: "Pendlay Row", sportTags: ["football", "rugby", "hockey"], intentTags: ["strength", "power"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Single-Arm Dumbbell Row", sportTags: ["basketball", "soccer", "lacrosse"], intentTags: ["hypertrophy", "stability"], neuralDemand: "moderate", fatigueCost: "moderate" },
+  { name: "T-Bar Row", sportTags: ["football", "rugby", "hockey"], intentTags: ["strength", "hypertrophy"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Chest-Supported Dumbbell Row", sportTags: ["swimming", "baseball", "tennis"], intentTags: ["hypertrophy", "stability"], neuralDemand: "moderate", fatigueCost: "low" },
+  { name: "Meadows Row", sportTags: ["bodybuilding", "mma"], intentTags: ["hypertrophy"], neuralDemand: "moderate", fatigueCost: "moderate" },
+  { name: "Seal Row", sportTags: ["football", "rugby", "swimming"], intentTags: ["hypertrophy", "stability"], neuralDemand: "moderate", fatigueCost: "moderate" },
+  { name: "Dumbbell Seal Row", sportTags: ["soccer", "basketball"], intentTags: ["hypertrophy", "stability"], neuralDemand: "moderate", fatigueCost: "low" },
+  { name: "Half-Kneeling Cable Pull", sportTags: ["golf", "baseball", "tennis", "soccer"], intentTags: ["stability", "hypertrophy", "rotational"], neuralDemand: "moderate", fatigueCost: "low" },
 ];
 
 const UPPER_PULL_SECONDARY_POOL: ExerciseMeta[] = [
@@ -839,49 +905,66 @@ export function buildVariationMandate(sel: SlotExerciseSelection, sport: string 
   const blockVariant = getBlockVariant(sel.block_template_index, sport);
   const blockDescription = describeBlockVariant(blockVariant, sel);
 
+  const variantLabel = blockVariant === "squat_first" ? "A" : blockVariant === "hinge_first" ? "B" : blockVariant === "power_extended" ? "C" : "D";
+
   const lines = [
-    `## EXERCISE VARIATION MANDATE — ENFORCE THESE SPECIFIC SELECTIONS`,
+    `## ⚠️ CRITICAL EXERCISE MANDATE — LOCKED SELECTIONS — DO NOT OVERRIDE ⚠️`,
     ``,
-    `The following exercises have been pre-selected for this build via a ranked scoring engine.`,
-    `Use them exactly. Do NOT substitute with Back Squat, Conventional Deadlift, Broad Jump,`,
-    `Bulgarian Split Squat, or Pallof Press unless those ARE the pre-selected option listed below.`,
+    `These exercises were chosen by a pre-computation scoring engine based on sport fit,`,
+    `intent matching, novelty rotation, and repeat-avoidance. They are FINAL for this build.`,
     ``,
-    `### PRE-SELECTED EXERCISES BY SLOT`,
+    `OVERRIDE PROTECTION: Substituting any locked exercise below with a generic default`,
+    `(Back Squat, Broad Jump, Pull-Up, Bulgarian Split Squat, Pallof Press, Conventional Deadlift)`,
+    `is a BUILD FAILURE — unless that generic exercise IS the one explicitly listed.`,
     ``,
-    `- **Power / Explosive slot**: ${sel.lower_power}`,
-    `- **Bilateral squat strength**: ${sel.bilateral_squat_strength}`,
-    `- **Bilateral hinge strength**: ${sel.bilateral_hinge_strength}`,
-    `- **Unilateral lower (squat-pattern days)**: ${sel.unilateral_lower}`,
-    `- **Unilateral lower (hinge-pattern days)**: ${sel.unilateral_lower_alt}`,
-    `- **Trunk anti-rotation**: ${sel.trunk_anti_rotation}`,
-    `- **Trunk anti-extension**: ${sel.trunk_anti_extension}`,
-    `- **Upper push primary**: ${sel.upper_push_primary}`,
-    `- **Upper push secondary**: ${sel.upper_push_secondary}`,
-    `- **Upper pull primary**: ${sel.upper_pull_primary}`,
-    `- **Upper pull secondary**: ${sel.upper_pull_secondary}`,
-    isRotationalSport ? `- **Rotational power**: ${sel.rotational_power}` : null,
-    isElasticSport ? `- **Elastic / reactive power**: ${sel.elastic_power}` : null,
+    `### LOCKED EXERCISES — USE THESE EXACTLY`,
     ``,
-    `### SESSION BLOCK ORDER (this build)`,
+    `- Power / Explosive: ${sel.lower_power}`,
+    `- Bilateral Squat Primary: ${sel.bilateral_squat_strength}`,
+    `- Bilateral Hinge Primary: ${sel.bilateral_hinge_strength}`,
+    `- Unilateral Lower (squat days): ${sel.unilateral_lower}`,
+    `- Unilateral Lower (hinge days): ${sel.unilateral_lower_alt}`,
+    `- Trunk Anti-Rotation: ${sel.trunk_anti_rotation}`,
+    `- Trunk Anti-Extension: ${sel.trunk_anti_extension}`,
+    `- Upper Push Primary: ${sel.upper_push_primary}`,
+    `- Upper Push Secondary: ${sel.upper_push_secondary}`,
+    `- Upper Pull Primary: ${sel.upper_pull_primary}`,
+    `- Upper Pull Secondary: ${sel.upper_pull_secondary}`,
+    isRotationalSport ? `- Rotational Power: ${sel.rotational_power}` : null,
+    isElasticSport ? `- Elastic / Reactive Power: ${sel.elastic_power}` : null,
+    ``,
+    `### SUBSTITUTION RULES — PROHIBITED DEFAULTS`,
+    ``,
+    `Do NOT use these unless they appear above as the locked selection:`,
+    `- PROHIBITED as squat primary: Back Squat → use ${sel.bilateral_squat_strength}`,
+    `- PROHIBITED as power exercise: Broad Jump → use ${sel.lower_power}`,
+    `- PROHIBITED as hinge primary: Conventional Deadlift → use ${sel.bilateral_hinge_strength}`,
+    `- PROHIBITED as unilateral primary: Bulgarian Split Squat → use ${sel.unilateral_lower}`,
+    `- PROHIBITED as sole trunk exercise: Pallof Press → use ${sel.trunk_anti_rotation}`,
+    `- PROHIBITED as upper pull primary: Unweighted Pull-Up → use ${sel.upper_pull_primary}`,
+    ``,
+    `### SESSION BLOCK ORDER — VARIANT ${variantLabel}`,
     ``,
     blockDescription,
     ``,
-    `### REPEAT AVOIDANCE RULES`,
+    `### CROSS-SESSION VARIETY RULES`,
     ``,
-    `1. No single exercise should appear as a primary lift in more than one session.`,
-    `2. If a slot exercise appears twice in the program, use a variation:`,
-    `   - ${sel.bilateral_squat_strength} appears twice → second session uses a tempo or pause variant`,
-    `   - ${sel.bilateral_hinge_strength} appears twice → second session uses a different load scheme or unilateral version`,
-    `3. Power slots across sessions must differ — if Day 1 uses ${sel.lower_power}, Day 3 uses a different power modality.`,
-    `4. Accessory exercises (unilateral, trunk) may repeat — they are not anchors.`,
+    `1. No exercise appears as a PRIMARY lift in more than one session.`,
+    `2. If the same slot must appear on two days: Day 1 uses strength sets; Day 3 uses speed/technique sets at 65–75%.`,
+    `3. Power choices MUST differ across sessions. Day 1 = ${sel.lower_power}; other days use a different power modality.`,
+    `4. At least 3 DIFFERENT trunk exercises must appear across the full week — not the same one every session.`,
     ``,
-    `### VALIDATION CHECKLIST`,
+    `### FINAL VALIDATION CHECKLIST`,
     ``,
+    `- [ ] ${sel.lower_power} is used as the power/explosive slot`,
+    `- [ ] ${sel.bilateral_squat_strength} is used as the bilateral squat primary`,
+    `- [ ] ${sel.bilateral_hinge_strength} is used as the bilateral hinge primary`,
+    `- [ ] ${sel.unilateral_lower} is used for unilateral lower on squat-primary days`,
+    `- [ ] ${sel.trunk_anti_rotation} is used for anti-rotation trunk work`,
+    `- [ ] ${sel.upper_pull_primary} is used as the upper pull primary`,
     `- [ ] No two sessions share the same primary lift`,
     `- [ ] Power exercise differs across all sessions`,
-    `- [ ] At least 3 different trunk exercises appear across the week`,
-    `- [ ] Pre-selected exercises from this mandate are honored`,
-    `- [ ] Block order follows the Variant ${blockVariant === "squat_first" ? "A" : blockVariant === "hinge_first" ? "B" : blockVariant === "power_extended" ? "C" : "D"} template above`,
+    `- [ ] Block order follows Variant ${variantLabel} template`,
   ].filter((line): line is string => line !== null);
 
   return lines.join("\n");

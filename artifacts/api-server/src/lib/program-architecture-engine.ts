@@ -973,6 +973,117 @@ function buildSessionsForDayCount(
   const isFootball = !!(sport && /\bfootball\b/i.test(sport) && !/soccer/.test(sport.toLowerCase()));
   if (isFootball) {
     if (daysPerWeek === 3) {
+      // Variant C (seed ≥ 0.67): Hinge-priority — posterior chain leads, squat complements, power-extended Day 3
+      if ((variationSeed ?? 0) >= 0.67) {
+        return [
+          {
+            dayNumber: 1,
+            identity: "Posterior Chain Force + Acceleration",
+            intent: "Hinge-dominant lower session — deadlift pattern as the weekly anchor; sprint mechanics built into the session; single-leg posterior chain resilience",
+            neuralDemand: "high",
+            primaryPattern: "hinge",
+            emphasizedPatterns: ["locomotion", "hinge", "unilateral_lower", "trunk"],
+            cnsFlow: [
+              { role: "prep", description: "Sprint activation: 8 min — A-skip × 2 × 20m → broad jump × 3 sub-max → 2 × build-up stride at 80%, 95%" },
+              { role: "power", description: "ACCELERATION: 4 × 10m + 3 × 20m (3-point start or standing). 100% effort every rep. 90 sec between each." },
+              { role: "primary", description: "HINGE ANCHOR: Trap Bar Deadlift or Conventional Deadlift (4 × 3-5 @ 82-88%) — posterior chain force base for collision and sprinting" },
+              { role: "secondary", description: "Hip Thrust (3 × 5-8) + Nordic Hamstring Curl (3 × 4-6) — glute and hamstring tissue resilience" },
+              { role: "unilateral", description: "Single-Leg RDL or Kickstand RDL (3 × 6-8 each side) — unilateral posterior chain for sprint asymmetry" },
+              { role: "trunk", description: "Collision trunk: Suitcase Carry (3 × 30m each side) + Landmine Anti-Rotation (3 × 8 each) — trunk under load" },
+            ],
+            sportNotes: "Football hinge day: Trap Bar DL is preferred over Conventional DL for athletic position transfer — hip hinge mechanics mirror acceleration mechanics",
+          },
+          {
+            dayNumber: 2,
+            identity: "Upper Structural Strength + Power",
+            intent: "Press/pull balance for collision-ready upper body; upper explosive work for block shedding; anti-extension trunk integrity",
+            neuralDemand: "moderate",
+            primaryPattern: "upper_push",
+            emphasizedPatterns: ["upper_push", "upper_pull", "trunk", "rotational"],
+            cnsFlow: [
+              { role: "prep", description: "Upper activation: band pull-apart × 3 × 15, wall slide × 2 × 10, scapular circles" },
+              { role: "power", description: "UPPER EXPLOSIVE: Med Ball Chest Throw (4 × 5) or Push Press (4 × 3) — horizontal and vertical upper power for contact" },
+              { role: "primary", description: "Horizontal or incline press (4 × 4-6 @ 78-85%) — collision-ready chest and shoulder strength" },
+              { role: "secondary", description: "Horizontal pull: Barbell Row or T-Bar Row (4 × 5-8) — scapular balance and posterior shoulder health" },
+              { role: "trunk", description: "Anti-extension trunk: Ab Wheel Rollout (3 × 6-8) + Farmer Carry (3 × 30m) — trunk stiffness for contact" },
+            ],
+            sportNotes: "Football upper: match pull volume to push volume exactly — contact sport shoulder health depends on balanced loading",
+          },
+          {
+            dayNumber: 3,
+            identity: "Squat Strength + Unilateral Power + Conditioning",
+            intent: "Bilateral squat strength as secondary lower anchor; single-leg power expression; anaerobic repeat effort football conditioning",
+            neuralDemand: "high",
+            primaryPattern: "squat",
+            emphasizedPatterns: ["power", "squat", "unilateral_lower", "trunk", "locomotion"],
+            cnsFlow: [
+              { role: "prep", description: "Lower power activation: box jump × 3 sub-max → lateral bound × 2 × 3 each" },
+              { role: "power", description: "CONTRAST PAIR: Heavy Squat variation (4 × 2-3 @ 85-90%) → Box Jump or Vertical Jump (4 × 3-4) with 4-5 min PAP window between lift and jump" },
+              { role: "primary", description: "UNILATERAL POWER: Step-Up Jump or Split Squat Jump (3 × 5 each side) — single-leg force application mirroring cut and push-off mechanics" },
+              { role: "secondary", description: "Sled Push (4 × 20m) — horizontal force transfer; resisted acceleration pattern" },
+              { role: "trunk", description: "FOOTBALL CONDITIONING FINISHER: 3 × 5 × 20m shuttle sprints at 100% with 20 sec rest within sets, 3 min between sets. ANAEROBIC — not endurance." },
+            ],
+            sportNotes: "Football squat day: contrast pair for PAP + sled work + conditioning — combines force development and sport-specific work capacity in one session",
+          },
+        ];
+      }
+
+      // Variant B (seed ≥ 0.33): Power-extended Day 1 — explosive output leads the week
+      if ((variationSeed ?? 0) >= 0.33) {
+        return [
+          {
+            dayNumber: 1,
+            identity: "Power Development + Lower Strength",
+            intent: "Rate of force development via contrast pairs; bilateral lower strength as the potentiation base; anaerobic capacity conditioning — all in one high-CNS session",
+            neuralDemand: "high",
+            primaryPattern: "power",
+            emphasizedPatterns: ["power", "squat", "hinge", "trunk", "locomotion"],
+            cnsFlow: [
+              { role: "prep", description: "CNS activation: dynamic lower prep → sub-max broad jump × 3 → build-up stride × 2 at 80%, 90%" },
+              { role: "power", description: "CONTRAST PAIR A: Heavy bilateral compound (4 × 2-3 @ 85-90%) → explosive jump or bound (4 × 3-4) with 4-min PAP window. This pair IS the primary power output of the session." },
+              { role: "primary", description: "SECOND CONTRAST: Hex Bar or Trap Bar jump (3 × 4 @ 30-35% BW) → Med Ball Overhead Scoop Toss (3 × 5) — speed-strength and triple extension development" },
+              { role: "secondary", description: "Posterior chain tissue: Nordic Hamstring Curl (3 × 4-6) + Hip Thrust (3 × 8-10) — resilience for sprint demand" },
+              { role: "trunk", description: "Loaded carry: Farmer Carry (3 × 30m) + Pallof Press (2 × 10 each) — trunk bracing under load" },
+            ],
+            sportNotes: "Football: Power FIRST — rate of force development requires a fresh CNS. This session uses post-activation potentiation protocols to peak neuromuscular output.",
+          },
+          {
+            dayNumber: 2,
+            identity: "Upper Structural Strength + Vertical Pull",
+            intent: "Vertical and horizontal pull as the session anchor; press complement for structural balance; collision-specific trunk work",
+            neuralDemand: "moderate",
+            primaryPattern: "upper_pull",
+            emphasizedPatterns: ["upper_push", "upper_pull", "trunk"],
+            cnsFlow: [
+              { role: "prep", description: "Upper prep: scapular activation, band pull-apart, face pull warm-up (2 × 15)" },
+              { role: "power", description: "UPPER EXPLOSIVE: Med Ball Chest Throw (3 × 5) — horizontal power expression for block shedding" },
+              { role: "primary", description: "Vertical pull anchor (4 × 4-6) — weighted pull-up, lat pulldown, or heavy cable row for structural back strength" },
+              { role: "secondary", description: "Horizontal press complement (3 × 5-8) — bench or dumbbell press to balance the vertical pull session" },
+              { role: "trunk", description: "Anti-rotation: Suitcase Carry (3 × 30m each) + Ab Wheel Rollout (3 × 6-8) — collision trunk integrity" },
+            ],
+            sportNotes: "Football upper pull day: vertical pull leads for scapular strength — contact athletes need posterior shoulder development equal to pressing",
+          },
+          {
+            dayNumber: 3,
+            identity: "Acceleration + Bilateral Squat + Unilateral",
+            intent: "Sprint mechanics first; bilateral squat strength as secondary lower anchor; unilateral force production and posterior chain support",
+            neuralDemand: "high",
+            primaryPattern: "squat",
+            emphasizedPatterns: ["locomotion", "squat", "unilateral_lower", "trunk"],
+            cnsFlow: [
+              { role: "prep", description: "Sprint warm-up: 10 min — jog → A-skip × 2 → B-skip × 2 → build-up strides × 3 at 70%, 85%, 95%" },
+              { role: "power", description: "ACCELERATION BLOCK: 5 × 10m + 4 × 20m. 100% intent. Full recovery between reps (90 sec for 10m, 2 min for 20m)." },
+              { role: "primary", description: "Bilateral squat primary (4 × 3-6 @ 78-85%) — lower force production complement to Day 1 hinge" },
+              { role: "secondary", description: "Posterior chain complement: Romanian DL (3 × 6-8) — hinge reinforcement at moderate intensity" },
+              { role: "unilateral", description: "Unilateral lower (3 × 6-8 each side) — single-leg stability and positional control for football cut mechanics" },
+              { role: "trunk", description: "FOOTBALL CONDITIONING: 6-8 × 20m sprints at 100% with 90 sec full rest. ANAEROBIC — true speed work, not endurance." },
+            ],
+            sportNotes: "Football squat + sprint day: sprints first, strength second — acceleration quality degrades if done after heavy lifting",
+          },
+        ];
+      }
+
+      // Variant A (seed < 0.33): Original — Acceleration + Squat leads, Upper structural, Power day closes
       return [
         {
           dayNumber: 1,
@@ -984,9 +1095,9 @@ function buildSessionsForDayCount(
           cnsFlow: [
             { role: "prep", description: "Sprint activation: 10 min — A-skip × 2 × 20m → broad jump × 3 sub-max → build-up strides × 3 at 70%, 85%, 95%" },
             { role: "power", description: "ACCELERATION: 5 × 10m + 4 × 20m with 90 sec between 10m and 2 min between 20m. 100% effort every rep. Standing or 3-point start." },
-            { role: "primary", description: "LOWER FORCE: Heavy bilateral compound — Back Squat or Trap Bar Deadlift (4 × 3-5 @ 80-87%). The strength foundation for collision and acceleration." },
+            { role: "primary", description: "LOWER FORCE: Heavy bilateral compound squat (4 × 3-5 @ 80-87%) — the strength foundation for collision and acceleration" },
             { role: "secondary", description: "Posterior chain support: Romanian DL or Hip Thrust (3 × 5-8) — hamstring and glute resilience for sprint demand" },
-            { role: "trunk", description: "Collision trunk: Pallof press (3 × 10 each side) + Farmer Carry (3 × 30m) — trunk bracing for contact" },
+            { role: "trunk", description: "Collision trunk: Loaded Carry complex (3 × 30m) + Anti-rotation work (3 × 10 each side) — trunk bracing for contact" },
           ],
           sportNotes: "Football: Acceleration + heavy lower on the same day — force application in the gym mirrors force application on the field",
         },
@@ -1000,9 +1111,9 @@ function buildSessionsForDayCount(
           cnsFlow: [
             { role: "prep", description: "Upper prep: scapular activation, band pull-apart × 3 × 15, wall slide × 2 × 10" },
             { role: "power", description: "EXPLOSIVE PUSH: Med ball chest throw (4 × 5) or explosive push-up (4 × 4) — upper power for shedding blocks and contact" },
-            { role: "primary", description: "Horizontal press: Bench Press or Dumbbell Press (4 × 4-6 @ 80%) — collision-ready chest and shoulder development" },
-            { role: "secondary", description: "Horizontal pull: Bent-Over Row or Cable Row (4 × 5-8) — scapular stability and shoulder health balance" },
-            { role: "trunk", description: "Rotational trunk: Landmine Rotation (3 × 8 each) + Pallof Press (2 × 10 each side)" },
+            { role: "primary", description: "Horizontal press (4 × 4-6 @ 80%) — collision-ready chest and shoulder development" },
+            { role: "secondary", description: "Horizontal pull (4 × 5-8) — scapular stability and shoulder health balance" },
+            { role: "trunk", description: "Rotational trunk: Landmine Rotation (3 × 8 each) + Anti-extension carry (3 × 30m)" },
           ],
           sportNotes: "Football upper: balanced press/pull — contact athletes cannot have press-dominant upper body imbalance",
         },
@@ -1015,10 +1126,10 @@ function buildSessionsForDayCount(
           emphasizedPatterns: ["power", "hinge", "trunk", "locomotion"],
           cnsFlow: [
             { role: "prep", description: "Power activation: dynamic lower prep → box jump (2 × 3 sub-max)" },
-            { role: "power", description: "CONTRAST PAIR: Trap Bar DL or Hex Bar DL (4 × 2-3 @ 85-90%) → Box Jump or Broad Jump (4 × 4) with 4 min between primary and jump — PAP potentiation" },
-            { role: "primary", description: "SECOND POWER PAIR: Heavy Sled Push (4 × 20m) → Med Ball Overhead Scoop Toss (4 × 5) — force application transfer" },
+            { role: "power", description: "CONTRAST PAIR: Heavy hinge (4 × 2-3 @ 85-90%) → explosive jump (4 × 4) with 4 min PAP window — rate of force development" },
+            { role: "primary", description: "SECOND POWER PAIR: Heavy Sled Push (4 × 20m) → Med Ball Overhead Scoop Toss (4 × 5) — horizontal force application transfer" },
             { role: "secondary", description: "Nordic Hamstring Curl (3 × 4-6) — mandatory for sprint resilience" },
-            { role: "trunk", description: "CONDITIONING FINISHER: REPEAT EFFORT — 6–8 × 20m sprints at 100% with 90 sec rest. ANAEROBIC CAPACITY, not endurance. 2 min between sets of 3." },
+            { role: "trunk", description: "CONDITIONING FINISHER: REPEAT EFFORT — 6–8 × 20m sprints at 100% with 90 sec rest. ANAEROBIC CAPACITY. 2 min between sets of 3." },
           ],
           sportNotes: "Football power day: contrast pairs for RFD + anaerobic repeat effort conditioning — NOT aerobic endurance conditioning",
         },
@@ -2185,14 +2296,16 @@ REDUCE or ELIMINATE:
 This program is for an American football athlete. Structural rules:
 - **Acceleration work COMES FIRST** in every lower/full-body session — sprint before lifting
 - **Conditioning is ANAEROBIC ONLY** — short sprint repeats (10–30m), full rest between efforts. NO long aerobic conditioning.
-- **Heavy bilateral lower is the strength foundation** — back squat or trap bar DL at 80%+ 1RM
-- **Trunk bracing for collision** — loaded carry and Pallof press in every session
+- **Heavy bilateral lower is the strength foundation** — use the LOCKED bilateral squat or hinge primary from the variation mandate (80%+ 1RM)
+- **Trunk bracing for collision** — loaded carry or anti-rotation exercise in every session (use the LOCKED trunk selections from the variation mandate)
 - **Upper press:pull must be balanced** — contact sport demands shoulder integrity
 - **Med ball and contrast pairs** develop rate of force development — use in power sessions
+- **EXERCISE SPECIFICITY**: Use the exercises from the LOCKED SELECTIONS table in the variation mandate. Do NOT default to Back Squat, Broad Jump, or Pallof Press unless those are the locked selections.
 ELIMINATE from this football program:
 - Long-duration steady-state cardio
 - Soccer-style aerobic conditioning
 - Pure hypertrophy isolation work without collision-transfer purpose
+- Generic defaults (Back Squat, Broad Jump, Pallof Press) when the variation mandate specifies different exercises
 ` : "";
 
   const basketballOverlay = isBasketball ? `
@@ -2247,7 +2360,7 @@ ELIMINATE from this baseball program:
     : hockeyOverlay;
 
   const sportValidationLines = (() => {
-    if (isFootball) return "\n- [ ] Acceleration sprint work present (10–20m)\n- [ ] Conditioning is anaerobic only — NO long aerobic sessions\n- [ ] Heavy bilateral lower present (80%+ 1RM)\n- [ ] Trunk bracing (Pallof press or loaded carry) in ≥2 sessions\n- [ ] Upper press:pull balanced";
+    if (isFootball) return "\n- [ ] Acceleration sprint work present (10–20m)\n- [ ] Conditioning is anaerobic only — NO long aerobic sessions\n- [ ] Heavy bilateral lower present (80%+ 1RM)\n- [ ] Anti-rotation trunk work (loaded carry, landmine, or cable anti-rotation) in ≥2 sessions\n- [ ] Upper press:pull balanced\n- [ ] Exercises match the LOCKED SELECTIONS from the variation mandate";
     if (isBasketball) return "\n- [ ] Reactive plyometrics before lifting in lower sessions\n- [ ] Deceleration and landing mechanics session included\n- [ ] Single-leg strength in every lower session\n- [ ] Conditioning is explosive court efforts — NOT aerobic endurance\n- [ ] Push:pull balanced in upper sessions";
     if (isSoccer) return "\n- [ ] Nordic hamstring curl in EVERY lower session\n- [ ] Copenhagen plank in EVERY lower session\n- [ ] BOTH aerobic conditioning AND RSA conditioning included\n- [ ] Single-leg strength in every lower session\n- [ ] Calf or ankle loading present";
     if (isBaseball) return "\n- [ ] Med ball rotational throw in every power session\n- [ ] Face pull or external rotation in every upper session\n- [ ] Pull volume ≥ push volume\n- [ ] Conditioning is short sprint work ONLY — no aerobic endurance volume\n- [ ] Anti-rotation trunk (Pallof press) included";
