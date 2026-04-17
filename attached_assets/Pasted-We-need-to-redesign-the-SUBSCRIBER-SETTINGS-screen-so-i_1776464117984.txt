@@ -1,0 +1,195 @@
+We need to redesign the SUBSCRIBER SETTINGS screen so it functions like a real account center, not just a billing stub.
+
+CURRENT PROBLEM:
+The current subscriber settings page mostly shows:
+- subscription details
+- what’s included
+- one Stripe management button
+
+This is too limited and feels incomplete for a paid user.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Turn Settings into a full subscriber account/settings hub with clear sections for:
+- account
+- billing
+- training preferences
+- AI/coach settings
+- privacy/data
+- support
+
+Stripe billing management should remain, but it should live inside a broader, better-organized settings experience.
+
+==================================================
+TASK 1 — REDESIGN SETTINGS INFORMATION ARCHITECTURE
+==================================================
+
+Create a clean mobile-first settings layout with these sections:
+
+1. Account
+- full name
+- email
+- sign-in method
+- change password (if applicable)
+- sign out
+- delete account
+
+2. Subscription & Billing
+- current plan name
+- plan status (active / trial / canceled / past due)
+- renewal date
+- Stripe customer portal button
+- update payment method
+- billing history / invoices
+- cancel or resume subscription
+
+3. Training Preferences
+- primary goal
+- sport
+- experience level
+- equipment access
+- available training days
+- preferred session length
+- injury / limitation notes
+
+4. AI / Coach Settings
+- coaching tone
+- response depth
+- auto-adjust plan toggle
+- memory preference toggle (if supported)
+- proactive insights toggle (if supported)
+
+5. Privacy & Data
+- export account data
+- clear memory/history if supported
+- privacy policy
+- terms of service
+
+6. Support
+- contact support
+- report a bug
+- request a feature
+
+==================================================
+TASK 2 — KEEP STRIPE AS THE BILLING AUTHORITY
+==================================================
+
+Do NOT rebuild billing logic inside the app.
+
+Stripe should remain the source of truth for:
+- payment method updates
+- invoices
+- subscription cancellation
+- plan management
+
+The app should surface:
+- current billing status
+- renewal info
+- a strong “Manage billing with Stripe” action
+
+Use Stripe customer portal for billing changes.
+
+==================================================
+TASK 3 — IMPROVE BILLING SECTION UX
+==================================================
+
+Replace the current single billing card with a stronger section showing:
+- Plan: Elite / Pro / etc.
+- Status: Active
+- Renews on: [date]
+- Payment method: Managed in Stripe
+- CTA: Manage billing & payment
+
+Optional secondary text:
+- View invoices, update card, cancel, or manage your subscription securely in Stripe.
+
+==================================================
+TASK 4 — ADD ACCOUNT SETTINGS
+==================================================
+
+Add a real Account card/section above billing:
+- profile name
+- email
+- sign-in provider if known
+- edit account details button if supported
+
+This should make settings feel like an actual user settings area.
+
+==================================================
+TASK 5 — ADD TRAINING PREFERENCES SECTION
+==================================================
+
+Subscribers should be able to review and edit core training preferences from Settings.
+
+At minimum support:
+- sport
+- goal
+- equipment
+- experience level
+- training frequency
+- session duration
+
+These should update the user profile/preferences used by TrainChat.
+
+==================================================
+TASK 6 — ADD AI / COACH SETTINGS SECTION
+==================================================
+
+Create a section for how the AI behaves.
+
+Include useful controls such as:
+- concise vs detailed responses
+- proactive coaching insights toggle
+- auto-adjust recommendations toggle
+- memory personalization toggle if supported
+
+If some settings are not wired yet, scaffold the UI cleanly and label them appropriately.
+
+==================================================
+TASK 7 — MOBILE-FIRST UI
+==================================================
+
+Make the layout clean on iPhone/mobile Safari:
+- stacked cards
+- strong section headers
+- clear spacing
+- large tap targets
+- no cramped billing text
+- consistent dark theme styling matching the app
+
+==================================================
+TASK 8 — USEFUL EMPTY / LOCKED STATES
+==================================================
+
+If any settings are not yet fully supported:
+- do not leave them broken
+- show a disabled or coming-soon state cleanly
+- keep the page polished
+
+==================================================
+TASK 9 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. new settings page structure
+2. components/sections added
+3. what remains managed by Stripe
+4. what user preferences are editable in-app
+5. any placeholders / coming soon items
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Subscriber Settings should feel like a complete account center.
+
+It should let users:
+- manage billing through Stripe
+- manage their account
+- manage training preferences
+- manage AI/coach preferences
+- access privacy/support tools
+
+The page should feel premium, complete, and worthy of a paid subscription.
