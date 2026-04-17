@@ -26,6 +26,7 @@ import {
   buildRotationalPowerDescription,
   type SlotExerciseSelection,
 } from "./exercise-variation-engine";
+// getBlockVariant / describeBlockVariant are used inside buildVariationMandate — no direct call needed here
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -2046,7 +2047,21 @@ export function buildArchitectureBrief(
   if (!daysPerWeek || daysPerWeek < 2) return null;
 
   const seed = variationSeed ?? Math.random();
-  const slotSelection = selectSlotExercises(seed, sport, goal);
+
+  // Detect neural demand from request context
+  const reqLc = (userRequest + " " + (goal ?? "")).toLowerCase();
+  const isDeload = reqLc.includes("deload") || reqLc.includes("recovery week") || reqLc.includes("back-off week");
+  const isConditioningFocus = reqLc.includes("conditioning") || reqLc.includes("endurance") || reqLc.includes("cardio");
+  const neuralDemand: "high" | "moderate" | "low" = isDeload ? "low" : isConditioningFocus ? "moderate" : "high";
+
+  // Detect equipment context
+  const hasLimitedEquipment = reqLc.includes("home") || reqLc.includes("dumbbell only") || reqLc.includes("no barbell") || reqLc.includes("bodyweight");
+  const equipmentLevel: "full_gym" | "dumbbells_only" | "home_limited" | "bodyweight" =
+    reqLc.includes("bodyweight only") ? "bodyweight" :
+    reqLc.includes("dumbbell only") || reqLc.includes("no barbell") ? "dumbbells_only" :
+    hasLimitedEquipment ? "home_limited" : "full_gym";
+
+  const slotSelection = selectSlotExercises(seed, sport, goal, neuralDemand, equipmentLevel, isDeload);
   const arch = computeWeeklyArchitecture(daysPerWeek, sport, goal, seed);
   const isHockey = sport?.toLowerCase().includes("hockey") ?? false;
   const isFootball = !!(sport && /\bfootball\b/i.test(sport) && !/soccer/.test(sport.toLowerCase()));
