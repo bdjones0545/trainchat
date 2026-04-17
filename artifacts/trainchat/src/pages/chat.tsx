@@ -42,6 +42,7 @@ import CalibrationModal from "@/components/chat/CalibrationModal";
 import CoachMemoryPanel from "@/components/chat/CoachMemoryPanel";
 import { useStreamMessage } from "@/hooks/useStreamMessage";
 import { clearAuthState, markOnboardingComplete, logRouteDecision, readDeviceId, readOnboardingComplete } from "@/lib/routing";
+import { resolveProgramState } from "@/lib/resolveProgramState";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 
 const SUGGESTION_CHIPS = [
@@ -318,26 +319,16 @@ export default function Chat() {
       ? transformSystemToProgram(activeSystem.name, activeSystem.overarchingGoal, weekData)
       : null;
 
-  // DB-wins rule: when a saved training system exists in the DB, the right panel
-  // ALWAYS shows the DB-backed program — never stale conversation JSON.
+  // Single authoritative resolver — the ONLY place display source/program are decided.
+  // Never compute source or program inline elsewhere; always call resolveProgramState.
   //
-  // States:
-  //  hasActiveSystem + isNewBuildSession  → null (clean slate while new program builds)
-  //  hasActiveSystem + !isNewBuildSession → dbSystemProgram (DB is canonical)
-  //  !hasActiveSystem + latestProgram     → draft_build (built this session, not yet saved)
-  //  !hasActiveSystem + !latestProgram    → null / empty state
-  const displayProgram: ProgramStructure | null = hasActiveSystem
-    ? (isNewBuildSession ? null : dbSystemProgram)
-    : latestProgram;
-
-  // Source label passed to LiveProgramPanel so it can label the program correctly.
-  // "live"  — canonical DB-backed active training system
-  // "draft" — unsaved program generated in this browser session (not yet in DB)
-  // "none"  — no program to show
-  type DisplayProgramSource = "live" | "draft" | "none";
-  const displayProgramSource: DisplayProgramSource = hasActiveSystem
-    ? (isNewBuildSession ? "none" : "live")
-    : (latestProgram ? "draft" : "none");
+  // activeSystem arg is the already-derived DB program, nulled out during a new build
+  // so the panel shows a clean slate while the AI is streaming a replacement.
+  const { source: displayProgramSource, program: displayProgram } = resolveProgramState({
+    activeSystem: hasActiveSystem && !isNewBuildSession ? dbSystemProgram : null,
+    latestProgram,
+    sessionDraftMsgId: sessionDraftMsgIdRef.current,
+  });
 
   // The program is "in system" if explicitly saved this session OR if
   // we're showing the DB-backed program (no chat draft, system active, not a new build).
@@ -349,17 +340,19 @@ export default function Chat() {
   }, [me, meLoading, meError]);
 
   // ── State integrity assertions + audit log (DEV ONLY) ───────────────────
-  // Maps the internal source type to the canonical audit label.
+  // Always calls resolveProgramState — never recomputes source/program inline.
   useEffect(() => {
     if (!import.meta.env.DEV) return;
 
-    const programSource: "live" | "draft" | "none" = hasActiveSystem
-      ? (isNewBuildSession ? "none" : "live")
-      : (latestProgram ? "draft" : "none");
+    const { source: programSource, program: resolvedProgram } = resolveProgramState({
+      activeSystem: hasActiveSystem && !isNewBuildSession ? dbSystemProgram : null,
+      latestProgram,
+      sessionDraftMsgId: sessionDraftMsgIdRef.current,
+    });
 
-    // ── ASSERTION 1: Ghost live program ────────────────────────────────────
-    // latestProgram must never exist while an activeSystem is also present —
-    // the messages effect is supposed to clear it when hasActiveSystem = true.
+    // ── ASSERTION 1: Ghost draft ───────────────────────────────────────────
+    // latestProgram must never coexist with an active DB system —
+    // the messages effect clears it when hasActiveSystem = true.
     if (hasActiveSystem && latestProgram) {
       console.error(
         "[STATE VIOLATION] Ghost draft detected — latestProgram is non-null while activeSystem exists. " +
@@ -369,20 +362,21 @@ export default function Chat() {
     }
 
     // ── ASSERTION 2: Unauthorized draft source ─────────────────────────────
-    // If latestProgram exists, its _sourceMessageId MUST match sessionDraftMsgIdRef.
-    // Any mismatch means a historical message sneaked through the ghost-prevention gate.
+    // latestProgram.messageId MUST match sessionDraftMsgIdRef.current.
+    // resolveProgramState enforces this, but assert explicitly so violations surface even
+    // if latestProgram was set via a path that bypassed the helper.
     if (latestProgram) {
-      if (latestProgram._sourceMessageId === undefined) {
+      if (latestProgram.messageId === undefined) {
         console.error(
-          "[STATE VIOLATION] Unauthorized draft source — latestProgram has no _sourceMessageId. " +
+          "[STATE VIOLATION] Unauthorized draft source — latestProgram has no messageId. " +
           "It was set without going through the session-draft gate.",
           { latestProgramName: latestProgram.programName }
         );
-      } else if (latestProgram._sourceMessageId !== sessionDraftMsgIdRef.current) {
+      } else if (latestProgram.messageId !== sessionDraftMsgIdRef.current) {
         console.error(
-          "[STATE VIOLATION] Unauthorized draft source — _sourceMessageId mismatch.",
+          "[STATE VIOLATION] Unauthorized draft source — messageId mismatch.",
           {
-            latestProgramMessageId: latestProgram._sourceMessageId,
+            latestProgramMessageId: latestProgram.messageId,
             sessionDraftMsgId: sessionDraftMsgIdRef.current,
           }
         );
@@ -390,25 +384,25 @@ export default function Chat() {
     }
 
     // ── ASSERTION 3: Program visible without valid source ──────────────────
-    // displayProgram should only be non-null when source is "live" or "draft".
-    if (displayProgram && programSource === "none") {
+    // resolvedProgram should only be non-null when source is "live" or "draft".
+    if (resolvedProgram && programSource === "none") {
       console.error(
-        "[STATE VIOLATION] displayProgram is non-null but programSource is 'none'. " +
-        "A program is rendering in the sidebar with no valid source.",
-        { displayProgramName: displayProgram.programName }
+        "[STATE VIOLATION] resolveProgramState returned a program with source 'none'. " +
+        "This is a bug in the resolver itself.",
+        { resolvedProgramName: resolvedProgram.programName }
       );
     }
 
     // ── Canonical audit log ────────────────────────────────────────────────
     console.log("[ProgramStateAudit]", {
       activeSystemId: activeSystem?.id ?? null,
-      latestProgramMessageId: latestProgram?._sourceMessageId ?? null,
+      latestProgramMessageId: latestProgram?.messageId ?? null,
       sessionDraftMsgId: sessionDraftMsgIdRef.current,
       programSource,
       messagesCount: messages.length,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasActiveSystem, activeSystem?.id, latestProgram, displayProgram, isNewBuildSession, messages.length]);
+  }, [hasActiveSystem, activeSystem?.id, dbSystemProgram, latestProgram, isNewBuildSession, messages.length]);
 
   // FIX 7: fail-safe — fires ONCE on mount; if auth is still unresolved after 4s,
   // force the agent shell to render so the user is never stuck on a spinner.
@@ -579,9 +573,9 @@ export default function Chat() {
             const parsed = JSON.parse(last.structuredData) as ProgramStructure;
             const safe: ProgramStructure = {
               ...parsed,
-              // Stamp the source message ID so the assertion layer can verify
-              // that this latestProgram was produced by the registered session draft.
-              _sourceMessageId: last.id,
+              // Stamp the source message ID so resolveProgramState and the assertion
+              // layer can verify this draft came from the registered session message.
+              messageId: last.id,
               days: Array.isArray(parsed.days) ? parsed.days.map((d) => ({
                 ...d,
                 exercises: Array.isArray(d.exercises) ? d.exercises : [],

@@ -45,10 +45,10 @@ export interface ProgramStructure {
   /**
    * Internal tracking field: the ID of the assistant message whose structuredData
    * produced this draft. Set when latestProgram is written from the messages effect.
-   * Used by the state-integrity assertion layer to detect unauthorized draft sources.
+   * Used by resolveProgramState and the assertion layer to detect unauthorized sources.
    * Never comes from the API — this is a frontend-only field.
    */
-  _sourceMessageId?: number;
+  messageId?: number;
 }
 
 interface Props {
