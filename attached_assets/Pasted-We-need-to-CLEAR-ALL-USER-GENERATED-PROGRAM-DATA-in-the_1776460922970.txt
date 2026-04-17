@@ -1,0 +1,161 @@
+We need to CLEAR ALL USER-GENERATED PROGRAM DATA in the DEVELOPMENT database only.
+
+OBJECTIVE:
+Wipe all user-created training systems/programs/build artifacts so we can test fresh builds from a clean state and rule out stale dev-data contamination.
+
+IMPORTANT:
+This is for DEVELOPMENT only.
+Do NOT touch production.
+Do NOT touch shared seed/reference tables.
+Do NOT delete exercise_library, coaching_knowledge, or other canonical reference data.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Delete all user-generated program/build data and reset any active-program pointers so the app behaves like a fresh install with reference data intact.
+
+==================================================
+SAFETY REQUIREMENTS
+==================================================
+
+Before doing anything:
+1. Verify the environment is development
+2. Print/log the current database connection target
+3. Abort immediately if environment is production
+4. Require an explicit DEV-ONLY confirmation in code/logs before destructive execution
+
+Example safeguard:
+- if NODE_ENV === "production" → throw hard error
+- log: "DEV DATABASE RESET — USER PROGRAM DATA ONLY"
+
+==================================================
+TABLES / DATA TO CLEAR
+==================================================
+
+Clear all USER-GENERATED program data, including whatever tables are actually used in this app for generated programs and their descendants.
+
+Audit and clear the correct tables, likely including:
+- training_systems
+- training_phases
+- training_weeks
+- training_sessions
+- session_exercises
+- programs
+- program_versions if present
+- change logs tied to user programs
+- restore snapshots tied to user programs
+- pending clarifications tied to these program conversations if appropriate
+- any builder-session program artifacts
+- any active-program linkage fields on users/profile tables
+
+Also clear any caches/state records that would cause the frontend to reload an old active system.
+
+Do NOT clear:
+- exercise_library
+- coaching_knowledge
+- static/reference lookup tables
+- seed/config tables
+- user accounts themselves unless absolutely required
+- long-term memory tables unless they are specifically program-instance state
+
+==================================================
+TASK 1 — AUDIT DEPENDENCIES BEFORE DELETE
+==================================================
+
+First, inspect the schema and identify:
+- all tables that store user-generated programs
+- foreign key dependencies
+- any tables that reference training_system IDs or program IDs
+- any user/profile field that stores activeSystemId / currentProgramId / activeTrainingSystemId
+
+Return the dependency order before executing deletes.
+
+==================================================
+TASK 2 — CLEAR IN THE CORRECT ORDER
+==================================================
+
+Delete data in safe FK order.
+
+Typical order should be leaf-first, for example:
+1. session_exercises
+2. training_sessions
+3. training_weeks
+4. training_phases
+5. training_systems
+6. programs and related program-instance tables
+7. change logs / restore snapshots / builder artifacts
+8. reset user active-program pointers
+
+Use transactions where appropriate.
+
+==================================================
+TASK 3 — RESET ACTIVE PROGRAM STATE
+==================================================
+
+After deletes, ensure no user record still points to a deleted active system/program.
+
+Examples:
+- activeSystemId = null
+- currentProgramId = null
+- activeTrainingSystemId = null
+
+Also invalidate/reset any dev caches if needed.
+
+==================================================
+TASK 4 — KEEP REFERENCE DATA INTACT
+==================================================
+
+Explicitly verify after delete that these still exist:
+- exercise_library rows still present
+- coaching_knowledge rows still present
+- other reference/seed tables untouched
+
+==================================================
+TASK 5 — VERIFY CLEAN STATE
+==================================================
+
+After deletion, print row counts for:
+- all cleared program tables
+- exercise_library
+- coaching_knowledge
+
+Expected:
+- user-generated program tables = 0 rows
+- reference tables unchanged
+
+==================================================
+TASK 6 — OPTIONAL DEV HELPER
+==================================================
+
+If clean and useful, add a reusable DEV-ONLY reset script/command such as:
+- npm run reset:dev-programs
+or
+- tsx scripts/reset-dev-programs.ts
+
+This command must hard-fail in production.
+
+==================================================
+TASK 7 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. environment verified
+2. tables cleared
+3. dependency order used
+4. any user active-program pointers reset
+5. final row counts before/after
+6. confirmation that reference data was preserved
+
+==================================================
+FINAL STANDARD
+==================================================
+
+After this reset, the development database should contain:
+- zero user-generated programs
+- zero active program links
+- intact exercise_library
+- intact coaching_knowledge
+- intact reference/seed data
+
+This should give us a truly clean dev environment for fresh build testing.
