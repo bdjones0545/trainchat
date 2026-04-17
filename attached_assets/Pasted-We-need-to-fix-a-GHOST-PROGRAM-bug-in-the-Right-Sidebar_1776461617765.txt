@@ -1,0 +1,177 @@
+We need to fix a GHOST PROGRAM bug in the Right Sidebar / Live Program panel.
+
+PROBLEM:
+After clearing all DB-backed user-generated training systems, the Active Programs screen correctly shows:
+- No Training System Yet
+
+But the Right Sidebar / Live Program panel still shows a populated program with exercises.
+
+This means the sidebar is still hydrating from a non-canonical source such as:
+- conversation history structured JSON
+- latestProgram fallback
+- local/session cache
+- chat-derived draft state
+
+and is presenting that as if it were the live/current program.
+
+This is wrong.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+When there is NO DB-backed active training system, the Right Sidebar must not present an old conversation-derived program as the live program.
+
+We need to distinguish clearly between:
+1. active live program (DB-backed)
+2. unsaved chat-generated draft
+3. historical conversation program
+
+==================================================
+TASK 1 — TRACE SIDEBAR SOURCE WHEN NO ACTIVE SYSTEM EXISTS
+==================================================
+
+Audit the Right Sidebar / Live Program panel when:
+- Active Programs shows empty state
+- there is no DB-backed active system
+
+Log exactly what source the sidebar is using:
+- db_active_program
+- conversation_json
+- latestProgram
+- local_cache
+- local_storage
+- builder draft
+- session history
+
+I want the exact object and code path that is making the sidebar show a ghost program.
+
+==================================================
+TASK 2 — FIND THE FALLBACK PATH
+==================================================
+
+Inspect the logic that decides displayProgram for the sidebar.
+
+Find the exact fallback rule that allows:
+- latestProgram
+- conversation JSON
+- cached draft
+to be shown in the sidebar when activeSystem is null
+
+Report the current code path clearly.
+
+==================================================
+TASK 3 — DEFINE CORRECT DISPLAY RULES
+==================================================
+
+Implement these rules explicitly:
+
+A. If activeSystem exists:
+- sidebar shows DB-backed live program only
+
+B. If no activeSystem exists AND there is an unsaved current build draft created in this active builder session:
+- sidebar may show a clearly labeled draft/preview state
+- but must NOT label it as the live active program
+
+C. If no activeSystem exists and there is no current unsaved draft:
+- sidebar must show empty state
+- do NOT show old conversation program as current
+
+Historical conversation programs must not silently appear as the current live program.
+
+==================================================
+TASK 4 — SEPARATE LIVE PROGRAM FROM CHAT DRAFT
+==================================================
+
+If the app supports showing an unsaved build draft in the sidebar, clearly separate it from live DB state.
+
+Possible examples:
+- “Draft Program”
+- “Unsaved Build Preview”
+- “Not yet active”
+
+Do NOT let old chat-generated structuredData appear as a live training system.
+
+==================================================
+TASK 5 — REMOVE WRONG FALLBACK WHEN ACTIVE SYSTEM IS NULL
+==================================================
+
+If current logic is something like:
+- displayProgram = latestProgram when no activeSystem
+
+replace it with:
+- only show latestProgram if it belongs to the current unsaved build session and is explicitly marked as draft
+- otherwise show empty state
+
+Conversation history alone is not enough to count as an active live program.
+
+==================================================
+TASK 6 — AUDIT SESSION HISTORY / CONVERSATION STRUCTURED DATA
+==================================================
+
+Check whether the sidebar is reading old structuredData from past assistant messages.
+
+If so:
+- identify how it is being selected
+- prevent that path from populating the live sidebar when no active system exists
+
+Historical chat data can remain in history, but it must not masquerade as a current program.
+
+==================================================
+TASK 7 — ADD DEBUG LOGGING
+==================================================
+
+In development, log:
+
+[LiveProgramSidebarState] {
+  activeSystemId,
+  source: "db_active_program" | "draft_build" | "conversation_history" | "none",
+  isDraft: true/false,
+  programId,
+  conversationId,
+  messageId,
+  day1Exercises: [...]
+}
+
+This should make ghost-program behavior obvious.
+
+==================================================
+TASK 8 — TEST REQUIRED
+==================================================
+
+1. Clear all DB training systems
+2. Open Active Programs
+Expected:
+- empty state
+
+3. Open Right Sidebar
+Expected:
+- also empty state
+OR clearly labeled draft state if and only if there is a current unsaved build draft in the active builder session
+
+4. Open an old conversation with historical program output
+Expected:
+- historical message can still exist in chat history
+- but sidebar does NOT automatically present it as the live current program unless explicitly loaded as a draft
+
+==================================================
+TASK 9 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. exact source the ghost sidebar program was coming from
+2. the fallback path that caused it
+3. the corrected display rules
+4. how live program vs draft vs historical program are now separated
+5. before/after behavior when activeSystem is null
+
+==================================================
+FINAL STANDARD
+==================================================
+
+If there is no DB-backed active training system, the Right Sidebar must not show a ghost live program from old conversation history or cache.
+
+The app must clearly distinguish:
+- active live program
+- current unsaved draft
+- historical conversation output

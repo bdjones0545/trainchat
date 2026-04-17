@@ -79,6 +79,13 @@ interface Props {
   pendingChangeHint?: string;
   /** Summary of the last applied change — shown as a continuity chip in the panel header */
   lastChangeSummary?: string;
+  /**
+   * Identifies the source of the displayed program so the panel can label it correctly.
+   *  "db_active"   — live, DB-backed training system (canonical)
+   *  "draft_build" — unsaved program generated in this session (not yet in DB)
+   *  "none"        — no program to display
+   */
+  programSource?: "db_active" | "draft_build" | "none";
 }
 
 type Tab = "program" | "changes" | "history" | "forecast";
@@ -389,6 +396,7 @@ const EXERCISE_ACTIONS: { label: string; buildMessage: (name: string) => string 
 
 function ProgramTab({
   program,
+  programSource = "none",
   buildingState,
   onSave,
   onFeedback,
@@ -770,10 +778,17 @@ function ProgramTab({
           )}
         </div>
 
-        {/* Program title */}
-        <h3 className="text-[15px] font-bold text-foreground leading-snug mb-2.5 tracking-tight">
-          {program.programName}
-        </h3>
+        {/* Program title + draft label */}
+        <div className="flex items-start gap-2 mb-2.5">
+          <h3 className="text-[15px] font-bold text-foreground leading-snug tracking-tight flex-1">
+            {program.programName}
+          </h3>
+          {programSource === "draft_build" && (
+            <span className="flex-shrink-0 mt-0.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/30 text-[9px] font-semibold text-amber-400 uppercase tracking-wider">
+              Draft — not saved
+            </span>
+          )}
+        </div>
 
         {/* Meta chips */}
         {(program.splitType || days.length > 0) && (
@@ -1776,6 +1791,7 @@ export default function LiveProgramPanel({
   onClose,
   pendingChangeHint,
   lastChangeSummary,
+  programSource = "none",
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("program");
   const [hasUnseenChange, setHasUnseenChange] = useState(false);
@@ -1879,6 +1895,7 @@ export default function LiveProgramPanel({
         {activeTab === "program" && (
           <ProgramTab
             program={program}
+            programSource={programSource}
             buildingState={buildingState}
             onSave={onSave}
             onFeedback={onFeedback}

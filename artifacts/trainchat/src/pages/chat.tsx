@@ -200,6 +200,20 @@ export default function Chat() {
   const hasAttemptedConvoCreate = useRef(false);
   // Calibration nudge guard: one-shot, never auto-triggers twice
   const hasCheckedCalibrationNudge = useRef(false);
+  /**
+   * Tracks which assistant message ID was produced by the AI streaming in THIS
+   * browser session on the active conversation. Only that specific message is
+   * allowed to populate latestProgram. All other program structuredData in
+   * conversation history is treated as historical (not a live draft) and is
+   * NOT rendered in the sidebar. Cleared on convo switch or DB reset.
+   */
+  const sessionDraftMsgIdRef = useRef<number | null>(null);
+  /**
+   * Brief flag set immediately after stream.send() returns. Consumed by the
+   * messages effect on its next run to detect "stream just produced a program".
+   * Auto-resets after 5s as a safety net.
+   */
+  const streamJustFinishedRef = useRef(false);
   // Right-panel auto-open guard: opens panel once on load if user already has a program.
   // Prevents the panel from re-opening after conversational (non-mutation) messages.
   const hasAutoOpenedPanelRef = useRef(false);
@@ -310,10 +324,17 @@ export default function Chat() {
   // States:
   //  hasActiveSystem + isNewBuildSession  → null (clean slate while new program builds)
   //  hasActiveSystem + !isNewBuildSession → dbSystemProgram (DB is canonical)
-  //  !hasActiveSystem                     → latestProgram (chat-draft, not yet saved)
+  //  !hasActiveSystem + latestProgram     → draft_build (built this session, not yet saved)
+  //  !hasActiveSystem + !latestProgram    → null / empty state
   const displayProgram: ProgramStructure | null = hasActiveSystem
     ? (isNewBuildSession ? null : dbSystemProgram)
     : latestProgram;
+
+  // Source label used by LiveProgramPanel to distinguish live vs draft vs empty
+  type DisplayProgramSource = "db_active" | "draft_build" | "none";
+  const displayProgramSource: DisplayProgramSource = hasActiveSystem
+    ? (isNewBuildSession ? "none" : "db_active")
+    : (latestProgram ? "draft_build" : "none");
 
   // The program is "in system" if explicitly saved this session OR if
   // we're showing the DB-backed program (no chat draft, system active, not a new build).
@@ -324,27 +345,26 @@ export default function Chat() {
     console.log("[Chat] auth state:", { hasUser: !!me, meLoading, meError });
   }, [me, meLoading, meError]);
 
-  // ── Dev logging: source divergence detection ─────────────────────────────
+  // ── Dev logging: sidebar program source (Task 7) ─────────────────────────
   useEffect(() => {
     if (!import.meta.env.DEV) return;
-    const source = hasActiveSystem ? "db_active_program" : (latestProgram ? "conversation_json" : "empty");
-    const todayDow = new Date().getDay();
-    const todaySessionIdx = displayProgram?.days?.findIndex((d) => d.dayOfWeek === todayDow) ?? -1;
-    console.log("[BuildAudit:SidebarSource]", {
+    const source: DisplayProgramSource = hasActiveSystem
+      ? (isNewBuildSession ? "none" : "db_active")
+      : (latestProgram ? "draft_build" : "none");
+    const isDraft = source === "draft_build";
+    console.log("[LiveProgramSidebarState]", {
+      activeSystemId: activeSystem?.id ?? null,
       source,
-      systemId: activeSystem?.id ?? null,
-      cacheKey: ["training-system-week", activeSystem?.id ?? null],
+      isDraft,
+      programId: activeSystem?.id ?? null,
+      conversationId: activeConvoId,
+      sessionDraftMsgId: sessionDraftMsgIdRef.current,
       isNewBuildSession,
       weekDataSessions: weekData?.sessions?.length ?? 0,
-      todayDow,
-      todaySessionIdx,
       day1Exercises: displayProgram?.days?.[0]?.exercises?.map((e: { name: string }) => e.name) ?? [],
-      todayExercises: todaySessionIdx >= 0
-        ? displayProgram?.days?.[todaySessionIdx]?.exercises?.map((e: { name: string }) => e.name) ?? []
-        : "(no today-pinned session)",
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasActiveSystem, activeSystem?.id, latestProgram, displayProgram, weekData, isNewBuildSession]);
+  }, [hasActiveSystem, activeSystem?.id, latestProgram, displayProgram, weekData, isNewBuildSession, activeConvoId]);
 
   // FIX 7: fail-safe — fires ONCE on mount; if auth is still unresolved after 4s,
   // force the agent shell to render so the user is never stuck on a spinner.
@@ -463,11 +483,22 @@ export default function Chat() {
     actionType: stream.state.actionType,
   };
 
+  // ── DB-reset guard: when activeSystem disappears, invalidate any session draft ──
+  // Without this, the messages effect would re-read old structuredData from
+  // conversation history and ghost the sidebar after a DB wipe or program delete.
+  useEffect(() => {
+    if (!hasActiveSystem) {
+      sessionDraftMsgIdRef.current = null;
+    }
+  }, [hasActiveSystem]);
+
   useEffect(() => {
     // When the user has an active DB training system, the database is the
     // source of truth. Clear any stale chat-derived program so the right panel
     // shows the live system via dbSystemProgram instead of old message history.
     if (hasActiveSystem) {
+      // Consume the stream flag so it can't ghost on a future state change
+      streamJustFinishedRef.current = false;
       setLatestProgram(null);
       return;
     }
@@ -485,24 +516,46 @@ export default function Chat() {
 
     if (programMessages.length > 0) {
       const last = programMessages[programMessages.length - 1];
-      if (last.structuredData) {
-        try {
-          const parsed = JSON.parse(last.structuredData) as ProgramStructure;
-          const safe: ProgramStructure = {
-            ...parsed,
-            days: Array.isArray(parsed.days) ? parsed.days.map((d) => ({
-              ...d,
-              exercises: Array.isArray(d.exercises) ? d.exercises : [],
-            })) : [],
-          };
-          setLatestProgram(safe);
-          setIsSaved(false);
-        } catch {
-          // ignore
+
+      // If the stream just finished, the newest program message is a fresh
+      // draft built in this browser session — register it so the sidebar can show it.
+      if (streamJustFinishedRef.current) {
+        streamJustFinishedRef.current = false;
+        sessionDraftMsgIdRef.current = last.id;
+      }
+
+      // ── GHOST PREVENTION ─────────────────────────────────────────────────
+      // Only populate latestProgram when the last program message matches the
+      // one generated in THIS session. Historical structuredData from previous
+      // builds (or the same conversation after a DB reset) must NOT populate
+      // the sidebar — that is the "ghost program" bug this block fixes.
+      if (sessionDraftMsgIdRef.current !== null && sessionDraftMsgIdRef.current === last.id) {
+        if (last.structuredData) {
+          try {
+            const parsed = JSON.parse(last.structuredData) as ProgramStructure;
+            const safe: ProgramStructure = {
+              ...parsed,
+              days: Array.isArray(parsed.days) ? parsed.days.map((d) => ({
+                ...d,
+                exercises: Array.isArray(d.exercises) ? d.exercises : [],
+              })) : [],
+            };
+            setLatestProgram(safe);
+            setIsSaved(false);
+          } catch {
+            // ignore malformed JSON
+          }
         }
+      } else {
+        // Historical program from a previous build or a different session —
+        // do NOT ghost the sidebar. Clear any stale draft.
+        setLatestProgram(null);
       }
     } else {
-      if (messages.length === 0) setLatestProgram(null);
+      // No program messages in this conversation — always clear.
+      // (The previous code only cleared when messages.length === 0, which left
+      // ghost programs visible when switching between conversations.)
+      setLatestProgram(null);
     }
   }, [messages, hasActiveSystem]);
 
@@ -563,6 +616,9 @@ export default function Chat() {
           setUndoChangeLogId(null);
           setUndoVerificationStatus(null);
           setOperationError(null);
+          // Clear session draft refs so the new convo starts with a blank slate
+          sessionDraftMsgIdRef.current = null;
+          streamJustFinishedRef.current = false;
           // ─────────────────────────────────────────────────────────────────
         },
       }
@@ -605,7 +661,17 @@ export default function Chat() {
       return;
     }
 
-    // Stream completed — process result
+    // Stream completed — process result.
+    // Signal the messages effect that a new message just arrived via streaming.
+    // If that message contains program structuredData it will be registered as
+    // the session draft (sessionDraftMsgIdRef) so the sidebar can display it.
+    // The flag is consumed on the next messages-effect run (or after 5s).
+    if (!result.systemSaved && !result.systemEdit?.applied) {
+      // Conversational or draft response — may contain a program preview
+      streamJustFinishedRef.current = true;
+      setTimeout(() => { streamJustFinishedRef.current = false; }, 5000);
+    }
+
     queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(activeConvoId!) });
     queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
 
@@ -797,6 +863,8 @@ export default function Chat() {
       setIsSaved(true);
       // Clear the chat draft — panel will now show the live DB system
       setLatestProgram(null);
+      // Clear session draft ref so a future unsaved build starts clean
+      sessionDraftMsgIdRef.current = null;
       // Manual save also completes the new build session
       setIsNewBuildSession(false);
     } catch (err) {
@@ -896,6 +964,10 @@ export default function Chat() {
     // Switching to an existing conversation is NOT a new build — clear the flag
     // so the right panel shows whatever program that conversation has in context.
     setIsNewBuildSession(false);
+    // Clear session draft: historical messages in the new conversation must not
+    // auto-populate the sidebar. A new draft only forms if the user builds in this session.
+    sessionDraftMsgIdRef.current = null;
+    streamJustFinishedRef.current = false;
   }
 
   async function handleDeleteProgram(id: number) {
@@ -1274,6 +1346,7 @@ export default function Chat() {
       <div className="flex-1 min-h-0 overflow-hidden">
         <LiveProgramPanel
           program={displayProgram}
+          programSource={displayProgramSource}
           buildingState={buildingState}
           onSave={latestProgram && !isSaved ? handleSaveProgram : undefined}
           onFeedback={() => { setShowFeedback(true); setMobilePanel(null); }}
@@ -1819,6 +1892,7 @@ export default function Chat() {
               <div className="flex-1 overflow-hidden">
                 <LiveProgramPanel
                   program={displayProgram}
+                  programSource={displayProgramSource}
                   buildingState={buildingState}
                   onSave={latestProgram && !isSaved ? handleSaveProgram : undefined}
                   onFeedback={() => setShowFeedback(true)}
