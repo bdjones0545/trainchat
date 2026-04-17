@@ -1,0 +1,252 @@
+We need a FULL AUDIT AND FIX of the VARIETY LAYER in TrainChat.
+
+PROBLEM:
+Even after adding exercise/block variation and ranked selection, repeated builds are still producing the same anchor exercises and very similar session structures.
+
+Examples of repeated anchors still showing up too often:
+- Broad Jump
+- Back Squat
+- Pull-Up
+- Bulgarian Split Squat
+- Pallof Press
+
+This means the variety layer either:
+- is not being called correctly
+- is not materially affecting selection
+- has candidate pools that are too small
+- has novelty penalties that are too weak
+- or is being overridden by architecture/session defaults
+
+We need to audit the full path and fix it.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make repeated builds with the same broad input produce:
+- the same quality
+- the same category/sport fit
+- the same coaching logic
+
+BUT
+- different valid block structures
+- different valid anchor exercises
+- different coherent slot fillings
+
+No random chaos.
+No degradation in quality.
+Just real, structured variety.
+
+==================================================
+TASK 1 — TRACE THE FULL BUILD PATH
+==================================================
+
+Audit the full build path for a repeated request such as:
+“I am a football player give me a 3 day strength program”
+
+Trace:
+
+1. architecture variant selection
+2. session identity selection
+3. slot generation
+4. candidate pool generation per slot
+5. ranking/scoring
+6. novelty / repeat penalty application
+7. final exercise chosen
+
+I want the exact path from prompt to selected exercises.
+
+==================================================
+TASK 2 — VERIFY WHETHER THE VARIETY LAYER IS ACTUALLY RUNNING
+==================================================
+
+Add or inspect logging to confirm:
+
+- which architecture variant was selected
+- which block template variant was selected
+- which slots were created for each day
+- how many candidate exercises existed per slot
+- top 5 scored candidates per slot
+- which candidate actually won
+- what novelty / repeat penalties were applied
+
+If these logs already exist, inspect them for a repeated build test.
+If not, add them.
+
+==================================================
+TASK 3 — AUDIT CANDIDATE POOL SIZE
+==================================================
+
+For the most repetitive slots, inspect the real candidate counts.
+
+At minimum audit:
+- lower_power
+- bilateral_squat_strength
+- bilateral_hinge_strength
+- unilateral_lower
+- trunk_anti_rotation / trunk
+
+Determine:
+- how many candidates are actually available
+- how many survive filtering
+- whether the same 1–2 candidates dominate because the pool is too small
+
+If candidate pools are too small, expand them using canonical DB exercise library entries.
+
+==================================================
+TASK 4 — AUDIT RANKING WEIGHTS
+==================================================
+
+Inspect the ranking formula used to pick exercises.
+
+Find out whether the current scoring is over-weighting:
+- movement fit
+- sport fit
+- “best” exercise inertia
+
+while under-weighting:
+- novelty
+- recent-use penalty
+- anchor overuse penalty
+
+I want the exact score breakdown for repeated winners like:
+- Back Squat
+- Broad Jump
+- Bulgarian Split Squat
+- Pallof Press
+
+Determine why they keep winning.
+
+==================================================
+TASK 5 — STRENGTHEN NOVELTY / REPEAT PENALTIES
+==================================================
+
+If the same anchors keep winning, increase or improve:
+
+- exact repeat penalty
+- recent-build penalty
+- “default anchor” penalty for overused exercises
+- same-session-identity repetition penalty if applicable
+
+The goal is NOT to eliminate the best lifts.
+The goal is to prevent automatic reuse when several valid options exist.
+
+If Back Squat is clearly the best choice in one build, fine.
+But it should not auto-win every build by inertia.
+
+==================================================
+TASK 6 — AUDIT BLOCK TEMPLATE VARIATION
+==================================================
+
+Verify that the architecture/block variation actually changes session composition.
+
+Questions:
+- Are different block variants truly being selected?
+- Or are multiple variants collapsing into the same slot pattern?
+- Is the system still always producing:
+  prep → power → squat → hinge → unilateral → trunk
+
+Audit 3-day football strength specifically.
+We need to see whether:
+- one version is squat-dominant
+- one is hinge-priority
+- one is more elastic / power supported
+- one is more unilateral support driven
+
+If all variants collapse into the same block logic, fix that.
+
+==================================================
+TASK 7 — ADD “PROGRAM CONTRAST” MEMORY INSIDE BUILD SESSION
+==================================================
+
+For repeated builds in the same conversation/session, the system should compare against the most recent build and try to produce contrast.
+
+Add a lightweight contrast rule:
+- avoid exact same anchor lifts when equivalent alternatives exist
+- avoid same day identity ordering when another valid variant exists
+- avoid same power choice + same squat choice + same trunk choice together
+
+This is not long-term memory.
+It is immediate build contrast inside the current working context.
+
+==================================================
+TASK 8 — FIX VARIETY AT TWO LEVELS
+==================================================
+
+Make sure variation happens at BOTH:
+
+A. BLOCK / STRUCTURE LEVEL
+- different coherent day layouts
+- different block emphasis
+- different slot combinations
+
+B. EXERCISE SELECTION LEVEL
+- different valid exercise winners for the same slot
+
+If only exercise selection varies but slot structure stays fixed, the program still feels repetitive.
+If only structure varies but anchors stay the same, it also feels repetitive.
+
+==================================================
+TASK 9 — ADD ANCHOR EXERCISE PENALTY LIST
+==================================================
+
+For a first pass, create an explicit overused-anchor penalty list for exercises that are repeatedly showing up in builds.
+
+Examples:
+- Broad Jump
+- Back Squat
+- Pull-Up
+- Bulgarian Split Squat
+- Pallof Press
+
+Do not ban them.
+Just apply a modest novelty penalty so alternatives can win when valid.
+
+==================================================
+TASK 10 — TEST REQUIRED
+==================================================
+
+Run the same request at least 5 times:
+
+“I am a football player give me a 3 day strength program”
+
+For each build, report:
+- architecture variant selected
+- day identities
+- top anchors chosen for each day
+
+Expected outcome:
+- all builds remain high quality
+- all builds remain football-appropriate
+- repeated builds are not identical
+- not every build uses the same exact anchor stack
+
+Also test:
+“I am a soccer player give me a 3 day strength program”
+
+Make sure football and soccer are not collapsing into the same structure unless clearly intended.
+
+==================================================
+TASK 11 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. whether the variety layer was actually being executed
+2. candidate pool sizes for the audited slots
+3. current ranking formula / weight behavior
+4. why repeated anchors kept winning
+5. what was changed in novelty / repeat penalties
+6. what was changed in block template variation
+7. before/after repeated-build comparison
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Repeated builds with the same broad prompt should no longer feel like the same program with the same 4–5 anchor lifts.
+
+TrainChat should feel like a real coach choosing from a deep toolbox:
+- same logic
+- same sport fit
+- same quality
+- but real structural and exercise variety
