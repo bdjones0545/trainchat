@@ -1,0 +1,136 @@
+TrainChat Terms of Service
+
+Last Updated: [Insert Date]
+
+By accessing or using TrainChat, you agree to these Terms of Service.
+
+---
+
+## 1. Nature of Service
+
+TrainChat provides AI-generated fitness and training guidance.
+
+This service is:
+- Informational and educational  
+- Not a licensed coaching, medical, or healthcare service  
+
+---
+
+## 2. No Medical Advice
+
+TrainChat does not provide medical advice.
+
+You acknowledge:
+- Exercise carries inherent risk  
+- You should consult a qualified professional before beginning any program  
+- You are responsible for your own health decisions  
+
+---
+
+## 3. Assumption of Risk
+
+By using TrainChat, you agree:
+
+- You assume all risks related to training and physical activity  
+- TrainChat is not liable for injury, harm, or damages resulting from use  
+
+---
+
+## 4. User Responsibilities
+
+You agree to:
+
+- Use the service responsibly  
+- Provide accurate information where relevant  
+- Stop activity if experiencing pain or adverse effects  
+
+---
+
+## 5. AI Limitations
+
+You acknowledge that:
+
+- AI-generated responses may be imperfect  
+- Recommendations may not account for all individual conditions  
+- Final decisions remain your responsibility  
+
+---
+
+## 6. Subscriptions & Billing
+
+- Subscriptions are processed via Stripe  
+- Payments renew automatically unless canceled  
+- Billing management is handled through Stripe’s customer portal  
+
+---
+
+## 7. Cancellation & Refunds
+
+- You may cancel at any time via Stripe  
+- No refunds unless required by applicable law  
+
+---
+
+## 8. Account Suspension
+
+We reserve the right to suspend or terminate accounts that:
+
+- Violate these terms  
+- Abuse the platform  
+- Interfere with system integrity  
+
+---
+
+## 9. Intellectual Property
+
+All TrainChat content, systems, and technology are owned by TrainChat.
+
+You may not:
+- Copy  
+- Resell  
+- Reverse engineer  
+- Redistribute the platform  
+
+---
+
+## 10. Limitation of Liability
+
+To the fullest extent permitted by law:
+
+TrainChat is not liable for:
+- Injuries  
+- Training outcomes  
+- Indirect or consequential damages  
+
+Use is at your own risk.
+
+---
+
+## 11. Indemnification
+
+You agree to indemnify TrainChat from claims resulting from:
+
+- Misuse of the service  
+- Violation of these terms  
+
+---
+
+## 12. Modifications
+
+We may update these Terms at any time.
+
+Continued use constitutes acceptance.
+
+---
+
+## 13. Governing Law
+
+These Terms are governed by the laws of [Insert State/Country].
+
+---
+
+## 14. Contact
+
+[Insert Support Email]
+
+---

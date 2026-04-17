@@ -915,13 +915,13 @@ export default function SettingsPage() {
               />
               <SettingsRow
                 label="Privacy policy"
-                onClick={() => window.open("https://trainchat.app/privacy", "_blank")}
-                rightElement={<ExternalLink className="w-3.5 h-3.5 text-muted-foreground/50" />}
+                onClick={() => navigate("/privacy")}
+                rightElement={<ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />}
               />
               <SettingsRow
                 label="Terms of service"
-                onClick={() => window.open("https://trainchat.app/terms", "_blank")}
-                rightElement={<ExternalLink className="w-3.5 h-3.5 text-muted-foreground/50" />}
+                onClick={() => navigate("/terms")}
+                rightElement={<ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />}
               />
             </Card>
           </section>

@@ -11,6 +11,8 @@ import GuestStart from "@/pages/guest-start";
 import AdminDashboard from "@/pages/admin";
 import SystemPage from "@/pages/system";
 import BillingPage from "@/pages/billing";
+import PrivacyPage from "@/pages/privacy";
+import TermsPage from "@/pages/terms";
 import { useGetMe, getGetMeQueryKey, setDefaultHeaders } from "@workspace/api-client-react";
 import { computeRoute, readDeviceId, type UserMode } from "@/lib/routing";
 import { getOrCreateDeviceId } from "@/lib/deviceId";
@@ -268,6 +270,8 @@ function Router() {
           </AuthGuard>
         )}
       </Route>
+      <Route path="/privacy" component={PrivacyPage} />
+      <Route path="/terms" component={TermsPage} />
       <Route component={NotFound} />
     </Switch>
   );
