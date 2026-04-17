@@ -1,0 +1,182 @@
+We need to add a proper SendGrid email layer to TrainChat for branded transactional emails.
+
+OBJECTIVE:
+Replace basic SMTP-first thinking with a cleaner transactional email system using SendGrid so TrainChat can send:
+- reliable support emails
+- branded confirmation emails
+- welcome emails on sign-up
+- future lifecycle emails
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Implement a reusable SendGrid email service that supports:
+1. internal support delivery
+2. user-facing confirmation emails
+3. welcome email on sign-up
+4. branded HTML email templates consistent with TrainChat
+
+==================================================
+TASK 1 — CREATE SENDGRID EMAIL SERVICE
+==================================================
+
+Create a centralized email service module, for example:
+- src/lib/email/sendgrid.ts
+or similar
+
+It should expose methods like:
+- sendWelcomeEmail(...)
+- sendSupportSubmissionToAdmin(...)
+- sendSupportConfirmationToUser(...)
+- sendBugReportToAdmin(...)
+- sendBugConfirmationToUser(...)
+- sendFeatureRequestToAdmin(...)
+- sendFeatureRequestConfirmationToUser(...)
+
+Do not scatter SendGrid calls throughout the app.
+
+==================================================
+TASK 2 — ENVIRONMENT VARIABLES
+==================================================
+
+Add support for:
+- SENDGRID_API_KEY
+- EMAIL_FROM
+- EMAIL_SUPPORT_TO (default Bryan.jones@trainchat.ai)
+- EMAIL_REPLY_TO if useful
+
+Hard-fail gracefully in development if SendGrid is not configured.
+Do not crash the app.
+Log clearly when email delivery is skipped due to missing config.
+
+==================================================
+TASK 3 — SUPPORT EMAILS
+==================================================
+
+Update the support flow so submissions send:
+A. Internal email to Bryan.jones@trainchat.ai
+B. Confirmation email to the user
+
+Include support type-specific subjects:
+
+- [TrainChat Support] Account help — user@email.com
+- [TrainChat Bug] Settings issue — user@email.com
+- [TrainChat Feature] New request — user@email.com
+
+Internal email should include:
+- support type
+- name
+- email
+- user ID if available
+- all form fields
+- browser/device context if available
+- timestamp
+- environment
+
+User confirmation should be shorter, branded, and reassuring.
+
+==================================================
+TASK 4 — WELCOME EMAIL ON SIGN-UP
+==================================================
+
+Send a branded welcome email automatically when a new user signs up.
+
+The welcome email should:
+- welcome them to TrainChat
+- explain what they can do first
+- point them to build their first program
+- mention settings / billing if relevant
+- feel premium and on-brand
+
+Subject examples:
+- Welcome to TrainChat
+- Your AI coach is ready
+- Welcome to TrainChat — let’s build your system
+
+Only send once per account creation.
+
+==================================================
+TASK 5 — BRANDED HTML TEMPLATES
+==================================================
+
+Create reusable email templates matching TrainChat branding:
+- dark / premium / clean
+- strong headings
+- clear CTA buttons if useful
+- mobile-friendly layout
+
+At minimum create templates for:
+- welcome
+- support confirmation
+- bug report confirmation
+- feature request confirmation
+- internal support notification format
+
+Keep them simple and reliable across email clients.
+
+==================================================
+TASK 6 — FALLBACK / ERROR HANDLING
+==================================================
+
+If SendGrid fails:
+- log the failure clearly
+- do not break the user-facing flow
+- still show success if the support submission itself was saved successfully, but log email failure
+- if useful, persist support submissions in DB as backup
+
+==================================================
+TASK 7 — OPTIONAL DB BACKUP FOR SUPPORT
+==================================================
+
+If not already implemented, optionally store support submissions in DB so no request is lost if email delivery fails.
+
+Email should still be attempted.
+
+==================================================
+TASK 8 — FUTURE-READY STRUCTURE
+==================================================
+
+Design the service so future emails can be added cleanly:
+- subscription activated
+- payment failed
+- trial ending
+- weekly summary
+- password reset
+- coach insight emails
+
+Do not hardcode everything into one giant function.
+
+==================================================
+TASK 9 — TEST REQUIRED
+==================================================
+
+Verify:
+1. New sign-up sends welcome email
+2. Contact Support sends internal email + user confirmation
+3. Report a Bug sends internal email + user confirmation
+4. Request a Feature sends internal email + user confirmation
+5. Missing SendGrid config fails gracefully
+6. Templates render well on mobile
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. files/components added
+2. environment variables required
+3. email types implemented
+4. how welcome email is triggered
+5. how support emails are triggered
+6. fallback behavior if SendGrid is unavailable
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat should have a real branded transactional email layer.
+
+Users should receive polished, on-brand emails.
+Bryan.jones@trainchat.ai should receive structured support emails.
+The system should be reliable, scalable, and ready for future lifecycle automation.
