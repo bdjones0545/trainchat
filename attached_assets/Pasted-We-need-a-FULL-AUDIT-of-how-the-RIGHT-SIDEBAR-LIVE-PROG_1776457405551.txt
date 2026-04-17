@@ -1,0 +1,184 @@
+We need a FULL AUDIT of how the RIGHT SIDEBAR / LIVE PROGRAM panel is constructed and hydrated, because it appears to be showing a different program than the Active Program / Today view.
+
+PROBLEM:
+The right sidebar / Live Program panel still appears to show the same repeated exercise stack:
+- Box Jump
+- Back Squat
+- Pull-Up
+- Bulgarian Split Squat
+- trunk movement
+
+But the Active Program / Today view shows a different exercise stack for the same day/program.
+
+This strongly suggests the problem is not only the variety layer.
+It suggests the right sidebar is rendering from a different or stale source of truth.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Verify exactly how the right sidebar program is constructed, what data source it uses, and why it can diverge from the Active Program / Today view.
+
+We need to determine:
+- is the sidebar stale?
+- is it using old conversation JSON?
+- is it reconstructing a program incorrectly?
+- is Active Program using the DB while the sidebar uses cached chat state?
+- is there a sync/hydration bug between these two views?
+
+==================================================
+TASK 1 — TRACE DATA SOURCES FOR BOTH VIEWS
+==================================================
+
+Audit both:
+
+A. Right Sidebar / Live Program panel
+B. Active Program / Today view
+
+For each, identify:
+- the exact component(s) rendering the program
+- the exact data source
+- whether it uses:
+  - conversation history structuredData
+  - active program state from DB
+  - saved program object
+  - session cache
+  - local React state
+  - transformed/hydrated program structure
+
+I want the exact source of truth for each.
+
+==================================================
+TASK 2 — FIND THE SIDEBAR SOURCE OF TRUTH
+==================================================
+
+Specifically inspect the Live Program sidebar.
+
+Find:
+- where `program` prop/state comes from
+- whether it is being built from:
+  - latest structured conversation message
+  - activeSystem from DB
+  - stale memoized state
+  - local optimistic state
+  - old builder session object
+
+Log exactly what object is being used to render Day 1.
+
+==================================================
+TASK 3 — COMPARE SIDEBAR DATA VS ACTIVE PROGRAM DATA
+==================================================
+
+For the SAME current program/session, log:
+
+- program ID
+- session/day IDs
+- exercise names in Day 1
+- source type (DB / conversation / cache / local state)
+
+for:
+- right sidebar
+- Active Program / Today view
+
+We need a side-by-side comparison showing whether they are actually different objects.
+
+==================================================
+TASK 4 — AUDIT HYDRATION / TRANSFORMATION LAYER
+==================================================
+
+If the sidebar is not reading raw DB state directly, inspect the transformation layer.
+
+Examples:
+- dbSystemToProgramStructure()
+- any serializer / mapper / adapter
+- any saved-program reconstruction logic
+- any “latest structured program” resolver
+
+We need to know whether:
+- the transform drops/overwrites exercises
+- the resolver prefers older chat JSON
+- the sidebar is rebuilding from stale conversation state
+
+==================================================
+TASK 5 — CHECK REFRESH / INVALIDATION FLOW
+==================================================
+
+Audit what happens after a program build or program update.
+
+Does the right sidebar:
+- refresh from DB?
+- reuse previous local state?
+- depend on the latest assistant message JSON?
+- fail to invalidate old program state?
+
+Compare this with what Active Program / Today view does.
+It may be refreshing correctly while the sidebar is not.
+
+==================================================
+TASK 6 — UNIFY SOURCE OF TRUTH
+==================================================
+
+If the two views are using different sources, fix it.
+
+Preferred rule:
+- Right Sidebar / Live Program should render from the same canonical active program source as the Active Program / Today view
+
+Do NOT let the sidebar rely on stale conversation JSON if the DB-backed active program exists.
+
+If needed:
+- when active program exists, DB wins
+- conversation JSON is only fallback when no DB-backed program exists yet
+
+==================================================
+TASK 7 — ADD DEBUG LOGGING
+==================================================
+
+In development, log something like:
+
+[LiveProgramSidebarSource] {
+  source: "db_active_program" | "conversation_json" | "local_cache",
+  programId,
+  day1Exercises: [...],
+}
+
+[ActiveProgramSource] {
+  source: "db_active_program",
+  programId,
+  day1Exercises: [...],
+}
+
+This should make divergence obvious immediately.
+
+==================================================
+TASK 8 — TEST REQUIRED
+==================================================
+
+1. Build the same broad prompt multiple times
+2. Open right sidebar
+3. Open Active Program / Today view
+4. Compare Day 1 exercise stacks
+
+Expected after fix:
+- both views show the same program
+- if variety changed, both reflect that
+- no stale repeated anchors in sidebar when Active Program differs
+
+==================================================
+TASK 9 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. exact source of truth for the right sidebar
+2. exact source of truth for Active Program / Today view
+3. whether they were diverging
+4. where stale/cached/sidebar construction was happening
+5. what was changed to unify them
+6. before/after comparison of Day 1 exercise lists
+
+==================================================
+FINAL STANDARD
+==================================================
+
+The right sidebar / Live Program panel and the Active Program / Today view must render the same canonical current program.
+
+If the actual program changed, both views must show the same updated exercise stack.

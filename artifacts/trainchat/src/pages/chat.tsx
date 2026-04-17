@@ -268,7 +268,10 @@ export default function Chat() {
   });
 
   const { data: weekData } = useQuery({
-    queryKey: ["training-system-week"],
+    // Include activeSystem.id so React Query creates a NEW cache entry whenever
+    // the program changes — prevents stale exercises from a previous system
+    // leaking into the sidebar after a new program build.
+    queryKey: ["training-system-week", activeSystem?.id ?? null],
     queryFn: fetchCurrentWeek,
     enabled: !!me && !!activeSystem?.id,
     staleTime: 0,
@@ -300,11 +303,16 @@ export default function Chat() {
       ? transformSystemToProgram(activeSystem.name, activeSystem.overarchingGoal, weekData)
       : null;
 
-  // Priority: chat-derived draft > DB system > null (empty state)
-  // During a new build session: suppress the old DB system from the right panel so
-  // the user gets a true clean slate. The panel shows empty state until the new
-  // program is generated and saved.
-  const displayProgram = isNewBuildSession ? latestProgram : (latestProgram ?? dbSystemProgram);
+  // DB-wins rule: when a saved training system exists in the DB, the right panel
+  // ALWAYS shows the DB-backed program — never stale conversation JSON.
+  //
+  // States:
+  //  hasActiveSystem + isNewBuildSession  → null (clean slate while new program builds)
+  //  hasActiveSystem + !isNewBuildSession → dbSystemProgram (DB is canonical)
+  //  !hasActiveSystem                     → latestProgram (chat-draft, not yet saved)
+  const displayProgram: ProgramStructure | null = hasActiveSystem
+    ? (isNewBuildSession ? null : dbSystemProgram)
+    : latestProgram;
 
   // The program is "in system" if explicitly saved this session OR if
   // we're showing the DB-backed program (no chat draft, system active, not a new build).
@@ -314,6 +322,20 @@ export default function Chat() {
   useEffect(() => {
     console.log("[Chat] auth state:", { hasUser: !!me, meLoading, meError });
   }, [me, meLoading, meError]);
+
+  // ── Dev logging: source divergence detection (Task 7) ─────────────────────
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const source = hasActiveSystem ? "db_active_program" : (latestProgram ? "conversation_json" : "empty");
+    console.log("[LiveProgramSidebarSource]", {
+      source,
+      systemId: activeSystem?.id ?? null,
+      isNewBuildSession,
+      weekDataSessions: weekData?.sessions?.length ?? 0,
+      day1Exercises: displayProgram?.days?.[0]?.exercises?.map((e: { name: string }) => e.name) ?? [],
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasActiveSystem, activeSystem?.id, latestProgram, displayProgram, weekData, isNewBuildSession]);
 
   // FIX 7: fail-safe — fires ONCE on mount; if auth is still unresolved after 4s,
   // force the agent shell to render so the user is never stuck on a spinner.
@@ -608,14 +630,18 @@ export default function Chat() {
     }
 
     if (result.systemEdit?.applied || result.systemSaved) {
-      queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+      // Force-refetch the active system (not just invalidate) so activeSystem.id
+      // updates immediately. This triggers the weekData query key to change
+      // (["training-system-week", newId]) which forces a fresh cache entry —
+      // eliminating any risk of stale exercises from the old program.
+      queryClient.refetchQueries({ queryKey: ["training-system-active"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-library"] });
-      // Use refetch (not just invalidate) for the week view so the UI shows
-      // the updated program immediately rather than stale cached data
-      queryClient.refetchQueries({ queryKey: ["training-system-week"] });
+      // Partial key match: invalidates all ["training-system-week", *] entries
+      // so any observer re-fetches with the current active system.
+      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
 
       if (result.systemSaved) {
         setIsSaved(true);
@@ -679,9 +705,9 @@ export default function Chat() {
     setUndoVerificationStatus(null);
     try {
       await customFetch<any>(`/api/training-system/restore/${undoChangeLogId}`, { method: "POST" });
-      queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+      queryClient.refetchQueries({ queryKey: ["training-system-active"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
-      queryClient.refetchQueries({ queryKey: ["training-system-week"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
     } catch {

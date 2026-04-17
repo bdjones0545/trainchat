@@ -457,6 +457,18 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditC
     retry: false,
   });
 
+  // Dev logging: ActiveProgramSource — pairs with [LiveProgramSidebarSource] in chat.tsx
+  // to make sidebar/Today divergence immediately visible in the browser console.
+  useEffect(() => {
+    if (!import.meta.env.DEV || !today) return;
+    console.log("[ActiveProgramSource]", {
+      source: "db_active_program",
+      sessionId: today.id ?? null,
+      sessionLabel: today.label ?? null,
+      day1Exercises: (today.exercises ?? []).map((e: { name: string }) => e.name),
+    });
+  }, [today]);
+
   if (isLoading) return <ViewSkeleton />;
   if (error || !today) {
     return (
