@@ -30,8 +30,10 @@ import {
   BarChart2,
   ExternalLink,
   AlertTriangle,
+  Loader2,
+  Pencil,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import PricingModal from "@/components/PricingModal";
 import AnonymousUpgradeModal from "@/components/AnonymousUpgradeModal";
 import { SupportModal, type SupportType } from "@/components/chat/SupportModal";
@@ -273,9 +275,19 @@ function TrainingPreferencesSection({ profile }: { profile: Record<string, any> 
         injuries: raw.injuries || null,
         sportFocus: raw.sportFocus || null,
       }),
-    onSuccess: () => {
+    onSuccess: (saved) => {
       queryClient.invalidateQueries({ queryKey: ["user-profile"] });
       setIsEditing(false);
+      console.info("[SettingsAudit:Save] Training preferences saved", {
+        goal: saved?.trainingGoal,
+        experience: saved?.experienceLevel,
+        style: saved?.trainingStyle,
+        daysPerWeek: saved?.daysPerWeek,
+        sessionDuration: saved?.sessionDuration,
+        equipmentAccess: saved?.equipmentAccess ? "set" : "empty",
+        sportFocus: !!saved?.sportFocus,
+        injuries: !!saved?.injuries,
+      });
       toast({ title: "Preferences saved", description: "Your training preferences have been updated." });
     },
     onError: (err: Error) => {
@@ -495,9 +507,10 @@ function CoachSettingsSection() {
   const [autoAdjust, setAutoAdjust] = useState(() => localStorage.getItem("coach_autoadjust") !== "false");
   const [memory, setMemory] = useState(() => localStorage.getItem("coach_memory") !== "false");
 
-  function toggle(key: string, val: boolean, setter: (v: boolean) => void) {
+  function toggle(key: string, val: boolean, setter: (v: boolean) => void, label: string) {
     localStorage.setItem(key, String(val));
     setter(val);
+    console.info(`[SettingsAudit:CoachToggle] ${label} → ${val}`);
   }
 
   return (
@@ -509,7 +522,7 @@ function CoachSettingsSection() {
         </div>
         <Switch
           checked={concise}
-          onCheckedChange={(v) => toggle("coach_concise", v, setConcise)}
+          onCheckedChange={(v) => toggle("coach_concise", v, setConcise, "conciseResponses")}
         />
       </div>
       <div className="flex items-center justify-between py-3.5 px-4">
@@ -519,7 +532,7 @@ function CoachSettingsSection() {
         </div>
         <Switch
           checked={proactiveInsights}
-          onCheckedChange={(v) => toggle("coach_proactive", v, setProactiveInsights)}
+          onCheckedChange={(v) => toggle("coach_proactive", v, setProactiveInsights, "proactiveInsights")}
         />
       </div>
       <div className="flex items-center justify-between py-3.5 px-4">
@@ -529,7 +542,7 @@ function CoachSettingsSection() {
         </div>
         <Switch
           checked={autoAdjust}
-          onCheckedChange={(v) => toggle("coach_autoadjust", v, setAutoAdjust)}
+          onCheckedChange={(v) => toggle("coach_autoadjust", v, setAutoAdjust, "autoAdjustRecommendations")}
         />
       </div>
       <div className="flex items-center justify-between py-3.5 px-4">
@@ -539,7 +552,7 @@ function CoachSettingsSection() {
         </div>
         <Switch
           checked={memory}
-          onCheckedChange={(v) => toggle("coach_memory", v, setMemory)}
+          onCheckedChange={(v) => toggle("coach_memory", v, setMemory, "memoryPersonalization")}
         />
       </div>
     </Card>
@@ -557,8 +570,11 @@ export default function SettingsPage() {
   const [anonymousUpgradePlan, setAnonymousUpgradePlan] = useState<{ planId: string; priceId: string } | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [supportModalType, setSupportModalType] = useState<SupportType | null>(null);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const [nameSaving, setNameSaving] = useState(false);
 
-  const { data: me } = useGetMe();
+  const { data: me, refetch: refetchMe } = useGetMe();
   const isAnonymousUser = !!(me as any)?.isAnonymous;
   const logout = useLogout();
 
@@ -574,9 +590,55 @@ export default function SettingsPage() {
     staleTime: 60_000,
   });
 
+  // ── Audit log on settings load ───────────────────────────────────────────────
+  useEffect(() => {
+    if (!me && !sub && !profile) return;
+    console.info("[SettingsAudit:Load] Settings page loaded", {
+      userId: (me as any)?.id ?? null,
+      isAnonymous: (me as any)?.isAnonymous ?? true,
+      plan: sub?.plan ?? "free",
+      planStatus: sub?.planStatus ?? "unknown",
+      profileLoaded: !!profile,
+      trainingGoal: profile?.trainingGoal ?? null,
+      experienceLevel: profile?.experienceLevel ?? null,
+      coachConcise: localStorage.getItem("coach_concise") ?? "false",
+      coachProactive: localStorage.getItem("coach_proactive") ?? "true",
+      coachAutoAdjust: localStorage.getItem("coach_autoadjust") ?? "true",
+      coachMemory: localStorage.getItem("coach_memory") ?? "true",
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!(me || sub || profile)]);
+
+  // ── Name editing ─────────────────────────────────────────────────────────────
+  async function saveName() {
+    if (!nameInput.trim() || nameSaving) return;
+    setNameSaving(true);
+    try {
+      const res = await fetch("/api/account", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: nameInput.trim() }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to update name");
+      }
+      await refetchMe();
+      setIsEditingName(false);
+      console.info("[SettingsAudit:Save] Account name updated");
+      toast({ title: "Name updated", description: "Your display name has been saved." });
+    } catch (err: any) {
+      toast({ title: "Failed to save name", description: err.message, variant: "destructive" });
+    } finally {
+      setNameSaving(false);
+    }
+  }
+
   const portalMutation = useMutation({
     mutationFn: openPortal,
     onSuccess: (url) => {
+      console.info("[SettingsAudit:Billing] Stripe portal opened");
       window.location.href = url;
     },
     onError: (err: Error) => {
@@ -674,13 +736,59 @@ export default function SettingsPage() {
                         .slice(0, 2)
                         .toUpperCase() || "?"}
                 </div>
-                <div className="min-w-0">
-                  <p className="text-base font-bold text-foreground truncate">
-                    {isAnonymousUser ? "Guest User" : userName || "Your Account"}
-                  </p>
-                  <p className="text-sm text-muted-foreground truncate">
-                    {isAnonymousUser ? "No account — create one to save your data" : userEmail || "No email on file"}
-                  </p>
+                <div className="min-w-0 flex-1">
+                  {isEditingName && !isAnonymousUser ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        autoFocus
+                        value={nameInput}
+                        onChange={(e) => setNameInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveName();
+                          if (e.key === "Escape") setIsEditingName(false);
+                        }}
+                        maxLength={100}
+                        className="flex-1 min-w-0 bg-background border border-primary/40 rounded-lg px-3 py-1.5 text-sm font-medium text-foreground focus:outline-none focus:border-primary/70"
+                        placeholder="Your name"
+                      />
+                      <button
+                        onClick={saveName}
+                        disabled={nameSaving || !nameInput.trim()}
+                        className="flex-shrink-0 p-1.5 rounded-lg bg-primary/20 hover:bg-primary/30 text-primary transition-colors disabled:opacity-40"
+                      >
+                        {nameSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      </button>
+                      <button
+                        onClick={() => setIsEditingName(false)}
+                        className="flex-shrink-0 p-1.5 rounded-lg hover:bg-accent/40 text-muted-foreground transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 group">
+                      <p className="text-base font-bold text-foreground truncate">
+                        {isAnonymousUser ? "Guest User" : userName || "Your Account"}
+                      </p>
+                      {!isAnonymousUser && (
+                        <button
+                          onClick={() => {
+                            setNameInput(userName);
+                            setIsEditingName(true);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-accent/40 text-muted-foreground hover:text-foreground transition-all flex-shrink-0"
+                          title="Edit name"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {!isEditingName && (
+                    <p className="text-sm text-muted-foreground truncate mt-0.5">
+                      {isAnonymousUser ? "No account — create one to save your data" : userEmail || "No email on file"}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -734,7 +842,7 @@ export default function SettingsPage() {
                   <div>
                     <p className="text-sm font-bold text-red-400">Delete your account?</p>
                     <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                      This permanently removes your account, training history, and coach memory. This cannot be undone. Cancel your subscription in Stripe first to stop billing.
+                      Account deletion permanently removes your training history and coach memory. To proceed, please contact support and we'll complete it for you within 24 hours. Cancel your Stripe subscription first to stop billing.
                     </p>
                   </div>
                 </div>
@@ -747,12 +855,12 @@ export default function SettingsPage() {
                   </button>
                   <button
                     onClick={() => {
-                      toast({ title: "Contact support to delete your account", description: "Email us at support@trainchat.app to complete account deletion." });
                       setShowDeleteConfirm(false);
+                      setSupportModalType("contact");
                     }}
                     className="flex-1 py-2.5 rounded-xl bg-red-500/20 border border-red-500/30 text-sm font-semibold text-red-400 hover:bg-red-500/30 transition-all"
                   >
-                    Delete account
+                    Contact support
                   </button>
                 </div>
               </div>
@@ -934,17 +1042,26 @@ export default function SettingsPage() {
             <Card>
               <SettingsRow
                 label="Contact support"
-                onClick={() => setSupportModalType("contact")}
+                onClick={() => {
+                  console.info("[SettingsAudit:Support] Contact support modal opened");
+                  setSupportModalType("contact");
+                }}
                 rightElement={<ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />}
               />
               <SettingsRow
                 label="Report a bug"
-                onClick={() => setSupportModalType("bug")}
+                onClick={() => {
+                  console.info("[SettingsAudit:Support] Bug report modal opened");
+                  setSupportModalType("bug");
+                }}
                 rightElement={<ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />}
               />
               <SettingsRow
                 label="Request a feature"
-                onClick={() => setSupportModalType("feature")}
+                onClick={() => {
+                  console.info("[SettingsAudit:Support] Feature request modal opened");
+                  setSupportModalType("feature");
+                }}
                 rightElement={<ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />}
               />
             </Card>

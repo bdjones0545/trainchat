@@ -363,4 +363,37 @@ router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
   });
 });
 
+/**
+ * PATCH /api/account
+ *
+ * Update mutable account fields (currently: display name).
+ * Registered users only — anonymous users cannot change their name.
+ */
+router.patch("/account", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.session.userId!;
+  const { name } = req.body ?? {};
+
+  if (!name || typeof name !== "string" || !name.trim()) {
+    res.status(400).json({ error: "Name is required" });
+    return;
+  }
+
+  const trimmedName = name.trim().slice(0, 100);
+
+  try {
+    const [updated] = await db
+      .update(usersTable)
+      .set({ name: trimmedName })
+      .where(eq(usersTable.id, userId))
+      .returning({ id: usersTable.id, name: usersTable.name, email: usersTable.email });
+
+    logger.info({ userId, name: trimmedName }, "[SettingsAudit:Save] Account name updated");
+
+    res.json({ id: updated.id, name: updated.name, email: updated.email });
+  } catch (err) {
+    logger.error({ err, userId }, "Failed to update account name");
+    res.status(500).json({ error: "Failed to update account. Please try again." });
+  }
+});
+
 export default router;

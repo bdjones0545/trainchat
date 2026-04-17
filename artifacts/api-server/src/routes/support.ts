@@ -78,7 +78,7 @@ router.post("/support", async (req, res): Promise<void> => {
       emailSent: "pending",
     }).returning({ id: supportSubmissionsTable.id });
     submissionId = row.id;
-    logger.info({ submissionId, type, email }, "[Support] Submission stored in DB");
+    logger.info({ submissionId, type, email, userId }, "[SettingsAudit:Support] Submission stored in DB");
   } catch (err) {
     logger.error({ err, type, email }, "[Support] Failed to store submission in DB");
     res.status(500).json({ error: "Failed to save your submission. Please try again." });
