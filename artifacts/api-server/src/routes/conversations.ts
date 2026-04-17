@@ -39,6 +39,7 @@ import {
 } from "../lib/pending-clarification-service";
 import { normalizeToIntentFamily } from "../lib/intent-family-engine";
 import { buildExecutionPlan, type ExecutionPlan } from "../lib/execution-planner";
+import { resolveAgentSettingsContext, type CoachBehaviorSettings, type AgentSettingsContext } from "../lib/agent-settings-resolver";
 
 const router: IRouter = Router();
 
@@ -441,6 +442,12 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
 
   const userId = req.session.userId!;
 
+  // ── Agent Settings — resolve behavior + training defaults for this request ──
+  // Reads coachSettings from request body (sent by frontend from localStorage).
+  // Falls back to system defaults when client sends nothing.
+  const rawCoachSettings = (req.body as any)?.coachSettings as Partial<CoachBehaviorSettings> | undefined;
+  const agentSettings: AgentSettingsContext = await resolveAgentSettingsContext(userId, rawCoachSettings ?? null);
+
   // --- Plan gating ---
   let planInfo = await getUserPlanInfo(userId).catch(() => null);
   if (planInfo && !planInfo.canSendMessage) {
@@ -501,18 +508,25 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
   let memoryCtx = "";
   let insightHint = "";
 
+  const allowMemory = isPro && agentSettings.behavior.memoryPersonalization;
+  const allowInsights = agentSettings.behavior.proactiveInsights;
+
   if (isPro) {
     const [adaptation, memories] = await Promise.all([
       buildAdaptationContext(userId).catch(() => ({ promptContext: "" })),
-      listMemories(userId).catch(() => []),
+      allowMemory ? listMemories(userId).catch(() => []) : Promise.resolve([]),
     ]);
     adaptationCtx = adaptation.promptContext;
-    memoryCtx = buildMemoryContext(memories);
-    const insights = await generateInsights(userId, memories).catch(() => []);
-    insightHint = buildInsightPromptHint(insights);
+    memoryCtx = allowMemory ? buildMemoryContext(memories) : "";
+    if (allowInsights && allowMemory) {
+      const insights = await generateInsights(userId, memories).catch(() => []);
+      insightHint = buildInsightPromptHint(insights);
+    }
 
-    syncMemoriesFromData(userId).catch(() => {});
-    extractMemoriesFromMessage(userId, userMessage.content).catch(() => {});
+    if (allowMemory) {
+      syncMemoriesFromData(userId).catch(() => {});
+      extractMemoriesFromMessage(userId, userMessage.content).catch(() => {});
+    }
   }
 
   // Agent-driven conversion hint for free/starter users
@@ -744,6 +758,19 @@ Keep it helpful and intelligent, never promotional.`;
     // Handles both clarification followups (resume pending mutation) and direct
     // vibe edits (surgical edit on the active training system).
     case "APPLY_MUTATION": {
+
+  // ── SUGGEST-ONLY GATE — skip edit engine when autoAdjustRecommendations is off ─
+  // When executionPermission is "suggest_only", the edit engine is bypassed entirely.
+  // The request falls through to the AI path, where system prompt behavior instructions
+  // (injected via buildBehaviorInstructions) tell the AI to describe the change
+  // and ask "Want me to apply this?" instead of mutating.
+  if (agentSettings.behavior.executionPermission === "suggest_only") {
+    logger.info(
+      { userId, conversationId: params.data.id, executionPermission: "suggest_only" },
+      "[AgentSettings] suggest_only mode — bypassing edit engine, routing to AI describe+confirm path"
+    );
+    break; // fall through to AI call below
+  }
 
   // ── CLARIFICATION_FOLLOWUP — resume a pending mutation with the user's answer ──
   // This runs BEFORE the normal vibe edit path. When active, it reconstructs
@@ -1551,6 +1578,7 @@ Keep it helpful and intelligent, never promotional.`;
       neuralBias,
       neuralImbalances,
       hasActiveProgram: !!currentProgram || hasActiveSystem,
+      agentSettings,
     }
   );
 
@@ -1644,6 +1672,7 @@ Keep it helpful and intelligent, never promotional.`;
           neuralContext: neuralContextStr,
           neuralBias,
           neuralImbalances,
+          agentSettings,
         }
       ).catch(() => null);
 
@@ -1865,6 +1894,13 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   // When true: scope intent classification to conversation history only (ignore DB active system)
   // and strip old program name from the AI system prompt uiContext section.
   const isFreshBuildSession = streamUIContext?.newBuildSession === true;
+
+  // ── Agent Settings — resolve behavior + training defaults for this request ──
+  const streamRawCoachSettings = (req.body as any)?.coachSettings as Partial<CoachBehaviorSettings> | undefined;
+  const agentSettings: AgentSettingsContext = await resolveAgentSettingsContext(
+    req.session.userId!,
+    streamRawCoachSettings ?? null,
+  );
   if (isFreshBuildSession) {
     logger.info(
       { conversationId: params.data.id },
@@ -1979,17 +2015,24 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   let memoryCtx = "";
   let insightHint = "";
 
+  const allowMemory = isPro && agentSettings.behavior.memoryPersonalization;
+  const allowInsights = agentSettings.behavior.proactiveInsights;
+
   if (isPro) {
     const [adaptation, memories] = await Promise.all([
       buildAdaptationContext(userId).catch(() => ({ promptContext: "" })),
-      listMemories(userId).catch(() => []),
+      allowMemory ? listMemories(userId).catch(() => []) : Promise.resolve([]),
     ]);
     adaptationCtx = adaptation.promptContext;
-    memoryCtx = buildMemoryContext(memories);
-    const insights = await generateInsights(userId, memories).catch(() => []);
-    insightHint = buildInsightPromptHint(insights);
-    syncMemoriesFromData(userId).catch(() => {});
-    extractMemoriesFromMessage(userId, userMessage.content).catch(() => {});
+    memoryCtx = allowMemory ? buildMemoryContext(memories) : "";
+    if (allowInsights && allowMemory) {
+      const insights = await generateInsights(userId, memories).catch(() => []);
+      insightHint = buildInsightPromptHint(insights);
+    }
+    if (allowMemory) {
+      syncMemoriesFromData(userId).catch(() => {});
+      extractMemoriesFromMessage(userId, userMessage.content).catch(() => {});
+    }
   }
 
   // ── Neural Graph Context (streaming path) ─────────────────────────────────
@@ -2212,6 +2255,15 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
     // ── APPLY_MUTATION ────────────────────────────────────────────────────────
     case "APPLY_MUTATION": {
+
+  // ── SUGGEST-ONLY GATE — skip edit engine when autoAdjustRecommendations is off ─
+  if (agentSettings.behavior.executionPermission === "suggest_only") {
+    logger.info(
+      { userId, conversationId: params.data.id, executionPermission: "suggest_only" },
+      "[AgentSettings:stream] suggest_only mode — bypassing edit engine, routing to AI describe+confirm path"
+    );
+    break; // fall through to AI call below
+  }
 
   // ── Short-circuit: CLARIFICATION_FOLLOWUP ────────────────────────────────
   // Resume a pending mutation from a prior turn using the user's short answer.
@@ -2773,6 +2825,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       neuralImbalances: streamNeuralImbalances,
       uiContext: safeUIContext,
       hasActiveProgram: !!currentProgram || hasActiveSystem,
+      agentSettings,
     }
   );
 
@@ -2852,6 +2905,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           extractedConstraints,
           userMessage: parsed.data.content,
           transformHint: enforceHint,
+          agentSettings,
         }
       ).catch(() => null);
 

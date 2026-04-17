@@ -1,0 +1,363 @@
+We need to build a FULL AGENT SETTINGS INTEGRATION LAYER for TrainChat.
+
+OBJECTIVE:
+The new Settings screen now includes:
+- Training Preferences
+- AI Coach Settings
+  - Concise responses
+  - Proactive insights
+  - Auto-adjust recommendations
+  - Memory personalization
+- Privacy / Data / Support sections
+
+These settings must NOT remain cosmetic UI only.
+
+They must become hard inputs into the agent system and affect:
+- prompt behavior
+- execution permissions
+- memory reads/writes
+- program generation
+- mutation authority
+- exercise selection
+- user experience consistency
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Create a single Agent Settings Integration Layer that resolves all relevant user settings and injects them into the agent pipeline consistently.
+
+This layer must feed into:
+1. conversational response behavior
+2. build/program generation behavior
+3. mutation/refinement behavior
+4. memory behavior
+5. proactive behavior
+6. constraint contract / training logic
+
+==================================================
+CORE RULE
+==================================================
+
+Settings are HARD CONSTRAINTS, not decoration.
+
+If the user toggles a setting, the agent must actually behave differently.
+
+==================================================
+TASK 1 — CREATE A SINGLE SETTINGS RESOLVER
+==================================================
+
+Create a central resolver module, for example:
+
+src/lib/agent-settings-resolver.ts
+
+This module should expose one function like:
+
+resolveAgentSettingsContext({
+  userId,
+  rawUserSettings,
+  rawTrainingPreferences,
+}): AgentSettingsContext
+
+The returned object should include normalized values such as:
+- conciseResponses: boolean
+- proactiveInsights: boolean
+- autoAdjustRecommendations: boolean
+- memoryPersonalization: boolean
+- goal: string | null
+- sport: string | null
+- experience: string | null
+- trainingStyle: string | null
+- daysPerWeek: number | null
+- sessionLength: number | null
+- equipment: string | null
+- limitations: string | null
+
+This should be the ONE canonical settings object used downstream.
+
+==================================================
+TASK 2 — WIRE SETTINGS INTO CONVERSATIONAL RESPONSE LAYER
+==================================================
+
+The agent’s conversational behavior must respect these settings on every response.
+
+A. Concise responses
+If true:
+- shorter answers
+- less explanation
+- direct coaching language
+- avoid verbose reasoning
+
+If false:
+- allow more explanation
+- more educational detail
+- more rationale
+
+B. Proactive insights
+If true:
+- agent may surface trends, suggestions, insights unprompted
+
+If false:
+- agent should respond only to direct user questions/requests
+- no unsolicited advice
+
+These instructions must be injected every time into the response generation path (AI or fallback path).
+
+==================================================
+TASK 3 — WIRE SETTINGS INTO EXECUTION / MUTATION AUTHORITY
+==================================================
+
+Auto-adjust recommendations must control whether the agent is allowed to actively mutate or only suggest.
+
+If autoAdjustRecommendations = true:
+- allowed to apply mutation/refinement when user asks for a change
+- may surface recommendation paths more assertively
+
+If autoAdjustRecommendations = false:
+- default to suggest-only mode unless user explicitly confirms changes
+- do not silently auto-apply adaptive recommendations
+
+This must affect the execution planner / mutation path, not just wording.
+
+Implement a clear execution permission mode, for example:
+- apply_mutation
+- suggest_only
+
+==================================================
+TASK 4 — WIRE SETTINGS INTO MEMORY BEHAVIOR
+==================================================
+
+Memory personalization must control BOTH read and write behavior.
+
+If memoryPersonalization = true:
+- allow memory reads
+- allow memory writes
+- allow agent to reference past patterns/preferences
+
+If false:
+- do not read long-term memory into the agent context
+- do not write new memory
+- do not mention historical personalization
+
+This must be enforced both in:
+- memory context injection
+- memory extraction/save pipeline
+
+Do not let memory writes happen silently if the toggle is off.
+
+==================================================
+TASK 5 — WIRE TRAINING PREFERENCES INTO BUILD LOGIC
+==================================================
+
+Training preferences must be injected into the build/program generation path every time.
+
+These include at minimum:
+- primary goal
+- sport focus
+- experience
+- training style
+- days per week
+- session length
+- equipment
+- limitations
+
+They must feed directly into:
+- build constraint contract
+- architecture engine
+- variation engine
+- exercise scoring / filtering
+- special population detection if relevant
+
+If a preference is set, it should act as a real constraint.
+
+Example:
+- equipment = home gym → do not build full-gym-only structures
+- session length = 45 → architecture must respect it
+- sport = soccer → sport-specific branch/scoring must use it
+- limitations = knee pain → special populations logic should see it
+
+==================================================
+TASK 6 — SETTINGS PRECEDENCE RULES
+==================================================
+
+Define and enforce precedence clearly.
+
+Recommended order:
+1. explicit current user message
+2. resolved settings / training preferences
+3. stored memory/profile defaults
+4. generic defaults
+
+Examples:
+- If settings say “soccer” but the current prompt says “football,” current prompt wins
+- If prompt is silent, settings fill the gap
+- If settings are empty, memory/defaults may inform
+
+Document this clearly in code comments.
+
+==================================================
+TASK 7 — CREATE A SETTINGS CONTRACT OBJECT
+==================================================
+
+Create a single object that gets passed into downstream logic, for example:
+
+AgentConstraintContract = {
+  behavior: {
+    conciseResponses,
+    proactiveInsights,
+    autoAdjustRecommendations,
+    memoryPersonalization,
+  },
+  training: {
+    goal,
+    sport,
+    experience,
+    trainingStyle,
+    daysPerWeek,
+    sessionLength,
+    equipment,
+    limitations,
+  }
+}
+
+This contract should be accessible to:
+- generateAIResponse
+- execution planner
+- buildArchitectureBrief
+- variation engine
+- memory layer
+- fallback response generator
+
+==================================================
+TASK 8 — WIRE SETTINGS INTO FALLBACK / NON-AI PATHS TOO
+==================================================
+
+Very important:
+TrainChat sometimes runs through fallback logic before or instead of model behavior.
+
+The settings integration must also affect:
+- generateFallbackResponse
+- greeting mode
+- safety response mode
+- explanation mode
+- guidance mode
+
+Examples:
+- conciseResponses affects fallback wording length
+- proactiveInsights affects whether fallback can offer suggestions
+- memoryPersonalization affects whether fallback references past user context
+
+Do not only wire this into OpenAI system prompts.
+
+==================================================
+TASK 9 — ADD DEV AUDIT LOGGING
+==================================================
+
+Add a clear settings audit log on every major request path:
+
+[AgentSettingsAudit] {
+  conciseResponses,
+  proactiveInsights,
+  autoAdjustRecommendations,
+  memoryPersonalization,
+  goal,
+  sport,
+  experience,
+  trainingStyle,
+  daysPerWeek,
+  sessionLength,
+  equipment,
+  limitations,
+  source: {
+    settings: ...,
+    promptOverride: ...,
+    memoryFallback: ...
+  }
+}
+
+This should make it obvious whether settings are actually being applied.
+
+==================================================
+TASK 10 — TEST REQUIRED
+==================================================
+
+Run these exact tests:
+
+TEST 1 — Concise responses ON
+Input: ask a normal coaching question
+Expected:
+- shorter answer
+- less explanation
+
+TEST 2 — Concise responses OFF
+Expected:
+- more detailed answer
+
+TEST 3 — Proactive insights OFF
+Expected:
+- no unsolicited suggestions
+
+TEST 4 — Proactive insights ON
+Expected:
+- agent may surface useful trends/suggestions
+
+TEST 5 — Auto-adjust recommendations OFF
+Input: ask for guidance on a program change
+Expected:
+- suggest change, do not auto-apply without explicit ask
+
+TEST 6 — Memory personalization OFF
+Expected:
+- agent does not reference prior sessions/preferences
+- no memory write occurs
+
+TEST 7 — Training preferences set
+Example:
+- sport = soccer
+- equipment = home gym
+- session length = 45
+Input: build program
+Expected:
+- all 3 are reflected in generated structure
+
+TEST 8 — Prompt overrides setting
+Example:
+- settings sport = soccer
+- prompt says football
+Expected:
+- football wins for that build/request
+
+==================================================
+TASK 11 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. resolver module created
+2. AgentSettingsContext shape
+3. AgentConstraintContract shape
+4. where each setting is injected
+5. how precedence works
+6. how fallback/non-AI paths were updated
+7. test results showing settings actually alter behavior
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat settings must become a real integration layer, not just a settings screen.
+
+If the user changes:
+- concise responses
+- proactive insights
+- auto-adjust recommendations
+- memory personalization
+- training preferences
+
+the agent must actually behave differently across:
+- conversation
+- build generation
+- refinement
+- memory
+- fallback behavior
+
+Settings must be enforced consistently across the full agent pipeline.

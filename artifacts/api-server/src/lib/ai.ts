@@ -44,6 +44,7 @@ import { buildSpecialConsiderationsContext, getSpecialConsiderationsClarificatio
 import { buildReturnFromInjuryContext, getReturnFromInjuryClarification, validateReturnFromInjuryOutput } from "./return-from-injury-engine";
 import { resolveRoutingDecision, getResolvedSport, getResolvedSeason, type RoutingDecision } from "./message-router";
 import { validateProgrammingQuality, buildQualityRetryPrompt, type ProgrammingValidationInput } from "./program-quality-validator";
+import { type AgentSettingsContext, buildBehaviorInstructions, buildProfileFillContext } from "./agent-settings-resolver";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -1940,6 +1941,11 @@ export interface AIResponseOptions {
   uiContext?: UIContextData | null;
   /** Whether the user currently has an active program — passed to GREETING_RESPONSE template */
   hasActiveProgram?: boolean;
+  /**
+   * Resolved agent settings context — controls behavior, training defaults, and mutation authority.
+   * When present, injected into the system prompt to enforce user preferences.
+   */
+  agentSettings?: AgentSettingsContext | null;
 }
 
 // ─── Main entry point ────────────────────────────────────────────────────────
@@ -1967,7 +1973,13 @@ export async function generateAIResponse(
     neuralImbalances,
     uiContext,
     hasActiveProgram,
+    agentSettings,
   } = options;
+
+  // ── Agent settings: behavior instructions + profile fill defaults ──────────
+  // Injected into the system prompt on every request when settings are present.
+  const behaviorInstructions = agentSettings ? buildBehaviorInstructions(agentSettings) : null;
+  const profileFillContext = agentSettings ? buildProfileFillContext(agentSettings) : null;
 
   const [profile] = await db
     .select()
@@ -2138,9 +2150,11 @@ export async function generateAIResponse(
   if (isBuildIntent) {
     // For structural rebuilds, also check the intent metadata for targetDays
     const metaDays = (intentResult?.metadata as { targetDays?: number | null } | undefined)?.targetDays ?? null;
-    const days = extractedConstraints?.daysPerWeek ?? metaDays ?? null;
-    const sport = extractSportFromRequest(userMessage, extractedConstraints?.sportFocus ?? null);
-    const goal = extractedConstraints?.primaryGoal ?? null;
+    // Settings precedence: explicit prompt constraints → agentSettings profile defaults → null
+    // This ensures profile-saved preferences fill the gap when the user's message is silent.
+    const days = extractedConstraints?.daysPerWeek ?? metaDays ?? agentSettings?.training.daysPerWeek ?? null;
+    const sport = extractSportFromRequest(userMessage, extractedConstraints?.sportFocus ?? agentSettings?.training.sport ?? null);
+    const goal = extractedConstraints?.primaryGoal ?? agentSettings?.training.goal ?? null;
 
     if (process.env.NODE_ENV !== "production") {
       console.log("[BuildAudit:Input]", JSON.stringify({
@@ -2198,7 +2212,9 @@ export async function generateAIResponse(
   }
 
   const uiContextSection = buildUIContextSection(uiContext);
-  const extras = [adaptationContext, memoryContext, sessionSportOverride, insightHint, conversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, architectureBriefText, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection]
+  // behaviorInstructions placed FIRST (highest priority for style/behavior rules)
+  // profileFillContext placed BEFORE constraint contract (prompt-level constraints override profile)
+  const extras = [behaviorInstructions, profileFillContext, adaptationContext, memoryContext, sessionSportOverride, insightHint, conversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, architectureBriefText, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection]
     .filter(Boolean)
     .join("\n\n");
   const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;
@@ -2216,6 +2232,7 @@ export async function generateAIResponse(
       neuralImbalances: neuralImbalances,
       responseMode: responseMode ?? null,
       hasActiveProgram: hasActiveProgram ?? (currentProgram != null),
+      agentSettings: agentSettings ?? null,
     });
   }
 
@@ -2836,6 +2853,7 @@ interface FallbackOptions {
   neuralImbalances?: import("./neural-graph-interpreter").Imbalance[];
   responseMode?: ResponseMode | null;
   hasActiveProgram?: boolean;
+  agentSettings?: AgentSettingsContext | null;
 }
 
 function generateFallbackResponse(
@@ -2844,7 +2862,20 @@ function generateFallbackResponse(
   profile: UserProfile | null,
   options: FallbackOptions = {}
 ): AIResponse {
-  const { currentProgram, editIntent, intentResult, extractedConstraints, neuralBias, neuralImbalances, responseMode, hasActiveProgram } = options;
+  const { currentProgram, editIntent, intentResult, extractedConstraints, neuralBias, neuralImbalances, responseMode, hasActiveProgram, agentSettings } = options;
+
+  // ── Settings-based response modifier (applied to conversational replies) ───
+  // conciseResponses: shorten / strip rationale from fallback text
+  // proactiveInsights: suppress suggestions when disabled
+  const _isConcise = agentSettings?.behavior.conciseResponses === true;
+  const _allowProactive = agentSettings?.behavior.proactiveInsights !== false;
+
+  // Helper: strip trailing suggestions from a fallback response when proactive insights off
+  const maybeStripProactive = (text: string): string => {
+    if (_allowProactive) return text;
+    // Remove trailing paragraphs that start with proactive language
+    return text.replace(/\n\n(Want to |If you |You (might|may|could)|Consider |One thing|Try |Worth noting|This (is )?also|Flagging|Note:).*/si, "").trim();
+  };
 
   // ── CONVERSATIONAL MODE LOCK ──────────────────────────────────────────────
   // Must run FIRST — before the specialist layer, edit engine, or any legacy

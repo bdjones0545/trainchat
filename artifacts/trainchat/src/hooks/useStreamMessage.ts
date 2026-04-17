@@ -215,6 +215,15 @@ export function useStreamMessage(): UseStreamMessageResult {
         paywallIsAnonymous: false,
       });
 
+      // ── Read coach behavior settings from localStorage ────────────────────
+      // Keys match the Settings page localStorage conventions.
+      const coachSettings = {
+        conciseResponses: localStorage.getItem("coach_concise") === "true",
+        proactiveInsights: localStorage.getItem("coach_proactive") !== "false",
+        autoAdjustRecommendations: localStorage.getItem("coach_autoadjust") !== "false",
+        memoryPersonalization: localStorage.getItem("coach_memory") !== "false",
+      };
+
       try {
         const response = await fetch(
           `/api/conversations/${conversationId}/messages/stream`,
@@ -222,7 +231,7 @@ export function useStreamMessage(): UseStreamMessageResult {
             method: "POST",
             headers: { "Content-Type": "application/json", ...getDefaultHeaders() },
             credentials: "include",
-            body: JSON.stringify({ content, ...(uiContext ? { uiContext } : {}) }),
+            body: JSON.stringify({ content, coachSettings, ...(uiContext ? { uiContext } : {}) }),
             signal: controller.signal,
           }
         );

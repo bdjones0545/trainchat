@@ -1,0 +1,135 @@
+TrainChat Privacy Policy
+
+Last Updated: [Insert Date]
+
+TrainChat (“TrainChat”, “we”, “our”, “us”) is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard your information when you use our application.
+
+---
+
+## 1. Information We Collect
+
+We collect only the information necessary to operate and improve TrainChat.
+
+### Account Information
+- Name (if provided)
+- Email address
+- Authentication credentials
+
+### Usage & Interaction Data
+- Messages and interactions with the AI coach
+- Program creation and modification activity
+- Feature usage and engagement metrics
+
+### Training & Personalization Data
+- Goals, sport, experience level
+- Equipment access and preferences
+- Session feedback, readiness inputs, and performance logs
+
+### Billing Information
+- Payments are processed securely via Stripe
+- We do not store full payment details (e.g., card numbers)
+
+---
+
+## 2. How We Use Your Information
+
+We use your data to:
+
+- Deliver AI-powered coaching and program generation  
+- Personalize training recommendations and system behavior  
+- Improve performance, accuracy, and reliability of the platform  
+- Manage subscriptions and billing  
+- Provide customer support and troubleshooting  
+- Ensure platform security and prevent abuse  
+
+---
+
+## 3. AI Personalization & Memory
+
+TrainChat may use your data to personalize your experience, including:
+
+- Learning training preferences  
+- Adapting programs over time  
+- Improving coaching responses  
+
+This behavior is controlled via Memory Personalization in Settings.
+
+If disabled:
+- Long-term memory is not used
+- New personalization data is not stored
+
+---
+
+## 4. Data Sharing
+
+We do not sell your data.
+
+We may share limited data with:
+
+- Stripe (billing and subscription management)  
+- Infrastructure providers (hosting, analytics, logging)  
+- Legal authorities if required by law  
+
+---
+
+## 5. Data Security
+
+We implement industry-standard safeguards to protect your data, including:
+
+- Secure authentication  
+- Encrypted data transmission  
+- Controlled system access  
+
+However, no system is completely secure.
+
+---
+
+## 6. Your Rights
+
+Depending on your location, you may:
+
+- Request access to your data  
+- Request deletion of your account  
+- Disable personalization features  
+- Request data export (coming soon)  
+
+---
+
+## 7. Data Retention
+
+We retain data only as long as necessary to:
+
+- Provide services  
+- Maintain system functionality  
+- Meet legal obligations  
+
+---
+
+## 8. Third-Party Services
+
+TrainChat integrates with third-party services including:
+
+- Stripe  
+
+These services operate under their own policies.
+
+---
+
+## 9. Children’s Privacy
+
+TrainChat is not intended for users under 13. We do not knowingly collect data from children.
+
+---
+
+## 10. Changes to This Policy
+
+We may update this policy at any time. Continued use of TrainChat constitutes acceptance of changes.
+
+---
+
+## 11. Contact
+
+For privacy-related inquiries:  
+[Insert Support Email]
+
+---
