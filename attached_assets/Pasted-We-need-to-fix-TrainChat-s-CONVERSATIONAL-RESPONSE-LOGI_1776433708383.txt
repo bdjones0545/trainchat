@@ -1,0 +1,214 @@
+We need to fix TrainChat’s CONVERSATIONAL RESPONSE LOGIC so the agent stops falling back to build-language when the user is asking a question about the existing program.
+
+PROBLEM:
+The user can ask something like:
+- “Is this program safe for me?”
+- “Why is this exercise here?”
+- “Is this too much volume?”
+- “Will this help with endurance?”
+- “Does this make sense for soccer?”
+
+…and the system incorrectly replies with:
+- “Built a 3-day strength program. Check the Program tab…”
+
+This is a response-mode failure.
+
+The agent is not reliably distinguishing:
+- build requests
+- refinement requests
+- explanation questions
+- safety questions
+- coaching questions about the current program
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Add a stricter conversational response-mode layer so the assistant responds appropriately to the user’s intent and NEVER falls back to build-language when the user is asking about an existing program.
+
+==================================================
+TASK 1 — AUDIT THE CURRENT FAILURE PATH
+==================================================
+
+Trace the exact path for this message:
+- “Is this program safe for me?”
+
+Find:
+1. intent classification result
+2. execution-planner result
+3. responseMode passed into generateAIResponse
+4. why the assistant used build-template language
+5. where the fallback build response is being selected
+
+We need the exact failure point, not guesses.
+
+==================================================
+TASK 2 — ADD EXPLICIT RESPONSE MODES
+==================================================
+
+Create or tighten a response-mode enum with at least:
+
+- BUILD_RESPONSE
+- REFINE_RESPONSE
+- PROGRAM_SAFETY_RESPONSE
+- PROGRAM_EXPLANATION_RESPONSE
+- COACHING_GUIDANCE_RESPONSE
+- CLARIFICATION_RESPONSE
+
+The user’s message should not only decide whether a mutation happens.
+It should also decide what kind of conversational answer is allowed.
+
+==================================================
+TASK 3 — ADD PROGRAM-QUESTION DETECTION
+==================================================
+
+Create a detector for questions about the current program.
+
+Examples:
+- Is this program safe for me?
+- Is this too much?
+- Why is this here?
+- Does this make sense for soccer?
+- Is this enough recovery?
+- Will this build endurance?
+- Should I do this if my knee hurts?
+
+These should map to:
+- PROGRAM_SAFETY_RESPONSE
+or
+- PROGRAM_EXPLANATION_RESPONSE
+or
+- COACHING_GUIDANCE_RESPONSE
+
+NOT BUILD_RESPONSE.
+
+==================================================
+TASK 4 — BUILD-LANGUAGE GUARDRAIL
+==================================================
+
+Add a hard guardrail:
+
+If the user message is a question about the current program or current session,
+the final response must NOT use build-template phrasing such as:
+- “Built a 3-day strength program”
+- “Check the Program tab”
+- “Want to adjust anything?”
+unless the system actually just built something in that same turn.
+
+This should be blocked in both:
+- normal response path
+- streaming response path
+
+==================================================
+TASK 5 — PROGRAM SAFETY RESPONSE TEMPLATE
+==================================================
+
+For safety/appropriateness questions, create a dedicated response style.
+
+Examples:
+- acknowledge uncertainty appropriately
+- reference the current program
+- mention what determines safety (injury history, pain, training age, recovery, constraints)
+- offer targeted next-step refinement if needed
+
+Example shape:
+- “This may be appropriate if you’re healthy and accustomed to this level of training.”
+- “If you have knee/back/shoulder pain or low training history, I’d want to adjust X.”
+- “Tell me what hurts or what concerns you and I’ll modify it.”
+
+Do not answer with generic legal disclaimers unless truly necessary.
+Do not rebuild the program in the reply.
+
+==================================================
+TASK 6 — PROGRAM EXPLANATION RESPONSE TEMPLATE
+==================================================
+
+For “why is this here?” or “does this make sense?” questions, the agent should explain the existing program/session/exercise.
+
+It should reference:
+- current session identity
+- current structure
+- exercise role
+- training goal / sport context if available
+
+The point is to explain, not mutate and not rebuild.
+
+==================================================
+TASK 7 — USE CURRENT PROGRAM CONTEXT RELIABLY
+==================================================
+
+When answering safety/explanation questions, the AI should receive:
+- current program
+- current session if relevant
+- any known constraints
+- current sport/goal context
+
+This must be the live/current program, not stale build text.
+
+==================================================
+TASK 8 — ADD POST-CLASSIFICATION RESPONSE GUARD
+==================================================
+
+Even if earlier classification is imperfect, add a final response guard before persistence:
+
+If:
+- the user asked a question
+- and has an active/current program
+- and no build action actually occurred
+
+Then:
+- block build-template response text
+- reroute to explanation/guidance safety response
+
+This is a belt-and-suspenders protection.
+
+==================================================
+TASK 9 — TEST REQUIRED
+==================================================
+
+Test these exact messages against an existing program:
+
+1. “Is this program safe for me?”
+Expected:
+- direct safety/coaching answer
+- no build-language
+
+2. “Why is this exercise here?”
+Expected:
+- explanation of role and intent
+- no rebuild
+
+3. “Is this too much volume?”
+Expected:
+- coaching answer tied to the current plan
+
+4. “Does this make sense for soccer?”
+Expected:
+- contextual answer tied to the current program
+
+5. “Build me a 3-day program”
+Expected:
+- still uses proper build response
+
+This confirms the system can separate build requests from current-program questions.
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. exact failure point for “Is this program safe for me?”
+2. response modes added/updated
+3. how program-question detection works
+4. what build-language guardrails were added
+5. example before/after outputs for the 5 test prompts
+
+==================================================
+FINAL STANDARD
+==================================================
+
+When a user asks a question about their current program, TrainChat must answer that question directly.
+
+It must not fall back to “Built a program. Check the Program tab.”
+
+The agent should feel like a coach having a conversation about the existing system, not a generator re-announcing the build.
