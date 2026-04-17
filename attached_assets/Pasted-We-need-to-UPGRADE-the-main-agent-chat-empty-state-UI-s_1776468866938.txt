@@ -1,0 +1,238 @@
+We need to UPGRADE the main agent chat / empty-state UI so it feels more premium, more intelligent, and more conversion-oriented — without adding friction.
+
+CURRENT STATE:
+The current main chat screen is clean and functional, but it still feels a bit too empty and generic.
+
+It has:
+- a centered icon
+- headline: “What do you want to build?”
+- subtext
+- 4 quick action chips
+- bottom input
+
+This is good structurally, but it does not yet feel like a high-end AI system builder.
+
+We want it to feel:
+- more premium
+- more intelligent
+- more coach-like
+- more deliberate
+- more “this is different”
+
+Do NOT add onboarding screens.
+Do NOT slow the user down.
+Do NOT clutter the screen.
+
+This is a UI + copy + interaction polish pass only.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make the empty-state / main chat experience feel like:
+- an elite AI coach
+- a live system builder
+- a premium product
+
+while keeping the Replit-style:
+- straight to agent
+- immediate action
+- minimal friction
+
+==================================================
+TASK 1 — UPGRADE THE EMPTY-STATE COPY
+==================================================
+
+Replace the current generic empty-state copy with stronger language.
+
+Current headline:
+- “What do you want to build?”
+
+Upgrade to something stronger such as:
+- “Build your training system”
+OR
+- “Let’s build your next phase”
+OR
+- “Design your training system”
+
+Pick the strongest option for TrainChat’s brand.
+
+Replace the current subtext:
+- “Describe your training — I’ll build it live.”
+
+With something that better communicates intelligence and adaptation, e.g.:
+- “Your AI coach builds, adapts, and evolves your program in real time.”
+OR
+- “Describe your goal, constraints, or sport — I’ll build it live.”
+
+Keep it concise and premium.
+
+==================================================
+TASK 2 — UPGRADE THE QUICK ACTION CHIPS
+==================================================
+
+The current chips are useful but feel slightly generic.
+
+Rewrite them to feel more coach-driven and system-oriented.
+
+Current style:
+- Build a 4-day split
+- Train around pain
+- Add speed & power
+- Home gym setup
+
+Upgrade to something like:
+- Build a 4-day strength system
+- Work around pain or injury
+- Add speed & explosiveness
+- Build for a home gym
+
+Keep them short enough for mobile.
+Keep 4 chips.
+Maintain instant-tap usability.
+
+==================================================
+TASK 3 — ADD A SUBTLE “SYSTEM STATUS” STRIP
+==================================================
+
+Below the chips (or between subtext and chips if it looks better), add a subtle status row that reflects state.
+
+Examples:
+If no active system:
+- “No active system yet”
+- “Start building to generate your first program”
+
+If active system exists:
+- “Active system: 4-Day Strength”
+- “Ready to refine or rebuild”
+
+If only draft exists:
+- “Draft system ready”
+- “Continue building or save it to your system”
+
+This should be subtle, premium, and context-aware.
+Not loud or salesy.
+
+==================================================
+TASK 4 — TIGHTEN SPACING / VISUAL RHYTHM
+==================================================
+
+The current screen has too much empty vertical breathing space and feels slightly passive.
+
+Tighten:
+- icon to headline spacing
+- headline to subtext spacing
+- subtext to chips spacing
+- chips to input spacing
+
+Goal:
+- still clean
+- less empty
+- more intentional
+- stronger visual center of gravity
+
+Do not make it cramped.
+
+==================================================
+TASK 5 — MAKE THE ICON AREA FEEL MORE ALIVE
+==================================================
+
+The centered dumbbell/icon area should feel slightly more “live” and premium.
+
+Add one subtle enhancement:
+- soft glow
+- slow pulse
+- slight animated shimmer
+- breathing border
+- subtle gradient halo
+
+Do NOT make it distracting.
+Do NOT make it gimmicky.
+Keep it elegant.
+
+==================================================
+TASK 6 — IMPROVE INPUT PROMINENCE
+==================================================
+
+The bottom input should feel like the main action surface.
+
+Improve:
+- border / glow / depth
+- placeholder copy
+- send button emphasis
+
+Possible placeholder upgrade:
+- “Describe your goal, sport, or constraints…”
+or
+- “Tell me what you want to train for…”
+
+It should invite action more strongly than the current placeholder.
+
+==================================================
+TASK 7 — ADD MICRO-INTERACTION POLISH
+==================================================
+
+Add light but premium micro-interactions:
+- quick action chips hover/tap feedback
+- icon pulse or soft glow
+- input focus ring
+- gentle appearance animation on empty state
+
+Do not add heavy loaders or fake delays.
+Everything should still feel fast.
+
+==================================================
+TASK 8 — KEEP THE REPLIT-LIKE SPEED
+==================================================
+
+Do NOT introduce:
+- onboarding forms
+- step-by-step wizard
+- blocking setup
+- extra clicks before chat
+
+The user must still be able to:
+- tap a chip
+- type instantly
+- get to a build immediately
+
+==================================================
+TASK 9 — MOBILE-FIRST QA
+==================================================
+
+Ensure this upgraded empty state looks excellent on:
+- iPhone/mobile Safari
+- narrow screens
+- full-height chat layout
+
+Verify:
+- chips wrap cleanly
+- no clipping
+- no crowded bottom input
+- no oversized dead space
+- visual hierarchy is strong
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. exact copy changes
+2. layout/spacing changes
+3. icon/pulse/glow changes
+4. quick chip text changes
+5. status strip logic
+6. any micro-interactions added
+
+==================================================
+FINAL STANDARD
+==================================================
+
+The main chat screen should feel like:
+- an elite AI coach
+- a live training system builder
+- a premium product
+
+It should still be minimal, but not generic.
+It should still be fast, but not empty.
+It should feel more intentional, more intelligent, and more worth paying for.
