@@ -1,0 +1,308 @@
+We need to build an EXERCISE + BLOCK VARIATION ENGINE WITH RANKED SELECTION for TrainChat.
+
+OBJECTIVE:
+Stop first-build programs from using the same default exercises and the same session block order every time, while preserving coherent coaching logic.
+
+Current issue:
+Even after fixing doctrine and architecture, first builds still overuse the same default anchors and same ordering patterns:
+- Broad Jump
+- Back Squat
+- Conventional Deadlift
+- Bulgarian Split Squat
+- Pallof Press
+
+The system needs controlled variation with intelligent ranking, not randomness.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+For each session role / slot, choose the BEST-FIT exercise from a candidate pool using ranked selection, while also varying valid block order templates.
+
+The system should feel like:
+- a coach choosing from a deep toolbox
+not:
+- a template filling the same defaults every time
+
+==================================================
+CORE PRINCIPLES
+==================================================
+
+1. Variation must preserve training intent
+2. Session structure must remain coherent
+3. Selection must be ranked, not first-valid
+4. Repeat avoidance should reduce overuse, not create chaos
+5. The system should vary both:
+   - which exercises are selected
+   - how blocks are ordered
+
+==================================================
+TASK 1 — DEFINE SLOT-BASED EXERCISE SELECTION
+==================================================
+
+Create a slot system for exercise selection.
+
+Examples of slots:
+- lower_power
+- bilateral_squat_strength
+- bilateral_hinge_strength
+- unilateral_lower
+- trunk_anti_rotation
+- trunk_anti_extension
+- upper_push_strength
+- upper_pull_strength
+- rotational_power
+- elastic_power
+- conditioning_finisher
+- positional_support
+- shoulder_health
+- posterior_chain_accessory
+
+Each session architecture block should resolve to one or more slots.
+Do NOT select whole programs directly from templates.
+Select slot-by-slot from ranked candidate pools.
+
+==================================================
+TASK 2 — BUILD CANDIDATE POOLS FROM THE DB LIBRARY
+==================================================
+
+Use the DB exercise library as the source of truth.
+
+For each high-frequency slot, build candidate pools using canonical exercise metadata.
+
+Start with the most repetitive / highest-value slots:
+1. lower_power
+2. bilateral_squat_strength
+3. bilateral_hinge_strength
+4. unilateral_lower
+5. trunk_anti_rotation / trunk
+
+Each pool must contain multiple valid exercises.
+
+Examples:
+lower_power:
+- Broad Jump
+- Box Jump
+- Countermovement Jump
+- Hurdle Jump
+- Lateral Bound
+- Split-Stance Jump
+
+bilateral_squat_strength:
+- Back Squat
+- Front Squat
+- Goblet Squat
+- Box Squat
+- Safety Bar Squat
+- Zercher Squat (if available)
+
+bilateral_hinge_strength:
+- Conventional Deadlift
+- Trap Bar Deadlift
+- Romanian Deadlift
+- Sumo Deadlift
+- Barbell Hip Thrust
+
+unilateral_lower:
+- Bulgarian Split Squat
+- RFESS
+- Reverse Lunge
+- Walking Lunge
+- Step-Up
+- Lateral Lunge
+
+trunk:
+- Pallof Press
+- Dead Bug
+- Copenhagen Plank
+- Side Plank
+- Bear Crawl Hold
+- Cable Chop
+- Cable Lift
+
+==================================================
+TASK 3 — DEFINE RANKING FACTORS
+==================================================
+
+For each candidate, compute a selection score.
+
+Ranking factors should include:
+- sport/category fit
+- session identity fit
+- block/slot fit
+- equipment fit
+- fatigue cost
+- neural demand fit
+- movement similarity
+- progression appropriateness
+- novelty score
+- recent usage penalty
+
+The scoring system does not need to be overly complex at first, but it must be explicit and deterministic enough to inspect/debug.
+
+Example concept:
+score =
+  movementFit
++ sessionFit
++ sportFit
++ equipmentFit
+- fatiguePenalty
+- overusePenalty
+- exactRepeatPenalty
+
+==================================================
+TASK 4 — ADD NOVELTY / REPEAT AVOIDANCE
+==================================================
+
+Implement repeat-avoidance so the same defaults do not keep winning.
+
+Track at minimum:
+- exercises already used in current program
+- recently used exercises in prior build(s), if available
+- repeated use of the same top-ranked anchors
+
+Penalize:
+- exact repeats from immediately previous build
+- the same 4–5 “default winners” showing up every time
+
+Do NOT make novelty dominate fit.
+If Back Squat is still clearly the best choice for a specific slot, it can still win — but it should not auto-win every time by inertia.
+
+==================================================
+TASK 5 — ADD BLOCK TEMPLATE VARIATION
+==================================================
+
+Support multiple valid block order variants for the same session identity.
+
+Example:
+A lower performance session should not always be:
+prep → jump → squat → hinge → unilateral → trunk
+
+Allow multiple coherent variants such as:
+A.
+prep → jump → squat → unilateral → trunk
+
+B.
+prep → reactive/med-ball → hinge → unilateral → trunk
+
+C.
+prep → jump → hinge → squat-support → trunk
+
+D.
+prep → elastic power → bilateral strength → accessory → trunk
+
+Each variant must still obey:
+- neural freshness logic
+- category logic
+- session identity coherence
+
+==================================================
+TASK 6 — TIE VARIATION TO CATEGORY / SPORT
+==================================================
+
+Variation must not be generic.
+It should respect sport category and session intent.
+
+Examples:
+- soccer lower_power may prefer horizontal and elastic power options
+- golf rotational_power may prefer scoop toss / shotput / rotational med-ball
+- swimming should not receive default jump-heavy lower_power slots
+- combat conditioning blocks should differ from field-sport conditioning blocks
+
+Variation must stay category-consistent.
+
+==================================================
+TASK 7 — KEEP BLOCKS COACH-LIKE, NOT RANDOM
+==================================================
+
+The engine must preserve coaching logic.
+
+Do NOT:
+- randomly shuffle blocks
+- randomly pick exercises from a bucket
+- break neural demand ordering
+- place high-fatigue lifts before power/reactive work when that violates the session identity
+
+Variation must be structured and intentional.
+
+==================================================
+TASK 8 — DEFINE A CLEAN IMPLEMENTATION POINT
+==================================================
+
+Identify the best place in the generation pipeline to apply this engine.
+
+Likely integration points:
+- program-architecture-engine.ts (slot/block template generation)
+- AI generation prep in ai.ts
+- any exercise context building layer
+
+The ideal flow is:
+
+architecture/session identity
+→ block template variant selected
+→ slots resolved
+→ ranked exercise selection fills slots
+→ final program JSON generated or finalized
+
+==================================================
+TASK 9 — ADD DEBUG VISIBILITY
+==================================================
+
+In development, log for each generated session:
+- session identity
+- selected block template variant
+- slot list
+- candidate pool size per slot
+- top 3 scored candidates per slot
+- chosen candidate
+- repeat/novelty penalties applied
+
+This needs to be inspectable so we can tune it.
+
+==================================================
+TASK 10 — TEST REQUIRED
+==================================================
+
+Run the same request 5 times:
+“Build me a 4-day soccer performance program”
+
+Expected:
+- same overall quality and category fit
+- different valid exercise choices across repeated slots
+- some block template variation
+- not always Broad Jump / Back Squat / Conventional Deadlift / Bulgarian Split Squat / Pallof Press
+
+Also test:
+- 4-day golf performance program
+- 4-day swim dryland program
+- 4-day MMA performance program
+
+Expected:
+- category-consistent block and exercise variation
+- not just the same skeleton with different labels
+
+==================================================
+TASK 11 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. slot system implemented
+2. candidate pools added
+3. ranking factors used
+4. repeat-avoidance logic
+5. block template variants added
+6. where this integrates in generation flow
+7. before vs after behavior for repeated builds
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat should stop feeling like it always builds the same program with the same anchor lifts.
+
+It should instead feel like a coach with a deep toolbox choosing:
+- the right session structure
+- the right block order
+- the right exercise for the role
+
+with intelligent variation and ranked selection.

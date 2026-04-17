@@ -5,12 +5,27 @@
 //   2. Define session intent
 //   3. Allocate movement patterns
 //   4. Sequence CNS flow
-//   5. Select exercises (delegated to AI — engine provides the blueprint)
+//   5. Select exercises — pre-selected via exercise-variation-engine,
+//      injected into Architecture Brief as prescriptions (not options)
 //
 // The engine generates a structured "Architecture Brief" that is injected
 // into the AI system prompt, ensuring every generated program follows elite
 // strength & conditioning principles.
 // ─────────────────────────────────────────────────────────────────────────────
+
+import {
+  selectSlotExercises,
+  buildVariationMandate,
+  buildLowerPowerDescription,
+  buildSquatPrimaryDescription,
+  buildHingePrimaryDescription,
+  buildUnilateralDescription,
+  buildTrunkDescription,
+  buildUpperPushDescription,
+  buildUpperPullDescription,
+  buildRotationalPowerDescription,
+  type SlotExerciseSelection,
+} from "./exercise-variation-engine";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -68,8 +83,13 @@ export interface WeeklyArchitecture {
 
 // ─── Standard CNS flow ───────────────────────────────────────────────────────
 
-function buildCNSFlow(patterns: MovementPattern[], neuralDemand: NeuralDemand): CNSBlock[] {
+function buildCNSFlow(
+  patterns: MovementPattern[],
+  neuralDemand: NeuralDemand,
+  sel?: SlotExerciseSelection,
+): CNSBlock[] {
   const blocks: CNSBlock[] = [];
+  const isHingeDay = patterns.includes("hinge") && !patterns.includes("squat");
 
   blocks.push({
     role: "prep",
@@ -81,54 +101,98 @@ function buildCNSFlow(patterns: MovementPattern[], neuralDemand: NeuralDemand): 
   });
 
   if (neuralDemand !== "low") {
-    blocks.push({
-      role: "power",
-      description: patterns.includes("lateral") || patterns.includes("rotational")
-        ? "Lateral/rotational power: lateral bound, med ball rotational throw, or reactive sprint mechanic drill"
-        : patterns.includes("squat") || patterns.includes("unilateral_lower")
-          ? "Vertical/horizontal power: broad jump, box jump, or vertical jump (3–5 sets × 3–5 reps)"
-          : "Med ball power: chest throw, overhead slam, or push press (3–4 sets × 3–5 reps)",
-    });
+    const hasPowerPattern = patterns.includes("lateral") || patterns.includes("rotational");
+    const hasLowerPattern = patterns.includes("squat") || patterns.includes("unilateral_lower");
+    const hasHinge = patterns.includes("hinge");
+
+    if (sel) {
+      if (hasPowerPattern && patterns.includes("rotational")) {
+        blocks.push({ role: "power", description: buildRotationalPowerDescription(sel) });
+      } else if (hasLowerPattern || hasHinge) {
+        blocks.push({ role: "power", description: buildLowerPowerDescription(sel, neuralDemand) });
+      } else {
+        blocks.push({ role: "power", description: `Med ball power: ${sel.rotational_power} or chest throw (3–4 sets × 3–5 reps)` });
+      }
+    } else {
+      blocks.push({
+        role: "power",
+        description: hasPowerPattern
+          ? "Lateral/rotational power: lateral bound, med ball rotational throw, or reactive sprint mechanic drill"
+          : hasLowerPattern
+            ? "Vertical/horizontal power: broad jump, box jump, or vertical jump (3–5 sets × 3–5 reps)"
+            : "Med ball power: chest throw, overhead slam, or push press (3–4 sets × 3–5 reps)",
+      });
+    }
   }
 
-  blocks.push({
-    role: "primary",
-    description: patterns.includes("squat")
-      ? "Primary squat pattern: bilateral squat variation — back squat, front squat, or trap bar squat"
-      : patterns.includes("hinge")
-        ? "Primary hinge pattern: deadlift or Romanian deadlift variation"
-        : patterns.includes("upper_push")
-          ? "Primary press: bench press, overhead press, or incline press"
-          : patterns.includes("upper_pull")
-            ? "Primary pull: weighted pull-up or barbell row"
-            : "Primary compound movement matching session identity",
-  });
+  if (sel) {
+    blocks.push({
+      role: "primary",
+      description: patterns.includes("squat")
+        ? buildSquatPrimaryDescription(sel)
+        : patterns.includes("hinge")
+          ? buildHingePrimaryDescription(sel)
+          : patterns.includes("upper_push")
+            ? buildUpperPushDescription(sel, true)
+            : patterns.includes("upper_pull")
+              ? buildUpperPullDescription(sel, true)
+              : "Primary compound movement matching session identity",
+    });
 
-  blocks.push({
-    role: "secondary",
-    description: patterns.includes("squat")
-      ? "Secondary pattern: hinge complement (RDL) + posterior chain support"
-      : patterns.includes("hinge")
-        ? "Secondary pattern: squat complement (goblet or split squat) + trunk"
-        : patterns.includes("upper_push")
-          ? "Structural balance: horizontal or vertical pull to complement press"
-          : "Secondary compound: supports and balances the primary pattern",
-  });
+    blocks.push({
+      role: "secondary",
+      description: patterns.includes("squat")
+        ? `Secondary pattern: ${sel.bilateral_hinge_strength} complement (hinge) + posterior chain support (3 × 8–10)`
+        : patterns.includes("hinge")
+          ? `Secondary pattern: ${sel.unilateral_lower} (unilateral squat complement) + posterior chain support (3 × 8–10)`
+          : patterns.includes("upper_push")
+            ? `Structural balance: ${sel.upper_pull_secondary} — horizontal or vertical pull to complement press (3–4 × 8–12)`
+            : `Secondary compound: ${sel.upper_push_secondary} — supports and balances the primary pattern (3 × 8–12)`,
+    });
+  } else {
+    blocks.push({
+      role: "primary",
+      description: patterns.includes("squat")
+        ? "Primary squat pattern: bilateral squat variation — back squat, front squat, or trap bar squat"
+        : patterns.includes("hinge")
+          ? "Primary hinge pattern: deadlift or Romanian deadlift variation"
+          : patterns.includes("upper_push")
+            ? "Primary press: bench press, overhead press, or incline press"
+            : patterns.includes("upper_pull")
+              ? "Primary pull: weighted pull-up or barbell row"
+              : "Primary compound movement matching session identity",
+    });
+
+    blocks.push({
+      role: "secondary",
+      description: patterns.includes("squat")
+        ? "Secondary pattern: hinge complement (RDL) + posterior chain support"
+        : patterns.includes("hinge")
+          ? "Secondary pattern: squat complement (goblet or split squat) + trunk"
+          : patterns.includes("upper_push")
+            ? "Structural balance: horizontal or vertical pull to complement press"
+            : "Secondary compound: supports and balances the primary pattern",
+    });
+  }
 
   if (patterns.includes("unilateral_lower") || patterns.includes("squat") || patterns.includes("hinge")) {
     blocks.push({
       role: "unilateral",
-      description: "Unilateral lower-body: RFESS, lateral step-up, single-leg RDL, or lateral lunge for positional control and asymmetry exposure",
+      description: sel
+        ? buildUnilateralDescription(sel, isHingeDay)
+        : "Unilateral lower-body: RFESS, lateral step-up, single-leg RDL, or lateral lunge for positional control and asymmetry exposure",
     });
   }
 
   blocks.push({
     role: "trunk",
-    description: patterns.includes("rotational")
-      ? "Rotational trunk: Pallof press, half-kneeling cable chop, or landmine rotation"
-      : patterns.includes("lateral")
-        ? "Lateral stability trunk: Copenhagen plank, side plank with hip abduction, or suitcase carry"
-        : "Trunk integrity: anti-extension (ab wheel, dead bug) + anti-rotation (Pallof press) paired",
+    description: sel
+      ? buildTrunkDescription(sel, patterns.includes("rotational"))
+      : patterns.includes("rotational")
+        ? "Rotational trunk: Pallof press, half-kneeling cable chop, or landmine rotation"
+        : patterns.includes("lateral")
+          ? "Lateral stability trunk: Copenhagen plank, side plank with hip abduction, or suitcase carry"
+          : "Trunk integrity: anti-extension (ab wheel, dead bug) + anti-rotation (Pallof press) paired",
   });
 
   if (neuralDemand === "low") {
@@ -1447,8 +1511,44 @@ function buildSessionsForDayCount(
   }
 
   if (daysPerWeek === 3) {
+    // Variant C: Upper-pull anchor + lower integration — pull-led, posterior-chain closed
+    if ((variationSeed ?? 0) >= 0.67) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Upper Pull Anchor + Power",
+          intent: "Vertical pull strength as the session anchor; rotational power primer; structural push balance; trunk anti-extension",
+          neuralDemand: "high",
+          primaryPattern: "upper_pull",
+          emphasizedPatterns: ["upper_pull", "upper_push", "power", "trunk", "rotational"],
+          cnsFlow: buildCNSFlow(["upper_pull", "upper_push", "power", "rotational", "trunk"], "high"),
+          sportNotes: isHockey ? "Weighted pull-up; rotational med ball throw; face pull" : undefined,
+        },
+        {
+          dayNumber: 2,
+          identity: "Lower Power + Squat Strength",
+          intent: "Explosive power as the CNS primer; bilateral squat strength as the force base; unilateral and lateral control",
+          neuralDemand: "high",
+          primaryPattern: "squat",
+          emphasizedPatterns: ["squat", "power", "unilateral_lower", "lateral", "trunk"],
+          cnsFlow: buildCNSFlow(["squat", "power", "unilateral_lower", "lateral", "trunk"], "high"),
+          sportNotes: isHockey ? "Lateral bound; front squat or safety bar squat; lateral step-up; Copenhagen plank" : undefined,
+        },
+        {
+          dayNumber: 3,
+          identity: "Posterior Chain + Full Body Integration",
+          intent: "Hinge-dominant posterior chain development; unilateral resilience; loaded carry and trunk integrity — athletic transfer session",
+          neuralDemand: "moderate",
+          primaryPattern: "hinge",
+          emphasizedPatterns: ["hinge", "unilateral_lower", "trunk", "lateral"],
+          cnsFlow: buildCNSFlow(["hinge", "unilateral_lower", "lateral", "trunk"], "moderate"),
+          sportNotes: isHockey ? "Single-leg RDL; lateral lunge; Copenhagen plank; carry complex" : undefined,
+        },
+      ];
+    }
+
     // Variant B: Hinge-first / posterior-chain-emphasis 3-day split
-    if ((variationSeed ?? 0) % 2 === 1) {
+    if ((variationSeed ?? 0) >= 0.33) {
       return [
         {
           dayNumber: 1,
@@ -1562,8 +1662,54 @@ function buildSessionsForDayCount(
       ];
     }
 
+    // Variant C: Hinge-anchored full-body integration — posterior chain leads, upper follows
+    if ((variationSeed ?? 0) >= 0.67) {
+      return [
+        {
+          dayNumber: 1,
+          identity: "Hinge-Dominant Power + Posterior Chain",
+          intent: "Deadlift-pattern peak force as the week's anchor; reactive power primer; single-leg posterior chain resilience",
+          neuralDemand: "high",
+          primaryPattern: "hinge",
+          emphasizedPatterns: ["hinge", "power", "unilateral_lower", "trunk"],
+          cnsFlow: buildCNSFlow(["hinge", "power", "unilateral_lower", "trunk"], "high"),
+          sportNotes: isHockey ? "RDL + single-leg RDL as primary hinge; lateral bound as power primer" : undefined,
+        },
+        {
+          dayNumber: 2,
+          identity: "Upper Push + Anti-Extension Trunk",
+          intent: "Horizontal and vertical press development; push:pull balance built through accessory pulling; anti-extension trunk integrity",
+          neuralDemand: "moderate",
+          primaryPattern: "upper_push",
+          emphasizedPatterns: ["upper_push", "upper_pull", "trunk"],
+          cnsFlow: buildCNSFlow(["upper_push", "upper_pull", "trunk"], "moderate"),
+          sportNotes: isHockey ? "Landmine press as sport-specific horizontal force; face pull and external rotation for rotator cuff tolerance" : undefined,
+        },
+        {
+          dayNumber: 3,
+          identity: "Squat Strength + Lateral Control",
+          intent: "Bilateral squat force production as secondary lower anchor; lateral and unilateral control; reactive power output",
+          neuralDemand: "moderate",
+          primaryPattern: "squat",
+          emphasizedPatterns: ["squat", "power", "unilateral_lower", "lateral", "trunk"],
+          cnsFlow: buildCNSFlow(["squat", "power", "unilateral_lower", "lateral", "trunk"], "moderate"),
+          sportNotes: isHockey ? "Lateral step-up and Copenhagen plank in unilateral block; anti-rotation trunk emphasis" : undefined,
+        },
+        {
+          dayNumber: 4,
+          identity: "Upper Pull Dominance + Rotational Power",
+          intent: "Vertical and horizontal pull as the closing upper anchor; rotational power integration; loaded carry finisher for trunk under fatigue",
+          neuralDemand: "high",
+          primaryPattern: "upper_pull",
+          emphasizedPatterns: ["upper_pull", "rotational", "power", "trunk"],
+          cnsFlow: buildCNSFlow(["upper_pull", "rotational", "power", "trunk"], "high"),
+          sportNotes: isHockey ? "Weighted chin-up or bent-over row; med ball rotational throw; carry complex" : undefined,
+        },
+      ];
+    }
+
     // Variant B: Upper/Lower split emphasis — pull-dominant Day 2, power-focused Day 3
-    if ((variationSeed ?? 0) % 2 === 1) {
+    if ((variationSeed ?? 0) >= 0.33) {
       return [
         {
           dayNumber: 1,
@@ -1645,7 +1791,7 @@ function buildSessionsForDayCount(
 
   if (daysPerWeek === 5) {
     // Variant B: Push/Pull/Legs emphasis — dedicated push and pull days
-    if ((variationSeed ?? 0) % 2 === 1) {
+    if ((variationSeed ?? 0) >= 0.5) {
       return [
         {
           dayNumber: 1,
@@ -1899,7 +2045,9 @@ export function buildArchitectureBrief(
 ): string | null {
   if (!daysPerWeek || daysPerWeek < 2) return null;
 
-  const arch = computeWeeklyArchitecture(daysPerWeek, sport, goal, variationSeed);
+  const seed = variationSeed ?? Math.random();
+  const slotSelection = selectSlotExercises(seed, sport, goal);
+  const arch = computeWeeklyArchitecture(daysPerWeek, sport, goal, seed);
   const isHockey = sport?.toLowerCase().includes("hockey") ?? false;
   const isFootball = !!(sport && /\bfootball\b/i.test(sport) && !/soccer/.test(sport.toLowerCase()));
   const isBasketball = !!(sport && /basketball/i.test(sport));
@@ -1925,8 +2073,53 @@ export function buildArchitectureBrief(
     goal?.toLowerCase().includes("work capacity")
   );
 
+  // Post-process CNS flow blocks: replace generic "choose from X, Y, Z" descriptions
+  // with pre-selected specific exercises from the variation engine.
+  // Only replaces descriptions that contain " or " (indicating options were listed).
+  function overlayBlockWithSlot(block: CNSBlock, patterns: MovementPattern[], nd: NeuralDemand): CNSBlock {
+    const isGeneric = block.description.includes(" or ") || block.description.includes("variation");
+    if (!isGeneric) return block;
+    const isHingeDay = patterns.includes("hinge") && !patterns.includes("squat");
+
+    if (block.role === "power" && (patterns.includes("squat") || patterns.includes("hinge") || patterns.includes("unilateral_lower"))) {
+      return { ...block, description: buildLowerPowerDescription(slotSelection, nd) };
+    }
+    if (block.role === "power" && patterns.includes("rotational")) {
+      return { ...block, description: buildRotationalPowerDescription(slotSelection) };
+    }
+    if (block.role === "primary" && patterns.includes("squat")) {
+      return { ...block, description: buildSquatPrimaryDescription(slotSelection) };
+    }
+    if (block.role === "primary" && patterns.includes("hinge")) {
+      return { ...block, description: buildHingePrimaryDescription(slotSelection) };
+    }
+    if (block.role === "primary" && patterns.includes("upper_push")) {
+      return { ...block, description: buildUpperPushDescription(slotSelection, true) };
+    }
+    if (block.role === "primary" && patterns.includes("upper_pull")) {
+      return { ...block, description: buildUpperPullDescription(slotSelection, true) };
+    }
+    if (block.role === "secondary" && patterns.includes("squat")) {
+      return { ...block, description: `Secondary hinge complement: ${slotSelection.bilateral_hinge_strength} + posterior chain support (3 × 8–10)` };
+    }
+    if (block.role === "secondary" && patterns.includes("hinge")) {
+      return { ...block, description: `Secondary squat complement: ${slotSelection.unilateral_lower} + posterior chain support (3 × 8–10)` };
+    }
+    if (block.role === "secondary" && (patterns.includes("upper_push") || patterns.includes("upper_pull"))) {
+      return { ...block, description: `Structural balance: ${slotSelection.upper_pull_secondary} — horizontal or vertical pull to complement press (3–4 × 8–12)` };
+    }
+    if (block.role === "unilateral") {
+      return { ...block, description: buildUnilateralDescription(slotSelection, isHingeDay) };
+    }
+    if (block.role === "trunk") {
+      return { ...block, description: buildTrunkDescription(slotSelection, patterns.includes("rotational")) };
+    }
+    return block;
+  }
+
   const sessionLines = arch.sessions.map((s) => {
-    const flowRoles = s.cnsFlow.map((b) => `[${b.role.toUpperCase()}] ${b.description}`).join("\n    ");
+    const processedFlow = s.cnsFlow.map((b) => overlayBlockWithSlot(b, s.emphasizedPatterns, s.neuralDemand));
+    const flowRoles = processedFlow.map((b) => `[${b.role.toUpperCase()}] ${b.description}`).join("\n    ");
     const sportLine = s.sportNotes ? `\n  SPORT OVERLAY: ${s.sportNotes}` : "";
     return [
       `  DAY ${s.dayNumber} — ${s.identity}`,
@@ -2080,6 +2273,8 @@ Only AFTER the above architecture is locked, select exercises that:
 4. Vary exercises across sessions — no repeated primary lifts
 5. Minimum 5 meaningful exercises per session (6–8 optimal for full sessions)
 
+${buildVariationMandate(slotSelection, sport)}
+
 ### VALIDATION CHECKLIST (apply before outputting JSON)
 - [ ] Every session has a clear identity that answers "why does this day exist?"
 - [ ] No consecutive high-CNS sessions
@@ -2095,7 +2290,10 @@ ${isPowerOptional
   : "- [ ] Every session has power/explosive work (unless injury contraindicates)"}
 - [ ] Every session has at least one unilateral lower-body movement (lower/full-body days)
 - [ ] No repeated primary lifts across sessions
-- [ ] Exercise intents are performance cues, not muscle labels${sportValidationLines}${isConditioningGoal ? "\n- [ ] Dedicated conditioning sessions include named energy system (aerobic base / lactate threshold / VO2max / anaerobic capacity / RSA)\n- [ ] Every conditioning exercise has work duration, rest duration, and interval count\n- [ ] Conditioning sessions do NOT default to circuits — real intervals required\n- [ ] Progression is stated: Week 1 → Week 3 → Week 5" : ""}`;
+- [ ] Exercise intents are performance cues, not muscle labels
+- [ ] Pre-selected exercises from EXERCISE VARIATION MANDATE are used — no substitution with defaults unless explicitly justified
+- [ ] No two sessions share the same power exercise (broad jump, box jump, etc. must not repeat)
+- [ ] At least 3 different trunk exercises used across the week (not Pallof press in every session)${sportValidationLines}${isConditioningGoal ? "\n- [ ] Dedicated conditioning sessions include named energy system (aerobic base / lactate threshold / VO2max / anaerobic capacity / RSA)\n- [ ] Every conditioning exercise has work duration, rest duration, and interval count\n- [ ] Conditioning sessions do NOT default to circuits — real intervals required\n- [ ] Progression is stated: Week 1 → Week 3 → Week 5" : ""}`;
 }
 
 // ─── Post-generation Validation ───────────────────────────────────────────────
