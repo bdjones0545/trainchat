@@ -28,6 +28,11 @@ import {
 } from "./exercise-variation-engine";
 // getBlockVariant / describeBlockVariant are used inside buildVariationMandate — no direct call needed here
 
+import {
+  detectSpecialPopulation,
+  buildSpecialPopArchitectureBrief,
+} from "./special-populations-engine";
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type NeuralDemand = "high" | "moderate" | "low";
@@ -2158,6 +2163,15 @@ export function buildArchitectureBrief(
   if (!daysPerWeek || daysPerWeek < 2) return null;
 
   const seed = variationSeed ?? Math.random();
+
+  // ── Special Population Detection — route BEFORE any athlete logic ──────────
+  // If the user request matches an older adult, beginner, post-rehab, pain-sensitive,
+  // low-impact, or prenatal profile, route them into the dedicated special populations
+  // engine. This is a hard early exit — special populations never reach athlete templates.
+  const spProfile = detectSpecialPopulation(userRequest, goal);
+  if (spProfile) {
+    return buildSpecialPopArchitectureBrief(daysPerWeek, goal, userRequest, spProfile, seed);
+  }
 
   // Detect neural demand from request context
   const reqLc = (userRequest + " " + (goal ?? "")).toLowerCase();

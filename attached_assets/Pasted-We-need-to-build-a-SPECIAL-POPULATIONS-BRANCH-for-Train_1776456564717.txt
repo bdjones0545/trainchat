@@ -1,0 +1,368 @@
+We need to build a SPECIAL POPULATIONS BRANCH for TrainChat.
+
+OBJECTIVE:
+Right now TrainChat’s architecture, exercise pools, scoring, and session framing are optimized primarily for athletes and performance-oriented users.
+
+That works well for:
+- football
+- soccer
+- basketball
+- hockey
+- general performance builds
+
+But it is not correct for special populations such as:
+- older adults
+- beginners / deconditioned users
+- post-rehab / return-to-training users
+- pain-sensitive users
+- low-impact users
+- prenatal / postpartum (future support, even if not fully implemented yet)
+
+These users are NOT just “lighter athletes.”
+They require a different optimization branch.
+
+We need to create a dedicated special populations path that changes:
+- detection
+- architecture
+- exercise selection
+- scoring priorities
+- session language
+- progression model
+
+This should be implemented as a separate branch, not as a hack on top of the athlete/performance branch.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Create a SPECIAL_POPULATION_MODE branch that:
+- detects when the user belongs in this mode
+- routes them into safer / lower-impact / tolerance-aware programming
+- preserves TrainChat’s high-quality adaptive logic
+- avoids athlete-centric session framing and default lift bias
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+Do NOT treat special populations as “weaker athletes.”
+
+Treat them as a different optimization problem.
+
+Current athlete branch optimizes for:
+- force
+- speed
+- power
+- athletic transfer
+- neural freshness
+
+Special populations branch should optimize for:
+- tolerance
+- safety
+- control
+- resilience
+- low-impact strength
+- movement quality
+- progressive capacity building
+
+==================================================
+TASK 1 — ADD POPULATION DETECTION LAYER
+==================================================
+
+Create a new early-routing detection layer before architecture generation.
+
+This detector should identify keywords / constraints such as:
+- older adult / elderly / 60+ / 65+ / 70+
+- beginner / new to training / never lifted
+- post rehab / returning after injury / cleared from rehab
+- knee pain / back pain / shoulder pain / joint pain
+- low impact / gentle / safe / deconditioned
+- postpartum / prenatal (can be detected now even if initial support is partial)
+
+Examples that should trigger SPECIAL_POPULATION_MODE:
+- “Build me a program for a 65-year-old”
+- “I’m just getting back from an ACL injury”
+- “I need something low impact”
+- “Beginner strength program with knee pain”
+- “Safe strength program for an older adult”
+
+Output should include:
+- specialPopulationMode: boolean
+- specialPopulationType(s): array of tags
+- any pain / limitation / age flags
+
+==================================================
+TASK 2 — ROUTE SPECIAL POPULATIONS INTO A SEPARATE BRANCH
+==================================================
+
+If specialPopulationMode = true, route the build into:
+SPECIAL_POPULATION_ENGINE
+
+Do NOT let these users fall through to the standard athlete/performance architecture path.
+
+This branch should override:
+- architecture templates
+- scoring weights
+- session naming / framing
+- exercise filtering / ranking
+
+==================================================
+TASK 3 — ADD POPULATION TAGS TO EXERCISE SELECTION
+==================================================
+
+Extend exercise metadata / scoring inputs to support population-aware filtering and ranking.
+
+Add tags such as:
+- low_impact
+- beginner_safe
+- joint_friendly
+- spinal_friendly
+- post_acl_friendly
+- shoulder_friendly
+- balance_support
+- control_first
+- low_complexity
+- tolerance_building
+
+If full DB migration is too large for v1, create an initial overlay map / metadata adapter layer that attaches these tags to a starter subset of canonical exercises.
+
+Initial exercises to tag should include lower-risk options like:
+- Goblet Squat
+- Box Squat
+- Step-Up
+- Split Squat variations
+- Trap Bar Deadlift
+- RDL (controlled)
+- Hip Bridge / Hip Thrust
+- Seated Row / Cable Row
+- Landmine Press
+- Dead Bug
+- Pallof Press
+- Farmer Carry
+- Sled Push
+- Bike / Rower / Walk intervals
+- Controlled med-ball if appropriate
+
+==================================================
+TASK 4 — CREATE SPECIAL POPULATION SCORING PRIORITIES
+==================================================
+
+Special populations should not use the same ranking priorities as athletes.
+
+Current athlete scoring emphasizes:
+- sport fit
+- power intent
+- neural demand
+- novelty / variation
+
+Special populations scoring should emphasize:
+- safety / joint-friendliness
+- low impact
+- control and simplicity
+- tolerance building
+- progression potential
+- low unnecessary fatigue
+- population fit
+
+Implement a dedicated scoring path for SPECIAL_POPULATION_MODE.
+
+Example conceptual priority:
+score =
+  safetyFit
++ populationFit
++ simplicityFit
++ toleranceFit
++ movementQualityFit
++ equipmentFit
+- impactPenalty
+- jointStressPenalty
+- unnecessaryFatiguePenalty
+
+Novelty should be reduced in priority compared to athlete mode.
+
+==================================================
+TASK 5 — CREATE SPECIAL POPULATION SESSION TEMPLATES
+==================================================
+
+Build special-population-specific session architecture templates.
+
+Do NOT use athlete framing like:
+- Lower Force Production + Acceleration Support
+- Explosive Output
+- Power / Contrast Pairing
+- Deceleration Capacity
+
+Use session identities like:
+- Lower Strength + Joint Stability
+- Movement Quality + Lower Control
+- Upper Strength + Structural Support
+- Full Body Strength Endurance
+- Stability + Anti-Rotation Core
+- Re-Entry Strength Development
+- Low-Impact Capacity + Resilience
+
+Create at least initial templates for:
+- 2-day
+- 3-day
+- 4-day
+
+for special populations.
+
+These should still have variation, but within appropriate constraints.
+
+==================================================
+TASK 6 — CHANGE SESSION LANGUAGE / EMPHASIS
+==================================================
+
+For special population mode, session label and emphasis text must change.
+
+Do NOT use athlete-centric language like:
+- acceleration mechanics
+- bar speed
+- explosive output
+- force production dominance
+
+Use language like:
+- movement quality
+- controlled strength
+- tissue tolerance
+- resilience
+- low-impact capacity
+- stability and positional control
+- progressive loading with safe execution
+
+This should affect:
+- day card title
+- emphasis / subtitle
+- coaching cues where possible
+
+==================================================
+TASK 7 — CHANGE PROGRESSION MODEL
+==================================================
+
+Special populations should not be progressed like athletes.
+
+Athlete progression emphasizes:
+- more load
+- more velocity
+- more complexity
+- more force output
+
+Special population progression should emphasize:
+- cleaner movement
+- symptom-free execution
+- controlled range
+- work-capacity tolerance
+- basic strength foundation
+- low-risk progression
+
+Create a special population progression strategy that prefers:
+- simpler before harder
+- stable before dynamic
+- tolerance before intensity
+- consistency before novelty
+
+==================================================
+TASK 8 — KEEP VARIETY, BUT BOUNDED
+==================================================
+
+The variety layer should still work in special population mode, but within a narrower safe range.
+
+That means:
+- different valid options
+- but no chaotic variation
+- no aggressive high-impact substitutions
+- no athlete-default anchor bias
+
+Examples:
+Instead of always:
+- Back Squat / Deadlift / Broad Jump
+
+special population mode may rotate among:
+- Goblet Squat
+- Box Squat
+- Step-Up
+- Trap Bar DL
+- Hip Bridge
+- Cable Row
+- Farmer Carry
+- Pallof Press
+- Bike/Rower finisher
+
+Variety should feel thoughtful, not restricted — but always safe.
+
+==================================================
+TASK 9 — IMPLEMENT V1 SCOPE CLEANLY
+==================================================
+
+For v1, support these special population categories first:
+- older adults
+- beginners / deconditioned users
+- pain-sensitive / low-impact users
+- return-to-training / post-rehab general
+
+You can detect prenatal/postpartum now, but if full support is not ready, respond safely and route conservatively.
+
+Do NOT try to solve every medical edge case in v1.
+
+==================================================
+TASK 10 — ADD TEST CASES
+==================================================
+
+Test these exact prompts:
+
+1. “Build me a 3-day strength program for a 65-year-old”
+Expected:
+- no athlete framing
+- low-impact / controlled exercise choices
+- appropriate session identities
+
+2. “Beginner 3-day strength program with knee pain”
+Expected:
+- no default aggressive squat bias
+- safer lower-body choices
+- lower-impact framing
+
+3. “I’m returning after injury and need a safe 3-day strength plan”
+Expected:
+- re-entry / resilience framing
+- controlled progressions
+- no explosive/athlete-first structure
+
+4. “Low-impact strength program for general fitness”
+Expected:
+- special population mode
+- low-impact exercise pool
+- no athlete wording
+
+5. “3-day football strength program”
+Expected:
+- still uses athlete branch
+- confirms special population mode did not contaminate normal performance builds
+
+==================================================
+TASK 11 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. where special population detection was added
+2. how routing into SPECIAL_POPULATION_ENGINE works
+3. what session templates were added
+4. what scoring priorities changed
+5. what exercise tags / metadata overlay was added
+6. before/after behavior for the 5 required tests
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat should no longer treat special populations as lightly modified athletes.
+
+It should recognize them as a separate programming domain with:
+- different constraints
+- different session framing
+- different scoring priorities
+- different progression logic
+- safer, more appropriate exercise selection
+
+Build this as a clean separate branch that preserves the strength of the current athlete/performance engine.
