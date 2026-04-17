@@ -50,6 +50,10 @@ export type IntentFamily =
   // ── Day-level progression / regression (button-driven, identity-preserving) ──
   | "day_progression"
   | "day_regression"
+  // ── Program-question families — NEVER mutate, always route to GUIDANCE ──────
+  | "program_safety_question"
+  | "program_explanation_question"
+  | "coaching_question"
   | "clarification_required";
 
 // ─── Target Scopes ────────────────────────────────────────────────────────────
@@ -454,6 +458,57 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
       /\b(reduce|lower|cut|decrease).{0,20}(volume|sets?|total work|workload)\b/i,
       /\b(too much volume|too many sets?|too much work|too much accessory)\b/i,
       /\b(volume is too (high|much)|less total work|lower total volume)\b/i,
+    ],
+  },
+
+  // ── Program Safety Question (NEVER mutates — always GUIDANCE) ─────────────
+  // Matches questions about whether the current program is appropriate, safe,
+  // or suitable given the user's condition, sport, or context.
+  {
+    family: "program_safety_question",
+    patterns: [
+      /\bis\s+(this|the)\s+(program|plan|workout|session|exercise|training).{0,40}(safe|okay|ok|appropriate|suitable|too (much|hard|intense|heavy|demanding)|right for me)\b/i,
+      /\b(safe|okay|ok)\s+(for me|to do|to follow|to use)\b/i,
+      /\bshould i (do|follow|use|run|try) this.{0,30}(if|with|when).{0,40}(pain|hurt|injury|knee|shoulder|back|hip|sore|weak|limited|old|pregnant|new to|beginner)/i,
+      /\b(is this|are these).{0,20}(too much|too hard|too intense|too heavy|too demanding|excessive|overtraining|overtrain)\b/i,
+      /\b(is this|will this).{0,30}(cause|lead to|result in|risk|increase|hurt|damage|injure|aggravate|irritate)\b/i,
+      /\b(not (sure|certain)) if (this|the program|it).{0,30}(is|will|can|would)\b/i,
+      /\b(worried|concerned|nervous).{0,30}(about|with|this|program|plan|exercise|volume|intensity)\b/i,
+      /\b(is.{0,20}enough|is.{0,20}too (little|few|much|many)).{0,30}(recovery|rest|days?|volume|sets?|frequency)\b/i,
+      /\bcould (this|it|the program) (hurt|harm|damage|be bad for|be dangerous|cause issues)\b/i,
+      /\b(program|plan|training).{0,30}(safe|appropriate|suitable|recommended|advisable)\s*(for|if|when|with)\b/i,
+    ],
+  },
+
+  // ── Program Explanation Question (NEVER mutates — always GUIDANCE) ────────
+  // Matches questions asking WHY something is in the program, or whether the
+  // structure makes sense for a given goal, sport, or context.
+  {
+    family: "program_explanation_question",
+    patterns: [
+      /\bwhy (is|are|do|does|did).{0,30}(this|the|these|here|in (the|this|my))\b/i,
+      /\bwhat (is|are) (this|these|the).{0,30}(for|doing|here|about)\b/i,
+      /\b(does|do) (this|the program|it|these).{0,30}(make sense|work|fit|apply|help|translate|carry over|target|address)\b/i,
+      /\b(for|for a).{0,20}(soccer|football|basketball|baseball|tennis|rugby|hockey|volleyball|swimming|cycling|running|track|wrestling|bjj|mma|crossfit|triathlon|golf|lacrosse)\b.{0,40}\?/i,
+      /\bwhat('s| is) the (point|purpose|reason|idea|goal|rationale).{0,30}(of|behind|for|with) (this|the|these)\b/i,
+      /\bhow (does|do|will) (this|these|the program|it).{0,40}(help|work|fit|apply|translate|build|develop|improve|benefit)\b/i,
+      /\b(why|what) (did you|did the|was this|is this|are these).{0,30}(choose|pick|select|include|add|put here|program|structure)\b/i,
+      /\b(makes sense|makes any sense|makes no sense).{0,20}(for|with|to|given)\b/i,
+    ],
+  },
+
+  // ── Coaching Question (NEVER mutates — always GUIDANCE) ───────────────────
+  // Matches open-ended coaching questions about the current program's effect,
+  // suitability, or logic — without requesting a change.
+  {
+    family: "coaching_question",
+    patterns: [
+      /\bwill (this|the program|it|these).{0,40}(help|work|build|develop|improve|increase|boost|enhance|train)\b/i,
+      /\b(is|are) (this|these|the program).{0,40}(good|effective|optimal|efficient|ideal|the right|a good|the best) (for|way|approach|choice|option)\b/i,
+      /\b(should|would) (i|this|the).{0,30}(use|follow|do|be|help|work|apply|carry)\b/i,
+      /\bhow (effective|good|well|much|long|often|many).{0,40}(is|are|will|does|do) (this|the|it|these)\b/i,
+      /\b(is there|are there).{0,20}(a better|an alternative|another|a different|a smarter) (way|option|approach|exercise|structure|method)\b/i,
+      /\bwhat (should|would|can|do) (i|you|we).{0,30}(expect|see|get|notice|feel|achieve)\b/i,
     ],
   },
 ];
@@ -1265,6 +1320,50 @@ RULES:
     validationRules: ["Clarification must be requested before acting"],
     aiDirective: "CLARIFICATION NEEDED: Ask one specific, targeted question to determine intent. Do not make assumptions. Do not apply any changes without understanding the request.",
     scopeGuidance: "No scope inference — clarify first.",
+  },
+
+  program_safety_question: {
+    intentFamily: "program_safety_question",
+    minimumStructuralChanges: 0,
+    primaryChanges: [],
+    secondaryChanges: [],
+    antiPatterns: [
+      "Do NOT rebuild or re-announce the program",
+      "Do NOT say 'Built' or 'Check the Program tab'",
+      "Do NOT use generic legal disclaimers",
+    ],
+    validationRules: ["No structural changes — coaching/safety answer only"],
+    aiDirective: "PROGRAM SAFETY QUESTION: Answer directly about the current program's safety/appropriateness. Reference the program's structure, volume, and intensity. Offer to modify if there's a concern. No build language.",
+    scopeGuidance: "Program-level assessment — no changes unless the user requests them.",
+  },
+
+  program_explanation_question: {
+    intentFamily: "program_explanation_question",
+    minimumStructuralChanges: 0,
+    primaryChanges: [],
+    secondaryChanges: [],
+    antiPatterns: [
+      "Do NOT rebuild the program to explain it",
+      "Do NOT say 'Built' or 'Check the Program tab'",
+      "Do NOT re-list the entire program structure",
+    ],
+    validationRules: ["No structural changes — explanation only"],
+    aiDirective: "PROGRAM EXPLANATION QUESTION: Explain WHY the current structure, exercise, or session exists. Reference the training goal, sport context, or programming logic. No build language.",
+    scopeGuidance: "Explain the specific element asked about — do not restructure.",
+  },
+
+  coaching_question: {
+    intentFamily: "coaching_question",
+    minimumStructuralChanges: 0,
+    primaryChanges: [],
+    secondaryChanges: [],
+    antiPatterns: [
+      "Do NOT rebuild the program to answer the question",
+      "Do NOT say 'Built' or 'Check the Program tab'",
+    ],
+    validationRules: ["No structural changes — coaching guidance only"],
+    aiDirective: "COACHING QUESTION: Answer the coaching/guidance question directly. Reference the current program if relevant. Be authoritative and concise. No build language.",
+    scopeGuidance: "Coaching guidance — no program changes unless explicitly requested.",
   },
 };
 

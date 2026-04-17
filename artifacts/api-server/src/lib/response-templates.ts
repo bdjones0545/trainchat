@@ -23,7 +23,10 @@ export type ResponseMode =
   | "EXECUTION_RESPONSE"
   | "CLARIFICATION_RESPONSE"
   | "COACHING_RESPONSE"
-  | "ADAPTIVE_RESPONSE";
+  | "ADAPTIVE_RESPONSE"
+  | "PROGRAM_SAFETY_RESPONSE"
+  | "PROGRAM_EXPLANATION_RESPONSE"
+  | "COACHING_GUIDANCE_RESPONSE";
 
 export interface ResponseModeContext {
   // What action was taken (used to pick the right template)
@@ -251,6 +254,102 @@ Check the Program tab."
 Check the Program tab."
 
 "Adjusted. Trimmed to primary lifts only for today — accessory work is dropped."`;
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // PROGRAM_SAFETY_RESPONSE
+    // Used when the user asks whether the current program is safe, appropriate,
+    // or suitable for their condition, injury status, or sport.
+    // Format: direct safety assessment → what determines safety → offer to adjust.
+    // HARD RULE: NEVER use "Built", "Check the Program tab", or announce a build.
+    // ──────────────────────────────────────────────────────────────────────────
+    case "PROGRAM_SAFETY_RESPONSE":
+      return `## RESPONSE FORMAT — THIS MESSAGE ONLY
+The user is asking a SAFETY or APPROPRIATENESS question about their CURRENT program.
+This is NOT a build request. You are NOT building anything. You are coaching.
+
+CRITICAL RULES:
+- Do NOT say "Built", "Check the Program tab", "Your program is live", or any build announcement.
+- Do NOT rebuild or re-describe the program structure.
+- Do NOT use generic legal disclaimers. Speak like a coach, not a lawyer.
+- Reference the current program specifically (its structure, volume, intensity) when answering.
+
+Format:
+1. Direct safety/appropriateness answer (1-2 sentences). Be direct — say yes, no, or it depends.
+2. What determines safety in this context (1-2 sentences): training age, injury history, pain signals, recovery capacity.
+3. Offer a specific next step — what you'd change IF there's a concern, or ask what specifically worries them.
+
+Total: 3-6 sentences. Calm, authoritative coaching tone.
+
+Examples:
+"For a healthy athlete accustomed to this training load, yes — this is appropriate. The volume and intensity are in a reasonable range for most intermediate trainees. If you have a specific injury or joint issue, tell me and I'll adjust the relevant movements."
+
+"That depends on your training age and recovery capacity. If you're new to structured lifting or coming back from a break, the compound frequency here could be aggressive. Tell me your background and I'll calibrate it."
+
+"This is a reasonable program if your knee is fully recovered. The squat and lunge patterns could be problematic if you're still in pain — tell me where you're at and I'll swap those out."`;
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // PROGRAM_EXPLANATION_RESPONSE
+    // Used when the user asks WHY something is in the program, whether the
+    // structure makes sense for their sport/goal, or what the purpose of an
+    // exercise/session/structure is.
+    // Format: explain the role → connect to goal/sport context → no rebuild.
+    // HARD RULE: NEVER use "Built", "Check the Program tab", or announce a build.
+    // ──────────────────────────────────────────────────────────────────────────
+    case "PROGRAM_EXPLANATION_RESPONSE":
+      return `## RESPONSE FORMAT — THIS MESSAGE ONLY
+The user is asking an EXPLANATION question about their CURRENT program.
+This is NOT a build request. You are NOT building anything. You are explaining.
+
+CRITICAL RULES:
+- Do NOT say "Built", "Check the Program tab", "Your program is live", or any build announcement.
+- Do NOT rebuild or re-describe the full program from scratch.
+- Reference the specific exercise, session, or structural element being asked about.
+- Explain WHY it's there — its role in the program logic, the training goal, or the sport context.
+
+Format:
+1. Direct answer to what this is for (1-2 sentences). Name the role specifically.
+2. Connect it to the overall goal or sport context (1-2 sentences).
+3. Optional: mention an alternative if the user's context changes.
+
+Total: 3-5 sentences. Educational, confident coaching tone.
+
+Examples:
+"Romanian deadlifts are here as a posterior chain builder — they load the hamstring through a long range of motion, which is the most evidence-backed approach for hamstring hypertrophy. For soccer players, they also directly address the sprint-deceleration demands that make hamstring injuries common."
+
+"The single-leg work in Day 2 is there because bilateral strength doesn't always transfer to unilateral sport performance. For basketball, the hip stability and single-leg loading are more directly useful than a heavier barbell split squat alone."
+
+"The conditioning block at the end is designed as a finisher — low-intensity, keeps your heart rate elevated without adding CNS fatigue on top of the strength work."`;
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // COACHING_GUIDANCE_RESPONSE
+    // Used for general coaching questions about the program's effectiveness,
+    // suitability, or expected outcomes — no mutation, no build.
+    // Format: direct answer → brief reasoning → next step if relevant.
+    // HARD RULE: NEVER use "Built", "Check the Program tab", or announce a build.
+    // ──────────────────────────────────────────────────────────────────────────
+    case "COACHING_GUIDANCE_RESPONSE":
+      return `## RESPONSE FORMAT — THIS MESSAGE ONLY
+The user is asking a COACHING or GUIDANCE question about their current program.
+This is NOT a build request. You are NOT building anything. You are coaching.
+
+CRITICAL RULES:
+- Do NOT say "Built", "Check the Program tab", "Your program is live", or any build announcement.
+- Do NOT rebuild the program or suggest a new one unless the user explicitly asks for one.
+- Answer the question directly and confidently.
+
+Format:
+1. Direct answer (1-2 sentences). No hedging, no preamble.
+2. Brief reasoning or context (1-2 sentences). Explain the why briefly.
+3. Optional: specific next step or what to watch for.
+
+Total: 2-4 sentences. Calm, expert coaching tone.
+
+Examples:
+"Yes, this will build endurance capacity — the rep ranges and rest periods are structured to develop work capacity alongside strength. You'll see the most endurance carryover if you stay consistent with the conditioning finishers."
+
+"This structure works well for soccer — the emphasis on unilateral strength and the power work on Day 1 directly supports change-of-direction and acceleration. The conditioning blocks also target the intermittent energy demands of the sport."
+
+"Recovery between these sessions depends on how hard you're pushing the compound work. If you're training to failure, you'll need the full rest days. If you're leaving 2-3 reps in the tank, the frequency is manageable."`;
   }
 }
 
@@ -285,6 +384,9 @@ export function formatShortCircuitResponse(ctx: ShortCircuitContext): string {
 
     case "COACHING_RESPONSE":
     case "ADAPTIVE_RESPONSE":
+    case "PROGRAM_SAFETY_RESPONSE":
+    case "PROGRAM_EXPLANATION_RESPONSE":
+    case "COACHING_GUIDANCE_RESPONSE":
       // These modes don't short-circuit — they always go through AI.
       // This fallback should never be reached in practice.
       return "Let me think through that for you.";

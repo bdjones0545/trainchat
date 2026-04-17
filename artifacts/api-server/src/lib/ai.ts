@@ -18,7 +18,7 @@ import {
 } from "./training-intelligence";
 import { type IntentResult, buildIntentPromptHint, type ExtractedConstraints, buildConstraintContract } from "./intent";
 import { decideProgramAdjustment, applySpecialistMutations, buildSpecialistChangeSummary, buildSpecialistResponse } from "./program-specialist";
-import { type ActionDecision, buildPreservationContext } from "./decision";
+import { type ActionDecision, type ActionType, buildPreservationContext } from "./decision";
 import {
   type ResponseMode,
   buildResponseModePrompt,
@@ -2093,15 +2093,24 @@ export async function generateAIResponse(
     }
   }
 
-  // Build response mode formatting prompt — always injected last so it takes priority
+  // Build response mode formatting prompt — always injected last so it takes priority.
+  // IMPORTANT: Build this even when actionDecision is null (GUIDANCE, REBUILD paths).
+  // When actionDecision is absent, derive a synthetic ActionType from the response mode
+  // so the template can still be injected. COACHING_RESPONSE and the new program-question
+  // modes do not use actionType in their template logic anyway.
   let responseModePrompt: string | null = null;
-  if (responseMode && actionDecision) {
+  if (responseMode) {
+    const syntheticActionType: ActionType = actionDecision?.actionType ?? (
+      responseMode === "EXECUTION_RESPONSE" ? "PROGRAM_GENERATION" :
+      responseMode === "CLARIFICATION_RESPONSE" ? "ASK_CLARIFYING_QUESTION" :
+      "GUIDANCE_ONLY"
+    );
     const rmCtx: ResponseModeContext = {
-      actionType: actionDecision.actionType,
+      actionType: syntheticActionType,
       mode: responseMode,
-      targetDescription: actionDecision.targetDescription,
-      inferenceRationale: actionDecision.inferenceRationale,
-      clarifyingQuestion: actionDecision.clarifyingQuestion,
+      targetDescription: actionDecision?.targetDescription,
+      inferenceRationale: actionDecision?.inferenceRationale,
+      clarifyingQuestion: actionDecision?.clarifyingQuestion,
     };
     responseModePrompt = buildResponseModePrompt(rmCtx);
     logResponseMode(rmCtx);

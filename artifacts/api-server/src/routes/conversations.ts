@@ -658,8 +658,13 @@ Keep it helpful and intelligent, never promotional.`;
   // ── Response Mode Selection — derived from execution planner action ──────────
   // Decision tree (resolveAction) is no longer called here; the execution planner
   // is the single routing authority. ResponseMode is derived directly from execPlan.
+  // For GUIDANCE actions, we further specialize the mode based on the intent family
+  // so program questions get the exact right response template.
   const responseMode: ResponseMode =
     execPlan.action === "ASK_CLARIFICATION" ? "CLARIFICATION_RESPONSE" :
+    execPlan.action === "GUIDANCE" && execPlan.intentFamily === "program_safety_question" ? "PROGRAM_SAFETY_RESPONSE" :
+    execPlan.action === "GUIDANCE" && execPlan.intentFamily === "program_explanation_question" ? "PROGRAM_EXPLANATION_RESPONSE" :
+    execPlan.action === "GUIDANCE" && execPlan.intentFamily === "coaching_question" ? "COACHING_GUIDANCE_RESPONSE" :
     execPlan.action === "GUIDANCE" ? "COACHING_RESPONSE" :
     "EXECUTION_RESPONSE";
 
@@ -1406,8 +1411,18 @@ Keep it helpful and intelligent, never promotional.`;
   //   if a DB-backed active system exists, use that as currentProgram.
   //   DB state wins over stale conversation-history JSON — the AI and right panel
   //   must see the same program after any vibe edit.
+  // PROGRAM QUESTION mode (GUIDANCE with program_safety_question, program_explanation_question, coaching_question):
+  //   Also loads the current program so the AI can reference it when answering.
+  //   This prevents the AI from answering blind without program context.
+  const isProgramQuestionGuidance =
+    execPlan.action === "GUIDANCE" && (
+      execPlan.intentFamily === "program_safety_question" ||
+      execPlan.intentFamily === "program_explanation_question" ||
+      execPlan.intentFamily === "coaching_question"
+    );
+
   let currentProgram: ProgramStructure | null = null;
-  if (isModificationIntent) {
+  if (isModificationIntent || isProgramQuestionGuidance) {
     if (activeSystem) {
       // DB system exists — load fresh state and convert to ProgramStructure
       const freshFullSystem = await getFullTrainingSystem(activeSystem.id).catch(() => null);
@@ -1416,7 +1431,7 @@ Keep it helpful and intelligent, never promotional.`;
         if (dbProgram) {
           currentProgram = dbProgram;
           logger.info(
-            { source: "db_active_system", systemId: activeSystem.id, intentType: intentResult.type, days: dbProgram.days.length },
+            { source: "db_active_system", systemId: activeSystem.id, intentType: intentResult.type, days: dbProgram.days.length, isProgramQuestion: isProgramQuestionGuidance },
             "[ProgramContext] Using fresh DB program as currentProgram — overrides stale conversation JSON"
           );
         }
@@ -1540,26 +1555,50 @@ Keep it helpful and intelligent, never promotional.`;
     logger.warn("[IntentRouter] EDIT_PROGRAM intent with program context, but AI did not return updated JSON. Right panel will NOT update.");
   }
 
-  // ── HARD GUARD: Block build templates for edit/refinement intents ─────────
-  // If a vibe-edit intent somehow reached the standard AI path (should not happen
-  // after the fall-through fix above, but acts as an absolute safety net),
-  // the final message MUST NOT contain generic build language like "Built a X-day
-  // program" or "Check the Program tab" as a standalone completion phrase.
-  // This prevents the assistant from sounding like it forgot what it just did.
+  // ── HARD GUARD: Block build templates for edit/refinement and program-question intents ─
+  // Belt-and-suspenders protection:
+  // 1. Edit/refine intents must never produce build-announcement language.
+  // 2. Program question GUIDANCE intents (safety, explanation, coaching) must never
+  //    produce build-announcement language — the user asked a question, not for a build.
+  // 3. Any GUIDANCE response where no build actually occurred must not say "Built".
   {
     const isEditRefineIntent =
       intentResult.type === "EDIT_PROGRAM" ||
       intentResult.type === "ADJUST_FOR_PAIN" ||
       intentResult.type === "ADJUST_FOR_READINESS";
 
-    if (isEditRefineIntent) {
+    const isGuidanceNoBuild = execPlan.action === "GUIDANCE";
+
+    const shouldGuard = isEditRefineIntent || isGuidanceNoBuild || isProgramQuestionGuidance;
+
+    if (shouldGuard) {
+      // Pattern: build announcement language that should never appear in guidance/question responses
       const buildTemplatePattern = /^(built[\.\s]|got it[—\s]*i built\s|i built a \d|built a \d+[\s\-]day)/i;
-      if (buildTemplatePattern.test(aiContent.trim())) {
+      const buildBodyPattern = /\b(built a \d+[\s\-]day|check the program tab|your program is live in|i(?:'ve)? built (you |a )?(?:a )?\d+[\s\-]day)\b/i;
+
+      if (buildTemplatePattern.test(aiContent.trim()) || (isGuidanceNoBuild && buildBodyPattern.test(aiContent))) {
         logger.warn(
-          { intentType: intentResult.type, contentPreview: aiContent.slice(0, 80) },
-          "[HardGuard] Build-template response detected for edit/refine intent — overriding with edit-aware fallback"
+          {
+            intentType: intentResult.type,
+            planAction: execPlan.action,
+            intentFamily: execPlan.intentFamily,
+            contentPreview: aiContent.slice(0, 100),
+            guardReason: isEditRefineIntent ? "edit_refine_intent" : isProgramQuestionGuidance ? "program_question_guidance" : "guidance_no_build",
+          },
+          "[HardGuard] Build-template response detected for non-build path — overriding with coaching fallback"
         );
-        aiContent = `I processed your request and applied the change. Check the Program tab to see what was updated.`;
+
+        if (isProgramQuestionGuidance) {
+          if (execPlan.intentFamily === "program_safety_question") {
+            aiContent = `That depends on your training background, current health, and any active injuries. For a healthy athlete adapted to this level of training, the program is appropriate. If you have specific concerns — pain, a recent injury, or very limited training history — let me know and I'll adjust the relevant parts.`;
+          } else if (execPlan.intentFamily === "program_explanation_question") {
+            aiContent = `The structure is built around your stated goal. Each session has a defined role — primary compound movements for the training stimulus, accessory work to reinforce weak links, and the ordering follows a CNS-demand hierarchy (hardest first). If you want me to explain a specific exercise or session, name it and I'll break it down.`;
+          } else {
+            aiContent = `Good question. The program is structured to address your stated goal — the exercise selection, volume, and frequency are calibrated for that. If something doesn't seem right for your situation, tell me what specifically and I'll clarify or adjust.`;
+          }
+        } else {
+          aiContent = `I processed your request and applied the change. Check the Program tab to see what was updated.`;
+        }
       }
     }
   }
@@ -2070,8 +2109,13 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   );
 
   // ── Response Mode Selection — derived from execution planner action ──────────
+  // For GUIDANCE actions, specialize based on intent family so program questions
+  // get the exact right response template (safety, explanation, or coaching).
   const responseMode: ResponseMode =
     execPlan.action === "ASK_CLARIFICATION" ? "CLARIFICATION_RESPONSE" :
+    execPlan.action === "GUIDANCE" && execPlan.intentFamily === "program_safety_question" ? "PROGRAM_SAFETY_RESPONSE" :
+    execPlan.action === "GUIDANCE" && execPlan.intentFamily === "program_explanation_question" ? "PROGRAM_EXPLANATION_RESPONSE" :
+    execPlan.action === "GUIDANCE" && execPlan.intentFamily === "coaching_question" ? "COACHING_GUIDANCE_RESPONSE" :
     execPlan.action === "GUIDANCE" ? "COACHING_RESPONSE" :
     "EXECUTION_RESPONSE";
 
@@ -2638,8 +2682,17 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   // REFINE / EDIT / RETRIEVE mode: DB-backed active system wins over stale
   // conversation-history JSON. The AI and the right panel must see the same
   // program. After any vibe edit, only the DB has the updated truth.
+  // PROGRAM QUESTION mode: Also loads currentProgram so the AI can reference
+  // it when answering safety, explanation, or coaching questions.
+  const isProgramQuestionGuidanceSSE =
+    execPlan.action === "GUIDANCE" && (
+      execPlan.intentFamily === "program_safety_question" ||
+      execPlan.intentFamily === "program_explanation_question" ||
+      execPlan.intentFamily === "coaching_question"
+    );
+
   let currentProgram: ProgramStructure | null = null;
-  if (isModificationIntent) {
+  if (isModificationIntent || isProgramQuestionGuidanceSSE) {
     if (activeSystem) {
       const freshFullSystem = await getFullTrainingSystem(activeSystem.id).catch(() => null);
       if (freshFullSystem) {
@@ -2647,7 +2700,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         if (dbProgram) {
           currentProgram = dbProgram;
           logger.info(
-            { source: "db_active_system", systemId: activeSystem.id, intentType: intentResult.type, days: dbProgram.days.length },
+            { source: "db_active_system", systemId: activeSystem.id, intentType: intentResult.type, days: dbProgram.days.length, isProgramQuestion: isProgramQuestionGuidanceSSE },
             "[ProgramContext:stream] Using fresh DB program as currentProgram — overrides stale conversation JSON"
           );
         }
@@ -2712,25 +2765,49 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     }
   );
 
-  // ── HARD GUARD: Block build templates for edit/refinement intents ─────────
-  // Safety net for the streaming path. If a vibe-edit intent somehow reached
-  // the standard AI path (prevented by the fall-through fix above, but guarded
-  // here as a second layer), the final message must NEVER use build-style
-  // language. Catches any "Built a X-day program" or similar build templates.
+  // ── HARD GUARD: Block build templates for edit/refinement and program-question intents ─
+  // Belt-and-suspenders protection for the streaming path:
+  // 1. Edit/refine intents must never produce build-announcement language.
+  // 2. Program question GUIDANCE intents (safety, explanation, coaching) must never
+  //    produce build-announcement language — the user asked a question, not for a build.
+  // 3. Any GUIDANCE response where no build actually occurred must not say "Built".
   {
     const isEditRefineIntentSSE =
       intentResult.type === "EDIT_PROGRAM" ||
       intentResult.type === "ADJUST_FOR_PAIN" ||
       intentResult.type === "ADJUST_FOR_READINESS";
 
-    if (isEditRefineIntentSSE) {
+    const isGuidanceNoBuildSSE = execPlan.action === "GUIDANCE";
+
+    const shouldGuardSSE = isEditRefineIntentSSE || isGuidanceNoBuildSSE || isProgramQuestionGuidanceSSE;
+
+    if (shouldGuardSSE) {
       const buildTemplatePatternSSE = /^(built[\.\s]|got it[—\s]*i built\s|i built a \d|built a \d+[\s\-]day)/i;
-      if (buildTemplatePatternSSE.test(aiContent.trim())) {
+      const buildBodyPatternSSE = /\b(built a \d+[\s\-]day|check the program tab|your program is live in|i(?:'ve)? built (you |a )?(?:a )?\d+[\s\-]day)\b/i;
+
+      if (buildTemplatePatternSSE.test(aiContent.trim()) || (isGuidanceNoBuildSSE && buildBodyPatternSSE.test(aiContent))) {
         logger.warn(
-          { intentType: intentResult.type, contentPreview: aiContent.slice(0, 80) },
-          "[HardGuard:stream] Build-template response detected for edit/refine intent — overriding with edit-aware fallback"
+          {
+            intentType: intentResult.type,
+            planAction: execPlan.action,
+            intentFamily: execPlan.intentFamily,
+            contentPreview: aiContent.slice(0, 100),
+            guardReason: isEditRefineIntentSSE ? "edit_refine_intent" : isProgramQuestionGuidanceSSE ? "program_question_guidance" : "guidance_no_build",
+          },
+          "[HardGuard:stream] Build-template response detected for non-build path — overriding with coaching fallback"
         );
-        aiContent = `I processed your request and applied the change. Check the Program tab to see what was updated.`;
+
+        if (isProgramQuestionGuidanceSSE) {
+          if (execPlan.intentFamily === "program_safety_question") {
+            aiContent = `That depends on your training background, current health, and any active injuries. For a healthy athlete adapted to this level of training, the program is appropriate. If you have specific concerns — pain, a recent injury, or very limited training history — let me know and I'll adjust the relevant parts.`;
+          } else if (execPlan.intentFamily === "program_explanation_question") {
+            aiContent = `The structure is built around your stated goal. Each session has a defined role — primary compound movements for the training stimulus, accessory work to reinforce weak links, and the ordering follows a CNS-demand hierarchy (hardest first). If you want me to explain a specific exercise or session, name it and I'll break it down.`;
+          } else {
+            aiContent = `Good question. The program is structured to address your stated goal — the exercise selection, volume, and frequency are calibrated for that. If something doesn't seem right for your situation, tell me what specifically and I'll clarify or adjust.`;
+          }
+        } else {
+          aiContent = `I processed your request and applied the change. Check the Program tab to see what was updated.`;
+        }
       }
     }
   }
