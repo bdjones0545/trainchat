@@ -2167,6 +2167,8 @@ export async function generateAIResponse(
       extractedConstraints: extractedConstraints ?? null,
       neuralBias: neuralBias,
       neuralImbalances: neuralImbalances,
+      responseMode: responseMode ?? null,
+      hasActiveProgram: hasActiveProgram ?? (currentProgram != null),
     });
   }
 
@@ -2593,6 +2595,8 @@ Output the corrected program JSON and a brief calm confirmation.`;
       editIntent: activeEditIntent ?? undefined,
       intentResult: intentResult ?? undefined,
       extractedConstraints: extractedConstraints ?? null,
+      responseMode: responseMode ?? null,
+      hasActiveProgram: hasActiveProgram ?? (currentProgram != null),
     });
   }
 }
@@ -2608,6 +2612,8 @@ interface FallbackOptions {
   extractedConstraints?: ExtractedConstraints | null;
   neuralBias?: import("./neural-graph-interpreter").NeuralBias;
   neuralImbalances?: import("./neural-graph-interpreter").Imbalance[];
+  responseMode?: ResponseMode | null;
+  hasActiveProgram?: boolean;
 }
 
 function generateFallbackResponse(
@@ -2616,7 +2622,66 @@ function generateFallbackResponse(
   profile: UserProfile | null,
   options: FallbackOptions = {}
 ): AIResponse {
-  const { currentProgram, editIntent, intentResult, extractedConstraints, neuralBias, neuralImbalances } = options;
+  const { currentProgram, editIntent, intentResult, extractedConstraints, neuralBias, neuralImbalances, responseMode, hasActiveProgram } = options;
+
+  // ── CONVERSATIONAL MODE LOCK ──────────────────────────────────────────────
+  // Must run FIRST — before the specialist layer, edit engine, or any legacy
+  // routing — so that greetings and program-question intents always get a
+  // direct conversational reply instead of being funnelled into intake or build.
+  if (
+    responseMode === "GREETING_RESPONSE" ||
+    responseMode === "PROGRAM_SAFETY_RESPONSE" ||
+    responseMode === "PROGRAM_EXPLANATION_RESPONSE" ||
+    responseMode === "COACHING_GUIDANCE_RESPONSE"
+  ) {
+    if (responseMode === "GREETING_RESPONSE") {
+      if (hasActiveProgram) {
+        const programName = currentProgram?.programName;
+        const programRef = programName ? ` Your ${programName} is loaded up.` : " Your program is loaded up.";
+        return {
+          content: `Hey!${programRef} What's on your mind — any adjustments, or just checking in?`,
+          structuredData: null,
+        };
+      }
+      return {
+        content: `Hey! I'm TrainChat — your AI performance coach. What are you working toward? Tell me about your goals, schedule, and equipment and I'll build a training program around you.`,
+        structuredData: null,
+      };
+    }
+
+    if (responseMode === "PROGRAM_SAFETY_RESPONSE") {
+      if (hasActiveProgram && currentProgram) {
+        return {
+          content: `Good question to ask. The program is designed around progressive overload with built-in recovery — it's appropriate for consistent trainees.\n\nA few things to watch: if any exercise causes joint pain (not just muscle burn), skip it and flag it so I can swap it out. The loading is intentional — don't rush the weights up.\n\nIf you have specific limitations or health concerns, tell me and I'll adjust the structure accordingly.`,
+          structuredData: null,
+        };
+      }
+      return {
+        content: `Program safety comes down to matching the workload to your current capacity. Key factors: injury history, training age, recovery ability, and how the exercises are sequenced.\n\nIf you share more about your situation I can give you a more specific answer.`,
+        structuredData: null,
+      };
+    }
+
+    if (responseMode === "PROGRAM_EXPLANATION_RESPONSE") {
+      if (hasActiveProgram && currentProgram) {
+        const splitType = currentProgram.splitType ?? "training split";
+        return {
+          content: `The program uses a ${splitType} structure. Each session is sequenced to hit the primary movement pattern first when you're freshest, then support work, then accessories.\n\nThe progression strategy: ${currentProgram.progressionStrategy ?? "progressive overload with planned deloads"}.\n\nWhat specifically do you want me to walk through — exercise selection, set/rep logic, or the weekly structure?`,
+          structuredData: null,
+        };
+      }
+      return {
+        content: `Happy to explain the reasoning behind any program I build. What would you like me to walk through?`,
+        structuredData: null,
+      };
+    }
+
+    // COACHING_GUIDANCE_RESPONSE
+    return {
+      content: `Good coaching question. The answer depends on your specific context — tell me more about your situation and I'll give you a more targeted response.`,
+      structuredData: null,
+    };
+  }
 
   // Helper: apply neural bias to a generated program when bias is active
   const applyNeural = (program: ProgramStructure): ProgramStructure => {

@@ -1,0 +1,248 @@
+We need to fix CONVERSATIONAL MODE LOCKING in TrainChat.
+
+PROBLEM:
+Two obvious failures are still happening even after previous fixes:
+
+1. Greeting failure
+User: “What’s up”
+Current response: intake-style question (“Tell me more about what you’re working toward...”)
+
+2. Program safety failure
+User: “Is this program safe for me?”
+Current response: refinement-direction clarification (“What direction do you want to push this...”)
+
+Both are wrong.
+
+This means the system is still not locking the correct conversational response mode before generic fallback logic runs.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Implement a strict conversational mode lock so that:
+
+- greetings produce greeting responses
+- program safety questions produce safety responses
+- current-program explanation questions produce explanation responses
+
+These must NOT fall through to:
+- intake questions
+- build responses
+- refinement clarification
+- direction-selection questions
+
+==================================================
+TASK 1 — TRACE THE EXACT FAILURE PATHS
+==================================================
+
+Trace both messages end-to-end:
+
+A. “What’s up”
+B. “Is this program safe for me?”
+
+For each, log:
+1. raw message
+2. intent classification result
+3. intent family result
+4. execution planner result
+5. response mode selected
+6. final fallback/template path actually used
+
+I want the exact line/path where these get converted into the wrong response style.
+
+==================================================
+TASK 2 — ADD EXPLICIT CONVERSATIONAL MODES
+==================================================
+
+Create or tighten these response modes:
+
+- GREETING_RESPONSE
+- PROGRAM_SAFETY_RESPONSE
+- PROGRAM_EXPLANATION_RESPONSE
+- COACHING_GUIDANCE_RESPONSE
+- BUILD_RESPONSE
+- REFINE_RESPONSE
+- CLARIFICATION_RESPONSE
+
+These modes should control what final response shapes are allowed.
+
+==================================================
+TASK 3 — ADD GREETING DETECTION THAT RUNS EARLY
+==================================================
+
+Detect short social openers such as:
+- what’s up
+- whats up
+- hey
+- hi
+- yo
+- sup
+- how’s it going
+- how are you
+
+If detected:
+- mode = GREETING_RESPONSE
+
+If there is an active program:
+respond with short greeting + active-program-aware bridge
+
+Examples:
+- “What’s up — how’s the program feeling so far?”
+- “What’s up — want to tweak your current plan or keep it rolling?”
+
+If there is no active program:
+- “What’s up — what are you training for?”
+- “Hey — want me to build you something?”
+
+This must block intake-tree fallback when an active program already exists.
+
+==================================================
+TASK 4 — ADD PROGRAM-SAFETY QUESTION DETECTION
+==================================================
+
+Detect questions like:
+- Is this program safe for me?
+- Is this safe?
+- Is this too much?
+- Is this okay for me?
+- Is this safe with my knee/back/shoulder?
+- Should I be doing this?
+
+If there is an active program:
+- mode = PROGRAM_SAFETY_RESPONSE
+
+This mode should:
+- reference the current program
+- answer the question directly
+- mention what determines safety (pain, injury history, training age, recovery, medical limitations)
+- optionally ask one focused follow-up only if needed
+
+Examples:
+- “It may be appropriate if you’re healthy and accustomed to this level of training. If you have pain, injury history, or low training background, I’d want to adjust it.”
+- “If anything currently hurts or feels risky, tell me where and I’ll modify the plan.”
+
+This must block:
+- build response
+- intake response
+- direction-selection clarification
+- mutation clarification
+
+==================================================
+TASK 5 — ADD CURRENT-PROGRAM QUESTION DETECTOR
+==================================================
+
+Detect when the user is asking ABOUT the current program, not asking to change it.
+
+Examples:
+- Why is this here?
+- Is this safe for me?
+- Is this too much volume?
+- Does this make sense?
+- Will this help with endurance?
+- Is this good for soccer?
+
+If active program exists:
+- treat as question about existing system
+- do not route to mutation clarification unless user is explicitly asking for a change
+
+==================================================
+TASK 6 — HARD RESPONSE GUARDRAILS
+==================================================
+
+Add a final response guard before persistence/output:
+
+If mode = GREETING_RESPONSE:
+- block intake questions
+- block build template language
+- keep response under 1–2 sentences
+
+If mode = PROGRAM_SAFETY_RESPONSE:
+- block “What direction do you want to push this…”
+- block build-template phrasing
+- block mutation clarification language
+
+If mode = PROGRAM_EXPLANATION_RESPONSE:
+- block mutation-oriented fallback unless user explicitly requested a change
+
+This guardrail must exist in both:
+- non-stream path
+- streaming/SSE path
+
+==================================================
+TASK 7 — DO NOT TREAT QUESTIONS AS MUTATIONS
+==================================================
+
+Add a rule:
+If the user is asking a question about the current program and there is no explicit change verb,
+do NOT enter mutation clarification mode.
+
+Examples that should stay non-mutational:
+- Is this safe?
+- Why is this here?
+- Is this too much?
+- Does this make sense?
+
+==================================================
+TASK 8 — ACTIVE PROGRAM CONTEXT MUST BE USED
+==================================================
+
+When greeting or safety/explanation questions happen and the user has an active program:
+- use active program context
+- do not ask cold-start intake questions
+- do not pretend there is no program
+
+==================================================
+TASK 9 — TEST REQUIRED
+==================================================
+
+Run these exact tests with an active program present:
+
+1. “What’s up”
+Expected:
+- short natural greeting
+- references current program or training
+- no intake question
+
+2. “Hey”
+Expected:
+- same class of response as above
+
+3. “Is this program safe for me?”
+Expected:
+- direct safety/coaching answer
+- no “what direction do you want to push this”
+
+4. “Is this too much volume?”
+Expected:
+- direct coaching answer tied to current program
+
+5. “Why is this exercise here?”
+Expected:
+- explanation of role and intent
+
+6. “Build me a 3-day program”
+Expected:
+- still properly uses build response mode
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. exact failure paths for the two screenshots
+2. what conversational modes were added or corrected
+3. how early detection now works
+4. what final response guardrails were added
+5. before/after outputs for the 6 required tests
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat must behave like a coach in an ongoing conversation.
+
+- Greetings should feel social and context-aware
+- Safety questions should be answered directly
+- Questions about the current program must not fall into intake or mutation clarification
+
+The agent should not restart the relationship every turn.
