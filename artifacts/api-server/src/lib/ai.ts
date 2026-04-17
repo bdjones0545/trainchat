@@ -2150,8 +2150,22 @@ export async function generateAIResponse(
     }
   }
 
+  // ── Session-Sport Isolation Guard ────────────────────────────────────────
+  // When the current message explicitly names a sport (via extractedConstraints),
+  // inject a hard override note AFTER memoryContext so any sport stored in
+  // persistent memory does NOT bleed into this session's build.
+  // This is the final line of defense against cross-session sport leakage.
+  let sessionSportOverride: string | null = null;
+  if (
+    isBuildIntent &&
+    extractedConstraints?.sportFocus &&
+    memoryContext
+  ) {
+    sessionSportOverride = `## SESSION SPORT ISOLATION — OVERRIDE ACTIVE\nThe current user message explicitly stated sport = "${extractedConstraints.sportFocus}".\nThis overrides any sport saved in memory or profile. Do NOT use any previously stored sport context. Build this program for ${extractedConstraints.sportFocus} only.`;
+  }
+
   const uiContextSection = buildUIContextSection(uiContext);
-  const extras = [adaptationContext, memoryContext, insightHint, conversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, architectureBriefText, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection]
+  const extras = [adaptationContext, memoryContext, sessionSportOverride, insightHint, conversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, architectureBriefText, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection]
     .filter(Boolean)
     .join("\n\n");
   const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;

@@ -475,7 +475,12 @@ export async function extractMemoriesFromMessage(
 
   // ── Sport context ────────────────────────────────────────────────────────
   const sports: { pattern: RegExp; name: string }[] = [
-    { pattern: /\b(soccer|football)\b/, name: "soccer" },
+    // American football — must come before generic "football" check
+    { pattern: /\b(american football|nfl|gridiron|quarterback|wide receiver|running back|linebacker|tight end)\b/, name: "football" },
+    // Soccer — "football" intentionally excluded to avoid misclassifying American football players
+    { pattern: /\b(soccer|futbol)\b/, name: "soccer" },
+    // Generic "football" defaults to American football in US context
+    { pattern: /\bfootball\b/, name: "football" },
     { pattern: /\bbasketball\b/, name: "basketball" },
     { pattern: /\bbaseball\b/, name: "baseball" },
     { pattern: /\btennis\b/, name: "tennis" },

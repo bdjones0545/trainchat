@@ -429,7 +429,14 @@ export function detectSeasonContext(lower: string): SeasonContext | null {
 // ─── Sport Detection ──────────────────────────────────────────────────────────
 
 export function detectSport(lower: string): string | null {
-  if (/\b(soccer|football|futbol|pitch)\b/.test(lower)) return "soccer";
+  // American football must be checked before generic "football" to avoid ambiguity
+  if (/\b(american football|nfl|gridiron|quarterback|wide receiver|running back|linebacker|tight end|offensive line|defensive back|cornerback|safety|halfback|fullback)\b/.test(lower)) return "american_football";
+  // Soccer — "football" is intentionally excluded here to prevent American football
+  // players from being misclassified as soccer athletes
+  if (/\b(soccer|futbol)\b/.test(lower)) return "soccer";
+  // Generic "football" in isolation defaults to American football (most common
+  // meaning in the primary US user context — separate from soccer/futbol)
+  if (/\bfootball\b/.test(lower)) return "american_football";
   if (/\b(basketball|hoops|court)\b/.test(lower)) return "basketball";
   if (/\b(baseball|softball|pitcher|batter)\b/.test(lower)) return "baseball";
   if (/\b(tennis|racket|racquet)\b/.test(lower)) return "tennis";
