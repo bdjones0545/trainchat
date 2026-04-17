@@ -1,0 +1,232 @@
+We need to fix DAY CARD IDENTITY SYNC after program refinements in TrainChat.
+
+PROBLEM:
+When the user triggers a refinement such as:
+- “More Explosive”
+- “More Endurance”
+- “More Strength”
+- “Shorter”
+- “Lower Impact”
+
+the system may change only prescriptions (tempo, reps, rest, cues) or partially change exercise content, but the Day Card title and description remain unchanged.
+
+This creates a major UX and logic mismatch:
+- the mutation says the day changed
+- but the visible session identity still reads like the old day
+
+Example:
+User presses “More Explosive” on Day 1
+System changes tempo / bar-speed cues
+But Day 1 still says:
+“Lower Force Production + Acceleration Support”
+
+That makes the app feel like nothing really changed.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Whenever a refinement meaningfully changes the training intent of a day/session, the system must recompute and update the Day Card identity:
+
+- day title
+- day subtitle/description
+- session intent label if applicable
+
+The Day Card must stay in sync with the actual session logic.
+
+==================================================
+CORE RULE
+==================================================
+
+If a refinement changes session intent, slot emphasis, or training emphasis,
+then the session identity layer must also be updated.
+
+This means refinements affect 3 layers:
+
+1. Identity Layer
+- day title
+- day description
+- session intent label
+
+2. Structure Layer
+- exercises
+- ordering
+- block composition
+- slot distribution
+
+3. Prescription Layer
+- sets/reps/rest/load/tempo/cues
+
+Right now the system is mostly updating Layer 3 and sometimes Layer 2.
+We need to ensure Layer 1 updates too.
+
+==================================================
+TASK 1 — TRACE WHERE DAY CARD IDENTITY IS STORED
+==================================================
+
+Audit the current data model for a session/day.
+
+Identify:
+- where day title is stored
+- where description/subtitle is stored
+- where session identity / intent is stored
+- how it is initially created during program generation
+- how it is currently preserved during refinements
+
+I want the exact place where the stale identity is surviving after a mutation.
+
+==================================================
+TASK 2 — DEFINE WHEN IDENTITY MUST BE RECOMPUTED
+==================================================
+
+Add an explicit rule for refinements that should trigger identity recomputation.
+
+Examples that SHOULD trigger identity recomputation:
+- More Explosive
+- More Strength
+- More Endurance
+- Lower Impact
+- Add Exercise (if it materially changes emphasis)
+- Remove Exercise (if it materially changes emphasis)
+- exercise swaps that change the day’s dominant pattern or intent
+
+Examples that may NOT require identity recomputation:
+- tiny prescription adjustment
+- one local easier/harder swap that does not change day emphasis
+- cosmetic cue-only updates
+
+Build a clear threshold.
+
+==================================================
+TASK 3 — CREATE SESSION IDENTITY RECOMPUTE FUNCTION
+==================================================
+
+Create a dedicated function that recomputes day/session identity from the updated session structure.
+
+Example concept:
+recomputeSessionIdentity(session, context)
+
+It should inspect:
+- dominant slots
+- dominant exercise types
+- strength vs power vs endurance bias
+- unilateral vs bilateral emphasis
+- trunk/support density
+- conditioning presence
+- any category/sport context
+
+And return:
+- newTitle
+- newDescription
+- optional identity metadata
+
+This should not be random.
+It should be rule-based and inspectable.
+
+==================================================
+TASK 4 — TIE IDENTITY TO SLOT / BLOCK EMPHASIS
+==================================================
+
+Use the actual session composition to drive identity.
+
+Examples:
+If explosive/power slots become dominant:
+- “Lower Power + Acceleration Emphasis”
+- “Explosive Lower + Elastic Output”
+
+If bilateral force remains dominant:
+- “Lower Force Production + Acceleration Support”
+
+If conditioning/endurance density becomes dominant:
+- “Lower Strength Endurance + Work Capacity”
+
+The title must reflect what the session actually became.
+
+==================================================
+TASK 5 — UPDATE DESCRIPTION / SUBTITLE TOO
+==================================================
+
+Do not update only the day title.
+Also update the short descriptive line/subtitle under the title.
+
+Example:
+Before:
+- Bilateral squat strength, horizontal power, and single-leg positional control
+
+After “More Explosive”:
+- Horizontal power, elastic output, and high-velocity lower-body force development
+
+The subtitle must support the new identity.
+
+==================================================
+TASK 6 — PATCH THE REFINEMENT PIPELINE
+==================================================
+
+After a mutation/refinement is successfully applied to a session/day:
+
+- evaluate whether identity recomputation is required
+- if yes, recompute session identity
+- persist updated title + description in the same mutation result
+
+This must happen in the canonical DB-backed mutation path, not just in UI state.
+
+Do NOT fake this only on the frontend.
+
+==================================================
+TASK 7 — KEEP THE UI IN SYNC
+==================================================
+
+Ensure the right panel / day cards reflect the newly recomputed identity immediately after refresh.
+
+If the day changed from strength-support to explosive emphasis, the Day Card should visibly show that on the next render.
+
+==================================================
+TASK 8 — TEST REQUIRED
+==================================================
+
+Test these exact cases:
+
+1. Day 1 → More Explosive
+Expected:
+- title changes to a more explosive identity
+- description updates accordingly
+- visible exercises / prescriptions align with that identity
+
+2. Day 1 → More Endurance
+Expected:
+- title and subtitle shift toward endurance/work-capacity identity
+
+3. Day 1 → More Strength
+Expected:
+- title and subtitle shift toward force/strength emphasis
+
+4. Minor easier swap on one accessory
+Expected:
+- identity may stay unchanged if overall session intent remains the same
+
+5. Add Exercise that materially changes the session
+Expected:
+- identity recomputes only if the added exercise meaningfully shifts emphasis
+
+==================================================
+TASK 9 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. where stale day identity was surviving
+2. what rules now trigger identity recomputation
+3. what recomputeSessionIdentity logic was added
+4. how title + description are now updated
+5. where this was integrated into the DB-backed mutation path
+6. which test cases now update the Day Card correctly
+
+==================================================
+FINAL STANDARD
+==================================================
+
+After any meaningful refinement, the Day Card must reflect the updated session intent.
+
+If the session becomes more explosive, stronger, more endurance-based, or lower impact,
+the card title and description must visibly change to match.
+
+TrainChat should never say a session changed while leaving the Day Card identity stuck in the old logic.

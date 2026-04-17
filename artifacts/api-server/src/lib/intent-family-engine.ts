@@ -691,7 +691,7 @@ const TRANSFORMATION_BUNDLES: Record<IntentFamily, TransformationBundle> = {
       "Rest MUST extend on primary lifts (3+ min)",
       "At least 2 structural changes required",
     ],
-    aiDirective: "STRENGTH FOCUS: Shift primary lifts to 3-6 rep range. Extend rest to 3-5 min on compounds. Reduce or remove high-fatigue isolation accessories. Prioritize maximal force output. Rep ranges MUST change — this is not optional.",
+    aiDirective: "STRENGTH FOCUS: Shift primary lifts to 3-6 rep range. Extend rest to 3-5 min on compounds. Reduce or remove high-fatigue isolation accessories. Prioritize maximal force output. Rep ranges MUST change — this is not optional.\n\nIDENTITY UPDATE REQUIRED: You MUST also produce an update_session change that refreshes the session's `label` and `emphasis` to reflect its new strength identity. Example label: 'Lower Strength — Maximal Force Output'. Example emphasis: 'Heavy compound loading, peak force development, and bilateral strength expression'. Adapt to the actual body region (upper/lower/full body) of the session. Do NOT leave the original label and emphasis unchanged.",
     scopeGuidance: "Apply to all primary and secondary compound lifts in scope. Accessories can stay but reduce fluff.",
   },
 
@@ -716,7 +716,7 @@ const TRANSFORMATION_BUNDLES: Record<IntentFamily, TransformationBundle> = {
       "Accessory volume must increase or be maintained",
       "At least 2 structural changes required",
     ],
-    aiDirective: "HYPERTROPHY FOCUS: Shift to 8-15 rep range on primary and secondary lifts. Add or maintain accessory volume. Add targeted isolation work (e.g. curls, lateral raises, leg curls, face pulls). Rest can be moderate (60-90 sec on accessories). Volume increases.",
+    aiDirective: "HYPERTROPHY FOCUS: Shift to 8-15 rep range on primary and secondary lifts. Add or maintain accessory volume. Add targeted isolation work (e.g. curls, lateral raises, leg curls, face pulls). Rest can be moderate (60-90 sec on accessories). Volume increases.\n\nIDENTITY UPDATE REQUIRED: You MUST also produce an update_session change that refreshes the session's `label` and `emphasis` to reflect its new hypertrophy identity. Example label: 'Upper Hypertrophy — Volume + Mechanical Tension'. Example emphasis: 'Isolation volume, metabolic stress, and progressive mechanical tension for muscle-building'. Adapt to the actual body region. Do NOT leave the original label and emphasis unchanged.",
     scopeGuidance: "Apply to primary, secondary, and accessory movements in scope.",
   },
 
@@ -743,7 +743,7 @@ const TRANSFORMATION_BUNDLES: Record<IntentFamily, TransformationBundle> = {
       "At least 2 structural changes required — cannot pass with only tempo notes",
       "Density must increase: less rest OR more reps OR circuit structure",
     ],
-    aiDirective: "ENDURANCE FOCUS: Two or more structural changes required. Shift rep ranges to 12-20+ or make time-based. Tighten rest to 30-60 sec. Add a circuit or density block. Optionally add conditioning finisher. You CANNOT pass this with only a tempo change or coaching note.",
+    aiDirective: "ENDURANCE FOCUS: Two or more structural changes required. Shift rep ranges to 12-20+ or make time-based. Tighten rest to 30-60 sec. Add a circuit or density block. Optionally add conditioning finisher. You CANNOT pass this with only a tempo change or coaching note.\n\nIDENTITY UPDATE REQUIRED: You MUST also produce an update_session change that refreshes the session's `label` and `emphasis` to reflect its new endurance identity. Example label: 'Lower Strength Endurance — Work Capacity'. Example emphasis: 'High-rep density, compressed rest intervals, and aerobic capacity integration across the session'. Adapt to the actual body region. Do NOT leave the original label and emphasis unchanged.",
     scopeGuidance: "Apply across the full scope. Reduce heavy strength emphasis proportionally.",
   },
 
@@ -768,7 +768,7 @@ const TRANSFORMATION_BUNDLES: Record<IntentFamily, TransformationBundle> = {
       "Work:rest ratios should be defined",
       "At least 2 structural changes required",
     ],
-    aiDirective: "CONDITIONING FOCUS: Add real conditioning work. Add a structured interval block (e.g. 5x200m at 85% / 90 sec rest, or 5 rounds 30 sec on/30 sec off) OR a conditioning finisher with defined work:rest. Define work:rest ratios explicitly. Pure resistance circuits alone are insufficient.",
+    aiDirective: "CONDITIONING FOCUS: Add real conditioning work. Add a structured interval block (e.g. 5x200m at 85% / 90 sec rest, or 5 rounds 30 sec on/30 sec off) OR a conditioning finisher with defined work:rest. Define work:rest ratios explicitly. Pure resistance circuits alone are insufficient.\n\nIDENTITY UPDATE REQUIRED: You MUST also produce an update_session change that refreshes the session's `label` and `emphasis` to reflect its new conditioning identity. Example label: 'Full Body Conditioning — Metabolic Output'. Example emphasis: 'High-intensity interval conditioning, circuit density, and cardiovascular work capacity'. Adapt to the actual body region. Do NOT leave the original label and emphasis unchanged.",
     scopeGuidance: "Add conditioning to targeted sessions. If program-wide, add conditioning work proportionally across days.",
   },
 
@@ -795,7 +795,7 @@ const TRANSFORMATION_BUNDLES: Record<IntentFamily, TransformationBundle> = {
       "At least 2 structural changes total",
       "Text-only changes = invalid",
     ],
-    aiDirective: "POWER/EXPLOSIVE FOCUS: Two or more structural changes required. Add an explosive opener (box jump, broad jump, med ball slam, power clean, sprint). Shift primary lifting to 2-5 reps with speed intent. Extend rest to 2-3 min. Trim fatigue-heavy accessories. You CANNOT pass with only coaching text.",
+    aiDirective: "POWER/EXPLOSIVE FOCUS: Two or more structural changes required. Add an explosive opener (box jump, broad jump, med ball slam, power clean, sprint). Shift primary lifting to 2-5 reps with speed intent. Extend rest to 2-3 min. Trim fatigue-heavy accessories. You CANNOT pass with only coaching text.\n\nIDENTITY UPDATE REQUIRED: You MUST also produce an update_session change that refreshes the session's `label` and `emphasis` to reflect its new explosive/power identity. Example label: 'Lower Power — Explosive Output + Bar Speed'. Example emphasis: 'Horizontal power, elastic force expression, and high-velocity lower-body force development'. Adapt to the actual body region (use Upper, Lower, Full Body as appropriate). Do NOT leave the original label and emphasis unchanged.",
     scopeGuidance: "Add explosive work early in session (pre-fatigue). Apply to sessions with suitable compound movements.",
   },
 
@@ -818,7 +818,7 @@ const TRANSFORMATION_BUNDLES: Record<IntentFamily, TransformationBundle> = {
       "Sprint or acceleration work must be added OR speed-support training must be restructured",
       "At least 2 structural changes required",
     ],
-    aiDirective: "SPEED FOCUS: Add acceleration or max velocity work at session start. Reduce fatigue-heavy accessories that compromise speed quality. Add speed-support lifting (low reps, explosive intent). Protect movement quality over volume.",
+    aiDirective: "SPEED FOCUS: Add acceleration or max velocity work at session start. Reduce fatigue-heavy accessories that compromise speed quality. Add speed-support lifting (low reps, explosive intent). Protect movement quality over volume.\n\nIDENTITY UPDATE REQUIRED: You MUST also produce an update_session change that refreshes the session's `label` and `emphasis` to reflect its new speed identity. Example label: 'Lower Speed + Power — Acceleration Development'. Example emphasis: 'Sprint mechanics, acceleration-deceleration quality, and velocity-support strength'. Adapt to the actual body region. Do NOT leave the original label and emphasis unchanged.",
     scopeGuidance: "Add speed work early in sessions. Protect from excessive fatigue.",
   },
 
@@ -843,7 +843,7 @@ const TRANSFORMATION_BUNDLES: Record<IntentFamily, TransformationBundle> = {
       "Conditioning support must be present or added",
       "At least 2 structural changes required",
     ],
-    aiDirective: "ATHLETIC PERFORMANCE FOCUS: Blend explosive, conditioning, trunk/resilience, and compound movement quality. Add explosive opener. Add conditioning support. Prioritize multi-joint movements with athletic carryover. Avoid generic bodybuilding structure.",
+    aiDirective: "ATHLETIC PERFORMANCE FOCUS: Blend explosive, conditioning, trunk/resilience, and compound movement quality. Add explosive opener. Add conditioning support. Prioritize multi-joint movements with athletic carryover. Avoid generic bodybuilding structure.\n\nIDENTITY UPDATE REQUIRED: You MUST also produce an update_session change that refreshes the session's `label` and `emphasis` to reflect its new athletic identity. Example label: 'Full Body Athletic — Power + Conditioning'. Example emphasis: 'Explosive movement quality, multi-directional athleticism, and sport-transfer conditioning'. Adapt to the actual body region and sport context. Do NOT leave the original label and emphasis unchanged.",
     scopeGuidance: "Apply across program or targeted sessions. Maintain sport-relevant balance.",
   },
 
@@ -867,7 +867,7 @@ const TRANSFORMATION_BUNDLES: Record<IntentFamily, TransformationBundle> = {
       "At least 1 actual workload or fatigue reduction — set removed, exercise removed, or density reduced",
       "Workload must demonstrably decrease",
     ],
-    aiDirective: "FATIGUE MANAGEMENT: Reduce actual workload. Remove 1-2 lowest-priority accessories. Remove 1 set from secondary lifts. Reduce density. Preserve primary compound movements. Workload MUST decrease — do not just add coaching notes.",
+    aiDirective: "FATIGUE MANAGEMENT: Reduce actual workload. Remove 1-2 lowest-priority accessories. Remove 1 set from secondary lifts. Reduce density. Preserve primary compound movements. Workload MUST decrease — do not just add coaching notes.\n\nIDENTITY UPDATE REQUIRED: You MUST also produce an update_session change that refreshes the session's `label` and `emphasis` to reflect reduced-volume intent. Example label: 'Lower Strength — Reduced Volume / Fatigue Management'. Example emphasis: 'Preserved compound strength with reduced accessory load and extended recovery windows'. Adapt to the actual body region. Do NOT leave the original label and emphasis unchanged.",
     scopeGuidance: "Apply to full scope. Preserve primary movement patterns while reducing cumulative fatigue.",
   },
 
@@ -891,7 +891,7 @@ const TRANSFORMATION_BUNDLES: Record<IntentFamily, TransformationBundle> = {
       "Intensity or volume must decrease",
       "At least 1 real workload reduction or recovery addition",
     ],
-    aiDirective: "RECOVERY FOCUS: Reduce intensity and volume. Add low-intensity movement or restoration work. If a recovery day, convert to movement quality / mobility focus. Preserve basic movement patterns at very low intensity.",
+    aiDirective: "RECOVERY FOCUS: Reduce intensity and volume. Add low-intensity movement or restoration work. If a recovery day, convert to movement quality / mobility focus. Preserve basic movement patterns at very low intensity.\n\nIDENTITY UPDATE REQUIRED: You MUST also produce an update_session change that refreshes the session's `label` and `emphasis` to reflect its new recovery identity. Example label: 'Active Recovery — Movement Quality'. Example emphasis: 'Low-intensity tissue restoration, mobility work, and CNS readiness preparation'. Adapt to the actual body region. Do NOT leave the original label and emphasis unchanged.",
     scopeGuidance: "Apply to the targeted session(s). Do not compromise performance sessions.",
   },
 

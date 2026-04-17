@@ -815,7 +815,7 @@ Keep it helpful and intelligent, never promotional.`;
           "[ClarificationFollowup] Edit plan generated from reconstructed request"
         );
 
-        const clarificationEditResult = await applyEditPlan(clarificationEditPlan);
+        const clarificationEditResult = await applyEditPlan(clarificationEditPlan, pending.intentFamily ?? undefined);
 
         logger.info(
           { applied: clarificationEditResult.appliedCount, skipped: clarificationEditResult.skippedCount },
@@ -1224,7 +1224,7 @@ Keep it helpful and intelligent, never promotional.`;
         "[VibeEdit] DB pipeline — edit plan generated"
       );
 
-      const directEditResult = await applyEditPlan(directEditPlan);
+      const directEditResult = await applyEditPlan(directEditPlan, execPlan.intentFamily ?? undefined);
 
       logger.info(
         { applied: directEditResult.appliedCount, skipped: directEditResult.skippedCount, systemId: resolvedSystem.id },
@@ -2198,7 +2198,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           reconstructedRequest, clarificationFullSystem, clarificationTarget,
           adaptationCtx || undefined, clarificationDecisionMemory?.decisionMemoryContext || undefined
         );
-        const clarificationEditResult = await applyEditPlan(clarificationEditPlan);
+        const clarificationEditResult = await applyEditPlan(clarificationEditPlan, pending.intentFamily ?? undefined);
 
         if (clarificationEditResult.appliedCount > 0) {
           const verification = clarificationEditResult.verification;
@@ -2465,7 +2465,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         "[VibeEdit:stream] DB pipeline — edit plan generated"
       );
 
-      const streamEditResult = await applyEditPlan(streamEditPlan);
+      const streamEditResult = await applyEditPlan(streamEditPlan, execPlan.intentFamily ?? undefined);
 
       logger.info(
         { applied: streamEditResult.appliedCount, skipped: streamEditResult.skippedCount, systemId: resolvedSystem.id },

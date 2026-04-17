@@ -377,22 +377,49 @@ EXPLOSIVE / POWER SESSION ("make day 1 more explosive", "add power to this sessi
 - Add 3-1-X-0 tempo to primary lifts (3-sec eccentric, controlled pause, explosive concentric)
 - Set rest to 2-3 min on primary lifts for full CNS recovery
 - Reduce or remove slow high-rep hypertrophy accessories (12+ rep accessories → 8-10 or remove)
-- Update session emphasis (secondary change, after structural changes)
+- IDENTITY REQUIRED: Produce an update_session change setting label (title) AND emphasis (subtitle) to reflect the new explosive identity.
+  Example label: "Lower Power — Explosive Output + Bar Speed"
+  Example emphasis: "Horizontal power, elastic force expression, and high-velocity lower-body force development"
+  Adapt to the session's actual body region (Upper/Lower/Full Body).
 - changeSummary MUST name specific exercise(s) added and prescription changes made (NOT "refocused toward explosive qualities")
+
+STRENGTH SESSION ("make this a strength session", "more strength", "heavier focus"):
+- Shift primary lift reps to 3-6 range
+- Extend rest to 3-5 min on primary compound lifts
+- Reduce or remove high-rep isolation accessories
+- IDENTITY REQUIRED: Produce an update_session change setting label AND emphasis to reflect the new strength identity.
+  Example label: "Lower Strength — Maximal Force Output"
+  Example emphasis: "Heavy compound loading, peak force development, and bilateral strength expression"
 
 HYPERTROPHY SESSION ("make this a hypertrophy session", "focus on muscle building"):
 - Move primary lift reps to 6-10 range
 - Add 1-2 isolation accessory exercises targeting the session's primary muscle group
 - Extend sets on accessories by 1 set
 - Set rest to 60-90s on accessories (metabolic demand)
+- IDENTITY REQUIRED: Produce an update_session change setting label AND emphasis to reflect the new hypertrophy identity.
+  Example label: "Upper Hypertrophy — Volume + Mechanical Tension"
+  Example emphasis: "Isolation volume, metabolic stress, and progressive mechanical tension for muscle-building"
 - changeSummary must name added exercises and rep range changes
+
+ENDURANCE SESSION ("more endurance", "make this more endurance-based", "lower impact aerobic"):
+- Shift rep ranges to 12-20+ or time-based
+- Tighten rest to 30-60 sec
+- Add a circuit or density block
+- IDENTITY REQUIRED: Produce an update_session change setting label AND emphasis to reflect the new endurance identity.
+  Example label: "Lower Strength Endurance — Work Capacity"
+  Example emphasis: "High-rep density, compressed rest intervals, and aerobic capacity integration across the session"
 
 CONDITIONING SESSION ("add conditioning to this session", "make this more metabolic"):
 - Add a conditioning finisher (10-15 min assault bike, rowing intervals, or similar)
 - Reduce rest on accessories to 60s
+- IDENTITY REQUIRED: Produce an update_session change setting label AND emphasis to reflect the new conditioning identity.
+  Example label: "Full Body Conditioning — Metabolic Output"
+  Example emphasis: "High-intensity interval conditioning, circuit density, and cardiovascular work capacity"
 - changeSummary must name the finisher and sessions affected
 
 RULE: If a coaching transformation only produces update_session, update_week, or update_phase changes (text fields only) with NO add_exercise, replace_exercise, or update_exercise changes touching sets/reps/tempo/rest → the response is INVALID. You must include at least one structural change.
+
+IDENTITY RULE: Every session coaching transformation (explosive, strength, hypertrophy, endurance, conditioning) MUST include an update_session change that updates BOTH label (the day title) AND emphasis (the one-line subtitle description). A transformation that leaves label and emphasis unchanged is INCOMPLETE — even if structural changes were made.
 
 CRITICAL — BLOCK / PHASE MUTATION REQUESTS (highest priority after prescription commands):
 When the target is a PHASE and the request contains a block-level mutation intent, you MUST make REAL structural changes to the sessions and exercises — not just update the phase label or notes. A phase update-only response is NOT acceptable.
@@ -471,10 +498,17 @@ BLOCK MUTATION RULES:
 BLOCK MUTATION — SCOPE AND CHANGES:
 - Use scope: "block" for all block mutations
 - Include update_phase change to update phase name, goal, emphasis, and notes
-- Include update_session changes for session emphasis fields
+- Include update_session changes for each session affected — MUST update BOTH "label" AND "emphasis" fields to reflect the new training identity
 - Include update_exercise / add_exercise / replace_exercise / delete_exercise for actual structural exercise changes
 - Include update_week changes for volumeLevel where appropriate
 - changeSummary MUST describe the structural changes made, not just "block updated"
+
+BLOCK MUTATION — IDENTITY RULE:
+Every block mutation that changes training emphasis MUST produce update_session changes that update BOTH "label" (the day title) AND "emphasis" (the one-line session descriptor) for each affected session. Examples:
+- INCREASE_POWER_BIAS: session label → "Lower Power — Explosive Output + Bar Speed", emphasis → "Horizontal power, elastic force expression, and high-velocity lower-body development"
+- ENDURANCE_TRANSFORMATION: session label → "Lower Strength Endurance — Work Capacity", emphasis → "High-rep density, compressed rest, and aerobic capacity integration"
+- CONDITIONING_TRANSFORMATION: session label → "Full Body Conditioning — Metabolic Output", emphasis → "Interval conditioning circuits, minimal rest, and cardiovascular work capacity"
+Do NOT leave session label and emphasis unchanged when the training emphasis shifts.
 
 Good changeSummary for power bias: "Shifted the Foundation Strength Block toward strength + power. Added Box Jumps to Day 1 (lower force session) and Medicine Ball Rotational Throws to Day 2. Replaced the leg curl accessory set on Day 3 with Lateral Bounds. Updated session emphases to reflect force-expression focus while keeping all primary lifts intact."
 Bad changeSummary: "Block updated to increase power focus." or "Done."

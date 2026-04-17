@@ -21,6 +21,7 @@ import { logger } from "./logger";
 import type { EditPlan, EditChange } from "./edit-intent-service";
 import type { SystemSnapshot } from "./change-log-service";
 import { verifyMutation, type MutationVerificationResult } from "./mutation-verifier";
+import { ensureSessionIdentityUpdated } from "./session-identity-sync";
 
 // ─── Allowed field allowlists (safety guard) ─────────────────────────────────
 
@@ -426,7 +427,7 @@ export interface EditResult {
   verification: MutationVerificationResult;
 }
 
-export async function applyEditPlan(plan: EditPlan): Promise<EditResult> {
+export async function applyEditPlan(plan: EditPlan, intentFamily?: string): Promise<EditResult> {
   // Phase 4: Capture state BEFORE applying changes
   const beforeSnapshot = await captureBeforeSnapshot(plan);
 
@@ -443,6 +444,24 @@ export async function applyEditPlan(plan: EditPlan): Promise<EditResult> {
   // Collect IDs for exercises inserted via add_exercise so they appear in changedIds
   const newExerciseIds = results.flatMap((r) => (r.newId ? [r.newId] : []));
   const changedIds = extractChangedIds(plan, newExerciseIds);
+
+  // ── Session Identity Sync (post-mutation guard) ────────────────────────────
+  // If the AI's EditPlan made structural changes for an identity-changing
+  // transformation but did NOT include an update_session with new label/emphasis,
+  // deterministically patch the session identity now.
+  const autoIdentityPatchedSessions = await ensureSessionIdentityUpdated(plan, intentFamily);
+  if (autoIdentityPatchedSessions.length > 0) {
+    // Add auto-patched sessions to changedIds so they appear in the after snapshot
+    for (const sid of autoIdentityPatchedSessions) {
+      if (!changedIds.sessions.includes(sid)) {
+        changedIds.sessions.push(sid);
+      }
+    }
+    logger.info(
+      { count: autoIdentityPatchedSessions.length, sessionIds: autoIdentityPatchedSessions },
+      "[EditEngine] Session identity auto-synced after mutation",
+    );
+  }
 
   // Phase 4: Capture state AFTER applying changes
   const afterSnapshot = await captureAfterSnapshot(changedIds);
