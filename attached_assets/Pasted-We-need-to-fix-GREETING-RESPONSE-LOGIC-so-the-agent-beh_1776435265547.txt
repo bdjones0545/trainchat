@@ -1,0 +1,125 @@
+We need to fix GREETING RESPONSE LOGIC so the agent behaves context-aware instead of defaulting to intake questions.
+
+PROBLEM:
+User says:
+- “What’s up?”
+
+Agent responds with:
+- intake-style question (“tell me more about your goals…”)
+
+This ignores:
+- active program state
+- conversational tone
+- user intent (social opener, not task request)
+
+==================================================
+GOAL
+==================================================
+
+Implement CONTEXT-AWARE GREETING MODE.
+
+==================================================
+TASK 1 — DETECT GREETINGS
+==================================================
+
+Detect short, social openers such as:
+- what’s up
+- whats up
+- hey
+- hi
+- yo
+- sup
+- how’s it going
+- how are you
+
+These should map to:
+responseMode = GREETING
+
+==================================================
+TASK 2 — ADD CONTEXT-AWARE BRANCHING
+==================================================
+
+If GREETING:
+
+Check:
+- does user have active program?
+
+--------------------------------
+IF ACTIVE PROGRAM:
+--------------------------------
+
+Respond with:
+- short greeting
+- reference to current program
+- optional action
+
+Examples:
+- “What’s up — want to tweak your program or keep building?”
+- “What’s up — how’s the program feeling so far?”
+- “What’s up — want to adjust today’s session?”
+
+DO NOT:
+- ask full intake questions
+- reset context
+- ask “what are your goals”
+
+--------------------------------
+IF NO ACTIVE PROGRAM:
+--------------------------------
+
+Respond with:
+- greeting
+- open-ended build prompt
+
+Examples:
+- “What’s up — what are you training for?”
+- “Hey — want me to build you a program?”
+
+==================================================
+TASK 3 — HARD GUARDRAIL
+==================================================
+
+If responseMode = GREETING:
+
+BLOCK:
+- BUILD_RESPONSE
+- INTAKE_QUESTION_TREE
+- LONG FORM QUESTIONS
+
+Keep response:
+- under 1–2 sentences
+- conversational
+- natural
+
+==================================================
+TASK 4 — OPTIONAL VARIATION
+==================================================
+
+Add slight variation so responses don’t feel repetitive:
+- reference program
+- reference last action
+- ask a light follow-up
+
+==================================================
+TASK 5 — TEST
+==================================================
+
+With active program:
+Input: “What’s up”
+Expected:
+- short greeting
+- mentions program
+- no intake questions
+
+Without program:
+Input: “What’s up”
+Expected:
+- short greeting
+- prompts build
+
+==================================================
+FINAL STANDARD
+==================================================
+
+The agent should feel like a coach continuing a conversation,
+not restarting an intake form every time the user says hello.

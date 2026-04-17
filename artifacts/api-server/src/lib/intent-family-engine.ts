@@ -54,6 +54,8 @@ export type IntentFamily =
   | "program_safety_question"
   | "program_explanation_question"
   | "coaching_question"
+  // ── Greeting — short social opener, context-aware response ────────────────
+  | "greeting"
   | "clarification_required";
 
 // ─── Target Scopes ────────────────────────────────────────────────────────────
@@ -134,6 +136,21 @@ interface FamilyPattern {
 }
 
 const FAMILY_PATTERNS: FamilyPattern[] = [
+  // ── Greeting — short social openers, matched before all other families ─────
+  // These use anchors to ensure the ENTIRE message is a greeting, not a mixed request.
+  // "Hey, can you reduce rest?" must NOT match here — only pure openers do.
+  {
+    family: "greeting",
+    patterns: [
+      /^(hey|hi|hello|yo|sup|hiya|howdy|hola|what's good)\s*[!\.\?]?\s*$/i,
+      /^whats?\s*up\s*[!\.\?]?\s*$/i,
+      /^how'?s\s*(it|things|everything|life|you|ya|u)\s*(going|goin|been|doing|doin)?\s*[!\.\?]?\s*$/i,
+      /^how\s*are\s*(you|u|ya)\s*(doing|goin|going|been)?\s*[!\.\?]?\s*$/i,
+      /^(wassup|wazzup|sup\s*dude|yoo+|heyyy+|heyy+)\s*[!\.\?]?\s*$/i,
+      /^(what('?s| is) (up|good|new))\s*[!\.\?]?\s*$/i,
+    ],
+  },
+
   // ── Injury / Joint Modification (highest priority — safety first) ──────────
   {
     family: "injury_modification",
@@ -1322,6 +1339,22 @@ RULES:
     scopeGuidance: "No scope inference — clarify first.",
   },
 
+  greeting: {
+    intentFamily: "greeting",
+    minimumStructuralChanges: 0,
+    primaryChanges: [],
+    secondaryChanges: [],
+    antiPatterns: [
+      "Do NOT ask intake questions",
+      "Do NOT rebuild or re-announce the program",
+      "Do NOT ask about goals, days, or training history",
+      "Do NOT use build-template language",
+    ],
+    validationRules: ["No structural changes — context-aware greeting only"],
+    aiDirective: "GREETING: Respond as a coach would to a casual greeting. Keep it to 1-2 short sentences. If the user has an active program, reference it briefly. If not, prompt them to build one. No intake questions.",
+    scopeGuidance: "No scope — conversational response only.",
+  },
+
   program_safety_question: {
     intentFamily: "program_safety_question",
     minimumStructuralChanges: 0,
@@ -1402,8 +1435,12 @@ export function validateTransformationResult(
     };
   }
 
-  // Clarification — always "valid" (no structural change needed)
-  if (result.intentFamily === "clarification_required") {
+  // Non-mutation families — always "valid" (no structural changes needed or expected)
+  if (result.intentFamily === "clarification_required" ||
+      result.intentFamily === "greeting" ||
+      result.intentFamily === "program_safety_question" ||
+      result.intentFamily === "program_explanation_question" ||
+      result.intentFamily === "coaching_question") {
     return { valid: true, structuralChangeCount: 0, requiredMinimum: 0 };
   }
 

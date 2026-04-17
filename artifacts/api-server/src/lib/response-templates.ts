@@ -26,7 +26,8 @@ export type ResponseMode =
   | "ADAPTIVE_RESPONSE"
   | "PROGRAM_SAFETY_RESPONSE"
   | "PROGRAM_EXPLANATION_RESPONSE"
-  | "COACHING_GUIDANCE_RESPONSE";
+  | "COACHING_GUIDANCE_RESPONSE"
+  | "GREETING_RESPONSE";
 
 export interface ResponseModeContext {
   // What action was taken (used to pick the right template)
@@ -350,6 +351,52 @@ Examples:
 "This structure works well for soccer — the emphasis on unilateral strength and the power work on Day 1 directly supports change-of-direction and acceleration. The conditioning blocks also target the intermittent energy demands of the sport."
 
 "Recovery between these sessions depends on how hard you're pushing the compound work. If you're training to failure, you'll need the full rest days. If you're leaving 2-3 reps in the tank, the frequency is manageable."`;
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // GREETING_RESPONSE
+    // User said a short social opener ("hey", "what's up", "how's it going").
+    // Context-aware: reference the active program if one exists; prompt a build if not.
+    // HARD RULES: 1-2 sentences max. No intake questions. No build announcements.
+    // ──────────────────────────────────────────────────────────────────────────
+    case "GREETING_RESPONSE": {
+      const hasProgram = ctx.hasActiveProgram;
+      if (hasProgram) {
+        return `## RESPONSE FORMAT — THIS MESSAGE ONLY
+The user sent a casual greeting. They have an ACTIVE PROGRAM.
+This is a social opener — NOT a build request, NOT an intake form.
+
+CRITICAL RULES:
+- Do NOT ask intake questions ("what are your goals", "how many days", etc.)
+- Do NOT say "Built", "Check the Program tab", or announce any program
+- Do NOT restart context or re-explain who you are
+- Keep it to exactly 1-2 short sentences
+
+What to do:
+- Greet them back naturally
+- Reference the current program with a light, optional follow-up action
+
+Good examples:
+"What's up — how's the program feeling so far?"
+"Hey — want to tweak anything in the current program?"
+"What's up — ready to hit the next session or want to adjust anything?"
+"Hey — program's loaded up. Want to make any changes before you train?"`;
+      } else {
+        return `## RESPONSE FORMAT — THIS MESSAGE ONLY
+The user sent a casual greeting. They do NOT have an active program yet.
+This is a social opener — NOT an intake form trigger.
+
+CRITICAL RULES:
+- Do NOT ask multiple intake questions
+- Do NOT say "Built", "Check the Program tab", or announce any program
+- Keep it to exactly 1-2 short sentences
+- End with ONE simple open-ended prompt to start building
+
+Good examples:
+"What's up — what are you training for?"
+"Hey — want me to build you a program?"
+"What's up — ready to get a program going?"`;
+      }
+    }
   }
 }
 
@@ -387,6 +434,7 @@ export function formatShortCircuitResponse(ctx: ShortCircuitContext): string {
     case "PROGRAM_SAFETY_RESPONSE":
     case "PROGRAM_EXPLANATION_RESPONSE":
     case "COACHING_GUIDANCE_RESPONSE":
+    case "GREETING_RESPONSE":
       // These modes don't short-circuit — they always go through AI.
       // This fallback should never be reached in practice.
       return "Let me think through that for you.";

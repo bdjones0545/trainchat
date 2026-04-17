@@ -665,6 +665,7 @@ Keep it helpful and intelligent, never promotional.`;
     execPlan.action === "GUIDANCE" && execPlan.intentFamily === "program_safety_question" ? "PROGRAM_SAFETY_RESPONSE" :
     execPlan.action === "GUIDANCE" && execPlan.intentFamily === "program_explanation_question" ? "PROGRAM_EXPLANATION_RESPONSE" :
     execPlan.action === "GUIDANCE" && execPlan.intentFamily === "coaching_question" ? "COACHING_GUIDANCE_RESPONSE" :
+    execPlan.action === "GUIDANCE" && execPlan.intentFamily === "greeting" ? "GREETING_RESPONSE" :
     execPlan.action === "GUIDANCE" ? "COACHING_RESPONSE" :
     "EXECUTION_RESPONSE";
 
@@ -1414,11 +1415,13 @@ Keep it helpful and intelligent, never promotional.`;
   // PROGRAM QUESTION mode (GUIDANCE with program_safety_question, program_explanation_question, coaching_question):
   //   Also loads the current program so the AI can reference it when answering.
   //   This prevents the AI from answering blind without program context.
+  // GREETING mode: also loads program so the AI can reference it in a context-aware greeting.
   const isProgramQuestionGuidance =
     execPlan.action === "GUIDANCE" && (
       execPlan.intentFamily === "program_safety_question" ||
       execPlan.intentFamily === "program_explanation_question" ||
-      execPlan.intentFamily === "coaching_question"
+      execPlan.intentFamily === "coaching_question" ||
+      execPlan.intentFamily === "greeting"
     );
 
   let currentProgram: ProgramStructure | null = null;
@@ -1547,6 +1550,7 @@ Keep it helpful and intelligent, never promotional.`;
       neuralContext: neuralContextStr,
       neuralBias,
       neuralImbalances,
+      hasActiveProgram: !!currentProgram || hasActiveSystem,
     }
   );
 
@@ -1593,6 +1597,10 @@ Keep it helpful and intelligent, never promotional.`;
             aiContent = `That depends on your training background, current health, and any active injuries. For a healthy athlete adapted to this level of training, the program is appropriate. If you have specific concerns — pain, a recent injury, or very limited training history — let me know and I'll adjust the relevant parts.`;
           } else if (execPlan.intentFamily === "program_explanation_question") {
             aiContent = `The structure is built around your stated goal. Each session has a defined role — primary compound movements for the training stimulus, accessory work to reinforce weak links, and the ordering follows a CNS-demand hierarchy (hardest first). If you want me to explain a specific exercise or session, name it and I'll break it down.`;
+          } else if (execPlan.intentFamily === "greeting") {
+            aiContent = currentProgram
+              ? `What's up — how's the program feeling so far?`
+              : `What's up — want me to build you a program?`;
           } else {
             aiContent = `Good question. The program is structured to address your stated goal — the exercise selection, volume, and frequency are calibrated for that. If something doesn't seem right for your situation, tell me what specifically and I'll clarify or adjust.`;
           }
@@ -2116,6 +2124,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     execPlan.action === "GUIDANCE" && execPlan.intentFamily === "program_safety_question" ? "PROGRAM_SAFETY_RESPONSE" :
     execPlan.action === "GUIDANCE" && execPlan.intentFamily === "program_explanation_question" ? "PROGRAM_EXPLANATION_RESPONSE" :
     execPlan.action === "GUIDANCE" && execPlan.intentFamily === "coaching_question" ? "COACHING_GUIDANCE_RESPONSE" :
+    execPlan.action === "GUIDANCE" && execPlan.intentFamily === "greeting" ? "GREETING_RESPONSE" :
     execPlan.action === "GUIDANCE" ? "COACHING_RESPONSE" :
     "EXECUTION_RESPONSE";
 
@@ -2688,7 +2697,8 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     execPlan.action === "GUIDANCE" && (
       execPlan.intentFamily === "program_safety_question" ||
       execPlan.intentFamily === "program_explanation_question" ||
-      execPlan.intentFamily === "coaching_question"
+      execPlan.intentFamily === "coaching_question" ||
+      execPlan.intentFamily === "greeting"
     );
 
   let currentProgram: ProgramStructure | null = null;
@@ -2762,6 +2772,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       neuralBias: streamNeuralBias,
       neuralImbalances: streamNeuralImbalances,
       uiContext: safeUIContext,
+      hasActiveProgram: !!currentProgram || hasActiveSystem,
     }
   );
 
@@ -2802,6 +2813,10 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
             aiContent = `That depends on your training background, current health, and any active injuries. For a healthy athlete adapted to this level of training, the program is appropriate. If you have specific concerns — pain, a recent injury, or very limited training history — let me know and I'll adjust the relevant parts.`;
           } else if (execPlan.intentFamily === "program_explanation_question") {
             aiContent = `The structure is built around your stated goal. Each session has a defined role — primary compound movements for the training stimulus, accessory work to reinforce weak links, and the ordering follows a CNS-demand hierarchy (hardest first). If you want me to explain a specific exercise or session, name it and I'll break it down.`;
+          } else if (execPlan.intentFamily === "greeting") {
+            aiContent = currentProgram
+              ? `What's up — how's the program feeling so far?`
+              : `What's up — want me to build you a program?`;
           } else {
             aiContent = `Good question. The program is structured to address your stated goal — the exercise selection, volume, and frequency are calibrated for that. If something doesn't seem right for your situation, tell me what specifically and I'll clarify or adjust.`;
           }

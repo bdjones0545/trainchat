@@ -1938,6 +1938,8 @@ export interface AIResponseOptions {
   neuralImbalances?: import("./neural-graph-interpreter").Imbalance[];
   /** Spatial/product context from the frontend — resolves "this", "here", etc. */
   uiContext?: UIContextData | null;
+  /** Whether the user currently has an active program — passed to GREETING_RESPONSE template */
+  hasActiveProgram?: boolean;
 }
 
 // ─── Main entry point ────────────────────────────────────────────────────────
@@ -1964,6 +1966,7 @@ export async function generateAIResponse(
     neuralBias,
     neuralImbalances,
     uiContext,
+    hasActiveProgram,
   } = options;
 
   const [profile] = await db
@@ -2111,6 +2114,7 @@ export async function generateAIResponse(
       targetDescription: actionDecision?.targetDescription,
       inferenceRationale: actionDecision?.inferenceRationale,
       clarifyingQuestion: actionDecision?.clarifyingQuestion,
+      hasActiveProgram: hasActiveProgram ?? (currentProgram != null),
     };
     responseModePrompt = buildResponseModePrompt(rmCtx);
     logResponseMode(rmCtx);

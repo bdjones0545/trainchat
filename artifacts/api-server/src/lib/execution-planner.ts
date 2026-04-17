@@ -377,16 +377,18 @@ export async function buildExecutionPlan({
   // ── Program question intents → ALWAYS coaching guidance, even without program ─
   // These are questions ABOUT the current program (safety, explanation, coaching).
   // They must NEVER trigger a build — route to GUIDANCE regardless of program state.
+  // Greetings are also non-building — context-aware conversational response only.
   else if (
     intent === "program_safety_question" ||
     intent === "program_explanation_question" ||
-    intent === "coaching_question"
+    intent === "coaching_question" ||
+    intent === "greeting"
   ) {
     plan = {
       action: "GUIDANCE",
       intentFamily: intent,
       scope,
-      reasoning: `Program question intent '${intent}' — always coaching/explanation, never build`,
+      reasoning: `Non-mutation intent '${intent}' — always GUIDANCE, never build`,
     };
   }
 
