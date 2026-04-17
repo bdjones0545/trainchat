@@ -717,8 +717,18 @@ function ProgramTab({
         </div>
       )}
 
+      {/* ─── Scrollable content body ──────────────────────────────────────────
+           flex-1 + min-h-0 ensure this expands to fill the remaining panel
+           height. overflow-y-auto + -webkit-overflow-scrolling:touch give
+           smooth momentum scrolling on mobile Safari / WKWebView.           */}
+      <div
+        ref={scrollAreaRef}
+        className="flex-1 min-h-0 overflow-y-auto overscroll-contain"
+        style={{ WebkitOverflowScrolling: "touch" } as React.CSSProperties}
+      >
+
       {/* ── Program Summary Card ───────────────────────────────────────────── */}
-      <div className="px-4 pt-4 pb-3 border-b border-border flex-shrink-0">
+      <div className="px-4 pt-4 pb-3 border-b border-border">
         {/* Live status row */}
         <div className="flex items-center gap-2 mb-3">
           <div className="flex items-center gap-1.5 min-w-0">
@@ -837,7 +847,7 @@ function ProgramTab({
 
       {/* ── Refinement Section: Chips + Freeform Input ─────────────────────── */}
       {onSendMessage && (
-        <div className="px-4 py-3.5 border-b border-border flex-shrink-0 space-y-3">
+        <div className="px-4 py-3.5 border-b border-border space-y-3">
           {/* Section label */}
           <p className="text-[9px] font-bold text-muted-foreground/50 uppercase tracking-[0.14em]">
             Refine this program
@@ -907,7 +917,7 @@ function ProgramTab({
 
       {/* What Changed / Why Changed */}
       {(program.whatChanged || program.whyChanged) && (
-        <div className="px-4 py-2.5 border-b border-border flex-shrink-0 bg-amber-400/5">
+        <div className="px-4 py-2.5 border-b border-border bg-amber-400/5">
           <div className="flex items-start gap-2">
             <Activity className="w-3 h-3 text-amber-400 mt-0.5 flex-shrink-0" />
             <div className="space-y-1.5 min-w-0">
@@ -930,7 +940,7 @@ function ProgramTab({
 
       {/* Progression strategy */}
       {program.progressionStrategy && (
-        <div className="px-4 py-2.5 border-b border-border flex-shrink-0 bg-primary/5">
+        <div className="px-4 py-2.5 border-b border-border bg-primary/5">
           <div className="flex items-start gap-2">
             <TrendingUp className="w-3 h-3 text-primary mt-0.5 flex-shrink-0" />
             <div>
@@ -942,7 +952,7 @@ function ProgramTab({
       )}
 
       {/* Days */}
-      <div ref={scrollAreaRef} className="flex-1 overflow-y-auto p-3 space-y-2">
+      <div className="p-3 space-y-2">
         {days.map((day, idx) => {
           const isLocked = !isPremium && idx > 0;
           const isExpanded = expandedDay === idx;
@@ -1284,6 +1294,8 @@ function ProgramTab({
           );
         })}
       </div>
+
+      </div>{/* end scrollable content body */}
 
       {/* ── Learn Exercise Modal ──────────────────────────────────────────── */}
       <LearnExerciseModal
