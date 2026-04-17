@@ -43,6 +43,7 @@ export type IntentFamily =
   | "equipment_constraint"
   | "session_expansion"
   | "session_reduction"
+  | "add_exercise"
   | "exercise_swap"
   | "exercise_progression"
   | "exercise_regression"
@@ -207,11 +208,29 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
     ],
   },
 
+  // ── Add Exercise (STRICT — single exercise insertion) ─────────────────────
+  // Must appear BEFORE session_expansion so "add an exercise" is captured
+  // as a precise structural add, not a loose volume/expansion request.
+  {
+    family: "add_exercise",
+    patterns: [
+      // "add an exercise / add a new exercise / add one exercise / add another exercise"
+      /\badd (an?|one|another|a new) (exercise|movement|lift|drill)\b/i,
+      // "add a new exercise to day 1 / add an exercise to this session"
+      /\badd (an?|one|a new) (exercise|movement|lift) to (day|session|this)\b/i,
+      // "add one more exercise"
+      /\badd one more (exercise|movement|lift)\b/i,
+      // "put an exercise on day 1"
+      /\bput (an?|one|another) (exercise|movement|lift) (in|on|into) (day|session)\b/i,
+    ],
+  },
+
   // ── Session Expansion ─────────────────────────────────────────────────────
   {
     family: "session_expansion",
     patterns: [
-      /\b(add (more )?(exercises?|work|movements?|accessories?|upper body work|lower body work|core work))\s*(to\s*(day\s*\d|session|this))?\b/i,
+      // Requires "more" before exercises — prevents matching "add an exercise to Day X"
+      /\b(add more (exercises?|work|movements?|accessories?|upper body work|lower body work|core work))\s*(to\s*(day\s*\d|session|this))?\b/i,
       /\b(make (day\s*\d|this session|day|session).{0,20}longer)\b/i,
       /\b(expand (day\s*\d|this session|this day|the session))\b/i,
       /\b(more work in|more volume in|throw in.{0,20}exercises?)\b/i,
@@ -385,7 +404,9 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
     patterns: [
       /\b(more volume|increase volume|add (more )?sets?|add (more )?volume|more total work)\b/i,
       /\b(volume is too low|not enough volume|need more volume|increase training volume)\b/i,
-      /\b(add (more )?exercises?|more training|more weekly volume)\b/i,
+      // NOTE: "add exercises?" (with optional s) removed — that greedily matched "add an exercise"
+      // which is a strict structural add and belongs in the add_exercise family.
+      /\b(add more exercises|more training|more weekly volume)\b/i,
     ],
   },
 
@@ -1009,6 +1030,32 @@ const TRANSFORMATION_BUNDLES: Record<IntentFamily, TransformationBundle> = {
     scopeGuidance: "Apply to the specified session only.",
   },
 
+  // ── Add Exercise ──────────────────────────────────────────────────────────
+  // Strict single-exercise insertion — triggered by the right panel "Add Exercise"
+  // button and unambiguous text like "add an exercise to Day X".
+  // This is intentionally separate from session_expansion (which is looser).
+  add_exercise: {
+    intentFamily: "add_exercise",
+    minimumStructuralChanges: 1,
+    primaryChanges: [
+      { type: "add_exercise", description: "Insert exactly one new exercise row into the target session", countAs: 1 },
+    ],
+    secondaryChanges: [],
+    antiPatterns: [
+      "Do NOT add sets or reps to existing exercises instead of inserting a new exercise row",
+      "Do NOT increase generic volume without adding a new discrete exercise entry",
+      "Do NOT substitute a conditioning finisher or accessory block for a real new exercise row",
+      "Do NOT say 'adding volume', 'expanding the session', or 'primary structure unchanged' in the changeSummary",
+    ],
+    validationRules: [
+      "Exactly 1 new exercise must be inserted (add_exercise change type)",
+      "The new exercise must have a real canonical name — no placeholder text",
+      "The changeSummary MUST name the specific exercise added and which day it targets",
+    ],
+    aiDirective: "ADD EXERCISE (STRICT STRUCTURAL): The user explicitly requested adding a new exercise. You MUST produce exactly one add_exercise change. Choose an exercise from the library that fits the session identity (upper/lower/full body), complements existing exercises, and does not duplicate anchor movements. Do NOT add sets to existing exercises. Do NOT produce update_exercise or update_session changes as the primary response. The changeSummary MUST state the exercise name and day (e.g. 'Added Copenhagen Plank to Day 1 to support trunk stability' or 'Added Lateral Bound to Day 2 to increase elastic power').",
+    scopeGuidance: "Apply to the specific target session only. Insert at the end of the session's exercise list unless a specific position was requested.",
+  },
+
   exercise_swap: {
     intentFamily: "exercise_swap",
     minimumStructuralChanges: 1,
@@ -1369,6 +1416,12 @@ export function bridgeToSpecialistIntent(family: IntentFamily): FamilyBridgeResu
       return {
         specialistIntent: "EQUIPMENT_ADJUSTMENT",
         supplementalData: { family },
+      };
+
+    case "add_exercise":
+      return {
+        specialistIntent: "VOLUME_CHANGE",
+        supplementalData: { direction: "add_exercise_strict", family },
       };
 
     case "exercise_swap":

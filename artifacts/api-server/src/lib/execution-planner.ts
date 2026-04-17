@@ -201,7 +201,25 @@ export async function buildExecutionPlan({
     };
   }
 
-  // ── Add exercise / session expansion ─────────────────────────────────────
+  // ── Strict single-exercise insertion (right panel "Add Exercise" button) ─
+  else if (intent === "add_exercise") {
+    plan = {
+      action: "APPLY_MUTATION",
+      intentFamily: intent,
+      scope,
+      mutation: {
+        type: "add",
+        params: {
+          category: inferExerciseCategory(message),
+          strict: true,         // signals AI: produce exactly one add_exercise change
+          forceExerciseRow: true,
+        },
+      },
+      reasoning: "Strict add-exercise flow — one new exercise row must be inserted",
+    };
+  }
+
+  // ── Session expansion / volume increase ───────────────────────────────────
   else if (intent === "session_expansion" || intent === "increase_volume") {
     plan = {
       action: "APPLY_MUTATION",
@@ -464,6 +482,7 @@ function isMutationFamily(family: IntentFamily): boolean {
     "injury_modification",
     "joint_friendly_modification",
     "equipment_constraint",
+    "add_exercise",
   ];
 
   return mutationFamilies.includes(family);

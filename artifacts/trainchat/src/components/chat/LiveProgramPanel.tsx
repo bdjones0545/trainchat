@@ -371,12 +371,12 @@ const GLOBAL_CHIPS: { label: string; message: string }[] = [
   { label: "Home Gym Version", message: "Convert this program for a home gym" },
 ];
 
-const SESSION_ACTIONS: { label: string; buildMessage: (dayNum: number) => string }[] = [
+const SESSION_ACTIONS: { label: string; button?: string; buildMessage: (dayNum: number) => string }[] = [
   { label: "More Explosive", buildMessage: (d) => `Make Day ${d} more explosive` },
   { label: "Easier", buildMessage: (d) => `Make Day ${d} easier` },
   { label: "Harder", buildMessage: (d) => `Make Day ${d} harder` },
   { label: "Shorter", buildMessage: (d) => `Make Day ${d} shorter` },
-  { label: "Add Exercise", buildMessage: (d) => `Add an exercise to Day ${d}` },
+  { label: "Add Exercise", button: "add_exercise", buildMessage: (d) => `Add a new exercise to Day ${d}` },
 ];
 
 const EXERCISE_ACTIONS: { label: string; buildMessage: (name: string) => string }[] = [
@@ -1117,6 +1117,7 @@ function ProgramTab({
                                   sendRefinement(action.buildMessage(day.dayNumber), key, {
                                     dayIndex: idx,
                                     interactionType: "session_action",
+                                    ...(action.button ? { button: action.button } : {}),
                                   })
                                 }
                                 disabled={isDisabled}
