@@ -197,8 +197,6 @@ export default function Chat() {
 
   // Startup state: fail-safe lets the agent render even if auth hangs
   const [forceReady, setForceReady] = useState(false);
-  // Conversation creation guard: prevents duplicate conversations on fast re-renders
-  const hasAttemptedConvoCreate = useRef(false);
   // Calibration nudge guard: one-shot, never auto-triggers twice
   const hasCheckedCalibrationNudge = useRef(false);
   /**
@@ -421,33 +419,23 @@ export default function Chat() {
   // GuestStart when me is null. No redirect needed here — Chat only renders
   // when the user is confirmed authenticated.
 
-  // Conversation bootstrap: select the first existing convo, or create one.
-  // FIX: hasAttemptedConvoCreate ref prevents creating duplicate conversations on
-  // fast re-renders while the invalidation refetch is in flight.
+  // Conversation bootstrap: select the first existing convo when the list loads.
+  // We no longer auto-create a "New Session" here — deleted sessions must stay
+  // deleted across reloads. The user can start a new conversation deliberately
+  // via the "New conversation" button or by sending a message.
   useEffect(() => {
     if (!me || convosLoading) return;
+    console.log("[SessionHistorySourceAudit]", {
+      source: "listConversations query (DB)",
+      sessionIds: conversations.map((c: any) => c.id),
+      titles: conversations.map((c: any) => c.title),
+    });
     if (conversations.length > 0) {
       if (!activeConvoId) setActiveConvoId(conversations[0].id);
       return;
     }
-    // conversations is empty — create one, but only once
-    if (!hasAttemptedConvoCreate.current && !createConvo.isPending) {
-      hasAttemptedConvoCreate.current = true;
-      console.log("[Chat] creating starter conversation");
-      createConvo.mutate(
-        { data: { title: "New Session" } },
-        {
-          onSuccess: (convo) => {
-            queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
-            setActiveConvoId(convo.id);
-          },
-          onError: () => {
-            // Reset guard on failure so a manual retry can succeed
-            hasAttemptedConvoCreate.current = false;
-          },
-        }
-      );
-    }
+    // conversations is empty — clear active pointer so the empty state shows
+    if (activeConvoId) setActiveConvoId(null);
   }, [me, conversations, convosLoading, activeConvoId]);
 
   // FIX 5: calibration nudge — evaluated ONCE after a program is generated.
@@ -668,7 +656,32 @@ export default function Chat() {
 
   async function handleSend(text?: string, extraContext?: Record<string, unknown>) {
     const content = (text ?? inputText).trim();
-    if (!content || !activeConvoId || stream.isActive) return;
+    if (!content || stream.isActive) return;
+
+    // If there is no active conversation (e.g. user deleted all sessions), auto-create
+    // one now so the first message lands in a fresh conversation.
+    let resolvedConvoId = activeConvoId;
+    if (!resolvedConvoId) {
+      try {
+        const newConvo = await new Promise<{ id: number }>((resolve, reject) => {
+          createConvo.mutate(
+            { data: { title: "New Session" } },
+            {
+              onSuccess: (convo) => {
+                queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+                setActiveConvoId(convo.id);
+                resolve(convo);
+              },
+              onError: reject,
+            }
+          );
+        });
+        resolvedConvoId = newConvo.id;
+      } catch {
+        setOperationError("Couldn't start a new session. Please try again.");
+        return;
+      }
+    }
 
     setInputText("");
     if (inputRef.current) {
@@ -693,7 +706,7 @@ export default function Chat() {
       // Extra context from panel actions (source, dayIndex, exerciseId, etc.)
       ...(extraContext ?? {}),
     };
-    const result = await stream.send(activeConvoId, content, chatUIContext);
+    const result = await stream.send(resolvedConvoId, content, chatUIContext);
 
     if (!result) {
       // Paywall and error display is handled by the useEffect that watches
@@ -713,7 +726,7 @@ export default function Chat() {
       setTimeout(() => { streamJustFinishedRef.current = false; }, 5000);
     }
 
-    queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(activeConvoId!) });
+    queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(resolvedConvoId) });
     queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
 
     if (result.planInfo?.messagesRemaining !== undefined) {
@@ -1044,32 +1057,39 @@ export default function Chat() {
 
   async function handleDeleteConversation(id: number) {
     if (isDeleting) return;
+    const target = conversations.find((c: any) => c.id === id);
+    console.log("[SessionDeleteAudit] started", {
+      clickedSessionId: id,
+      clickedTitle: target?.title ?? "unknown",
+      modalOpened: true,
+      confirmed: true,
+      deleteSource: "db",
+    });
     setIsDeleting(true);
     try {
       await customFetch(`/api/conversations/${id}`, { method: "DELETE" });
       // Repair active pointer: if we just deleted the active conversation,
-      // switch to the most recent remaining one (or create a new one)
+      // switch to the most recent remaining one. If none remain, clear the
+      // pointer and show the empty state — do NOT auto-create a ghost session.
       if (id === activeConvoId) {
         const remaining = conversations.filter((c: any) => c.id !== id);
         if (remaining.length > 0) {
           handleSelectConvo(remaining[0].id);
         } else {
-          // No conversations left — create a fresh one
           setActiveConvoId(null);
-          createConvo.mutate(
-            { data: { title: "New Session" } },
-            {
-              onSuccess: (convo) => {
-                queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
-                setActiveConvoId(convo.id);
-              },
-            }
-          );
         }
       }
-      queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+      // Invalidate and refetch so sidebar reflects the persisted DB state
+      await queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+      const remaining = conversations.filter((c: any) => c.id !== id);
+      console.log("[SessionDeleteAudit] success", {
+        clickedSessionId: id,
+        deleteSucceeded: true,
+        invalidatedQueryKeys: [getListConversationsQueryKey()],
+        remainingSessionIds: remaining.map((c: any) => c.id),
+      });
     } catch (err) {
-      console.error("[DeleteConversation] Failed:", err);
+      console.error("[SessionDeleteAudit] failed", { clickedSessionId: id, deleteSucceeded: false, error: err });
       if (operationErrorTimeoutRef.current) clearTimeout(operationErrorTimeoutRef.current);
       setOperationError("Couldn't delete that session. Please try again.");
       operationErrorTimeoutRef.current = setTimeout(() => setOperationError(null), 5000);
@@ -1424,8 +1444,9 @@ export default function Chat() {
       rightPanel={liveProgramPanel}
     >
       {/* ─── Delete Confirmation Modal ─── */}
+      {/* z-[60] keeps this above the sidebar/panel which sits at z-50 */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !isDeleting && setDeleteConfirm(null)} />
           <div
             className="relative w-full max-w-sm rounded-2xl border border-border bg-[#0c1220] shadow-2xl p-6"
@@ -1899,7 +1920,7 @@ export default function Chat() {
                 <button
                   data-testid="button-send"
                   onClick={() => handleSend()}
-                  disabled={!inputText.trim() || stream.isActive || !activeConvoId}
+                  disabled={!inputText.trim() || stream.isActive}
                   className="m-2 p-2 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 active:scale-95 flex-shrink-0"
                 >
                   <SendHorizontal className="w-4 h-4" />
