@@ -91,10 +91,12 @@ export async function buildExecutionPlan({
   uiContext?: Record<string, unknown> | null;
 }): Promise<ExecutionPlan> {
   // ── STEP 0: Button signal override ─────────────────────────────────────────
-  // Day-level Harder/Easier buttons send an explicit button signal via uiContext.
-  // These are DETERMINISTIC CONTROLS — they must never route to ASK_CLARIFICATION.
-  // The button signal overrides all text-based intent classification.
+  // Right-panel buttons send an explicit button signal via uiContext.
+  // These are DETERMINISTIC CONTROLS — they must NEVER route to ASK_CLARIFICATION.
+  // The button signal overrides all text-based intent classification AND pending
+  // clarification resolution — buttons act, they never ask.
   const buttonSignal = uiContext?.button as string | undefined;
+
   if (buttonSignal === "day_progression" || buttonSignal === "day_regression") {
     const scope = resolveScope(message);
     const resolvedScope: ExecutionScope = scope.type === "session"
@@ -122,6 +124,47 @@ export async function buildExecutionPlan({
         buttonSignal,
       },
       "[ExecutionPlanner] Button override — day-level progression/regression forced"
+    );
+
+    return plan;
+  }
+
+  if (buttonSignal === "add_exercise") {
+    // Prefer the dayIndex supplied by the UI button (0-based) over text extraction,
+    // then fall back to the text-parsed day number.
+    const dayIndexFromUi = typeof uiContext?.dayIndex === "number" ? (uiContext.dayIndex as number) : undefined;
+    const textScope = resolveScope(message);
+    const resolvedDayIndex = dayIndexFromUi ?? textScope.dayIndex;
+
+    const plan: ExecutionPlan = {
+      action: "APPLY_MUTATION",
+      intentFamily: "add_exercise",
+      scope: { type: "session", dayIndex: resolvedDayIndex },
+      mutation: {
+        type: "add",
+        params: {
+          strict: true,
+          forceExerciseRow: true,
+          allowFallbackSlot: true,
+          dayIndex: resolvedDayIndex,
+        },
+      },
+      reasoning: "Button-driven add_exercise — forced APPLY_MUTATION. One real canonical exercise row must be inserted into the target day.",
+    };
+
+    logger.debug(
+      {
+        conversationId,
+        userId,
+        action: plan.action,
+        intentFamily: plan.intentFamily,
+        scope: plan.scope,
+        buttonSignal,
+        dayIndexFromUi,
+        resolvedDayIndex,
+        message,
+      },
+      "[AddExerciseButtonFlow] Button override — add_exercise forced to APPLY_MUTATION"
     );
 
     return plan;

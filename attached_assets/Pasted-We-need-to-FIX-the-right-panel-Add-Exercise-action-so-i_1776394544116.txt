@@ -1,0 +1,253 @@
+We need to FIX the right-panel “Add Exercise” action so it NEVER falls back to clarification when triggered from the button.
+
+PROBLEM:
+When the user presses the right-panel Day Card button:
+- Add Exercise
+
+the system sometimes responds with:
+- “I couldn’t match a clean change…”
+- “Try being more specific…”
+
+This is wrong.
+
+For a button-driven action, the system should not ask the user to clarify what “Add Exercise” means.
+The button itself already defines the intent.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make the right-panel Add Exercise button a deterministic execution path:
+
+- no clarification
+- no generic NLP ambiguity
+- no “be more specific”
+
+It must always attempt to add a real exercise row to the targeted day.
+
+==================================================
+CORE RULE
+==================================================
+
+Buttons should not think.
+Buttons should act.
+
+If uiContext.button === "add_exercise", the planner must force:
+- intentFamily = add_exercise
+- scope = targeted day
+- action = APPLY_MUTATION
+
+and execute the add-exercise path directly.
+
+==================================================
+TASK 1 — TRACE THE ACTUAL RUNTIME FLOW
+==================================================
+
+Audit the full runtime path for the right-panel Add Exercise button.
+
+Verify all of these at runtime:
+1. frontend payload includes:
+   - message
+   - uiContext.button = "add_exercise"
+   - uiContext.dayIndex
+
+2. conversations route receives the full uiContext intact
+
+3. buildExecutionPlan receives uiContext
+
+4. Step 0 button override actually runs before any clarification / fallback logic
+
+5. the resulting execution plan is APPLY_MUTATION with intentFamily add_exercise
+
+Identify the exact place where this currently breaks.
+
+==================================================
+TASK 2 — HARD OVERRIDE IN EXECUTION PLANNER
+==================================================
+
+At the very top of buildExecutionPlan (before pending clarification, before text classification, before any ambiguity logic), add/verify:
+
+If:
+- uiContext?.button === "add_exercise"
+
+Then immediately return:
+- action: "APPLY_MUTATION"
+- intentFamily: "add_exercise"
+- params: {
+    dayIndex: uiContext.dayIndex,
+    forceExerciseRow: true,
+    allowFallbackSlot: true
+  }
+
+This must bypass all clarification/question behavior.
+
+==================================================
+TASK 3 — MAKE ADD_EXERCISE NON-AMBIGUOUS
+==================================================
+
+For button-triggered add_exercise:
+- do NOT ask what kind of exercise the user wants
+- do NOT ask what direction they want
+- do NOT ask them to be more specific
+
+Instead:
+- infer best slot from the session
+- if ideal slot is unclear, use fallback slot logic
+- still add something coherent
+
+Clarification should only be allowed if the user typed a vague freeform prompt, NOT when they pressed the button.
+
+==================================================
+TASK 4 — IMPLEMENT FALLBACK SLOT RESOLUTION
+==================================================
+
+The add-exercise executor must never fail just because it cannot find a perfect slot.
+
+Implement this order:
+
+1. Try ideal slot based on current session composition
+   Example:
+   - missing trunk
+   - missing unilateral support
+   - missing accessory posterior chain
+   - missing finisher / conditioning support
+
+2. If no clear slot:
+   use a safe fallback slot such as:
+   - accessory_general
+   - trunk_support
+   - positional_support
+   - low-fatigue complementary work
+
+The system must not return “couldn’t match a clean change” just because slot inference was imperfect.
+
+==================================================
+TASK 5 — IMPLEMENT SAFE EXERCISE FALLBACK
+==================================================
+
+If ranked library selection fails for the chosen slot:
+
+1. try broader library match
+2. try category-compatible fallback
+3. if still nothing, use a safe deterministic fallback exercise from the library
+
+Examples:
+- lower accessory day → Romanian Deadlift / Step-Up / Copenhagen Plank
+- upper day → Cable Row / DB Bench / Face Pull
+- general support → Pallof Press / Dead Bug / Split Squat
+
+IMPORTANT:
+Use only canonical library exercises.
+Never fail silently.
+Never ask for specificity for a button-driven add.
+
+==================================================
+TASK 6 — REQUIRE REAL STRUCTURAL INSERTION
+==================================================
+
+For button-driven add_exercise:
+success requires:
+- exercise count in target session/day increases by 1
+- inserted exercise is real and canonical
+- inserted exercise belongs to the targeted day
+
+If exercise count does not increase:
+- mutation failed
+- do NOT say “Program Updated”
+- do NOT return a fake success summary
+
+==================================================
+TASK 7 — RESPONSE TEXT MUST NAME THE ADDED EXERCISE
+==================================================
+
+The final response must explicitly name what was added and why.
+
+Examples:
+- “Added Romanian Deadlift to Day 1 to reinforce posterior chain strength.”
+- “Added Copenhagen Plank to Day 1 for trunk stability and adductor support.”
+- “Added Rowing Machine Intervals to Day 1 as a conditioning finisher.”
+
+Do NOT return:
+- “couldn’t match a clean change”
+- “try being more specific”
+- “adding volume”
+for the button flow
+
+==================================================
+TASK 8 — PATCH BOTH DIRECT + STREAMING PATHS
+==================================================
+
+If there are separate:
+- non-stream handler
+- SSE/streaming handler
+
+apply the same button override behavior to BOTH.
+Do not let one path work and the other fall into clarification.
+
+==================================================
+TASK 9 — ADD DEBUG LOGGING
+==================================================
+
+In development, log:
+
+[AddExerciseButtonFlow] {
+  message,
+  uiContext,
+  executionPlanAction,
+  intentFamily,
+  dayIndex,
+  selectedSlot,
+  selectedExercise,
+  inserted: true/false,
+  finalExerciseCount
+}
+
+This must make it obvious whether the button override was honored.
+
+==================================================
+TASK 10 — TEST REQUIRED
+==================================================
+
+Test these exact scenarios:
+
+1. Right-panel button: Add Exercise on Day 1
+Expected:
+- no clarification
+- one real exercise row added
+- response names the exercise
+
+2. Right-panel button: Add Exercise on a different day/session type
+Expected:
+- still no clarification
+- added exercise fits that day
+
+3. Freeform chat: “Add a new exercise to Day 1”
+Expected:
+- should also work, but can use normal text-based add_exercise path
+
+4. Freeform vague prompt not from button
+Expected:
+- clarification is still allowed if genuinely needed
+
+This ensures the button flow is deterministic while freeform remains flexible.
+
+==================================================
+TASK 11 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. where the button flow was breaking
+2. whether uiContext reached the planner
+3. what hard override was added
+4. how fallback slot resolution works
+5. how safe fallback exercise selection works
+6. how structural insertion is verified
+7. which tests now pass
+
+==================================================
+FINAL STANDARD
+==================================================
+
+When the user presses “Add Exercise” in the right panel, TrainChat must add a real exercise row to that targeted day.
+
+It must never ask the user to clarify what the button already told it to do.

@@ -160,9 +160,19 @@ function buildAgenticNoChangesResponse(
   editIntent: string,
   editScope: string,
   editSubtype: string | undefined,
-  resolvedTarget?: { type: string; label?: string } | null
+  resolvedTarget?: { type: string; label?: string } | null,
+  executionFamily?: string | null,
 ): string {
   const lower = userRequest.toLowerCase();
+
+  // ── BUTTON-DRIVEN ADD EXERCISE — never say "try being more specific" ──────────
+  // When the execution plan is add_exercise (i.e. triggered by the right-panel button),
+  // the intent is unambiguous. The failure is slot/exercise selection, not user clarity.
+  // Return a retry prompt that never asks the user to clarify what the button already told us.
+  if (executionFamily === "add_exercise" || editIntent === "add_exercise") {
+    const targetLabel = resolvedTarget?.label ? `"${resolvedTarget.label}"` : "that session";
+    return `I tried inserting a new exercise into ${targetLabel} but ran into an issue selecting the right one. Give it another tap — or name the type you'd like (e.g. "add a posterior chain accessory" or "add a conditioning finisher") and I'll place it right away.`;
+  }
 
   // If the user mentioned a specific day/session and we still got 0 changes,
   // the problem is with what to change — not where. Ask about the action, not the location.
@@ -1239,7 +1249,8 @@ Keep it helpful and intelligent, never promotional.`;
           directEditPlan.intent,
           directEditPlan.scope,
           undefined,
-          directTarget
+          directTarget,
+          execPlan.intentFamily,
         );
         const [noChangesMsg] = await db.insert(messagesTable).values({
           conversationId: params.data.id, role: "assistant", content: noChangesContent, structuredData: null,
@@ -2481,7 +2492,8 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           streamEditPlan.intent,
           streamEditPlan.scope,
           undefined,
-          streamTarget
+          streamTarget,
+          execPlan.intentFamily,
         );
         const [noChangesMsg] = await db.insert(messagesTable).values({
           conversationId: params.data.id, role: "assistant", content: noChangesContent, structuredData: null,

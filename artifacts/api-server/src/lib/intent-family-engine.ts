@@ -1089,7 +1089,24 @@ const TRANSFORMATION_BUNDLES: Record<IntentFamily, TransformationBundle> = {
       "The new exercise must have a real canonical name — no placeholder text",
       "The changeSummary MUST name the specific exercise added and which day it targets",
     ],
-    aiDirective: "ADD EXERCISE (STRICT STRUCTURAL): The user explicitly requested adding a new exercise. You MUST produce exactly one add_exercise change. Choose an exercise from the library that fits the session identity (upper/lower/full body), complements existing exercises, and does not duplicate anchor movements. Do NOT add sets to existing exercises. Do NOT produce update_exercise or update_session changes as the primary response. The changeSummary MUST state the exercise name and day (e.g. 'Added Copenhagen Plank to Day 1 to support trunk stability' or 'Added Lateral Bound to Day 2 to increase elastic power').",
+    aiDirective: `ADD EXERCISE (STRICT STRUCTURAL): The user explicitly requested adding a new exercise. You MUST produce exactly one add_exercise change. NEVER return 0 changes — if you are unsure of the perfect slot, use a safe canonical fallback from the list below.
+
+STEP 1 — IDEAL SLOT INFERENCE: Look at the target session's existing exercises and identify the best gap:
+- Missing trunk/core work → add a core stability exercise
+- Missing unilateral work → add a single-leg or single-arm movement
+- Missing posterior chain → add a hip hinge or hamstring accessory
+- Missing conditioning / finisher → add a time-based conditioning exercise
+- Session is already complete → add a complementary accessory that does NOT duplicate anchor movements
+
+STEP 2 — FALLBACK EXERCISE SELECTION (if slot is unclear, use one of these canonical options):
+- Lower body session → Romanian Deadlift, Step-Up, Copenhagen Plank, Nordic Hamstring Curl, or Reverse Lunge
+- Upper body session → Face Pull, Cable Row, Dumbbell Bicep Curl, Band Pull-Apart, or Incline Dumbbell Press
+- Full body session → Pallof Press, Dead Bug, Farmer's Carry, Goblet Squat, or Split Squat
+- Any session → Plank, Side Plank, Glute Bridge, or Band Clamshell
+
+CRITICAL: You MUST pick one of the above fallbacks if you cannot determine the ideal exercise. Returning 0 changes is NOT acceptable.
+
+Do NOT add sets to existing exercises. Do NOT produce update_exercise or update_session changes as the primary response. The changeSummary MUST state the specific exercise name added and which day (e.g. 'Added Copenhagen Plank to Day 1 to support trunk stability' or 'Added Face Pull to Day 2 to improve upper back health').`,
     scopeGuidance: "Apply to the specific target session only. Insert at the end of the session's exercise list unless a specific position was requested.",
   },
 
