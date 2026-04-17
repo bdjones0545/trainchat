@@ -8,7 +8,8 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "seed:products": "pnpm exec tsx scripts/seed-products.ts"
+    "seed:products": "pnpm exec tsx scripts/seed-products.ts",
+    "reset:dev-programs": "pnpm exec tsx scripts/reset-dev-programs.ts"
   },
   "dependencies": {
     "@types/connect-pg-simple": "^7.0.3",
