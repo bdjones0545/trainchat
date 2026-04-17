@@ -1,0 +1,201 @@
+We need to fix SESSION DELETE behavior in the left sidebar/menu.
+
+There are TWO bugs:
+
+==================================================
+BUG 1 — DELETE CONFIRMATION MODAL IS BEHIND THE LEFT SIDEBAR
+==================================================
+
+When the user taps the trash/delete icon on a saved session/history item, the confirmation popup/modal does not appear correctly above the left sidebar.
+
+It is likely rendering:
+- underneath the sidebar
+- inside the sidebar stacking context
+- inside an overflow-hidden/clipped container
+- or with insufficient z-index
+
+The confirmation UI must appear ABOVE the sidebar and all menu content.
+
+==================================================
+BUG 2 — DELETED SESSIONS REAPPEAR AFTER RELOAD
+==================================================
+
+After deleting saved program sessions/history items, they may disappear temporarily but reappear when the app is reopened/reloaded.
+
+This means deletion is not being fully persisted or the UI is rehydrating from a stale source.
+
+Observed symptom:
+- session rows like “New Session” reappear after app restart
+- previously deleted items are still coming back
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make session deletion:
+- visually correct
+- actually persistent
+- immediately reflected in the sidebar
+- still gone after reload
+
+==================================================
+TASK 1 — TRACE DELETE FLOW END TO END
+==================================================
+
+Audit the full delete flow for session history / saved program entries in the left menu.
+
+Trace:
+1. click trash icon
+2. open confirm modal
+3. confirm delete action
+4. frontend handler
+5. backend/API call or data mutation
+6. source-of-truth delete
+7. cache invalidation/refetch
+8. sidebar rerender
+9. app reload behavior
+
+We need the exact source of truth for those session rows.
+
+==================================================
+TASK 2 — FIX MODAL LAYERING / PORTAL
+==================================================
+
+The confirmation popup must render above the left sidebar.
+
+Fix by:
+- rendering the dialog in a portal/root overlay layer
+- ensuring it is outside the sidebar stacking context
+- ensuring z-index is higher than the sidebar/drawer
+- ensuring no parent overflow clips it
+
+The delete confirmation should be clearly visible and centered/anchored correctly on mobile.
+
+==================================================
+TASK 3 — IDENTIFY TRUE DATA SOURCE FOR SESSION HISTORY
+==================================================
+
+Audit where the session list is coming from.
+
+Possible sources:
+- DB/conversations table
+- local state
+- localStorage
+- cached query
+- builder session list
+- saved program metadata
+- conversation history
+
+Determine the exact real source of truth.
+
+==================================================
+TASK 4 — VERIFY DELETE ACTUALLY PERSISTS
+==================================================
+
+When confirm delete is pressed, verify:
+- the correct entity ID is being deleted
+- the correct table/source is affected
+- the delete does not silently fail
+- any soft-delete logic is intentional and respected by reads
+
+If backend delete is failing or deleting the wrong entity, fix it.
+
+==================================================
+TASK 5 — INVALIDATE / REFETCH THE CORRECT QUERY
+==================================================
+
+After successful delete:
+- invalidate the exact query/cache used for the sidebar session list
+- refetch so the UI is driven by fresh persisted state
+- do not rely only on local optimistic removal
+
+The deleted row must disappear immediately AND stay gone after reload.
+
+==================================================
+TASK 6 — FIX “NEW SESSION” GHOST ITEMS
+==================================================
+
+Specifically investigate why generic rows like:
+- “New Session”
+
+are reappearing.
+
+Determine:
+- are these placeholder conversations?
+- are they draft builder sessions?
+- are they empty sessions that were never actually deleted?
+- are they being recreated automatically on load?
+- are deleted sessions still being returned by the query?
+
+Fix the root cause so deleted ghost rows do not come back.
+
+==================================================
+TASK 7 — ADD DEV LOGGING
+==================================================
+
+Add development logs for deletion:
+
+[SessionDeleteAudit] {
+  clickedSessionId,
+  clickedTitle,
+  modalOpened: true/false,
+  confirmed: true/false,
+  deleteSource: "db" | "local" | "cache",
+  deleteSucceeded: true/false,
+  invalidatedQueryKeys: [...],
+  remainingSessionIds: [...]
+}
+
+And on sidebar load:
+
+[SessionHistorySourceAudit] {
+  source,
+  sessionIds,
+  titles
+}
+
+==================================================
+TASK 8 — TEST REQUIRED
+==================================================
+
+Test these exact cases:
+
+1. Tap delete on a named session
+Expected:
+- confirmation modal visible above sidebar
+- delete works
+- row disappears
+- row stays gone after reload
+
+2. Tap delete on a “New Session” row
+Expected:
+- same behavior
+- no reappearance after reload
+
+3. Delete multiple sessions in a row
+Expected:
+- modal always visible correctly
+- no stale rows returning
+- sidebar reflects true persisted state
+
+==================================================
+TASK 9 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. what caused the modal layering bug
+2. what caused deleted sessions to reappear
+3. what source of truth the session list uses
+4. what was changed in delete persistence
+5. what query/cache invalidation was added
+6. before/after behavior for deleting “New Session”
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Deleting a session from the left menu must:
+- show a visible confirmation modal above the sidebar
+- persistently remove the session from the true source of truth
+- remove it from the sidebar immediately
+- keep it gone after app reload
