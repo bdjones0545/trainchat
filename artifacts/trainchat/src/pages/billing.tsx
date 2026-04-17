@@ -569,6 +569,8 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [anonymousUpgradePlan, setAnonymousUpgradePlan] = useState<{ planId: string; priceId: string } | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [supportModalType, setSupportModalType] = useState<SupportType | null>(null);
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameInput, setNameInput] = useState("");
@@ -632,6 +634,29 @@ export default function SettingsPage() {
       toast({ title: "Failed to save name", description: err.message, variant: "destructive" });
     } finally {
       setNameSaving(false);
+    }
+  }
+
+  // ── Account deletion ──────────────────────────────────────────────────────────
+  async function handleDeleteAccount() {
+    if (deleteLoading) return;
+    setDeleteLoading(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch("/api/account", {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error ?? "Failed to delete account. Please try again.");
+      }
+      // Clear all cached data and redirect to login
+      queryClient.clear();
+      navigate("/login");
+    } catch (err: any) {
+      setDeleteError(err.message);
+      setDeleteLoading(false);
     }
   }
 
@@ -840,27 +865,44 @@ export default function SettingsPage() {
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-sm font-bold text-red-400">Delete your account?</p>
+                    <p className="text-sm font-bold text-red-400">Permanently delete your account?</p>
                     <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                      Account deletion permanently removes your training history and coach memory. To proceed, please contact support and we'll complete it for you within 24 hours. Cancel your Stripe subscription first to stop billing.
+                      This will immediately cancel your subscription, delete all your training programs, conversation history, and coach memory. <strong className="text-foreground/70">This cannot be undone.</strong>
                     </p>
                   </div>
                 </div>
+
+                {deleteError && (
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-500/15 border border-red-500/25">
+                    <AlertCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                    <p className="text-xs text-red-300">{deleteError}</p>
+                  </div>
+                )}
+
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setShowDeleteConfirm(false)}
-                    className="flex-1 py-2.5 rounded-xl border border-border text-sm font-medium text-foreground hover:bg-accent/30 transition-all"
+                    onClick={() => {
+                      setShowDeleteConfirm(false);
+                      setDeleteError(null);
+                    }}
+                    disabled={deleteLoading}
+                    className="flex-1 py-2.5 rounded-xl border border-border text-sm font-medium text-foreground hover:bg-accent/30 transition-all disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
-                    onClick={() => {
-                      setShowDeleteConfirm(false);
-                      setSupportModalType("contact");
-                    }}
-                    className="flex-1 py-2.5 rounded-xl bg-red-500/20 border border-red-500/30 text-sm font-semibold text-red-400 hover:bg-red-500/30 transition-all"
+                    onClick={handleDeleteAccount}
+                    disabled={deleteLoading}
+                    className="flex-1 py-2.5 rounded-xl bg-red-500/20 border border-red-500/30 text-sm font-semibold text-red-400 hover:bg-red-500/30 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
                   >
-                    Contact support
+                    {deleteLoading ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Deleting…
+                      </>
+                    ) : (
+                      "Delete account"
+                    )}
                   </button>
                 </div>
               </div>

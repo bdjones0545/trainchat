@@ -7,6 +7,7 @@ import { RegisterBody, LoginBody } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
 import { logger } from "../lib/logger";
 import { mergeAnonymousToRegistered } from "../lib/anonymousMerge";
+import { getUncachableStripeClient } from "../lib/stripeClient";
 
 const router: IRouter = Router();
 
@@ -361,6 +362,84 @@ router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
     ...toPublicUser(user),
     onboardingComplete,
   });
+});
+
+/**
+ * DELETE /api/account
+ *
+ * Permanently deletes the authenticated user's account:
+ *   1. Cancels active Stripe subscription immediately (no period-end grace)
+ *   2. Deletes the user row — all related data cascades (conversations, programs,
+ *      memories, training systems, readiness, session logs, exercise logs, etc.)
+ *   3. Destroys the session cookie
+ *
+ * Anonymous users are not blocked — their row is deleted and their device/session
+ * is cleared so they can start fresh.
+ */
+router.delete("/account", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.session.userId!;
+
+  logger.info({ userId }, "[SettingsAudit:Delete] Account deletion initiated");
+
+  try {
+    // ── 1. Load user ──────────────────────────────────────────────────────────
+    const [user] = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.id, userId))
+      .limit(1);
+
+    if (!user) {
+      req.session.destroy(() => {});
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    // ── 2. Cancel Stripe subscription if active ───────────────────────────────
+    let subscriptionCanceled = false;
+    if (user.stripeSubscriptionId && user.plan !== "free") {
+      try {
+        const stripe = await getUncachableStripeClient();
+        // Retrieve subscription first to check it's still active
+        const sub = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+        const isLive = ["active", "trialing", "past_due"].includes(sub.status);
+
+        if (isLive) {
+          // Cancel immediately — no grace period, no refund (billing portal handles that)
+          await stripe.subscriptions.cancel(user.stripeSubscriptionId, {
+            invoice_now: false,
+            prorate: false,
+          });
+          subscriptionCanceled = true;
+          logger.info(
+            { userId, subscriptionId: user.stripeSubscriptionId, plan: user.plan },
+            "[SettingsAudit:Delete] Stripe subscription canceled immediately"
+          );
+        }
+      } catch (stripeErr: any) {
+        // If the subscription is already canceled in Stripe, that's fine — continue
+        if (stripeErr?.code !== "resource_missing") {
+          logger.error({ stripeErr, userId }, "[SettingsAudit:Delete] Stripe cancellation failed — proceeding with account deletion anyway");
+        }
+      }
+    }
+
+    // ── 3. Delete user row (cascades all related data) ────────────────────────
+    await db.delete(usersTable).where(eq(usersTable.id, userId));
+
+    logger.info(
+      { userId, subscriptionCanceled, plan: user.plan, isAnonymous: user.isAnonymous },
+      "[SettingsAudit:Delete] Account deleted — all data cascaded"
+    );
+
+    // ── 4. Destroy session ────────────────────────────────────────────────────
+    req.session.destroy(() => {
+      res.json({ success: true, subscriptionCanceled });
+    });
+  } catch (err) {
+    logger.error({ err, userId }, "[SettingsAudit:Delete] Account deletion failed");
+    res.status(500).json({ error: "Failed to delete account. Please try again or contact support." });
+  }
 });
 
 /**
