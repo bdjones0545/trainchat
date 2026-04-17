@@ -1,0 +1,516 @@
+We are implementing a PREMIUM “Learn Exercise” modal for TrainChat using the exact component hierarchy and prop structure below.
+
+OBJECTIVE:
+When a user taps the learn/play icon on an exercise inside the right panel / Live Program view, open a premium coaching modal that explains:
+- why the exercise is in the program
+- key coaching cues
+- common mistakes
+- demo/video access
+- optional “ask coach about this” prompts
+
+This must feel like a coaching assist layer, not a generic media popup.
+
+IMPORTANT:
+- Keep implementation mobile-first
+- Reuse existing styling patterns and dark premium UI
+- Do NOT build a new backend API for this
+- Use fallback-generated content when structured metadata is missing
+- Keep TrainChat as the authority; video links are secondary support
+
+==================================================
+COMPONENT HIERARCHY TO IMPLEMENT
+==================================================
+
+Implement this hierarchy:
+
+<LiveProgramPanel>
+  <DayCard>
+    <ExerciseRow>
+      <ExerciseLearnButton />
+    </ExerciseRow>
+  </DayCard>
+
+  <LearnExerciseModal>
+    <LearnExerciseHeader />
+    <LearnExerciseWhySection />
+    <LearnExerciseCuesSection />
+    <LearnExerciseMistakesSection />
+    <LearnExerciseModifySection />       // optional in v1, include if easy
+    <LearnExerciseDemoSection />
+    <LearnExerciseAskCoachSection />
+  </LearnExerciseModal>
+</LiveProgramPanel>
+
+==================================================
+TOP-LEVEL STATE OWNER
+==================================================
+
+The right panel / LiveProgramPanel should own:
+- modal open/close state
+- selected exercise
+- selected context
+
+Add local state like:
+- learnModalOpen: boolean
+- selectedExercise: LearnExerciseData | null
+- selectedContext: LearnExerciseContext | null
+
+Use a centralized handler:
+
+handleOpenLearnExercise(exercise, context)
+
+This prevents each exercise row from owning modal state.
+
+==================================================
+TYPES TO ADD
+==================================================
+
+Add these shared types (adjust file location as appropriate):
+
+type ExerciseRole =
+  | "PRIMARY"
+  | "SECONDARY"
+  | "POWER"
+  | "TRUNK"
+  | "ACCESSORY"
+  | "CONDITIONING"
+  | "SUPPORT"
+  | null;
+
+interface LearnExerciseData {
+  exerciseId?: string | null;
+  exerciseName: string;
+  canonicalExerciseName?: string | null;
+  role?: ExerciseRole;
+  movementFamily?: string | null;
+  bodyRegion?: string | null;
+
+  whyThisIsHere?: string | null;
+  coachingCues?: string[];
+  commonMistakes?: string[];
+
+  easierOptions?: string[];
+  harderOptions?: string[];
+  substituteOptions?: string[];
+
+  youtubeQuery?: string | null;
+}
+
+interface LearnExerciseContext {
+  dayIndex?: number | null;
+  dayTitle?: string | null;
+  sessionIdentity?: string | null;
+  programTitle?: string | null;
+  sport?: string | null;
+  goal?: string | null;
+}
+
+==================================================
+LIVE PROGRAM PANEL CHANGES
+==================================================
+
+In the right panel / LiveProgramPanel:
+
+1. Add local state:
+- learnModalOpen
+- selectedExercise
+- selectedContext
+
+2. Add handler:
+handleOpenLearnExercise(exercise, context)
+
+3. Render the modal at panel level:
+<LearnExerciseModal
+  open={learnModalOpen}
+  exercise={selectedExercise}
+  context={selectedContext}
+  onClose={...}
+  onAskCoach={...}
+/>
+
+4. Wire onAskCoach so it uses the existing conversation/refine input system.
+It can:
+- prefill the right-panel input
+OR
+- send through the existing chat send flow
+Do NOT create a new backend path.
+
+==================================================
+EXERCISE ROW CHANGES
+==================================================
+
+Update ExerciseRow to accept:
+
+interface ExerciseRowProps {
+  exercise: SessionExercise;
+  dayIndex: number;
+  dayTitle?: string;
+  sessionIdentity?: string;
+  programTitle?: string;
+  sport?: string | null;
+  goal?: string | null;
+  onOpenLearnExercise: (
+    exercise: LearnExerciseData,
+    context: LearnExerciseContext
+  ) => void;
+}
+
+Inside ExerciseRow:
+- add a small ExerciseLearnButton near the exercise name row
+- on click, map the row into LearnExerciseData + LearnExerciseContext
+- pass both up through onOpenLearnExercise
+
+Use this mapping logic as baseline:
+- exerciseId: exercise.exerciseLibraryId ?? null
+- exerciseName: exercise.name
+- canonicalExerciseName: exercise.name
+- role: mapRole(exercise.role)
+- movementFamily: exercise.movementPattern ?? null
+- bodyRegion: exercise.bodyRegion ?? null
+- coachingCues: exercise.cues ?? []
+- youtubeQuery: `${exercise.name} exercise proper form strength training`
+
+Context:
+- dayIndex
+- dayTitle
+- sessionIdentity
+- programTitle
+- sport
+- goal
+
+==================================================
+EXERCISE LEARN BUTTON
+==================================================
+
+Create:
+ExerciseLearnButton.tsx
+
+Props:
+interface ExerciseLearnButtonProps {
+  onClick: () => void;
+  ariaLabel?: string;
+}
+
+Requirements:
+- small subtle icon button
+- use play/info/video-style icon
+- hit area should still be comfortable on mobile
+- tooltip/aria label: "Learn exercise"
+
+Do NOT make this a big primary CTA.
+It is a premium secondary action.
+
+==================================================
+LEARN EXERCISE MODAL
+==================================================
+
+Create:
+LearnExerciseModal.tsx
+
+Props:
+interface LearnExerciseModalProps {
+  open: boolean;
+  exercise: LearnExerciseData | null;
+  context: LearnExerciseContext | null;
+  onClose: () => void;
+  onAskCoach: (prompt: string) => void;
+}
+
+Requirements:
+- bottom sheet on mobile
+- centered modal on larger screens if that is already a pattern
+- dark premium elevated surface
+- rounded corners (~24px)
+- scrollable content
+- height ~75–80vh on mobile
+
+When exercise is null, render nothing.
+
+The modal composes:
+- LearnExerciseHeader
+- LearnExerciseWhySection
+- LearnExerciseCuesSection
+- LearnExerciseMistakesSection
+- LearnExerciseModifySection (optional, include if simple)
+- LearnExerciseDemoSection
+- LearnExerciseAskCoachSection
+
+==================================================
+HEADER COMPONENT
+==================================================
+
+Create:
+LearnExerciseHeader.tsx
+
+Props:
+interface LearnExerciseHeaderProps {
+  exerciseName: string;
+  role?: ExerciseRole;
+  movementFamily?: string | null;
+  onClose: () => void;
+}
+
+Render:
+- exercise title
+- optional role pill
+- optional movement family subtitle
+- close button
+
+==================================================
+WHY SECTION
+==================================================
+
+Create:
+LearnExerciseWhySection.tsx
+
+Props:
+interface LearnExerciseWhySectionProps {
+  whyThisIsHere?: string | null;
+  exerciseName: string;
+  context?: LearnExerciseContext | null;
+  movementFamily?: string | null;
+  role?: ExerciseRole;
+}
+
+Behavior:
+If whyThisIsHere exists, use it.
+Otherwise generate a short fallback explanation from:
+- role
+- session identity
+- sport
+- movement family
+
+Create a helper in a shared utility file:
+buildWhyFallback(exerciseName, context, movementFamily, role): string
+
+Keep this to ~2–3 sentences max.
+
+==================================================
+CUES SECTION
+==================================================
+
+Create:
+LearnExerciseCuesSection.tsx
+
+Props:
+interface LearnExerciseCuesSectionProps {
+  cues: string[];
+  exerciseName: string;
+  movementFamily?: string | null;
+}
+
+Behavior:
+If cues exist, render them.
+If not, generate 3 fallback cues from movement family / exercise keywords.
+
+Add helper:
+buildCueFallback(exerciseName, movementFamily): string[]
+
+==================================================
+MISTAKES SECTION
+==================================================
+
+Create:
+LearnExerciseMistakesSection.tsx
+
+Props:
+interface LearnExerciseMistakesSectionProps {
+  mistakes: string[];
+  exerciseName: string;
+  movementFamily?: string | null;
+}
+
+Behavior:
+If mistakes exist, render them.
+If not, generate 3 fallback mistakes from movement family / exercise type.
+
+Add helper:
+buildMistakeFallback(exerciseName, movementFamily): string[]
+
+==================================================
+MODIFY SECTION (OPTIONAL BUT PREFERRED)
+==================================================
+
+Create:
+LearnExerciseModifySection.tsx
+
+Props:
+interface LearnExerciseModifySectionProps {
+  easierOptions: string[];
+  harderOptions: string[];
+  substituteOptions: string[];
+  exerciseName: string;
+  onSelectSuggestion?: (prompt: string) => void;
+}
+
+Behavior:
+Render compact cards or lists for:
+- Easier
+- Harder
+- If this bothers you / Swap options
+
+If structured options are missing, it is okay in v1 to hide the section entirely or render a minimal fallback.
+
+If implemented, tapping an item can call onSelectSuggestion() with prompts like:
+- "Give me an easier version of {exerciseName}"
+- "Make {exerciseName} harder"
+- "Swap {exerciseName} for a joint-friendlier option"
+
+==================================================
+DEMO SECTION
+==================================================
+
+Create:
+LearnExerciseDemoSection.tsx
+
+Props:
+interface LearnExerciseDemoSectionProps {
+  exerciseName: string;
+  youtubeQuery?: string | null;
+}
+
+Render two buttons:
+- View demo
+- Search more videos
+
+Behavior:
+- build YouTube search URL from youtubeQuery or fallback:
+  `${exerciseName} exercise proper form strength training`
+- open in new tab/window when applicable
+
+Add helper:
+buildYoutubeSearchUrl(query: string): string
+
+IMPORTANT:
+Do NOT label the primary action “YouTube.”
+Keep product language premium:
+- “View demo”
+- “Search more videos”
+
+Do NOT embed full video players in v1.
+
+==================================================
+ASK COACH SECTION
+==================================================
+
+Create:
+LearnExerciseAskCoachSection.tsx
+
+Props:
+interface LearnExerciseAskCoachSectionProps {
+  exerciseName: string;
+  onAskCoach: (prompt: string) => void;
+}
+
+Render:
+- one primary CTA OR 2–3 prompt chips/buttons
+
+Suggested prompts:
+- Explain how to perform {exerciseName}
+- Why is {exerciseName} in my program?
+- Give me an easier version of {exerciseName}
+
+Add helper:
+buildAskCoachPrompts(exerciseName: string): string[]
+
+When tapped:
+- call onAskCoach(prompt)
+
+==================================================
+UTILITY FILE
+==================================================
+
+Create a helper file, e.g.:
+lib/learn-exercise.ts
+
+Put shared helpers there:
+- buildWhyFallback(...)
+- buildCueFallback(...)
+- buildMistakeFallback(...)
+- buildYoutubeSearchUrl(...)
+- buildAskCoachPrompts(...)
+- mapRole(...) if needed
+
+Keep fallbacks simple but polished.
+
+==================================================
+VISUAL STYLE REQUIREMENTS
+==================================================
+
+Use existing TrainChat premium dark UI language.
+
+Requirements:
+- dark elevated modal surface
+- subtle borders
+- comfortable spacing
+- readable text, not too faint
+- section headers small/semibold
+- exercise title strong
+- no clutter
+
+The modal should feel like:
+- a coaching card
+not:
+- a wiki page
+- a raw YouTube launcher
+
+==================================================
+PLACEMENT + TRIGGER
+==================================================
+
+Place the ExerciseLearnButton inside each exercise row in the right panel.
+
+It must be:
+- visible enough to discover
+- subtle enough not to compete with Swap / Easier / Harder / Full Edit
+
+Prefer near the exercise name row.
+
+==================================================
+DO NOT OVERBUILD
+==================================================
+
+For v1:
+- no embedded YouTube player
+- no giant metadata schema requirement
+- no new backend API
+- no new conversation system
+- no large refactor of exercise rows
+
+Use existing data where available.
+Use polished fallbacks where missing.
+
+==================================================
+TESTING REQUIREMENTS
+==================================================
+
+Verify:
+
+1. Tapping the learn icon opens the modal for the correct exercise
+2. The modal renders cleanly on mobile
+3. Missing structured exercise data still produces useful fallback content
+4. “View demo” opens the correct search
+5. “Ask coach about this movement” routes into the existing conversation/refine flow
+6. Existing exercise controls still work and are not broken by layout changes
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+1. files/components created
+2. where the trigger was added
+3. how data is mapped into LearnExerciseData
+4. what fallback logic was added
+5. how Ask Coach is wired into existing flow
+6. any v1 simplifications made
+
+==================================================
+FINAL STANDARD
+==================================================
+
+The Learn Exercise modal should feel like a premium coaching assist layer inside TrainChat.
+
+Users should be able to understand an exercise better without leaving the product, and optionally open demo videos or ask the coach follow-up questions.
+
+Implement this now.
