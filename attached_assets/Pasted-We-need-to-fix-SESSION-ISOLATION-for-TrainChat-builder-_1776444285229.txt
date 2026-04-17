@@ -1,0 +1,156 @@
+We need to fix SESSION ISOLATION for TrainChat builder sessions.
+
+PROBLEM:
+A new builder session is inheriting sport/build context from a previous chat/session.
+
+Example:
+- previous session: soccer player
+- new session message: “I am a football player give me a 3 day strength program”
+- system response still references soccer performance support
+
+This is wrong.
+
+Each builder session must be its own entity.
+Previous sessions can inform defaults only when the current session is silent, but they must NEVER override explicit current-session input.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Ensure that each new builder session uses its own isolated working context.
+
+Current prompt/session context must take priority over:
+- previous session history
+- previous active program sport
+- saved session metadata
+- memory/profile defaults
+
+==================================================
+TASK 1 — TRACE SPORT / GOAL RESOLUTION ORDER
+==================================================
+
+Audit the exact order used to resolve:
+- sport
+- goal
+- program type
+- current build context
+
+Find where previous session context or active program metadata is overriding the current message.
+
+I want the exact precedence chain currently being used.
+
+==================================================
+TASK 2 — DEFINE CORRECT PRECEDENCE
+==================================================
+
+For a NEW BUILDER SESSION, resolve context in this order:
+
+1. explicit current user message
+2. current session-local state
+3. current builder-session metadata
+4. user profile / saved defaults
+5. previous sessions / older history
+
+The current message must always win.
+
+If current message explicitly says “football”, nothing older should be able to turn that into soccer.
+
+==================================================
+TASK 3 — ADD SESSION-LOCAL BUILD CONTEXT
+==================================================
+
+Ensure each builder session has its own isolated context object containing things like:
+- sport
+- goal
+- phase
+- build type
+- current working program identity
+
+When a new builder session is created:
+- initialize a fresh context
+- do not hydrate it with previous session-specific sport/goal unless the current prompt is silent
+
+==================================================
+TASK 4 — PREVENT CROSS-SESSION SPORT LEAKAGE
+==================================================
+
+If:
+- a new builder session starts
+- and the user explicitly mentions a sport/goal
+
+Then:
+- overwrite any inherited sport/goal immediately
+- do not use previous session sport as fallback
+- do not inject previous active program identity into the build response
+
+==================================================
+TASK 5 — MEMORY SHOULD INFORM, NOT OVERRIDE
+==================================================
+
+Persistent memory can still be used for:
+- equipment defaults
+- training age
+- injuries if intentionally saved
+- preference/style
+
+But it must NOT override explicit new-session inputs such as:
+- sport
+- current goal
+- current program type
+
+==================================================
+TASK 6 — RESPONSE TEXT MUST MATCH CURRENT SESSION
+==================================================
+
+After build, the assistant response and the generated program metadata must reflect the current session’s explicit sport/goal.
+
+Example:
+Input:
+“I am a football player give me a 3 day strength program”
+
+Expected:
+- football support, not soccer
+- no bleed from prior soccer session
+
+==================================================
+TASK 7 — TEST REQUIRED
+==================================================
+
+Test these exact cases:
+
+1. Session A:
+“I am a soccer player give me a 3 day program”
+
+2. New Builder Session B:
+“I am a football player give me a 3 day strength program”
+
+Expected:
+- Session B resolves to football
+- no soccer language anywhere in response or program metadata
+
+3. New Builder Session C:
+“Build me a 3 day strength program”
+(no sport mentioned)
+
+Expected:
+- can use saved defaults or ask
+- but only because current prompt is silent
+
+==================================================
+TASK 8 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. current broken precedence order
+2. corrected precedence order
+3. where session-local context is created/reset
+4. what was causing prior session sport leakage
+5. before/after behavior for the 3 required tests
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Each builder session must be its own entity.
+
+Previous chats may inform defaults only when the current session is silent, but they must never override explicit current-session inputs.
