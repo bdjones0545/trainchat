@@ -252,6 +252,7 @@ function hasEquipment(exerciseName: string, equipmentLevel: string): boolean {
 const ANCHOR_EXTRA_PENALTY: Record<string, number> = {
   "Broad Jump": 1.5,
   "Back Squat": 1.5,
+  "Box Jump": 1.5,
   "Weighted Pull-Up": 1.0,
   "Bulgarian Split Squat": 1.0,
   "Pallof Press": 1.0,
@@ -377,7 +378,7 @@ function ranked(pool: ExerciseMeta[], ctx: ScoreContext, primeMultiplier: number
 // ── Lower Power ───────────────────────────────────────────────────────────────
 
 const LOWER_POWER_POOL: ExerciseMeta[] = [
-  { name: "Box Jump", sportTags: ["soccer", "basketball", "football", "rugby", "lacrosse", "volleyball", "hockey", "track"], intentTags: ["power", "speed"], neuralDemand: "high", fatigueCost: "moderate", isDefaultAnchor: false },
+  { name: "Box Jump", sportTags: ["soccer", "basketball", "football", "rugby", "lacrosse", "volleyball", "hockey", "track"], intentTags: ["power", "speed"], neuralDemand: "high", fatigueCost: "moderate", isDefaultAnchor: true },
   { name: "Broad Jump", sportTags: ["soccer", "football", "rugby", "lacrosse", "track", "sprint"], intentTags: ["power", "speed", "elastic"], neuralDemand: "high", fatigueCost: "moderate", isDefaultAnchor: true },
   { name: "Vertical Jump (countermovement)", sportTags: ["basketball", "volleyball", "football"], intentTags: ["power", "elastic"], neuralDemand: "high", fatigueCost: "low" },
   { name: "Hurdle Hop", sportTags: ["track", "soccer", "football", "sprint"], intentTags: ["power", "elastic", "speed"], neuralDemand: "high", fatigueCost: "moderate" },
@@ -914,7 +915,7 @@ export function buildVariationMandate(sel: SlotExerciseSelection, sport: string 
     `intent matching, novelty rotation, and repeat-avoidance. They are FINAL for this build.`,
     ``,
     `OVERRIDE PROTECTION: Substituting any locked exercise below with a generic default`,
-    `(Back Squat, Broad Jump, Pull-Up, Bulgarian Split Squat, Pallof Press, Conventional Deadlift)`,
+    `(Back Squat, Box Jump, Broad Jump, Pull-Up, Bulgarian Split Squat, Pallof Press, Conventional Deadlift)`,
     `is a BUILD FAILURE — unless that generic exercise IS the one explicitly listed.`,
     ``,
     `### LOCKED EXERCISES — USE THESE EXACTLY`,
@@ -937,6 +938,7 @@ export function buildVariationMandate(sel: SlotExerciseSelection, sport: string 
     ``,
     `Do NOT use these unless they appear above as the locked selection:`,
     `- PROHIBITED as squat primary: Back Squat → use ${sel.bilateral_squat_strength}`,
+    `- PROHIBITED as power exercise: Box Jump → use ${sel.lower_power}`,
     `- PROHIBITED as power exercise: Broad Jump → use ${sel.lower_power}`,
     `- PROHIBITED as hinge primary: Conventional Deadlift → use ${sel.bilateral_hinge_strength}`,
     `- PROHIBITED as unilateral primary: Bulgarian Split Squat → use ${sel.unilateral_lower}`,

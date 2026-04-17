@@ -33,7 +33,7 @@ import {
   type TransformRequest,
 } from "./split-transform";
 import { retrieveRelevantKnowledge } from "./knowledge-retrieval";
-import { buildArchitectureBrief, validateProgramArchitecture, extractSportFromRequest } from "./program-architecture-engine";
+import { buildArchitectureBrief, validateProgramArchitecture, extractSportFromRequest, getLastSlotSelection, enforceVariationMandateOnProgram } from "./program-architecture-engine";
 import { buildConditioningContext, isConditioningGoal } from "./conditioning-engine";
 import { buildPowerSpeedContext, isPowerRequest, isSpeedRequest } from "./power-speed-engine";
 import { buildSportContext, mapSportToProfile, detectSeasonContext } from "./sport-profile-engine";
@@ -2131,6 +2131,10 @@ export async function generateAIResponse(
     intentResult?.type === "START_NEW_PROGRAM" ||
     actionDecision?.actionType === "STRUCTURAL_REBUILD";
 
+  // Captures the variation engine's locked exercise selections for post-generation enforcement.
+  // Set when buildArchitectureBrief runs (non-SP path only).
+  let lockedExerciseSelections = getLastSlotSelection();
+
   if (isBuildIntent) {
     // For structural rebuilds, also check the intent metadata for targetDays
     const metaDays = (intentResult?.metadata as { targetDays?: number | null } | undefined)?.targetDays ?? null;
@@ -2139,9 +2143,11 @@ export async function generateAIResponse(
     const goal = extractedConstraints?.primaryGoal ?? null;
     try {
       architectureBriefText = buildArchitectureBrief(days, sport, goal, userMessage, Math.random());
+      // Capture the freshly-computed slot selections (set as a side-effect inside buildArchitectureBrief)
+      lockedExerciseSelections = getLastSlotSelection();
       if (architectureBriefText) {
         logger.info(
-          { days, sport, goal, intentType: intentResult?.type },
+          { days, sport, goal, intentType: intentResult?.type, hasSelections: !!lockedExerciseSelections },
           "[ArchitectureEngine] Architecture brief injected into prompt"
         );
       }
@@ -2597,6 +2603,22 @@ Output the corrected program JSON and a brief calm confirmation.`;
         logger.info(
           { injuredRegion: routingDecision.returnFromInjury.injuredRegion },
           "[ReturnFromInjuryValidator] Safety validation passed cleanly",
+        );
+      }
+    }
+
+    // ── Variation Mandate Enforcement — Post-Generation Guardrail ─────────
+    // Deterministic step: regardless of whether the AI followed the mandate,
+    // replace any prohibited default exercise with the variation engine's
+    // locked selection. This fires only on build intents where we computed
+    // a slotSelection earlier in this call.
+    if (isBuildIntent && structuredData && lockedExerciseSelections) {
+      const enforced = enforceVariationMandateOnProgram(structuredData, lockedExerciseSelections);
+      if (enforced && enforced !== structuredData) {
+        structuredData = enforced as typeof structuredData;
+        logger.info(
+          { hasSelections: true },
+          "[VariationEnforcer] Post-generation enforcement applied — prohibited defaults replaced"
         );
       }
     }

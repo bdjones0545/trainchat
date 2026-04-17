@@ -2153,6 +2153,9 @@ export function computeWeeklyArchitecture(
 
 // ─── Build Architecture Brief (AI prompt injection) ──────────────────────────
 
+/** Stores the slot selections from the most recent buildArchitectureBrief call (non-SP path). */
+let _lastSlotSelection: SlotExerciseSelection | null = null;
+
 export function buildArchitectureBrief(
   daysPerWeek: number | null,
   sport: string | null,
@@ -2187,6 +2190,7 @@ export function buildArchitectureBrief(
     hasLimitedEquipment ? "home_limited" : "full_gym";
 
   const slotSelection = selectSlotExercises(seed, sport, goal, neuralDemand, equipmentLevel, isDeload);
+  _lastSlotSelection = slotSelection;
   const arch = computeWeeklyArchitecture(daysPerWeek, sport, goal, seed);
   const isHockey = sport?.toLowerCase().includes("hockey") ?? false;
   const isFootball = !!(sport && /\bfootball\b/i.test(sport) && !/soccer/.test(sport.toLowerCase()));
@@ -2576,6 +2580,85 @@ export function validateProgramArchitecture(
     issues,
     warnings,
   };
+}
+
+// ─── Variation Mandate Enforcement ───────────────────────────────────────────
+//
+// After the AI generates a program, we run a deterministic enforcer that
+// replaces any prohibited default exercise with the locked variation-engine
+// selection. This guarantees variety regardless of whether the AI followed
+// the mandate in the system prompt.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Returns the slot selections computed during the last buildArchitectureBrief call. */
+export function getLastSlotSelection(): SlotExerciseSelection | null {
+  return _lastSlotSelection;
+}
+
+/**
+ * Scans a generated program and replaces any prohibited default exercise with
+ * its locked variation-engine alternative.
+ *
+ * Safe: only replaces exercises where the locked selection DIFFERS from the
+ * prohibited default. If Back Squat scored highest this build, it remains.
+ */
+export function enforceVariationMandateOnProgram(
+  program: { days: Array<{ exercises?: Array<{ name: string; [key: string]: unknown }> }> } | null,
+  selections: SlotExerciseSelection | null,
+): { days: Array<{ exercises?: Array<{ name: string; [key: string]: unknown }> }> } | null {
+  if (!program || !selections) return program;
+
+  const replacements: Record<string, string> = {};
+  if (selections.bilateral_squat_strength && selections.bilateral_squat_strength !== "Back Squat")
+    replacements["Back Squat"] = selections.bilateral_squat_strength;
+  if (selections.lower_power) {
+    if (selections.lower_power !== "Broad Jump") replacements["Broad Jump"] = selections.lower_power;
+    if (selections.lower_power !== "Box Jump") replacements["Box Jump"] = selections.lower_power;
+  }
+  if (selections.bilateral_hinge_strength && selections.bilateral_hinge_strength !== "Conventional Deadlift")
+    replacements["Conventional Deadlift"] = selections.bilateral_hinge_strength;
+  if (selections.unilateral_lower && selections.unilateral_lower !== "Bulgarian Split Squat")
+    replacements["Bulgarian Split Squat"] = selections.unilateral_lower;
+  if (selections.trunk_anti_rotation && selections.trunk_anti_rotation !== "Pallof Press")
+    replacements["Pallof Press"] = selections.trunk_anti_rotation;
+  if (
+    selections.upper_pull_primary &&
+    selections.upper_pull_primary !== "Pull-Up" &&
+    selections.upper_pull_primary !== "Weighted Pull-Up"
+  ) {
+    replacements["Pull-Up"] = selections.upper_pull_primary;
+    replacements["Weighted Pull-Up"] = selections.upper_pull_primary;
+    replacements["Unweighted Pull-Up"] = selections.upper_pull_primary;
+  }
+
+  if (Object.keys(replacements).length === 0) return program;
+
+  let enforced = 0;
+  const patchedDays = program.days.map((day) => ({
+    ...day,
+    exercises: (day.exercises ?? []).map((ex) => {
+      const replacement = replacements[ex.name];
+      if (replacement) {
+        enforced++;
+        return { ...ex, name: replacement };
+      }
+      return ex;
+    }),
+  }));
+
+  if (enforced > 0) {
+    const logger = (global as Record<string, unknown>).__trainchatLogger;
+    if (logger && typeof (logger as { info: unknown }).info === "function") {
+      (logger as { info: (obj: unknown, msg: string) => void }).info(
+        { enforced, replacements },
+        "[VariationEnforcer] Post-generation enforcement — replaced prohibited defaults",
+      );
+    } else {
+      console.log(`[VariationEnforcer] Replaced ${enforced} prohibited default(s) with locked selections`);
+    }
+  }
+
+  return { ...program, days: patchedDays };
 }
 
 // ─── Sport extraction helper ──────────────────────────────────────────────────
