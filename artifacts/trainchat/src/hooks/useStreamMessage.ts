@@ -159,6 +159,12 @@ export interface UIContext {
    * - Route ambiguous messages toward CREATE rather than EDIT
    */
   newBuildSession?: boolean;
+  /** Source of the message — "right_panel" for vibe coding actions */
+  source?: string;
+  /** Day index (0-based) for session-scoped refinement actions */
+  dayIndex?: number;
+  /** Exercise ID for exercise-scoped refinement actions */
+  exerciseId?: number;
 }
 
 interface UseStreamMessageResult {

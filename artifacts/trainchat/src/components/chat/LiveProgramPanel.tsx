@@ -64,8 +64,8 @@ interface Props {
   newProgramSignal?: number;
   /** Change targets from the latest edit — used for highlighting and scrolling */
   changeTargets?: ChangeTarget[];
-  /** Callback to send a pre-written coaching message from the Forecast tab */
-  onSendMessage?: (message: string) => void;
+  /** Callback to send a coaching message — optionally with extra context (source, dayIndex, etc.) */
+  onSendMessage?: (message: string, options?: Record<string, unknown>) => void;
   /** Hint from the acknowledged intent during an active DIRECT_MUTATION stream */
   pendingChangeHint?: string;
   /** Summary of the last applied change — shown as a continuity chip in the panel header */
@@ -353,6 +353,25 @@ function EmptyProgramState() {
   );
 }
 
+// ─── Vibe refinement chip definitions ────────────────────────────────────────
+
+const GLOBAL_CHIPS: { label: string; message: string; icon: string }[] = [
+  { label: "More Explosive", message: "Make this program more explosive", icon: "⚡" },
+  { label: "More Strength", message: "Make this program more strength focused", icon: "💪" },
+  { label: "More Endurance", message: "Add more endurance work to this program", icon: "🔁" },
+  { label: "Shorter Sessions", message: "Shorten all sessions", icon: "⏱" },
+  { label: "Lower Impact", message: "Make this program lower impact", icon: "🦵" },
+  { label: "Home Gym Version", message: "Convert this to a home gym version", icon: "🏠" },
+];
+
+const SESSION_ACTIONS: { label: string; buildMessage: (dayNum: number) => string }[] = [
+  { label: "More Explosive", buildMessage: (d) => `Make Day ${d} more explosive` },
+  { label: "Easier", buildMessage: (d) => `Make Day ${d} easier` },
+  { label: "Harder", buildMessage: (d) => `Make Day ${d} harder` },
+  { label: "Shorter", buildMessage: (d) => `Make Day ${d} shorter` },
+  { label: "Add Exercise", buildMessage: (d) => `Add an exercise to Day ${d}` },
+];
+
 function ProgramTab({
   program,
   buildingState,
@@ -369,12 +388,48 @@ function ProgramTab({
   newChangeSignal,
   pendingChangeHint,
   lastChangeSummary,
+  onSendMessage,
 }: Omit<Props, "hasActiveSystem">) {
   const queryClient = useQueryClient();
   const [expandedDay, setExpandedDay] = useState<number | null>(0);
   const prevProgramRef = useRef<ProgramStructure | null>(null);
   const [animatedKeys, setAnimatedKeys] = useState<Map<string, DiffType>>(new Map());
   const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Refinement state ─────────────────────────────────────────────────────
+  const [pendingRefinement, setPendingRefinement] = useState<string | null>(null);
+  const [refineInput, setRefineInput] = useState("");
+  const [showProgramUpdated, setShowProgramUpdated] = useState(false);
+  const programUpdatedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevBuildingRef = useRef(false);
+
+  // Clear loading state + flash "Program Updated" when stream completes
+  useEffect(() => {
+    const isBuilding = !!buildingState?.isBuilding;
+    if (prevBuildingRef.current && !isBuilding && pendingRefinement) {
+      setPendingRefinement(null);
+      setShowProgramUpdated(true);
+      if (programUpdatedTimerRef.current) clearTimeout(programUpdatedTimerRef.current);
+      programUpdatedTimerRef.current = setTimeout(() => setShowProgramUpdated(false), 3000);
+    }
+    prevBuildingRef.current = isBuilding;
+    return () => {
+      if (programUpdatedTimerRef.current) clearTimeout(programUpdatedTimerRef.current);
+    };
+  }, [buildingState?.isBuilding, pendingRefinement]);
+
+  function sendRefinement(message: string, key: string, options?: Record<string, unknown>) {
+    if (!onSendMessage || buildingState?.isBuilding) return;
+    setPendingRefinement(key);
+    onSendMessage(message, { source: "right_panel", ...options });
+  }
+
+  function handleRefineSubmit() {
+    const msg = refineInput.trim();
+    if (!msg || !onSendMessage || buildingState?.isBuilding) return;
+    setRefineInput("");
+    sendRefinement(msg, "refine-input");
+  }
 
   // ── Session mode ─────────────────────────────────────────────────────────
   type SessionMode = "idle" | "active" | "completed";
@@ -687,6 +742,50 @@ function ProgramTab({
           </div>
         )}
 
+        {/* Program Updated flash */}
+        {showProgramUpdated && (
+          <div
+            className="flex items-center gap-1.5 mb-3 px-2.5 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20"
+            style={{ animation: "fadeSlideIn 0.2s ease both" }}
+          >
+            <CheckCircle className="w-3 h-3 text-green-400 flex-shrink-0" />
+            <span className="text-[10px] font-semibold text-green-400">Program Updated</span>
+          </div>
+        )}
+
+        {/* Global refinement chips */}
+        {onSendMessage && (
+          <div className="mb-3">
+            <p className="text-[9px] font-bold text-muted-foreground/50 uppercase tracking-[0.1em] mb-1.5">Quick Refine</p>
+            <div className="flex flex-wrap gap-1.5">
+              {GLOBAL_CHIPS.map((chip) => {
+                const key = `global-${chip.label}`;
+                const isLoading = pendingRefinement === key;
+                const isDisabled = !!buildingState?.isBuilding;
+                return (
+                  <button
+                    key={chip.label}
+                    onClick={() => sendRefinement(chip.message, key)}
+                    disabled={isDisabled}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold border transition-all duration-150 active:scale-95 ${
+                      isLoading
+                        ? "bg-primary/20 border-primary/40 text-primary"
+                        : "bg-muted/40 border-border/60 text-muted-foreground hover:bg-accent hover:text-foreground hover:border-primary/30"
+                    } disabled:opacity-40 disabled:cursor-not-allowed`}
+                  >
+                    {isLoading ? (
+                      <Loader2 className="w-2.5 h-2.5 animate-spin flex-shrink-0" />
+                    ) : (
+                      <span className="text-[10px] leading-none">{chip.icon}</span>
+                    )}
+                    {chip.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Action buttons */}
         <div className="flex gap-2">
           {onSave && (
@@ -917,6 +1016,36 @@ function ProgramTab({
                         </div>
                       )}
 
+                      {/* Session refine actions */}
+                      {onSendMessage && (
+                        <div className="px-3 py-2 flex flex-wrap gap-1.5 border-b border-border/30">
+                          {SESSION_ACTIONS.map((action) => {
+                            const key = `day-${idx}-${action.label}`;
+                            const isLoading = pendingRefinement === key;
+                            const isDisabled = !!buildingState?.isBuilding;
+                            return (
+                              <button
+                                key={action.label}
+                                onClick={() =>
+                                  sendRefinement(action.buildMessage(day.dayNumber), key, { dayIndex: idx })
+                                }
+                                disabled={isDisabled}
+                                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold border transition-all duration-150 active:scale-95 ${
+                                  isLoading
+                                    ? "bg-primary/20 border-primary/40 text-primary"
+                                    : "bg-muted/30 border-border/50 text-muted-foreground hover:bg-accent hover:text-foreground hover:border-primary/25"
+                                } disabled:opacity-40 disabled:cursor-not-allowed`}
+                              >
+                                {isLoading && (
+                                  <Loader2 className="w-2.5 h-2.5 animate-spin flex-shrink-0" />
+                                )}
+                                {action.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
                       {/* Exercise rows */}
                       {(day.exercises ?? []).map((ex, exIdx) => {
                         const exKey = `d${idx}-e${exIdx}`;
@@ -1018,6 +1147,42 @@ function ProgramTab({
           );
         })}
       </div>
+
+      {/* Freeform refinement input — anchored at the panel bottom */}
+      {onSendMessage && (
+        <div className="flex-shrink-0 border-t border-border/50 bg-background/80 backdrop-blur-sm px-3 py-2">
+          <div className="flex items-center gap-2 bg-card border border-border/60 rounded-xl focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/15 transition-all duration-150">
+            <input
+              type="text"
+              value={refineInput}
+              onChange={(e) => setRefineInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleRefineSubmit();
+                }
+              }}
+              placeholder="Refine this program…"
+              disabled={!!buildingState?.isBuilding}
+              className="flex-1 bg-transparent px-3 py-2 text-[11px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none disabled:opacity-50"
+            />
+            <button
+              onClick={handleRefineSubmit}
+              disabled={!refineInput.trim() || !!buildingState?.isBuilding}
+              className="mr-2 p-1.5 rounded-lg bg-primary/15 text-primary hover:bg-primary/25 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 active:scale-95 flex-shrink-0"
+              aria-label="Send refinement"
+            >
+              {pendingRefinement === "refine-input" ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2L2 8.5l4.5 1.5L8 14l2-4.5L14 2z" />
+                </svg>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1567,6 +1732,7 @@ export default function LiveProgramPanel({
             onFeedback={onFeedback}
             onLogSession={onLogSession}
             onUpgrade={onUpgrade}
+            onSendMessage={onSendMessage}
             isSaving={isSaving}
             isSaved={isSaved}
             isPremium={isPremium}

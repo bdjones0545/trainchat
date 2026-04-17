@@ -538,7 +538,7 @@ export default function Chat() {
     );
   }
 
-  async function handleSend(text?: string) {
+  async function handleSend(text?: string, extraContext?: Record<string, unknown>) {
     const content = (text ?? inputText).trim();
     if (!content || !activeConvoId || stream.isActive) return;
 
@@ -562,6 +562,8 @@ export default function Chat() {
       activeProgramName: isNewBuildSession ? null : ((activeSystem as any)?.programName ?? null),
       // Signal backend to use only this conversation's history for intent routing
       newBuildSession: isNewBuildSession || undefined,
+      // Extra context from panel actions (source, dayIndex, exerciseId, etc.)
+      ...(extraContext ?? {}),
     };
     const result = await stream.send(activeConvoId, content, chatUIContext);
 
@@ -1242,7 +1244,7 @@ export default function Chat() {
           onFeedback={() => { setShowFeedback(true); setMobilePanel(null); }}
           onLogSession={() => { setShowSessionLog(true); setMobilePanel(null); }}
           onUpgrade={() => { setShowPricing(true); setMobilePanel(null); }}
-          onSendMessage={(msg) => handleSend(msg)}
+          onSendMessage={(msg, opts) => handleSend(msg, opts)}
           isSaving={!!latestProgram && isSaving}
           isSaved={isInSystem}
           isPremium={isPremium}
@@ -1786,7 +1788,7 @@ export default function Chat() {
                   onFeedback={() => setShowFeedback(true)}
                   onLogSession={() => setShowSessionLog(true)}
                   onUpgrade={() => setShowPricing(true)}
-                  onSendMessage={(msg) => handleSend(msg)}
+                  onSendMessage={(msg, opts) => handleSend(msg, opts)}
                   isSaving={!!latestProgram && isSaving}
                   isSaved={isInSystem}
                   isPremium={isPremium}
