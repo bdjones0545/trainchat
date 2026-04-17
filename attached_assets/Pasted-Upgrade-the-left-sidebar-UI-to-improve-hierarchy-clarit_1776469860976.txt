@@ -1,0 +1,95 @@
+Upgrade the left sidebar UI to improve hierarchy, clarity, and system feedback.
+
+==================================================
+GOAL
+==================================================
+
+Make the sidebar feel:
+- like a system control panel
+- not just navigation
+- clearly state-driven
+
+==================================================
+STEP 1 — ACTIVE PROGRAM EMPHASIS
+==================================================
+
+Add visual highlight to "Active Program":
+
+- subtle background tint OR glow
+- optional left accent bar
+- slightly brighter text
+
+==================================================
+STEP 2 — ADD SYSTEM STATUS
+==================================================
+
+Under "Active Program", add subtext:
+
+Examples:
+- "Live system"
+- "Ready"
+- "Building..."
+
+Use smaller, muted text with optional green dot
+
+==================================================
+STEP 3 — RENAME BUILDER SESSION
+==================================================
+
+Change:
+
+"New Builder Session"
+→ "New Program"
+
+==================================================
+STEP 4 — IMPROVE PROFILE HEADER
+==================================================
+
+Enhance top user block:
+
+- slightly increase avatar size
+- add subtle glow or ring
+- reduce emphasis on subtitle text
+
+Optional:
+Add small label: "AI Coach Active"
+
+==================================================
+STEP 5 — IMPROVE EMPTY SESSION STATE
+==================================================
+
+Replace:
+
+"No sessions yet"
+
+With:
+
+"No sessions yet"
+"Start a program to begin your history"
+
+==================================================
+STEP 6 — ADD TAP FEEDBACK
+==================================================
+
+On tap:
+- slight scale down (0.98)
+- subtle background highlight
+
+==================================================
+STEP 7 — SECTION LABEL POLISH
+==================================================
+
+Improve "TRAINING SYSTEM":
+
+- slightly dim color
+- increase letter spacing
+- add subtle divider below
+
+==================================================
+RESULT
+==================================================
+
+Sidebar now feels:
+- premium
+- state-aware
+- system-driven
