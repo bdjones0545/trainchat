@@ -81,11 +81,11 @@ interface Props {
   lastChangeSummary?: string;
   /**
    * Identifies the source of the displayed program so the panel can label it correctly.
-   *  "db_active"   — live, DB-backed training system (canonical)
-   *  "draft_build" — unsaved program generated in this session (not yet in DB)
-   *  "none"        — no program to display
+   *  "live"  — canonical DB-backed active training system
+   *  "draft" — unsaved program generated in this browser session (not yet in DB)
+   *  "none"  — no program to display
    */
-  programSource?: "db_active" | "draft_build" | "none";
+  programSource?: "live" | "draft" | "none";
 }
 
 type Tab = "program" | "changes" | "history" | "forecast";
@@ -783,7 +783,7 @@ function ProgramTab({
           <h3 className="text-[15px] font-bold text-foreground leading-snug tracking-tight flex-1">
             {program.programName}
           </h3>
-          {programSource === "draft_build" && (
+          {programSource === "draft" && (
             <span className="flex-shrink-0 mt-0.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/30 text-[9px] font-semibold text-amber-400 uppercase tracking-wider">
               Draft — not saved
             </span>
@@ -1791,7 +1791,7 @@ export default function LiveProgramPanel({
   onClose,
   pendingChangeHint,
   lastChangeSummary,
-  programSource = "none",
+  programSource = "none" as const,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("program");
   const [hasUnseenChange, setHasUnseenChange] = useState(false);

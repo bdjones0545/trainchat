@@ -1,0 +1,110 @@
+We need to enforce strict state integrity rules for program display to prevent ghost programs from appearing again.
+
+==================================================
+PRIMARY RULE — SINGLE SOURCE OF TRUTH
+==================================================
+
+The ONLY source of a live program is:
+
+- DB-backed activeSystem
+
+No other source (conversation history, structuredData, cache, local state) is allowed to present a program as "live".
+
+==================================================
+RULES FOR PROGRAM DISPLAY
+==================================================
+
+1. LIVE PROGRAM
+- Source: DB (activeSystem)
+- Condition: activeSystem != null
+- UI: Full program shown
+- Label: none (default live)
+
+2. DRAFT PROGRAM (CURRENT SESSION ONLY)
+- Source: assistant message that MATCHES sessionDraftMsgIdRef
+- Condition:
+    - activeSystem == null
+    - AND message.id === sessionDraftMsgIdRef
+- UI: show program
+- Label: "Draft — not saved"
+
+3. NO PROGRAM
+- Condition:
+    - activeSystem == null
+    - AND no valid sessionDraftMsgIdRef match
+- UI: empty state
+- MUST NOT fallback to conversation history
+
+4. HISTORY (STRICTLY NON-LIVE)
+- Historical messages with structuredData must NEVER:
+    - set latestProgram
+    - populate sidebar automatically
+    - be treated as draft or live
+
+==================================================
+FORBIDDEN BEHAVIOR (HARD FAIL)
+==================================================
+
+The system must NEVER:
+- Hydrate latestProgram from ANY assistant message unless:
+    message.id === sessionDraftMsgIdRef
+
+- Show a program in the sidebar when:
+    activeSystem == null AND no valid draft exists
+
+- Use latestProgram as a fallback for displayProgram when activeSystem is null
+
+==================================================
+MANDATORY CLEARING RULE
+==================================================
+
+Whenever:
+- activeSystem becomes null
+OR
+- messages change and no message matches sessionDraftMsgIdRef
+
+Then:
+- latestProgram MUST be set to null immediately
+
+No exceptions.
+
+==================================================
+ASSERTION LAYER (DEV ONLY)
+==================================================
+
+Add runtime assertions:
+
+if (!activeSystem && latestProgram && programSource === "live") {
+  console.error("[STATE VIOLATION] Ghost live program detected");
+  throw new Error("Live program cannot exist without activeSystem");
+}
+
+if (latestProgram && latestProgram.messageId !== sessionDraftMsgIdRef) {
+  console.error("[STATE VIOLATION] Unauthorized draft source");
+}
+
+==================================================
+DEBUG LOGGING
+==================================================
+
+Log every sidebar render:
+
+[ProgramStateAudit] {
+  activeSystemId,
+  latestProgramMessageId,
+  sessionDraftMsgId,
+  programSource: "live" | "draft" | "none",
+  messagesCount
+}
+
+==================================================
+FINAL GUARANTEE
+==================================================
+
+After implementation:
+
+- Clearing DB must result in ZERO programs shown anywhere
+- Sidebar must NEVER show a ghost program
+- Only current-session draft OR DB active system can render a program
+
+Any violation must log loudly in development.

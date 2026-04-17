@@ -42,6 +42,13 @@ export interface ProgramStructure {
   whatChanged?: string;
   whyChanged?: string;
   days: ProgramDay[];
+  /**
+   * Internal tracking field: the ID of the assistant message whose structuredData
+   * produced this draft. Set when latestProgram is written from the messages effect.
+   * Used by the state-integrity assertion layer to detect unauthorized draft sources.
+   * Never comes from the API — this is a frontend-only field.
+   */
+  _sourceMessageId?: number;
 }
 
 interface Props {

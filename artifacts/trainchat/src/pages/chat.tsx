@@ -330,11 +330,14 @@ export default function Chat() {
     ? (isNewBuildSession ? null : dbSystemProgram)
     : latestProgram;
 
-  // Source label used by LiveProgramPanel to distinguish live vs draft vs empty
-  type DisplayProgramSource = "db_active" | "draft_build" | "none";
+  // Source label passed to LiveProgramPanel so it can label the program correctly.
+  // "live"  — canonical DB-backed active training system
+  // "draft" — unsaved program generated in this browser session (not yet in DB)
+  // "none"  — no program to show
+  type DisplayProgramSource = "live" | "draft" | "none";
   const displayProgramSource: DisplayProgramSource = hasActiveSystem
-    ? (isNewBuildSession ? "none" : "db_active")
-    : (latestProgram ? "draft_build" : "none");
+    ? (isNewBuildSession ? "none" : "live")
+    : (latestProgram ? "draft" : "none");
 
   // The program is "in system" if explicitly saved this session OR if
   // we're showing the DB-backed program (no chat draft, system active, not a new build).
@@ -345,26 +348,67 @@ export default function Chat() {
     console.log("[Chat] auth state:", { hasUser: !!me, meLoading, meError });
   }, [me, meLoading, meError]);
 
-  // ── Dev logging: sidebar program source (Task 7) ─────────────────────────
+  // ── State integrity assertions + audit log (DEV ONLY) ───────────────────
+  // Maps the internal source type to the canonical audit label.
   useEffect(() => {
     if (!import.meta.env.DEV) return;
-    const source: DisplayProgramSource = hasActiveSystem
-      ? (isNewBuildSession ? "none" : "db_active")
-      : (latestProgram ? "draft_build" : "none");
-    const isDraft = source === "draft_build";
-    console.log("[LiveProgramSidebarState]", {
+
+    const programSource: "live" | "draft" | "none" = hasActiveSystem
+      ? (isNewBuildSession ? "none" : "live")
+      : (latestProgram ? "draft" : "none");
+
+    // ── ASSERTION 1: Ghost live program ────────────────────────────────────
+    // latestProgram must never exist while an activeSystem is also present —
+    // the messages effect is supposed to clear it when hasActiveSystem = true.
+    if (hasActiveSystem && latestProgram) {
+      console.error(
+        "[STATE VIOLATION] Ghost draft detected — latestProgram is non-null while activeSystem exists. " +
+        "The messages effect should have cleared it.",
+        { activeSystemId: activeSystem?.id, latestProgramName: latestProgram.programName }
+      );
+    }
+
+    // ── ASSERTION 2: Unauthorized draft source ─────────────────────────────
+    // If latestProgram exists, its _sourceMessageId MUST match sessionDraftMsgIdRef.
+    // Any mismatch means a historical message sneaked through the ghost-prevention gate.
+    if (latestProgram) {
+      if (latestProgram._sourceMessageId === undefined) {
+        console.error(
+          "[STATE VIOLATION] Unauthorized draft source — latestProgram has no _sourceMessageId. " +
+          "It was set without going through the session-draft gate.",
+          { latestProgramName: latestProgram.programName }
+        );
+      } else if (latestProgram._sourceMessageId !== sessionDraftMsgIdRef.current) {
+        console.error(
+          "[STATE VIOLATION] Unauthorized draft source — _sourceMessageId mismatch.",
+          {
+            latestProgramMessageId: latestProgram._sourceMessageId,
+            sessionDraftMsgId: sessionDraftMsgIdRef.current,
+          }
+        );
+      }
+    }
+
+    // ── ASSERTION 3: Program visible without valid source ──────────────────
+    // displayProgram should only be non-null when source is "live" or "draft".
+    if (displayProgram && programSource === "none") {
+      console.error(
+        "[STATE VIOLATION] displayProgram is non-null but programSource is 'none'. " +
+        "A program is rendering in the sidebar with no valid source.",
+        { displayProgramName: displayProgram.programName }
+      );
+    }
+
+    // ── Canonical audit log ────────────────────────────────────────────────
+    console.log("[ProgramStateAudit]", {
       activeSystemId: activeSystem?.id ?? null,
-      source,
-      isDraft,
-      programId: activeSystem?.id ?? null,
-      conversationId: activeConvoId,
+      latestProgramMessageId: latestProgram?._sourceMessageId ?? null,
       sessionDraftMsgId: sessionDraftMsgIdRef.current,
-      isNewBuildSession,
-      weekDataSessions: weekData?.sessions?.length ?? 0,
-      day1Exercises: displayProgram?.days?.[0]?.exercises?.map((e: { name: string }) => e.name) ?? [],
+      programSource,
+      messagesCount: messages.length,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasActiveSystem, activeSystem?.id, latestProgram, displayProgram, weekData, isNewBuildSession, activeConvoId]);
+  }, [hasActiveSystem, activeSystem?.id, latestProgram, displayProgram, isNewBuildSession, messages.length]);
 
   // FIX 7: fail-safe — fires ONCE on mount; if auth is still unresolved after 4s,
   // force the agent shell to render so the user is never stuck on a spinner.
@@ -535,6 +579,9 @@ export default function Chat() {
             const parsed = JSON.parse(last.structuredData) as ProgramStructure;
             const safe: ProgramStructure = {
               ...parsed,
+              // Stamp the source message ID so the assertion layer can verify
+              // that this latestProgram was produced by the registered session draft.
+              _sourceMessageId: last.id,
               days: Array.isArray(parsed.days) ? parsed.days.map((d) => ({
                 ...d,
                 exercises: Array.isArray(d.exercises) ? d.exercises : [],
