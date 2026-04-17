@@ -1,0 +1,148 @@
+We need to build an EXERCISE VARIATION LAYER for TrainChat.
+
+OBJECTIVE:
+Stop initial program builds from using the same exercises and block structure every time.
+
+Current problem:
+Even after fixing doctrine and architecture, first builds still overuse the same default exercises and session flow:
+- Broad Jump
+- Back Squat
+- Conventional Deadlift
+- Bulgarian Split Squat
+- Pallof Press
+
+The system needs controlled variation, not randomness.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+For each session role / movement slot, choose the BEST-FIT exercise from a candidate pool while avoiding repetitive defaults.
+
+==================================================
+TASK 1 — DEFINE SLOT-BASED EXERCISE SELECTION
+==================================================
+
+Create a variation engine that works by slot, not by full-program randomness.
+
+Examples of slots:
+- lower_power
+- bilateral_squat_strength
+- bilateral_hinge_strength
+- unilateral_lower
+- trunk_anti_rotation
+- trunk_anti_extension
+- upper_push
+- upper_pull
+- rotational_power
+- conditioning_finisher
+
+Each slot should map to a candidate pool of exercises.
+
+==================================================
+TASK 2 — BUILD CANDIDATE POOLS
+==================================================
+
+For the highest-frequency repetitive slots, create candidate pools from the DB exercise library:
+
+1. lower_power
+2. bilateral_squat_strength
+3. bilateral_hinge_strength
+4. unilateral_lower
+5. trunk
+
+Each pool should include multiple valid options, not one default.
+
+==================================================
+TASK 3 — ADD RANKING LOGIC
+==================================================
+
+Score candidates using:
+
+- sport/category fit
+- session identity fit
+- equipment fit
+- fatigue cost
+- movement similarity to target slot
+- novelty penalty
+- recent usage penalty
+
+Do NOT select the first valid candidate.
+Select the best scored candidate.
+
+==================================================
+TASK 4 — ADD NOVELTY / REPEAT AVOIDANCE
+==================================================
+
+Track recent exercises used in:
+- current program
+- previous build(s) if available
+
+Penalize:
+- exact recent repeats
+- same 4–5 default anchors appearing every build
+
+The system should still allow repeats when truly optimal, but should avoid automatic reuse.
+
+==================================================
+TASK 5 — ADD BLOCK TEMPLATE VARIATION
+==================================================
+
+For session identities, support multiple valid block order variants.
+
+Example:
+A lower performance day should not always be:
+prep → jump → squat → hinge → unilateral → trunk
+
+Allow multiple variants such as:
+- prep → jump → squat → unilateral → trunk
+- prep → med ball/reactive → hinge → unilateral → trunk
+- prep → jump → hinge → squat-support → trunk
+
+Variation must stay coherent, not random.
+
+==================================================
+TASK 6 — KEEP STRUCTURE COACH-LIKE
+==================================================
+
+The variation layer must preserve:
+- session intent
+- category logic
+- neural demand ordering
+- exercise role correctness
+
+No random exercise shuffling.
+No breaking coaching logic.
+
+==================================================
+TASK 7 — TEST REQUIRED
+==================================================
+
+Generate the same request 5 times:
+“Build me a 4-day soccer performance program”
+
+Expected:
+- same overall quality and category fit
+- different valid exercise choices across repeated slots
+- some block order variation
+- no constant Broad Jump / Back Squat / Deadlift default pattern every time
+
+==================================================
+TASK 8 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. slot system implemented
+2. candidate pools added
+3. ranking factors used
+4. repeat-avoidance logic
+5. block template variants added
+6. before vs after behavior for repeated builds
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat should stop feeling like it always builds the same skeleton with the same exercises.
+
+It should feel like a coach choosing from a deep toolbox with intent and variation.
