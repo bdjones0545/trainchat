@@ -1,0 +1,217 @@
+We are implementing a PREMIUM “Learn Exercise” modal for TrainChat.
+
+OBJECTIVE:
+When a user taps the learn/play icon on an exercise, open a premium coaching modal that helps them understand:
+- why the exercise is in the program
+- how to perform it
+- what to focus on
+- common mistakes
+- how to view a demo
+- how to ask the coach about it
+
+This should feel like a coaching card, not a generic media popup or raw YouTube link.
+
+==================================================
+GOAL
+==================================================
+
+Create a mobile-first modal/bottom-sheet called:
+Learn Exercise
+
+It should fit the existing premium dark UI and integrate with the current right panel / Live Program experience.
+
+==================================================
+SECTION 1 — MODAL SHELL
+==================================================
+
+Implement as:
+- bottom sheet on mobile
+- centered modal on desktop/tablet
+
+Style:
+- dark elevated surface
+- rounded corners (~24px)
+- subtle border
+- scrollable content
+- height ~75–80vh on mobile
+
+==================================================
+SECTION 2 — HEADER
+==================================================
+
+Top content:
+- exercise name
+- close button
+- optional role pill (PRIMARY / POWER / ACCESSORY / TRUNK)
+- optional movement family subtitle if available
+
+==================================================
+SECTION 3 — WHY THIS IS IN YOUR PROGRAM
+==================================================
+
+Add section:
+“Why this is in your program”
+
+Show a short context-aware explanation tied to the program/session role.
+
+Use existing exercise/session metadata if available.
+If not available, generate a clean fallback explanation from:
+- exercise category
+- role
+- session identity
+
+Keep this to 2–3 sentences max.
+
+==================================================
+SECTION 4 — KEY COACHING CUES
+==================================================
+
+Add section:
+“Key coaching cues”
+
+Render 3–5 short cues in a stacked list or small cards.
+
+Examples:
+- Stay tall through the torso
+- Drive through the mid-foot
+- Control the lowering phase
+
+If structured cues exist, use them.
+If not, derive a lightweight fallback from exercise type.
+
+==================================================
+SECTION 5 — COMMON MISTAKES
+==================================================
+
+Add section:
+“Common mistakes”
+
+Render 3 concise mistakes.
+
+Examples:
+- Letting the knee cave inward
+- Losing posture at the bottom
+- Rushing the eccentric
+
+If no structured mistakes exist, generate a clean default set by exercise category.
+
+==================================================
+SECTION 6 — MODIFY THIS MOVEMENT
+==================================================
+
+Add section:
+“Modify this movement”
+
+Show three compact cards or rows:
+- Easier
+- Harder
+- If this bothers you
+
+Use existing progression/regression/swap relationships if available.
+
+Examples:
+- Easier: Assisted / bodyweight version
+- Harder: tempo / weighted / progressed version
+- If this bothers you: nearby substitute
+
+Do not overcomplicate this in v1.
+
+==================================================
+SECTION 7 — SEE IT IN ACTION
+==================================================
+
+Add section:
+“See it in action”
+
+Buttons:
+- View demo
+- Search more videos
+
+For v1:
+- View demo can open a YouTube search using a high-quality query
+- Search more videos opens a broader YouTube search
+
+Query format:
+{exercise name} exercise proper form strength training
+
+Do not label the main action “YouTube.”
+Keep the product language premium.
+
+==================================================
+SECTION 8 — ASK COACH ABOUT THIS
+==================================================
+
+Add a CTA:
+“Ask coach about this movement”
+
+On tap:
+- prefill existing chat/refine input with a contextual prompt, such as:
+  - Explain how to perform {exercise}
+  - Why is {exercise} in my program?
+  - Give me an easier version of {exercise}
+
+This should route back into the existing conversation flow.
+
+==================================================
+SECTION 9 — PLACEMENT / TRIGGER
+==================================================
+
+Add a small learn/play icon to each exercise row in the right panel.
+
+This must be:
+- subtle
+- secondary to primary controls
+- easy to tap
+- not visually noisy
+
+Tapping it opens the Learn Exercise modal.
+
+==================================================
+SECTION 10 — VISUAL STYLE
+==================================================
+
+Follow current app style:
+- dark premium surfaces
+- subtle borders
+- blue accent for important CTA
+- clean spacing
+- no clutter
+
+Typography hierarchy:
+- exercise name strong
+- section labels small/semibold
+- body text readable, not faint
+
+==================================================
+SECTION 11 — DO NOT OVERBUILD
+==================================================
+
+For v1, do NOT:
+- embed full YouTube video players inline
+- create a giant anatomy wiki
+- overload the modal with too many links
+- turn this into a media browser
+
+Keep it focused, premium, and coach-like.
+
+==================================================
+SECTION 12 — OUTPUT REQUIRED
+==================================================
+
+After implementation, return:
+1. Components added
+2. Where the trigger icon was placed
+3. What data powers each section
+4. What fallbacks were used when structured data was missing
+5. Any compromises made for mobile clarity
+
+==================================================
+FINAL STANDARD
+==================================================
+
+The Learn Exercise modal should feel like:
+a premium coaching assist layer
+
+It should help users understand the exercise while keeping TrainChat as the authority and using external demo links only as supporting tools.
+
+Implement this now.

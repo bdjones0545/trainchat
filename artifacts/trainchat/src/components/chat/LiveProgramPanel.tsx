@@ -4,7 +4,7 @@ import {
   Dumbbell, Save, CheckCircle, Loader2, Lock, Zap, PlayCircle,
   MessageSquare, ChevronDown, ChevronUp, TrendingUp, LayoutGrid,
   Calendar, Clock, RotateCcw, GitBranch, Activity, Layers,
-  AlertCircle, RefreshCw, Send,
+  AlertCircle, RefreshCw, Send, BookOpen,
 } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
 import type { ProgramStructure } from "./ChatOutput";
@@ -12,6 +12,7 @@ import BlockStatusCard from "@/components/training/BlockStatusCard";
 import type { BuildStage } from "@/hooks/useStreamMessage";
 import ExerciseLogInline, { type ProgressionTarget, type SetLog } from "@/components/training/ExerciseLogInline";
 import CoachForecast from "./CoachForecast";
+import LearnExerciseModal from "./LearnExerciseModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -406,6 +407,16 @@ function ProgramTab({
   const [pendingRefinement, setPendingRefinement] = useState<string | null>(null);
   const [refineInput, setRefineInput] = useState("");
   const [showProgramUpdated, setShowProgramUpdated] = useState(false);
+
+  // ── Learn Exercise modal state ────────────────────────────────────────────
+  interface LearnModalState {
+    exerciseName: string;
+    exerciseNotes?: string;
+    classification?: string;
+    dayName?: string;
+    dayFocus?: string;
+  }
+  const [learnModal, setLearnModal] = useState<LearnModalState | null>(null);
   const programUpdatedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevBuildingRef = useRef(false);
 
@@ -1138,6 +1149,23 @@ function ProgramTab({
                                   Updated
                                 </span>
                               )}
+                              {/* Learn Exercise trigger */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setLearnModal({
+                                    exerciseName: ex.name,
+                                    exerciseNotes: ex.notes,
+                                    classification: (ex as Record<string, unknown>).classification as string | undefined,
+                                    dayName: day.name,
+                                    dayFocus: day.focus,
+                                  });
+                                }}
+                                className="ml-auto flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-muted-foreground/40 hover:text-primary hover:bg-primary/10 transition-colors"
+                                title="Learn this exercise"
+                              >
+                                <BookOpen className="w-3 h-3" />
+                              </button>
                             </div>
                             {isHighlighted && inlineLabel && (
                               <p
@@ -1235,6 +1263,29 @@ function ProgramTab({
         })}
       </div>
 
+      {/* ── Learn Exercise Modal ──────────────────────────────────────────── */}
+      {learnModal && (
+        <LearnExerciseModal
+          exerciseName={learnModal.exerciseName}
+          exerciseNotes={learnModal.exerciseNotes}
+          classification={learnModal.classification}
+          dayName={learnModal.dayName}
+          dayFocus={learnModal.dayFocus}
+          programGoal={trainingGoal ?? undefined}
+          onClose={() => setLearnModal(null)}
+          onAskCoach={
+            onSendMessage
+              ? (msg) => {
+                  onSendMessage(msg, {
+                    source: "right_panel",
+                    interactionType: "learn_ask_coach",
+                    exerciseId: learnModal.exerciseName,
+                  });
+                }
+              : undefined
+          }
+        />
+      )}
     </div>
   );
 }
