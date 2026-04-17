@@ -327,43 +327,73 @@ function UpdatingBadge({ phase }: { phase: BuildPhase }) {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function EmptyProgramState() {
-  const steps = [
-    { icon: MessageSquare, label: "Describe your goal", detail: "Tell the coach your schedule, equipment, and what you're training for" },
-    { icon: Zap, label: "Program builds live", detail: "Watch your training system structure in real time as the AI builds it" },
-    { icon: TrendingUp, label: "Evolve week over week", detail: "Ask for adjustments anytime — every change is tracked and reversible" },
+function EmptyProgramState({ buildingState }: { buildingState?: BuildingState }) {
+  const isBuilding = !!buildingState?.isBuilding;
+
+  const bullets = [
+    "Builds instantly in real time",
+    "Adapts as you refine",
+    "Tracks every change",
   ];
 
   return (
     <div className="flex flex-col h-full overflow-y-auto p-5">
-      <div className="flex items-center gap-2 mb-5">
-        <div className="w-7 h-7 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-7 h-7 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
           <Dumbbell className="w-3.5 h-3.5 text-primary/60" />
         </div>
         <div>
-          <p className="text-[11px] font-bold text-foreground">Your Program</p>
-          <p className="text-[10px] text-muted-foreground">Your program builds here in real time</p>
+          <p className="text-[11px] font-bold text-foreground tracking-wide">Live System</p>
+          <p className="text-[10px] text-muted-foreground">Your training system builds here in real time</p>
         </div>
       </div>
 
-      <div className="space-y-3 mb-6">
-        {steps.map(({ icon: Icon, label, detail }, i) => (
-          <div key={i} className="flex items-start gap-3">
-            <div className="w-6 h-6 rounded-lg bg-primary/8 border border-primary/15 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <Icon className="w-3 h-3 text-primary/50" />
-            </div>
-            <div>
-              <p className="text-[11px] font-semibold text-foreground/70">{label}</p>
-              <p className="text-[10px] text-muted-foreground leading-relaxed mt-0.5">{detail}</p>
-            </div>
-          </div>
-        ))}
+      {/* Divider */}
+      <div className="border-t border-border/40 mb-4" />
+
+      {/* Status line */}
+      <div
+        className={[
+          "flex items-center gap-2 mb-4 px-2.5 py-1.5 rounded-lg border transition-all duration-300",
+          isBuilding
+            ? "bg-primary/10 border-primary/30 shadow-[0_0_8px_rgba(var(--primary-rgb),0.15)]"
+            : "bg-muted/30 border-border/30",
+        ].join(" ")}
+      >
+        <span
+          className={[
+            "w-1.5 h-1.5 rounded-full flex-shrink-0",
+            isBuilding
+              ? "bg-primary animate-pulse"
+              : "bg-emerald-400/80",
+          ].join(" ")}
+        />
+        <div>
+          <p
+            className={[
+              "text-[11px] font-semibold leading-none",
+              isBuilding ? "text-primary" : "text-foreground/80",
+            ].join(" ")}
+          >
+            {isBuilding ? "Building..." : "Ready to build"}
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">
+            {isBuilding
+              ? "System updating in real time"
+              : "Describe your goal to generate your program"}
+          </p>
+        </div>
       </div>
 
-      <div className="mt-auto pt-4 border-t border-border/30">
-        <p className="text-[10px] text-muted-foreground/50 leading-relaxed text-center">
-          Your program appears here the moment the AI starts building — no need to leave the chat.
-        </p>
+      {/* Bullets */}
+      <div className="space-y-2">
+        {bullets.map((text, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <span className="w-1 h-1 rounded-full bg-primary/40 flex-shrink-0" />
+            <p className="text-[10px] text-muted-foreground">{text}</p>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -674,7 +704,7 @@ function ProgramTab({
     };
   }, [program]);
 
-  if (!program) return <EmptyProgramState />;
+  if (!program) return <EmptyProgramState buildingState={buildingState} />;
 
   const days = program.days ?? [];
   const lockedDayCount = isPremium ? 0 : Math.max(0, days.length - 1);
