@@ -1,0 +1,127 @@
+We need to fix RIGHT PANEL SCROLLING in the Live Program sidebar on mobile Safari/WebView.
+
+PROBLEM:
+After the new right-panel UI additions (summary card, refinement chips, freeform input), the right sidebar content no longer scrolls.
+
+This is almost certainly a layout/overflow bug, not a data issue.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Restore smooth vertical scrolling inside the right panel while keeping:
+- fixed panel shell
+- header + tabs visible
+- all new refinement UI intact
+
+==================================================
+TASK 1 — AUDIT SCROLL CONTAINER HIERARCHY
+==================================================
+
+Inspect the Live Program right panel structure and identify:
+
+- outer panel wrapper
+- header container
+- tab row container
+- scrolling content body
+- any nested wrappers added by the new UI
+
+Find where scroll should live and where it is currently blocked.
+
+==================================================
+TASK 2 — APPLY CORRECT FLEX + OVERFLOW LAYOUT
+==================================================
+
+The right panel should follow this structure:
+
+- outer shell: fixed height, overflow-hidden, display flex, flex-col
+- header/tabs: non-scrolling
+- content body: flex-1, min-h-0, overflow-y-auto
+
+Make sure the actual scrolling region has:
+- flex: 1
+- min-height: 0
+- overflow-y: auto
+
+If using Tailwind-style classes, the content body should effectively have:
+- flex-1
+- min-h-0
+- overflow-y-auto
+- overscroll-contain
+
+==================================================
+TASK 3 — REMOVE/RELOCATE BAD OVERFLOW RULES
+==================================================
+
+Check for any parent or child wrappers using:
+- overflow-hidden
+- h-full without min-h-0
+- fixed heights that trap content
+- pointer/touch behavior blocking inner scroll
+
+If the new refinement section is wrapped in a non-scrolling container, fix that.
+
+==================================================
+TASK 4 — IOS / WEBVIEW SCROLL SUPPORT
+==================================================
+
+Make sure the actual scrollable container supports mobile Safari/WebView well.
+
+Add if needed:
+- -webkit-overflow-scrolling: touch;
+- overscroll-behavior: contain;
+
+Do not rely on body scroll.
+The panel itself must scroll.
+
+==================================================
+TASK 5 — KEEP HEADER/TABS STATIC
+==================================================
+
+The following should stay fixed inside the panel:
+- Live Program header
+- close button
+- tabs row
+
+Only the body content below should scroll.
+
+==================================================
+TASK 6 — VERIFY NEW UI DOES NOT BREAK SCROLL
+==================================================
+
+Confirm that all of these can exist inside the scrollable body without breaking it:
+- program summary card
+- refinement chips
+- freeform refine input
+- day cards
+- exercise rows
+
+==================================================
+TASK 7 — TESTING
+==================================================
+
+Verify on mobile-sized viewport / iPhone WebView:
+
+1. Open Live Program panel
+2. Scroll from top through summary → chips → input → day cards → exercises
+3. Confirm smooth vertical scrolling
+4. Confirm header and tabs remain visible
+5. Confirm no dead touch zones
+
+==================================================
+TASK 8 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. which element should own scroll
+2. what was blocking scroll
+3. exact layout/overflow fix applied
+4. whether any iOS/WebView-specific support was added
+
+==================================================
+FINAL STANDARD
+==================================================
+
+The right panel should have a fixed shell and a smoothly scrolling inner content area.
+
+Users must be able to scroll through the entire program inside the sidebar on mobile without losing the new refine UI.
