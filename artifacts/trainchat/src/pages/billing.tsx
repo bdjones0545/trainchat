@@ -1,10 +1,42 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { ArrowLeft, CreditCard, Calendar, RefreshCw, AlertCircle, CheckCircle, XCircle, Zap, Crown, Star } from "lucide-react";
+import {
+  ArrowLeft,
+  CreditCard,
+  Calendar,
+  RefreshCw,
+  AlertCircle,
+  CheckCircle,
+  XCircle,
+  Zap,
+  Crown,
+  Star,
+  User,
+  Mail,
+  LogOut,
+  Trash2,
+  ChevronRight,
+  Dumbbell,
+  Target,
+  Clock,
+  Brain,
+  Shield,
+  LifeBuoy,
+  Edit2,
+  Save,
+  X,
+  ToggleLeft,
+  MessageSquare,
+  BarChart2,
+  ExternalLink,
+  AlertTriangle,
+} from "lucide-react";
 import { useState } from "react";
 import PricingModal from "@/components/PricingModal";
 import AnonymousUpgradeModal from "@/components/AnonymousUpgradeModal";
-import { useGetMe } from "@workspace/api-client-react";
+import { useGetMe, useLogout } from "@workspace/api-client-react";
+import { Switch } from "@/components/ui/switch";
+import { useToast } from "@/hooks/use-toast";
 
 // ─── Data fetching ────────────────────────────────────────────────────────────
 
@@ -14,9 +46,23 @@ async function fetchSubscription() {
   return r.json();
 }
 
-async function fetchActiveSystem() {
-  const r = await fetch("/api/training-system/active", { credentials: "include" });
-  if (!r.ok) return null;
+async function fetchProfile() {
+  const r = await fetch("/api/profile", { credentials: "include" });
+  if (!r.ok) throw new Error("Failed to load profile");
+  return r.json();
+}
+
+async function saveProfile(data: Record<string, unknown>) {
+  const r = await fetch("/api/profile", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}));
+    throw new Error(body.error ?? "Failed to save profile");
+  }
   return r.json();
 }
 
@@ -118,27 +164,411 @@ const PLAN_PRICES: Record<string, { monthly: number; yearly: number }> = {
   elite: { monthly: 79, yearly: 758 },
 };
 
+// ─── Section Header ───────────────────────────────────────────────────────────
+
+function SectionHeader({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle?: string }) {
+  return (
+    <div className="flex items-center gap-3 mb-3 px-1">
+      <div className="w-8 h-8 rounded-lg bg-muted/50 border border-border flex items-center justify-center text-muted-foreground flex-shrink-0">
+        {icon}
+      </div>
+      <div>
+        <h2 className="text-sm font-bold text-foreground uppercase tracking-wider">{title}</h2>
+        {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
+      </div>
+    </div>
+  );
+}
+
+// ─── Settings Row ─────────────────────────────────────────────────────────────
+
+function SettingsRow({
+  label,
+  value,
+  onClick,
+  rightElement,
+  destructive,
+  disabled,
+  badge,
+}: {
+  label: string;
+  value?: string;
+  onClick?: () => void;
+  rightElement?: React.ReactNode;
+  destructive?: boolean;
+  disabled?: boolean;
+  badge?: string;
+}) {
+  const base =
+    "flex items-center justify-between py-3.5 px-4 transition-all duration-150";
+  const interactive = onClick && !disabled
+    ? "cursor-pointer hover:bg-accent/30 active:bg-accent/50"
+    : "";
+  const textColor = destructive ? "text-red-400" : "text-foreground";
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled || !onClick}
+      className={`${base} ${interactive} w-full text-left ${disabled ? "opacity-40 cursor-default" : ""}`}
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        <span className={`text-sm font-medium ${textColor} truncate`}>{label}</span>
+        {badge && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-semibold flex-shrink-0">
+            {badge}
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-2 ml-3 flex-shrink-0">
+        {value && <span className="text-sm text-muted-foreground truncate max-w-[140px]">{value}</span>}
+        {rightElement}
+        {onClick && !rightElement && !disabled && (
+          <ChevronRight className={`w-4 h-4 ${destructive ? "text-red-400/50" : "text-muted-foreground/50"}`} />
+        )}
+      </div>
+    </button>
+  );
+}
+
+// ─── Card wrapper ─────────────────────────────────────────────────────────────
+
+function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`rounded-2xl border border-border bg-card/50 overflow-hidden divide-y divide-border/60 ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+// ─── Training Preferences Editor ──────────────────────────────────────────────
+
+function TrainingPreferencesSection({ profile }: { profile: Record<string, any> | undefined }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [isEditing, setIsEditing] = useState(false);
+  const [form, setForm] = useState<Record<string, string>>({});
+
+  function startEdit() {
+    setForm({
+      trainingGoal: profile?.trainingGoal ?? "",
+      experienceLevel: profile?.experienceLevel ?? "",
+      trainingStyle: profile?.trainingStyle ?? "",
+      daysPerWeek: String(profile?.daysPerWeek ?? ""),
+      sessionDuration: String(profile?.sessionDuration ?? ""),
+      equipmentAccess: profile?.equipmentAccess ?? "",
+      sportFocus: profile?.sportFocus ?? "",
+      injuries: profile?.injuries ?? "",
+    });
+    setIsEditing(true);
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: (raw: Record<string, string>) =>
+      saveProfile({
+        ...raw,
+        daysPerWeek: raw.daysPerWeek ? Number(raw.daysPerWeek) : undefined,
+        sessionDuration: raw.sessionDuration ? Number(raw.sessionDuration) : undefined,
+        injuries: raw.injuries || null,
+        sportFocus: raw.sportFocus || null,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-profile"] });
+      setIsEditing(false);
+      toast({ title: "Preferences saved", description: "Your training preferences have been updated." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Save failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const GOALS = ["muscle_gain", "fat_loss", "strength", "endurance", "general_fitness", "sport_performance"];
+  const LEVELS = ["beginner", "intermediate", "advanced", "elite"];
+  const STYLES = ["bodybuilding", "powerlifting", "crossfit", "calisthenics", "general_strength", "cardio", "hybrid"];
+
+  function label(val: string) {
+    return val.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  if (isEditing) {
+    return (
+      <div className="space-y-3">
+        <div className="rounded-2xl border border-primary/30 bg-primary/5 overflow-hidden p-4 space-y-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-bold text-foreground">Edit Training Preferences</p>
+            <button
+              onClick={() => setIsEditing(false)}
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-all"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Goal */}
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Primary Goal</label>
+            <div className="flex flex-wrap gap-2">
+              {GOALS.map((g) => (
+                <button
+                  key={g}
+                  onClick={() => setForm((f) => ({ ...f, trainingGoal: g }))}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                    form.trainingGoal === g
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                  }`}
+                >
+                  {label(g)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Experience */}
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Experience Level</label>
+            <div className="flex flex-wrap gap-2">
+              {LEVELS.map((l) => (
+                <button
+                  key={l}
+                  onClick={() => setForm((f) => ({ ...f, experienceLevel: l }))}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                    form.experienceLevel === l
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                  }`}
+                >
+                  {label(l)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Training style */}
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Training Style</label>
+            <div className="flex flex-wrap gap-2">
+              {STYLES.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setForm((f) => ({ ...f, trainingStyle: s }))}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                    form.trainingStyle === s
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                  }`}
+                >
+                  {label(s)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Days & Duration row */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Days/Week</label>
+              <div className="flex gap-1.5 flex-wrap">
+                {[2, 3, 4, 5, 6].map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => setForm((f) => ({ ...f, daysPerWeek: String(d) }))}
+                    className={`w-9 h-9 rounded-lg text-sm font-bold border transition-all ${
+                      form.daysPerWeek === String(d)
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border text-muted-foreground hover:border-primary/40"
+                    }`}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Session (min)</label>
+              <div className="flex gap-1.5 flex-wrap">
+                {[30, 45, 60, 75, 90].map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setForm((f) => ({ ...f, sessionDuration: String(m) }))}
+                    className={`px-2 h-9 rounded-lg text-xs font-bold border transition-all ${
+                      form.sessionDuration === String(m)
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border text-muted-foreground hover:border-primary/40"
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Equipment */}
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Equipment Access</label>
+            <textarea
+              value={form.equipmentAccess}
+              onChange={(e) => setForm((f) => ({ ...f, equipmentAccess: e.target.value }))}
+              placeholder="e.g. Full gym with barbells, cables, machines..."
+              rows={2}
+              className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 resize-none"
+            />
+          </div>
+
+          {/* Sport */}
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Sport Focus <span className="text-muted-foreground/40 normal-case font-normal">(optional)</span></label>
+            <input
+              value={form.sportFocus}
+              onChange={(e) => setForm((f) => ({ ...f, sportFocus: e.target.value }))}
+              placeholder="e.g. BJJ, soccer, marathon running..."
+              className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50"
+            />
+          </div>
+
+          {/* Injuries */}
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Injuries / Limitations <span className="text-muted-foreground/40 normal-case font-normal">(optional)</span></label>
+            <textarea
+              value={form.injuries}
+              onChange={(e) => setForm((f) => ({ ...f, injuries: e.target.value }))}
+              placeholder="e.g. Left knee pain, avoid heavy squats..."
+              rows={2}
+              className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 resize-none"
+            />
+          </div>
+
+          <button
+            onClick={() => saveMutation.mutate(form)}
+            disabled={saveMutation.isPending}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-60"
+          >
+            <Save className="w-4 h-4" />
+            {saveMutation.isPending ? "Saving…" : "Save preferences"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const rows = [
+    { label: "Primary goal", value: profile?.trainingGoal ? label(profile.trainingGoal) : undefined },
+    { label: "Experience", value: profile?.experienceLevel ? label(profile.experienceLevel) : undefined },
+    { label: "Training style", value: profile?.trainingStyle ? label(profile.trainingStyle) : undefined },
+    { label: "Days per week", value: profile?.daysPerWeek ? `${profile.daysPerWeek} days` : undefined },
+    { label: "Session length", value: profile?.sessionDuration ? `${profile.sessionDuration} min` : undefined },
+    { label: "Equipment", value: profile?.equipmentAccess || undefined },
+    { label: "Sport focus", value: profile?.sportFocus || undefined },
+    { label: "Limitations", value: profile?.injuries || undefined },
+  ];
+
+  return (
+    <Card>
+      {rows.map(({ label: l, value }) => (
+        <div key={l} className="flex items-center justify-between py-3.5 px-4">
+          <span className="text-sm font-medium text-foreground">{l}</span>
+          <span className="text-sm text-muted-foreground max-w-[160px] text-right truncate">
+            {value ?? <span className="text-muted-foreground/40 italic">Not set</span>}
+          </span>
+        </div>
+      ))}
+      <div className="px-4 py-3">
+        <button
+          onClick={startEdit}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-border text-sm font-medium text-foreground hover:border-primary/40 hover:bg-primary/5 active:scale-[0.98] transition-all"
+        >
+          <Edit2 className="w-3.5 h-3.5" />
+          Edit training preferences
+        </button>
+      </div>
+    </Card>
+  );
+}
+
+// ─── AI Coach Settings ────────────────────────────────────────────────────────
+
+function CoachSettingsSection() {
+  const [concise, setConcise] = useState(() => localStorage.getItem("coach_concise") === "true");
+  const [proactiveInsights, setProactiveInsights] = useState(() => localStorage.getItem("coach_proactive") !== "false");
+  const [autoAdjust, setAutoAdjust] = useState(() => localStorage.getItem("coach_autoadjust") !== "false");
+  const [memory, setMemory] = useState(() => localStorage.getItem("coach_memory") !== "false");
+
+  function toggle(key: string, val: boolean, setter: (v: boolean) => void) {
+    localStorage.setItem(key, String(val));
+    setter(val);
+  }
+
+  return (
+    <Card>
+      <div className="flex items-center justify-between py-3.5 px-4">
+        <div className="min-w-0 pr-4">
+          <p className="text-sm font-medium text-foreground">Concise responses</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Short, direct answers instead of detailed explanations</p>
+        </div>
+        <Switch
+          checked={concise}
+          onCheckedChange={(v) => toggle("coach_concise", v, setConcise)}
+        />
+      </div>
+      <div className="flex items-center justify-between py-3.5 px-4">
+        <div className="min-w-0 pr-4">
+          <p className="text-sm font-medium text-foreground">Proactive insights</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Coach surfaces trends and suggestions unprompted</p>
+        </div>
+        <Switch
+          checked={proactiveInsights}
+          onCheckedChange={(v) => toggle("coach_proactive", v, setProactiveInsights)}
+        />
+      </div>
+      <div className="flex items-center justify-between py-3.5 px-4">
+        <div className="min-w-0 pr-4">
+          <p className="text-sm font-medium text-foreground">Auto-adjust recommendations</p>
+          <p className="text-xs text-muted-foreground mt-0.5">AI adapts your plan based on readiness and feedback</p>
+        </div>
+        <Switch
+          checked={autoAdjust}
+          onCheckedChange={(v) => toggle("coach_autoadjust", v, setAutoAdjust)}
+        />
+      </div>
+      <div className="flex items-center justify-between py-3.5 px-4">
+        <div className="min-w-0 pr-4">
+          <p className="text-sm font-medium text-foreground">Memory personalization</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Coach remembers your history, preferences, and patterns</p>
+        </div>
+        <Switch
+          checked={memory}
+          onCheckedChange={(v) => toggle("coach_memory", v, setMemory)}
+        />
+      </div>
+    </Card>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function BillingPage() {
+export default function SettingsPage() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [showPricing, setShowPricing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [anonymousUpgradePlan, setAnonymousUpgradePlan] = useState<{ planId: string; priceId: string } | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { data: me } = useGetMe();
   const isAnonymousUser = !!(me as any)?.isAnonymous;
+  const logout = useLogout();
 
-  const { data: sub, isLoading } = useQuery({
+  const { data: sub, isLoading: subLoading } = useQuery({
     queryKey: ["subscription"],
     queryFn: fetchSubscription,
     staleTime: 30_000,
   });
 
-  const { data: activeProgram } = useQuery({
-    queryKey: ["training-system-active"],
-    queryFn: fetchActiveSystem,
+  const { data: profile } = useQuery({
+    queryKey: ["user-profile"],
+    queryFn: fetchProfile,
     staleTime: 60_000,
   });
 
@@ -158,19 +588,25 @@ export default function BillingPage() {
       setError("Price ID not available. Please try again.");
       return;
     }
-
-    // Anonymous users must create an account before checkout
     if (isAnonymousUser) {
       setAnonymousUpgradePlan({ planId, priceId });
       return;
     }
-
     try {
       const url = await startCheckout(priceId);
       if (url) window.location.href = url;
     } catch (err: any) {
       setError(err.message);
     }
+  }
+
+  function handleLogout() {
+    logout.mutate(undefined, {
+      onSuccess: () => {
+        queryClient.clear();
+        navigate("/login");
+      },
+    });
   }
 
   const plan = sub?.plan ?? "free";
@@ -182,14 +618,17 @@ export default function BillingPage() {
   const hasActiveAccess = sub?.hasActiveAccess ?? false;
   const isPaid = plan !== "free";
 
-  // Effective status label for badge
   let displayStatus = planStatus;
   if (isPaid && cancelAtPeriodEnd) displayStatus = "canceled_within_period";
   if (!isPaid) displayStatus = "free";
 
+  const userName = (me as any)?.name ?? "";
+  const userEmail = (me as any)?.email ?? "";
+
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="max-w-2xl mx-auto px-4 py-8">
+      <div className="max-w-2xl mx-auto px-4 py-8 pb-16">
+
         {/* Header */}
         <div className="flex items-center gap-3 mb-8">
           <button
@@ -199,8 +638,8 @@ export default function BillingPage() {
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
-            <h1 className="text-xl font-bold text-foreground">Billing & Subscription</h1>
-            <p className="text-sm text-muted-foreground">Manage your plan and payment details</p>
+            <h1 className="text-xl font-bold text-foreground">Settings</h1>
+            <p className="text-sm text-muted-foreground">Account, billing & preferences</p>
           </div>
         </div>
 
@@ -210,204 +649,310 @@ export default function BillingPage() {
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             {error}
             <button onClick={() => setError(null)} className="ml-auto text-red-400/60 hover:text-red-400">
-              ✕
+              <X className="w-4 h-4" />
             </button>
           </div>
         )}
 
-        {/* Active program callout */}
-        {activeProgram?.name && (
-          <div className="mb-6 flex items-center gap-3 p-4 rounded-xl bg-primary/5 border border-primary/20">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
-              <Zap className="w-4 h-4 text-primary" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-0.5">Active program</p>
-              <p className="text-sm font-semibold text-foreground truncate">{activeProgram.name}</p>
-            </div>
-            {activeProgram.days?.length > 0 && (
-              <div className="ml-auto flex-shrink-0">
-                <span className="text-xs text-muted-foreground">{activeProgram.days.length} day{activeProgram.days.length !== 1 ? "s" : ""}/wk</span>
-              </div>
-            )}
-          </div>
-        )}
+        <div className="space-y-8">
 
-        {isLoading ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-24 rounded-xl bg-card/50 border border-border animate-pulse" />
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {/* Current plan card */}
-            <div className="rounded-xl border border-border bg-card/50 p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-                    <PlanIcon plan={plan} />
+          {/* ── 1. ACCOUNT ── */}
+          <section>
+            <SectionHeader icon={<User className="w-4 h-4" />} title="Account" />
+            <Card>
+              {/* Avatar / name row */}
+              <div className="flex items-center gap-4 px-4 py-4">
+                <div className="w-12 h-12 rounded-full bg-primary/20 border-2 border-primary/30 flex items-center justify-center text-base font-bold text-primary flex-shrink-0">
+                  {isAnonymousUser
+                    ? "TC"
+                    : userName
+                        .split(" ")
+                        .map((n: string) => n[0])
+                        .join("")
+                        .slice(0, 2)
+                        .toUpperCase() || "?"}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-base font-bold text-foreground truncate">
+                    {isAnonymousUser ? "Guest User" : userName || "Your Account"}
+                  </p>
+                  <p className="text-sm text-muted-foreground truncate">
+                    {isAnonymousUser ? "No account — create one to save your data" : userEmail || "No email on file"}
+                  </p>
+                </div>
+              </div>
+
+              {!isAnonymousUser && userEmail && (
+                <div className="flex items-center justify-between py-3.5 px-4">
+                  <div className="flex items-center gap-2">
+                    <Mail className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-sm font-medium text-foreground">Email</span>
                   </div>
+                  <span className="text-sm text-muted-foreground truncate max-w-[180px]">{userEmail}</span>
+                </div>
+              )}
+
+              <SettingsRow
+                label="Sign-in method"
+                value={isAnonymousUser ? "Guest session" : "Email & password"}
+                disabled
+              />
+
+              {isAnonymousUser ? (
+                <div className="px-4 py-3">
+                  <button
+                    onClick={() => navigate("/register")}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all"
+                  >
+                    Create account to save progress
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <SettingsRow
+                    label="Sign out"
+                    onClick={handleLogout}
+                    rightElement={<LogOut className="w-4 h-4 text-muted-foreground/60" />}
+                  />
+                  <SettingsRow
+                    label="Delete account"
+                    destructive
+                    onClick={() => setShowDeleteConfirm(true)}
+                    rightElement={<Trash2 className="w-4 h-4 text-red-400/60" />}
+                  />
+                </>
+              )}
+            </Card>
+
+            {/* Delete confirmation */}
+            {showDeleteConfirm && (
+              <div className="mt-3 rounded-2xl border border-red-500/30 bg-red-500/5 p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-0.5">
-                      Current plan
-                    </p>
-                    <p className="text-lg font-bold text-foreground">{PLAN_NAMES[plan] ?? plan}</p>
-                  </div>
-                </div>
-                <StatusBadge status={displayStatus} />
-              </div>
-
-              {isPaid && billingInterval && (
-                <div className="flex items-baseline gap-1 mb-4">
-                  <span className="text-2xl font-bold text-foreground">
-                    ${billingInterval === "yearly"
-                      ? Math.round((PLAN_PRICES[plan]?.yearly ?? 0) / 12)
-                      : (PLAN_PRICES[plan]?.monthly ?? 0)}
-                  </span>
-                  <span className="text-sm text-muted-foreground">/mo</span>
-                  {billingInterval === "yearly" && (
-                    <span className="text-xs text-muted-foreground ml-1">
-                      (${PLAN_PRICES[plan]?.yearly ?? 0}/year)
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {isPaid && billingInterval && (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Calendar className="w-3.5 h-3.5" />
-                  <span className="capitalize">{billingInterval} billing</span>
-                </div>
-              )}
-
-              {!isPaid && (
-                <p className="text-sm text-muted-foreground">
-                  You're on the free plan with {sub?.features ? "limited" : "no"} access to premium features.
-                </p>
-              )}
-            </div>
-
-            {/* Subscription details */}
-            {isPaid && (
-              <div className="rounded-xl border border-border bg-card/50 p-6 space-y-4">
-                <h2 className="text-sm font-semibold text-foreground">Subscription details</h2>
-
-                <div className="space-y-3">
-                  {currentPeriodEnd && (
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        {cancelAtPeriodEnd ? "Access ends" : "Renews on"}
-                      </div>
-                      <span className="text-sm font-medium text-foreground">
-                        {formatDate(currentPeriodEnd)}
-                      </span>
-                    </div>
-                  )}
-
-                  {trialEnd && (
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Zap className="w-3.5 h-3.5" />
-                        Trial ends
-                      </div>
-                      <span className="text-sm font-medium text-foreground">
-                        {formatDate(trialEnd)}
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <CreditCard className="w-3.5 h-3.5" />
-                      Payment method
-                    </div>
-                    <span className="text-sm font-medium text-foreground">
-                      Managed via Stripe
-                    </span>
-                  </div>
-                </div>
-
-                {cancelAtPeriodEnd && currentPeriodEnd && (
-                  <div className="mt-2 p-3 rounded-lg bg-amber-400/10 border border-amber-400/20">
-                    <p className="text-xs text-amber-400 leading-relaxed">
-                      Your subscription is set to cancel on {formatDate(currentPeriodEnd)}. You'll retain full access until then.
+                    <p className="text-sm font-bold text-red-400">Delete your account?</p>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                      This permanently removes your account, training history, and coach memory. This cannot be undone. Cancel your subscription in Stripe first to stop billing.
                     </p>
                   </div>
-                )}
-
-                {planStatus === "past_due" && (
-                  <div className="mt-2 p-3 rounded-lg bg-red-400/10 border border-red-400/20">
-                    <p className="text-xs text-red-400 leading-relaxed">
-                      Your last payment failed. Update your payment method to keep access.
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Features summary */}
-            {sub?.features && (
-              <div className="rounded-xl border border-border bg-card/50 p-6">
-                <h2 className="text-sm font-semibold text-foreground mb-4">What's included</h2>
-                <div className="space-y-2.5">
-                  {[
-                    { key: "unlimitedMessages", label: "Unlimited AI coaching messages" },
-                    { key: "adaptationContext", label: "Adaptive training (readiness-based)" },
-                    { key: "memoryContext", label: "Long-term memory — coach remembers you" },
-                    { key: "programEvolution", label: "Program evolution week-over-week" },
-                    { key: "insightHints", label: "Proactive insights engine" },
-                    { key: "sessionLogging", label: "Session logging & progress tracking" },
-                    { key: "priorityAI", label: "Priority AI response speed" },
-                  ].map(({ key, label }) => {
-                    const active = (sub.features as any)[key];
-                    return (
-                      <div key={key} className="flex items-center gap-2.5">
-                        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${active ? "bg-primary" : "bg-muted-foreground/30"}`} />
-                        <span className={`text-[12px] ${active ? "text-muted-foreground" : "text-muted-foreground/40 line-through"}`}>
-                          {label}
-                        </span>
-                      </div>
-                    );
-                  })}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowDeleteConfirm(false)}
+                    className="flex-1 py-2.5 rounded-xl border border-border text-sm font-medium text-foreground hover:bg-accent/30 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      toast({ title: "Contact support to delete your account", description: "Email us at support@trainchat.app to complete account deletion." });
+                      setShowDeleteConfirm(false);
+                    }}
+                    className="flex-1 py-2.5 rounded-xl bg-red-500/20 border border-red-500/30 text-sm font-semibold text-red-400 hover:bg-red-500/30 transition-all"
+                  >
+                    Delete account
+                  </button>
                 </div>
               </div>
             )}
+          </section>
 
-            {/* Actions */}
-            <div className="rounded-xl border border-border bg-card/50 p-6 space-y-3">
-              <h2 className="text-sm font-semibold text-foreground mb-1">Manage billing</h2>
+          {/* ── 2. SUBSCRIPTION & BILLING ── */}
+          <section>
+            <SectionHeader icon={<CreditCard className="w-4 h-4" />} title="Subscription & Billing" subtitle="Managed securely via Stripe" />
 
-              {isPaid && (
-                <button
-                  onClick={() => portalMutation.mutate()}
-                  disabled={portalMutation.isPending}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-card border border-border text-sm font-medium text-foreground hover:border-primary/40 hover:bg-primary/5 active:scale-[0.98] transition-all disabled:opacity-50"
-                >
-                  <CreditCard className="w-4 h-4" />
-                  {portalMutation.isPending ? "Opening portal…" : "Manage payment & subscription"}
-                </button>
-              )}
+            {subLoading ? (
+              <div className="h-40 rounded-2xl bg-card/50 border border-border animate-pulse" />
+            ) : (
+              <div className="space-y-3">
+                {/* Plan card */}
+                <div className="rounded-2xl border border-border bg-card/50 p-5">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+                        <PlanIcon plan={plan} />
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-0.5">Current plan</p>
+                        <p className="text-lg font-bold text-foreground">{PLAN_NAMES[plan] ?? plan}</p>
+                      </div>
+                    </div>
+                    <StatusBadge status={displayStatus} />
+                  </div>
 
-              {(!isPaid || !hasActiveAccess) && (
-                <button
-                  onClick={() => setShowPricing(true)}
-                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all"
-                >
-                  <Zap className="w-4 h-4" />
-                  {isPaid ? "Reactivate subscription" : "Upgrade to Pro"}
-                </button>
-              )}
+                  <div className="space-y-2.5">
+                    {billingInterval && isPaid && (
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <BarChart2 className="w-3.5 h-3.5" />
+                          Billing cycle
+                        </div>
+                        <span className="font-medium text-foreground capitalize">{billingInterval}</span>
+                      </div>
+                    )}
 
-              {isPaid && !cancelAtPeriodEnd && (
-                <p className="text-center text-[11px] text-muted-foreground/50">
-                  Cancel, downgrade, or update your payment method in the portal above.
-                </p>
-              )}
-            </div>
-          </div>
-        )}
+                    {currentPeriodEnd && isPaid && (
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Calendar className="w-3.5 h-3.5" />
+                          {cancelAtPeriodEnd ? "Access ends" : "Renews on"}
+                        </div>
+                        <span className="font-medium text-foreground">{formatDate(currentPeriodEnd)}</span>
+                      </div>
+                    )}
+
+                    {trialEnd && (
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Zap className="w-3.5 h-3.5" />
+                          Trial ends
+                        </div>
+                        <span className="font-medium text-foreground">{formatDate(trialEnd)}</span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <CreditCard className="w-3.5 h-3.5" />
+                        Payment method
+                      </div>
+                      <span className="font-medium text-foreground">Managed in Stripe</span>
+                    </div>
+                  </div>
+
+                  {cancelAtPeriodEnd && currentPeriodEnd && (
+                    <div className="mt-4 p-3 rounded-xl bg-amber-400/10 border border-amber-400/20">
+                      <p className="text-xs text-amber-400 leading-relaxed">
+                        Your subscription cancels on {formatDate(currentPeriodEnd)}. You'll retain full access until then. Reactivate anytime in the billing portal.
+                      </p>
+                    </div>
+                  )}
+
+                  {planStatus === "past_due" && (
+                    <div className="mt-4 p-3 rounded-xl bg-red-400/10 border border-red-400/20">
+                      <p className="text-xs text-red-400 leading-relaxed">
+                        Your last payment failed. Open the billing portal to update your payment method and restore access.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Billing actions */}
+                <Card>
+                  {isPaid && (
+                    <div className="px-4 py-3">
+                      <button
+                        onClick={() => portalMutation.mutate()}
+                        disabled={portalMutation.isPending}
+                        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-50"
+                      >
+                        <CreditCard className="w-4 h-4" />
+                        {portalMutation.isPending ? "Opening portal…" : "Manage billing & payment"}
+                      </button>
+                      <p className="text-center text-[11px] text-muted-foreground/50 mt-2">
+                        Update card · View invoices · Cancel or resume subscription
+                      </p>
+                    </div>
+                  )}
+
+                  {(!isPaid || !hasActiveAccess) && (
+                    <div className="px-4 py-3">
+                      <button
+                        onClick={() => setShowPricing(true)}
+                        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all"
+                      >
+                        <Zap className="w-4 h-4" />
+                        {isPaid ? "Reactivate subscription" : "Upgrade to Pro"}
+                      </button>
+                    </div>
+                  )}
+
+                  {isPaid && (
+                    <SettingsRow
+                      label="Billing history & invoices"
+                      onClick={() => portalMutation.mutate()}
+                      rightElement={<ExternalLink className="w-3.5 h-3.5 text-muted-foreground/50" />}
+                    />
+                  )}
+                </Card>
+              </div>
+            )}
+          </section>
+
+          {/* ── 3. TRAINING PREFERENCES ── */}
+          <section>
+            <SectionHeader
+              icon={<Dumbbell className="w-4 h-4" />}
+              title="Training Preferences"
+              subtitle="Used by your AI coach to build and adapt your program"
+            />
+            <TrainingPreferencesSection profile={profile} />
+          </section>
+
+          {/* ── 4. AI / COACH SETTINGS ── */}
+          <section>
+            <SectionHeader
+              icon={<Brain className="w-4 h-4" />}
+              title="AI Coach Settings"
+              subtitle="Control how your coach communicates and behaves"
+            />
+            <CoachSettingsSection />
+          </section>
+
+          {/* ── 5. PRIVACY & DATA ── */}
+          <section>
+            <SectionHeader icon={<Shield className="w-4 h-4" />} title="Privacy & Data" />
+            <Card>
+              <SettingsRow
+                label="Export my data"
+                badge="Coming soon"
+                disabled
+              />
+              <SettingsRow
+                label="Clear coach memory"
+                badge="Coming soon"
+                disabled
+              />
+              <SettingsRow
+                label="Privacy policy"
+                onClick={() => window.open("https://trainchat.app/privacy", "_blank")}
+                rightElement={<ExternalLink className="w-3.5 h-3.5 text-muted-foreground/50" />}
+              />
+              <SettingsRow
+                label="Terms of service"
+                onClick={() => window.open("https://trainchat.app/terms", "_blank")}
+                rightElement={<ExternalLink className="w-3.5 h-3.5 text-muted-foreground/50" />}
+              />
+            </Card>
+          </section>
+
+          {/* ── 6. SUPPORT ── */}
+          <section>
+            <SectionHeader icon={<LifeBuoy className="w-4 h-4" />} title="Support" />
+            <Card>
+              <SettingsRow
+                label="Contact support"
+                onClick={() => window.open("mailto:support@trainchat.app", "_blank")}
+                rightElement={<ExternalLink className="w-3.5 h-3.5 text-muted-foreground/50" />}
+              />
+              <SettingsRow
+                label="Report a bug"
+                onClick={() => window.open("mailto:bugs@trainchat.app?subject=Bug+Report", "_blank")}
+                rightElement={<ExternalLink className="w-3.5 h-3.5 text-muted-foreground/50" />}
+              />
+              <SettingsRow
+                label="Request a feature"
+                onClick={() => window.open("mailto:hello@trainchat.app?subject=Feature+Request", "_blank")}
+                rightElement={<ExternalLink className="w-3.5 h-3.5 text-muted-foreground/50" />}
+              />
+            </Card>
+          </section>
+
+          {/* App version */}
+          <p className="text-center text-[11px] text-muted-foreground/30 pt-2">
+            TrainChat · Settings
+          </p>
+        </div>
       </div>
 
       {showPricing && (
