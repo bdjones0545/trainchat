@@ -1,0 +1,118 @@
+We need to AUTO-CLOSE the right sidebar / Live Program panel when a refinement action from that panel sends a conversational request.
+
+PROBLEM:
+When the user presses a refinement control in the right panel, such as:
+- More Endurance
+- More Explosive
+- More Strength
+- Add Exercise
+- day-level actions
+- freeform refine input
+
+the request is sent through the conversation route and the response appears in the main chat, but the right panel stays open.
+
+This is poor UX because:
+- the user cannot immediately see the coach response
+- the app feels disconnected
+- the action originated in the panel but the answer appears elsewhere
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+When a right-panel action sends a conversational refine request, the panel should close automatically so the user can immediately see the assistant response in chat.
+
+==================================================
+TASK 1 — IDENTIFY RIGHT-PANEL ACTION ENTRY POINTS
+==================================================
+
+Audit all actions originating from the right panel that send requests into the conversation/chat flow.
+
+This includes:
+- global refinement chips
+- session-level buttons
+- freeform right-panel refine input
+- Ask Coach from Learn Exercise modal if it routes to chat
+
+==================================================
+TASK 2 — AUTO-CLOSE PANEL ON SEND
+==================================================
+
+When these actions dispatch a request:
+- close the right panel immediately after send is triggered
+OR
+- close it as soon as the request is accepted by the send handler
+
+Use the existing right-panel open/close state.
+Do not create a second panel state.
+
+==================================================
+TASK 3 — PRESERVE CHAT RESPONSE VISIBILITY
+==================================================
+
+After panel close:
+- ensure the latest assistant response is visible
+- scroll to bottom / newest message if needed
+- do not leave the user at an old scroll position
+
+If there is an existing helper for scrolling to latest message, reuse it.
+
+==================================================
+TASK 4 — DO NOT AUTO-CLOSE FOR PURELY LOCAL ACTIONS
+==================================================
+
+Only auto-close when the action routes into the chat/conversation response flow.
+
+Do NOT auto-close for:
+- purely local panel toggles
+- expand/collapse UI
+- actions that do not generate a chat response
+
+==================================================
+TASK 5 — OPTIONAL POLISH
+==================================================
+
+If clean and simple, add one subtle polish behavior:
+- after auto-close, briefly highlight or bring attention to the newest assistant message
+
+This is optional, only if easy.
+
+==================================================
+TASK 6 — TEST REQUIRED
+==================================================
+
+Verify:
+1. Tap More Endurance in right panel
+Expected:
+- panel closes
+- chat response visible immediately
+
+2. Tap More Explosive on Day 1
+Expected:
+- panel closes
+- response visible immediately
+
+3. Use freeform refine input in panel
+Expected:
+- panel closes
+- response visible
+
+4. Reopen panel after response
+Expected:
+- panel still works normally and reflects refreshed state
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+Return:
+1. which right-panel actions now auto-close
+2. where the close call was added
+3. how latest chat visibility was preserved
+4. any actions intentionally excluded
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Any refinement action initiated from the right panel that produces a conversational response should automatically close the panel so the user can immediately see the coach’s reply.

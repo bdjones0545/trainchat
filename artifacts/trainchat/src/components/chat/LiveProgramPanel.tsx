@@ -73,6 +73,8 @@ interface Props {
   changeTargets?: ChangeTarget[];
   /** Callback to send a coaching message — optionally with extra context (source, dayIndex, etc.) */
   onSendMessage?: (message: string, options?: Record<string, unknown>) => void;
+  /** Callback to close the right panel — called automatically when a conversational action is dispatched */
+  onClose?: () => void;
   /** Hint from the acknowledged intent during an active DIRECT_MUTATION stream */
   pendingChangeHint?: string;
   /** Summary of the last applied change — shown as a continuity chip in the panel header */
@@ -402,6 +404,7 @@ function ProgramTab({
   pendingChangeHint,
   lastChangeSummary,
   onSendMessage,
+  onClose,
 }: Omit<Props, "hasActiveSystem">) {
   const queryClient = useQueryClient();
   const [expandedDay, setExpandedDay] = useState<number | null>(0);
@@ -457,6 +460,7 @@ function ProgramTab({
     if (!onSendMessage || buildingState?.isBuilding) return;
     setPendingRefinement(key);
     onSendMessage(message, { source: "right_panel", ...options });
+    onClose?.();
   }
 
   function handleRefineSubmit() {
@@ -1311,6 +1315,7 @@ function ProgramTab({
               interactionType: "learn_ask_coach",
               exerciseId: selectedExercise?.exerciseName,
             });
+            onClose?.();
           }
         }}
       />
@@ -1753,6 +1758,7 @@ export default function LiveProgramPanel({
   newProgramSignal = 0,
   changeTargets = [],
   onSendMessage,
+  onClose,
   pendingChangeHint,
   lastChangeSummary,
 }: Props) {
@@ -1864,6 +1870,7 @@ export default function LiveProgramPanel({
             onLogSession={onLogSession}
             onUpgrade={onUpgrade}
             onSendMessage={onSendMessage}
+            onClose={onClose}
             isSaving={isSaving}
             isSaved={isSaved}
             isPremium={isPremium}
