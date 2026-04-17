@@ -28,121 +28,137 @@ export default function TermsPage() {
         </div>
 
         <p className="text-sm text-muted-foreground leading-relaxed mb-8">
-          By using TrainChat, you agree to these Terms of Service. Please read them carefully. If you do not agree, do not use the service.
+          By accessing or using TrainChat, you agree to these Terms of Service.
         </p>
 
-        <PolicySection title="1. Acceptance of Terms">
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            By accessing or using TrainChat, you agree to be bound by these Terms and our Privacy Policy. These Terms apply to all users, including free, registered, and subscribed users.
-          </p>
-        </PolicySection>
-
-        <PolicySection title="2. Description of Service">
+        <PolicySection title="1. Nature of Service">
           <p className="text-sm text-muted-foreground leading-relaxed mb-3">
-            TrainChat is an AI-powered coaching platform that provides:
+            TrainChat provides AI-generated fitness and training guidance.
           </p>
+          <p className="text-sm text-muted-foreground leading-relaxed mb-2">This service is:</p>
           <PolicyList items={[
-            "Personalized training program generation",
-            "AI coaching conversations and guidance",
-            "Program tracking and adaptation",
-            "Subscription-based access to advanced features",
+            "Informational and educational",
+            "Not a licensed coaching, medical, or healthcare service",
           ]} />
         </PolicySection>
 
-        <PolicySection title="3. User Accounts">
-          <PolicyList items={[
-            "You must provide accurate information when creating an account",
-            "You are responsible for maintaining the security of your account",
-            "You may not share, sell, or transfer access to your account",
-            "You must be 13 years or older to use TrainChat",
-          ]} />
-        </PolicySection>
-
-        <PolicySection title="4. Acceptable Use">
-          <p className="text-sm text-muted-foreground leading-relaxed mb-3">You agree not to:</p>
-          <PolicyList items={[
-            "Use the service for any unlawful purpose",
-            "Attempt to reverse-engineer, copy, or exploit the AI systems",
-            "Transmit harmful, abusive, or deceptive content",
-            "Circumvent subscription limits or access controls",
-            "Use automated scripts to interact with the service",
-          ]} />
-        </PolicySection>
-
-        <PolicySection title="5. Subscriptions & Billing">
+        <PolicySection title="2. No Medical Advice">
           <p className="text-sm text-muted-foreground leading-relaxed mb-3">
-            TrainChat offers free and paid subscription tiers.
+            TrainChat does not provide medical advice.
           </p>
+          <p className="text-sm text-muted-foreground leading-relaxed mb-2">You acknowledge:</p>
           <PolicyList items={[
-            "Paid subscriptions are billed via Stripe on a recurring basis",
-            "Cancellations take effect at the end of the current billing period",
-            "Refunds are not provided for partial billing periods unless required by law",
-            "We reserve the right to change pricing with advance notice",
+            "Exercise carries inherent risk",
+            "You should consult a qualified professional before beginning any program",
+            "You are responsible for your own health decisions",
           ]} />
         </PolicySection>
 
-        <PolicySection title="6. AI-Generated Content">
-          <p className="text-sm text-muted-foreground leading-relaxed mb-3">
-            TrainChat's AI generates training programs and coaching responses based on your inputs.
-          </p>
+        <PolicySection title="3. Assumption of Risk">
+          <p className="text-sm text-muted-foreground leading-relaxed mb-2">By using TrainChat, you agree:</p>
           <PolicyList items={[
-            "AI output is for informational purposes only — not medical advice",
-            "Always consult a healthcare professional before beginning a new training program",
-            "TrainChat is not liable for injuries arising from following AI-generated programs",
-            "Results may vary — AI recommendations are not guaranteed",
+            "You assume all risks related to training and physical activity",
+            "TrainChat is not liable for injury, harm, or damages resulting from use",
           ]} />
         </PolicySection>
 
-        <PolicySection title="7. Intellectual Property">
-          <p className="text-sm text-muted-foreground leading-relaxed mb-3">
-            All TrainChat software, design, and AI systems are owned by TrainChat.
-          </p>
+        <PolicySection title="4. User Responsibilities">
+          <p className="text-sm text-muted-foreground leading-relaxed mb-2">You agree to:</p>
           <PolicyList items={[
-            "You retain ownership of data you submit (messages, training logs, etc.)",
-            "You grant TrainChat a license to use your data to operate and improve the service",
-            "You may not copy, reproduce, or distribute TrainChat's proprietary systems",
+            "Use the service responsibly",
+            "Provide accurate information where relevant",
+            "Stop activity if experiencing pain or adverse effects",
           ]} />
         </PolicySection>
 
-        <PolicySection title="8. Termination">
-          <p className="text-sm text-muted-foreground leading-relaxed mb-3">
-            TrainChat may terminate or suspend your account if you:
+        <PolicySection title="5. AI Limitations">
+          <p className="text-sm text-muted-foreground leading-relaxed mb-2">You acknowledge that:</p>
+          <PolicyList items={[
+            "AI-generated responses may be imperfect",
+            "Recommendations may not account for all individual conditions",
+            "Final decisions remain your responsibility",
+          ]} />
+        </PolicySection>
+
+        <PolicySection title="6. Subscriptions & Billing">
+          <PolicyList items={[
+            "Subscriptions are processed via Stripe",
+            "Payments renew automatically unless canceled",
+            "Billing management is handled through Stripe's customer portal",
+          ]} />
+        </PolicySection>
+
+        <PolicySection title="7. Cancellation & Refunds">
+          <PolicyList items={[
+            "You may cancel at any time via Stripe",
+            "No refunds unless required by applicable law",
+          ]} />
+        </PolicySection>
+
+        <PolicySection title="8. Account Suspension">
+          <p className="text-sm text-muted-foreground leading-relaxed mb-2">
+            We reserve the right to suspend or terminate accounts that:
           </p>
           <PolicyList items={[
-            "Violate these Terms",
-            "Engage in abusive or fraudulent behavior",
-            "Use the service in a way that harms other users or the platform",
+            "Violate these terms",
+            "Abuse the platform",
+            "Interfere with system integrity",
+          ]} />
+        </PolicySection>
+
+        <PolicySection title="9. Intellectual Property">
+          <p className="text-sm text-muted-foreground leading-relaxed mb-3">
+            All TrainChat content, systems, and technology are owned by TrainChat.
+          </p>
+          <p className="text-sm text-muted-foreground leading-relaxed mb-2">You may not:</p>
+          <PolicyList items={[
+            "Copy",
+            "Resell",
+            "Reverse engineer",
+            "Redistribute the platform",
+          ]} />
+        </PolicySection>
+
+        <PolicySection title="10. Limitation of Liability">
+          <p className="text-sm text-muted-foreground leading-relaxed mb-3">
+            To the fullest extent permitted by law, TrainChat is not liable for:
+          </p>
+          <PolicyList items={[
+            "Injuries",
+            "Training outcomes",
+            "Indirect or consequential damages",
           ]} />
           <p className="text-sm text-muted-foreground leading-relaxed mt-3">
-            You may delete your account at any time via Settings.
+            Use is at your own risk.
           </p>
         </PolicySection>
 
-        <PolicySection title="9. Limitation of Liability">
+        <PolicySection title="11. Indemnification">
+          <p className="text-sm text-muted-foreground leading-relaxed mb-2">
+            You agree to indemnify TrainChat from claims resulting from:
+          </p>
+          <PolicyList items={[
+            "Misuse of the service",
+            "Violation of these terms",
+          ]} />
+        </PolicySection>
+
+        <PolicySection title="12. Modifications">
+          <p className="text-sm text-muted-foreground leading-relaxed mb-1">
+            We may update these Terms at any time.
+          </p>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            To the fullest extent permitted by law, TrainChat is not liable for indirect, incidental, or consequential damages arising from use of the service. Our total liability is limited to the amount you paid in the 12 months prior to the claim.
+            Continued use constitutes acceptance.
           </p>
         </PolicySection>
 
-        <PolicySection title="10. Disclaimer of Warranties">
+        <PolicySection title="13. Governing Law">
           <p className="text-sm text-muted-foreground leading-relaxed">
-            TrainChat is provided "as is" without warranties of any kind. We do not guarantee uninterrupted access, error-free operation, or specific fitness outcomes.
+            These Terms are governed by applicable law.
           </p>
         </PolicySection>
 
-        <PolicySection title="11. Changes to Terms">
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            We may update these Terms at any time. Continued use of TrainChat after changes constitutes acceptance of the updated Terms. We will notify you of material changes where required by law.
-          </p>
-        </PolicySection>
-
-        <PolicySection title="12. Governing Law">
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            These Terms are governed by applicable law. Disputes will be resolved through binding arbitration unless prohibited by law.
-          </p>
-        </PolicySection>
-
-        <PolicySection title="13. Contact" last>
+        <PolicySection title="14. Contact" last>
           <p className="text-sm text-muted-foreground leading-relaxed">
             For questions about these Terms, please reach out via the support link in Settings.
           </p>
