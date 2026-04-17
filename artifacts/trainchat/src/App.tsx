@@ -6,6 +6,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
+import ForgotPassword from "@/pages/forgot-password";
+import ResetPassword from "@/pages/reset-password";
 import Chat from "@/pages/chat";
 import GuestStart from "@/pages/guest-start";
 import AdminDashboard from "@/pages/admin";
@@ -245,6 +247,8 @@ function Router() {
           </PublicOnlyGuard>
         )}
       </Route>
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
       {/* /onboarding is retired — agent handles onboarding through conversation */}
       <Route path="/onboarding">{() => <Redirect to="/chat" />}</Route>
       {/* /chat serves both authenticated (full agent) and guest (limited agent) users */}

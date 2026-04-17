@@ -412,6 +412,58 @@ export async function sendFeatureRequestConfirmationToUser(payload: SupportEmail
   );
 }
 
+// ── Password Reset email ──────────────────────────────────────────────────────
+
+export interface PasswordResetEmailPayload {
+  email: string;
+  resetUrl: string;
+  expiresInMinutes: number;
+}
+
+function buildPasswordResetBody(payload: PasswordResetEmailPayload): string {
+  return `
+    <h2 style="margin:0 0 8px;color:#f1f5f9;font-size:20px;font-weight:700">Reset your password</h2>
+    <p style="margin:0 0 24px;color:#94a3b8;font-size:15px;line-height:1.6">
+      We received a request to reset the password for your TrainChat account
+      (<strong style="color:#e2e8f0">${escapeHtml(payload.email)}</strong>).
+      Click the button below to choose a new password.
+    </p>
+
+    <div style="text-align:center;margin-bottom:28px">
+      ${ctaButton("Reset my password", payload.resetUrl)}
+    </div>
+
+    <div style="background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:14px 16px;margin-bottom:24px">
+      <p style="margin:0;color:#64748b;font-size:12px;line-height:1.6">
+        This link expires in <strong style="color:#94a3b8">${payload.expiresInMinutes} minutes</strong>.
+        If you didn't request a password reset, you can safely ignore this email — your password won't change.
+      </p>
+    </div>
+
+    <p style="margin:0;color:#475569;font-size:13px;line-height:1.6;border-top:1px solid #334155;padding-top:20px">
+      If the button above doesn't work, copy and paste this URL into your browser:<br>
+      <span style="color:#38bdf8;font-size:12px;word-break:break-all">${escapeHtml(payload.resetUrl)}</span>
+    </p>`;
+}
+
+/**
+ * Sends a branded password reset email with a secure one-time link.
+ */
+export async function sendPasswordResetEmail(payload: PasswordResetEmailPayload): Promise<SendResult> {
+  const html = userLayout(
+    "Reset your TrainChat password — link expires soon.",
+    buildPasswordResetBody(payload),
+  );
+  return deliver(
+    {
+      to: payload.email,
+      subject: "Reset your TrainChat password",
+      html,
+    },
+    "password-reset",
+  );
+}
+
 /**
  * @deprecated Compatibility shim — routes to the appropriate admin+confirm pair.
  * Existing callers in support.ts still work without changes.

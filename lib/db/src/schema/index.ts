@@ -15,3 +15,4 @@ export * from "./neural-profile";
 export * from "./global-learning";
 export * from "./pending-clarifications";
 export * from "./support";
+export * from "./password-reset-tokens";

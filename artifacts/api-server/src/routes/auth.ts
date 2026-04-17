@@ -1,14 +1,15 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { z } from "zod";
-import { db, usersTable, userProfilesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, usersTable, userProfilesTable, passwordResetTokensTable } from "@workspace/db";
+import { eq, and, gt, isNull } from "drizzle-orm";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
 import { logger } from "../lib/logger";
 import { mergeAnonymousToRegistered } from "../lib/anonymousMerge";
 import { getUncachableStripeClient } from "../lib/stripeClient";
-import { sendWelcomeEmail } from "../lib/email";
+import { sendWelcomeEmail, sendPasswordResetEmail } from "../lib/email";
 
 const router: IRouter = Router();
 
@@ -480,6 +481,232 @@ router.patch("/account", requireAuth, async (req, res): Promise<void> => {
   } catch (err) {
     logger.error({ err, userId }, "Failed to update account name");
     res.status(500).json({ error: "Failed to update account. Please try again." });
+  }
+});
+
+// ─── Password Reset constants ──────────────────────────────────────────────────
+
+const RESET_TOKEN_EXPIRES_MINUTES = 60;
+const GENERIC_RESET_RESPONSE = {
+  message: "If an account exists for that email, we've sent password reset instructions.",
+};
+
+// Simple in-memory rate limiter: max 5 requests per email per hour
+const resetRateMap = new Map<string, { count: number; resetAt: number }>();
+
+function isRateLimited(email: string): boolean {
+  const now = Date.now();
+  const entry = resetRateMap.get(email);
+  if (!entry || entry.resetAt < now) {
+    resetRateMap.set(email, { count: 1, resetAt: now + 60 * 60 * 1000 });
+    return false;
+  }
+  entry.count += 1;
+  if (entry.count > 5) return true;
+  return false;
+}
+
+// ─── POST /api/auth/forgot-password ───────────────────────────────────────────
+
+/**
+ * Accepts an email address and sends a password reset link if the account exists.
+ * Always returns the same generic response to prevent user enumeration.
+ */
+router.post("/auth/forgot-password", async (req, res): Promise<void> => {
+  const parsed = z.object({ email: z.string().email() }).safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({ error: "A valid email address is required." });
+    return;
+  }
+
+  const email = parsed.data.email.toLowerCase();
+
+  // Rate limiting — silently return success to prevent enumeration via timing
+  if (isRateLimited(email)) {
+    logger.warn({ email }, "[PasswordResetRequest] rate limited");
+    res.json(GENERIC_RESET_RESPONSE);
+    return;
+  }
+
+  logger.info({ email }, "[PasswordResetRequest] received");
+
+  // Always respond quickly — do the heavy work after replying
+  res.json(GENERIC_RESET_RESPONSE);
+
+  // Fire-and-forget the actual work so response is already sent
+  setImmediate(async () => {
+    try {
+      const [user] = await db
+        .select({ id: usersTable.id, email: usersTable.email, isAnonymous: usersTable.isAnonymous, passwordHash: usersTable.passwordHash })
+        .from(usersTable)
+        .where(eq(usersTable.email, email));
+
+      // No user, or anonymous (no password set) — silently stop
+      if (!user || user.isAnonymous || !user.passwordHash) {
+        logger.info({ email }, "[PasswordResetRequest] email not found or anonymous — no action");
+        return;
+      }
+
+      // Invalidate any existing unused tokens for this user
+      await db
+        .delete(passwordResetTokensTable)
+        .where(
+          and(
+            eq(passwordResetTokensTable.userId, user.id),
+            isNull(passwordResetTokensTable.usedAt),
+          ),
+        );
+
+      // Generate cryptographically secure token
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+      const expiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRES_MINUTES * 60 * 1000);
+
+      await db.insert(passwordResetTokensTable).values({
+        userId: user.id,
+        tokenHash,
+        expiresAt,
+      });
+
+      // Build reset URL — use the app's public URL or fall back to a safe default
+      const appUrl = process.env.APP_URL
+        ?? (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "https://trainchat.ai");
+      const resetUrl = `${appUrl}/reset-password?token=${rawToken}`;
+
+      await sendPasswordResetEmail({
+        email: user.email!,
+        resetUrl,
+        expiresInMinutes: RESET_TOKEN_EXPIRES_MINUTES,
+      });
+
+      logger.info({ userId: user.id }, "[PasswordResetEmailSent] reset email sent");
+    } catch (err) {
+      logger.error({ err, email }, "[PasswordResetRequest] background processing failed");
+    }
+  });
+});
+
+// ─── POST /api/auth/reset-password ────────────────────────────────────────────
+
+const ResetPasswordBody = z.object({
+  token: z.string().min(1, "Token is required"),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .max(128, "Password is too long"),
+});
+
+/**
+ * Validates a reset token and updates the user's password.
+ * Token must exist, not be expired, and not already be used.
+ */
+router.post("/auth/reset-password", async (req, res): Promise<void> => {
+  const parsed = ResetPasswordBody.safeParse(req.body);
+
+  if (!parsed.success) {
+    const firstError = parsed.error.errors[0]?.message ?? "Invalid request";
+    res.status(400).json({ error: firstError });
+    return;
+  }
+
+  const { token, password } = parsed.data;
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  const now = new Date();
+
+  try {
+    const [record] = await db
+      .select()
+      .from(passwordResetTokensTable)
+      .where(eq(passwordResetTokensTable.tokenHash, tokenHash));
+
+    if (!record) {
+      logger.warn({ tokenHash }, "[PasswordResetTokenValidated] token not found");
+      res.status(400).json({ error: "This reset link is invalid. Please request a new one." });
+      return;
+    }
+
+    if (record.usedAt) {
+      logger.warn({ tokenId: record.id, userId: record.userId }, "[PasswordResetTokenValidated] token already used");
+      res.status(400).json({ error: "This reset link has already been used. Please request a new one." });
+      return;
+    }
+
+    if (record.expiresAt < now) {
+      logger.warn({ tokenId: record.id, userId: record.userId }, "[PasswordResetTokenValidated] token expired");
+      res.status(400).json({ error: "This reset link has expired. Please request a new one." });
+      return;
+    }
+
+    logger.info({ tokenId: record.id, userId: record.userId }, "[PasswordResetTokenValidated] token valid");
+
+    // Hash the new password and update the user record
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    await db
+      .update(usersTable)
+      .set({ passwordHash })
+      .where(eq(usersTable.id, record.userId));
+
+    // Mark token as used
+    await db
+      .update(passwordResetTokensTable)
+      .set({ usedAt: now })
+      .where(eq(passwordResetTokensTable.id, record.id));
+
+    // Invalidate any active session for this user (revoke on password reset)
+    // Sessions are stored in the DB — we can't destroy them directly here,
+    // so we clear the current request session at minimum.
+    req.session.destroy(() => {});
+
+    logger.info({ userId: record.userId }, "[PasswordResetCompleted] password updated, session invalidated");
+
+    res.json({ message: "Your password has been reset. You can now sign in." });
+  } catch (err) {
+    logger.error({ err }, "[PasswordResetCompleted] failed");
+    res.status(500).json({ error: "Something went wrong. Please try again." });
+  }
+});
+
+// ─── GET /api/auth/validate-reset-token ───────────────────────────────────────
+
+/**
+ * Validates a reset token without consuming it.
+ * Used by the reset password page to show appropriate UI on load.
+ */
+router.get("/auth/validate-reset-token", async (req, res): Promise<void> => {
+  const token = typeof req.query.token === "string" ? req.query.token : "";
+  if (!token) {
+    res.status(400).json({ valid: false, reason: "missing" });
+    return;
+  }
+
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  const now = new Date();
+
+  try {
+    const [record] = await db
+      .select({ id: passwordResetTokensTable.id, expiresAt: passwordResetTokensTable.expiresAt, usedAt: passwordResetTokensTable.usedAt })
+      .from(passwordResetTokensTable)
+      .where(eq(passwordResetTokensTable.tokenHash, tokenHash));
+
+    if (!record) {
+      res.json({ valid: false, reason: "invalid" });
+      return;
+    }
+    if (record.usedAt) {
+      res.json({ valid: false, reason: "used" });
+      return;
+    }
+    if (record.expiresAt < now) {
+      res.json({ valid: false, reason: "expired" });
+      return;
+    }
+
+    res.json({ valid: true });
+  } catch (err) {
+    logger.error({ err }, "validate-reset-token: failed");
+    res.status(500).json({ valid: false, reason: "error" });
   }
 });
 
