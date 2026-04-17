@@ -38,7 +38,7 @@ STRIPE_PRICE_PRO_MONTHLY = "price_1TIYT6GOcsf8J09liwTgBS2B"
 STRIPE_PRICE_PRO_YEARLY = "price_1TIYT6GOcsf8J09lwEsSUGIB"
 STRIPE_PRICE_ELITE_MONTHLY = "price_1TIYT7GOcsf8J09l1wnaZMge"
 STRIPE_PRICE_ELITE_YEARLY = "price_1TIYT7GOcsf8J09lOHjWItMD"
-EMAIL_FROM = "Bryan.jones@trainchat.ai"
+EMAIL_FROM = "Bryan.jones@efficiencystrengthtraining.com"
 EMAIL_SUPPORT_TO = "Bryan.jones@trainchat.ai"
 
 [userenv.production]
