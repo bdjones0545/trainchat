@@ -1949,13 +1949,6 @@ export default function SystemPage() {
               <Settings className="w-4 h-4 text-muted-foreground flex-shrink-0" />
               <span>Settings</span>
             </button>
-            <button
-              onClick={() => { setLocation("/billing"); setMobilePanel(null); }}
-              className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
-            >
-              <CreditCard className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-              <span>Billing &amp; Plans</span>
-            </button>
           </>
         )}
       </div>
