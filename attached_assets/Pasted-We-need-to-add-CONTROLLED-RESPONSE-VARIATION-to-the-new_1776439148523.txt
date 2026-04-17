@@ -1,0 +1,253 @@
+We need to add CONTROLLED RESPONSE VARIATION to the new conversational mode lock in TrainChat.
+
+CONTEXT:
+We already fixed the core issue by adding a Conversational Mode Lock inside generateFallbackResponse. That lock now correctly handles:
+- GREETING_RESPONSE
+- PROGRAM_SAFETY_RESPONSE
+- PROGRAM_EXPLANATION_RESPONSE
+- COACHING_GUIDANCE_RESPONSE
+
+The problem now is that these responses are too static. If the same mode is triggered repeatedly, the wording will feel repetitive and robotic.
+
+We do NOT want random personality drift.
+We want:
+- the same coach voice
+- slightly different phrasing
+- context-aware variation
+- no repetition loops
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Add bounded, context-aware response variation for the locked conversational modes.
+
+This should make the fallback responses feel more natural while preserving:
+- same tone
+- same coaching identity
+- same meaning
+- same safety/clarity
+
+==================================================
+CORE RULE
+==================================================
+
+Variation must be:
+- controlled
+- deterministic enough to debug
+- context-aware
+- consistent with the TrainChat coach voice
+
+Do NOT:
+- make responses feel like different personalities
+- inject random slang
+- overcomplicate this
+- make every response totally different
+
+Think:
+same coach, different phrasing
+
+==================================================
+TASK 1 — CREATE RESPONSE BANKS BY MODE
+==================================================
+
+For each locked conversational mode, create a small response bank.
+
+Modes:
+- GREETING_RESPONSE
+- PROGRAM_SAFETY_RESPONSE
+- PROGRAM_EXPLANATION_RESPONSE
+- COACHING_GUIDANCE_RESPONSE
+
+Each bank should contain:
+- 3 to 5 high-quality variants
+- same meaning
+- slightly different phrasing
+- same overall tone
+
+==================================================
+TASK 2 — GREETING RESPONSE VARIANTS
+==================================================
+
+Create greeting banks for two cases:
+
+A. greeting + active program
+B. greeting + no active program
+
+Examples for active program:
+- “Hey — your [Program Name] is loaded up. What’s on your mind?”
+- “What’s up — want to tweak your current plan or talk through something?”
+- “Hey — how’s your program feeling so far?”
+- “What’s up — want to adjust something or keep it rolling?”
+- “Hey — I’ve got your current plan in front of me. What do you want to work on?”
+
+Examples for no active program:
+- “Hey — what are you working toward?”
+- “What’s up — want me to help you build something?”
+- “Hey — tell me what you’re training for.”
+- “What’s up — what do you want to improve?”
+- “Hey — want to start with a plan or just talk through your training?”
+
+==================================================
+TASK 3 — PROGRAM SAFETY RESPONSE VARIANTS
+==================================================
+
+Create 3–5 strong safety-style responses for when the user asks:
+- “Is this program safe for me?”
+- “Is this too much?”
+- “Is this okay for me?”
+
+These should:
+- answer directly
+- mention what determines safety (pain, injury history, training age, recovery)
+- optionally invite one focused follow-up
+- stay coach-like, not legalistic
+
+Examples:
+- “Good question. On paper this is structured progressively, but whether it’s safe for you depends on your injury history, current pain, and recovery.”
+- “Smart question. The plan itself is built logically, but I’d want to know if anything currently hurts or if you’ve got any limitations before I’d call it fully appropriate.”
+- “This can be a solid plan if you’re tolerating the workload well, but if you’ve got pain, low training history, or poor recovery, I’d want to adjust it.”
+
+==================================================
+TASK 4 — PROGRAM EXPLANATION RESPONSE VARIANTS
+==================================================
+
+Create 3–5 explanation-style responses for:
+- “Why is this exercise here?”
+- “Does this make sense?”
+- “Will this help with endurance?”
+- “Why is this day structured this way?”
+
+These should:
+- explain
+- reference current program/session context
+- sound like a coach teaching, not rebuilding
+
+==================================================
+TASK 5 — COACHING GUIDANCE RESPONSE VARIANTS
+==================================================
+
+Create 3–5 generic coaching-guidance responses for open but valid questions, where the user is not asking to mutate the program and not just greeting.
+
+These should:
+- answer directly
+- stay concise
+- optionally bridge to adjustment if appropriate
+
+==================================================
+TASK 6 — ADD CONTEXT-AWARE SELECTION
+==================================================
+
+Do NOT just randomize blindly.
+
+Selection should consider:
+- active program exists or not
+- mode
+- whether the user just made a refinement
+- maybe message tone or wording if simple
+- recent response used (avoid immediate repetition)
+
+Implement a lightweight selection helper like:
+selectFallbackVariant({
+  mode,
+  hasActiveProgram,
+  programName,
+  recentVariantKey,
+  userMessage
+})
+
+==================================================
+TASK 7 — ADD RECENT-VARIANT AVOIDANCE
+==================================================
+
+Prevent the same exact fallback variant from being used back-to-back for the same mode when possible.
+
+Simple rule is enough:
+- if 2+ variants exist, avoid returning the exact same one as last time
+- if only one exists, use it
+
+This can be done in-memory per conversation/session if simple, or via lightweight per-request selection logic if state is limited.
+
+No heavy persistence needed.
+
+==================================================
+TASK 8 — KEEP VARIABLE INSERTS CLEAN
+==================================================
+
+Where relevant, allow insertion of:
+- program name
+- session/day name
+- current plan reference
+
+But do not over-template responses.
+Keep them readable and natural.
+
+Example:
+- “Hey — your Strength Program — 3-Day is loaded up. What’s on your mind?”
+
+==================================================
+TASK 9 — DO NOT BREAK MODE LOCK
+==================================================
+
+The variation system must sit INSIDE the conversational mode lock, not outside it.
+
+The lock still decides:
+- this is GREETING_RESPONSE
+- this is PROGRAM_SAFETY_RESPONSE
+etc.
+
+Variation only decides:
+- which phrasing to use within the correct mode
+
+==================================================
+TASK 10 — TEST REQUIRED
+==================================================
+
+Test these cases repeatedly and verify wording varies while meaning stays stable:
+
+1. “What’s up” with active program
+Expected:
+- 3–5 possible short greeting variants
+- all acknowledge active program
+- no intake reset
+
+2. “What’s up” without active program
+Expected:
+- 3–5 short build/opening variants
+
+3. “Is this program safe for me?”
+Expected:
+- multiple direct safety responses
+- all stay coach-like
+- none fall into mutation clarification
+
+4. “Why is this exercise here?”
+Expected:
+- multiple explanation variants
+- all still grounded in current program
+
+5. Repeated same input twice
+Expected:
+- no identical fallback wording back-to-back if avoidable
+
+==================================================
+TASK 11 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. where the response banks were added
+2. what variants were created per mode
+3. how context-aware selection works
+4. how repetition avoidance works
+5. before/after examples for repeated greetings and safety questions
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat should still feel like the same coach every time,
+but with enough controlled variation that the fallback responses do not feel repetitive or robotic.
+
+Same coach.
+Different phrasing.
+Stable meaning.

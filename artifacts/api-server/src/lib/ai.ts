@@ -2601,6 +2601,130 @@ Output the corrected program JSON and a brief calm confirmation.`;
   }
 }
 
+// ─── Conversational Fallback Response Banks ──────────────────────────────────
+// Controlled variation for each locked conversational mode.
+// Same coach voice — slightly different phrasing — no repetition loops.
+// Selection is deterministic per (message + history length) so same message
+// repeating in a growing conversation naturally cycles through variants.
+
+interface VariantContext {
+  mode: ResponseMode;
+  hasActiveProgram: boolean;
+  programName?: string | null;
+  splitType?: string | null;
+  progressionStrategy?: string | null;
+  historyLength: number;
+  userMessage: string;
+}
+
+const FALLBACK_VARIANTS = {
+  greeting_with_program: [
+    (ctx: VariantContext) =>
+      `Hey — your ${ctx.programName ?? "program"} is loaded up. What's on your mind?`,
+    (_ctx: VariantContext) =>
+      `What's up — want to tweak something in your current plan?`,
+    (_ctx: VariantContext) =>
+      `Hey — how's the program feeling so far? Anything you want to adjust?`,
+    (ctx: VariantContext) =>
+      `What's up — I've got your ${ctx.programName ?? "current plan"} here. What do you want to work on?`,
+    (_ctx: VariantContext) =>
+      `Hey — want to adjust something or keep it rolling?`,
+  ],
+
+  greeting_no_program: [
+    (_ctx: VariantContext) =>
+      `Hey — what are you working toward?`,
+    (_ctx: VariantContext) =>
+      `What's up — want me to help you build something?`,
+    (_ctx: VariantContext) =>
+      `Hey — tell me what you're training for and I'll build around it.`,
+    (_ctx: VariantContext) =>
+      `What's up — what do you want to improve?`,
+    (_ctx: VariantContext) =>
+      `Hey — want to start with a program or just talk through your training?`,
+  ],
+
+  program_safety_with_program: [
+    (_ctx: VariantContext) =>
+      `Good question. On paper this is structured progressively, but whether it's safe for you depends on your injury history, current pain, and how well you recover.\n\nAnything specific I should know about?`,
+    (_ctx: VariantContext) =>
+      `Smart question. The plan is built logically — but I'd want to know if anything currently hurts or if you've got limitations before I'd call it fully appropriate.\n\nWhat's your situation?`,
+    (_ctx: VariantContext) =>
+      `This can be a solid plan if you're tolerating the workload well. If you've got pain, a low training history, or poor recovery, tell me and I'll adjust.\n\nAnything you're working around?`,
+    (_ctx: VariantContext) =>
+      `The program is built around progressive loading with built-in recovery. If something is aggravating an old injury or the volume feels like too much, flag it and I'll make the changes.\n\nAnything currently limiting you?`,
+  ],
+
+  program_safety_no_program: [
+    (_ctx: VariantContext) =>
+      `Program safety comes down to matching the workload to your current capacity. Key factors: injury history, training age, recovery ability, and how the exercises are sequenced.\n\nShare more about your situation and I can be more specific.`,
+    (_ctx: VariantContext) =>
+      `Good question to ask upfront. Safety depends on your injury history, training background, and how you handle recovery — those shape how I'd structure everything.\n\nWhat does your situation look like?`,
+    (_ctx: VariantContext) =>
+      `Depends on your situation — training age, any injuries, and recovery capacity. Once you give me that context I'll build the program to fit it, not the other way around.`,
+  ],
+
+  program_explanation_with_program: [
+    (ctx: VariantContext) =>
+      `The program uses a ${ctx.splitType ?? "training split"} structure. Sessions are sequenced to hit the primary movement pattern first when you're freshest, then support work, then accessories.\n\n${ctx.progressionStrategy ? `Progression strategy: ${ctx.progressionStrategy}.` : "Progressive overload is built in with planned deloads."}\n\nWhat do you want me to walk through — exercise selection, set/rep logic, or the weekly structure?`,
+    (ctx: VariantContext) =>
+      `The structure is built around a ${ctx.splitType ?? "training split"}. Exercise order follows fatigue priority — compound movements first, accessories last. That ordering is intentional.\n\nWhat part do you want me to dig into?`,
+    (_ctx: VariantContext) =>
+      `Each session has a clear purpose. Primary compound lift first, then movement-pattern support, then accessories. That order prioritizes what moves the needle most.\n\nWhat would you like me to explain specifically?`,
+    (ctx: VariantContext) =>
+      `The ${ctx.splitType ?? "split"} structure spreads the training stimulus across the week to balance recovery and volume. ${ctx.progressionStrategy ? `Progression: ${ctx.progressionStrategy}.` : ""}\n\nWant me to explain a specific day or the overall logic?`,
+  ],
+
+  program_explanation_no_program: [
+    (_ctx: VariantContext) =>
+      `Happy to explain the reasoning behind any program I build. What would you like me to walk through?`,
+    (_ctx: VariantContext) =>
+      `I can explain exercise selection, set/rep logic, split structure — anything. What do you want to understand better?`,
+    (_ctx: VariantContext) =>
+      `Good question to ask. Once you have a program, I can walk you through why each piece is there. What are you trying to understand?`,
+  ],
+
+  coaching_guidance: [
+    (_ctx: VariantContext) =>
+      `Good coaching question. The answer depends on your specific context — tell me more and I'll give you a targeted response.`,
+    (_ctx: VariantContext) =>
+      `Solid question. Without more context I can give you the general principle — but the right answer depends on your training history and current setup. What does that look like?`,
+    (_ctx: VariantContext) =>
+      `Depends on your situation. Give me more context and I'll give you something specific, not a generic answer.`,
+    (_ctx: VariantContext) =>
+      `Coaching answer depends on the details. What does your current training look like and what are you trying to solve?`,
+  ],
+} as const;
+
+type VariantBank = keyof typeof FALLBACK_VARIANTS;
+
+function selectFallbackVariant(ctx: VariantContext): string {
+  const bankKey: VariantBank =
+    ctx.mode === "GREETING_RESPONSE" && ctx.hasActiveProgram
+      ? "greeting_with_program"
+      : ctx.mode === "GREETING_RESPONSE"
+        ? "greeting_no_program"
+        : ctx.mode === "PROGRAM_SAFETY_RESPONSE" && ctx.hasActiveProgram
+          ? "program_safety_with_program"
+          : ctx.mode === "PROGRAM_SAFETY_RESPONSE"
+            ? "program_safety_no_program"
+            : ctx.mode === "PROGRAM_EXPLANATION_RESPONSE" && ctx.hasActiveProgram
+              ? "program_explanation_with_program"
+              : ctx.mode === "PROGRAM_EXPLANATION_RESPONSE"
+                ? "program_explanation_no_program"
+                : "coaching_guidance";
+
+  const bank = FALLBACK_VARIANTS[bankKey];
+
+  // Deterministic index: seed from (message char-sum + history length) so
+  // the same message sent repeatedly in a growing conversation cycles naturally
+  // through variants without needing external state.
+  const charSum = ctx.userMessage.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const idx = (charSum + ctx.historyLength) % bank.length;
+
+  return (bank[idx] as (ctx: VariantContext) => string)(ctx);
+}
+
 // ─── Intelligent Fallback (no API key) ──────────────────────────────────────
 // Uses the training intelligence engine for exercise selection and program design.
 // Follows the same co-creation model as the real AI agent.
@@ -2634,53 +2758,16 @@ function generateFallbackResponse(
     responseMode === "PROGRAM_EXPLANATION_RESPONSE" ||
     responseMode === "COACHING_GUIDANCE_RESPONSE"
   ) {
-    if (responseMode === "GREETING_RESPONSE") {
-      if (hasActiveProgram) {
-        const programName = currentProgram?.programName;
-        const programRef = programName ? ` Your ${programName} is loaded up.` : " Your program is loaded up.";
-        return {
-          content: `Hey!${programRef} What's on your mind — any adjustments, or just checking in?`,
-          structuredData: null,
-        };
-      }
-      return {
-        content: `Hey! I'm TrainChat — your AI performance coach. What are you working toward? Tell me about your goals, schedule, and equipment and I'll build a training program around you.`,
-        structuredData: null,
-      };
-    }
-
-    if (responseMode === "PROGRAM_SAFETY_RESPONSE") {
-      if (hasActiveProgram && currentProgram) {
-        return {
-          content: `Good question to ask. The program is designed around progressive overload with built-in recovery — it's appropriate for consistent trainees.\n\nA few things to watch: if any exercise causes joint pain (not just muscle burn), skip it and flag it so I can swap it out. The loading is intentional — don't rush the weights up.\n\nIf you have specific limitations or health concerns, tell me and I'll adjust the structure accordingly.`,
-          structuredData: null,
-        };
-      }
-      return {
-        content: `Program safety comes down to matching the workload to your current capacity. Key factors: injury history, training age, recovery ability, and how the exercises are sequenced.\n\nIf you share more about your situation I can give you a more specific answer.`,
-        structuredData: null,
-      };
-    }
-
-    if (responseMode === "PROGRAM_EXPLANATION_RESPONSE") {
-      if (hasActiveProgram && currentProgram) {
-        const splitType = currentProgram.splitType ?? "training split";
-        return {
-          content: `The program uses a ${splitType} structure. Each session is sequenced to hit the primary movement pattern first when you're freshest, then support work, then accessories.\n\nThe progression strategy: ${currentProgram.progressionStrategy ?? "progressive overload with planned deloads"}.\n\nWhat specifically do you want me to walk through — exercise selection, set/rep logic, or the weekly structure?`,
-          structuredData: null,
-        };
-      }
-      return {
-        content: `Happy to explain the reasoning behind any program I build. What would you like me to walk through?`,
-        structuredData: null,
-      };
-    }
-
-    // COACHING_GUIDANCE_RESPONSE
-    return {
-      content: `Good coaching question. The answer depends on your specific context — tell me more about your situation and I'll give you a more targeted response.`,
-      structuredData: null,
-    };
+    const variantContent = selectFallbackVariant({
+      mode: responseMode,
+      hasActiveProgram: hasActiveProgram ?? false,
+      programName: currentProgram?.programName ?? null,
+      splitType: currentProgram?.splitType ?? null,
+      progressionStrategy: currentProgram?.progressionStrategy ?? null,
+      historyLength: history.length,
+      userMessage,
+    });
+    return { content: variantContent, structuredData: null };
   }
 
   // Helper: apply neural bias to a generated program when bias is active
