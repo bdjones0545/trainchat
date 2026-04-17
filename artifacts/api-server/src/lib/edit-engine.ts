@@ -21,7 +21,11 @@ import { logger } from "./logger";
 import type { EditPlan, EditChange } from "./edit-intent-service";
 import type { SystemSnapshot } from "./change-log-service";
 import { verifyMutation, type MutationVerificationResult } from "./mutation-verifier";
-import { ensureSessionIdentityUpdated } from "./session-identity-sync";
+import {
+  ensureSessionIdentityUpdated,
+  buildIdentityUpdateSummary,
+  type PatchedIdentityResult,
+} from "./session-identity-sync";
 
 // ─── Allowed field allowlists (safety guard) ─────────────────────────────────
 
@@ -425,6 +429,8 @@ export interface EditResult {
   changeTargets: ChangeTarget[];
   /** Phase 2: Post-mutation verification result */
   verification: MutationVerificationResult;
+  /** Sessions whose label/emphasis were auto-patched by the identity sync guard */
+  identityPatches: PatchedIdentityResult[];
 }
 
 export async function applyEditPlan(plan: EditPlan, intentFamily?: string): Promise<EditResult> {
@@ -448,17 +454,25 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string): Prom
   // ── Session Identity Sync (post-mutation guard) ────────────────────────────
   // If the AI's EditPlan made structural changes for an identity-changing
   // transformation but did NOT include an update_session with new label/emphasis,
-  // deterministically patch the session identity now.
-  const autoIdentityPatchedSessions = await ensureSessionIdentityUpdated(plan, intentFamily);
-  if (autoIdentityPatchedSessions.length > 0) {
+  // deterministically patch the session identity now using the template matrix.
+  const identityPatches = await ensureSessionIdentityUpdated(plan, intentFamily);
+  if (identityPatches.length > 0) {
     // Add auto-patched sessions to changedIds so they appear in the after snapshot
-    for (const sid of autoIdentityPatchedSessions) {
-      if (!changedIds.sessions.includes(sid)) {
-        changedIds.sessions.push(sid);
+    for (const patch of identityPatches) {
+      if (!changedIds.sessions.includes(patch.sessionId)) {
+        changedIds.sessions.push(patch.sessionId);
       }
     }
     logger.info(
-      { count: autoIdentityPatchedSessions.length, sessionIds: autoIdentityPatchedSessions },
+      {
+        count: identityPatches.length,
+        patches: identityPatches.map((p) => ({
+          sessionId: p.sessionId,
+          region: p.inferredRegion,
+          family: p.intentFamily,
+          newLabel: p.newLabel,
+        })),
+      },
       "[EditEngine] Session identity auto-synced after mutation",
     );
   }
@@ -529,15 +543,22 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string): Prom
     }
   }
 
+  // ── Task 8: Augment changeSummary with identity update notes ─────────────
+  const identitySuffix = buildIdentityUpdateSummary(identityPatches);
+  const finalChangeSummary = identityPatches.length > 0
+    ? (plan.changeSummary + identitySuffix).trim()
+    : plan.changeSummary;
+
   return {
     appliedCount,
     skippedCount,
-    changeSummary: plan.changeSummary,
+    changeSummary: finalChangeSummary,
     details: results.map((r) => r.detail),
     changedIds,
     beforeSnapshot,
     afterSnapshot,
     changeTargets,
     verification,
+    identityPatches,
   };
 }

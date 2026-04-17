@@ -1,0 +1,272 @@
+We need to implement SESSION IDENTITY RECOMPUTE LOGIC for TrainChat.
+
+OBJECTIVE:
+Whenever a refinement materially changes a session’s training character, the system must recompute and persist that session’s:
+
+- label
+- emphasis
+
+so the Day Card stays in sync with the actual updated session.
+
+Right now these fields are written during program creation and then left frozen, which makes the UI feel stale after meaningful refinements.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+After a qualifying refinement, recompute session identity from the updated session and write the new:
+- training_sessions.label
+- training_sessions.emphasis
+
+inside the canonical DB-backed mutation path.
+
+Do NOT fake this only in the frontend.
+
+==================================================
+TASK 1 — CREATE A NEW MODULE
+==================================================
+
+Create a new module, for example:
+
+session-identity-sync.ts
+
+This module should own:
+- recomputeSessionIdentity()
+- trigger rules
+- helper functions for body region / session type inference
+- template lookup by intent family
+
+Keep it deterministic and inspectable.
+
+==================================================
+TASK 2 — DEFINE THE MAIN FUNCTION
+==================================================
+
+Create a function like:
+
+recomputeSessionIdentity({
+  session,
+  intentFamily,
+  programContext,
+}: {
+  session: FullTrainingSession;
+  intentFamily: IntentFamily;
+  programContext?: {
+    sport?: string | null;
+    goal?: string | null;
+    category?: string | null;
+  };
+}): {
+  label: string;
+  emphasis: string;
+}
+
+This function must return BOTH:
+- label
+- emphasis
+
+==================================================
+TASK 3 — ADD IDENTITY RECOMPUTE TRIGGER RULES
+==================================================
+
+Only recompute identity for intent families that materially shift session character.
+
+Trigger recompute for:
+- power_explosive_focus
+- strength_focus
+- endurance_focus
+- conditioning_focus
+- hypertrophy_focus
+- speed_focus
+- athletic_performance_focus
+- recovery_focus
+- fatigue_management
+
+Do NOT automatically recompute for:
+- tiny single-exercise easier/harder tweaks
+- cue-only changes
+- small prescription edits
+- cosmetic updates
+
+Implement a helper like:
+
+shouldRecomputeSessionIdentity(intentFamily: IntentFamily): boolean
+
+==================================================
+TASK 4 — INFER SESSION BODY REGION / SESSION TYPE
+==================================================
+
+Implement a helper that determines whether the session is:
+- Lower
+- Upper
+- Full Body
+- Rotational / Mixed if applicable
+
+For now, it is acceptable to use a combination of:
+- existing session label
+- exercise composition
+- dominant slots / patterns in the session
+
+Prefer using session structure where possible, not just string matching.
+
+Create helper(s) like:
+- inferSessionRegion(session): "Lower" | "Upper" | "Full Body" | "Mixed"
+- inferSessionBias(session): "power" | "strength" | "endurance" | "conditioning" | "hypertrophy" | "recovery" | "mixed"
+
+==================================================
+TASK 5 — DEFINE RULE-BASED LABEL / EMPHASIS TEMPLATES
+==================================================
+
+Create explicit templates by:
+- intent family
+- session region
+
+Examples:
+
+power_explosive_focus + Lower
+label:
+"Lower Power — Explosive Output + Bar Speed"
+emphasis:
+"Horizontal power, elastic force expression, and high-velocity lower-body force development"
+
+endurance_focus + Lower
+label:
+"Lower Strength Endurance — Work Capacity"
+emphasis:
+"High-rep density, compressed rest intervals, and aerobic capacity integration"
+
+strength_focus + Upper
+label:
+"Upper Strength — Maximal Force Output"
+emphasis:
+"Heavy compound loading, peak force development, and bilateral upper-body strength expression"
+
+recovery_focus + Lower
+label:
+"Lower Recovery — Tissue Quality + Low-Impact Support"
+emphasis:
+"Lower-impact movement quality, tissue tolerance, and recovery-oriented force support"
+
+fatigue_management + Full Body
+label:
+"Full Body Reload — Reduced Fatigue + Quality Output"
+emphasis:
+"Lower stress, cleaner execution, and preserved movement quality with reduced fatigue cost"
+
+Add enough templates so all trigger families produce coherent outputs for:
+- Lower
+- Upper
+- Full Body
+
+Do not leave this vague.
+Make the templates clear and polished.
+
+==================================================
+TASK 6 — HANDLE FALLBACKS CLEANLY
+==================================================
+
+If a perfect template combination is missing:
+- fall back to a generic template for that intent family
+- still return valid label + emphasis
+- never return null/empty strings
+
+Create fallback behavior like:
+- power_explosive_focus + unknown region → “Power Development — Explosive Intent”
+- endurance_focus + unknown region → “Endurance Development — Work Capacity”
+
+==================================================
+TASK 7 — INTEGRATE INTO DB-BACKED MUTATION PATH
+==================================================
+
+After a successful refinement mutation is applied in the canonical DB-backed path:
+
+1. determine the affected session(s)
+2. check shouldRecomputeSessionIdentity(intentFamily)
+3. if true:
+   - recompute label + emphasis
+   - persist them to training_sessions
+4. include updated identity in the returned fresh DB state
+
+This must happen after structural/prescription changes are applied, so the recompute logic sees the updated session.
+
+==================================================
+TASK 8 — UPDATE CHANGE SUMMARY / RESPONSE TEXT
+==================================================
+
+When identity recompute happens, include it in the mutation summary.
+
+Example:
+- "Day 1 shifted to Lower Power — Explosive Output + Bar Speed."
+- "Day 2 now emphasizes Upper Strength — Maximal Force Output."
+
+This helps users see that the session identity truly changed.
+
+Do not overdo it, but make it visible.
+
+==================================================
+TASK 9 — ADD DEBUG LOGGING
+==================================================
+
+In development, log something like:
+
+[SessionIdentitySync] {
+  sessionId,
+  intentFamily,
+  previousLabel,
+  previousEmphasis,
+  inferredRegion,
+  newLabel,
+  newEmphasis,
+  recomputed: true
+}
+
+This needs to be inspectable when tuning.
+
+==================================================
+TASK 10 — TEST REQUIRED
+==================================================
+
+Test these exact cases:
+
+1. Day 1 → More Explosive
+Expected:
+- label changes to an explosive/power identity
+- emphasis updates accordingly
+
+2. Day 1 → More Endurance
+Expected:
+- label/emphasis shift toward work capacity / density
+
+3. Day 2 → More Strength
+Expected:
+- label/emphasis shift toward maximal force / heavy loading
+
+4. Day 1 → Lower Impact
+Expected:
+- label/emphasis shift toward recovery / lower-impact support
+
+5. Small easier swap on one accessory
+Expected:
+- identity does NOT necessarily recompute if overall session character is unchanged
+
+==================================================
+TASK 11 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. file/module created
+2. recomputeSessionIdentity() signature
+3. trigger families used
+4. template logic added
+5. where it was integrated in the DB-backed mutation path
+6. example before/after label+emphasis outputs from tests
+
+==================================================
+FINAL STANDARD
+==================================================
+
+After any meaningful refinement, the Day Card must reflect the updated training character of the session.
+
+If the session becomes more explosive, stronger, more endurance-based, lower impact, or more conditioning-oriented, the persisted label and emphasis must update to match.
+
+TrainChat should never leave session identity frozen while the session underneath it changes.
