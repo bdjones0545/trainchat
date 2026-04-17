@@ -89,10 +89,10 @@ async function trackFunnelEvent(deviceId: string, event: string, metadata?: Reco
 // prompt  – full conversational sentence sent to the AI when tapped
 
 const QUICK_START = [
-  { label: "Build a 4-day split",   prompt: "Make me a 4-day training split",             icon: "📅", highlight: true },
-  { label: "Train around pain",     prompt: "Help me train around an injury or pain",     icon: "🩺", highlight: false },
-  { label: "Add speed & power",     prompt: "Add speed, power, and athletic development to my program", icon: "⚡", highlight: false },
-  { label: "Home gym setup",        prompt: "Build a plan using only home equipment",     icon: "🏠", highlight: false },
+  { label: "Build a 4-day strength system", prompt: "Design a 4-day strength training system for me",           icon: "📅", highlight: true },
+  { label: "Work around pain or injury",    prompt: "Help me train around an injury or pain",                   icon: "🩺", highlight: false },
+  { label: "Add speed & explosiveness",     prompt: "Add speed, power, and athletic explosiveness to my program", icon: "⚡", highlight: false },
+  { label: "Build for a home gym",          prompt: "Build a program using only home gym equipment",            icon: "🏠", highlight: false },
 ];
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
@@ -711,11 +711,11 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
               <div>
                 {/* Primary — strongest text on the screen */}
                 <p className="text-lg sm:text-xl font-bold leading-snug" style={{ color: "rgba(255,255,255,0.93)" }}>
-                  What do you want to build?
+                  Build your training system
                 </p>
                 {/* Secondary — readable, clearly supporting the headline */}
                 <p className="text-xs sm:text-sm mt-1.5 leading-relaxed" style={{ color: "rgba(255,255,255,0.60)" }}>
-                  Describe your training — I'll build it live.
+                  Describe your goal, constraints, or sport — I'll build it live.
                 </p>
               </div>
             </div>

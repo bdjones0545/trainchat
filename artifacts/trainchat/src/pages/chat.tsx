@@ -46,10 +46,10 @@ import { resolveProgramState } from "@/lib/resolveProgramState";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 
 const SUGGESTION_CHIPS = [
-  { label: "Build a 4-day split", prompt: "Design a 4-day training split for me", highlight: true },
-  { label: "Train around pain", prompt: "Help me train around an injury or pain", highlight: false },
-  { label: "Add speed & power", prompt: "I want to add speed, power, and athletic development to my program", highlight: false },
-  { label: "Home gym setup", prompt: "Build a program using only home gym equipment", highlight: false },
+  { label: "Build a 4-day strength system", prompt: "Design a 4-day strength training system for me", highlight: true },
+  { label: "Work around pain or injury", prompt: "Help me train around an injury or pain", highlight: false },
+  { label: "Add speed & explosiveness", prompt: "I want to add speed, power, and athletic explosiveness to my program", highlight: false },
+  { label: "Build for a home gym", prompt: "Build a program using only home gym equipment", highlight: false },
 ];
 
 async function fetchSubscription() {
@@ -1703,25 +1703,60 @@ export default function Chat() {
               </div>
             ) : messages.length === 0 ? (
               /* ─── Empty state ─── */
-              <div className="flex flex-col items-center justify-center h-full py-12 px-4 text-center">
-                <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-5">
-                  <Dumbbell className="w-6 h-6 text-primary" />
+              <div className="flex flex-col items-center justify-center h-full py-8 px-4 text-center animate-in fade-in slide-in-from-bottom-2 duration-500">
+                {/* Icon with soft animated glow */}
+                <div className="relative mb-4 flex items-center justify-center">
+                  <div className="absolute inset-0 rounded-2xl bg-primary/20 blur-xl animate-pulse" style={{ animationDuration: "3s" }} />
+                  <div className="relative w-14 h-14 rounded-2xl bg-primary/10 border border-primary/25 flex items-center justify-center shadow-sm">
+                    <Dumbbell className="w-6 h-6 text-primary" />
+                  </div>
                 </div>
-                <h2 className="text-base font-semibold text-foreground mb-1.5">
-                  What do you want to build?
+
+                <h2 className="text-base font-semibold text-foreground mb-1">
+                  Build your training system
                 </h2>
-                <p className="text-sm text-muted-foreground max-w-xs leading-relaxed mb-8">
-                  Describe your training — I'll build it live.
+                <p className="text-sm text-muted-foreground max-w-xs leading-relaxed mb-4">
+                  Describe your goal, constraints, or sport — I'll build it live.
                 </p>
-                <div className="flex flex-wrap justify-center gap-2 w-full max-w-md">
+
+                {/* System status strip */}
+                <div className="flex items-center gap-2 mb-6 px-3.5 py-2 rounded-full bg-card border border-border/60">
+                  {hasActiveSystem ? (
+                    <>
+                      <div className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
+                      <span className="text-[11px] text-muted-foreground">
+                        <span className="text-foreground font-medium">Active system: {activeSystem?.name ?? "Your Program"}</span>
+                        {" · "}Ready to refine or rebuild
+                      </span>
+                    </>
+                  ) : latestProgram ? (
+                    <>
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary/60 flex-shrink-0" />
+                      <span className="text-[11px] text-muted-foreground">
+                        <span className="text-foreground font-medium">Draft system ready</span>
+                        {" · "}Continue building or save it to your system
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30 flex-shrink-0" />
+                      <span className="text-[11px] text-muted-foreground">
+                        No active system yet · Start building to generate your first program
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                {/* Quick action chips */}
+                <div className="flex flex-wrap justify-center gap-2 w-full max-w-sm">
                   {SUGGESTION_CHIPS.map((chip) => (
                     <button
                       key={chip.label}
                       onClick={() => handleSend(chip.prompt)}
                       className={`px-3.5 py-2 text-xs font-medium rounded-full active:scale-95 transition-all duration-150 ${
                         chip.highlight
-                          ? "text-primary border border-primary/50 bg-primary/10 hover:bg-primary/15"
-                          : "text-foreground bg-card border border-border hover:border-primary/40 hover:text-primary hover:bg-primary/5"
+                          ? "text-primary border border-primary/50 bg-primary/10 hover:bg-primary/20 hover:border-primary/70 hover:shadow-sm"
+                          : "text-foreground bg-card border border-border hover:border-primary/40 hover:text-primary hover:bg-primary/5 hover:shadow-sm"
                       }`}
                     >
                       {chip.label}
@@ -1899,7 +1934,7 @@ export default function Chat() {
                   </div>
                 )}
               </div>
-              <div className="relative flex items-end gap-2 bg-card border border-border rounded-2xl focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 transition-all duration-200">
+              <div className="relative flex items-end gap-2 bg-card border border-border rounded-2xl focus-within:border-primary/60 focus-within:ring-2 focus-within:ring-primary/15 focus-within:shadow-sm transition-all duration-200">
                 <textarea
                   ref={inputRef}
                   data-testid="input-message"
@@ -1907,9 +1942,9 @@ export default function Chat() {
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleKeyDown}
                   rows={1}
-                  placeholder="Try: Build me a 4-day strength program"
+                  placeholder="Describe your goal, sport, or constraints…"
                   disabled={stream.isActive}
-                  className="flex-1 resize-none bg-transparent px-4 py-3.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none leading-relaxed max-h-40 overflow-y-auto disabled:opacity-60"
+                  className="flex-1 resize-none bg-transparent px-4 py-3.5 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none leading-relaxed max-h-40 overflow-y-auto disabled:opacity-60"
                   style={{ minHeight: "52px" }}
                   onInput={(e) => {
                     const t = e.target as HTMLTextAreaElement;
@@ -1921,7 +1956,7 @@ export default function Chat() {
                   data-testid="button-send"
                   onClick={() => handleSend()}
                   disabled={!inputText.trim() || stream.isActive}
-                  className="m-2 p-2 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 active:scale-95 flex-shrink-0"
+                  className="m-2 p-2.5 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-25 disabled:cursor-not-allowed transition-all duration-150 active:scale-95 flex-shrink-0 shadow-sm"
                 >
                   <SendHorizontal className="w-4 h-4" />
                 </button>
