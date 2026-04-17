@@ -1,0 +1,173 @@
+We are upgrading the RIGHT PANEL (Live Program view) into a VIBE CODING INTERFACE.
+
+This is NOT a redesign — this is a behavioral layer added on top of the existing UI.
+
+==================================================
+OBJECTIVE
+==================================================
+
+After a program is built, the right panel becomes the PRIMARY place where users refine their program.
+
+Users should be able to:
+- make quick global changes
+- tweak individual days
+- adjust exercises
+- send natural language refinement requests
+
+WITHOUT leaving the panel.
+
+==================================================
+SECTION 1 — GLOBAL REFINEMENT BAR (TOP OF PANEL)
+==================================================
+
+Add a horizontal chip row directly under the program title.
+
+Component: <RefinementChips />
+
+Chips (first version):
+- More Explosive
+- More Strength
+- More Endurance
+- Shorter Sessions
+- Lower Impact
+- Home Gym Version
+
+Behavior:
+- On click → send message to backend via existing conversation route
+- Message format:
+  "Make this program more explosive"
+  "Shorten all sessions"
+  etc.
+
+- Show loading state on chip
+- After response:
+  - refresh program from DB
+  - show "Program Updated" state (existing system)
+
+==================================================
+SECTION 2 — SESSION-LEVEL VIBE ACTIONS
+==================================================
+
+Each Day Card gets a new action row:
+
+Component: <SessionRefineActions />
+
+Buttons:
+- More Explosive
+- Easier
+- Harder
+- Shorter
+- Add Exercise
+
+Behavior:
+- Sends contextual message:
+  Example:
+  "Make Day 1 more explosive"
+  "Make Day 2 shorter"
+  "Add an exercise to Day 3"
+
+- Must include day reference in payload:
+  { dayIndex: X }
+
+==================================================
+SECTION 3 — INLINE FREEFORM VIBE INPUT
+==================================================
+
+Add a small input anchored at the bottom of the right panel.
+
+Component: <ProgramRefineInput />
+
+Placeholder:
+"Refine this program…"
+
+Behavior:
+- Sends message to same conversation endpoint
+- Must include context flag:
+  { source: "right_panel" }
+
+Examples:
+- "Add more jumps"
+- "Make this more soccer specific"
+- "Reduce lower body fatigue"
+
+==================================================
+SECTION 4 — EXERCISE-LEVEL (KEEP EXISTING, ENHANCE)
+==================================================
+
+Existing controls:
+- Swap
+- Easier
+- Harder
+- Full edit
+
+Enhancement:
+- When user taps Swap:
+  - ALSO allow “Smart Swap” via AI if no DB alternatives found
+  - fallback message:
+    "Swap this with something similar for [goal/context]"
+
+==================================================
+SECTION 5 — VISUAL FEEDBACK
+==================================================
+
+When ANY refinement is triggered:
+
+1. Show inline loading state on:
+   - chip OR button pressed
+
+2. On success:
+   - flash "Program Updated"
+   - scroll to affected section if possible
+
+3. Highlight changes:
+   - briefly animate modified exercises (fade or glow)
+
+==================================================
+SECTION 6 — TECHNICAL INTEGRATION
+==================================================
+
+All actions must route through existing system:
+- POST /conversations/:id/messages
+
+DO NOT create a new API.
+
+Payload additions:
+- source: "right_panel"
+- optional: dayIndex
+- optional: exerciseId
+
+Execution flow:
+- goes through execution-planner
+- mutation engine (DB-backed)
+- returns updated system
+
+==================================================
+SECTION 7 — DO NOT BREAK THESE
+==================================================
+
+- Do NOT bypass execution planner
+- Do NOT directly mutate UI state
+- Always reload from DB after mutation
+- Do NOT duplicate logic from chat — reuse it
+
+==================================================
+SECTION 8 — SUCCESS CRITERIA
+==================================================
+
+After this:
+
+User builds program → stays on right panel → can:
+- click “More Explosive”
+- click “Add Exercise” on Day 2
+- type “add more jumps”
+
+And the system:
+- updates correctly
+- reflects changes immediately
+- feels like a real coaching system
+
+NOT a static plan
+
+==================================================
+END
+==================================================
