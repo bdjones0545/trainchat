@@ -257,3 +257,40 @@
     inset: -1px;
   }
 }
+
+/* ─── System Core animations ──────────────────────────────────────────────── */
+
+@keyframes system-core-pulse {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.04); }
+}
+
+@keyframes system-core-drift {
+  0%, 100% { transform: rotate(-2deg); }
+  50%       { transform: rotate(2deg); }
+}
+
+@keyframes system-core-glow {
+  0%, 100% { opacity: 0.25; }
+  50%       { opacity: 0.55; }
+}
+
+@keyframes system-core-react {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+.system-core-idle {
+  animation:
+    system-core-pulse 3s ease-in-out infinite,
+    system-core-drift 7s ease-in-out infinite;
+}
+
+.system-core-react {
+  animation: system-core-react 0.45s ease-out forwards !important;
+}
+
+.system-core-halo {
+  animation: system-core-glow 3s ease-in-out infinite;
+}

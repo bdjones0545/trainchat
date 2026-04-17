@@ -161,6 +161,8 @@ export default function Chat() {
   const [showCalibration, setShowCalibration] = useState(false);
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
   const [calibrationNudgeShown, setCalibrationNudgeShown] = useState(false);
+  const [corePulseActive, setCorePulseActive] = useState(false);
+  const corePulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [undoChangeLogId, setUndoChangeLogId] = useState<number | null>(null);
   const [undoVerificationStatus, setUndoVerificationStatus] = useState<"verified" | "partial" | "unclear" | null>(null);
   const [lastChangeSummary, setLastChangeSummary] = useState<string | null>(null);
@@ -652,6 +654,12 @@ export default function Chat() {
         },
       }
     );
+  }
+
+  function triggerCorePulse() {
+    if (corePulseTimerRef.current) clearTimeout(corePulseTimerRef.current);
+    setCorePulseActive(true);
+    corePulseTimerRef.current = setTimeout(() => setCorePulseActive(false), 500);
   }
 
   async function handleSend(text?: string, extraContext?: Record<string, unknown>) {
@@ -1704,11 +1712,42 @@ export default function Chat() {
             ) : messages.length === 0 ? (
               /* ─── Empty state ─── */
               <div className="flex flex-col items-center justify-center h-full py-8 px-4 text-center animate-in fade-in slide-in-from-bottom-2 duration-500">
-                {/* Icon with soft animated glow */}
-                <div className="relative mb-4 flex items-center justify-center">
-                  <div className="absolute inset-0 rounded-2xl bg-primary/20 blur-xl animate-pulse" style={{ animationDuration: "3s" }} />
-                  <div className="relative w-14 h-14 rounded-2xl bg-primary/10 border border-primary/25 flex items-center justify-center shadow-sm">
-                    <Dumbbell className="w-6 h-6 text-primary" />
+                {/* System core — TrainChat logo with living glow field */}
+                <div className="relative mb-5 flex items-center justify-center" style={{ width: 88, height: 88 }}>
+                  {/* Outer radial glow halo */}
+                  <div
+                    className="system-core-halo absolute rounded-full pointer-events-none"
+                    style={{
+                      inset: -16,
+                      background: "radial-gradient(ellipse at center, hsl(var(--primary)/0.35) 0%, transparent 70%)",
+                      filter: "blur(18px)",
+                    }}
+                  />
+                  {/* Core shell — pulses + drifts in idle state, reacts on interaction */}
+                  <div
+                    className={corePulseActive ? "system-core-react" : "system-core-idle"}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+                  >
+                    {/* Inner container — subtle border glow */}
+                    <div
+                      style={{
+                        width: 80,
+                        height: 80,
+                        borderRadius: 22,
+                        background: "radial-gradient(ellipse at 40% 35%, hsl(var(--primary)/0.18) 0%, hsl(var(--primary)/0.06) 100%)",
+                        border: "1px solid hsl(var(--primary)/0.28)",
+                        boxShadow: "0 0 18px hsl(var(--primary)/0.22), inset 0 1px 1px hsl(var(--primary)/0.15)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <img
+                        src={trainChatLogo}
+                        alt="TrainChat"
+                        style={{ width: 46, height: 46, objectFit: "contain" }}
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -1752,7 +1791,7 @@ export default function Chat() {
                   {SUGGESTION_CHIPS.map((chip) => (
                     <button
                       key={chip.label}
-                      onClick={() => handleSend(chip.prompt)}
+                      onClick={() => { triggerCorePulse(); handleSend(chip.prompt); }}
                       className={`px-3.5 py-2 text-xs font-medium rounded-full active:scale-95 transition-all duration-150 ${
                         chip.highlight
                           ? "text-primary border border-primary/50 bg-primary/10 hover:bg-primary/20 hover:border-primary/70 hover:shadow-sm"
@@ -1944,6 +1983,7 @@ export default function Chat() {
                   rows={1}
                   placeholder="Describe your goal, sport, or constraints…"
                   disabled={stream.isActive}
+                  onFocus={() => { if (messages.length === 0) triggerCorePulse(); }}
                   className="flex-1 resize-none bg-transparent px-4 py-3.5 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none leading-relaxed max-h-40 overflow-y-auto disabled:opacity-60"
                   style={{ minHeight: "52px" }}
                   onInput={(e) => {

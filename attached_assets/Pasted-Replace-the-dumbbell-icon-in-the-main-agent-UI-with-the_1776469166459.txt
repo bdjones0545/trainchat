@@ -1,0 +1,109 @@
+Replace the dumbbell icon in the main agent UI with the TrainChat logo and upgrade it into a dynamic “system core” element.
+
+==================================================
+GOAL
+==================================================
+
+The TrainChat logo should feel like:
+- the brain of the system
+- alive and reactive
+- premium and intelligent
+
+NOT:
+- a static image
+- a small logo asset
+
+==================================================
+STEP 1 — REPLACE ICON
+==================================================
+
+Remove the dumbbell icon.
+
+Insert the TrainChat logo centered in the same container.
+
+Increase its visual weight slightly (size + clarity).
+
+==================================================
+STEP 2 — CREATE SYSTEM CORE CONTAINER
+==================================================
+
+Wrap the logo in a container that includes:
+
+- soft radial gradient glow (blue/cyan tone)
+- subtle blur (20–30px)
+- circular or slightly rounded shape
+
+This should feel like an energy field around the logo.
+
+==================================================
+STEP 3 — ADD PULSE ANIMATION
+==================================================
+
+Animate the container:
+
+- scale: 1 → 1.04 → 1
+- duration: ~3 seconds
+- ease-in-out
+- infinite loop
+
+Very subtle — premium feel only.
+
+==================================================
+STEP 4 — ADD INNER GLOW
+==================================================
+
+Inside the container:
+
+- faint neon edge glow
+- slightly brighter center behind logo
+
+No harsh borders.
+
+==================================================
+STEP 5 — ADD REACTIVE FEEDBACK
+==================================================
+
+When user:
+- taps input
+- taps a quick action chip
+
+Trigger:
+
+- quick pulse (scale to 1.08 → back)
+- glow intensity increase briefly
+
+This makes the system feel responsive.
+
+==================================================
+STEP 6 — OPTIONAL (ADVANCED)
+==================================================
+
+Add very slow rotation:
+
+- rotate: -2deg → 2deg → -2deg
+- duration: 6–8 seconds
+
+Barely noticeable.
+
+==================================================
+STEP 7 — KEEP IT CLEAN
+==================================================
+
+Do NOT:
+- add text around logo
+- add labels
+- clutter the space
+
+Let the logo + motion carry the identity.
+
+==================================================
+RESULT
+==================================================
+
+The center of the screen now feels like:
+- a live AI system core
+- not a fitness icon
+- not a placeholder
+
+It should subtly communicate:
+"This system is ready to build something for you."
