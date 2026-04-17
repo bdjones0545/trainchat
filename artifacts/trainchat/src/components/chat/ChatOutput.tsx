@@ -29,6 +29,7 @@ interface ProgramDay {
   focus?: string;
   exercises: Exercise[];
   notes?: string;
+  dayOfWeek?: number;
 }
 
 export interface ProgramStructure {

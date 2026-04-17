@@ -358,13 +358,18 @@ function ranked(pool: ExerciseMeta[], ctx: ScoreContext, primeMultiplier: number
   };
 
   if (process.env.NODE_ENV !== "production") {
-    console.log("[variation:debug]", JSON.stringify({
+    console.log("[BuildAudit:Variation]", JSON.stringify({
       slot: ctx.slotName,
       sport: ctx.sport,
-      intent: ctx.sessionIntent,
       poolSize: pool.length,
-      top5: scored.slice(0, 5).map((c) => ({ name: c.name, score: Number(c.score.toFixed(2)), ...c.breakdown })),
+      top5: scored.slice(0, 5).map((c) => ({
+        name: c.name,
+        score: Number(c.score.toFixed(2)),
+        isDefaultAnchor: !!(pool.find((m) => m.name === c.name)?.isDefaultAnchor),
+        breakdown: c.breakdown,
+      })),
       chosen,
+      chosenIsDefaultAnchor: !!(pool.find((m) => m.name === chosen)?.isDefaultAnchor),
       contrastPenaltyActive: LAST_BUILD_SELECTIONS.size > 0,
       lastBuildAnchors: [...LAST_BUILD_SELECTIONS].slice(0, 6),
     }));

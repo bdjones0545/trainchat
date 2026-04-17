@@ -2167,12 +2167,25 @@ export function buildArchitectureBrief(
 
   const seed = variationSeed ?? Math.random();
 
+  // Always reset _lastSlotSelection before any path — this ensures stale selections
+  // from a prior build never leak into the post-generation enforcer for SP builds.
+  _lastSlotSelection = null;
+
   // ── Special Population Detection — route BEFORE any athlete logic ──────────
   // If the user request matches an older adult, beginner, post-rehab, pain-sensitive,
   // low-impact, or prenatal profile, route them into the dedicated special populations
   // engine. This is a hard early exit — special populations never reach athlete templates.
   const spProfile = detectSpecialPopulation(userRequest, goal);
   if (spProfile) {
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[BuildAudit:Architecture]", JSON.stringify({
+        path: "special_population",
+        spProfile: spProfile.population,
+        seed: Number(seed.toFixed(4)),
+        daysPerWeek, sport, goal,
+        lockedSelections: null,
+      }));
+    }
     return buildSpecialPopArchitectureBrief(daysPerWeek, goal, userRequest, spProfile, seed);
   }
 
@@ -2191,6 +2204,27 @@ export function buildArchitectureBrief(
 
   const slotSelection = selectSlotExercises(seed, sport, goal, neuralDemand, equipmentLevel, isDeload);
   _lastSlotSelection = slotSelection;
+
+  if (process.env.NODE_ENV !== "production") {
+    const archVariant = seed >= 0.67 ? "C (hinge-priority)" : seed >= 0.33 ? "B (power-extended D1)" : "A (original)";
+    console.log("[BuildAudit:Architecture]", JSON.stringify({
+      path: "athlete",
+      seed: Number(seed.toFixed(4)),
+      archVariant,
+      daysPerWeek, sport, goal,
+      neuralDemand, equipmentLevel, isDeload,
+      lockedSelections: {
+        lower_power: slotSelection.lower_power,
+        bilateral_squat: slotSelection.bilateral_squat_strength,
+        bilateral_hinge: slotSelection.bilateral_hinge_strength,
+        unilateral_lower: slotSelection.unilateral_lower,
+        upper_push: slotSelection.upper_push_primary,
+        upper_pull: slotSelection.upper_pull_primary,
+        trunk_anti_rotation: slotSelection.trunk_anti_rotation,
+      },
+    }));
+  }
+
   const arch = computeWeeklyArchitecture(daysPerWeek, sport, goal, seed);
   const isHockey = sport?.toLowerCase().includes("hockey") ?? false;
   const isFootball = !!(sport && /\bfootball\b/i.test(sport) && !/soccer/.test(sport.toLowerCase()));

@@ -63,6 +63,18 @@ router.get("/training-system/today", requireAuth, async (req, res): Promise<void
     const userId = req.session.userId!;
     const todaySession = await getTodaySession(userId);
 
+    if (process.env.NODE_ENV !== "production" && todaySession) {
+      console.log("[BuildAudit:TodaySource]", JSON.stringify({
+        systemId: (todaySession as any).trainingSystemId ?? null,
+        sessionId: todaySession.id,
+        sessionLabel: todaySession.label,
+        dayOfWeek: todaySession.dayOfWeek,
+        todayDow: new Date().getDay(),
+        matchedByDow: todaySession.dayOfWeek === new Date().getDay(),
+        exercises: (todaySession.exercises ?? []).map((e: { name: string }) => e.name),
+      }));
+    }
+
     res.json(todaySession ?? null);
   } catch (err) {
     console.error("[training-system] GET /today error", err);

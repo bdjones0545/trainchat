@@ -1,0 +1,315 @@
+We need a FULL END-TO-END AUDIT of TrainChat program generation and display consistency.
+
+OBJECTIVE:
+Trace the entire pipeline from:
+1. user input
+2. intent / build context resolution
+3. architecture / variation / locked selection
+4. final generated program object
+5. DB save / active system creation
+6. right sidebar / Live Program rendering
+7. Today / Active Program rendering
+
+We are no longer guessing.
+
+We need to find the exact point where the built program diverges, becomes stale, gets overwritten, or is displayed incorrectly.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Identify the exact source of the mismatch between:
+- what the user asked for
+- what the build engine selected
+- what gets saved as the active program
+- what the right sidebar shows
+- what the Today / Active Program view shows
+
+Then fix the true root cause.
+
+==================================================
+KNOWN SYMPTOMS
+==================================================
+
+We have seen one or more of these:
+- repeated anchor exercises still showing up in one view but not another
+- right sidebar / Live Program showing a different exercise stack than Today / Active Program
+- new builds looking like continuations of older builds
+- variation engine appearing to “not work” even when the active program differs
+- AI output drifting back to default exercises
+- possible old build context leaking into new builds
+
+This audit must determine exactly which layer is responsible.
+
+==================================================
+TASK 1 — TRACE THE FULL BUILD PIPELINE
+==================================================
+
+For a fresh build request such as:
+“I am a football player give me a 3 day strength program”
+
+trace the exact path through:
+
+1. raw input message
+2. sport / goal detection
+3. build context creation
+4. architecture template selection
+5. variation engine selection
+6. locked selections generated
+7. AI generation call (or fallback path if no API key)
+8. post-generation enforcement / replacement
+9. final program object before save
+10. DB save into training_systems / sessions / exercises
+11. active system assignment
+12. right sidebar source resolution
+13. Today / Active Program source resolution
+
+For each step, log the concrete data object being used.
+
+==================================================
+TASK 2 — AUDIT BUILD CONTEXT CREATION
+==================================================
+
+Determine whether a fresh build is truly fresh.
+
+At build start, log:
+- activeSystem.id
+- latestProgram presence
+- builder session ID
+- whether prior program structure is injected
+- whether memory/profile defaults are applied
+- whether conversation program JSON is present
+- whether buildContextType is:
+  - fresh
+  - existing_program
+  - conversation_program
+  - memory_informed_fresh
+
+We need to know whether the build is actually starting from scratch.
+
+==================================================
+TASK 3 — AUDIT SPORT / GOAL / SESSION CONTEXT RESOLUTION
+==================================================
+
+Log the resolved:
+- sport
+- goal
+- build type
+- special population mode
+- session-local overrides
+- memory/profile inputs
+
+We need to confirm that explicit user input wins and that older state is not silently overriding the current request.
+
+==================================================
+TASK 4 — AUDIT ARCHITECTURE VARIANT SELECTION
+==================================================
+
+For the build, log:
+- architecture family selected
+- template variant selected
+- seed used
+- day identities generated
+- slot layout for each day
+
+We need to know whether structural variety is actually occurring or whether the same template is being selected repeatedly.
+
+==================================================
+TASK 5 — AUDIT VARIATION ENGINE OUTPUT
+==================================================
+
+For each slot, log:
+- slot name
+- candidate pool size
+- top 5 ranked exercises
+- score breakdown for each
+- locked selection winner
+- whether winner is marked default anchor
+- what novelty / contrast penalties applied
+
+We need to see whether the variety engine is actually making different selections.
+
+==================================================
+TASK 6 — AUDIT AI OVERRIDE / POST-GENERATION ENFORCEMENT
+==================================================
+
+After the AI generates the program, log:
+- raw AI output exercise list
+- locked selections expected
+- which exercises violated locked selections
+- which replacements the post-generation enforcer applied
+- final exercise list after enforcement
+
+We need to verify whether the AI is drifting and whether the deterministic guardrail is correcting it.
+
+==================================================
+TASK 7 — AUDIT DB SAVE / ACTIVE SYSTEM CREATION
+==================================================
+
+After the final program object is ready, log:
+- program/system ID created
+- session IDs created
+- exercise rows saved
+- active system ID after save
+- whether the save is new program vs overwrite vs refinement
+
+We need to confirm the DB contains the expected final enforced program.
+
+==================================================
+TASK 8 — AUDIT RIGHT SIDEBAR SOURCE OF TRUTH
+==================================================
+
+Log exactly what the right sidebar / Live Program uses:
+- source type: db_active_program | conversation_json | local_state | cache
+- activeSystem.id
+- query key
+- day 1 exercise names
+- whether data came from cache or fresh fetch
+
+We already fixed one stale cache issue; verify there is no remaining stale source or fallback path.
+
+==================================================
+TASK 9 — AUDIT TODAY / ACTIVE PROGRAM SOURCE OF TRUTH
+==================================================
+
+Log exactly what Today / Active Program uses:
+- endpoint/query
+- activeSystem.id / session ID
+- day 1 exercise names
+- whether it is directly DB-backed
+- whether any local transformation differs from sidebar transformation
+
+==================================================
+TASK 10 — COMPARE FINAL OUTPUTS SIDE BY SIDE
+==================================================
+
+For the SAME build, produce a structured side-by-side comparison:
+
+A. Locked selections from variation engine
+B. Final program object after post-generation enforcement
+C. DB-saved exercise stack
+D. Right sidebar Day 1 exercise stack
+E. Today / Active Program Day 1 exercise stack
+
+We need to see if and where divergence begins.
+
+==================================================
+TASK 11 — ADD TEMPORARY DEBUG LOGGING EVERYWHERE
+==================================================
+
+Add concise but high-signal logs in development:
+
+[BuildAudit:Input]
+[BuildAudit:Context]
+[BuildAudit:Architecture]
+[BuildAudit:Variation]
+[BuildAudit:AIOutput]
+[BuildAudit:PostEnforcement]
+[BuildAudit:DBSave]
+[BuildAudit:SidebarSource]
+[BuildAudit:TodaySource]
+
+Each should include identifiers and Day 1 exercise names where relevant.
+
+==================================================
+TASK 12 — IDENTIFY THE EXACT ROOT CAUSE
+==================================================
+
+After the audit, answer explicitly:
+
+1. Is the build context stale?
+2. Is the architecture repeating?
+3. Is the variation engine picking varied exercises?
+4. Is the AI overriding locked selections?
+5. Is post-generation enforcement working?
+6. Is the DB saving the correct final program?
+7. Is the right sidebar showing stale or transformed data?
+8. Is Today / Active Program showing something different?
+9. At what exact layer does the mismatch begin?
+
+Do NOT give guesses.
+Only report what the logs prove.
+
+==================================================
+TASK 13 — FIX THE ROOT CAUSE ONLY
+==================================================
+
+Once the exact failing layer is identified, fix that layer directly.
+
+Possible examples:
+- fresh build context enforcement
+- architecture variant bug
+- variation scoring bug
+- post-generation enforcer not running
+- DB save mismatch
+- sidebar stale source
+- transformation/hydration mismatch
+- old builder session leakage
+
+Do not apply speculative fixes across unrelated layers.
+
+==================================================
+TASK 14 — VALIDATION TESTS
+==================================================
+
+Run these tests after the fix:
+
+TEST A
+Build:
+“I am a football player give me a 3 day strength program”
+
+Capture:
+- locked selections
+- final program
+- DB save
+- right sidebar
+- Today / Active Program
+
+Expected:
+all 5 match on Day 1 exercise stack
+
+TEST B
+Repeat same broad build 3 times from truly fresh builder sessions
+
+Expected:
+- coherent variety across builds
+- right sidebar and Today view match each build exactly
+
+TEST C
+Build a clearly different sport/context program after a previous build
+
+Expected:
+- no old build leakage
+- new context wins
+- displayed program matches built program
+
+==================================================
+TASK 15 — OUTPUT REQUIRED
+==================================================
+
+Return a full audit report with:
+
+1. the exact source of truth at each layer
+2. whether each layer matched or diverged
+3. the exact root cause
+4. the exact code/files changed
+5. before/after Day 1 comparisons
+6. confirmation that right sidebar and Today / Active Program now match the true built program
+
+==================================================
+FINAL STANDARD
+==================================================
+
+For any new build, the system must be internally consistent:
+
+- the user input resolves correctly
+- the variation engine selects coherently
+- post-generation enforcement produces the final intended program
+- the DB saves that exact program
+- the right sidebar shows that exact program
+- the Today / Active Program view shows that exact program
+
+No stale displays.
+No hidden overrides.
+No guessing.
+One true program from input to UI.

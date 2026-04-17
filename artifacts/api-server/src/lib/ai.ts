@@ -2132,8 +2132,8 @@ export async function generateAIResponse(
     actionDecision?.actionType === "STRUCTURAL_REBUILD";
 
   // Captures the variation engine's locked exercise selections for post-generation enforcement.
-  // Set when buildArchitectureBrief runs (non-SP path only).
-  let lockedExerciseSelections = getLastSlotSelection();
+  // Initialized to null — only populated when buildArchitectureBrief runs on the non-SP path.
+  let lockedExerciseSelections: ReturnType<typeof getLastSlotSelection> = null;
 
   if (isBuildIntent) {
     // For structural rebuilds, also check the intent metadata for targetDays
@@ -2141,10 +2141,37 @@ export async function generateAIResponse(
     const days = extractedConstraints?.daysPerWeek ?? metaDays ?? null;
     const sport = extractSportFromRequest(userMessage, extractedConstraints?.sportFocus ?? null);
     const goal = extractedConstraints?.primaryGoal ?? null;
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[BuildAudit:Input]", JSON.stringify({
+        intentType: intentResult?.type ?? actionDecision?.actionType,
+        userMessageSnippet: userMessage.slice(0, 120),
+        sport, goal, days,
+        hasMemoryContext: !!memoryContext,
+        hasExistingProgram: !!currentProgram,
+        sessionSportFocus: extractedConstraints?.sportFocus ?? null,
+      }));
+    }
+
     try {
       architectureBriefText = buildArchitectureBrief(days, sport, goal, userMessage, Math.random());
-      // Capture the freshly-computed slot selections (set as a side-effect inside buildArchitectureBrief)
+      // Capture the freshly-computed slot selections (set as a side-effect inside buildArchitectureBrief).
+      // buildArchitectureBrief resets _lastSlotSelection to null at its start, so this correctly
+      // returns null for SP builds and the fresh selection for non-SP builds.
       lockedExerciseSelections = getLastSlotSelection();
+
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[BuildAudit:Context]", JSON.stringify({
+          hasArchitectureBrief: !!architectureBriefText,
+          hasLockedSelections: !!lockedExerciseSelections,
+          lockedLowerPower: lockedExerciseSelections?.lower_power ?? null,
+          lockedBilateralSquat: lockedExerciseSelections?.bilateral_squat_strength ?? null,
+          lockedUnilateral: lockedExerciseSelections?.unilateral_lower ?? null,
+          lockedUpperPull: lockedExerciseSelections?.upper_pull_primary ?? null,
+          hasSessionSportOverride: !!(extractedConstraints?.sportFocus && memoryContext),
+        }));
+      }
+
       if (architectureBriefText) {
         logger.info(
           { days, sport, goal, intentType: intentResult?.type, hasSelections: !!lockedExerciseSelections },
@@ -2223,6 +2250,17 @@ export async function generateAIResponse(
       ?? (editContext !== null || intentResult?.type === "ADJUST_FOR_PAIN" || intentResult?.type === "ADJUST_FOR_READINESS" ? 4000 : 2800);
 
     let { cleanContent, structuredData } = await callOpenAI(baseMessages, maxTokens);
+
+    if (isBuildIntent && structuredData && process.env.NODE_ENV !== "production") {
+      console.log("[BuildAudit:AIOutput]", JSON.stringify({
+        programName: structuredData.programName,
+        dayCount: structuredData.days?.length ?? 0,
+        day1Name: structuredData.days?.[0]?.name ?? null,
+        day1Exercises: structuredData.days?.[0]?.exercises?.map((e: { name: string }) => e.name) ?? [],
+        lockedLowerPower: lockedExerciseSelections?.lower_power ?? null,
+        lockedBilateralSquat: lockedExerciseSelections?.bilateral_squat_strength ?? null,
+      }));
+    }
 
     // ── Hard Constraint Validation + Auto-Retry ───────────────────────────
     // Only validate/retry for new program builds where constraints exist
@@ -2613,6 +2651,7 @@ Output the corrected program JSON and a brief calm confirmation.`;
     // locked selection. This fires only on build intents where we computed
     // a slotSelection earlier in this call.
     if (isBuildIntent && structuredData && lockedExerciseSelections) {
+      const preDay1 = structuredData.days?.[0]?.exercises?.map((e: { name: string }) => e.name) ?? [];
       const enforced = enforceVariationMandateOnProgram(structuredData, lockedExerciseSelections);
       if (enforced && enforced !== structuredData) {
         structuredData = enforced as typeof structuredData;
@@ -2620,7 +2659,30 @@ Output the corrected program JSON and a brief calm confirmation.`;
           { hasSelections: true },
           "[VariationEnforcer] Post-generation enforcement applied — prohibited defaults replaced"
         );
+        if (process.env.NODE_ENV !== "production") {
+          const postDay1 = structuredData.days?.[0]?.exercises?.map((e: { name: string }) => e.name) ?? [];
+          console.log("[BuildAudit:PostEnforcement]", JSON.stringify({
+            enforcementApplied: true,
+            day1Before: preDay1,
+            day1After: postDay1,
+            diff: preDay1.filter((n) => !postDay1.includes(n)).map((n) => ({
+              removed: n,
+              replacedWith: postDay1.find((p) => !preDay1.includes(p)) ?? null,
+            })),
+          }));
+        }
+      } else if (process.env.NODE_ENV !== "production") {
+        console.log("[BuildAudit:PostEnforcement]", JSON.stringify({
+          enforcementApplied: false,
+          reason: enforced === structuredData ? "no_prohibited_defaults_found" : "enforcer_returned_null",
+          day1: preDay1,
+        }));
       }
+    } else if (isBuildIntent && process.env.NODE_ENV !== "production") {
+      console.log("[BuildAudit:PostEnforcement]", JSON.stringify({
+        enforcementApplied: false,
+        reason: !lockedExerciseSelections ? "no_locked_selections (SP path)" : !structuredData ? "no_structured_data" : "unknown",
+      }));
     }
 
     return { content: cleanContent, structuredData };

@@ -110,6 +110,7 @@ function transformSystemToProgram(
       dayNumber: idx + 1,
       name: session.label,
       focus: session.emphasis ?? undefined,
+      dayOfWeek: session.dayOfWeek ?? undefined,
       exercises: (session.exercises ?? []).map((ex: any) => ({
         name: ex.name,
         sets: typeof ex.sets === "number" ? ex.sets : 3,
@@ -323,16 +324,24 @@ export default function Chat() {
     console.log("[Chat] auth state:", { hasUser: !!me, meLoading, meError });
   }, [me, meLoading, meError]);
 
-  // ── Dev logging: source divergence detection (Task 7) ─────────────────────
+  // ── Dev logging: source divergence detection ─────────────────────────────
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     const source = hasActiveSystem ? "db_active_program" : (latestProgram ? "conversation_json" : "empty");
-    console.log("[LiveProgramSidebarSource]", {
+    const todayDow = new Date().getDay();
+    const todaySessionIdx = displayProgram?.days?.findIndex((d) => d.dayOfWeek === todayDow) ?? -1;
+    console.log("[BuildAudit:SidebarSource]", {
       source,
       systemId: activeSystem?.id ?? null,
+      cacheKey: ["training-system-week", activeSystem?.id ?? null],
       isNewBuildSession,
       weekDataSessions: weekData?.sessions?.length ?? 0,
+      todayDow,
+      todaySessionIdx,
       day1Exercises: displayProgram?.days?.[0]?.exercises?.map((e: { name: string }) => e.name) ?? [],
+      todayExercises: todaySessionIdx >= 0
+        ? displayProgram?.days?.[todaySessionIdx]?.exercises?.map((e: { name: string }) => e.name) ?? []
+        : "(no today-pinned session)",
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasActiveSystem, activeSystem?.id, latestProgram, displayProgram, weekData, isNewBuildSession]);

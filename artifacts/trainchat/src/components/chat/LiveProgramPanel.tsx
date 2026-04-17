@@ -409,6 +409,7 @@ function ProgramTab({
   const queryClient = useQueryClient();
   const [expandedDay, setExpandedDay] = useState<number | null>(0);
   const prevProgramRef = useRef<ProgramStructure | null>(null);
+  const pinnedProgramKey = useRef<string | null>(null);
   const [animatedKeys, setAnimatedKeys] = useState<Map<string, DiffType>>(new Map());
   const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -634,6 +635,20 @@ function ProgramTab({
       if (sessionMode !== "idle") resetSession();
     }
   }, [expandedDay]);
+
+  // Pin expanded day to today's session on initial program load and after each new build.
+  // Uses dayOfWeek preserved in the ProgramDay by transformSystemToProgram.
+  // Falls back to Day 1 (index 0) when today has no scheduled session.
+  useEffect(() => {
+    if (!program) return;
+    const key = `${program.programName}::${program.days?.length ?? 0}`;
+    if (pinnedProgramKey.current === key) return;
+    pinnedProgramKey.current = key;
+    const todayDow = new Date().getDay();
+    const idx = (program.days ?? []).findIndex((d) => d.dayOfWeek === todayDow);
+    setExpandedDay(idx >= 0 ? idx : 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [program?.programName, program?.days?.length]);
 
   useEffect(() => {
     const prev = prevProgramRef.current;

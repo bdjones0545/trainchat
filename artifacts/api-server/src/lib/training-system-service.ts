@@ -1328,6 +1328,18 @@ export async function createTrainingSystemFromProgram(
   }
 
   logger.info({ systemId: system.id, userId }, "[TrainingSystem] createTrainingSystemFromProgram — complete");
+
+  if (process.env.NODE_ENV !== "production") {
+    const day1 = program.days[0];
+    console.log("[BuildAudit:DBSave]", JSON.stringify({
+      newSystemId: system.id,
+      programName: system.name,
+      totalDays: program.days.length,
+      day1Name: day1?.name ?? null,
+      day1Exercises: (day1?.exercises ?? []).map((e) => e.name),
+    }));
+  }
+
   return system;
 }
 
