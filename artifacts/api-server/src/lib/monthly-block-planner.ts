@@ -427,10 +427,13 @@ export function buildMonthlyBlockPlan(
   experience: string | null,
   seed: number,
   isSpecialPopulation: boolean = false,
+  blockTypeOverride?: string,
 ): MonthlyBlockPlan {
-  const blockType = isSpecialPopulation
-    ? selectSpecialPopBlockType(goal, experience, seed)
-    : selectBlockType(goal, sport, experience, isSpecialPopulation, seed);
+  const blockType: MonthlyBlockType | SpecialPopBlockType = blockTypeOverride
+    ? (blockTypeOverride as MonthlyBlockType | SpecialPopBlockType)
+    : isSpecialPopulation
+      ? selectSpecialPopBlockType(goal, experience, seed)
+      : selectBlockType(goal, sport, experience, isSpecialPopulation, seed);
 
   const baseDefinition = isSpecialPopulation
     ? SPECIAL_POP_BLOCKS[blockType as SpecialPopBlockType]

@@ -46,6 +46,19 @@ import {
   type WeeklyBlockPlan,
 } from "./weekly-block-planner";
 
+import { selectBlockAndSplit, archetypeToMonthlyBlockType } from "./programs/blockScoring";
+import { buildFingerprint, recordFingerprint, computeSimilarity, getRecentFingerprints, logSimilarityResult } from "./programs/similarity";
+import { emitBlockRulesAudit, buildFingerprintString, generateAuditId } from "./programs/blockRulesAudit";
+import { validateArchetypeCoherence } from "./programs/blockArchetypes";
+import { validateSplitArchitectures } from "./programs/splitArchitectures";
+
+// ─── One-time validation on module load ──────────────────────────────────────
+// DEV-only coherence checks fire once per process start.
+if (process.env.NODE_ENV !== "production") {
+  validateArchetypeCoherence();
+  validateSplitArchitectures();
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type NeuralDemand = "high" | "moderate" | "low";
@@ -2228,7 +2241,6 @@ export function buildArchitectureBrief(
     reqLc.includes("dumbbell only") || reqLc.includes("no barbell") ? "dumbbells_only" :
     hasLimitedEquipment ? "home_limited" : "full_gym";
 
-  // ── Hierarchical Planning — Layer 1: Monthly Block ─────────────────────────
   // Extract experience/training level from request for monthly block selection
   const experienceHint = reqLc.includes("beginner") ? "beginner" :
     reqLc.includes("novice") ? "novice" :
@@ -2236,32 +2248,161 @@ export function buildArchitectureBrief(
     reqLc.includes("advanced") ? "advanced" :
     reqLc.includes("just starting") || reqLc.includes("new to") ? "beginner" : null;
 
-  const monthlyPlan = buildMonthlyBlockPlan(goal, sport, experienceHint, seed, false);
-  _lastMonthlyPlan = monthlyPlan;
+  const experienceLevel = (experienceHint ?? "intermediate") as "beginner" | "novice" | "intermediate" | "advanced";
+  const recoveryProfile: "fresh" | "normal" | "fatigued" | "overtrained" =
+    isDeload ? "fatigued" : reqLc.includes("tired") || reqLc.includes("sore") ? "fatigued" : "normal";
+
+  // ── Block Variation Engine — STEP 2-5: Score and select archetype + split ──
+  const auditId = generateAuditId();
+
+  const userConstraints = {
+    goal,
+    sport,
+    daysPerWeek,
+    experienceLevel,
+    recoveryProfile,
+    neuralDemandHint: neuralDemand,
+    isDeload,
+    isSpecialPopulation: false,
+    equipmentLevel,
+    seed,
+  };
+
+  // First selection attempt
+  let blockSelection = selectBlockAndSplit(userConstraints, false, null);
+
+  // ── Hierarchical Planning — Layer 1: Monthly Block (archetype-driven) ───────
+  const targetBlockType = archetypeToMonthlyBlockType(blockSelection.archetypeId, userConstraints);
+  const monthlyPlan = buildMonthlyBlockPlan(goal, sport, experienceHint, seed, false, targetBlockType);
+
+  // Patch displayName with archetype label so the UI header is accurate
+  const enrichedMonthlyPlan = {
+    ...monthlyPlan,
+    displayName: blockSelection.archetype.label,
+    missionStatement: blockSelection.archetype.introCopyTemplate,
+    blockType: monthlyPlan.blockType,
+  };
+  _lastMonthlyPlan = enrichedMonthlyPlan;
 
   // ── Hierarchical Planning — Layer 2: Weekly Block ──────────────────────────
-  const weeklyPlans = buildWeeklyBlockPlans(monthlyPlan, daysPerWeek, sport, seed);
-  // For program generation we always generate Week 1 (establish) as the template
-  // but the AI is given the full 4-week arc context.
+  const weeklyPlans = buildWeeklyBlockPlans(enrichedMonthlyPlan, daysPerWeek, sport, seed);
   const activeWeekPlan = weeklyPlans[0]; // establish week
 
-  // Build block context for exercise selection — Week 1 uses establish-week intent
+  // ── Slot exercise selection with archetype-aware block context ───────────────
   const blockCtx: BlockSelectionContext = {
-    blockType: String(monthlyPlan.blockType),
+    blockType: String(enrichedMonthlyPlan.blockType),
     weekRole: activeWeekPlan.role,
   };
 
-  const slotSelection = selectSlotExercises(seed, sport, goal, neuralDemand, equipmentLevel, isDeload, blockCtx);
+  // Use the split's variationSeed for session template selection
+  const splitVariationSeed = blockSelection.variationSeed;
+  const slotSelection = selectSlotExercises(splitVariationSeed, sport, goal, neuralDemand, equipmentLevel, isDeload, blockCtx);
   _lastSlotSelection = slotSelection;
 
+  // ── STEP 9: Similarity check ──────────────────────────────────────────────
+  const elasticCount = blockSelection.split.dayTemplates.filter((d) => d.elasticExposure).length;
+  const lowerCount = blockSelection.split.dayTemplates.filter((d) =>
+    d.primaryPattern === "squat" || d.primaryPattern === "hinge" || d.primaryPattern === "unilateral_lower",
+  ).length;
+  const upperCount = blockSelection.split.dayTemplates.filter((d) =>
+    d.primaryPattern === "upper_push" || d.primaryPattern === "upper_pull",
+  ).length;
+
+  const candidateFingerprint = buildFingerprint({
+    blockArchetype: blockSelection.archetypeId,
+    splitArchitecture: blockSelection.splitId,
+    blockType: String(enrichedMonthlyPlan.blockType),
+    weeklyRhythm: blockSelection.split.weeklyRhythmDescription,
+    slotSelections: slotSelection as unknown as Record<string, string>,
+    neuralDemandProfile: blockSelection.archetype.neuralDemandProfile,
+    daysPerWeek,
+    elasticExposureCount: elasticCount,
+    lowerDaysCount: lowerCount,
+    upperDaysCount: upperCount,
+    variationTags: blockSelection.archetype.variationTags,
+  });
+
+  const recentFingerprints = getRecentFingerprints(3);
+  const similarityResult = computeSimilarity(candidateFingerprint, recentFingerprints);
+  logSimilarityResult(candidateFingerprint, similarityResult);
+
+  // ── STEP 10: Fallback if too similar ──────────────────────────────────────
+  let fallbackTriggered = false;
+  let fallbackReason: string | null = null;
+
+  if (similarityResult.isTooSimilar && recentFingerprints.length >= 2) {
+    fallbackTriggered = true;
+    fallbackReason = `similarity_threshold_exceeded (score=${similarityResult.score.toFixed(2)})`;
+
+    // Try second-best archetype/split
+    const fallbackSelection = selectBlockAndSplit(userConstraints, true, fallbackReason);
+    if (fallbackSelection.archetypeId !== blockSelection.archetypeId ||
+        fallbackSelection.splitId !== blockSelection.splitId) {
+      blockSelection = fallbackSelection;
+
+      // Rebuild with new archetype
+      const fallbackBlockType = archetypeToMonthlyBlockType(fallbackSelection.archetypeId, userConstraints);
+      const fallbackMonthlyPlan = buildMonthlyBlockPlan(goal, sport, experienceHint, seed, false, fallbackBlockType);
+      const enrichedFallback = {
+        ...fallbackMonthlyPlan,
+        displayName: fallbackSelection.archetype.label,
+        missionStatement: fallbackSelection.archetype.introCopyTemplate,
+      };
+      _lastMonthlyPlan = enrichedFallback;
+    } else {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[BlockRulesAuditWarning] Similarity threshold bypassed by fallback with no valid alternative — keeping original selection");
+      }
+    }
+  }
+
+  // Record fingerprint for future builds
+  recordFingerprint(candidateFingerprint);
+
+  // ── Block Rules Audit ─────────────────────────────────────────────────────
+  const fingerprintStr = buildFingerprintString(
+    blockSelection.archetypeId,
+    blockSelection.splitId,
+    [slotSelection.bilateral_squat_strength, slotSelection.bilateral_hinge_strength, slotSelection.lower_power],
+    blockSelection.archetype.neuralDemandProfile,
+  );
+
+  emitBlockRulesAudit({
+    generationId: auditId,
+    mode: reqLc.includes("speed") || reqLc.includes("athletic") ? "speed" : reqLc.includes("strength") ? "strength" : "general",
+    goal,
+    daysPerWeek,
+    equipmentSummary: equipmentLevel,
+    recentProgramIds: [],
+    archetypeCandidates: blockSelection.archetypeCandidates,
+    chosenArchetype: blockSelection.archetypeId,
+    archetypeRuleHits: blockSelection.archetypeRuleHits,
+    archetypeRuleMisses: blockSelection.archetypeRuleMisses,
+    splitCandidates: blockSelection.splitCandidates,
+    chosenSplit: blockSelection.splitId,
+    splitRuleHits: blockSelection.splitRuleHits,
+    slotWeightAdjustmentsApplied: blockSelection.archetype.slotWeightAdjustments.map(
+      (a) => `${a.slot}×${a.modifier}`,
+    ),
+    movementBiasesApplied: blockSelection.archetype.movementBiases,
+    similarityScore: similarityResult.score,
+    fallbackTriggered,
+    fallbackReason,
+    finalProgramFingerprint: fingerprintStr,
+  });
+
   if (process.env.NODE_ENV !== "production") {
-    const archVariant = seed >= 0.67 ? "C (hinge-priority)" : seed >= 0.33 ? "B (power-extended D1)" : "A (original)";
     console.log("[BuildAudit:Architecture]", JSON.stringify({
-      path: "athlete",
+      path: "athlete_block_engine",
+      auditId,
       seed: Number(seed.toFixed(4)),
-      archVariant,
+      splitVariationSeed: Number(splitVariationSeed.toFixed(4)),
+      chosenArchetype: blockSelection.archetypeId,
+      chosenSplit: blockSelection.splitId,
+      blockType: targetBlockType,
       daysPerWeek, sport, goal,
       neuralDemand, equipmentLevel, isDeload,
+      fallbackTriggered,
       lockedSelections: {
         lower_power: slotSelection.lower_power,
         bilateral_squat: slotSelection.bilateral_squat_strength,
@@ -2274,7 +2415,7 @@ export function buildArchitectureBrief(
     }));
   }
 
-  const arch = computeWeeklyArchitecture(daysPerWeek, sport, goal, seed);
+  const arch = computeWeeklyArchitecture(daysPerWeek, sport, goal, splitVariationSeed);
   const isHockey = sport?.toLowerCase().includes("hockey") ?? false;
   const isFootball = !!(sport && /\bfootball\b/i.test(sport) && !/soccer/.test(sport.toLowerCase()));
   const isBasketball = !!(sport && /basketball/i.test(sport));
@@ -2487,7 +2628,9 @@ ELIMINATE from this baseball program:
   })();
 
   // Build hierarchical context blocks for prompt injection
-  const monthlyBlockContext = buildMonthlyBlockContext(monthlyPlan);
+  // Use enrichedMonthlyPlan so the archetype label appears in the AI context
+  const activePlan = (_lastMonthlyPlan ?? monthlyPlan) as typeof monthlyPlan;
+  const monthlyBlockContext = buildMonthlyBlockContext(activePlan);
   const weeklyBlockContext = buildWeeklyBlockContext(weeklyPlans, 1);
 
   // Build session role annotation for the active week
@@ -2500,6 +2643,12 @@ ELIMINATE from this baseball program:
   return `## PROGRAM ARCHITECTURE BRIEF — MANDATORY STRUCTURE
 The following architecture MUST be used as the blueprint for this program.
 DO NOT begin exercise selection until this structure is established.
+
+### BLOCK IDENTITY
+Block Archetype: **${blockSelection.archetype.label}** (${blockSelection.archetypeId})
+Split Architecture: **${blockSelection.split.label}** (${blockSelection.splitId})
+Neural Demand Profile: ${blockSelection.archetype.neuralDemandProfile.toUpperCase()}
+Weekly Rhythm: ${blockSelection.split.weeklyRhythmDescription}
 
 ### REQUESTED BUILD
 User request: "${userRequest.slice(0, 120)}"

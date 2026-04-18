@@ -1,0 +1,472 @@
+We need to connect the new Block Variation Engine and the existing Exercise Variation / Slot Ranking system into one unified programming engine. Right now these systems risk living beside each other instead of driving each other. The result must be that the chosen block archetype materially changes which exercises win, how slots behave, how days feel, and how the final program differs from other outputs.
+
+GOAL
+Make block variation actively drive exercise variation.
+
+CORE PROBLEM
+Right now the system can still converge into “same program, different exercises” or worse, a mismatch where the chosen block identity says one thing but exercise selection behaves like another block. We need the block archetype, phase, split architecture, and day template to shape exercise ranking directly.
+
+PRIMARY OBJECTIVES
+
+1. Connect block variation to exercise ranking
+2. Make slot behavior block-aware and phase-aware
+3. Ensure exercise selection reflects block identity, not just generic slot fit
+4. Add audit logging so we can prove why each exercise won
+5. Prevent stale outputs by combining block-level novelty with exercise-level novelty
+
+ARCHITECTURAL PRINCIPLE
+
+Block engine sets the context.
+Exercise engine obeys the context.
+
+Do NOT let exercise ranking bypass block state.
+Do NOT let slots use raw generic ranking without the derived block context.
+Use single-source-of-truth principles.
+
+NEW SHARED DERIVED OBJECT
+
+Create a single derived context object that is produced after:
+- block archetype selection
+- phase selection
+- split architecture selection
+- day template creation
+
+Name it something like:
+ProgramContextProfile
+
+This object should be the single source of truth passed into slot planning and exercise ranking.
+
+ProgramContextProfile should include at minimum:
+- blockArchetype
+- blockArchetypeLabel
+- currentPhase
+- splitArchitecture
+- splitArchitectureLabel
+- mode (strength or speed)
+- goal
+- daysPerWeek
+- dayIndex
+- dayTheme
+- slotId
+- slotIntent
+- movementBiases
+- neuralDemandProfile
+- fatigueProfile
+- setRepProfile
+- restProfile
+- progressionStyle
+- preferredExerciseFamilies
+- reducedExerciseFamilies
+- disallowedExerciseFamilies
+- noveltyPressure
+- recentUsageWindow
+- recentProgramFingerprints
+- injuryConstraints
+- equipmentConstraints
+- sessionDurationConstraint
+- sportTags
+- phaseSpecificModifiers
+- blockSpecificSlotAdjustments
+- blockSpecificRankingWeights
+
+All downstream ranking logic must consume this derived object rather than raw scattered state.
+
+SLOT BEHAVIOR INTEGRATION
+
+Refactor slot planning so that slots are not only static labels like:
+- bilateral_squat_strength
+- unilateral_lower
+- rotational_power
+- elastic_power
+- upper_push_primary
+etc.
+
+Each slot must also derive a block-aware slot intent.
+
+Examples:
+
+INTENSIFICATION_STRENGTH + bilateral_squat_strength
+- prioritize force output
+- lower rep ranges
+- longer rest
+- stable bilateral anchors
+- lower novelty tolerance
+
+POWER_ELASTIC_CONVERSION + bilateral_squat_strength
+- reinterpret as dynamic lower force slot
+- faster intent
+- lower fatigue
+- more explosive variants allowed
+- higher jump/throw/reactive preference if appropriate
+
+REBUILD_DELOAD + unilateral_lower
+- lower complexity
+- lower fatigue
+- more controlled tempo
+- easier session completion
+- more stability and tissue tolerance bias
+
+FOUNDATION_ACCUMULATION + upper_pull_primary
+- broader exposure
+- moderate volume
+- more hypertrophy-supportive patterns
+- moderate novelty allowed
+
+Implement a function like:
+deriveSlotIntent(programContextProfile, slotDefinition, dayTemplate)
+
+This should return:
+- slotIntentLabel
+- targetStimulus
+- allowedFamilies
+- reducedFamilies
+- disallowedFamilies
+- targetNeuralDemand
+- targetFatigueCost
+- targetStabilityDemand
+- targetVelocityIntent
+- targetRepStyle
+- targetRestStyle
+- noveltyTolerance
+
+EXERCISE RANKING INTEGRATION
+
+Refactor exercise ranking so it accepts ProgramContextProfile + derived slot intent.
+
+Current ranking should be extended to include all of the following dimensions:
+
+- sportFit
+- intentFit
+- neuralFit
+- fatigueFit
+- equipmentFit
+- modeFit
+- blockArchetypeFit
+- currentPhaseFit
+- splitDayFit
+- dayThemeFit
+- slotIntentFit
+- movementBiasFit
+- familyPreferenceFit
+- familyReductionPenalty
+- disallowedFamilyPenalty
+- recentExactExercisePenalty
+- recentFamilyPenalty
+- recentMovementPatternPenalty
+- anchorPenalty
+- noveltyBonus
+- sessionDurationFit
+- injuryConstraintPenalty
+- complexityPenalty
+- progressionStyleFit
+- velocityIntentFit
+- stabilityDemandFit
+
+Create a structured score breakdown object so we can inspect why an exercise won.
+
+Something like:
+ExerciseScoreBreakdown = {
+  exerciseId,
+  totalScore,
+  factors: {
+    sportFit: number,
+    intentFit: number,
+    neuralFit: number,
+    fatigueFit: number,
+    equipmentFit: number,
+    blockArchetypeFit: number,
+    currentPhaseFit: number,
+    splitDayFit: number,
+    slotIntentFit: number,
+    movementBiasFit: number,
+    familyPreferenceFit: number,
+    familyReductionPenalty: number,
+    disallowedFamilyPenalty: number,
+    recentExactExercisePenalty: number,
+    recentFamilyPenalty: number,
+    anchorPenalty: number,
+    noveltyBonus: number,
+    sessionDurationFit: number,
+    injuryConstraintPenalty: number,
+    complexityPenalty: number,
+    progressionStyleFit: number,
+    velocityIntentFit: number,
+    stabilityDemandFit: number
+  }
+}
+
+BLOCK-AWARE EXERCISE BEHAVIOR
+
+Ensure the same slot can resolve differently depending on block context.
+
+Examples that MUST be supported:
+
+1. bilateral_squat_strength
+INTENSIFICATION_STRENGTH:
+- back squat
+- front squat
+- safety bar squat
+- trap bar deadlift
+Preferred qualities:
+- stable
+- high force
+- lower rep
+- longer rest
+
+POWER_ELASTIC_CONVERSION:
+- trap bar jump
+- dynamic effort squat
+- jump squat
+- box jump paired lower intent if slot mapping allows
+Preferred qualities:
+- velocity
+- explosiveness
+- low-moderate fatigue
+- lower grind cost
+
+REBUILD_DELOAD:
+- goblet squat
+- tempo squat
+- supported squat variation
+Preferred qualities:
+- movement quality
+- lower complexity
+- lower neural demand
+
+2. upper_push_primary
+FOUNDATION_ACCUMULATION:
+- DB bench
+- incline bench
+- machine press if needed
+Preferred qualities:
+- moderate volume
+- tissue tolerance
+- moderate novelty
+
+INTENSIFICATION_STRENGTH:
+- bench press
+- incline press
+- landmine press if constraints require
+Preferred qualities:
+- stable pressing
+- progression clarity
+- lower fluff
+
+3. elastic_power
+POWER_ELASTIC_CONVERSION:
+- bounds
+- pogo jumps
+- hurdle hops
+- med ball scoop toss
+- rotational throw
+Preferred qualities:
+- elastic/reactive emphasis
+- high velocity
+- controlled fatigue
+
+REBUILD_DELOAD:
+- reduced density
+- lower complexity pogo or skip variations
+- no excessive tendon load if not appropriate
+
+PROGRAM CONTEXT TO EXERCISE FAMILY MAPPING
+
+Add a family mapping layer so the block can bias families directly.
+
+Examples:
+FOUNDATION_ACCUMULATION:
+- boost general strength families
+- boost hypertrophy-support families
+- reduce ultra-high neural or ultra-reactive families
+
+INTENSIFICATION_STRENGTH:
+- boost heavy bilateral families
+- boost stable upper push/pull families
+- reduce fluff/isolation overload
+- reduce excessive jump density
+
+POWER_ELASTIC_CONVERSION:
+- boost plyometric, ballistic, reactive, med-ball, sprint-support families
+- reduce high-fatigue grinding families
+- reduce excessive accessory density
+
+REBUILD_DELOAD:
+- boost controlled unilateral, trunk stability, mobility-support, tissue-tolerance families
+- reduce high neural bilateral anchors
+- reduce high-impact elastic exposure
+
+Create a utility like:
+deriveFamilyBiases(programContextProfile)
+
+This should output:
+- boostedFamilies
+- reducedFamilies
+- bannedFamilies
+- familyBiasScores
+
+PHASE-AWARE LOGIC
+
+Make exercise variation phase-aware, not just block-aware.
+
+Example:
+FOUNDATION_ACCUMULATION + establish
+- simpler exposure
+- moderate volume
+- foundational patterns
+
+FOUNDATION_ACCUMULATION + build
+- slightly more density / volume / challenge
+
+INTENSIFICATION_STRENGTH + intensify
+- strongest heavy bilateral emphasis
+- tighter accessory list
+- reduced novelty
+
+POWER_ELASTIC_CONVERSION + realize
+- highest velocity emphasis
+- lower fatigue
+- more reactive exposure
+- simpler main lifts around power output
+
+REBUILD_DELOAD + deload
+- minimal complexity
+- low fatigue
+- easy recovery compliance
+
+Implement a helper like:
+derivePhaseModifiers(blockArchetype, currentPhase)
+
+SIMILARITY + ANTI-STALE INTEGRATION
+
+Integrate exercise-level novelty with block-level novelty.
+
+We already want block/split similarity checks, but now also add:
+- same top lift repetition penalty
+- same top 2 movement family pattern penalty by day
+- same assistance cluster penalty
+- same elastic/power cluster penalty
+- same trunk/conditioning finisher repetition penalty
+
+When generating a new program:
+1. choose block archetype
+2. choose split architecture
+3. derive ProgramContextProfile
+4. rank exercises per slot with block-aware scoring
+5. compute program fingerprint
+6. compare against recent program fingerprints
+7. if too similar, try re-ranking with stronger novelty pressure or use next-best block/split candidate
+8. log why fallback happened
+
+Do NOT randomize blindly.
+
+PROGRAM FINGERPRINT EXPANSION
+
+Expand the program fingerprint to include:
+- block archetype
+- phase
+- split architecture
+- day themes
+- top primary exercise per day
+- secondary exercise family per day
+- total bilateral emphasis
+- total unilateral emphasis
+- total elastic emphasis
+- total trunk emphasis
+- total conditioning exposure
+- neural demand distribution
+- fatigue distribution
+
+Use this to reduce stale outputs.
+
+AUDIT SYSTEM
+
+Add a DEV-only audit layer named:
+[ExerciseVariationAudit]
+
+This must log for every generation:
+- generationId
+- chosenBlockArchetype
+- chosenPhase
+- chosenSplitArchitecture
+- dayIndex
+- dayTheme
+- slotId
+- slotIntentLabel
+- topCandidateExercises with score breakdowns
+- chosenExercise
+- why chosenExercise won
+- penalties applied
+- novelty pressure applied
+- family bias applied
+- phase modifier applied
+- block modifier applied
+- whether fallback rerank occurred
+- rerank reason
+
+Also create a concise line for grep-ability:
+[ExerciseVariationAudit] day=1 slot=bilateral_squat_strength block=INTENSIFICATION_STRENGTH phase=intensify winner=front_squat score=8.7 noveltyPressure=0.3 rerank=false
+
+Add DEV warnings for suspicious mismatches:
+[ExerciseVariationAuditWarning] POWER_ELASTIC_CONVERSION selected high-fatigue grinder in elastic slot
+[ExerciseVariationAuditWarning] REBUILD_DELOAD exceeded neural demand target on day 2
+[ExerciseVariationAuditWarning] Slot intent says low complexity but winner complexity score exceeded threshold
+[ExerciseVariationAuditWarning] Block label and selected family distribution appear inconsistent
+
+HEADER / UI CONSISTENCY
+
+Ensure the UI reflects the actual derived context:
+- header block label
+- phase
+- subtitle copy
+- day theme copy if applicable
+
+No component should display generic block text if the derived block identity says otherwise.
+No component should bypass derived program state.
+
+IMPLEMENTATION FILES
+
+Create or refactor toward files like:
+- lib/programs/programContextProfile.ts
+- lib/programs/deriveSlotIntent.ts
+- lib/programs/deriveFamilyBiases.ts
+- lib/programs/derivePhaseModifiers.ts
+- lib/programs/exerciseRanking.ts
+- lib/programs/exerciseVariationAudit.ts
+- lib/programs/fingerprint.ts
+- lib/programs/similarity.ts
+
+If existing files already contain related logic, integrate cleanly rather than duplicating.
+
+VALIDATION RULES
+
+Add DEV validation checks to ensure:
+- disallowed families cannot win unless fallback explicitly allows it and logs why
+- rebuild/deload does not accidentally produce high-fatigue/high-neural day loads
+- power/elastic blocks do not overfill accessory density
+- intensification blocks do not over-rank fluff or low-transfer novelty exercises
+- slot intent and winner qualities are aligned
+- recent repetition penalties actually influence ranking
+
+SUCCESS CRITERIA
+
+This work is successful if:
+1. The same slot resolves differently across different block archetypes in meaningful ways
+2. Programs no longer feel like the same template with swapped exercises
+3. Exercise winners can be explained through structured audit logs
+4. Similarity detection reduces stale outputs
+5. UI reflects real block identity consistently
+6. Existing working generation flow is preserved and enhanced, not broken
+7. No spaghetti logic is layered on top of old state paths
+
+DELIVERABLES
+
+1. Connect block variation and exercise variation through ProgramContextProfile
+2. Refactor slot intent derivation to be block-aware and phase-aware
+3. Refactor exercise ranking to consume derived context and produce score breakdowns
+4. Add ExerciseVariationAudit DEV logs and warnings
+5. Expand similarity/fingerprint logic to include exercise family distribution
+6. Validate that UI labels match derived block identity
+7. Print a concise summary of changed files and why
+8. Print at least 3 example audits showing the same slot resolving differently under different blocks
+
+Before coding, inspect the current generation pipeline and identify the best integration points so this is an architecture upgrade, not another patch layer.
