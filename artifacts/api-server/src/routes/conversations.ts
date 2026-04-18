@@ -8,6 +8,8 @@ import { getLastMonthlyPlan } from "../lib/program-architecture-engine";
 import { classifyIntent, logIntentSummary, extractConstraints, type IntentResult, type ExtractedConstraints } from "../lib/intent";
 import { extractAgentIntentProfile } from "../lib/language-system";
 import { auditLanguageInterpretation } from "../lib/language-audit";
+import { resolveResponsePolicy, type ResponsePolicy, type ResponsePolicyContext } from "../lib/response-policy-engine";
+import { auditResponsePolicy } from "../lib/response-policy-audit";
 import {
   type ResponseMode,
   formatShortCircuitResponse,
@@ -625,14 +627,27 @@ Keep it helpful and intelligent, never promotional.`;
 
   logIntentSummary(parsed.data.content, intentResult, hasAnyProgram);
 
-  // ── Language System — audit classification with AgentIntentProfile ─────────
-  // Runs the broad English coaching language interpretation layer and emits a
-  // structured audit log. Non-fatal — errors do not block the conversation flow.
+  // ── Language System + Response Policy ────────────────────────────────────
+  // Layer 1: extract broad coaching language profile from the user message.
+  // Layer 2: resolve a ResponsePolicy (action, scope, mode, voice, preserves).
+  // Both layers are non-fatal — any failure is swallowed so the main flow continues.
+  let resolvedResponsePolicy: ResponsePolicy | null = null;
   try {
     const langProfile = extractAgentIntentProfile(parsed.data.content, hasAnyProgram);
     auditLanguageInterpretation(langProfile);
+
+    const policyCtx: ResponsePolicyContext = {
+      hasActiveProgram: hasAnyProgram,
+      currentBlock: latestStructuredProgram
+        ? (latestStructuredProgram as any).phases?.[0]?.phaseName ?? null
+        : null,
+      todaySession: null,
+    };
+
+    resolvedResponsePolicy = resolveResponsePolicy(langProfile, policyCtx);
+    auditResponsePolicy(resolvedResponsePolicy, parsed.data.content, langProfile);
   } catch (langErr) {
-    // Intentionally silent — language audit is observability-only
+    // Intentionally silent — language/policy layer is observability + enrichment only
   }
 
   // ── EXECUTION PLANNER — Central single-brain routing decision ─────────────
@@ -1650,6 +1665,7 @@ Keep it helpful and intelligent, never promotional.`;
       neuralImbalances,
       hasActiveProgram: !!currentProgram || hasActiveSystem,
       agentSettings,
+      responsePolicy: resolvedResponsePolicy,
     }
   );
 
@@ -2970,6 +2986,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       uiContext: safeUIContext,
       hasActiveProgram: !!currentProgram || hasActiveSystem,
       agentSettings,
+      responsePolicy: resolvedResponsePolicy,
     }
   );
 

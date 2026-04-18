@@ -47,6 +47,7 @@ import { validateProgrammingQuality, buildQualityRetryPrompt, type ProgrammingVa
 import { type AgentSettingsContext, buildBehaviorInstructions, buildProfileFillContext } from "./agent-settings-resolver";
 import { extractAgentIntentProfile, buildAgentIntentProfilePromptSection } from "./language-system";
 import { auditLanguageInterpretation } from "./language-audit";
+import { type ResponsePolicy, buildResponsePolicyPromptSection } from "./response-policy-engine";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -1948,6 +1949,11 @@ export interface AIResponseOptions {
    * When present, injected into the system prompt to enforce user preferences.
    */
   agentSettings?: AgentSettingsContext | null;
+  /**
+   * Resolved Response Policy — tells the agent what action to take, what scope to change,
+   * how to phrase the response, and what to preserve. Produced by the Response Policy Engine.
+   */
+  responsePolicy?: ResponsePolicy | null;
 }
 
 // ─── Main entry point ────────────────────────────────────────────────────────
@@ -1976,6 +1982,7 @@ export async function generateAIResponse(
     uiContext,
     hasActiveProgram,
     agentSettings,
+    responsePolicy,
   } = options;
 
   // ── Agent settings: behavior instructions + profile fill defaults ──────────
@@ -2243,7 +2250,12 @@ export async function generateAIResponse(
   const uiContextSection = buildUIContextSection(uiContext);
   // behaviorInstructions placed FIRST (highest priority for style/behavior rules)
   // profileFillContext placed BEFORE constraint contract (prompt-level constraints override profile)
-  const extras = [behaviorInstructions, profileFillContext, adaptationContext, memoryContext, sessionSportOverride, insightHint, conversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, agentIntentProfileSection, architectureBriefText, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection]
+  // Build response policy prompt section if a pre-computed policy was passed in
+  const responsePolicySection = responsePolicy
+    ? buildResponsePolicyPromptSection(responsePolicy)
+    : null;
+
+  const extras = [behaviorInstructions, profileFillContext, adaptationContext, memoryContext, sessionSportOverride, insightHint, conversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, agentIntentProfileSection, responsePolicySection, architectureBriefText, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection]
     .filter(Boolean)
     .join("\n\n");
   const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;
