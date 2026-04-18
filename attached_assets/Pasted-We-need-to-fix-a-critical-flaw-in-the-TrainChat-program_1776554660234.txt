@@ -1,0 +1,321 @@
+We need to fix a critical flaw in the TrainChat programming agent:
+
+PROBLEM
+The agent is not treating AGE as a real programming constraint. Example:
+User input: “I am a 65 year old pickleball player give me a 3 day program”
+The system generated things like box jumps, conventional deadlifts at 4–6 reps, pull-ups, and Bulgarian split squats without first applying an age-aware safety and recovery layer.
+
+This makes the output feel like a generic athletic program instead of a context-aware coaching system.
+
+GOAL
+Implement a true AGE-AWARE PROGRAMMING LAYER so the agent:
+1. Detects age from free text reliably
+2. Stores age in structured context
+3. Uses age as a hard modifier before exercise selection and ranking
+4. Adjusts volume, intensity, exercise risk, impact, and recovery
+5. Changes both generation behavior and agent response language
+
+IMPORTANT
+Do not just patch the final text response.
+Do not just add age to the summary.
+Do not fake compliance.
+This must affect the real program generation pipeline.
+
+==================================================
+TASK 1 — EXTRACT AGE FROM USER INPUT
+==================================================
+
+Audit the entire intake / agent request pipeline and find where structured user constraints are parsed from free text.
+
+Implement robust age extraction from natural language examples like:
+- “I am 65”
+- “I am 65 years old”
+- “65 year old pickleball player”
+- “I’m a 42-year-old baseball player”
+- “female, 58, limited equipment”
+- “72yo golfer”
+- “I’m 61 and have knee pain”
+
+Create or improve a parser function such as:
+extractStructuredConstraintsFromPrompt(input: string)
+
+Return structured fields like:
+{
+  age?: number,
+  sport?: string,
+  goals?: string[],
+  injuries?: string[],
+  equipment?: string[],
+  trainingDays?: number,
+  gender?: string,
+  experienceLevel?: string
+}
+
+Requirements:
+- Age must be captured reliably from common phrasing
+- Avoid false positives from reps / sets / days
+- If multiple numbers exist, use surrounding language to identify age
+- Add unit tests for age parsing edge cases
+
+==================================================
+TASK 2 — PERSIST AGE INTO REAL PROGRAM CONTEXT
+==================================================
+
+Once age is extracted, store it in the real program generation context, not just transient UI state.
+
+Audit wherever the agent builds the request payload for:
+- training system creation
+- program generation
+- refine plan
+- regenerate
+- future edits
+
+Ensure age becomes part of the system/user profile context used by the generation engine, for example:
+{
+  demographics: {
+    age: 65
+  }
+}
+
+If program metadata already exists, merge age into metadata safely and persist it so future refinements remember it.
+
+Requirements:
+- Age survives refresh
+- Age survives follow-up refinements
+- Age is visible to downstream generation logic
+- Do not break existing saved programs
+
+==================================================
+TASK 3 — ADD AGE-AWARE SAFETY / SCALING LAYER
+==================================================
+
+Before exercise selection happens, introduce an age-aware decision layer.
+
+Create a function similar to:
+buildAgeProfile(age?: number): AgeProfile
+
+Example shape:
+{
+  bracket: 'under_40' | '40_49' | '50_59' | '60_69' | '70_plus',
+  prioritizeJointFriendly: boolean,
+  reduceImpact: boolean,
+  reduceAxialLoading: boolean,
+  emphasizeBalance: boolean,
+  emphasizePowerButLowImpact: boolean,
+  recoveryAdjustment: 'none' | 'moderate' | 'high',
+  defaultIntensityBias: 'normal' | 'conservative',
+  defaultVolumeBias: 'normal' | 'reduced'
+}
+
+Core rules:
+- Age < 50: minimal change
+- 50–59: mild joint-friendly bias, mild recovery bias
+- 60–69: meaningful reduction in high impact and high spinal load, more stability and controlled power
+- 70+: strongly conservative defaults, highly joint-friendly, balance/stability emphasis
+
+For age 60+:
+- Reduce high-impact jumping exposure
+- Reduce low-rep max-strength bias
+- Reduce high spinal loading bias
+- Increase unilateral control, balance, trunk stability, rotational control
+- Favor “power with low impact” instead of “power with hard landings”
+- Favor recoverable training density
+- Favor technique quality over aggressive loading
+
+This layer must feed into the real ranking / filtering system.
+
+==================================================
+TASK 4 — ADD EXERCISE SAFETY METADATA
+==================================================
+
+Audit the exercise library / candidate pool definitions.
+
+Add missing coaching metadata needed for age-aware filtering/scoring. Each exercise should support fields like:
+- riskLevel: 'low' | 'moderate' | 'high'
+- impactLevel: 'none' | 'low' | 'moderate' | 'high'
+- jointDemand: 'low' | 'moderate' | 'high'
+- spinalLoad: 'low' | 'moderate' | 'high'
+- balanceDemand: 'low' | 'moderate' | 'high'
+- regressionOptions?: string[]
+- ageNotes?: string[]
+
+Do this safely:
+- If full metadata doesn’t exist yet, add defaults and then enrich priority exercises first
+- At minimum, cover the exercises most likely to cause bad recommendations
+
+Examples:
+- Box Jump → impact high, risk moderate/high for older populations
+- Conventional Deadlift → spinalLoad high
+- Pull-Up → difficulty high, regression needed
+- Bulgarian Split Squat → balanceDemand moderate/high
+- Med Ball Scoop Toss → low impact power option
+- Trap Bar Deadlift (high handles) → lower spinal risk than conventional
+- Step-Up → more age-friendly unilateral option
+- Lat Pulldown / Chest-Supported Row → more scalable upper pull options
+- Sled March / Sled Push / Bike Sprint → low impact power-conditioning options
+
+==================================================
+TASK 5 — HARD FILTERS + SCORING CHANGES
+==================================================
+
+Integrate age into the candidate selection engine in two ways:
+
+A. HARD FILTERS
+For users age 60+ by default:
+- Block or strongly suppress high-impact plyometrics unless explicitly unlocked
+- Block or strongly suppress high-risk landing exercises
+- Block or strongly suppress very high spinal loading for low-rep strength prescriptions
+- Block or strongly suppress advanced bodyweight strength movements unless experience supports them
+
+B. SCORING ADJUSTMENTS
+Add scoring bonuses for:
+- joint-friendly exercises
+- low-impact power exercises
+- supported unilateral work
+- balance/stability work
+- trunk anti-rotation / anti-extension
+- recoverable movement patterns
+- rotational work relevant to sport with safe loading
+
+Add penalties for:
+- high impact
+- high spinal load
+- high balance demand without progression path
+- poor scalability for older users
+- advanced exercises without regression
+
+IMPORTANT:
+Do not completely sterilize the program.
+For pickleball and similar sports, still preserve:
+- rotational power
+- lateral control
+- unilateral strength
+- elastic qualities
+But express them in safer forms.
+
+==================================================
+TASK 6 — AGE-AWARE EXERCISE SUBSTITUTION
+==================================================
+
+Implement automatic substitutions when an age-incompatible exercise is selected.
+
+Examples for age 60+:
+- Box Jump -> Med Ball Chest Pass / Scoop Toss / Low Pogo / Power Step-Up
+- Conventional Deadlift -> Trap Bar Deadlift (high handles) / DB RDL / Kettlebell hinge
+- Pull-Up -> Assisted Pull-Up / Lat Pulldown / Supported Row
+- Bulgarian Split Squat -> Supported Split Squat / Step-Up / Split Squat to box
+- Depth jump or reactive jump -> low amplitude elastic drill or med ball throw
+
+Create a helper like:
+getAgeAppropriateAlternative(exercise, ageProfile, sportContext)
+
+Use real substitution logic, not string replacement.
+
+==================================================
+TASK 7 — ADJUST PROGRAM DOSING
+==================================================
+
+For age 60+ default programming should also adjust dosing:
+- Slightly lower total volume
+- Slightly more rest between demanding sets
+- Less aggressive loading ranges
+- More moderate rep ranges for main strength work unless advanced trainee
+- More warm-up/prep quality
+- More movement prep for hips, trunk, shoulders, ankles
+- Better recovery distribution across the 3-day split
+
+For example:
+- Prefer trap bar or goblet patterns over heavy conventional deadlift prescriptions
+- Prefer 5–8 or 6–10 type ranges over aggressive 3–5 loading for most cases
+- Keep power intent but lower impact
+- Include tissue/joint prep appropriate for racket sports and older adults
+
+==================================================
+TASK 8 — CHANGE AGENT RESPONSE BEHAVIOR
+==================================================
+
+The chat response should prove that the system understood age.
+
+Bad:
+“Built a 3-day athletic performance program with pickleball performance support.”
+
+Better:
+“Built a 3-day pickleball performance program with age-aware joint-friendly power, balance, and strength work. I biased the plan toward low-impact explosiveness, lateral stability, and recoverable strength since you’re 65.”
+
+If the age materially affects programming, the agent should mention it naturally.
+
+Also:
+If age is detected but equipment is unknown, the follow-up question should be smart:
+“Since you’re 65, I kept this joint-friendly and low-impact by default. Do you have full gym access, or should I scale this to dumbbells, bands, and bodyweight?”
+
+==================================================
+TASK 9 — ADD TEST CASES
+==================================================
+
+Add tests covering:
+1. “I am a 65 year old pickleball player give me a 3 day program”
+   Expected:
+   - age = 65
+   - pickleball context retained
+   - no box jumps by default
+   - no conventional deadlift 4–6 by default unless explicit advanced override
+   - no unscaled pull-ups by default
+   - agent response acknowledges age-aware bias
+
+2. “I’m 28 and want a 4 day explosive football off-season plan”
+   Expected:
+   - age parsed
+   - no older-user constraints applied
+
+3. “72 year old golfer with knee pain and limited equipment”
+   Expected:
+   - strong joint-friendly and balance bias
+   - low impact output
+   - equipment-sensitive substitutions
+
+4. “58 year old former lifter, advanced, wants to keep heavy trap bar deadlifts”
+   Expected:
+   - age-aware bias still applied
+   - explicit user preference can preserve trap bar strength work if safe
+
+==================================================
+TASK 10 — AUDIT CURRENT BAD OUTPUTS
+==================================================
+
+Find where the current program allowed:
+- box jumps
+- conventional deadlift 4–6
+- pull-ups
+- Bulgarian split squats
+for a 65-year-old pickleball user.
+
+Trace the exact path and fix the root cause, not just symptoms.
+
+I want:
+- a concise summary of the root cause
+- files changed
+- what age now affects
+- before vs after behavior
+
+==================================================
+IMPLEMENTATION STANDARD
+==================================================
+
+Do this cleanly and production-safe:
+- no hacks
+- no fake UI-only fix
+- no duplicated logic
+- no giant hardcoded if/else blob in the chat component
+
+Keep logic inside the actual constraint parsing + generation pipeline.
+
+Preserve the athletic identity of TrainChat:
+The system should still feel performance-oriented, not like generic rehab software.
+But it must become context-dominant and coaching-realistic.
+
+When complete, provide:
+1. root cause
+2. exact files changed
+3. how age is parsed
+4. how age changes generation
+5. example before/after output for the 65-year-old pickleball case
