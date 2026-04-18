@@ -632,6 +632,33 @@ const PHASE_EXERCISE_AFFINITY: Record<string, number> = {
   "deload:Cossack Squat":                                   2.0,
   "deload:Heel-Elevated Goblet Split Squat":                1.5,
   "deload:Walking Lunge (weighted)":                        1.0,
+
+  // ── Unilateral Hinge — Phase Expressions ──────────────────────────────────
+  // Establish: teachable, lower stability demand, pattern distinct from bilateral
+  // RDL (Single-Leg Hip Thrust, Kickstand RDL feel nothing like a bilateral RDL
+  // to the athlete, even if they share the same posterior-chain intent).
+  "establish:Kickstand RDL":                                2.0,
+  "establish:Single-Leg Hip Thrust":                        2.0,
+  "establish:Single-Leg Deadlift (KB)":                     1.5,
+  "establish:Single-Leg Good Morning":                      0.5,
+
+  // Build: standard SLRDL appropriate once athletes are established
+  "build:Single-Leg Romanian Deadlift":                     2.0,
+  "build:Single-Leg Deadlift (KB)":                         1.5,
+  "build:Single-Leg Hip Thrust":                            1.0,
+  "build:Kickstand RDL":                                    0.5,
+
+  // Intensify: maximal posterior-chain neural demand
+  "intensify:Nordics (Nordic Hamstring Curl)":              2.5,
+  "intensify:Single-Leg Romanian Deadlift":                 1.5,
+  "intensify:Single-Leg Good Morning":                      1.5,
+  "intensify:Glute-Ham Raise":                              1.0,
+
+  // Deload: lowest load, different-feeling pattern from any heavy bilateral hinge
+  "deload:Single-Leg Hip Thrust":                           2.5,
+  "deload:Kickstand RDL":                                   2.0,
+  "deload:Hip Hinge to Single-Leg RDL":                     1.5,
+  "deload:Single-Leg Deadlift (KB)":                        1.0,
 };
 
 // ─── Per-candidate seed utilities ─────────────────────────────────────────────
@@ -736,15 +763,30 @@ function scoreCandidate(
 
   // ── Movement cluster penalty (-1.5 per same-family exercise in this build) ─
   // Within the current build's alreadySelected set, count exercises that share
-  // the same movement family as this candidate. Each one adds -1.5, capped at
-  // -3.0. Prevents movement-pattern saturation: e.g., a build that already
-  // locked in two hip-hinge exercises is discouraged from adding a third.
+  // the same movement family OR the same equivalence cluster as this candidate.
+  // Each match adds -1.5, capped at -3.0.
+  //
+  // The equivalence-cluster check is the cross-family saturation gate:
+  // "Romanian Deadlift" (family: heavy_bilateral_hinge, cluster: rdl-pattern)
+  // and "Single-Leg Romanian Deadlift" (family: unilateral_hinge, cluster:
+  // rdl-pattern) are different families, but share a movement pattern. If
+  // bilateral RDL was already selected, SLRDL will receive -1.5 here and the
+  // unilateral hinge slot will prefer Single-Leg Hip Thrust or Nordic Curl.
   const movementClusterPenalty = (() => {
     if (ctx.alreadySelected.size === 0) return 0;
-    const candidateFamily = getExerciseExtendedMeta(meta.name).family;
-    const sameClusterCount = [...ctx.alreadySelected].filter(
-      (n) => getExerciseExtendedMeta(n).family === candidateFamily,
-    ).length;
+    const candidateFamily  = getExerciseExtendedMeta(meta.name).family;
+    const candidateCluster = getEquivalenceCluster(meta.name);
+    const sameClusterCount = [...ctx.alreadySelected].filter((n) => {
+      const alreadyMeta = getExerciseExtendedMeta(n);
+      if (alreadyMeta.family === candidateFamily) return true;
+      // Cross-family cluster overlap: penalise same-pattern exercises even when
+      // they live in different slot families (e.g. bilateral vs unilateral RDL).
+      if (candidateCluster !== "unclassified") {
+        const alreadyCluster = getEquivalenceCluster(n);
+        if (alreadyCluster === candidateCluster) return true;
+      }
+      return false;
+    }).length;
     return Math.min(3.0, sameClusterCount * 1.5);
   })();
 

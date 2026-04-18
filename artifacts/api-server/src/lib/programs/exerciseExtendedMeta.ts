@@ -75,14 +75,21 @@ export const EXERCISE_EXTENDED_META: Record<string, ExerciseExtendedMeta> = {
   "Trap Bar Velocity Deadlift":        { family: "trap_bar", complexity: "moderate", velocityIntent: "explosive",  stabilityDemand: "moderate" },
 
   // ── Heavy Bilateral Hinge ─────────────────────────────────────────────
-  "Conventional Deadlift":             { family: "heavy_bilateral_hinge", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
-  "Sumo Deadlift":                     { family: "heavy_bilateral_hinge", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
-  "Rack Pull (from knee)":             { family: "heavy_bilateral_hinge", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
-  "Snatch-Grip Deadlift":              { family: "heavy_bilateral_hinge", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
-  "Romanian Deadlift":                 { family: "heavy_bilateral_hinge", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
-  "Romanian Deadlift (heavy)":         { family: "heavy_bilateral_hinge", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
+  // equivalenceCluster "deadlift-pattern" groups conventional/sumo/trap bar —
+  // heavy axial-load pulling patterns that are functionally interchangeable as
+  // a primary strength hinge.
+  // equivalenceCluster "rdl-pattern" groups all hip-hinge knee-soft patterns —
+  // used for cross-family saturation: if bilateral RDL is already selected,
+  // the movementClusterPenalty will also suppress unilateral RDL variants
+  // (SLRDL, Kickstand RDL) in the same build call.
+  "Conventional Deadlift":             { family: "heavy_bilateral_hinge", equivalenceCluster: "deadlift-pattern", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
+  "Sumo Deadlift":                     { family: "heavy_bilateral_hinge", equivalenceCluster: "deadlift-pattern", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
+  "Rack Pull (from knee)":             { family: "heavy_bilateral_hinge", equivalenceCluster: "deadlift-pattern", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
+  "Snatch-Grip Deadlift":              { family: "heavy_bilateral_hinge", equivalenceCluster: "deadlift-pattern", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
+  "Romanian Deadlift":                 { family: "heavy_bilateral_hinge", equivalenceCluster: "rdl-pattern",      complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
+  "Romanian Deadlift (heavy)":         { family: "heavy_bilateral_hinge", equivalenceCluster: "rdl-pattern",      complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
   "Good Morning":                      { family: "heavy_bilateral_hinge", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "high" },
-  "Dumbbell Romanian Deadlift":        { family: "heavy_bilateral_hinge", complexity: "simple",   velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
+  "Dumbbell Romanian Deadlift":        { family: "heavy_bilateral_hinge", equivalenceCluster: "rdl-pattern",      complexity: "simple",   velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
   "Kettlebell Deadlift":               { family: "heavy_bilateral_hinge", complexity: "simple",   velocityIntent: "slow_grind",  stabilityDemand: "low" },
   "Barbell Hip Thrust":                { family: "heavy_bilateral_hinge", complexity: "simple",   velocityIntent: "slow_grind",  stabilityDemand: "low" },
   "Hip Thrust (barbell)":              { family: "heavy_bilateral_hinge", complexity: "simple",   velocityIntent: "moderate",    stabilityDemand: "low" },
@@ -102,12 +109,16 @@ export const EXERCISE_EXTENDED_META: Record<string, ExerciseExtendedMeta> = {
   "Box Step-Up":                       { family: "unilateral_squat", complexity: "simple",   velocityIntent: "moderate",    stabilityDemand: "moderate" },
 
   // ── Unilateral Hinge ──────────────────────────────────────────────────
-  "Single-Leg Romanian Deadlift":      { family: "unilateral_hinge", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "high" },
+  // rdl-pattern cluster shared with bilateral RDL variants — so if
+  // Romanian Deadlift is already selected in the bilateral hinge slot,
+  // SLRDL and Kickstand RDL receive a movementClusterPenalty in the same
+  // build call, steering the unilateral slot toward more distinct patterns.
+  "Single-Leg Romanian Deadlift":      { family: "unilateral_hinge", equivalenceCluster: "rdl-pattern",      complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "high" },
   "Single-Leg Hip Thrust":             { family: "unilateral_hinge", complexity: "simple",   velocityIntent: "moderate",    stabilityDemand: "moderate" },
   "Single-Leg Deadlift (KB)":          { family: "unilateral_hinge", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "high" },
-  "Kickstand RDL":                     { family: "unilateral_hinge", complexity: "simple",   velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
+  "Kickstand RDL":                     { family: "unilateral_hinge", equivalenceCluster: "rdl-pattern",      complexity: "simple",   velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
   "Single-Leg Good Morning":           { family: "unilateral_hinge", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "high" },
-  "Hip Hinge to Single-Leg RDL":       { family: "unilateral_hinge", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "high" },
+  "Hip Hinge to Single-Leg RDL":       { family: "unilateral_hinge", equivalenceCluster: "rdl-pattern",      complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "high" },
   "Nordics (Nordic Hamstring Curl)":   { family: "unilateral_hinge", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
   "Glute-Ham Raise":                   { family: "unilateral_hinge", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
 
