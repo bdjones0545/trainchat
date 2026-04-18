@@ -212,9 +212,9 @@ export function validateSplitArchitectures(): void {
       );
     }
 
-    if (split.id === "REBUILD_DELOAD" || split.id === "MOVEMENT_FAMILY_SPLIT") {
+    if (split.id === "MOVEMENT_FAMILY_SPLIT") {
       const hasElastic = split.dayTemplates.some((d) => d.elasticExposure);
-      if (hasElastic && split.id === "MOVEMENT_FAMILY_SPLIT") {
+      if (hasElastic) {
         console.warn(
           `[BlockRulesAuditWarning] ${split.id} has elasticExposure=true but should not have full plyometric work`,
         );

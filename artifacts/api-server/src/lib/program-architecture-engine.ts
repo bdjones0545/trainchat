@@ -215,6 +215,46 @@ function buildCNSFlow(
     return blocks;
   }
 
+  // ── REBUILD_DELOAD structural template ────────────────────────────────────
+  // Fewer blocks. No power block. No secondary compound. Deload density only.
+  // This must look structurally distinct from FOUNDATION_ACCUMULATION every time.
+  if (blockArchetype === "REBUILD_DELOAD") {
+    blocks.push({
+      role: "prep",
+      description: "Deload prep: 8–10 min light dynamic mobility — tissue quality, not CNS activation. Move through ranges without approaching mechanical limits.",
+    });
+    if (isLowerSession) {
+      blocks.push({
+        role: "primary",
+        description: sel
+          ? `DELOAD LOWER: ${patterns.includes("squat") ? sel.bilateral_squat_strength : sel.bilateral_hinge_strength} at 50–60% 1RM, 3 × 5 reps. Movement quality only — no grinding, no fatigue accumulation. This is NOT a training stimulus session.`
+          : "DELOAD LOWER: Primary squat or hinge pattern at 50–60% 1RM, 3 × 5 reps — movement reinforcement, not loading. Bar speed should feel easy.",
+      });
+      blocks.push({
+        role: "unilateral",
+        description: sel
+          ? `Deload single-leg: ${sel.unilateral_lower} at bodyweight or very light load (3 × 6 each side). Positional quality and joint health, not strength training.`
+          : "Deload single-leg: split squat or step-up at bodyweight or very light load — positional quality and tissue care only.",
+      });
+    } else {
+      blocks.push({
+        role: "primary",
+        description: "DELOAD UPPER: Primary press at 50–60% 1RM, 3 × 5 reps. Easy bar speed. Shoulder health and thoracic mobility as the session priority, not load.",
+      });
+      blocks.push({
+        role: "secondary",
+        description: sel
+          ? `Deload pull: ${sel.upper_pull_primary ?? "cable row or face pull"} at very light load (3 × 8 reps). Tissue quality and scapular positioning.`
+          : "Deload pull: cable row or face pull at very light load (3 × 8 reps) — scapular care and shoulder health.",
+      });
+    }
+    blocks.push({
+      role: "trunk",
+      description: "Deload trunk: dead bug (3 × 8) + 90/90 breathing (3 × 5 breaths per side) — parasympathetic recovery, not high-tension abdominal work. Brief and restorative.",
+    });
+    return blocks;
+  }
+
   // ── WORK_CAPACITY / FOUNDATION_ACCUMULATION structural template ──────────
   // Full slot stack. Conditioning finisher is present regardless of neural demand.
   // Volume and density are the primary training stimuli.
@@ -1350,6 +1390,114 @@ function buildSessionsForDayCount(
   const isBasketball = !!(sport && /basketball/i.test(sport));
   if (isBasketball) {
     if (daysPerWeek === 3) {
+      // Variant C (seed ≥ 0.67): Deceleration + elastic SSC leads Day 1
+      if ((variationSeed ?? 0) >= 0.67) {
+        return [
+          {
+            dayNumber: 1,
+            identity: "Deceleration Mechanics + Elastic SSC + Posterior Chain",
+            intent: "Depth jump and lateral bound as the primary elastic stimulus; Nordic hamstring curl for tendon resilience; single-leg squat to close — decel quality anchors the week",
+            neuralDemand: "high",
+            primaryPattern: "power",
+            emphasizedPatterns: ["power", "unilateral_lower", "lateral", "trunk"],
+            cnsFlow: [
+              { role: "prep", description: "Decel prep: snap-down drill × 3 → lateral shuffle × 2 × 15m → single-leg landing hold × 3 each side" },
+              { role: "power", description: "ELASTIC SSC BLOCK: Depth Jump (4 × 4) — step off box, land, and IMMEDIATELY rebound at max height. Contact time is the metric. Then Lateral Bound (3 × 5 each side) — reactive lateral stiffness." },
+              { role: "primary", description: "Nordic Hamstring Curl (3 × 5-8) — tendon resilience mandatory for basketball athletes. This IS the primary tissue protection exercise of the session." },
+              { role: "secondary", description: "Single-Leg Squat or Pistol Squat (3 × 5-8 each side) — unilateral vertical force and deceleration mechanics" },
+              { role: "trunk", description: "Anti-rotation: Half-Kneeling Pallof Press (3 × 10 each side) + Copenhagen Plank (3 × 20 sec each) — groin and adductor resilience" },
+            ],
+            sportNotes: "Basketball Variant C: deceleration and elastic SSC quality anchors Day 1 — patellar tendon and ACL resilience built here, not just vertical power",
+          },
+          {
+            dayNumber: 2,
+            identity: "Upper Structural + Trunk",
+            intent: "Press/pull balance for shoulder health; rotational and anti-rotation trunk for contact and landing stability",
+            neuralDemand: "moderate",
+            primaryPattern: "upper_push",
+            emphasizedPatterns: ["upper_push", "upper_pull", "trunk", "rotational"],
+            cnsFlow: [
+              { role: "prep", description: "Upper activation: band pull-apart × 3, wall slide × 2, thoracic extension" },
+              { role: "power", description: "Med Ball Rotational Throw (3 × 5 each) or Chest Throw — upper rotational power for contact and outlet passes" },
+              { role: "primary", description: "Dumbbell Press (4 × 6-8) — shoulder-health-conscious horizontal press" },
+              { role: "secondary", description: "Chin-Up or Cable Row (4 × 6-8) — matching pull volume for shoulder joint health" },
+              { role: "trunk", description: "Rotational trunk: Cable Chop (3 × 8 each) + Copenhagen Plank (3 × 20-30 sec each) — adductor and groin resilience" },
+            ],
+            sportNotes: "Basketball upper: shoulder health priority — dumbbell over barbell for joint tolerance; face pull in warm-up; balanced push:pull",
+          },
+          {
+            dayNumber: 3,
+            identity: "Reactive Plyometric + Lower Strength + Conditioning",
+            intent: "Vertical and horizontal power via reactive jumps; bilateral lower strength; repeat power conditioning — distinct from Day 1 decel emphasis",
+            neuralDemand: "moderate",
+            primaryPattern: "power",
+            emphasizedPatterns: ["power", "squat", "unilateral_lower", "locomotion"],
+            cnsFlow: [
+              { role: "prep", description: "Jump prep: 2 × sub-max CMJ → 3 × broad jump sub-max" },
+              { role: "power", description: "REACTIVE PLYOMETRIC BLOCK: Box Jump (3 × 4) → Broad Jump (3 × 4) — maximum height/distance every rep. 90 sec between exercises." },
+              { role: "primary", description: "Trap Bar Deadlift or Goblet Squat (4 × 4-6) — bilateral lower strength foundation" },
+              { role: "secondary", description: "RFESS (3 × 6 each side) — single-leg basketball-specific loading" },
+              { role: "trunk", description: "CONDITIONING: REPEAT POWER — 6–8 × court sprint (baseline to half and back) at 100% with 60 sec rest. NOT endurance — explosive court transitions." },
+            ],
+            sportNotes: "Basketball Day 3: plyometric + strength + conditioning — closes the week with full-spectrum power expression",
+          },
+        ];
+      }
+
+      // Variant B (seed ≥ 0.33): Strength-first + bilateral lower anchor leads Day 1
+      if ((variationSeed ?? 0) >= 0.33) {
+        return [
+          {
+            dayNumber: 1,
+            identity: "Lower Bilateral Strength + Power Expression",
+            intent: "Heavy bilateral lower strength as the session anchor; jump expression after potentiation; single-leg loading and tendon care — strength-first structure this week",
+            neuralDemand: "high",
+            primaryPattern: "squat",
+            emphasizedPatterns: ["squat", "power", "unilateral_lower", "trunk"],
+            cnsFlow: [
+              { role: "prep", description: "CNS lower prep: glute activation → 3 × sub-max box step-up → hip CARs × 5 each direction" },
+              { role: "primary", description: "BILATERAL LOWER ANCHOR: Trap Bar Deadlift or Front Squat (4 × 3-5 @ 80-87%) — joint-friendly maximal lower force production. This is the strength anchor for the week." },
+              { role: "power", description: "POST-POTENTIATION JUMP: Box Jump (4 × 3) after rest from primary — PAP window. Then RFESS Jump (3 × 4 each side) — single-leg power expression." },
+              { role: "secondary", description: "Nordic Hamstring Curl (3 × 5-8) + Copenhagen Plank (3 × 20 sec each) — mandatory tendon and adductor care after heavy loading" },
+              { role: "trunk", description: "Anti-rotation: Pallof Press (3 × 10 each side) — trunk stiffness under residual fatigue" },
+            ],
+            sportNotes: "Basketball Variant B: strength-first Day 1 — bilateral lower is the anchor, jump expression follows via PAP, tissue care closes the session",
+          },
+          {
+            dayNumber: 2,
+            identity: "Upper Structural + Trunk",
+            intent: "Press/pull balance for shoulder health; rotational and anti-rotation trunk for contact and landing stability",
+            neuralDemand: "moderate",
+            primaryPattern: "upper_push",
+            emphasizedPatterns: ["upper_push", "upper_pull", "trunk", "rotational"],
+            cnsFlow: [
+              { role: "prep", description: "Upper activation: band pull-apart × 3, wall slide × 2, thoracic extension" },
+              { role: "power", description: "Med Ball Rotational Throw (3 × 5 each) or Chest Throw — upper rotational power for contact and outlet passes" },
+              { role: "primary", description: "Dumbbell Press (4 × 6-8) — shoulder-health-conscious horizontal press" },
+              { role: "secondary", description: "Chin-Up or Cable Row (4 × 6-8) — matching pull volume for shoulder joint health" },
+              { role: "trunk", description: "Rotational trunk: Cable Chop (3 × 8 each) + Copenhagen Plank (3 × 20-30 sec each) — adductor and groin resilience" },
+            ],
+            sportNotes: "Basketball upper: shoulder health priority — dumbbell over barbell for joint tolerance; face pull in warm-up; balanced push:pull",
+          },
+          {
+            dayNumber: 3,
+            identity: "Deceleration + Landing Mechanics + Repeat Power Conditioning",
+            intent: "Landing mechanics and reactive deceleration — distinct from the strength-first Day 1; basketball conditioning: repeat power efforts, NOT aerobic endurance",
+            neuralDemand: "moderate",
+            primaryPattern: "power",
+            emphasizedPatterns: ["power", "unilateral_lower", "lateral", "locomotion"],
+            cnsFlow: [
+              { role: "prep", description: "Movement prep: lateral shuffle × 2 × 20m → backpedal → decel pattern × 2" },
+              { role: "power", description: "DECELERATION + ELASTIC: Depth Jump (3 × 4) — land and IMMEDIATELY jump. Contact time is the metric. Then Lateral Bound (3 × 4 each side)" },
+              { role: "primary", description: "Nordic Hamstring Curl (3 × 5-8) + Single-Leg RDL (3 × 8 each) — tendon resilience and hamstring load tolerance" },
+              { role: "trunk", description: "CONDITIONING: REPEAT POWER — 6–8 × court sprint (baseline to half and back) at 100% with 60 sec rest. NOT endurance — explosive court transitions." },
+            ],
+            sportNotes: "Basketball: deceleration and landing mechanics are as important as acceleration — this session trains the qualities that prevent patellar tendon and ACL injuries",
+          },
+        ];
+      }
+
+      // Variant A (seed < 0.33): Reactive plyometric first — original structure
       return [
         {
           dayNumber: 1,
@@ -1401,6 +1549,143 @@ function buildSessionsForDayCount(
       ];
     }
     if (daysPerWeek === 4) {
+      // Variant C (seed ≥ 0.67): Strength-led Day 1 — bilateral anchor + post-PAP jump
+      if ((variationSeed ?? 0) >= 0.67) {
+        return [
+          {
+            dayNumber: 1,
+            identity: "Lower Bilateral Strength + Post-PAP Jump",
+            intent: "Heavy bilateral lower as the session anchor; box jump after full rest for PAP expression; single-leg and tendon care — strength-first structure this rotation",
+            neuralDemand: "high",
+            primaryPattern: "squat",
+            emphasizedPatterns: ["squat", "power", "unilateral_lower", "trunk"],
+            cnsFlow: [
+              { role: "prep", description: "Lower CNS prep: hip CARs → glute activation → 3 × sub-max CMJ (not exhaustive — just activating the jump pathway)" },
+              { role: "primary", description: "BILATERAL LOWER ANCHOR: Trap Bar Deadlift or Front Squat (4 × 3-5 @ 80-87%) — foundational lower strength. This IS the session." },
+              { role: "power", description: "POST-PAP JUMP: Box Jump (4 × 3 max height) → Broad Jump (3 × 4 max distance) — 4-5 min rest after the primary lift to peak potentiation window." },
+              { role: "secondary", description: "RFESS (3 × 6 each side) — single-leg stability and asymmetry control" },
+              { role: "trunk", description: "Copenhagen Plank (3 × 20-30 sec each side) + Dead Bug (3 × 8) — mandatory adductor and anti-extension care" },
+            ],
+            sportNotes: "Basketball Variant C 4-day: strength-first Day 1 — bilateral strength anchors the week, PAP jump follows, single-leg closes",
+          },
+          {
+            dayNumber: 2,
+            identity: "Upper Structural + Shoulder Health",
+            intent: "Balanced pressing and pulling for shoulder joint longevity — NOT hypertrophy focus",
+            neuralDemand: "moderate",
+            primaryPattern: "upper_push",
+            emphasizedPatterns: ["upper_push", "upper_pull", "trunk"],
+            cnsFlow: [
+              { role: "prep", description: "Shoulder prep: band pull-apart × 20 + face pull × 15 + wall slide × 10" },
+              { role: "primary", description: "Dumbbell Press (4 × 6-8) + Landmine Press (3 × 8 each) — joint-friendly pressing patterns" },
+              { role: "secondary", description: "Weighted Chin-Up (4 × 5-8) + Face Pull (3 × 15) — pull volume equals press volume for shoulder health" },
+              { role: "trunk", description: "Rotational + anti-rotation: Pallof Press (3 × 10 each) + Cable Chop (3 × 8 each)" },
+            ],
+            sportNotes: "Basketball upper: equal push:pull volume — shoulder health determines career longevity",
+          },
+          {
+            dayNumber: 3,
+            identity: "Deceleration + Landing + Elastic Power",
+            intent: "Landing mechanics, stretch-shortening cycle at full intensity, single-leg resilience — distinct from the strength-led Day 1",
+            neuralDemand: "moderate",
+            primaryPattern: "power",
+            emphasizedPatterns: ["power", "unilateral_lower", "lateral", "trunk"],
+            cnsFlow: [
+              { role: "prep", description: "Decel prep: snap-down drill × 3 → lateral shuffle → backpedal break mechanic × 3" },
+              { role: "power", description: "DEPTH JUMP (3 × 4) — step off, land, IMMEDIATELY jump. Develops elastic SSC. LATERAL BOUND (3 × 4 each) — reactive lateral power for defensive movements." },
+              { role: "primary", description: "Nordic Hamstring Curl (3 × 5-6) — tendon resilience mandatory for basketball athletes" },
+              { role: "secondary", description: "Single-Leg Squat or Pistol Squat (3 × 5-8 each side) — unilateral vertical force" },
+              { role: "trunk", description: "Anti-rotation: Half-Kneeling Pallof + Copenhagen Plank (2-3 sets each)" },
+            ],
+            sportNotes: "Basketball deceleration day: teaches the landing mechanics and deceleration capacity that prevent patellar tendon and ACL injuries",
+          },
+          {
+            dayNumber: 4,
+            identity: "Repeat Power Conditioning + Mobility Support",
+            intent: "Basketball-specific conditioning: repeat explosive efforts, NOT long aerobic work; mobility and tissue maintenance",
+            neuralDemand: "moderate",
+            primaryPattern: "locomotion",
+            emphasizedPatterns: ["locomotion", "lateral", "trunk"],
+            cnsFlow: [
+              { role: "prep", description: "Court prep: jog → lateral shuffle × 2 → 3-cone drill at 60% × 2" },
+              { role: "power", description: "BASKETBALL CONDITIONING: 8 × court sprint (full court and back) at 100% with 45-60 sec rest. EXPLOSIVE — not a jog. Add line drill complex if court available." },
+              { role: "secondary", description: "Hip Thrust (3 × 10) + Calf Raise (3 × 15) — posterior chain and ankle tendon maintenance for jump athletes" },
+              { role: "trunk", description: "Mobility: hip flexor stretch, ankle mobility, thoracic rotation + light core maintenance" },
+            ],
+            sportNotes: "Basketball conditioning: short explosive court efforts with full rest — mirrors game demands. NOT aerobic endurance.",
+          },
+        ];
+      }
+
+      // Variant B (seed ≥ 0.33): Deceleration + elastic SSC leads Day 1
+      if ((variationSeed ?? 0) >= 0.33) {
+        return [
+          {
+            dayNumber: 1,
+            identity: "Deceleration + Elastic SSC + Posterior Chain",
+            intent: "Depth jump and lateral bound as the elastic anchor; Nordic and single-leg squat for tendon resilience — decel quality leads this rotation",
+            neuralDemand: "high",
+            primaryPattern: "power",
+            emphasizedPatterns: ["power", "unilateral_lower", "lateral", "trunk"],
+            cnsFlow: [
+              { role: "prep", description: "Decel activation: snap-down drill × 3 → single-leg landing hold × 3 each → lateral shuffle × 2 × 15m" },
+              { role: "power", description: "ELASTIC SSC BLOCK: Depth Jump (4 × 4) — step off, land, IMMEDIATELY rebound at max height. Then Lateral Bound (4 × 4 each side) — reactive lateral stiffness for defensive change of direction." },
+              { role: "primary", description: "Nordic Hamstring Curl (3 × 5-8) — tendon resilience. RFESS (3 × 6 each side) — single-leg force production for jump and decel." },
+              { role: "secondary", description: "Hip Thrust (3 × 10) — posterior chain support and glute development for vertical power" },
+              { role: "trunk", description: "Copenhagen Plank (3 × 25 sec each side) + Dead Bug (3 × 8) — adductor and anti-extension care" },
+            ],
+            sportNotes: "Basketball Variant B 4-day: decel + elastic SSC leads Day 1 — structural differentiation from reactive plyometric focus of Variant A",
+          },
+          {
+            dayNumber: 2,
+            identity: "Upper Structural + Shoulder Health",
+            intent: "Balanced pressing and pulling for shoulder joint longevity — NOT hypertrophy focus",
+            neuralDemand: "moderate",
+            primaryPattern: "upper_push",
+            emphasizedPatterns: ["upper_push", "upper_pull", "trunk"],
+            cnsFlow: [
+              { role: "prep", description: "Shoulder prep: band pull-apart × 20 + face pull × 15 + wall slide × 10" },
+              { role: "primary", description: "Dumbbell Press (4 × 6-8) + Landmine Press (3 × 8 each) — joint-friendly pressing patterns" },
+              { role: "secondary", description: "Weighted Chin-Up (4 × 5-8) + Face Pull (3 × 15) — pull volume equals press volume for shoulder health" },
+              { role: "trunk", description: "Rotational + anti-rotation: Pallof Press (3 × 10 each) + Cable Chop (3 × 8 each)" },
+            ],
+            sportNotes: "Basketball upper: equal push:pull volume — shoulder health determines career longevity",
+          },
+          {
+            dayNumber: 3,
+            identity: "Reactive Plyometric + Lower Strength",
+            intent: "Vertical and horizontal power via reactive jumps; bilateral lower strength — distinct jump-first structure from Day 1 decel emphasis",
+            neuralDemand: "moderate",
+            primaryPattern: "power",
+            emphasizedPatterns: ["power", "squat", "unilateral_lower", "trunk"],
+            cnsFlow: [
+              { role: "prep", description: "Jump prep: 3 × sub-max CMJ → 2 × broad jump sub-max" },
+              { role: "power", description: "BOX JUMP (4 × 4) → BROAD JUMP (4 × 4). Maximum height/distance. 90 sec between each exercise. Step down from box every time." },
+              { role: "primary", description: "Trap Bar Deadlift (4 × 4-6 @ 75-82%) — foundational lower strength" },
+              { role: "secondary", description: "RFESS (3 × 6 each side) — single-leg stability and asymmetry management" },
+              { role: "trunk", description: "Copenhagen Plank (3 × 20-30 sec each side) + Dead Bug (3 × 8)" },
+            ],
+            sportNotes: "Basketball Day 3: reactive plyometric + bilateral strength — vertical power expression in contrast to Day 1 decel anchor",
+          },
+          {
+            dayNumber: 4,
+            identity: "Repeat Power Conditioning + Mobility Support",
+            intent: "Basketball-specific conditioning: repeat explosive efforts, NOT long aerobic work; mobility and tissue maintenance",
+            neuralDemand: "moderate",
+            primaryPattern: "locomotion",
+            emphasizedPatterns: ["locomotion", "lateral", "trunk"],
+            cnsFlow: [
+              { role: "prep", description: "Court prep: jog → lateral shuffle × 2 → 3-cone drill at 60% × 2" },
+              { role: "power", description: "BASKETBALL CONDITIONING: 8 × court sprint (full court and back) at 100% with 45-60 sec rest. EXPLOSIVE — not a jog. Add line drill complex if court available." },
+              { role: "secondary", description: "Hip Thrust (3 × 10) + Calf Raise (3 × 15) — posterior chain and ankle tendon maintenance for jump athletes" },
+              { role: "trunk", description: "Mobility: hip flexor stretch, ankle mobility, thoracic rotation + light core maintenance" },
+            ],
+            sportNotes: "Basketball conditioning: short explosive court efforts with full rest — mirrors game demands. NOT aerobic endurance.",
+          },
+        ];
+      }
+
+      // Variant A (seed < 0.33): Reactive plyometric first — original structure
       return [
         {
           dayNumber: 1,
@@ -1472,6 +1757,111 @@ function buildSessionsForDayCount(
   const isSoccer = !!(sport && /soccer|association football/i.test(sport));
   if (isSoccer) {
     if (daysPerWeek === 3) {
+      // Variant C (seed ≥ 0.67): Strength-led Day 1 — bilateral lower strength + Nordic emphasis
+      if ((variationSeed ?? 0) >= 0.67) {
+        return [
+          {
+            dayNumber: 1,
+            identity: "Bilateral Lower Strength + Hamstring Resilience",
+            intent: "Trap bar deadlift or bilateral squat as the lower anchor; Nordic hamstring curl mandatory; Copenhagen plank and single-leg — strength-first structure for soccer this week",
+            neuralDemand: "high",
+            primaryPattern: "squat",
+            emphasizedPatterns: ["squat", "hinge", "unilateral_lower", "trunk"],
+            cnsFlow: [
+              { role: "prep", description: "Lower strength prep: hip CARs × 5 each direction, glute activation series, ankle stiffness drill" },
+              { role: "primary", description: "BILATERAL LOWER ANCHOR: Trap Bar Deadlift or Back Squat (4 × 4-6 @ 78-85%) — structural lower force base. Strength-first Day 1 this week." },
+              { role: "secondary", description: "HAMSTRING RESILIENCE: Nordic Hamstring Curl (4 × 5-8) — MANDATORY. Most common soccer injury prevention. Non-negotiable regardless of Day 1 structure." },
+              { role: "unilateral", description: "Single-Leg RDL (3 × 8 each side) + Hip Thrust (3 × 10) — posterior chain resilience for sprint and deceleration" },
+              { role: "trunk", description: "ADDUCTOR: Copenhagen Plank (3 × 25 sec each side) + Pallof Press (2 × 10 each side) — mandatory every lower session" },
+            ],
+            sportNotes: "Soccer Variant C: strength-led Day 1 — bilateral lower is the anchor this week, Nordic and Copenhagen still mandatory, no sprinting",
+          },
+          {
+            dayNumber: 2,
+            identity: "Upper Structural + Trunk + Single-Leg Support",
+            intent: "Upper strength balance + rotational trunk + unilateral lower support — structural maintenance in a lower-dominant sport",
+            neuralDemand: "moderate",
+            primaryPattern: "upper_push",
+            emphasizedPatterns: ["upper_push", "upper_pull", "trunk", "unilateral_lower"],
+            cnsFlow: [
+              { role: "prep", description: "General activation: hip mobility, thoracic rotation, shoulder prep" },
+              { role: "primary", description: "Upper push + pull: Bench Press or Dumbbell Press (3 × 6-8) + Bent Row (3 × 6-8) — structural balance for aerial duels and contact" },
+              { role: "secondary", description: "Vertical pull: Chin-Up or Lat Pulldown (3 × 8-10) + Face Pull (3 × 15) — scapular health" },
+              { role: "trunk", description: "Rotational trunk: Pallof Press (3 × 10 each) + Lateral Lunge (3 × 8 each side) — adductor and COD support" },
+            ],
+            sportNotes: "Soccer upper: relatively low volume — focus on structural balance for aerial duels and shoulder health",
+          },
+          {
+            dayNumber: 3,
+            identity: "Acceleration + Repeat Sprint Conditioning",
+            intent: "Sprint mechanics (0–20m) + RSA conditioning — all sprint work this week consolidated with tissue maintenance",
+            neuralDemand: "high",
+            primaryPattern: "locomotion",
+            emphasizedPatterns: ["locomotion", "hinge", "lateral"],
+            cnsFlow: [
+              { role: "prep", description: "Sprint warm-up: 8 min jog → A-skip × 2 × 20m → build-up strides × 3 at 70%, 85%, 95%" },
+              { role: "power", description: "ACCELERATION: 4 × 10m + 3 × 20m at 100% intent with full rest — sprint mechanics first, freshest CNS goes to acceleration quality." },
+              { role: "primary", description: "REPEAT SPRINT ABILITY: 3 sets × 4 × 20-30m with 20 sec intra-set rest, 3 min between sets. Real effort, real rest." },
+              { role: "trunk", description: "Lower tissue maintenance: Nordic Hamstring Curl (2 × 6) + Copenhagen Plank (2 × 25 sec each) + Calf Raise (3 × 15) — mandatory tissue care after sprint session" },
+            ],
+            sportNotes: "Soccer Variant C Day 3: acceleration + RSA combined — sprint work consolidated since Day 1 was strength-led",
+          },
+        ];
+      }
+
+      // Variant B (seed ≥ 0.33): Nordic-first Day 1 — tissue protection leads, no sprint
+      if ((variationSeed ?? 0) >= 0.33) {
+        return [
+          {
+            dayNumber: 1,
+            identity: "Hamstring + Adductor Resilience + Hip Strength",
+            intent: "Nordic hamstring curl as the primary exercise; hip thrust and posterior chain loading; Copenhagen plank — injury prevention session leads the week",
+            neuralDemand: "moderate",
+            primaryPattern: "hinge",
+            emphasizedPatterns: ["hinge", "unilateral_lower", "trunk", "lateral"],
+            cnsFlow: [
+              { role: "prep", description: "Hip and hamstring prep: hip CARs → hamstring curl warm-up (2 × 6 slow) → Copenhagen side plank isometric hold × 3 each" },
+              { role: "primary", description: "HAMSTRING RESILIENCE ANCHOR: Nordic Hamstring Curl (4 × 5-8 @ eccentric focus) — this IS the session anchor this week. Primary exercise, not accessory." },
+              { role: "secondary", description: "Hip Thrust (4 × 8-10) — glute and posterior chain strength for sprint force application" },
+              { role: "unilateral", description: "Single-Leg RDL (3 × 8-10 each side) + Step-Up (3 × 8 each) — unilateral posterior chain and deceleration resilience" },
+              { role: "trunk", description: "ADDUCTOR: Copenhagen Plank (4 × 25-30 sec each side) — adductor strength and groin injury prevention. This day treats injury prevention as performance training." },
+            ],
+            sportNotes: "Soccer Variant B: Nordic curl is the Day 1 anchor — this week the injury prevention work IS the training priority, not the warm-up",
+          },
+          {
+            dayNumber: 2,
+            identity: "Upper Structural + Trunk + Single-Leg Support",
+            intent: "Upper strength balance + rotational trunk + unilateral lower support — structural maintenance in a lower-dominant sport",
+            neuralDemand: "moderate",
+            primaryPattern: "upper_push",
+            emphasizedPatterns: ["upper_push", "upper_pull", "trunk", "unilateral_lower"],
+            cnsFlow: [
+              { role: "prep", description: "General activation: hip mobility, thoracic rotation, shoulder prep" },
+              { role: "primary", description: "Upper push + pull: Bench Press or Dumbbell Press (3 × 6-8) + Bent Row (3 × 6-8) — structural balance for aerial duels and contact" },
+              { role: "secondary", description: "Vertical pull: Chin-Up or Lat Pulldown (3 × 8-10) + Face Pull (3 × 15) — scapular health" },
+              { role: "trunk", description: "Rotational trunk: Pallof Press (3 × 10 each) + Lateral Lunge (3 × 8 each side) — adductor and COD support" },
+            ],
+            sportNotes: "Soccer upper: relatively low volume — focus on structural balance for aerial duels and shoulder health",
+          },
+          {
+            dayNumber: 3,
+            identity: "Acceleration + Repeat Sprint Conditioning + Lower Tissue",
+            intent: "Sprint mechanics first; RSA conditioning; calf and adductor maintenance — all sprint quality in one high-intensity session",
+            neuralDemand: "high",
+            primaryPattern: "locomotion",
+            emphasizedPatterns: ["locomotion", "hinge", "lateral"],
+            cnsFlow: [
+              { role: "prep", description: "RSA warm-up: 5 min jog → dynamic drill series → 3 × 30m build-up strides" },
+              { role: "power", description: "ACCELERATION: 5 × 10m + 4 × 20m at 100% intent. 90 sec between 10m, 2 min between 20m. Sprint mechanics first." },
+              { role: "primary", description: "REPEAT SPRINT ABILITY: 3 sets × 5 × 20-30m with 20 sec intra-set rest, 3 min between sets. NOT circuits. Real sprint effort." },
+              { role: "trunk", description: "Lower tissue maintenance: Calf Raise (3 × 15) + Copenhagen Plank (2 × 30 sec each) — mandatory every session" },
+            ],
+            sportNotes: "Soccer Variant B Day 3: full sprint session — acceleration + RSA after the Nordic-focused Day 1",
+          },
+        ];
+      }
+
+      // Variant A (seed < 0.33): Acceleration + hamstring resilience — original structure
       return [
         {
           dayNumber: 1,
@@ -1522,6 +1912,143 @@ function buildSessionsForDayCount(
       ];
     }
     if (daysPerWeek === 4) {
+      // Variant C (seed ≥ 0.67): Strength-led Day 1 — bilateral lower anchor, no sprint
+      if ((variationSeed ?? 0) >= 0.67) {
+        return [
+          {
+            dayNumber: 1,
+            identity: "Bilateral Lower Strength + Hamstring Resilience",
+            intent: "Trap bar deadlift or squat as the weekly lower anchor; Nordic mandatory; Copenhagen mandatory — strength-first structure this rotation",
+            neuralDemand: "high",
+            primaryPattern: "squat",
+            emphasizedPatterns: ["squat", "hinge", "unilateral_lower", "trunk"],
+            cnsFlow: [
+              { role: "prep", description: "Lower strength prep: hip CARs, glute activation, ankle mobility — 8 min" },
+              { role: "primary", description: "BILATERAL LOWER ANCHOR: Trap Bar Deadlift or Back Squat (4 × 4-5 @ 80-87%) — structural lower force foundation for sprinting and contact" },
+              { role: "secondary", description: "HAMSTRING RESILIENCE: Nordic Hamstring Curl (4 × 5-8) — mandatory every lower session in soccer. Highest ROI injury prevention tool." },
+              { role: "unilateral", description: "Single-Leg RDL (3 × 8 each side) + Hip Thrust (3 × 10) — posterior chain resilience" },
+              { role: "trunk", description: "Copenhagen Plank (3 × 25 sec each side) + Pallof Press (2 × 10 each side) — mandatory adductor and anti-rotation" },
+            ],
+            sportNotes: "Soccer 4-day Variant C: strength-first Day 1 — bilateral lower anchors the week, sprint work moved to Day 4 RSA session",
+          },
+          {
+            dayNumber: 2,
+            identity: "Aerobic Base / Tempo + Lower Tissue Support",
+            intent: "Dedicated aerobic conditioning + adductor/calf tissue maintenance — soccer aerobic base is non-negotiable",
+            neuralDemand: "low",
+            primaryPattern: "locomotion",
+            emphasizedPatterns: ["locomotion", "unilateral_lower"],
+            cnsFlow: [
+              { role: "prep", description: "Easy warm-up: 5 min jog + dynamic stretching + calf activation" },
+              { role: "primary", description: "AEROBIC BASE: 25-35 min steady-state run at 65-73% max HR OR 4 × 6 min at 80-85% HR (lactate threshold) with 3 min rest. Soccer demands aerobic capacity for 90 minutes." },
+              { role: "secondary", description: "Calf Raise (3 × 15) + Tibialis Raise (2 × 15) — calf and ankle tissue maintenance for running volume" },
+              { role: "trunk", description: "Copenhagen Plank (2 × 20 sec each side) + Lateral Lunge (2 × 8 each side) — adductor maintenance session" },
+            ],
+            sportNotes: "Soccer aerobic day: real running conditioning. 10-13km per game demands this foundation. No lifting today — full aerobic development.",
+          },
+          {
+            dayNumber: 3,
+            identity: "Upper Structural + Trunk + Single-Leg",
+            intent: "Upper strength balance + lower unilateral strength support + trunk — structural maintenance week",
+            neuralDemand: "moderate",
+            primaryPattern: "upper_push",
+            emphasizedPatterns: ["upper_push", "upper_pull", "trunk", "unilateral_lower"],
+            cnsFlow: [
+              { role: "prep", description: "General prep: hip flexor stretch, thoracic rotation, shoulder warm-up" },
+              { role: "primary", description: "Dumbbell Press (3 × 8) + Bent Row (3 × 8) — balanced upper structural strength" },
+              { role: "secondary", description: "Chin-Up (3 × 8) + Lateral Lunge (3 × 8 each side) — upper pull + adductor strength" },
+              { role: "trunk", description: "Pallof Press (3 × 10 each) + Single-Leg Squat (3 × 8 each side) — anti-rotation trunk + single-leg strength" },
+            ],
+            sportNotes: "Soccer upper day: moderate volume — structural balance for heading duels and collision resilience without fatiguing the lower body",
+          },
+          {
+            dayNumber: 4,
+            identity: "Acceleration + Repeat Sprint Conditioning + Lower Tissue",
+            intent: "Sprint mechanics + RSA conditioning — all speed work this week in Day 4; strength was Day 1",
+            neuralDemand: "high",
+            primaryPattern: "locomotion",
+            emphasizedPatterns: ["locomotion", "hinge", "lateral"],
+            cnsFlow: [
+              { role: "prep", description: "Sprint prep: 8 min jog → A-skip + high knees → build-up strides × 3" },
+              { role: "power", description: "ACCELERATION: 4 × 10m + 4 × 20m with full rest. Every rep 100%. Sprints first — freshest CNS state." },
+              { role: "primary", description: "REPEAT SPRINT ABILITY: 4 sets × 4 × 20-30m sprint with 20 sec between reps and 3 min between sets. 100% sprint effort." },
+              { role: "secondary", description: "Nordic Hamstring Curl (3 × 5-8) — maintained on conditioning days. Hamstring protection is highest priority." },
+              { role: "trunk", description: "Copenhagen Plank (2 × 25 sec each) + Calf Raise (3 × 15) — tissue maintenance after sprint load" },
+            ],
+            sportNotes: "Soccer Variant C Day 4: all sprint work here — acceleration + RSA after strength-led Day 1 opens the week",
+          },
+        ];
+      }
+
+      // Variant B (seed ≥ 0.33): Nordic-first Day 1 — tissue protection anchors the week
+      if ((variationSeed ?? 0) >= 0.33) {
+        return [
+          {
+            dayNumber: 1,
+            identity: "Hamstring + Adductor Resilience + Hip Posterior Chain",
+            intent: "Nordic hamstring curl as the session anchor; hip thrust and single-leg posterior chain; Copenhagen mandatory — injury prevention IS the performance goal this week",
+            neuralDemand: "moderate",
+            primaryPattern: "hinge",
+            emphasizedPatterns: ["hinge", "unilateral_lower", "trunk", "lateral"],
+            cnsFlow: [
+              { role: "prep", description: "Hip and hamstring prep: hip CARs → slow Nordic lowering warm-up (2 × 5) → Copenhagen side isometric × 3 each" },
+              { role: "primary", description: "HAMSTRING RESILIENCE ANCHOR: Nordic Hamstring Curl (4 × 5-8 eccentric focus) — this is the session anchor. Treat it as a primary performance exercise." },
+              { role: "secondary", description: "Hip Thrust (4 × 8-10) — glute and posterior chain development for sprint force production" },
+              { role: "unilateral", description: "Single-Leg RDL (3 × 8-10 each side) + Step-Up (3 × 8 each) — unilateral posterior chain resilience" },
+              { role: "trunk", description: "ADDUCTOR: Copenhagen Plank (4 × 25-30 sec each side) — groin strength is a top-5 injury risk in soccer. This session prioritizes it." },
+            ],
+            sportNotes: "Soccer 4-day Variant B: Nordic curl anchors Day 1 — injury prevention quality receives the same priority as sprint and strength work this week",
+          },
+          {
+            dayNumber: 2,
+            identity: "Aerobic Base / Tempo + Lower Tissue Support",
+            intent: "Dedicated aerobic conditioning + adductor/calf tissue maintenance — soccer aerobic base is non-negotiable",
+            neuralDemand: "low",
+            primaryPattern: "locomotion",
+            emphasizedPatterns: ["locomotion", "unilateral_lower"],
+            cnsFlow: [
+              { role: "prep", description: "Easy warm-up: 5 min jog + dynamic stretching + calf activation" },
+              { role: "primary", description: "AEROBIC BASE: 25-35 min steady-state run at 65-73% max HR OR 4 × 6 min at 80-85% HR (lactate threshold) with 3 min rest. Soccer demands aerobic capacity for 90 minutes." },
+              { role: "secondary", description: "Calf Raise (3 × 15) + Tibialis Raise (2 × 15) — calf and ankle tissue maintenance for running volume" },
+              { role: "trunk", description: "Copenhagen Plank (2 × 20 sec each side) + Lateral Lunge (2 × 8 each side) — adductor maintenance session" },
+            ],
+            sportNotes: "Soccer aerobic day: real running conditioning. 10-13km per game demands this foundation. No lifting today — full aerobic development.",
+          },
+          {
+            dayNumber: 3,
+            identity: "Upper Structural + Trunk + Single-Leg",
+            intent: "Upper strength balance + lower unilateral strength support + trunk — structural maintenance week",
+            neuralDemand: "moderate",
+            primaryPattern: "upper_push",
+            emphasizedPatterns: ["upper_push", "upper_pull", "trunk", "unilateral_lower"],
+            cnsFlow: [
+              { role: "prep", description: "General prep: hip flexor stretch, thoracic rotation, shoulder warm-up" },
+              { role: "primary", description: "Dumbbell Press (3 × 8) + Bent Row (3 × 8) — balanced upper structural strength" },
+              { role: "secondary", description: "Chin-Up (3 × 8) + Lateral Lunge (3 × 8 each side) — upper pull + adductor strength" },
+              { role: "trunk", description: "Pallof Press (3 × 10 each) + Single-Leg Squat (3 × 8 each side) — anti-rotation trunk + single-leg strength" },
+            ],
+            sportNotes: "Soccer upper day: moderate volume — structural balance for heading duels and collision resilience without fatiguing the lower body",
+          },
+          {
+            dayNumber: 4,
+            identity: "Acceleration + Repeat Sprint Conditioning + Lower Tissue",
+            intent: "Sprint mechanics + RSA conditioning — all speed work consolidated on Day 4 when Nordic work anchored Day 1",
+            neuralDemand: "high",
+            primaryPattern: "locomotion",
+            emphasizedPatterns: ["locomotion", "hinge", "lateral"],
+            cnsFlow: [
+              { role: "prep", description: "RSA prep: 5 min jog → dynamic drill → 3 × build-up strides" },
+              { role: "power", description: "ACCELERATION: 5 × 10m + 4 × 20m. Full rest between every rep. 100% effort — sprint mechanics are the priority before RSA." },
+              { role: "primary", description: "REPEAT SPRINT ABILITY: 4 sets × 4 × 20-30m sprint with 20 sec between reps and 3 min between sets. 100% sprint effort." },
+              { role: "secondary", description: "Nordic Hamstring Curl (3 × 5-8) — maintained even on conditioning days — hamstring protection is highest priority" },
+              { role: "trunk", description: "Copenhagen Plank (2 × 25 sec each) + Calf Raise (3 × 15) — tissue maintenance after sprint load" },
+            ],
+            sportNotes: "Soccer Variant B Day 4: full sprint session — all acceleration + RSA here after Nordic-anchored Day 1",
+          },
+        ];
+      }
+
+      // Variant A (seed < 0.33): Acceleration + hamstring resilience — original structure
       return [
         {
           dayNumber: 1,
@@ -2260,8 +2787,33 @@ function computeMovementAllocation(sessions: SessionArchitecture[], sport: strin
 function applyBlockArchetypeIdentityOverride(
   session: SessionArchitecture,
   blockArchetype: string,
+  preserveIdentity = false,
 ): SessionArchitecture {
   const p = session.primaryPattern;
+
+  // Archetype intent annotations — used when preserveIdentity=true (sport sessions)
+  // to append loading-philosophy context without erasing sport-specific session names.
+  const archetypeIntentSuffix: Record<string, string> = {
+    INTENSIFICATION_STRENGTH:
+      "BLOCK CONTEXT: Intensification block — fewer total movements, heavier load. Load and quality over volume. Full rest between sets.",
+    POWER_ELASTIC_CONVERSION:
+      "BLOCK CONTEXT: Power/elastic conversion block — speed and reactive output IS the primary goal. Velocity intent on all compound movements.",
+    FOUNDATION_ACCUMULATION:
+      "BLOCK CONTEXT: Foundation accumulation block — full movement stack, volume density, work capacity finisher. Building structural and metabolic base.",
+    WORK_CAPACITY_BLOCK:
+      "BLOCK CONTEXT: Work capacity block — circuit density, shorter rest, accumulation of volume. Volume is the stimulus.",
+    REBUILD_DELOAD:
+      "BLOCK CONTEXT: Rebuild/deload block — reduced volume and intensity. Recovery-emphasis loading (50-60% 1RM). Maintain movement quality, not chasing performance.",
+  };
+
+  if (preserveIdentity) {
+    const suffix = archetypeIntentSuffix[blockArchetype];
+    if (!suffix) return session;
+    return {
+      ...session,
+      intent: `${session.intent} | ${suffix}`,
+    };
+  }
 
   if (blockArchetype === "INTENSIFICATION_STRENGTH") {
     if (p === "squat") {
@@ -2348,8 +2900,10 @@ export function computeWeeklyArchitecture(
   const days = Math.max(2, Math.min(6, daysPerWeek));
   let sessions = buildSessionsForDayCount(days, sport, goal, variationSeed, blockArchetype);
 
-  // Apply block-archetype session identity overrides for generic (non-sport) programs.
-  // Sport-specific templates already have bespoke identities and are left untouched.
+  // Apply block-archetype session identity overrides.
+  // Generic (non-sport) programs get full identity + intent replacement.
+  // Sport-specific programs have their bespoke identity preserved; archetype context
+  // is appended to the intent field so the AI understands the loading philosophy.
   const sportLc = sport?.toLowerCase() ?? "";
   const hasSportTemplate = sportLc.includes("hockey") || sportLc.includes("football") ||
     sportLc.includes("basketball") || sportLc.includes("soccer") || sportLc.includes("baseball") ||
@@ -2357,8 +2911,10 @@ export function computeWeeklyArchitecture(
     sportLc.includes("swim") || sportLc.includes("rowing") || sportLc.includes("cycling") ||
     sportLc.includes("mma") || sportLc.includes("boxing") || sportLc.includes("wrestling");
 
-  if (blockArchetype && !hasSportTemplate) {
-    sessions = sessions.map((s) => applyBlockArchetypeIdentityOverride(s, blockArchetype));
+  if (blockArchetype) {
+    sessions = sessions.map((s) =>
+      applyBlockArchetypeIdentityOverride(s, blockArchetype, hasSportTemplate)
+    );
   }
 
   const movementAllocation = computeMovementAllocation(sessions, sport);
