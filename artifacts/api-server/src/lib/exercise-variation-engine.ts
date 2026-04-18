@@ -173,6 +173,9 @@ export interface SlotDebugInfo {
   topKWindow?: number;
   softmaxNeedle?: number;
   softmaxTemperature?: number;
+  diversityBoostedNames?: string[];
+  diversityFamiliesAlreadyUsed?: string[];
+  biasTopDecayApplied?: boolean;
 }
 
 // ─── Overuse Registry ─────────────────────────────────────────────────────────
@@ -825,36 +828,122 @@ function scoreCandidate(
 const CANDIDATE_WINDOW = 10;
 const SOFTMAX_TEMP_BASE = 1.5;
 const SOFTMAX_TEMP_NOVELTY_SCALE = 2.0;
+// biasTop: rank-position exponential decay multiplier applied on top of softmax weights.
+// rank-0 → 1.000×, rank-1 → 0.861×, rank-2 → 0.741×, rank-5 → 0.472×, rank-9 → 0.259×
+const BIAS_TOP_DECAY = 0.15;
+// diversityBoost: weight multiplier for candidates from movement families not yet
+// picked in this build. 1.4 = 40% boost — enough to overcome a small score gap.
+const DIVERSITY_BOOST_MULT = 1.4;
+
+// ─── weightedRandom ────────────────────────────────────────────────────────────
+//
+// Core selection primitive used by ranked(). Takes a pre-scored, pre-sorted
+// top-K list and draws one candidate using a seed-deterministic draw with two
+// optional modifiers:
+//
+//   biasTop      — apply exponential rank-position decay so higher-ranked
+//                  candidates are inherently more likely, independent of their
+//                  score gap. Provides a second layer of safety on top of the
+//                  softmax weights.
+//
+//   diversityBoost — multiply the weight of any candidate whose movement FAMILY
+//                  has not yet appeared among already-selected exercises. Pushes
+//                  the engine toward varied movement families within a build
+//                  without hard-filtering anything from the pool.
+//
+// The two modifiers compound: a rank-2 candidate from a new family gets
+// softmax_weight × rank_decay(2) × DIVERSITY_BOOST_MULT. Combined, variety
+// can overcome a moderate score gap but not a large one — coaching quality
+// is preserved.
+
+interface WeightedRandomOptions {
+  biasTop: boolean;
+  diversityBoost: boolean;
+  temperature: number;
+  /** Pre-computed [0,1) needle — deterministic for repeatability */
+  needle: number;
+  /** Already-selected exercise names; used for family-novelty check */
+  alreadySelected: Set<string>;
+}
+
+interface WeightedRandomResult {
+  chosenIndex: number;
+  finalWeights: number[];
+  diversityBoostedNames: string[];
+  diversityFamiliesAlreadyUsed: string[];
+}
+
+function weightedRandom(
+  topK: CandidateScore[],
+  options: WeightedRandomOptions,
+): WeightedRandomResult {
+  const { biasTop, diversityBoost, temperature, needle, alreadySelected } = options;
+
+  // Step 1 — numerically stable softmax base weights
+  const minScore = topK[topK.length - 1]?.score ?? 0;
+  let weights = topK.map((c) => Math.exp((c.score - minScore) / temperature));
+
+  // Step 2 — biasTop: rank-position decay multiplier
+  if (biasTop) {
+    weights = weights.map((w, i) => w * Math.exp(-i * BIAS_TOP_DECAY));
+  }
+
+  // Step 3 — diversityBoost: family-novelty multiplier
+  const diversityBoostedNames: string[] = [];
+  const diversityFamiliesAlreadyUsed: string[] = [];
+  if (diversityBoost && alreadySelected.size > 0) {
+    const usedFamilies = new Set(
+      [...alreadySelected].map((name) => getExerciseExtendedMeta(name).family),
+    );
+    diversityFamiliesAlreadyUsed.push(...usedFamilies);
+    weights = weights.map((w, i) => {
+      const family = getExerciseExtendedMeta(topK[i].name).family;
+      if (!usedFamilies.has(family)) {
+        diversityBoostedNames.push(topK[i].name);
+        return w * DIVERSITY_BOOST_MULT;
+      }
+      return w;
+    });
+  }
+
+  // Step 4 — seed-deterministic draw
+  const total = weights.reduce((a, b) => a + b, 0);
+  const drawAt = needle * total;
+  let cumulative = 0;
+  let chosenIndex = 0;
+  for (let i = 0; i < topK.length; i++) {
+    cumulative += weights[i];
+    if (drawAt <= cumulative) {
+      chosenIndex = i;
+      break;
+    }
+  }
+
+  return { chosenIndex, finalWeights: weights, diversityBoostedNames, diversityFamiliesAlreadyUsed };
+}
 
 function ranked(pool: ExerciseMeta[], ctx: ScoreContext, primeMultiplier: number): { chosen: string; debugInfo: SlotDebugInfo } {
   const scored = pool.map((m) => scoreCandidate(m, ctx, primeMultiplier));
   scored.sort((a, b) => b.score - a.score);
 
-  // ── Top-K softmax selection ────────────────────────────────────────────────
+  // ── Top-K candidate window ────────────────────────────────────────────────
   const topK = scored.slice(0, Math.min(CANDIDATE_WINDOW, scored.length));
   const temperature = SOFTMAX_TEMP_BASE + (ctx.noveltyPressure ?? 0) * SOFTMAX_TEMP_NOVELTY_SCALE;
 
-  // Numerically stable softmax: shift by the minimum score in the window
-  const minScore = topK[topK.length - 1]?.score ?? 0;
-  const weights = topK.map((c) => Math.exp((c.score - minScore) / temperature));
-  const totalWeight = weights.reduce((a, b) => a + b, 0);
+  // ── Seed needle — unique per (seed × slotName × primeMultiplier) ──────────
+  const needle = slotSeedNeedle(ctx.seed, ctx.slotName, primeMultiplier);
 
-  // Seed needle: unique per (seed × slotName × primeMultiplier) so each slot
-  // in the same build draws at a different position in [0, totalWeight)
-  const needle = slotSeedNeedle(ctx.seed, ctx.slotName, primeMultiplier) * totalWeight;
+  // ── Weighted random draw with biasTop + diversityBoost ───────────────────
+  const { chosenIndex, diversityBoostedNames, diversityFamiliesAlreadyUsed } = weightedRandom(topK, {
+    biasTop: true,
+    diversityBoost: true,
+    temperature,
+    needle,
+    alreadySelected: ctx.alreadySelected,
+  });
 
-  let chosen = topK[0]?.name ?? pool[0]?.name ?? "Back Squat";
-  let softmaxRank = 0;
-  let cumulative = 0;
-  for (let i = 0; i < topK.length; i++) {
-    cumulative += weights[i];
-    if (needle <= cumulative) {
-      chosen = topK[i].name;
-      softmaxRank = i;
-      break;
-    }
-  }
-
+  const softmaxRank = chosenIndex;
+  const chosen = topK[chosenIndex]?.name ?? pool[0]?.name ?? "Back Squat";
   const chosenScore = scored.find((c) => c.name === chosen) ?? scored[0] ?? null;
   const top3 = scored.slice(0, 3);
 
@@ -869,6 +958,9 @@ function ranked(pool: ExerciseMeta[], ctx: ScoreContext, primeMultiplier: number
     topKWindow: topK.length,
     softmaxNeedle: Number(needle.toFixed(4)),
     softmaxTemperature: Number(temperature.toFixed(2)),
+    diversityBoostedNames,
+    diversityFamiliesAlreadyUsed,
+    biasTopDecayApplied: true,
   };
 
   if (process.env.NODE_ENV !== "production") {
@@ -880,6 +972,9 @@ function ranked(pool: ExerciseMeta[], ctx: ScoreContext, primeMultiplier: number
       topKWindow: topK.length,
       softmaxRank,
       softmaxTemperature: Number(temperature.toFixed(2)),
+      biasTopApplied: true,
+      diversityBoostedNames,
+      diversityFamiliesAlreadyUsed,
       top5: scored.slice(0, 5).map((c) => ({
         name: c.name,
         score: Number(c.score.toFixed(2)),
