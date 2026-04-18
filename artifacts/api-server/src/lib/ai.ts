@@ -2299,7 +2299,7 @@ export async function generateAIResponse(
   const activeEditIntent = legacyEditIntent;
 
   if (!apiKey) {
-    return generateFallbackResponse(userMessage, history, profile ?? null, {
+    const fallbackResult = generateFallbackResponse(userMessage, history, profile ?? null, {
       currentProgram: currentProgram ?? null,
       editIntent: activeEditIntent ?? undefined,
       intentResult: intentResult ?? undefined,
@@ -2310,6 +2310,22 @@ export async function generateAIResponse(
       hasActiveProgram: hasActiveProgram ?? (currentProgram != null),
       agentSettings: agentSettings ?? null,
     });
+    // Apply variation mandate enforcement to the fallback program (same guardrail as the OpenAI path).
+    if (isBuildIntent && fallbackResult.structuredData && lockedExerciseSelections) {
+      const enforced = enforceVariationMandateOnProgram(fallbackResult.structuredData, lockedExerciseSelections);
+      if (enforced && enforced !== fallbackResult.structuredData) {
+        if (process.env.NODE_ENV !== "production") {
+          const pre = fallbackResult.structuredData.days?.[0]?.exercises?.map((e: { name: string }) => e.name) ?? [];
+          const post = (enforced as typeof fallbackResult.structuredData).days?.[0]?.exercises?.map((e: { name: string }) => e.name) ?? [];
+          console.log("[BuildAudit:PostEnforcement]", JSON.stringify({ enforcementApplied: true, path: "fallback", day1Before: pre, day1After: post }));
+        }
+        return { ...fallbackResult, structuredData: enforced as typeof fallbackResult.structuredData };
+      } else if (process.env.NODE_ENV !== "production") {
+        const day1 = fallbackResult.structuredData.days?.[0]?.exercises?.map((e: { name: string }) => e.name) ?? [];
+        console.log("[BuildAudit:PostEnforcement]", JSON.stringify({ enforcementApplied: false, path: "fallback", reason: "no_prohibited_defaults_found", day1 }));
+      }
+    }
+    return fallbackResult;
   }
 
   // ── Helper: single AI call ────────────────────────────────────────────────
