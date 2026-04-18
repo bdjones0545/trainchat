@@ -109,6 +109,12 @@ export interface ScoreContext {
   resolvedAgentControls?: ResolvedAgentControls;
   /** Day index for this slot (used for day identity overrides). */
   dayIndex?: number;
+  /**
+   * Block-scoped exposure tracker for the current 4-week build.
+   * When provided, scoreCandidate applies an intra-block exposure penalty
+   * that prevents any single exercise from dominating a slot across all weeks.
+   */
+  blockExposure?: BlockExposureTracker;
 }
 
 export interface SlotExerciseSelection {
@@ -187,6 +193,15 @@ interface CandidateScore {
     dayIdentityAlignmentFit: number;
     controlNoveltyBonus: number;
     controlNoveltyPenalty: number;
+    // ── Family Rotation System ────────────────────────────────────────────────
+    /** -5 to -14: penalty for reusing the same exercise in the same slot in a
+     *  prior week of the current 4-week block.  Primary gate preventing one
+     *  exercise from dominating all weeks. */
+    blockExposurePenalty: number;
+    /** 0 to +2.5: bonus for exercises that are the ideal expression of their
+     *  movement family during the current training phase (establish/build/
+     *  intensify/deload).  Drives WHICH family member is chosen. */
+    phaseAffinityFit: number;
   };
 }
 
@@ -295,6 +310,61 @@ function registerBuildSelections(selections: Record<string, string>): void {
   }
 
   REGISTRY_BUILDS.push({ timestamp: now, exercises });
+}
+
+// ─── Block Exposure Tracker ────────────────────────────────────────────────────
+//
+// Tracks exercise selection across the weeks of a SINGLE program build.
+// Passed through W1→W2→W3→W4 selectSlotExercises calls so each week knows what
+// the prior weeks already chose for the same slot.
+//
+// Separation of concerns:
+//   • BlockExposureTracker = intra-block (same 4-week program). Reset per build.
+//   • REGISTRY_BUILDS      = inter-build (across programs). Persists in memory.
+//
+// Penalty logic (applied in scoreCandidate):
+//   count=1 (used once this block) : -5.0  — soft discouragement
+//   count=2 (used twice this block): -9.0  — near-hard ban
+//   count≥3                        : -14.0 — hard ban (never 4× same slot)
+
+export class BlockExposureTracker {
+  /** slotName → exerciseName → weekNumbers[] */
+  private readonly exposure: Map<string, Map<string, number[]>> = new Map();
+  /** Public so audit logs inside pick() can read it without a getter method. */
+  currentWeek: number = 1;
+
+  /** Call before each week's selectSlotExercises call. */
+  setWeek(weekNumber: number): void {
+    this.currentWeek = weekNumber;
+  }
+
+  /** Record a selection after it is made. Called inside pick(). */
+  record(slotName: string, exerciseName: string): void {
+    if (!this.exposure.has(slotName)) this.exposure.set(slotName, new Map());
+    const slotMap = this.exposure.get(slotName)!;
+    if (!slotMap.has(exerciseName)) slotMap.set(exerciseName, []);
+    slotMap.get(exerciseName)!.push(this.currentWeek);
+  }
+
+  /** Times this exercise has been used in this slot so far in the block. */
+  getCount(slotName: string, exerciseName: string): number {
+    return this.exposure.get(slotName)?.get(exerciseName)?.length ?? 0;
+  }
+
+  /** All exercises used in this slot across the block with their week arrays. */
+  getSlotExposure(slotName: string): Map<string, number[]> {
+    return this.exposure.get(slotName) ?? new Map();
+  }
+
+  /** Full exposure map for audit output. */
+  getFullExposure(): Record<string, Record<string, number[]>> {
+    const out: Record<string, Record<string, number[]>> = {};
+    for (const [slot, exMap] of this.exposure) {
+      out[slot] = {};
+      for (const [ex, weeks] of exMap) out[slot][ex] = weeks;
+    }
+    return out;
+  }
 }
 
 /** How many of the last N builds included this exercise (proper sliding count). */
@@ -438,6 +508,130 @@ const ANCHOR_EXTRA_PENALTY: Record<string, number> = {
   "Zercher Squat": 2.0,          // wins bilateral_squat_strength slot by default when Back Squat is penalized
   "Hatfield Squat": 1.0,         // secondary winner in the squat slot under strength archetypes
   "Safety Bar Squat": 0.5,       // surfaces frequently as Back Squat alternative
+};
+
+// ─── Phase Exercise Affinity ──────────────────────────────────────────────────
+//
+// Maps "phase:exerciseName" → score bonus.
+//
+// Purpose: make week role change WHICH family member is chosen, not just
+// the sets/reps.  Example: the "bilateral squat" family should express as:
+//   Establish → Belt Squat / Safety Bar (teachable, moderate axial load)
+//   Build     → Back Squat / Front Squat (progressive loading)
+//   Intensify → Pause Back Squat / Zercher (peak-force intent)
+//   Deload    → Belt Squat / Goblet Squat (zero axial compression)
+//
+// These bonuses are additive on top of all existing scoring dimensions.
+// They are intentionally NOT large enough to override a sport-fit or
+// equipment-fit mismatch — they only shift the tie-break inside the family.
+
+const PHASE_EXERCISE_AFFINITY: Record<string, number> = {
+  // ── Bilateral Squat — Phase Expressions ───────────────────────────────────
+  // Establish: teachable, stable, moderate complexity
+  "establish:Belt Squat":                                   2.0,
+  "establish:Safety Bar Squat":                             1.5,
+  "establish:Goblet Squat (heavy)":                         1.5,
+  "establish:Heel-Elevated Goblet Squat":                   1.0,
+  "establish:Back Squat":                                   1.0,
+  "establish:Trap Bar Deadlift (squat-mode, low handles)":  1.0,
+  "establish:Box Squat":                                    0.5,
+
+  // Build: progressive, demand-increasing
+  "build:Back Squat":                                       1.5,
+  "build:Front Squat":                                      1.5,
+  "build:Safety Bar Squat":                                 1.0,
+  "build:Cambered Bar Squat":                               1.0,
+  "build:Hatfield Squat":                                   1.0,
+  "build:Belt Squat":                                       0.5,
+
+  // Intensify: highest-force / highest-intent
+  "intensify:Pause Back Squat":                             2.0,
+  "intensify:Front Squat":                                  1.5,
+  "intensify:Zercher Squat":                                1.5,
+  "intensify:Low-Bar Back Squat":                           1.5,
+  "intensify:Hatfield Squat":                               1.0,
+  "intensify:Tempo Back Squat (3-1-1)":                     1.0,
+
+  // Deload: low axial load, joint-friendly, technique maintenance only
+  "deload:Belt Squat":                                      2.5,
+  "deload:Goblet Squat (heavy)":                            2.5,
+  "deload:Heel-Elevated Goblet Squat":                      2.0,
+  "deload:Box Squat":                                       1.5,
+  "deload:Safety Bar Squat":                                1.0,
+  "deload:Heel-Elevated Back Squat":                        1.0,
+
+  // ── Bilateral Hinge — Phase Expressions ──────────────────────────────────
+  "establish:Romanian Deadlift":                            2.0,
+  "establish:Dumbbell Romanian Deadlift":                   1.5,
+  "establish:Hip Thrust (barbell)":                         1.5,
+  "establish:Trap Bar Deadlift":                            1.0,
+  "establish:Hex Bar RDL":                                  1.0,
+
+  "build:Romanian Deadlift (heavy)":                        1.5,
+  "build:Conventional Deadlift":                            1.5,
+  "build:Sumo Deadlift":                                    1.0,
+  "build:Trap Bar Deadlift":                                1.0,
+  "build:Stiff-Leg Deadlift":                               1.0,
+
+  "intensify:Conventional Deadlift":                        2.0,
+  "intensify:Sumo Deadlift":                                1.5,
+  "intensify:Snatch-Grip Deadlift":                         1.5,
+  "intensify:Rack Pull (from knee)":                        1.0,
+  "intensify:Romanian Deadlift (heavy)":                    1.0,
+
+  "deload:Dumbbell Romanian Deadlift":                      2.5,
+  "deload:Good Morning":                                    2.0,
+  "deload:Hip Thrust (barbell)":                            1.5,
+  "deload:Hex Bar RDL":                                     1.5,
+  "deload:Romanian Deadlift":                               1.0,
+
+  // ── Lower Power / Explosive — Phase Expressions ──────────────────────────
+  "establish:Broad Jump":                                   1.5,
+  "establish:Standing Long Jump":                           1.5,
+  "establish:Box Jump (step-down)":                         1.0,
+  "establish:Med-Ball Scoop Toss":                          1.0,
+  "establish:Lateral Bound":                                1.0,
+
+  "build:Trap Bar Jump":                                    2.0,
+  "build:Box Jump":                                         1.5,
+  "build:Broad Jump":                                       1.0,
+  "build:Bounding":                                         1.0,
+  "build:Reactive Bound":                                   1.0,
+
+  "intensify:Depth Jump":                                   2.0,
+  "intensify:Trap Bar Jump":                                2.0,
+  "intensify:Loaded Jump":                                  1.5,
+  "intensify:Reactive Bound":                               1.5,
+
+  "deload:Pogo Hops":                                       2.0,
+  "deload:Ankle Stiffness Drill":                           2.0,
+  "deload:Box Jump (step-down)":                            1.5,
+  "deload:Med-Ball Scoop Toss":                             1.5,
+  "deload:Standing Long Jump":                              1.0,
+
+  // ── Unilateral Lower — Phase Expressions ──────────────────────────────────
+  "establish:Reverse Lunge":                                2.0,
+  "establish:Walking Lunge (weighted)":                     1.5,
+  "establish:Lateral Lunge":                                1.5,
+  "establish:Step-Up with Knee Drive":                      1.0,
+  "establish:Step-Up (front, loaded)":                      1.0,
+
+  "build:Bulgarian Split Squat":                            1.5,
+  "build:Rear-Foot Elevated Split Squat (RFESS)":           1.5,
+  "build:Deficit Reverse Lunge":                            1.0,
+  "build:Elevated Split Squat (barbell)":                   1.0,
+  "build:Lateral Step-Up":                                  0.5,
+
+  "intensify:Rear-Foot Elevated Split Squat (RFESS)":       2.0,
+  "intensify:Bulgarian Split Squat":                        1.5,
+  "intensify:Single-Leg Squat to Box":                      1.5,
+  "intensify:Deficit Reverse Lunge":                        1.0,
+
+  "deload:Reverse Lunge":                                   2.0,
+  "deload:Lateral Lunge":                                   2.0,
+  "deload:Cossack Squat":                                   2.0,
+  "deload:Heel-Elevated Goblet Split Squat":                1.5,
+  "deload:Walking Lunge (weighted)":                        1.0,
 };
 
 // ─── Per-candidate seed utilities ─────────────────────────────────────────────
@@ -851,6 +1045,37 @@ function scoreCandidate(
     }
   }
 
+  // ── Block Exposure Penalty (0 to −14) ────────────────────────────────────
+  // Core intra-block rotation gate. Fires when this exact exercise has already
+  // been used in THIS SAME SLOT in a prior week of the current 4-week block.
+  // This is the primary mechanism replacing penalty-only winner logic:
+  // after an exercise wins once, it is hard-suppressed for the remaining weeks
+  // unless it genuinely outscores all other candidates by a large margin.
+  //
+  //   count = 1 (used once this block):   -5.0  — soft discouragement
+  //   count = 2 (used twice this block):  -9.0  — near-hard ban
+  //   count ≥ 3 (used 3+ times):          -14.0 — hard ban
+  let blockExposurePenalty = 0;
+  if (ctx.blockExposure) {
+    const count = ctx.blockExposure.getCount(ctx.slotName, meta.name);
+    if (count >= 3) blockExposurePenalty = 14.0;
+    else if (count === 2) blockExposurePenalty = 9.0;
+    else if (count === 1) blockExposurePenalty = 5.0;
+  }
+
+  // ── Phase Affinity Fit (0 to +2.5) ────────────────────────────────────────
+  // Boosts exercises that are the ideal expression of their movement family
+  // during the current training phase.  Makes week role change WHICH family
+  // member is chosen — not just the sets/reps.
+  // Example: "deload:Belt Squat" = +2.5 so Belt Squat rises over Back Squat
+  // when the program context is a deload week.
+  let phaseAffinityFit = 0;
+  if (profile?.currentPhase) {
+    const affinityKey = `${profile.currentPhase}:${meta.name}`;
+    const rawBonus = PHASE_EXERCISE_AFFINITY[affinityKey] ?? 0;
+    phaseAffinityFit = Math.min(2.5, rawBonus);
+  }
+
   // ── Total ─────────────────────────────────────────────────────────────────
   const total = sportFit + intentFit + neuralFit + equipFit + noveltyBonus
     - fatiguePenalty - overusePenalty - contrastPenalty - exactRepeatPenalty - slotRepeatPenalty
@@ -864,7 +1089,10 @@ function scoreCandidate(
     + controlFamilyBoostFit - controlFamilyReductionPenalty
     + visibleSpineAlignmentFit
     + dayIdentityAlignmentFit
-    + controlNoveltyBonus - controlNoveltyPenalty;
+    + controlNoveltyBonus - controlNoveltyPenalty
+    // Family Rotation System
+    - blockExposurePenalty
+    + phaseAffinityFit;
 
   return {
     name: meta.name,
@@ -903,6 +1131,8 @@ function scoreCandidate(
       dayIdentityAlignmentFit,
       controlNoveltyBonus,
       controlNoveltyPenalty,
+      blockExposurePenalty,
+      phaseAffinityFit,
     },
   };
 }
@@ -1127,6 +1357,8 @@ function ranked(pool: ExerciseMeta[], ctx: ScoreContext, primeMultiplier: number
           controlFamilyReductionPenalty: c.breakdown.controlFamilyReductionPenalty,
           visibleSpineAlignmentFit: c.breakdown.visibleSpineAlignmentFit,
           dayIdentityAlignmentFit: c.breakdown.dayIdentityAlignmentFit,
+          blockExposurePenalty: c.breakdown.blockExposurePenalty,
+          phaseAffinityFit: c.breakdown.phaseAffinityFit,
           controlNoveltyBonus: c.breakdown.controlNoveltyBonus,
           controlNoveltyPenalty: c.breakdown.controlNoveltyPenalty,
         },
@@ -2008,6 +2240,7 @@ export function selectSlotExercises(
   programContext?: ProgramContextProfile,
   dayIndex?: number,
   registerSelections: boolean = true,
+  blockExposure?: BlockExposureTracker,
 ): SlotExerciseSelection {
   const alreadySelected = new Set<string>();
   const debugInfos: SlotDebugInfo[] = [];
@@ -2065,10 +2298,34 @@ export function selectSlotExercises(
       generationId,
       resolvedAgentControls,
       dayIndex,
+      blockExposure,
     };
     const { chosen, debugInfo } = ranked(pool, ctx, primeMultiplier);
     debugInfos.push(debugInfo);
     alreadySelected.add(chosen);
+
+    // Record to block exposure tracker so subsequent weeks penalise this choice
+    if (blockExposure) {
+      const prevCount = blockExposure.getCount(slotName, chosen);
+      blockExposure.record(slotName, chosen);
+
+      if (process.env.NODE_ENV !== "production") {
+        const family = getExerciseFamily(chosen);
+        const exposurePenaltyApplied = prevCount >= 3 ? 14 : prevCount === 2 ? 9 : prevCount === 1 ? 5 : 0;
+        console.log("[FamilyRotationAudit]", JSON.stringify({
+          slot: slotName,
+          week: blockExposure.currentWeek,
+          phase: programContext?.currentPhase ?? "unknown",
+          movementFamily: family,
+          selected: chosen,
+          priorBlockUses: prevCount,
+          exposurePenaltyApplied,
+          slotExposureSoFar: Object.fromEntries(blockExposure.getSlotExposure(slotName)),
+          top3: debugInfo.top3.map((c) => ({ name: c.name, score: Number(c.score.toFixed(2)) })),
+        }));
+      }
+    }
+
     auditSlotSelection(slotName, chosen, blockContext?.blockType, blockContext?.weekRole);
     return chosen;
   }

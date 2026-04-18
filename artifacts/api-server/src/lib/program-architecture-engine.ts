@@ -28,6 +28,7 @@ import {
   getDayPowerExercise,
   type SlotExerciseSelection,
   type BlockSelectionContext,
+  BlockExposureTracker,
 } from "./exercise-variation-engine";
 // getBlockVariant / describeBlockVariant are used inside buildVariationMandate — no direct call needed here
 
@@ -3168,10 +3169,16 @@ export function buildArchitectureBrief(
     agentControlDirectives,
   });
 
+  // ── Block Exposure Tracker ────────────────────────────────────────────────
+  // One tracker per program build — scopes exercise rotation across W1-W4.
+  // Prevents any exercise from occupying the same slot in multiple weeks.
+  const blockExposure = new BlockExposureTracker();
+
   // Use the split's variationSeed for session template selection
   const splitVariationSeed = blockSelection.variationSeed;
   // dayIndex=0: architecture brief generates the primary/anchor day template
-  const slotSelection = selectSlotExercises(splitVariationSeed, sport, goal, neuralDemand, equipmentLevel, isDeload, blockCtx, programContext, 0);
+  blockExposure.setWeek(1);
+  const slotSelection = selectSlotExercises(splitVariationSeed, sport, goal, neuralDemand, equipmentLevel, isDeload, blockCtx, programContext, 0, true, blockExposure);
   _lastSlotSelection = slotSelection;
 
   // ── Per-week slot selections (Weeks 2–4) ─────────────────────────────────
@@ -3214,28 +3221,31 @@ export function buildArchitectureBrief(
     agentControlDirectives,
   });
 
+  blockExposure.setWeek(2);
   const slotSelectionW2 = selectSlotExercises(
     (splitVariationSeed + 0.25) % 1, sport, goal,
     weeklyPlans[1].overallNeuralDemand,
     equipmentLevel, false,
     { blockType: blockTypeStr, weekRole: "build" },
-    programContextW2, 0, false,
+    programContextW2, 0, false, blockExposure,
   );
 
+  blockExposure.setWeek(3);
   const slotSelectionW3 = selectSlotExercises(
     (splitVariationSeed + 0.50) % 1, sport, goal,
     weeklyPlans[2].overallNeuralDemand,
     equipmentLevel, false,
     { blockType: blockTypeStr, weekRole: "intensify" },
-    programContextW3, 0, false,
+    programContextW3, 0, false, blockExposure,
   );
 
+  blockExposure.setWeek(4);
   const slotSelectionW4 = selectSlotExercises(
     (splitVariationSeed + 0.75) % 1, sport, goal,
     "low",
     equipmentLevel, true,
     { blockType: blockTypeStr, weekRole: "deload" },
-    programContextW4, 0, false,
+    programContextW4, 0, false, blockExposure,
   );
 
   if (process.env.NODE_ENV !== "production") {
@@ -3244,6 +3254,27 @@ export function buildArchitectureBrief(
       week2: { role: "build",     lower_power: slotSelectionW2.lower_power, squat_d1: slotSelectionW2.bilateral_squat_strength, squat_d2: slotSelectionW2.bilateral_squat_strength_d2, hinge: slotSelectionW2.bilateral_hinge_strength, unilateral: slotSelectionW2.unilateral_lower },
       week3: { role: "intensify", lower_power: slotSelectionW3.lower_power, squat_d1: slotSelectionW3.bilateral_squat_strength, squat_d2: slotSelectionW3.bilateral_squat_strength_d2, hinge: slotSelectionW3.bilateral_hinge_strength, unilateral: slotSelectionW3.unilateral_lower },
       week4: { role: "deload",    lower_power: slotSelectionW4.lower_power, squat_d1: slotSelectionW4.bilateral_squat_strength, squat_d2: slotSelectionW4.bilateral_squat_strength_d2, hinge: slotSelectionW4.bilateral_hinge_strength, unilateral: slotSelectionW4.unilateral_lower },
+    }));
+
+    // ExposureAudit: full view of which exercises were used in each slot and week
+    // Use to verify no exercise dominates a slot across the block.
+    const fullExposure = blockExposure.getFullExposure();
+    const repeatedSlots = Object.entries(fullExposure).filter(([, exMap]) =>
+      Object.values(exMap).some((weeks) => weeks.length > 1)
+    );
+    console.log("[ExposureAudit]", JSON.stringify({
+      summary: Object.fromEntries(
+        Object.entries(fullExposure).map(([slot, exMap]) => [
+          slot,
+          Object.fromEntries(Object.entries(exMap).map(([ex, weeks]) => [ex, `weeks ${weeks.join(",")}`])),
+        ])
+      ),
+      repeatedExercises: repeatedSlots.map(([slot, exMap]) => ({
+        slot,
+        repeated: Object.entries(exMap)
+          .filter(([, weeks]) => weeks.length > 1)
+          .map(([ex, weeks]) => ({ exercise: ex, weeks })),
+      })),
     }));
   }
 

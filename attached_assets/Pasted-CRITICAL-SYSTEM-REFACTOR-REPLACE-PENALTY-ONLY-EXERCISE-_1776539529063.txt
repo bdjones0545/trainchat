@@ -1,0 +1,279 @@
+CRITICAL SYSTEM REFACTOR — REPLACE PENALTY-ONLY EXERCISE SELECTION WITH FAMILY-BASED ROTATION + EXPOSURE CONTROL
+
+CONTEXT:
+We identified a core flaw in the current program generation system:
+
+The selector still behaves like:
+“find the single best exercise for this slot”
+
+So whichever exercise scores highest becomes the repeated winner.
+Example:
+- Zercher Squat wins repeatedly
+- if Zercher is penalized, the next highest candidate will win repeatedly instead
+
+This means the current penalty-based system is not solving repetition — it is only moving repetition from one exercise to another.
+
+We need to replace the current over-reliance on penalty suppression with a more intelligent system:
+- movement-family rotation
+- exposure caps
+- progression-aware reuse
+- controlled top-candidate cycling
+
+The goal is not randomness.
+The goal is intelligent sequencing over time.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Replace the penalty-only exercise selection model with a family-based rotation system that selects exercises intelligently across:
+- the same week
+- the full 4-week block
+- the same movement role / slot family
+- the same progression lineage
+
+==================================================
+TASK 1 — DEPRECATE PENALTY-ONLY WINNER LOGIC
+==================================================
+
+Audit the current selection system and identify where the logic is effectively:
+
+1. rank candidates
+2. penalize “anchors”
+3. choose the top remaining winner
+
+This penalty-only winner-take-all approach must no longer be the primary decision model.
+
+Do NOT fully remove all penalties if they are still useful.
+But penalties should become secondary guardrails — not the main mechanism preventing repetition.
+
+==================================================
+TASK 2 — INTRODUCE MOVEMENT FAMILY ROTATION
+==================================================
+
+Build a new layer that groups exercises into movement-expression families.
+
+Examples:
+Bilateral squat strength family:
+- Back Squat
+- Front Squat
+- Belt Squat
+- Safety Bar Squat
+- Zercher Squat
+- Pause Squat
+- Goblet Squat (when appropriate)
+- heavy split squat if it serves the same force intent
+
+Hinge / deadlift family:
+- Romanian Deadlift
+- Trap Bar Deadlift
+- Conventional Deadlift
+- Dumbbell RDL
+- Good Morning
+- Hip Hinge variations
+
+Power / plyometric family:
+- Broad Jump
+- Standing Long Jump
+- Trap Bar Jump
+- Box Jump
+- Lateral Bound
+- Med-ball scoop toss
+- Reactive hop variants
+
+Rules:
+- the selector should choose from within a family while respecting exposure
+- the system should not treat each lift as an isolated winner
+- it should manage the family across the block
+
+==================================================
+TASK 3 — ADD EXPOSURE CAPS
+==================================================
+
+Implement exposure tracking across the full program build.
+
+Track for each exercise:
+- total appearances in the block
+- appearances in the same week
+- appearances in the same role
+- appearances in the same day type
+
+Then implement hard or soft exposure caps such as:
+
+1. same exact exercise cannot occupy the same role twice in the same week unless explicitly intentional
+2. same exact exercise should not dominate the same role across all 4 weeks
+3. repeated use is allowed only if it is part of a meaningful progression lineage
+
+Example:
+- Zercher Squat can appear once as a valid primary squat
+- but should not appear Monday + Friday in the same week
+- and should not auto-win the entire block
+
+==================================================
+TASK 4 — REPLACE SINGLE-WINNER SELECTION WITH TOP-CANDIDATE CYCLING
+==================================================
+
+Instead of always selecting the top-ranked exercise after penalties, do this:
+
+1. rank candidates
+2. identify the top valid family-aligned candidates (e.g. top 3–5)
+3. apply exposure + sequencing logic
+4. choose the best candidate for THIS position in the program, not globally
+
+This is not random selection.
+It is controlled rotation among top-tier valid options.
+
+==================================================
+TASK 5 — ADD PROGRESSION LINEAGE LOGIC
+==================================================
+
+The system should allow intentional reuse only when it is part of a progression arc.
+
+Examples:
+Week 1:
+- Belt Squat
+
+Week 2:
+- Front Squat
+
+Week 3:
+- Zercher Squat
+
+Week 4:
+- lower-fatigue supported squat variation
+
+OR
+
+Week 1:
+- Trap Bar Jump
+
+Week 2:
+- loaded jump variant
+
+Week 3:
+- higher-intent contrast jump
+
+Week 4:
+- reduced-amplitude reactive prep
+
+The system should understand:
+- repetition is acceptable when it is progression
+- repetition is bad when it is lazy winner dominance
+
+==================================================
+TASK 6 — MAKE WEEK CONTEXT A REAL PART OF FAMILY SELECTION
+==================================================
+
+When choosing within a family, week role must influence exercise expression.
+
+Examples:
+Establish:
+- lower complexity
+- teachable / stable variations
+
+Build:
+- stronger loading / slightly more demanding expression
+
+Intensify:
+- highest-force / highest-intent expression
+
+Deload:
+- lower-fatigue / lower-complexity / lower-impact expression
+
+Do NOT only change sets/reps/rest.
+Week role must help determine which family member is chosen.
+
+==================================================
+TASK 7 — KEEP SPORT + SESSION IDENTITY RELEVANT
+==================================================
+
+The new family rotation system must still respect:
+- sport fit
+- session identity
+- block archetype
+- neural demand
+- equipment context
+- pain/modification context
+
+Example:
+A soccer acceleration day and a football strength day may both use a “squat family,” but should select different expressions.
+
+==================================================
+TASK 8 — ADD AUDIT LOGGING
+==================================================
+
+Add logs:
+
+[FamilyRotationAudit] {
+  slot,
+  weekNumber,
+  dayNumber,
+  sessionIdentity,
+  movementFamily,
+  candidates,
+  priorExposure,
+  progressionContext,
+  selectedExercise,
+  selectedReason
+}
+
+[ExposureAudit] {
+  exercise,
+  sameWeekUses,
+  sameRoleUses,
+  totalBlockUses,
+  capTriggered
+}
+
+We need full transparency into why an exercise was selected.
+
+==================================================
+TASK 9 — VALIDATION
+==================================================
+
+Generate a fresh 4-week soccer program and a fresh 4-week general strength program.
+
+Verify:
+- no single squat lift dominates all weeks
+- no same exact primary lift appears twice in the same week unless explicitly justified
+- power / plyometric family also rotates
+- week role changes exercise expression, not just dosage
+- output still feels coherent, not random
+
+==================================================
+TASK 10 — BACKWARD COMPATIBLE TRANSITION
+==================================================
+
+Do NOT break the whole generator.
+
+The new family rotation system should replace the current penalty-only winner logic progressively:
+- penalties can remain as secondary safeguards
+- but exposure control + family rotation becomes primary
+
+==================================================
+TASK 11 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. which parts of the penalty system were deprecated or reduced
+2. what movement families were introduced
+3. how exposure caps work
+4. how top-candidate cycling works
+5. how progression lineage is handled
+6. before/after examples showing repetition reduced without losing intent
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat should no longer behave like:
+“find the best lift and repeat it until manually suppressed”
+
+It should behave like:
+“select the best exercise for this role at this point in the week and block, given what has already been used and what should come next”
+
+The result should feel:
+- intentional
+- sequenced
+- coach-built
+- non-repetitive
