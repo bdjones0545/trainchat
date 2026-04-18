@@ -2187,8 +2187,28 @@ function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
     return () => clearInterval(t);
   }, []);
 
+  function buildTargetContext(scope: AgentScope): { type: string; id: number; label: string; parentLabel?: string } | undefined {
+    if (scope === "block") {
+      const block: any = queryClient.getQueryData(["training-system-block"]);
+      const phase = block?.currentPhase;
+      if (phase?.id) return { type: "phase", id: phase.id, label: phase.name ?? "Current Block" };
+    }
+    if (scope === "week") {
+      const weeks: any = queryClient.getQueryData(["training-system-weeks"]);
+      const weekNum = weeks?.currentWeekNumber ?? 1;
+      const week: any = queryClient.getQueryData(["training-system-week", weekNum]);
+      if (week?.id) return { type: "week", id: week.id, label: week.label ?? `Week ${weekNum}`, parentLabel: week.phase?.name };
+    }
+    if (scope === "today") {
+      const today: any = queryClient.getQueryData(["training-system-today"]);
+      if (today?.id) return { type: "session", id: today.id, label: today.label ?? "Today" };
+    }
+    return undefined;
+  }
+
   const commandMutation = useMutation({
-    mutationFn: (req: string) => submitGlobalEdit(req),
+    mutationFn: ({ req, scope }: { req: string; scope: AgentScope }) =>
+      submitQuickEdit(req, buildTargetContext(scope)),
     onSuccess: (data) => {
       setLastResult(data);
       setLastCommand(pendingCommand);
@@ -2237,7 +2257,7 @@ function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
     if (!pendingCommand) return;
     const strengthSuffix = selectedStrength === "moderate" ? "" : ` — ${selectedStrength} adjustment`;
     setPhase("thinking");
-    commandMutation.mutate(pendingCommand.req + strengthSuffix);
+    commandMutation.mutate({ req: pendingCommand.req + strengthSuffix, scope: selectedScope });
   }
 
   function handleCancel() { setPendingCommand(null); setPhase("idle"); }
@@ -2246,7 +2266,7 @@ function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
     if (commandMutation.isPending) return;
     setLastResult(null); setLastCommand(null); setPendingCommand(null); setUndoResult(null);
     setPhase("thinking");
-    commandMutation.mutate(req);
+    commandMutation.mutate({ req, scope: selectedScope });
   }
 
   function handleUndo() {

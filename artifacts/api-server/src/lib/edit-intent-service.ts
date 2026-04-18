@@ -2019,6 +2019,131 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
     }
 
     if (lower.match(/hypertrophy|muscle|size|volume|mass/)) {
+      // ── BLOCK-LEVEL HYPERTROPHY TRANSFORMATION ─────────────────────────────
+      // Iterates every session in this phase and applies the same structural
+      // changes as the session-level hypertrophy bundle:
+      //   1. Primary lifts → 6-10 reps, 90s rest
+      //   2. Accessories → 10-15 reps, 60-75s rest
+      //   3. Add one isolation accessory per session if missing
+      //   4. Update session label + emphasis text
+      //   5. Update phase emphasis + goal
+      const blockChanges: EditChange[] = [];
+
+      const targetPhase = (system.phases ?? []).find((p: any) => p.id === phaseId);
+      const allSessions: any[] = [];
+      for (const week of targetPhase?.weeks ?? []) {
+        for (const session of week.sessions ?? []) {
+          allSessions.push(session);
+        }
+      }
+
+      // Deduplicate sessions by id (same session appears in multiple weeks)
+      const seenSessionIds = new Set<number>();
+      const uniqueSessions = allSessions.filter((s: any) => {
+        if (seenSessionIds.has(s.id)) return false;
+        seenSessionIds.add(s.id);
+        return true;
+      });
+
+      for (const session of uniqueSessions) {
+        const exercises: any[] = session.exercises ?? [];
+        const isLowerBody = exercises.some((ex: any) =>
+          /squat|deadlift|lunge|leg|hip|glute|hamstring/i.test(ex.name)
+        );
+
+        // Primary lifts → 6-10 reps
+        for (const ex of exercises.filter((e: any) => e.category === "primary")) {
+          const repsStr: string = ex.reps ?? "";
+          const rangeMatch = repsStr.match(/(\d+)-(\d+)/);
+          const singleMatch = repsStr.match(/^(\d+)$/);
+          const currentMax = rangeMatch ? parseInt(rangeMatch[2]) : (singleMatch ? parseInt(singleMatch[1]) : 0);
+          if (currentMax < 6 || currentMax > 12) {
+            blockChanges.push({
+              type: "update_exercise",
+              id: ex.id,
+              updates: { reps: "6-10", rest: "90s", notes: "Hypertrophy zone: moderate load, control the eccentric, squeeze the contraction." },
+              reason: "Block hypertrophy refocus — primary lift rep range",
+            });
+          }
+        }
+
+        // Accessories → 10-15 reps, tighter rest
+        for (const ex of exercises.filter((e: any) => e.category === "accessory")) {
+          const repsStr: string = ex.reps ?? "";
+          const rangeMatch = repsStr.match(/(\d+)-(\d+)/);
+          const singleMatch = repsStr.match(/^(\d+)$/);
+          const currentMin = rangeMatch ? parseInt(rangeMatch[1]) : (singleMatch ? parseInt(singleMatch[1]) : 0);
+          if (currentMin < 10) {
+            blockChanges.push({
+              type: "update_exercise",
+              id: ex.id,
+              updates: { reps: "10-15", rest: "60-75s", notes: "Hypertrophy range — keep rest tight for metabolic demand." },
+              reason: "Block hypertrophy refocus — accessory rep range",
+            });
+          }
+        }
+
+        // Add isolation accessory if missing
+        const hasIsolation = exercises.some((ex: any) =>
+          /cable.*fly|fly|leg.*extension|leg.*curl|lateral.*raise|curl|pushdown|kickback/i.test(ex.name)
+        );
+        if (!hasIsolation && exercises.length > 0) {
+          const isolationName = isLowerBody ? "Leg Extension" : "Cable Fly";
+          blockChanges.push({
+            type: "add_exercise",
+            id: 0,
+            sessionId: session.id,
+            exercise: {
+              name: isolationName,
+              category: "accessory",
+              sets: 3,
+              reps: "12-15",
+              rest: "60s",
+              notes: "Hypertrophy isolation. Feel the target muscle. 2-sec contraction at peak.",
+            },
+            reason: "Block hypertrophy refocus — adding isolation accessory",
+          });
+        }
+
+        // Update session emphasis text
+        blockChanges.push({
+          type: "update_session",
+          id: session.id,
+          updates: {
+            emphasis: "Hypertrophy — mechanical tension, metabolic stress, volume accumulation",
+            coachingNotes: "Hypertrophy focus: moderate loads, controlled eccentrics, 60-90s rest to drive metabolic demand. Feel every rep.",
+          },
+          reason: "Block hypertrophy refocus — session emphasis",
+        });
+      }
+
+      // Update the phase itself
+      blockChanges.push({
+        type: "update_phase",
+        id: phaseId,
+        updates: {
+          emphasis: "Hypertrophy — mechanical tension and metabolic stress primary drivers",
+          goal: "Maximize muscle development through progressive volume and mechanical load",
+        },
+        reason: "Block hypertrophy refocus — phase emphasis",
+      });
+
+      const structuralCount = blockChanges.filter(c =>
+        c.type === "add_exercise" ||
+        (c.type === "update_exercise" && c.updates &&
+          Object.keys(c.updates).some(k => ["sets", "reps", "rest"].includes(k)))
+      ).length;
+
+      if (structuralCount >= 1) {
+        return {
+          intent: "refocus_block_hypertrophy",
+          scope: "block",
+          changeSummary: `${label} restructured for hypertrophy across all sessions — primary lifts moved to 6-10 rep range, accessories to 10-15 reps with tighter rest, isolation work added. Mechanical tension and metabolic stress are the primary training drivers.`,
+          changes: blockChanges,
+        };
+      }
+
+      // Fallback: text-only if no exercises found
       return {
         intent: "refocus_block_hypertrophy",
         scope: "block",
@@ -2426,6 +2551,21 @@ export function classifyEditRequest(
         "[EditRouter] Intent override → forcing transformation execution (known session intent)"
       );
       return { route: "DETERMINISTIC", reason: "session_known_intent_transformation" };
+    }
+  }
+
+  // ── Rule 6: Phase/block-level coaching transformations → DETERMINISTIC ────────
+  // Block-scope intents (hypertrophy, power, etc.) are handled by interpretWithRules
+  // which now produces real structural changes across all sessions in the phase.
+  // Routing to DETERMINISTIC here prevents a wasted LLM call for these common commands.
+  if (targetContext?.type === "phase") {
+    const KNOWN_INTENT_PHASE = /\b(hypertrophy|muscle.building|muscle.growth|muscle.mass|bodybuilding|bigger|size|power|explosive|speed|athletic|performance|field|sport)\b/i;
+    if (KNOWN_INTENT_PHASE.test(lower)) {
+      logger.info(
+        { lower: lower.slice(0, 100), targetType: targetContext.type },
+        "[EditRouter] Intent override → forcing transformation execution (known phase intent)"
+      );
+      return { route: "DETERMINISTIC", reason: "phase_known_intent_transformation" };
     }
   }
 
