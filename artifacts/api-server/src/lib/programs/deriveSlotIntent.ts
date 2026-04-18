@@ -12,6 +12,7 @@
 
 import type { BlockArchetypeId } from "./blockArchetypes";
 import type { BlockPhase, ProgramContextProfile } from "./programContextProfile";
+import type { DayIdentityOverride, ControlVelocity } from "./agentControlTypes";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -478,18 +479,30 @@ function getSlotBase(slotId: string, archetypeId: BlockArchetypeId): SlotIntentR
   return { ...defaults, ...(found ?? {}) };
 }
 
+// ─── Control Velocity → VelocityIntent Mapping ────────────────────────────────
+
+function controlVelocityToIntent(v: ControlVelocity): VelocityIntent {
+  if (v === "high") return "explosive";
+  if (v === "low") return "slow_grind";
+  return "moderate";
+}
+
 // ─── Main Entry Point ─────────────────────────────────────────────────────────
 
 /**
  * Derive the block-aware slot intent for a given slot within the program context.
  * Returns a SlotIntentResult that dictates how exercise ranking should behave.
+ *
+ * If the profile contains resolved agent controls with day identity overrides,
+ * those are applied on top of all other modifiers (top precedence).
  */
 export function deriveSlotIntent(
   profile: Pick<ProgramContextProfile,
     "blockArchetype" | "currentPhase" | "splitArchitecture" | "neuralDemandProfile" |
-    "phaseSpecificModifiers" | "blockSpecificRankingWeights"
+    "phaseSpecificModifiers" | "blockSpecificRankingWeights" | "resolvedAgentControls"
   >,
   slotId: string,
+  dayIndex?: number,
 ): SlotIntentResult {
   const base = getSlotBase(slotId, profile.blockArchetype);
 
@@ -497,7 +510,7 @@ export function deriveSlotIntent(
   const phaseMod = PHASE_MODS[profile.currentPhase] ?? {};
   const archetypePhaseMod = getArchetypePhaseOverride(profile.blockArchetype, profile.currentPhase);
 
-  return {
+  const derived: SlotIntentResult = {
     ...base,
     // Phase takes precedence, archetype-phase override takes top precedence
     targetNeuralDemand: archetypePhaseMod.targetNeuralDemand ?? phaseMod.targetNeuralDemand ?? base.targetNeuralDemand,
@@ -507,4 +520,43 @@ export function deriveSlotIntent(
     slotIntentLabel: archetypePhaseMod.slotIntentLabel ?? base.slotIntentLabel,
     targetStimulus: archetypePhaseMod.targetStimulus ?? base.targetStimulus,
   };
+
+  // ── Agent Control Layer: day identity override (top precedence) ───────────
+  // Day identity overrides modify slot intent for specific days.
+  // They flow through this function (not around it) to preserve single-source-of-truth.
+  const controls = profile.resolvedAgentControls;
+  if (controls && dayIndex !== undefined) {
+    const dayOverride: DayIdentityOverride | undefined = controls.resolvedDayIdentityTargets[dayIndex];
+
+    if (dayOverride) {
+      // Avoid families: add to reducedFamilies (agent control, not hard-disallow by default)
+      if (dayOverride.avoidFamilies && dayOverride.avoidFamilies.length > 0) {
+        derived.reducedFamilies = [
+          ...new Set([...derived.reducedFamilies, ...dayOverride.avoidFamilies]),
+        ];
+      }
+
+      // Neural demand override
+      if (dayOverride.targetNeuralDemand) {
+        derived.targetNeuralDemand = dayOverride.targetNeuralDemand;
+      }
+
+      // Fatigue override
+      if (dayOverride.targetFatigue) {
+        derived.targetFatigueCost = dayOverride.targetFatigue;
+      }
+
+      // Velocity override
+      if (dayOverride.targetVelocityIntent) {
+        derived.targetVelocityIntent = controlVelocityToIntent(dayOverride.targetVelocityIntent);
+      }
+
+      // Label override
+      if (dayOverride.primaryFocus) {
+        derived.slotIntentLabel = `${dayOverride.primaryFocus} — agent-directed`;
+      }
+    }
+  }
+
+  return derived;
 }

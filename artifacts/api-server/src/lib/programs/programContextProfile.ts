@@ -15,6 +15,8 @@ import type { SplitArchitecture } from "./splitArchitectures";
 import type { UserConstraints } from "./blockScoring";
 import { BLOCK_ARCHETYPES } from "./blockArchetypes";
 import { SPLIT_ARCHITECTURES } from "./splitArchitectures";
+import type { AgentControlDirectives, ResolvedAgentControls } from "./agentControlTypes";
+import { resolveAgentControlDirectives } from "./agentControlResolver";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -111,6 +113,20 @@ export interface ProgramContextProfile {
   // ── Generation metadata ─────────────────────────────────────────────────
   generationId: string;
   variationSeed: number;
+
+  // ── Agent Control Layer ──────────────────────────────────────────────────
+  /**
+   * Raw agent control directives provided for this generation.
+   * Undefined means no directives were issued.
+   */
+  agentControlDirectives?: AgentControlDirectives;
+
+  /**
+   * Resolved agent controls — the normalized, numeric form consumed by
+   * all downstream ranking and slot-planning functions.
+   * Always defined after buildProgramContextProfile runs.
+   */
+  resolvedAgentControls?: ResolvedAgentControls;
 }
 
 // ─── Builder ──────────────────────────────────────────────────────────────────
@@ -123,8 +139,18 @@ export function buildProgramContextProfile(params: {
   noveltyPressure: number;
   variationSeed: number;
   generationId: string;
+  agentControlDirectives?: AgentControlDirectives;
 }): ProgramContextProfile {
-  const { archetypeId, splitId, constraints, currentPhase, noveltyPressure, variationSeed, generationId } = params;
+  const { archetypeId, splitId, constraints, currentPhase, noveltyPressure, variationSeed, generationId, agentControlDirectives } = params;
+
+  // Resolve agent control directives if provided.
+  // Resolution happens here, once per generation, before any downstream function runs.
+  const resolvedAgentControls = agentControlDirectives
+    ? resolveAgentControlDirectives(agentControlDirectives, noveltyPressure)
+    : undefined;
+
+  // If agent controls override novelty pressure, use the resolved value.
+  const effectiveNoveltyPressure = resolvedAgentControls?.resolvedNoveltyPressure ?? noveltyPressure;
 
   const archetype = BLOCK_ARCHETYPES[archetypeId];
   const split = SPLIT_ARCHITECTURES[splitId];
@@ -184,7 +210,7 @@ export function buildProgramContextProfile(params: {
     primarySetsHigh: setRepProfile.primarySetRange[1],
     restProfilePrimary,
     restProfileSecondary,
-    noveltyPressure,
+    noveltyPressure: effectiveNoveltyPressure,
     injuryConstraints: [],
     sessionDurationConstraint: "standard",
     phaseSpecificModifiers,
@@ -192,6 +218,8 @@ export function buildProgramContextProfile(params: {
     blockSpecificRankingWeights,
     generationId,
     variationSeed,
+    agentControlDirectives,
+    resolvedAgentControls,
   };
 }
 

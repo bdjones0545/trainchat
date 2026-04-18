@@ -52,6 +52,7 @@ import { emitBlockRulesAudit, buildFingerprintString, generateAuditId } from "./
 import { validateArchetypeCoherence } from "./programs/blockArchetypes";
 import { validateSplitArchitectures } from "./programs/splitArchitectures";
 import { buildProgramContextProfile } from "./programs/programContextProfile";
+import type { AgentControlDirectives } from "./programs/agentControlTypes";
 import { buildExtendedFingerprint } from "./programs/programFingerprint";
 import { runProgramVarianceAudit } from "./programs/programVarianceAudit";
 import { emitRerollLog } from "./programs/programVarianceReroll";
@@ -2194,6 +2195,7 @@ export function buildArchitectureBrief(
   goal: string | null,
   userRequest: string,
   variationSeed?: number,
+  agentControlDirectives?: AgentControlDirectives,
 ): string | null {
   if (!daysPerWeek || daysPerWeek < 2) return null;
 
@@ -2314,11 +2316,13 @@ export function buildArchitectureBrief(
     noveltyPressure: estimatedNoveltyPressure,
     variationSeed: blockSelection.variationSeed,
     generationId: auditId,
+    agentControlDirectives,
   });
 
   // Use the split's variationSeed for session template selection
   const splitVariationSeed = blockSelection.variationSeed;
-  const slotSelection = selectSlotExercises(splitVariationSeed, sport, goal, neuralDemand, equipmentLevel, isDeload, blockCtx, programContext);
+  // dayIndex=0: architecture brief generates the primary/anchor day template
+  const slotSelection = selectSlotExercises(splitVariationSeed, sport, goal, neuralDemand, equipmentLevel, isDeload, blockCtx, programContext, 0);
   _lastSlotSelection = slotSelection;
 
   // ── STEP 9: Similarity check ──────────────────────────────────────────────

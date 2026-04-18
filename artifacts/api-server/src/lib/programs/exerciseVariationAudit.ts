@@ -43,6 +43,14 @@ export interface ExerciseScoreBreakdown {
     anchorPenalty: number;
     slotRepeatPenalty: number;
     seedTiebreaker: number;
+    // ── Agent Control Layer dimensions ────────────────────────────────────
+    heroSuppressionPenalty: number;
+    controlFamilyBoostFit: number;
+    controlFamilyReductionPenalty: number;
+    visibleSpineAlignmentFit: number;
+    dayIdentityAlignmentFit: number;
+    controlNoveltyBonus: number;
+    controlNoveltyPenalty: number;
   };
 }
 
@@ -188,6 +196,11 @@ export function buildWinReasons(breakdown: ExerciseScoreBreakdown["factors"]): s
   if (breakdown.movementBiasFit > 0) reasons.push(`movement bias fit (+${breakdown.movementBiasFit.toFixed(1)})`);
   if (breakdown.velocityIntentFit > 0) reasons.push(`velocity intent fit (+${breakdown.velocityIntentFit.toFixed(1)})`);
   if (breakdown.familyPreferenceFit > 0) reasons.push(`preferred family (+${breakdown.familyPreferenceFit.toFixed(1)})`);
+  // Agent Control Layer win reasons
+  if ((breakdown.controlFamilyBoostFit ?? 0) > 0) reasons.push(`[agent] family boost (+${breakdown.controlFamilyBoostFit.toFixed(1)})`);
+  if ((breakdown.visibleSpineAlignmentFit ?? 0) > 0) reasons.push(`[agent] visible spine alignment (+${breakdown.visibleSpineAlignmentFit.toFixed(1)})`);
+  if ((breakdown.dayIdentityAlignmentFit ?? 0) > 0) reasons.push(`[agent] day identity alignment (+${breakdown.dayIdentityAlignmentFit.toFixed(1)})`);
+  if ((breakdown.controlNoveltyBonus ?? 0) > 0) reasons.push(`[agent] control novelty bonus (+${breakdown.controlNoveltyBonus.toFixed(1)})`);
   return reasons.length > 0 ? reasons : ["tiebreaker"];
 }
 
@@ -201,5 +214,11 @@ export function buildPenaltySummary(breakdown: ExerciseScoreBreakdown["factors"]
   if (breakdown.disallowedFamilyPenalty > 0) penalties.push(`disallowed family (−${breakdown.disallowedFamilyPenalty.toFixed(1)})`);
   if (breakdown.anchorPenalty > 0) penalties.push(`anchor penalty (−${breakdown.anchorPenalty.toFixed(1)})`);
   if (breakdown.slotRepeatPenalty > 0) penalties.push(`slot repeat (−${breakdown.slotRepeatPenalty.toFixed(1)})`);
+  // Agent Control Layer penalties
+  if ((breakdown.heroSuppressionPenalty ?? 0) > 0) penalties.push(`[agent] hero suppression (−${breakdown.heroSuppressionPenalty.toFixed(1)})`);
+  if ((breakdown.controlFamilyReductionPenalty ?? 0) > 0) penalties.push(`[agent] family reduction (−${breakdown.controlFamilyReductionPenalty.toFixed(1)})`);
+  if ((breakdown.visibleSpineAlignmentFit ?? 0) < 0) penalties.push(`[agent] visible spine misalignment (${breakdown.visibleSpineAlignmentFit.toFixed(1)})`);
+  if ((breakdown.dayIdentityAlignmentFit ?? 0) < 0) penalties.push(`[agent] day identity misalignment (${breakdown.dayIdentityAlignmentFit.toFixed(1)})`);
+  if ((breakdown.controlNoveltyPenalty ?? 0) > 0) penalties.push(`[agent] conservative mode (−${breakdown.controlNoveltyPenalty.toFixed(1)})`);
   return penalties;
 }

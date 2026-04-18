@@ -48,6 +48,8 @@ import {
   type SlotAuditPayload,
 } from "./programs/exerciseVariationAudit";
 import type { ProgramContextProfile } from "./programs/programContextProfile";
+import type { ResolvedAgentControls } from "./programs/agentControlTypes";
+import { getAnchorPenaltyMultiplierForMode } from "./programs/agentControlResolver";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -94,6 +96,10 @@ export interface ScoreContext {
   noveltyPressure?: number;
   /** Generation ID for audit correlation. */
   generationId?: string;
+  /** Resolved agent control directives for this generation. */
+  resolvedAgentControls?: ResolvedAgentControls;
+  /** Day index for this slot (used for day identity overrides). */
+  dayIndex?: number;
 }
 
 export interface SlotExerciseSelection {
@@ -145,6 +151,14 @@ interface CandidateScore {
     progressionStyleFit: number;
     anchorPenalty: number;
     slotRepeatPenalty: number;
+    // ── Agent Control Layer dimensions ────────────────────────────────────
+    heroSuppressionPenalty: number;
+    controlFamilyBoostFit: number;
+    controlFamilyReductionPenalty: number;
+    visibleSpineAlignmentFit: number;
+    dayIdentityAlignmentFit: number;
+    controlNoveltyBonus: number;
+    controlNoveltyPenalty: number;
   };
 }
 
@@ -568,13 +582,158 @@ function scoreCandidate(
   if (profile?.progressionStyle === "wave_load" && exMeta.complexity !== "simple") progressionStyleFit = 0.3;
   else if (profile?.progressionStyle === "linear" && exMeta.complexity === "simple") progressionStyleFit = 0.3;
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ── Agent Control Layer scoring dimensions ─────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // These dimensions are applied AFTER block/phase scoring and AFTER novelty
+  // scoring. They represent explicit agent steering, not engine defaults.
+  // They are always logged in DEV audit output.
+
+  const agentControls = ctx.resolvedAgentControls;
+
+  // ── Hero Suppression Penalty (0 to −12) ───────────────────────────────────
+  // Penalises exercises the agent has explicitly targeted for suppression.
+  // Scale: strength=0.7 → ~7pts, strength=1.0 → 10pts (capped at 12 with multiplier).
+  let heroSuppressionPenalty = 0;
+  if (agentControls) {
+    const suppPenalty = agentControls.resolvedHeroSuppressionPenalties[meta.name];
+    if (suppPenalty) {
+      heroSuppressionPenalty = Math.min(12, suppPenalty);
+    }
+
+    // Also amplify anchor penalty based on mode
+    // e.g. high_variance mode doubles normal anchor penalties
+    if (meta.isDefaultAnchor) {
+      const modeMult = getAnchorPenaltyMultiplierForMode(agentControls.resolvedGenerationMode);
+      // The existing anchorPenalty was computed with noveltyPressureMultiplier.
+      // Here we apply an *additional* mode-based delta beyond the existing anchor calc.
+      // We cap it to avoid double-counting with the already-applied anchorPenalty.
+      const modeBoostFraction = modeMult - 1.0; // 0.0 for default, 0.4 for explore, 1.0 for high_variance
+      if (modeBoostFraction > 0) {
+        heroSuppressionPenalty = Math.min(12, heroSuppressionPenalty + anchorPenalty * modeBoostFraction * 0.5);
+      }
+    }
+  }
+
+  // ── Control Family Boost Fit (0 to +3) ────────────────────────────────────
+  // Separate from familyPreferenceFit — this is the agent-layer boost on top.
+  let controlFamilyBoostFit = 0;
+  if (agentControls) {
+    const delta = agentControls.resolvedFamilyBiasOverrides[exerciseFamily] ?? 0;
+    if (delta > 0) {
+      controlFamilyBoostFit = Math.min(3, delta * 0.5);
+    }
+  }
+
+  // ── Control Family Reduction Penalty (0 to −3) ────────────────────────────
+  // Separate from familyReductionPenalty — this is agent-driven, logged independently.
+  let controlFamilyReductionPenalty = 0;
+  if (agentControls) {
+    const delta = agentControls.resolvedFamilyBiasOverrides[exerciseFamily] ?? 0;
+    if (delta < 0 && delta > -10) {
+      // Not a hard ban — soft reduction only
+      controlFamilyReductionPenalty = Math.min(3, Math.abs(delta) * 0.4);
+    }
+  }
+
+  // ── Visible Spine Alignment Fit (−1 to +1) ───────────────────────────────
+  // Penalises exercises that would reinforce avoided visible-spine patterns.
+  // Rewards exercises that align with prioritized visible-spine patterns.
+  // Uses family membership as a proxy for pattern contribution.
+  let visibleSpineAlignmentFit = 0;
+  if (agentControls?.resolvedVisibleSpineRules.enabled) {
+    const rules = agentControls.resolvedVisibleSpineRules;
+    const strength = rules.strength;
+
+    // Families associated with "grindy" patterns: penalise when those patterns are avoided
+    const GRINDY_FAMILIES = new Set(["heavy_bilateral_squat", "heavy_bilateral_hinge"]);
+    const REACTIVE_FAMILIES = new Set(["elastic_reactive", "plyometric", "ballistic"]);
+    const UNILATERAL_FAMILIES = new Set(["unilateral_squat", "unilateral_hinge"]);
+
+    const isGrindy = GRINDY_FAMILIES.has(exerciseFamily);
+    const isReactive = REACTIVE_FAMILIES.has(exerciseFamily);
+    const isUnilateral = UNILATERAL_FAMILIES.has(exerciseFamily);
+
+    for (const pattern of rules.avoidPatterns) {
+      if (
+        (pattern.includes("grindy") && isGrindy) ||
+        (pattern.includes("bilateral_force") && isGrindy)
+      ) {
+        visibleSpineAlignmentFit -= 0.8 * strength;
+      }
+    }
+    for (const pattern of rules.prioritizePatterns) {
+      if (
+        (pattern.includes("reactive") && isReactive) ||
+        (pattern.includes("elastic") && isReactive) ||
+        (pattern.includes("unilateral") && isUnilateral) ||
+        (pattern.includes("jump") && isReactive)
+      ) {
+        visibleSpineAlignmentFit += 0.8 * strength;
+      }
+    }
+    visibleSpineAlignmentFit = Math.max(-1, Math.min(1, visibleSpineAlignmentFit));
+  }
+
+  // ── Day Identity Alignment Fit (−1 to +1) ────────────────────────────────
+  // Scores exercises against day-level identity overrides (neural, fatigue, velocity).
+  // This is the control-layer complement to slotIntentFit.
+  let dayIdentityAlignmentFit = 0;
+  if (agentControls && ctx.dayIndex !== undefined) {
+    const dayOverride = agentControls.resolvedDayIdentityTargets[ctx.dayIndex];
+    if (dayOverride) {
+      if (dayOverride.targetNeuralDemand) {
+        const targetNeural = NEURAL_ORDER[dayOverride.targetNeuralDemand] ?? 1;
+        const exNeural = NEURAL_ORDER[meta.neuralDemand] ?? 1;
+        if (exNeural === targetNeural) dayIdentityAlignmentFit += 0.5;
+        else if (Math.abs(exNeural - targetNeural) > 1) dayIdentityAlignmentFit -= 0.5;
+      }
+      if (dayOverride.targetFatigue) {
+        const targetFat = FATIGUE_ORDER[dayOverride.targetFatigue] ?? 1;
+        const exFat = FATIGUE_ORDER[meta.fatigueCost] ?? 1;
+        if (exFat === targetFat) dayIdentityAlignmentFit += 0.3;
+        else if (Math.abs(exFat - targetFat) > 1) dayIdentityAlignmentFit -= 0.3;
+      }
+      if (dayOverride.avoidFamilies?.includes(exerciseFamily)) {
+        dayIdentityAlignmentFit -= 0.8;
+      }
+      dayIdentityAlignmentFit = Math.max(-1, Math.min(1, dayIdentityAlignmentFit));
+    }
+  }
+
+  // ── Control Novelty Bonus (0 to +2) ──────────────────────────────────────
+  // Adds novelty reward for non-anchors when explore/high_variance mode is active.
+  let controlNoveltyBonus = 0;
+  if (agentControls && !meta.isDefaultAnchor) {
+    const mode = agentControls.resolvedGenerationMode;
+    if (mode === "high_variance") controlNoveltyBonus = 2.0;
+    else if (mode === "explore") controlNoveltyBonus = 1.0;
+  }
+
+  // ── Control Novelty Penalty (0 to −1) ─────────────────────────────────────
+  // Reduces novelty bonus for non-anchors in conservative mode.
+  let controlNoveltyPenalty = 0;
+  if (agentControls) {
+    const mode = agentControls.resolvedGenerationMode;
+    if (mode === "conservative" && !meta.isDefaultAnchor) {
+      // Don't over-penalise non-anchors in conservative mode, just reduce their bonus
+      controlNoveltyPenalty = 0.5;
+    }
+  }
+
   // ── Total ─────────────────────────────────────────────────────────────────
   const total = sportFit + intentFit + neuralFit + equipFit + noveltyBonus
     - fatiguePenalty - overusePenalty - contrastPenalty - exactRepeatPenalty - slotRepeatPenalty
     + seedTiebreaker
     + blockArchetypeFit + currentPhaseFit + slotIntentFit + movementBiasFit
     + familyPreferenceFit + velocityIntentFit + stabilityDemandFit + progressionStyleFit
-    - familyReductionPenalty - disallowedFamilyPenalty - complexityPenalty;
+    - familyReductionPenalty - disallowedFamilyPenalty - complexityPenalty
+    // Agent Control Layer dimensions
+    - heroSuppressionPenalty
+    + controlFamilyBoostFit - controlFamilyReductionPenalty
+    + visibleSpineAlignmentFit
+    + dayIdentityAlignmentFit
+    + controlNoveltyBonus - controlNoveltyPenalty;
 
   return {
     name: meta.name,
@@ -603,6 +762,13 @@ function scoreCandidate(
       progressionStyleFit,
       anchorPenalty,
       slotRepeatPenalty,
+      heroSuppressionPenalty,
+      controlFamilyBoostFit,
+      controlFamilyReductionPenalty,
+      visibleSpineAlignmentFit,
+      dayIdentityAlignmentFit,
+      controlNoveltyBonus,
+      controlNoveltyPenalty,
     },
   };
 }
@@ -674,6 +840,14 @@ function ranked(pool: ExerciseMeta[], ctx: ScoreContext, primeMultiplier: number
           progressionStyleFit: c.breakdown.progressionStyleFit,
           anchorPenalty: c.breakdown.anchorPenalty,
           slotRepeatPenalty: c.breakdown.slotRepeatPenalty,
+          // Agent Control Layer dimensions
+          heroSuppressionPenalty: c.breakdown.heroSuppressionPenalty,
+          controlFamilyBoostFit: c.breakdown.controlFamilyBoostFit,
+          controlFamilyReductionPenalty: c.breakdown.controlFamilyReductionPenalty,
+          visibleSpineAlignmentFit: c.breakdown.visibleSpineAlignmentFit,
+          dayIdentityAlignmentFit: c.breakdown.dayIdentityAlignmentFit,
+          controlNoveltyBonus: c.breakdown.controlNoveltyBonus,
+          controlNoveltyPenalty: c.breakdown.controlNoveltyPenalty,
         },
       });
 
@@ -685,7 +859,7 @@ function ranked(pool: ExerciseMeta[], ctx: ScoreContext, primeMultiplier: number
         chosenBlockArchetype: ctx.programContext.blockArchetype,
         chosenPhase: ctx.programContext.currentPhase,
         chosenSplitArchitecture: ctx.programContext.splitArchitecture,
-        dayIndex: 0,
+        dayIndex: ctx.dayIndex ?? 0,
         dayTheme: ctx.slotName,
         slotId: ctx.slotName,
         slotIntentLabel: ctx.slotIntent?.slotIntentLabel ?? ctx.slotName,
@@ -1104,6 +1278,7 @@ export function selectSlotExercises(
   lowFatigue?: boolean,
   blockContext?: BlockSelectionContext,
   programContext?: ProgramContextProfile,
+  dayIndex?: number,
 ): SlotExerciseSelection {
   const alreadySelected = new Set<string>();
   const debugInfos: SlotDebugInfo[] = [];
@@ -1125,6 +1300,9 @@ export function selectSlotExercises(
     ? `${programContext.blockArchetype}:${programContext.currentPhase}:${seed.toFixed(4)}`
     : undefined;
 
+  // Extract resolved agent controls from program context (resolved once in buildProgramContextProfile)
+  const resolvedAgentControls = programContext?.resolvedAgentControls;
+
   function pick(
     pool: ExerciseMeta[],
     slotName: string,
@@ -1137,9 +1315,9 @@ export function selectSlotExercises(
       intent,
     );
 
-    // Derive per-slot intent from block archetype + phase
+    // Derive per-slot intent from block archetype + phase (pass dayIndex for day identity overrides)
     const slotIntent = programContext
-      ? deriveSlotIntent(programContext, slotName)
+      ? deriveSlotIntent(programContext, slotName, dayIndex)
       : undefined;
 
     const ctx: ScoreContext = {
@@ -1156,6 +1334,8 @@ export function selectSlotExercises(
       programContext,
       noveltyPressure: programContext?.noveltyPressure,
       generationId,
+      resolvedAgentControls,
+      dayIndex,
     };
     const { chosen, debugInfo } = ranked(pool, ctx, primeMultiplier);
     debugInfos.push(debugInfo);

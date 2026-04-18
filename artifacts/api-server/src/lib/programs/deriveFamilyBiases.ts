@@ -10,6 +10,7 @@
 
 import type { BlockArchetypeId } from "./blockArchetypes";
 import type { BlockPhase, ProgramContextProfile } from "./programContextProfile";
+import type { ResolvedAgentControls } from "./agentControlTypes";
 
 // ─── Family Taxonomy ───────────────────────────────────────────────────────────
 
@@ -253,14 +254,45 @@ function buildFamilyBiasScores(
 /**
  * Derive exercise family biases from the program context profile.
  * Called once per slot scoring pass.
+ *
+ * If the profile contains resolved agent controls with family bias overrides,
+ * those are layered on top of the archetype/phase base biases.
+ * The agent control layer never replaces — it adds on top.
  */
 export function deriveFamilyBiases(
-  profile: Pick<ProgramContextProfile, "blockArchetype" | "currentPhase">,
+  profile: Pick<ProgramContextProfile, "blockArchetype" | "currentPhase" | "resolvedAgentControls">,
 ): FamilyBiasResult {
   const { boostedFamilies, reducedFamilies, bannedFamilies } =
     getArchetypePhaseFamily(profile.blockArchetype, profile.currentPhase);
 
   const familyBiasScores = buildFamilyBiasScores(boostedFamilies, reducedFamilies, bannedFamilies);
+
+  // ── Agent Control Layer: family bias overrides ────────────────────────────
+  const controls: ResolvedAgentControls | undefined = profile.resolvedAgentControls;
+  if (controls) {
+    // Apply numeric overrides from agent control resolver
+    for (const [family, delta] of Object.entries(controls.resolvedFamilyBiasOverrides)) {
+      familyBiasScores[family] = (familyBiasScores[family] ?? 0) + delta;
+    }
+
+    // Hard-ban families from agent control
+    for (const family of controls.resolvedBannedFamilies) {
+      if (!bannedFamilies.includes(family)) {
+        bannedFamilies.push(family);
+      }
+      // Override score to hard-ban level regardless of what archetype/phase said
+      familyBiasScores[family] = -10;
+    }
+
+    // Update boosted/reduced lists based on overrides for transparency in audit
+    for (const [family, score] of Object.entries(controls.resolvedFamilyBiasOverrides)) {
+      if (score > 0 && !boostedFamilies.includes(family)) {
+        boostedFamilies.push(family);
+      } else if (score < 0 && !reducedFamilies.includes(family) && !bannedFamilies.includes(family)) {
+        reducedFamilies.push(family);
+      }
+    }
+  }
 
   return {
     boostedFamilies,
@@ -268,6 +300,17 @@ export function deriveFamilyBiases(
     bannedFamilies,
     familyBiasScores,
   };
+}
+
+/**
+ * Derive family biases with explicit agent controls (for callers that have
+ * controls available separately, not inside the profile).
+ */
+export function deriveFamilyBiasesWithControls(
+  profile: Pick<ProgramContextProfile, "blockArchetype" | "currentPhase">,
+  resolvedControls?: ResolvedAgentControls,
+): FamilyBiasResult {
+  return deriveFamilyBiases({ ...profile, resolvedAgentControls: resolvedControls });
 }
 
 /**

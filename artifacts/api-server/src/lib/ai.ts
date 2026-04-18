@@ -48,6 +48,7 @@ import { type AgentSettingsContext, buildBehaviorInstructions, buildProfileFillC
 import { extractAgentIntentProfile, buildAgentIntentProfilePromptSection } from "./language-system";
 import { auditLanguageInterpretation } from "./language-audit";
 import { type ResponsePolicy, buildResponsePolicyPromptSection } from "./response-policy-engine";
+import { detectAndBuildDirectives } from "./programs/agentControlDirectives";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -2204,7 +2205,16 @@ export async function generateAIResponse(
     }
 
     try {
-      architectureBriefText = buildArchitectureBrief(days, sport, goal, userMessage, Math.random());
+      // Detect agent control directives from the user's utterance + any available style/preserve signals.
+      // These flow through buildArchitectureBrief → buildProgramContextProfile → resolveAgentControlDirectives
+      // → ScoreContext and influence all downstream exercise ranking.
+      const detectedDirectives = detectAndBuildDirectives(
+        userMessage,
+        [], // stylePreferences: empty at this stage — future: populate from agentSettings or memory
+        [], // preserveInstructions: empty at this stage — future: populate from responsePolicy
+      );
+
+      architectureBriefText = buildArchitectureBrief(days, sport, goal, userMessage, Math.random(), detectedDirectives ?? undefined);
       // Capture the freshly-computed slot selections (set as a side-effect inside buildArchitectureBrief).
       // buildArchitectureBrief resets _lastSlotSelection to null at its start, so this correctly
       // returns null for SP builds and the fresh selection for non-SP builds.
