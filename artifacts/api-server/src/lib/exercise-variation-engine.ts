@@ -1999,6 +1999,7 @@ export function selectSlotExercises(
   blockContext?: BlockSelectionContext,
   programContext?: ProgramContextProfile,
   dayIndex?: number,
+  registerSelections: boolean = true,
 ): SlotExerciseSelection {
   const alreadySelected = new Set<string>();
   const debugInfos: SlotDebugInfo[] = [];
@@ -2118,10 +2119,14 @@ export function selectSlotExercises(
   };
 
   // Register selections in overuse registry so next build penalises these
-  registerBuildSelections({
-    lower_power, bilateral_squat_strength, bilateral_hinge_strength,
-    unilateral_lower, trunk_anti_rotation, trunk_anti_extension,
-  });
+  // Only register for the primary (Week 1) selection — per-week secondary selections
+  // must NOT register to avoid polluting the registry with 4x entries per build.
+  if (registerSelections) {
+    registerBuildSelections({
+      lower_power, bilateral_squat_strength, bilateral_hinge_strength,
+      unilateral_lower, trunk_anti_rotation, trunk_anti_extension,
+    });
+  }
 
   return sel;
 }

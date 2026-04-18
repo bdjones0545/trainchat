@@ -2944,6 +2944,89 @@ export function computeWeeklyArchitecture(
   return { daysPerWeek: days, sport, goal, sessions, movementAllocation, weeklyRhythm, recoveryNotes };
 }
 
+// ─── Per-Week Exercise Variation Section ──────────────────────────────────────
+//
+// Generates the WEEK 2–4 EXERCISE MANDATE section injected into the Architecture Brief.
+// Each week has distinct locked exercise selections derived from the correct weekRole pool:
+//   build → standard pools with build intent scoring
+//   intensify → heavy/peak pools (getLowerPowerPool returns intensify variants)
+//   deload → submaximal pools (getLowerPowerPool returns submaximal pool)
+//
+// This is the primary fix for the cross-week variation bottleneck: previously all
+// 4 weeks shared the same slot selection computed from weekRole="establish".
+
+function buildWeeklyExerciseVariationSection(
+  weeklyPlans: WeeklyBlockPlan[],
+  selections: [SlotExerciseSelection, SlotExerciseSelection, SlotExerciseSelection, SlotExerciseSelection],
+): string {
+  const [w1, w2, w3, w4] = selections;
+  const plans = weeklyPlans;
+
+  function prepIntent(role: string): string {
+    switch (role) {
+      case "establish": return "8–10 min thorough prep — teach positions, build from scratch";
+      case "build":     return "8 min targeted prep — CNS awakening, progressively loaded";
+      case "intensify": return "5–6 min brief, sharp prep — CNS must be fresh for peak loads";
+      case "deload":    return "10 min restorative — tissue quality, no CNS demands";
+      default:          return "standard prep";
+    }
+  }
+
+  const weekRows = [
+    { num: 1, role: "ESTABLISH", sel: w1, plan: plans[0] },
+    { num: 2, role: "BUILD",     sel: w2, plan: plans[1] },
+    { num: 3, role: "INTENSIFY", sel: w3, plan: plans[2] },
+    { num: 4, role: "DELOAD",    sel: w4, plan: plans[3] },
+  ];
+
+  const rows = weekRows.map(({ num, role, sel, plan }) => {
+    return [
+      `### WEEK ${num} — ${role} (${plan.weeklyEmphasis.split(":")[0]})`,
+      `Coaching intent: ${plan.coachingNotes.split("—")[0].trim()}`,
+      `Prep family: ${prepIntent(role.toLowerCase())}`,
+      `Power / Explosive:`,
+      `  D1: ${sel.lower_power}  |  D2: ${sel.lower_power_d2}  |  D3: ${sel.lower_power_d3}  |  D4: ${sel.lower_power_d4}`,
+      `  Intent: ${role === "INTENSIFY" ? "MAXIMUM intent — 3 reps/set, full 3 min rest, peak RFD" : role === "DELOAD" ? "Sub-maximal — 3 × 3 at 50–60% effort, position focus only" : role === "BUILD" ? "Progressive intent — push output beyond Week 1, full reset between reps" : "Establish intent — teach the movement, moderate output"}`,
+      `Bilateral Squat: ${sel.bilateral_squat_strength}`,
+      `Bilateral Hinge: ${sel.bilateral_hinge_strength}`,
+      `Unilateral Lower (squat days): ${sel.unilateral_lower}`,
+      `Unilateral Lower (hinge days): ${sel.unilateral_lower_alt}`,
+      `Trunk Anti-Rotation: ${sel.trunk_anti_rotation}`,
+      `Trunk Anti-Extension: ${sel.trunk_anti_extension}`,
+      `Upper Push Primary: ${sel.upper_push_primary}`,
+      `Upper Pull Primary: ${sel.upper_pull_primary}`,
+      `Sets/Reps/Load directive: ${
+        role === "ESTABLISH" ? "3 sets × 5–8 reps @ RPE 6–7. Technique baseline. Do NOT max out."
+        : role === "BUILD" ? "4 sets × 4–6 reps @ RPE 7.5–8. Add load vs Week 1 once reps clean."
+        : role === "INTENSIFY" ? "4–5 sets × 2–4 reps @ RPE 8.5–9.5. Peak load. Volume drops. Full recovery between sets."
+        : "3 sets × 5 reps @ RPE ≤5. 60–65% of Week 3 loads. Recovery, not training stimulus."
+      }`,
+    ].join("\n");
+  });
+
+  return [
+    `## ⚠️ WEEK-BY-WEEK EXERCISE VARIATION — MANDATORY PER-WEEK LOCKED TABLE ⚠️`,
+    ``,
+    `Each week uses DIFFERENT exercises selected for its specific week role.`,
+    `Do NOT use Week 1 exercises for Weeks 2–4 unless explicitly listed below as the same.`,
+    `Week role governs both the EXERCISE POOL and the MOVEMENT INTENT — not just dosage.`,
+    ``,
+    rows.join("\n\n"),
+    ``,
+    `### CROSS-WEEK MOVEMENT EXPRESSION RULES`,
+    `1. Week 3 (INTENSIFY) power expression is MAXIMUM: fewer reps, longer rest, full output.`,
+    `2. Week 4 (DELOAD) power is SUB-MAXIMAL: technique only, no speed, no grinding.`,
+    `3. If the same exercise appears across two weeks, its INTENT and REP SCHEME must differ visibly.`,
+    `4. Prep duration changes by week role: Intensify = 5–6 min (brief); Deload = 10 min (restorative).`,
+    `5. Session grammar can contract in Week 3 (fewer blocks) and simplify in Week 4.`,
+    ``,
+    `### WEEK ROLE SESSION IDENTITY ASSIGNMENTS`,
+    weeklyPlans.map((plan) =>
+      `Week ${plan.weekNumber} [${plan.role.toUpperCase()}]: ${plan.sessionRoles.map((sr, i) => `Day ${i + 1} → ${sr.sessionRole}`).join(", ")}`
+    ).join("\n"),
+  ].join("\n");
+}
+
 // ─── Build Architecture Brief (AI prompt injection) ──────────────────────────
 
 /** Stores the slot selections from the most recent buildArchitectureBrief call (non-SP path). */
@@ -3085,6 +3168,45 @@ export function buildArchitectureBrief(
   // dayIndex=0: architecture brief generates the primary/anchor day template
   const slotSelection = selectSlotExercises(splitVariationSeed, sport, goal, neuralDemand, equipmentLevel, isDeload, blockCtx, programContext, 0);
   _lastSlotSelection = slotSelection;
+
+  // ── Per-week slot selections (Weeks 2–4) ─────────────────────────────────
+  // Each week uses its correct weekRole so the exercise pool reflects the actual
+  // training phase:  intensify → heavier pool,  deload → submaximal pool.
+  // registerSelections=false so the overuse registry only records Week 1.
+  const blockTypeStr = String(enrichedMonthlyPlan.blockType);
+
+  const slotSelectionW2 = selectSlotExercises(
+    (splitVariationSeed + 0.25) % 1, sport, goal,
+    weeklyPlans[1].overallNeuralDemand,
+    equipmentLevel, false,
+    { blockType: blockTypeStr, weekRole: "build" },
+    programContext, 0, false,
+  );
+
+  const slotSelectionW3 = selectSlotExercises(
+    (splitVariationSeed + 0.50) % 1, sport, goal,
+    weeklyPlans[2].overallNeuralDemand,
+    equipmentLevel, false,
+    { blockType: blockTypeStr, weekRole: "intensify" },
+    programContext, 0, false,
+  );
+
+  const slotSelectionW4 = selectSlotExercises(
+    (splitVariationSeed + 0.75) % 1, sport, goal,
+    "low",
+    equipmentLevel, true,
+    { blockType: blockTypeStr, weekRole: "deload" },
+    programContext, 0, false,
+  );
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[WeeklyVariationAudit]", JSON.stringify({
+      week1: { role: "establish", lower_power: slotSelection.lower_power, squat: slotSelection.bilateral_squat_strength, hinge: slotSelection.bilateral_hinge_strength, unilateral: slotSelection.unilateral_lower },
+      week2: { role: "build",     lower_power: slotSelectionW2.lower_power, squat: slotSelectionW2.bilateral_squat_strength, hinge: slotSelectionW2.bilateral_hinge_strength, unilateral: slotSelectionW2.unilateral_lower },
+      week3: { role: "intensify", lower_power: slotSelectionW3.lower_power, squat: slotSelectionW3.bilateral_squat_strength, hinge: slotSelectionW3.bilateral_hinge_strength, unilateral: slotSelectionW3.unilateral_lower },
+      week4: { role: "deload",    lower_power: slotSelectionW4.lower_power, squat: slotSelectionW4.bilateral_squat_strength, hinge: slotSelectionW4.bilateral_hinge_strength, unilateral: slotSelectionW4.unilateral_lower },
+    }));
+  }
 
   // ── STEP 9: Similarity check ──────────────────────────────────────────────
   const elasticCount = blockSelection.split.dayTemplates.filter((d) => d.elasticExposure).length;
@@ -3577,6 +3699,8 @@ Days/week: ${arch.daysPerWeek} | Sport: ${arch.sport ?? "General"} | Goal: ${arc
 ${monthlyBlockContext}
 
 ${weeklyBlockContext}
+
+${buildWeeklyExerciseVariationSection(weeklyPlans, [slotSelection, slotSelectionW2, slotSelectionW3, slotSelectionW4])}
 
 ### WEEK 1 SESSION ROLE ASSIGNMENTS (inherit into session architecture below)
 ${sessionRoleAnnotation}
