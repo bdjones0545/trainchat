@@ -1,0 +1,355 @@
+We need to implement a true Block Variation Engine plus a Block Rules Audit system for TrainChat. Right now the generator is over-converging and producing programs that feel too similar even when the exercise details change. The fix is NOT randomization. The fix is structured variation at the block level with auditability.
+
+GOAL
+Create a system where program generation first selects a block archetype and split architecture, then builds the program from those rules. Every generated program should feel intentionally different when appropriate, while still respecting user goal, training age, equipment, schedule, recovery, sport intent, and safety constraints.
+
+PRIMARY OBJECTIVE
+Stop the app from giving me the same program every time.
+
+HIGH-LEVEL REQUIREMENTS
+
+1. Introduce a Block Variation Engine
+The generator must choose from multiple block archetypes before slot filling and exercise ranking happen.
+
+2. Introduce a Block Rules Audit
+Every generation should emit a DEV-only structured audit log showing:
+- what block archetypes were considered
+- why the chosen block won
+- what split architecture was chosen
+- what rules fired
+- what rules were suppressed
+- whether fallback logic was used
+- whether the resulting program is too similar to recent outputs
+
+3. Preserve coaching quality
+Variation must remain constrained and intentional. No random nonsense. The system must still feel like expert programming, not shuffled templates.
+
+BLOCK VARIATION ENGINE
+
+Create a new concept called BlockArchetype.
+
+Minimum initial archetypes:
+- FOUNDATION_ACCUMULATION
+- INTENSIFICATION_STRENGTH
+- POWER_ELASTIC_CONVERSION
+- REBUILD_DELOAD
+
+Each BlockArchetype must define:
+- id
+- label
+- description
+- suitableGoals
+- suitableTrainingAges
+- suitableRecoveryProfiles
+- suitableScheduleRanges
+- preferredSplitArchitectures
+- bannedSplitArchitectures
+- slotWeightAdjustments
+- movementBiases
+- neuralDemandProfile
+- fatigueProfile
+- setRepProfile
+- restProfile
+- progressionStyle
+- variationTags
+- disallowedCombinations
+- preferredExerciseFamilies
+- reducedExerciseFamilies
+- introCopyTemplate
+
+Add support for BlockPhase:
+- establish
+- build
+- intensify
+- realize
+- deload
+
+The generated block should include both:
+- blockArchetype
+- currentPhase
+
+SPLIT ARCHITECTURE LAYER
+
+Create a second layer called SplitArchitecture.
+
+Minimum initial split architectures:
+- LOWER_UPPER_4DAY
+- FULL_BODY_3DAY
+- HIGH_LOW_4DAY
+- ATHLETIC_TOTAL_BODY_4DAY
+- LOWER_UPPER_POWER_HYPERTROPHY
+- MOVEMENT_FAMILY_SPLIT
+
+Each split architecture must define:
+- id
+- label
+- trainingDaysSupported
+- weeklyRhythmDescription
+- dayTemplates
+- allowedSlotsByDay
+- requiredSlotsByDay
+- optionalSlotsByDay
+- maxHighNeuralDays
+- adjacencyRules
+- lowerUpperBalance
+- pushPullBalance
+- elasticExposureRules
+- conditioningPlacementRules
+
+BLOCK SELECTION LOGIC
+
+Refactor generation flow so it works in this order:
+
+STEP 1
+Read user constraints:
+- goal
+- strength vs speed mode
+- training days
+- experience level
+- recovery readiness if available
+- equipment
+- sport tags if present
+- session duration
+- injury / pain / limitation flags
+- current or recent program history if available
+
+STEP 2
+Score all BlockArchetypes based on fit.
+Example factors:
+- goal fit
+- schedule fit
+- recovery fit
+- sport fit
+- equipment fit
+- novelty fit
+- recent repetition penalty
+- safety penalty
+- mode fit (strength vs speed)
+
+STEP 3
+Choose top-scoring valid block archetype.
+Do not allow same archetype to win repeatedly unless it is clearly the best fit and alternatives are below threshold.
+
+STEP 4
+Within chosen archetype, score valid SplitArchitectures.
+
+STEP 5
+Select split architecture with same logic:
+- fit
+- novelty
+- no recent overuse
+- rule compliance
+
+STEP 6
+Build day templates from the chosen split architecture.
+
+STEP 7
+Apply slot rules modified by block archetype.
+
+STEP 8
+Rank exercises within each slot using existing candidate metadata plus new block-aware weighting.
+
+STEP 9
+Run similarity check against recent programs.
+
+STEP 10
+If similarity exceeds threshold, try second-best valid archetype or split before finalizing.
+
+NOVELTY / ANTI-REPETITION RULES
+
+Add anti-repeat logic at multiple levels.
+
+A. Recent block repetition penalty
+If recent programs used the same block archetype, apply a penalty.
+
+B. Recent split repetition penalty
+If recent programs used the same split architecture, apply a penalty.
+
+C. Recent exercise family repetition penalty
+Penalize repeated main lift patterns and repeated assistance families.
+
+D. Recent exact exercise repetition penalty
+Penalty should be strongest for exact repeats.
+
+E. Anchor cap
+Even default anchor lifts should not dominate unless user profile specifically demands them.
+
+F. Similarity score
+Compute a similarity score between newly generated program and last N programs.
+Use components like:
+- same archetype
+- same split
+- same top lifts
+- same slot ordering
+- same movement family emphasis
+- same weekly rhythm
+
+If similarity score is above threshold, trigger re-roll logic using next-best valid configuration.
+
+BLOCK RULES AUDIT
+
+Create a DEV-only structured audit system named:
+[BlockRulesAudit]
+
+It must log the following on every generation and regeneration:
+- generationId
+- userId if available
+- mode (strength or speed)
+- goal
+- daysPerWeek
+- equipment summary
+- recentProgramIds considered
+- archetypeCandidates with scores
+- chosenArchetype
+- archetypeRuleHits
+- archetypeRuleMisses
+- splitCandidates with scores
+- chosenSplit
+- splitRuleHits
+- splitRuleMisses
+- slotWeightAdjustments applied
+- movementBiases applied
+- family penalties applied
+- exact exercise repetition penalties applied
+- similarityScore
+- fallbackTriggered (true/false)
+- fallbackReason
+- finalProgramFingerprint
+
+Also create a concise UI-safe dev summary string like:
+[BlockRulesAudit] archetype=POWER_ELASTIC_CONVERSION split=ATHLETIC_TOTAL_BODY_4DAY similarity=0.42 fallback=false
+
+PROGRAM FINGERPRINTING
+
+Implement a normalized program fingerprint to compare generated programs.
+Fingerprint should include:
+- block archetype
+- split architecture
+- day themes
+- top 1-2 primary movements per day
+- slot order pattern
+- main family distribution
+- neural demand distribution
+- total elastic exposure
+- lower/upper emphasis pattern
+
+Store the last several fingerprints for comparison.
+
+EXERCISE RANKING INTEGRATION
+
+Update ranking formula so it can receive block-aware modifiers.
+
+Current ranking should now also consider:
+- blockArchetypeFit
+- splitDayFit
+- movementBiasFit
+- currentPhaseFit
+- recentUsagePenalty
+- familyNoveltyBonus
+
+Do NOT randomize blindly.
+All variation must be explainable through the audit.
+
+BLOCK RULES FILES
+
+Create or refactor into something like:
+- lib/programs/blockArchetypes.ts
+- lib/programs/splitArchitectures.ts
+- lib/programs/blockScoring.ts
+- lib/programs/similarity.ts
+- lib/programs/fingerprint.ts
+- lib/programs/blockRulesAudit.ts
+
+If existing generator files already exist, integrate cleanly rather than duplicating logic.
+
+AUDIT RULE VALIDATION
+
+Add validation helpers to audit whether block rules are coherent.
+Examples:
+- no archetype should prefer a split architecture that it also bans
+- no day template should exceed neural demand cap
+- required slots must always be placeable
+- optional slots should not crowd out required slots
+- disallowed combinations must actually be enforced
+- progressionStyle must match setRepProfile
+- deload/rebuild blocks must reduce fatigue and neural demand appropriately
+
+Create DEV-only audit warnings like:
+[BlockRulesAuditWarning] FOUNDATION_ACCUMULATION has contradictory preferred/banned split: HIGH_LOW_4DAY
+[BlockRulesAuditWarning] REBUILD_DELOAD dayTemplate exceeds maxHighNeuralDays
+[BlockRulesAuditWarning] Similarity threshold bypassed by fallback with no logged reason
+
+UI / DISPLAY UPDATES
+
+Update program header display so it reflects real block identity, not generic text.
+Examples:
+- Foundation Accumulation Block · Week 1 · Establish
+- Intensification Strength Block · Week 2 · Build
+- Power + Elastic Conversion · Week 1 · Establish
+- Rebuild / Deload Block · Week 1 · Reset
+
+Also generate short block-specific subtitle copy so the program feels intentionally different.
+
+EXAMPLE DIFFERENTIATION TARGETS
+
+I want obvious feel differences between blocks:
+
+FOUNDATION_ACCUMULATION
+- more volume
+- more tissue tolerance
+- moderate neural demand
+- broader exercise exposure
+- less max-intent loading
+
+INTENSIFICATION_STRENGTH
+- lower rep primary lifts
+- higher rest
+- fewer fluff movements
+- stronger bilateral emphasis
+- tighter accessory selection
+
+POWER_ELASTIC_CONVERSION
+- more jumps, throws, reactive work, dynamic effort
+- lower fatigue accumulation
+- higher velocity intent
+- less grinding
+
+REBUILD_DELOAD
+- lower fatigue
+- less slot density
+- easier session completion
+- more movement quality and tissue restoration
+
+SUCCESS CRITERIA
+
+The implementation is successful if:
+1. Generating multiple programs for similar users no longer produces near-identical outputs
+2. The selected block archetype materially changes the feel of the program
+3. The selected split architecture materially changes weekly rhythm
+4. Audit logs clearly explain why a block and split were chosen
+5. Similarity detection prevents stale repetition
+6. No regressions break current working generation behavior
+7. The app still feels like a coach made the program, not a randomizer
+
+IMPORTANT CONSTRAINTS
+
+- Do not break the current working slot system
+- Do not remove existing metadata scoring; extend it
+- Do not add fake variation that harms program quality
+- Prefer clear, typed interfaces
+- Centralize all block selection logic
+- Use single-source-of-truth principles
+- Make all DEV audits easy to grep in console
+- If there are any components still bypassing derived program state, identify and fix them
+
+DELIVERABLES
+
+1. Implement the Block Variation Engine
+2. Implement Block Rules Audit logging
+3. Implement program similarity detection and fallback selection
+4. Update header labeling to reflect true block identity
+5. Add DEV audit warnings for contradictory or broken block rules
+6. Print a short summary of exactly what files were changed and why
+7. Print at least 3 example generation audit outputs showing materially different chosen blocks/splits
+
+Before coding, inspect the current generation pipeline and identify the best integration points so we enhance the architecture instead of layering spaghetti onto it.
