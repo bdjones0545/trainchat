@@ -1,0 +1,215 @@
+We need to upgrade TrainChat refinements so that every meaningful adjustment is:
+
+1. acknowledged clearly by the agent in the main chat
+2. applied intelligently downstream when progression logic requires it
+
+CONTEXT:
+Right now refinements can feel too local and too silent.
+If a user makes an exercise easier, swaps a movement, or changes a session/week/block, the app should not only update the immediate target — it should also consider how that affects later weeks in the block.
+
+The system should feel like a real coach:
+- it explains what changed
+- it explains whether future weeks were also adjusted
+- it preserves progression continuity
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make refinements feel coach-like and system-aware by adding:
+- smart chat acknowledgment
+- downstream progression impact when appropriate
+
+==================================================
+TASK 1 — ADD REFINEMENT ACKNOWLEDGMENT IN MAIN CHAT
+==================================================
+
+After any successful refinement, the agent must respond in the main chat with a concise, specific acknowledgment.
+
+Do NOT use generic language like:
+- “I processed your request”
+- “The program was updated”
+
+Instead use:
+- what changed
+- what level it affected
+- whether future weeks were adjusted
+
+Examples:
+- “I made Day 1 easier by reducing force demand and simplifying the lower-body progression.”
+- “I adjusted this week to be more explosive and rebalanced the accessory work.”
+- “I removed the knee-irritating pattern and smoothed the progression across the next two weeks.”
+
+==================================================
+TASK 2 — CREATE REFINEMENT IMPACT CLASSIFICATION
+==================================================
+
+Add an impact layer that classifies each successful refinement as one of:
+
+- local_only
+- same_week
+- downstream_weeks
+- full_block
+
+This should be based on:
+- refinement type
+- target scope
+- whether the change affects progression continuity
+- whether similar movement families appear later in the block
+
+==================================================
+TASK 3 — ADD DOWNSTREAM PROGRESSION LOGIC
+==================================================
+
+When appropriate, a refinement should affect later weeks.
+
+Examples:
+- if an exercise is made easier, later weeks should not immediately snap back to the original harder progression
+- if a movement pattern is removed due to pain, similar exercises later in the block should be reduced or replaced
+- if the session becomes more explosive, future related sessions should bias toward that direction when appropriate
+
+This should be intelligent, not over-aggressive.
+
+Do NOT rewrite the whole block unless the refinement truly requires it.
+
+==================================================
+TASK 4 — LINK MOVEMENT FAMILIES ACROSS WEEKS
+==================================================
+
+Add logic to detect related future exercises by:
+- movement pattern
+- slot family
+- progression lineage
+- exercise family / substitute cluster
+
+This allows the system to say:
+- “I changed the current version and adjusted the next progression step too.”
+
+==================================================
+TASK 5 — PRESERVE PROGRESSION CONTINUITY
+==================================================
+
+If the user modifies:
+- difficulty
+- pain tolerance
+- movement tolerance
+- force demand
+- explosiveness
+- session density
+
+then future weeks should remain coherent.
+
+Examples:
+- easier now → gentler progression later
+- remove painful pattern now → future similar patterns replaced
+- more explosive now → future session family may shift accordingly
+
+==================================================
+TASK 6 — GENERATE USER-FACING CHANGE SUMMARY
+==================================================
+
+Create a refinement summary generator for the agent response.
+
+It should include:
+- immediate change
+- downstream impact if any
+
+Examples:
+- “I swapped the main squat pattern for a friendlier option and adjusted the next two lower-body sessions so the progression stays smooth.”
+- “I made this week lower fatigue and softened the loaded posterior-chain work later in the week.”
+
+Keep it short, premium, and coach-like.
+
+==================================================
+TASK 7 — ADD OPTIONAL UI CHANGE INDICATOR
+==================================================
+
+If it fits cleanly, add a subtle note in the affected UI section:
+- Updated
+- Week adjusted
+- Future weeks rebalanced
+
+Keep it minimal.
+Do not clutter the interface.
+
+==================================================
+TASK 8 — DO NOT OVER-PROPAGATE
+==================================================
+
+Important:
+Not every change should rewrite the whole block.
+
+Rules:
+- cosmetic/local swaps → local_only
+- meaningful progression changes → downstream_weeks
+- broad phase changes → full_block
+
+Keep the system stable and intelligent.
+
+==================================================
+TASK 9 — AUDIT LOGGING
+==================================================
+
+Add logs:
+
+[RefinementImpactAudit] {
+  request,
+  targetScope,
+  impactScope,
+  immediateChanges,
+  downstreamWeeksAffected,
+  relatedExerciseFamiliesTouched
+}
+
+We need to verify the propagation logic is grounded and not random.
+
+==================================================
+TASK 10 — TEST CASES
+==================================================
+
+Test:
+1. “Make this exercise easier”
+Expected:
+- current exercise adjusted
+- later progression softened if needed
+- main chat acknowledgment explains both
+
+2. “This bothers my knee”
+Expected:
+- offending pattern removed
+- related future exposures adjusted
+- acknowledgment explains downstream effect
+
+3. “Make this week more explosive”
+Expected:
+- week changes
+- later sessions in that week rebalance
+- acknowledgment explains week-level impact
+
+4. “Adjust the block around hamstring resilience”
+Expected:
+- block-level effect
+- future weeks updated coherently
+- acknowledgment reflects full-block impact
+
+==================================================
+TASK 11 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. what impact classification system was added
+2. how downstream propagation works
+3. how main chat acknowledgment is generated
+4. examples of refinement summaries
+5. what UI indicators were added if any
+
+==================================================
+FINAL STANDARD
+==================================================
+
+When a user refines anything meaningful, TrainChat should feel like a real coach:
+
+- it acknowledges what changed
+- it explains the impact
+- it updates later weeks when progression logic requires it
+- it preserves continuity across the block

@@ -1,0 +1,266 @@
+CRITICAL AUDIT — DO PROGRAM VARIATION LAYERS ACTUALLY APPLY ACROSS WEEKS?
+
+CONTEXT:
+We have already built multiple variation layers into TrainChat, including:
+- monthly block planning
+- weekly block planning
+- session architecture / session identity
+- archetype-aware grammar
+- slot/exercise variation
+- enforcement / prohibited default replacement
+
+But there is growing evidence that these layers may not be applying strongly enough from week to week.
+
+Observed concern:
+- some exercise variation exists, especially in strength lifts
+- but prep/warm-up and power expression still feel repetitive
+- weekly progression may be changing dosage (sets/reps/rest) more than actual movement expression or structure
+- Weeks 2–4 may not be benefiting from the full variation system the same way Week 1 does
+
+We need to audit this directly instead of guessing.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Determine whether the program variation layers truly apply across all weeks of a 4-week block, or whether later weeks are mostly reusing Week 1 structure and exercise logic with small dosage changes.
+
+==================================================
+TASK 1 — TRACE ALL VARIATION LAYERS BY WEEK
+==================================================
+
+For a fresh 4-week build, log the following separately for Week 1, Week 2, Week 3, Week 4:
+
+[WeeklyVariationAudit] {
+  weekNumber,
+  weekRole,
+  monthlyBlockType,
+  variationSeed,
+  sessionIdentities,
+  finalBlockOrders,
+  prepFamilies,
+  powerExpressionFamilies,
+  primaryLiftSelections,
+  secondaryLiftSelections,
+  unilateralSelections,
+  trunkSelections,
+  conditioningSelections
+}
+
+We need to know whether real variation is happening across all weeks, not just in Week 1.
+
+==================================================
+TASK 2 — AUDIT SESSION IDENTITY VARIATION ACROSS WEEKS
+==================================================
+
+Compare session identities week to week.
+
+Questions:
+- Do Week 2 / 3 / 4 sessions receive distinct identities?
+- Or are they mostly the same identities with altered reps/rest?
+- Does the architecture engine generate distinct session purposes each week?
+
+FAIL if:
+- weekly identities are nearly identical except for dosage
+
+==================================================
+TASK 3 — AUDIT STRUCTURAL / GRAMMAR VARIATION ACROSS WEEKS
+==================================================
+
+For each week, print:
+- finalBlockOrder
+- block count
+- omitted blocks
+- merged blocks
+- block archetype influence
+
+Questions:
+- Does week role alter the actual session grammar?
+- Or are the same blocks appearing in the same order every week?
+- Do Week 3 and Week 4 structurally differ from Week 1?
+
+FAIL if:
+- grammar is static and only loading changes
+
+==================================================
+TASK 4 — AUDIT PREP / WARM-UP VARIATION ACROSS WEEKS
+==================================================
+
+For each session across all 4 weeks, print:
+
+[PrepWeeklyAudit] {
+  weekNumber,
+  dayNumber,
+  prepFamily,
+  prepExercises,
+  prepIntent
+}
+
+We need to know:
+- whether prep is the same every day and every week
+- whether week role changes prep expression
+- whether prep responds to session identity
+
+FAIL if:
+- prep is mostly fixed across all 4 weeks
+
+==================================================
+TASK 5 — AUDIT POWER / PLYOMETRIC VARIATION ACROSS WEEKS
+==================================================
+
+For each session with power work, print:
+
+[PowerWeeklyAudit] {
+  weekNumber,
+  dayNumber,
+  powerExpressionFamily,
+  selectedExercise,
+  candidates,
+  selectedReason
+}
+
+Questions:
+- Is Week 1 power expression different from Week 2/3/4?
+- Or is the same jump/throw reused with new sets/reps?
+- Do week roles change power expression family, not just intensity?
+
+FAIL if:
+- power movement flavor remains mostly the same across all 4 weeks
+
+==================================================
+TASK 6 — AUDIT STRENGTH VARIATION ACROSS WEEKS
+==================================================
+
+For primary and secondary strength selections, print:
+
+[StrengthWeeklyAudit] {
+  weekNumber,
+  dayNumber,
+  primaryExercise,
+  secondaryExercise,
+  selectedPattern,
+  selectedReason
+}
+
+We need to know:
+- whether strength lift variation survives into later weeks
+- whether Week 3 / Intensify produces different movement expression or just heavier versions
+- whether Week 4 / Deload produces different lower-fatigue exercise expression
+
+==================================================
+TASK 7 — DETERMINE WHETHER WEEK ROLE AFFECTS MOVEMENT EXPRESSION OR ONLY DOSAGE
+==================================================
+
+This is the most important question.
+
+For each week role:
+- Establish
+- Build
+- Intensify
+- Deload
+
+Answer:
+Does this role change:
+A. only sets/reps/rest/load?
+or
+B. actual movement expression, block order, prep, power, and session identity?
+
+Return a clear verdict.
+
+FAIL if:
+- week role mostly changes numbers, not actual program content
+
+==================================================
+TASK 8 — IDENTIFY WHICH VARIATION LAYERS ARE WEEK-ACTIVE VS WEEK-INERT
+==================================================
+
+For each variation layer, classify it as:
+
+- ACTIVE_ACROSS_WEEKS
+- PARTIALLY_ACTIVE
+- INERT_AFTER_WEEK_1
+
+Layers to classify:
+1. monthly block influence
+2. weekly role influence
+3. session identity variation
+4. session grammar variation
+5. prep variation
+6. power variation
+7. strength variation
+8. enforcement / prohibited-default replacement
+
+We need a very honest diagnosis.
+
+==================================================
+TASK 9 — FIND THE TRUE BOTTLENECK
+==================================================
+
+Return the top 3 reasons the later weeks still feel repetitive.
+
+Examples:
+- week role only changes dosage
+- prep/power are not rerolled across weeks
+- session identity is static after Week 1
+- grammar is copied forward
+- enforcement applies but only at strength layer
+- future weeks are generated from reused templates
+
+Do NOT guess.
+Base this on the logs.
+
+==================================================
+TASK 10 — APPLY TARGETED FIXES
+==================================================
+
+If a layer is inert after Week 1:
+- make it reroll / regenerate per week
+- make weekRole influence movement expression, not just dosage
+- make prep and power families distinct across weeks
+- make Week 4 / Deload structurally and expressively lighter, not just numerically lighter
+
+Do NOT rewrite everything blindly.
+Fix the exact layers that fail to vary across weeks.
+
+==================================================
+TASK 11 — VALIDATION
+==================================================
+
+Run one fresh 4-week build and compare:
+- Week 1 Day 1
+- Week 2 Day 1
+- Week 3 Day 1
+- Week 4 Day 1
+
+Then compare all sessions within each week.
+
+SUCCESS CRITERIA:
+- later weeks are meaningfully different from Week 1
+- variation is visible in prep, power, and session expression
+- week roles feel real, not just dosage labels
+
+==================================================
+TASK 12 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. which variation layers are active across weeks
+2. which ones become inert after Week 1
+3. whether week role changes movement expression or just dosage
+4. the top 3 bottlenecks
+5. exact fixes applied
+6. before/after examples for Weeks 1–4
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat’s variation system must apply across the full 4-week block.
+
+Weeks 2–4 should not feel like Week 1 with altered sets/reps.
+
+The user should feel:
+- progression
+- changing weekly emphasis
+- different movement expression
+- intelligent periodization across the entire block
