@@ -44,6 +44,11 @@ export interface ExerciseScoreBreakdown {
     slotRepeatPenalty: number;
     recentUsePenalty: number;
     movementClusterPenalty: number;
+    /** +1.5 when the last exercise chosen for this SLOT was from the same
+     *  equivalence cluster (e.g., "vertical-pull", "bilateral-squat") and the
+     *  candidate is a DIFFERENT exercise in that cluster. Drives intra-cluster
+     *  rotation: "you need a squat — try Safety Bar or Front Squat instead." */
+    clusterAlternativeBonus: number;
     seedTiebreaker: number;
     // ── Agent Control Layer dimensions ────────────────────────────────────
     heroSuppressionPenalty: number;
@@ -203,6 +208,7 @@ export function buildWinReasons(breakdown: ExerciseScoreBreakdown["factors"]): s
   if ((breakdown.visibleSpineAlignmentFit ?? 0) > 0) reasons.push(`[agent] visible spine alignment (+${breakdown.visibleSpineAlignmentFit.toFixed(1)})`);
   if ((breakdown.dayIdentityAlignmentFit ?? 0) > 0) reasons.push(`[agent] day identity alignment (+${breakdown.dayIdentityAlignmentFit.toFixed(1)})`);
   if ((breakdown.controlNoveltyBonus ?? 0) > 0) reasons.push(`[agent] control novelty bonus (+${breakdown.controlNoveltyBonus.toFixed(1)})`);
+  if ((breakdown.clusterAlternativeBonus ?? 0) > 0) reasons.push(`cluster alternative rotation (+${breakdown.clusterAlternativeBonus.toFixed(1)})`);
   return reasons.length > 0 ? reasons : ["tiebreaker"];
 }
 

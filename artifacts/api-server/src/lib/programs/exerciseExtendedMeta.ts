@@ -14,6 +14,17 @@
 
 export interface ExerciseExtendedMeta {
   family: string;
+  /**
+   * Movement equivalence cluster — a sub-family grouping of exercises that are
+   * functionally interchangeable in a given slot (e.g. all bilateral barbell
+   * squats, all vertical-pull patterns).  Used by the cluster-alternative-bonus
+   * scoring dimension to rotate through equivalents across builds rather than
+   * always defaulting to the same archetype exercise.
+   *
+   * Leave undefined (or use the helper default "unclassified") for exercises
+   * where cluster-level rotation is not meaningful.
+   */
+  equivalenceCluster?: string;
   complexity: "simple" | "moderate" | "complex";
   velocityIntent: "slow_grind" | "moderate" | "ballistic" | "explosive";
   stabilityDemand: "low" | "moderate" | "high";
@@ -28,23 +39,31 @@ const DEFAULT_EXTENDED: ExerciseExtendedMeta = {
 
 export const EXERCISE_EXTENDED_META: Record<string, ExerciseExtendedMeta> = {
   // ── Heavy Bilateral Squat ───────────────────────────────────────────────
-  "Back Squat":                        { family: "heavy_bilateral_squat", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
-  "Front Squat":                       { family: "heavy_bilateral_squat", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
-  "Pause Back Squat":                  { family: "heavy_bilateral_squat", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
-  "Safety Bar Squat":                  { family: "heavy_bilateral_squat", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "high" },
-  "Box Squat":                         { family: "heavy_bilateral_squat", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
-  "Low-Bar Back Squat":                { family: "heavy_bilateral_squat", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
-  "Cambered Bar Squat":                { family: "heavy_bilateral_squat", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
-  "Heel-Elevated Back Squat":          { family: "heavy_bilateral_squat", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
-  "Zercher Squat":                     { family: "heavy_bilateral_squat", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
+  // equivalenceCluster: "bilateral-squat" means all of these are movement-
+  // equivalent substitutes for the primary squat slot; the cluster-alternative
+  // bonus rotates through them build-over-build.
+  "Back Squat":                        { family: "heavy_bilateral_squat", equivalenceCluster: "bilateral-squat", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
+  "Front Squat":                       { family: "heavy_bilateral_squat", equivalenceCluster: "bilateral-squat", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
+  "Pause Back Squat":                  { family: "heavy_bilateral_squat", equivalenceCluster: "bilateral-squat", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
+  "Safety Bar Squat":                  { family: "heavy_bilateral_squat", equivalenceCluster: "bilateral-squat", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "high" },
+  "Box Squat":                         { family: "heavy_bilateral_squat", equivalenceCluster: "bilateral-squat", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
+  "Low-Bar Back Squat":                { family: "heavy_bilateral_squat", equivalenceCluster: "bilateral-squat", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
+  "Cambered Bar Squat":                { family: "heavy_bilateral_squat", equivalenceCluster: "bilateral-squat", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
+  "Heel-Elevated Back Squat":          { family: "heavy_bilateral_squat", equivalenceCluster: "bilateral-squat", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
+  "Zercher Squat":                     { family: "heavy_bilateral_squat", equivalenceCluster: "bilateral-squat", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
+  "Hatfield Squat":                    { family: "heavy_bilateral_squat", equivalenceCluster: "bilateral-squat", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
+  // New bilateral-squat equivalents
+  "Belt Squat":                        { family: "heavy_bilateral_squat", equivalenceCluster: "bilateral-squat", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
+  "Tempo Back Squat (3-1-1)":          { family: "heavy_bilateral_squat", equivalenceCluster: "bilateral-squat", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
+  // Machine / isolation (same family, different cluster — not used as primary)
   "Hack Squat (machine)":              { family: "heavy_bilateral_squat", complexity: "simple",   velocityIntent: "moderate",    stabilityDemand: "low" },
   "Leg Press (as primary)":            { family: "heavy_bilateral_squat", complexity: "simple",   velocityIntent: "moderate",    stabilityDemand: "low" },
 
   // ── Goblet / Tempo Squat ───────────────────────────────────────────────
-  "Goblet Squat (heavy)":              { family: "goblet_tempo_squat", complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "low" },
-  "Heel-Elevated Goblet Squat":        { family: "goblet_tempo_squat", complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "low" },
-  "Goblet Squat":                      { family: "goblet_tempo_squat", complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "low" },
-  "Tempo Goblet Squat":                { family: "goblet_tempo_squat", complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "low" },
+  "Goblet Squat (heavy)":              { family: "goblet_tempo_squat", equivalenceCluster: "goblet-squat", complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "low" },
+  "Heel-Elevated Goblet Squat":        { family: "goblet_tempo_squat", equivalenceCluster: "goblet-squat", complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "low" },
+  "Goblet Squat":                      { family: "goblet_tempo_squat", equivalenceCluster: "goblet-squat", complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "low" },
+  "Tempo Goblet Squat":                { family: "goblet_tempo_squat", equivalenceCluster: "goblet-squat", complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "low" },
 
   // ── Trap Bar ──────────────────────────────────────────────────────────
   "Trap Bar Deadlift (squat-mode, low handles)": { family: "trap_bar", complexity: "moderate", velocityIntent: "moderate", stabilityDemand: "moderate" },
@@ -154,26 +173,42 @@ export const EXERCISE_EXTENDED_META: Record<string, ExerciseExtendedMeta> = {
   "Push Press (barbell)":              { family: "upper_vertical_push", complexity: "moderate", velocityIntent: "ballistic",  stabilityDemand: "moderate" },
 
   // ── Upper Horizontal Pull ─────────────────────────────────────────────
-  "Barbell Row":                       { family: "upper_horizontal_pull", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "moderate" },
-  "Dumbbell Row":                      { family: "upper_horizontal_pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
-  "Cable Row":                         { family: "upper_horizontal_pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
-  "Chest-Supported Row":               { family: "upper_horizontal_pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
-  "Pendlay Row":                       { family: "upper_horizontal_pull", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "moderate" },
-  "Seal Row":                          { family: "upper_horizontal_pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
-  "Kroc Row":                          { family: "upper_horizontal_pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
-  "Meadows Row":                       { family: "upper_horizontal_pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
-  "TRX Row":                           { family: "upper_horizontal_pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "moderate" },
-  "Inverted Row":                      { family: "upper_horizontal_pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "moderate" },
+  // equivalenceCluster: "horizontal-pull" — all are movement-equivalent for
+  // the horizontal-pull slot; cluster-alternative bonus rotates through them.
+  "Barbell Row":                       { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "moderate" },
+  "Barbell Bent-Over Row":             { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "moderate" },
+  "Dumbbell Row":                      { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
+  "Cable Row":                         { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
+  "Seated Cable Row":                  { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
+  "Chest-Supported Row":               { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
+  "Chest-Supported Dumbbell Row":      { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
+  "Pendlay Row":                       { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "moderate" },
+  "Seal Row":                          { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
+  "Dumbbell Seal Row":                 { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
+  "Kroc Row":                          { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
+  "Meadows Row":                       { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
+  "T-Bar Row":                         { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "moderate" },
+  "Single-Arm Dumbbell Row":           { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
+  "Half-Kneeling Cable Pull":          { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "moderate" },
+  "TRX Row":                           { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "moderate" },
+  "Inverted Row":                      { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "moderate" },
 
   // ── Upper Vertical Pull ───────────────────────────────────────────────
-  "Pull-Up":                           { family: "upper_vertical_pull", complexity: "moderate", velocityIntent: "moderate",   stabilityDemand: "moderate" },
-  "Chin-Up":                           { family: "upper_vertical_pull", complexity: "moderate", velocityIntent: "moderate",   stabilityDemand: "moderate" },
-  "Weighted Pull-Up":                  { family: "upper_vertical_pull", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "moderate" },
-  "Lat Pulldown":                      { family: "upper_vertical_pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
-  "Wide-Grip Lat Pulldown":            { family: "upper_vertical_pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
-  "Single-Arm Lat Pulldown":           { family: "upper_vertical_pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
-  "Neutral-Grip Pull-Up":              { family: "upper_vertical_pull", complexity: "moderate", velocityIntent: "moderate",   stabilityDemand: "moderate" },
-  "Band-Assisted Pull-Up":             { family: "upper_vertical_pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
+  // equivalenceCluster: "vertical-pull" — all are movement-equivalent for the
+  // vertical-pull slot (chin-over-bar or cable lat-to-chest pattern).
+  "Pull-Up":                           { family: "upper_vertical_pull", equivalenceCluster: "vertical-pull", complexity: "moderate", velocityIntent: "moderate",   stabilityDemand: "moderate" },
+  "Chin-Up":                           { family: "upper_vertical_pull", equivalenceCluster: "vertical-pull", complexity: "moderate", velocityIntent: "moderate",   stabilityDemand: "moderate" },
+  "Weighted Pull-Up":                  { family: "upper_vertical_pull", equivalenceCluster: "vertical-pull", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "moderate" },
+  "Weighted Chin-Up":                  { family: "upper_vertical_pull", equivalenceCluster: "vertical-pull", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "moderate" },
+  "Lat Pulldown":                      { family: "upper_vertical_pull", equivalenceCluster: "vertical-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
+  "Lat Pulldown (heavy)":              { family: "upper_vertical_pull", equivalenceCluster: "vertical-pull", complexity: "moderate", velocityIntent: "moderate",   stabilityDemand: "low" },
+  "Wide-Grip Lat Pulldown":            { family: "upper_vertical_pull", equivalenceCluster: "vertical-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
+  "Single-Arm Lat Pulldown":           { family: "upper_vertical_pull", equivalenceCluster: "vertical-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
+  "Neutral-Grip Pull-Up":              { family: "upper_vertical_pull", equivalenceCluster: "vertical-pull", complexity: "moderate", velocityIntent: "moderate",   stabilityDemand: "moderate" },
+  "Band-Assisted Pull-Up":             { family: "upper_vertical_pull", equivalenceCluster: "vertical-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
+  // New vertical-pull equivalents
+  "Banded Pull-Up":                    { family: "upper_vertical_pull", equivalenceCluster: "vertical-pull", complexity: "moderate", velocityIntent: "moderate",   stabilityDemand: "moderate" },
+  "Ring Pull-Up":                      { family: "upper_vertical_pull", equivalenceCluster: "vertical-pull", complexity: "complex",  velocityIntent: "moderate",   stabilityDemand: "high" },
 
   // ── Trunk Stability ───────────────────────────────────────────────────
   "Pallof Press":                      { family: "trunk_stability", complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "high" },
@@ -243,4 +278,14 @@ export function getExerciseExtendedMeta(exerciseName: string): ExerciseExtendedM
 /** Get the family tag for an exercise. */
 export function getExerciseFamily(exerciseName: string): string {
   return EXERCISE_EXTENDED_META[exerciseName]?.family ?? "heavy_bilateral_squat";
+}
+
+/**
+ * Get the movement equivalence cluster for an exercise.
+ * Returns "unclassified" when the exercise has no cluster assigned — the
+ * cluster-alternative-bonus scoring dimension ignores "unclassified" candidates
+ * so the signal is additive only for exercises with explicit cluster assignments.
+ */
+export function getEquivalenceCluster(exerciseName: string): string {
+  return EXERCISE_EXTENDED_META[exerciseName]?.equivalenceCluster ?? "unclassified";
 }

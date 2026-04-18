@@ -35,7 +35,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─── Block Variation Engine Imports ──────────────────────────────────────────
-import { getExerciseExtendedMeta, getExerciseFamily } from "./programs/exerciseExtendedMeta";
+import { getExerciseExtendedMeta, getExerciseFamily, getEquivalenceCluster } from "./programs/exerciseExtendedMeta";
 import { deriveSlotIntent, type SlotIntentResult } from "./programs/deriveSlotIntent";
 import { deriveFamilyBiases, getFamilyBiasScore, type FamilyBiasResult } from "./programs/deriveFamilyBiases";
 import {
@@ -66,6 +66,15 @@ interface ExerciseMeta {
   fatigueCost: "high" | "moderate" | "low";
   /** True if this exercise is one of the 5 default anchors we're trying to rotate away from. */
   isDefaultAnchor?: boolean;
+  /**
+   * Movement equivalence cluster — a sub-family label that groups exercises
+   * that are functionally interchangeable in a given slot (e.g. all bilateral
+   * barbell squats, all vertical-pull patterns).  When defined, the cluster-
+   * alternative-bonus scoring dimension gives +1.5 to OTHER exercises in the
+   * same cluster when this exercise was picked in the previous build for this
+   * slot, encouraging build-over-build rotation within equivalents.
+   */
+  equivalenceCluster?: string;
 }
 
 /** Scoring context passed per build. */
@@ -146,6 +155,12 @@ interface CandidateScore {
      *  Prevents movement-pattern saturation within a single build (e.g., two
      *  hip-hinge exercises crowding out push or trunk variety). Capped at -3.0. */
     movementClusterPenalty: number;
+    /** +1.5 when the last exercise used in THIS SLOT belonged to the same
+     *  equivalence cluster (e.g., "bilateral-squat", "vertical-pull") and the
+     *  candidate is a DIFFERENT exercise in that cluster.  Drives rotation
+     *  within the cluster: the next build prefers "Safety Bar Squat" over
+     *  "Back Squat" because Back Squat won last time in this slot. */
+    clusterAlternativeBonus: number;
     // ── Block Variation Engine extensions ────────────────────────────────
     blockArchetypeFit: number;
     currentPhaseFit: number;
@@ -528,6 +543,24 @@ function scoreCandidate(
     return Math.min(3.0, sameClusterCount * 1.5);
   })();
 
+  // ── Cluster alternative bonus (+1.5) ──────────────────────────────────────
+  // Fires when the last exercise chosen for THIS SLOT was from the same
+  // equivalence cluster as the candidate AND the candidate is a different
+  // exercise.  Example: if "Back Squat" won the bilateral_squat_strength slot
+  // last build, every other "bilateral-squat" cluster member (Safety Bar Squat,
+  // Front Squat, Belt Squat, etc.) gets +1.5 next build.
+  // "I need a squat — pick a DIFFERENT squat than last time."
+  const clusterAlternativeBonus = (() => {
+    const candidateCluster = getEquivalenceCluster(meta.name);
+    if (candidateCluster === "unclassified") return 0;
+    const slotHistory = SLOT_CONTRAST_REGISTRY[ctx.slotName];
+    if (!slotHistory || slotHistory.length === 0) return 0;
+    const lastSlotExercise = slotHistory[slotHistory.length - 1];
+    if (lastSlotExercise === meta.name) return 0; // already penalised by slotRepeatPenalty
+    const lastCluster = getEquivalenceCluster(lastSlotExercise);
+    return lastCluster === candidateCluster ? 1.5 : 0;
+  })();
+
   // ── Seed tiebreaker (0–1.5, per-candidate) ────────────────────────────────
   // Previous formula: (seed * slotPrime * constant) — produces the SAME value
   // for every candidate in the slot (no-op tiebreaker). Fixed: mix meta.name
@@ -810,7 +843,7 @@ function scoreCandidate(
   // ── Total ─────────────────────────────────────────────────────────────────
   const total = sportFit + intentFit + neuralFit + equipFit + noveltyBonus
     - fatiguePenalty - overusePenalty - contrastPenalty - exactRepeatPenalty - slotRepeatPenalty
-    - recentUsePenalty - movementClusterPenalty
+    - recentUsePenalty - movementClusterPenalty + clusterAlternativeBonus
     + seedTiebreaker
     + blockArchetypeFit + currentPhaseFit + slotIntentFit + movementBiasFit
     + familyPreferenceFit + velocityIntentFit + stabilityDemandFit + progressionStyleFit
@@ -838,6 +871,7 @@ function scoreCandidate(
       seedTiebreaker,
       recentUsePenalty,
       movementClusterPenalty,
+      clusterAlternativeBonus,
       blockArchetypeFit,
       currentPhaseFit,
       slotIntentFit,
@@ -1075,6 +1109,7 @@ function ranked(pool: ExerciseMeta[], ctx: ScoreContext, primeMultiplier: number
           slotRepeatPenalty: c.breakdown.slotRepeatPenalty,
           recentUsePenalty: c.breakdown.recentUsePenalty,
           movementClusterPenalty: c.breakdown.movementClusterPenalty,
+          clusterAlternativeBonus: c.breakdown.clusterAlternativeBonus,
           // Agent Control Layer dimensions
           heroSuppressionPenalty: c.breakdown.heroSuppressionPenalty,
           controlFamilyBoostFit: c.breakdown.controlFamilyBoostFit,
@@ -1174,6 +1209,14 @@ const BILATERAL_SQUAT_POOL: ExerciseMeta[] = [
   { name: "Trap Bar Deadlift (squat-mode, low handles)", sportTags: ["football", "rugby", "hockey", "basketball"], intentTags: ["strength", "power"], neuralDemand: "high", fatigueCost: "high" },
   { name: "Zercher Squat", sportTags: ["wrestling", "mma", "football"], intentTags: ["strength", "stability"], neuralDemand: "high", fatigueCost: "high" },
   { name: "Hatfield Squat", sportTags: ["football", "rugby", "powerlifting"], intentTags: ["strength", "power"], neuralDemand: "high", fatigueCost: "high" },
+  // ── Movement Equivalents (new) ──────────────────────────────────────────────
+  // Belt squat: same bilateral squat pattern, zero spinal compression — excellent
+  // alternative when axial loading needs to rotate out for recovery or sport reasons.
+  { name: "Belt Squat", sportTags: ["football", "rugby", "powerlifting"], intentTags: ["strength", "hypertrophy"], neuralDemand: "high", fatigueCost: "moderate", equivalenceCluster: "bilateral-squat" },
+  // Tempo Back Squat: same pattern as Back Squat but with deliberate eccentric
+  // tempo (3-second down, 1-second pause, 1-second up) — hypertrophy and positional
+  // strength emphasis without adding new loading modalities.
+  { name: "Tempo Back Squat (3-1-1)", sportTags: ["powerlifting", "football", "rugby"], intentTags: ["strength", "hypertrophy", "stability"], neuralDemand: "high", fatigueCost: "high", equivalenceCluster: "bilateral-squat" },
 ];
 
 const BILATERAL_SQUAT_JOINT_FRIENDLY: ExerciseMeta[] = [
@@ -1334,6 +1377,17 @@ const UPPER_PULL_PRIMARY_POOL: ExerciseMeta[] = [
   { name: "Seal Row", sportTags: ["football", "rugby", "swimming"], intentTags: ["hypertrophy", "stability"], neuralDemand: "moderate", fatigueCost: "moderate" },
   { name: "Dumbbell Seal Row", sportTags: ["soccer", "basketball"], intentTags: ["hypertrophy", "stability"], neuralDemand: "moderate", fatigueCost: "low" },
   { name: "Half-Kneeling Cable Pull", sportTags: ["golf", "baseball", "tennis", "soccer"], intentTags: ["stability", "hypertrophy", "rotational"], neuralDemand: "moderate", fatigueCost: "low" },
+  // ── Vertical-Pull Movement Equivalents (new) ────────────────────────────────
+  // The primary pool previously contained pull-up and chin-up variants but lacked
+  // band-assisted and gymnastic ring options.  These are movement-equivalent to
+  // Weighted Pull-Up for the vertical-pull slot and share the "vertical-pull"
+  // equivalenceCluster so the cluster-alternative-bonus rotates through them.
+  { name: "Banded Pull-Up", sportTags: ["gymnastics", "mma", "basketball", "calisthenics"], intentTags: ["strength", "hypertrophy"], neuralDemand: "moderate", fatigueCost: "moderate", equivalenceCluster: "vertical-pull" },
+  { name: "Ring Pull-Up", sportTags: ["gymnastics", "mma", "calisthenics"], intentTags: ["strength", "stability"], neuralDemand: "high", fatigueCost: "high", equivalenceCluster: "vertical-pull" },
+  // Lat Pulldown (heavy) promotes to primary: full lat-dominant vertical pull at
+  // high load — functionally equivalent to weighted pull-up for athletes who
+  // lack sufficient bodyweight pull strength or use equipment-based periodisation.
+  { name: "Lat Pulldown (heavy)", sportTags: ["swimming", "rowing", "bodybuilding", "gymnastics"], intentTags: ["strength", "hypertrophy"], neuralDemand: "moderate", fatigueCost: "moderate", equivalenceCluster: "vertical-pull" },
 ];
 
 const UPPER_PULL_SECONDARY_POOL: ExerciseMeta[] = [
