@@ -52,6 +52,9 @@ import { emitBlockRulesAudit, buildFingerprintString, generateAuditId } from "./
 import { validateArchetypeCoherence } from "./programs/blockArchetypes";
 import { validateSplitArchitectures } from "./programs/splitArchitectures";
 import { buildProgramContextProfile } from "./programs/programContextProfile";
+import { buildExtendedFingerprint } from "./programs/programFingerprint";
+import { runProgramVarianceAudit } from "./programs/programVarianceAudit";
+import { emitRerollLog } from "./programs/programVarianceReroll";
 
 // ─── One-time validation on module load ──────────────────────────────────────
 // DEV-only coherence checks fire once per process start.
@@ -2431,6 +2434,36 @@ export function buildArchitectureBrief(
         trunk_anti_rotation: slotSelection.trunk_anti_rotation,
       },
     }));
+  }
+
+  // ── Program Variance Audit ────────────────────────────────────────────────
+  // Build the extended fingerprint AFTER exercises are selected so we have
+  // the full picture: block + split + slot exercises + day themes + family counts.
+  const extendedFingerprint = buildExtendedFingerprint({
+    generationId: auditId,
+    blockArchetype: blockSelection.archetypeId,
+    currentPhase: "establish",
+    progressionStyle: blockSelection.archetype.progressionStyle,
+    neuralDemandProfile: blockSelection.archetype.neuralDemandProfile,
+    fatigueProfile: blockSelection.archetype.fatigueProfile,
+    splitArchitecture: blockSelection.splitId,
+    weeklyRhythm: blockSelection.split.weeklyRhythmDescription,
+    daysPerWeek,
+    dayTemplates: blockSelection.split.dayTemplates,
+    slotSelections: slotSelection as unknown as Record<string, string>,
+    variationTags: blockSelection.archetype.variationTags,
+  });
+
+  // Run the variance audit against recent program history.
+  // Logs [ProgramVarianceAudit], [ProgramVarianceAuditWarning] in DEV.
+  // Returns the audit result including rerollRecommended flag.
+  const varianceAuditResult = runProgramVarianceAudit(extendedFingerprint);
+
+  // If variance is too low and we haven't already attempted a re-selection:
+  // log the reroll recommendation. The next generation will pick up the
+  // boosted novelty pressure from the variance score via the estimatedNoveltyPressure path.
+  if (varianceAuditResult.rerollRecommended && !fallbackTriggered) {
+    emitRerollLog("boost_novelty_pressure", "low_variance");
   }
 
   const arch = computeWeeklyArchitecture(daysPerWeek, sport, goal, splitVariationSeed);
