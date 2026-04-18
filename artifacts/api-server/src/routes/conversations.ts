@@ -2218,6 +2218,27 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
   logIntentSummary(parsed.data.content, intentResult, hasAnyProgram);
 
+  // ── Language System + Response Policy (SSE path) ─────────────────────────
+  // Mirror of the same block in the non-stream handler. Both handlers must
+  // declare resolvedResponsePolicy in their own scope — the non-stream handler's
+  // variable is NOT accessible here (different closure).
+  let resolvedResponsePolicy: ResponsePolicy | null = null;
+  try {
+    const langProfile = extractAgentIntentProfile(parsed.data.content, hasAnyProgram);
+    auditLanguageInterpretation(langProfile);
+    const policyCtx: ResponsePolicyContext = {
+      hasActiveProgram: hasAnyProgram,
+      currentBlock: latestStructuredProgram
+        ? (latestStructuredProgram as any).phases?.[0]?.phaseName ?? null
+        : null,
+      todaySession: null,
+    };
+    resolvedResponsePolicy = resolveResponsePolicy(langProfile, policyCtx);
+    auditResponsePolicy(resolvedResponsePolicy, parsed.data.content, langProfile);
+  } catch (langErrSSE) {
+    logger.warn({ langErrSSE }, "[SSE/ResponsePolicy] Language/policy resolution failed — continuing without it");
+  }
+
   // ── Constraint Extraction ─────────────────────────────────────────────────
   let extractedConstraints: ExtractedConstraints | null = null;
   if (intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM") {

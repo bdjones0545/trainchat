@@ -1,0 +1,194 @@
+CRITICAL REGRESSION — PROGRAMS ARE NO LONGER COMPLETING
+
+BUG:
+After the recent hierarchical generation / refinement / thinking-state changes, program builds are no longer completing.
+
+Observed behavior:
+- build starts
+- stage progresses to "Assigning sessions & exercises..."
+- timer continues running
+- after 90 seconds the frontend shows:
+  "Still working… something may have stalled. Retry?"
+- no final program is produced
+- no successful completion is reaching the frontend
+
+IMPORTANT:
+This is NOT just a UI issue.
+The frontend stall card is correctly detecting that the build pipeline is not finishing.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Find the exact point where program generation stops completing and fix it so full program builds finalize normally again.
+
+==================================================
+TASK 1 — TRACE THE FULL BACKEND BUILD PIPELINE
+==================================================
+
+Audit the full generation path from:
+- incoming build request
+- block planner
+- weekly planner
+- session role assignment
+- slot layout generation
+- exercise selection
+- reconciliation
+- DB save
+- stream completion / final response return
+
+We need the exact stage where execution stalls, loops, or fails silently.
+
+==================================================
+TASK 2 — ADD HARD AUDIT LOGGING AT EVERY TERMINAL STEP
+==================================================
+
+Add logs for:
+
+[BuildPipeline:start]
+[BuildPipeline:monthlyBlockDone]
+[BuildPipeline:weeklyBlocksDone]
+[BuildPipeline:sessionRolesDone]
+[BuildPipeline:slotLayoutDone]
+[BuildPipeline:exerciseSelectionDone]
+[BuildPipeline:reconciliationDone]
+[BuildPipeline:dbSaveDone]
+[BuildPipeline:finalResponseBuilt]
+[BuildPipeline:streamCompleted]
+[BuildPipeline:error]
+
+Each log must include:
+- conversationId
+- userId if available
+- elapsed ms
+- current block type / program title if available
+
+We need to see the last successful stage before it hangs.
+
+==================================================
+TASK 3 — AUDIT "ASSIGNING SESSIONS & EXERCISES..." STAGE MAPPING
+==================================================
+
+Find exactly which backend functions correspond to the frontend stage:
+"Assigning sessions & exercises..."
+
+List the exact functions invoked after that stage begins.
+
+This is likely where the hang is occurring.
+
+==================================================
+TASK 4 — CHECK FOR DEAD LOOPS / RECURSION / NESTED DB PATCH COST
+==================================================
+
+Audit recent changes for:
+- recursive planner calls
+- repeated reconciliation loops
+- mutation engine accidentally invoked during build
+- nested DB writes per exercise/session causing massive slowdown
+- any promise that never resolves
+- any stream that never reaches final close
+
+Especially inspect:
+- monthly-block-planner
+- weekly-block-planner
+- program-architecture-engine
+- exercise-variation-engine
+- reconciliation integration
+- conversations build path
+
+==================================================
+TASK 5 — VERIFY FINAL STREAM / RESPONSE TERMINATION
+==================================================
+
+Check whether:
+- the backend emits final content
+- the SSE stream sends a terminal completion event
+- non-streaming path returns final program payload
+- frontend completion handlers can actually fire
+
+Possible issue:
+Build may be functionally done, but final response/stream close never happens.
+
+==================================================
+TASK 6 — CHECK FOR SILENT ERROR SWALLOWING
+==================================================
+
+Audit all try/catch blocks in the build path.
+
+If errors are caught without:
+- logging
+- aborting
+- emitting failure
+- closing stream
+
+then fix that immediately.
+
+Any build failure must:
+- log the error
+- stop the spinner/thinking state
+- return a clean failure to the client
+
+==================================================
+TASK 7 — MEASURE ELAPSED TIME PER STAGE
+==================================================
+
+Add timing metrics per major stage.
+
+We need to know whether this is:
+- true infinite hang
+- extreme slowness in one stage
+- or completion-without-terminal-event
+
+==================================================
+TASK 8 — TEST WITH A SIMPLE KNOWN INPUT
+==================================================
+
+Run a minimal test build:
+"Build me a 3-day strength program"
+
+Confirm:
+- every stage log fires
+- final response returns
+- stream completes
+- program persists
+
+If not, identify exact failing stage.
+
+==================================================
+TASK 9 — FRONTEND SAFETY (SECONDARY)
+==================================================
+
+Do not remove the 90-second stall UI.
+Keep it.
+
+But once backend is fixed, verify that:
+- the stall state no longer appears during normal builds
+- final program resolves cleanly
+- status bar and transcript clear correctly
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. exact stage where build hangs
+2. exact root cause
+3. files/functions involved
+4. what was changed
+5. before/after timing
+6. proof that final program now builds and stream completes
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Program generation must:
+- complete normally
+- persist the program
+- return final assistant output
+- close the stream cleanly
+- stop the frontend thinking state
+
+No silent hangs.
+No endless "Assigning sessions & exercises..."
+No missing final program.
