@@ -56,6 +56,8 @@ export type IntentFamily =
   | "coaching_question"
   // ── Greeting — short social opener, context-aware response ────────────────
   | "greeting"
+  // ── Fresh build request — always REBUILD_PROGRAM, ignores active program ──
+  | "new_program_request"
   | "clarification_required";
 
 // ─── Target Scopes ────────────────────────────────────────────────────────────
@@ -148,6 +150,26 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
       /^how\s*are\s*(you|u|ya)\s*(doing|goin|going|been)?\s*[!\.\?]?\s*$/i,
       /^(wassup|wazzup|sup\s*dude|yoo+|heyyy+|heyy+)\s*[!\.\?]?\s*$/i,
       /^(what('?s| is) (up|good|new))\s*[!\.\?]?\s*$/i,
+    ],
+  },
+
+  // ── Fresh Program Build Request — ALWAYS routes to REBUILD_PROGRAM ──────────
+  // Catches explicit "build/create/make me a program" intent.
+  // Must appear before mutation families so "build a program" is never
+  // misclassified as a mutation or clarification_required.
+  // IMPORTANT: patterns are specific to program-creation language — they must
+  // NOT match mutation-style phrases like "build more endurance" or "make it harder".
+  {
+    family: "new_program_request",
+    patterns: [
+      // "build a 3 day soccer program" / "build me a program"
+      /\b(build|create|make|design|write|generate|put together|give me|set me up with)\s+(me\s+)?(a|an|my|new)\s+.{0,60}(program|plan|routine|split|workout plan|training plan|schedule)\b/i,
+      // "I want a new program" / "I need a new program" / "I need a program"
+      /\b(i want|i need|i'd like|i'd love|can you (make|build|create|give me|design))\s+(a|an|my|new)\s+.{0,60}(program|plan|routine|split|workout plan|training plan)\b/i,
+      // "new program" / "start fresh" / "start a new program"
+      /\b(start|create|build|make|generate)\s+(a\s+)?(new|fresh)\s+(program|plan|routine|split|workout|training)\b/i,
+      // "start fresh" / "start over" / "build from scratch"
+      /\b(start fresh|start over|build from scratch|create from scratch|new training program|new workout program|new strength program|new athletic program)\b/i,
     ],
   },
 
@@ -1398,6 +1420,20 @@ RULES:
     aiDirective: "COACHING QUESTION: Answer the coaching/guidance question directly. Reference the current program if relevant. Be authoritative and concise. No build language.",
     scopeGuidance: "Coaching guidance — no program changes unless explicitly requested.",
   },
+
+  new_program_request: {
+    intentFamily: "new_program_request",
+    minimumStructuralChanges: 0,
+    primaryChanges: [],
+    secondaryChanges: [],
+    antiPatterns: [
+      "Do NOT reuse or modify the existing program — this is a fresh build",
+      "Do NOT use mutation or update language",
+    ],
+    validationRules: ["No mutation validation needed — this routes to REBUILD_PROGRAM"],
+    aiDirective: "FRESH PROGRAM BUILD: Generate a completely new program from scratch based on the user's request. Ignore any existing program structure.",
+    scopeGuidance: "Full program — fresh generation from scratch.",
+  },
 };
 
 // ─── Transformation Result Validation ────────────────────────────────────────
@@ -1440,7 +1476,8 @@ export function validateTransformationResult(
       result.intentFamily === "greeting" ||
       result.intentFamily === "program_safety_question" ||
       result.intentFamily === "program_explanation_question" ||
-      result.intentFamily === "coaching_question") {
+      result.intentFamily === "coaching_question" ||
+      result.intentFamily === "new_program_request") {
     return { valid: true, structuralChangeCount: 0, requiredMinimum: 0 };
   }
 

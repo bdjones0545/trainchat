@@ -374,6 +374,30 @@ export async function buildExecutionPlan({
     };
   }
 
+  // ── Explicit fresh build request → ALWAYS rebuild, even if program exists ──
+  // "Build a 3 day soccer program", "Create a new plan", etc.
+  // This must appear BEFORE the !program check so that repeated build requests
+  // are never silently routed to GUIDANCE when an active program exists.
+  else if (intent === "new_program_request") {
+    plan = {
+      action: "REBUILD_PROGRAM",
+      intentFamily: "new_program_request",
+      scope,
+      reasoning: "Explicit fresh build request — REBUILD_PROGRAM regardless of existing program state",
+    };
+
+    logger.info(
+      {
+        conversationId,
+        userId,
+        action: plan.action,
+        intentFamily: plan.intentFamily,
+        existingProgramPresent: !!program,
+      },
+      "[FreshBuildAudit] new_program_request detected — forcing REBUILD_PROGRAM path. Existing program will NOT be used as base.",
+    );
+  }
+
   // ── Program question intents → ALWAYS coaching guidance, even without program ─
   // These are questions ABOUT the current program (safety, explanation, coaching).
   // They must NEVER trigger a build — route to GUIDANCE regardless of program state.
