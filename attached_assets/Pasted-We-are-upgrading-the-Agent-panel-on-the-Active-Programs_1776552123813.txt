@@ -1,0 +1,363 @@
+We are upgrading the Agent panel on the Active Programs page from a strong control surface into a true system-connected operating layer.
+
+This is NOT a UI-only upgrade.
+Everything must stay connected to:
+- the real agent pipeline
+- the main chat
+- the training system
+- the persisted DB-backed program state
+
+No fake logic.
+No local-only state pretending things changed.
+No duplicate pipelines.
+
+==================================================
+LOCATION (CRITICAL)
+==================================================
+
+Apply these upgrades ONLY to:
+- the existing Agent bottom sheet on the Active Programs page
+- the same panel that already contains:
+  - Today / This Week / Full Block scope selector
+  - quick command buttons
+  - the free-text input
+
+DO NOT create a separate page.
+DO NOT create a second agent surface.
+DO NOT move logic into a disconnected UI component.
+
+This must upgrade the EXISTING Agent panel in place.
+
+==================================================
+CORE REQUIREMENT
+==================================================
+
+Every command from this panel must continue to:
+
+1. Send through the real pipeline
+   - normalizeToIntentFamily
+   - execution-planner
+   - refinement-impact-engine
+
+2. Mutate the actual program / session / week / block
+
+3. Persist immediately
+
+4. Refresh the UI
+
+5. Post a real acknowledgment into MAIN CHAT
+
+In addition, we now need to add:
+- visible diff / change summaries
+- undo capability
+- persistent system-memory state
+- contextual thinking feedback
+- stronger natural-language control hierarchy
+
+==================================================
+TASK 1 — ADD POST-EXECUTION DIFF VIEW
+==================================================
+
+After any successful command, show a compact “What changed” diff card inside the Agent panel before returning to idle.
+
+This diff must be built from the REAL mutation result, not guessed.
+
+Examples:
+- Trap Bar Jump → Depth Jump
+- Sets reduced: 4 → 3
+- Rest increased: 90s → 120s
+- Week 2 progression softened
+- 3 sessions updated
+- 5 exercises swapped
+
+The diff should be:
+- concise
+- readable on mobile
+- grounded in actual system changes
+
+Implementation:
+- Extend the response object from the mutation pipeline if needed
+- Surface:
+  {
+    changedExercises,
+    changedSetsRepsRest,
+    changedWeeks,
+    changedSessions,
+    summary
+  }
+
+The same diff information should also be reflected in the main chat acknowledgment.
+
+==================================================
+TASK 2 — ADD UNDO LAST ACTION
+==================================================
+
+After a successful quick action or free-text command, show:
+
+[Undo last action]
+
+Requirements:
+- Undo must reverse the actual last mutation
+- Must work for:
+  - session scope
+  - week scope
+  - block scope
+- Must route through the real pipeline
+- Must persist immediately
+- Must refresh UI
+- Must post an acknowledgment into main chat
+
+Implementation options:
+- store last mutation payload + before-state snapshot
+- or store an inverse operation payload
+- use whichever is safest and most reliable
+
+This is a trust feature and must be real.
+
+==================================================
+TASK 3 — ADD PERSISTENT SYSTEM MEMORY STATE
+==================================================
+
+The panel currently shows temporary “active modifier” banners.
+Upgrade this so modifier state becomes part of the real training system state.
+
+Examples of persistent system state:
+- explosive focus
+- reduced volume
+- recovery bias
+- travel mode
+- joint-friendly bias
+- hypertrophy emphasis
+
+Requirements:
+- store these as system-level state / metadata
+- future commands and future builds should be able to reference them
+- the agent in main chat should be able to mention them
+
+Example:
+“Keeping your explosive focus while reducing knee load this week.”
+
+Implementation:
+- extend training system metadata or equivalent persistent layer
+- define a clean structure such as:
+  {
+    activeEmphases: [],
+    activeConstraints: [],
+    activeBiases: [],
+    lastAgentModifiers: []
+  }
+
+Do NOT keep this only in panel local state.
+
+==================================================
+TASK 4 — UPGRADE THINKING STATE TO BE CONTEXTUAL
+==================================================
+
+The current rotating thinking messages are good, but they should be contextual to the command.
+
+Examples:
+
+If command = “More explosive”
+show messages like:
+- Shifting emphasis toward power output…
+- Rebalancing speed and strength…
+- Adjusting explosive progression across your program…
+
+If command = “Recovery focus”
+show messages like:
+- Reducing fatigue load…
+- Rebuilding this week for recovery…
+- Protecting progression while lowering stress…
+
+If command = “Travel mode”
+show messages like:
+- Adapting your sessions for limited equipment…
+- Replacing gym-dependent movements…
+- Preserving intent with simpler tools…
+
+This must still reflect real work and should not feel random.
+
+==================================================
+TASK 5 — MAKE THE INPUT THE PRIMARY CONTROL
+==================================================
+
+The free-text input is the most powerful feature and should visually feel like the main interaction.
+
+Upgrade the existing input inside the Agent panel:
+
+- larger visual emphasis
+- slightly taller
+- stronger border / glow
+- clearer placeholder
+
+Replace placeholder with something like:
+“Command the system…”
+or
+“Tell the agent what to change in your program…”
+
+Add rotating examples beneath or inside the field:
+- protect my knee but keep intensity high
+- make this week more explosive
+- shorten Friday to 30 min
+- shift this block toward recovery
+
+Buttons should feel like shortcuts.
+Input should feel like the main control channel.
+
+==================================================
+TASK 6 — ADD COMMAND IMPACT STRENGTH
+==================================================
+
+For commands where it makes sense, allow the user to specify magnitude:
+
+Examples:
+- Low
+- Medium
+- High
+
+This can appear:
+- inline after button tap
+- or inside the impact preview modal
+
+Examples:
+“More explosive”
+→ choose:
+- subtle
+- moderate
+- aggressive
+
+“Less volume”
+→ choose:
+- slight reduction
+- moderate reduction
+- major deload
+
+This should be added only where it improves control and should feed through the real pipeline as structured command intensity.
+
+==================================================
+TASK 7 — UPGRADE FOLLOW-UP SUGGESTIONS TO BE STATEFUL
+==================================================
+
+Current follow-ups are good, but now they must reflect:
+- last command applied
+- active system memory state
+- current scope
+- recent refinements
+- current block/week context
+
+Examples:
+If user applies “More explosive” at week scope, suggest:
+- Reduce weekly volume to balance it?
+- Increase rest intervals too?
+- Carry this into next week?
+
+If user applies “Recovery focus,” suggest:
+- Keep intensity but shorten sessions?
+- Protect the next block too?
+- Add mobility bias?
+
+All follow-ups must route through the SAME real pipeline and must post to main chat.
+
+==================================================
+TASK 8 — MAIN CHAT MUST MIRROR EVERYTHING IMPORTANT
+==================================================
+
+For every command executed from the Agent panel:
+
+1. Post a real acknowledgment into main chat
+2. Include:
+   - what changed
+   - where it was applied
+   - what downstream effect occurred
+3. If diff data exists, summarize it in the chat response
+
+Examples:
+“I shifted this week toward explosive output. 3 sessions were updated, 4 movements were swapped, and the next week’s progression was softened to keep it coherent.”
+
+If undo is used:
+“I reverted the last block adjustment. Your previous session structure and progression are restored.”
+
+The main chat must remain the canonical narrative layer.
+
+==================================================
+TASK 9 — UI REFRESH + STATE COHERENCE
+==================================================
+
+After every command or undo:
+
+- refresh Today
+- refresh This Week
+- refresh Block
+- refresh any visible active program card
+- refresh modifier banners / state display
+
+Ensure:
+- no stale data
+- no mismatch between panel and chat
+- no mismatch between UI and DB
+
+==================================================
+TASK 10 — ADD SYSTEM STATE BANNER / HUD AT TOP OF PANEL
+==================================================
+
+At the top of the Agent panel, above commands, add a compact “current system state” area.
+
+Examples:
+- Explosive Focus Active
+- Reduced Volume Active
+- Recovery Bias Active
+- Travel Mode Active
+
+This should read from the real persisted system metadata, not local-only state.
+
+Requirements:
+- mobile clean
+- compact
+- dismissible only if that dismissal routes through the real pipeline to remove the modifier
+
+==================================================
+TASK 11 — DIFF + UNDO + MEMORY MUST NOT BYPASS PIPELINE
+==================================================
+
+Critical rule:
+- Diff is derived from the real mutation result
+- Undo uses the real mutation reversal
+- Memory state is persisted in the real system metadata
+- Chat acknowledgment is posted from the real result
+
+No fake UI states.
+No optimistic lies.
+No local-only approximations of system change.
+
+==================================================
+TASK 12 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. what was added to the Agent panel
+2. how the diff view works
+3. how undo works
+4. how persistent system memory state is stored
+5. how contextual thinking messages are selected
+6. how main chat now mirrors all important changes
+7. how UI refresh/state coherence is maintained
+
+==================================================
+FINAL STANDARD
+==================================================
+
+The Agent panel should now feel like a true operating layer for the training system:
+
+- the user commands the system
+- the agent thinks visibly
+- the program changes for real
+- the UI shows what changed
+- the main chat explains what happened
+- the system remembers the new state
+- the user can undo safely
+
+This should feel like:
+a live, programmable training system
+
+NOT:
+a static command menu or a fake assistant surface

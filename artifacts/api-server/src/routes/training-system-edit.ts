@@ -18,7 +18,7 @@ import { Router, type IRouter } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { interpretEditRequest } from "../lib/edit-intent-service";
 import { applyEditPlan, type EditResult } from "../lib/edit-engine";
-import { createChangeLogEntry } from "../lib/change-log-service";
+import { createChangeLogEntry, type SystemSnapshot } from "../lib/change-log-service";
 import { buildAdaptationContext } from "../lib/adaptation";
 import { listMemories, syncMemoriesFromData, extractMemoriesFromMessage } from "../lib/memory";
 import { buildDecisionMemory } from "../lib/decision-memory-service";
@@ -30,10 +30,71 @@ import {
   getBlockSummary,
 } from "../lib/training-system-service";
 import { trackLearningEvent } from "../lib/globalLearningService";
-import { db, conversationsTable, messagesTable } from "@workspace/db";
+import { db, conversationsTable, messagesTable, trainingSystems } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { logger } from "../lib/logger";
+
+// ─── Diff computation ─────────────────────────────────────────────────────────
+
+export interface EditDiff {
+  changedExercises: Array<{ from: string; to: string }>;
+  changedSetsRepsRest: Array<{ label: string; from: string; to: string }>;
+  changedSessions: number;
+  changedWeeks: number;
+}
+
+function computeSnapshotDiff(before: SystemSnapshot, after: SystemSnapshot): EditDiff {
+  const changedExercises: Array<{ from: string; to: string }> = [];
+  const changedSetsRepsRest: Array<{ label: string; from: string; to: string }> = [];
+
+  for (const [id, afterEx] of Object.entries(after.exercises ?? {})) {
+    const beforeEx = (before.exercises ?? {})[id];
+    if (!beforeEx) continue;
+
+    const afterName = String(afterEx.name ?? "");
+    const beforeName = String(beforeEx.name ?? "");
+    if (beforeName && afterName && beforeName !== afterName) {
+      changedExercises.push({ from: beforeName, to: afterName });
+    }
+
+    const label = afterName || beforeName || "Exercise";
+    if (beforeEx.sets != null && afterEx.sets != null && beforeEx.sets !== afterEx.sets) {
+      changedSetsRepsRest.push({ label, from: `${beforeEx.sets} sets`, to: `${afterEx.sets} sets` });
+    }
+    if (beforeEx.reps != null && afterEx.reps != null && String(beforeEx.reps) !== String(afterEx.reps)) {
+      changedSetsRepsRest.push({ label, from: String(beforeEx.reps), to: String(afterEx.reps) });
+    }
+    if (beforeEx.rest != null && afterEx.rest != null && beforeEx.rest !== afterEx.rest) {
+      changedSetsRepsRest.push({ label, from: `${beforeEx.rest}s rest`, to: `${afterEx.rest}s rest` });
+    }
+  }
+
+  return {
+    changedExercises,
+    changedSetsRepsRest,
+    changedSessions: Object.keys(after.sessions ?? {}).length,
+    changedWeeks: Object.keys(after.weeks ?? {}).length,
+  };
+}
+
+// ─── Agent memory helpers ─────────────────────────────────────────────────────
+
+export interface AgentMemory {
+  activeEmphases: string[];
+  activeConstraints: string[];
+  activeBiases: string[];
+  lastModifiers: Array<{ label: string; scope: string; appliedAt: string }>;
+}
+
+async function getSystemAndMetadata(userId: number) {
+  const [system] = await db
+    .select({ id: trainingSystems.id, metadata: trainingSystems.metadata })
+    .from(trainingSystems)
+    .where(eq(trainingSystems.userId, userId))
+    .limit(1);
+  return system ?? null;
+}
 
 /**
  * Posts an acknowledgment message to the user's most recent conversation so they
@@ -45,6 +106,7 @@ async function postEditAckToChat(
   editResult: EditResult,
   systemId: number,
   changeLogId: number | undefined,
+  diff?: EditDiff,
 ): Promise<void> {
   try {
     const [recentConvo] = await db
@@ -56,14 +118,29 @@ async function postEditAckToChat(
 
     if (!recentConvo) return;
 
-    // Build the chat message content from the changeSummary, which already
-    // includes the propagation note (e.g. "Applied to 3 matching future weeks.").
     const summary = editResult.changeSummary;
     const base = summary.endsWith(".") ? summary : `${summary}.`;
+
+    // Build a richer narrative from the diff if available
+    const diffLines: string[] = [];
+    if (diff) {
+      if (diff.changedExercises.length > 0) {
+        const swaps = diff.changedExercises.slice(0, 3).map((e) => `${e.from} → ${e.to}`).join(", ");
+        diffLines.push(`Swapped: ${swaps}${diff.changedExercises.length > 3 ? ` +${diff.changedExercises.length - 3} more` : ""}.`);
+      }
+      if (diff.changedSetsRepsRest.length > 0) {
+        const params = diff.changedSetsRepsRest.slice(0, 2).map((p) => `${p.label}: ${p.from} → ${p.to}`).join("; ");
+        diffLines.push(`Updated: ${params}${diff.changedSetsRepsRest.length > 2 ? " and more" : ""}.`);
+      }
+      if (diff.changedSessions > 0) diffLines.push(`${diff.changedSessions} session${diff.changedSessions !== 1 ? "s" : ""} updated.`);
+    }
+
+    const content = diffLines.length > 0 ? `${base} ${diffLines.join(" ")}` : base;
 
     const structuredData = JSON.stringify({
       _type: "system_edit",
       changeSummary: editResult.changeSummary,
+      diff,
       changedIds: editResult.changedIds,
       systemId,
       changeLogId,
@@ -75,7 +152,7 @@ async function postEditAckToChat(
     await db.insert(messagesTable).values({
       conversationId: recentConvo.id,
       role: "assistant",
-      content: base,
+      content,
       structuredData,
     });
 
@@ -89,6 +166,7 @@ async function postEditAckToChat(
         userId,
         conversationId: recentConvo.id,
         changeSummary: editResult.changeSummary,
+        diffItems: (diff?.changedExercises.length ?? 0) + (diff?.changedSetsRepsRest.length ?? 0),
         propagationStatus: editResult.propagationSummary?.status ?? "none",
       },
       "[SystemEdit] Posted programs-page edit acknowledgment to chat"
@@ -252,9 +330,11 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       },
     });
 
-    // 6. Echo the change to the user's most recent chat conversation so they see
-    //    what was updated when they return to chat. Fire-and-forget.
-    postEditAckToChat(userId, editResult, activeSystem.id, changeLogId).catch(() => {});
+    // 6. Compute structured diff from before/after snapshots
+    const diff = computeSnapshotDiff(editResult.beforeSnapshot, editResult.afterSnapshot);
+
+    // 7. Echo the change to the user's most recent chat conversation. Fire-and-forget.
+    postEditAckToChat(userId, editResult, activeSystem.id, changeLogId, diff).catch(() => {});
 
     // 7. Sync coach memories from the edit — same path as the conversation pipeline.
     //    Fire-and-forget: never block the response on memory operations.
@@ -279,6 +359,7 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       changedIds: editResult.changedIds,
       changeTargets: editResult.changeTargets,
       changeLogId,
+      diff,
       propagationSummary: editResult.propagationSummary ?? null,
       updatedData: { today, week, block },
     });
@@ -297,6 +378,68 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
     });
 
     res.status(500).json({ error: "Failed to process edit request." });
+  }
+});
+
+// ─── GET /training-system/agent-memory ───────────────────────────────────────
+// Returns the persisted AgentMemory from training_systems.metadata.agentMemory
+router.get("/training-system/agent-memory", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.session.userId!;
+  try {
+    const system = await getSystemAndMetadata(userId);
+    if (!system) { res.json({ agentMemory: null }); return; }
+    const meta = (system.metadata ?? {}) as Record<string, unknown>;
+    res.json({ agentMemory: (meta.agentMemory ?? null) as AgentMemory | null });
+  } catch (err) {
+    logger.warn({ err, userId }, "[AgentMemory] Failed to fetch agent memory");
+    res.json({ agentMemory: null });
+  }
+});
+
+// ─── PATCH /training-system/agent-memory ─────────────────────────────────────
+// Merges the provided fields into training_systems.metadata.agentMemory
+const AgentMemoryPatchSchema = z.object({
+  agentMemory: z.object({
+    activeEmphases: z.array(z.string()).optional(),
+    activeConstraints: z.array(z.string()).optional(),
+    activeBiases: z.array(z.string()).optional(),
+    lastModifiers: z.array(z.object({
+      label: z.string(),
+      scope: z.string(),
+      appliedAt: z.string(),
+    })).optional(),
+  }),
+});
+
+router.patch("/training-system/agent-memory", requireAuth, async (req, res): Promise<void> => {
+  const parsed = AgentMemoryPatchSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid request body" }); return; }
+
+  const userId = req.session.userId!;
+  const { agentMemory: patch } = parsed.data;
+
+  try {
+    const system = await getSystemAndMetadata(userId);
+    if (!system) { res.status(404).json({ error: "No training system found" }); return; }
+
+    const meta = (system.metadata ?? {}) as Record<string, unknown>;
+    const existing = (meta.agentMemory ?? {}) as Record<string, unknown>;
+    const merged: AgentMemory = {
+      activeEmphases: (patch.activeEmphases ?? existing.activeEmphases ?? []) as string[],
+      activeConstraints: (patch.activeConstraints ?? existing.activeConstraints ?? []) as string[],
+      activeBiases: (patch.activeBiases ?? existing.activeBiases ?? []) as string[],
+      lastModifiers: (patch.lastModifiers ?? existing.lastModifiers ?? []) as AgentMemory["lastModifiers"],
+    };
+
+    await db
+      .update(trainingSystems)
+      .set({ metadata: { ...meta, agentMemory: merged } as any })
+      .where(eq(trainingSystems.id, system.id));
+
+    res.json({ ok: true, agentMemory: merged });
+  } catch (err) {
+    logger.error({ err, userId }, "[AgentMemory] Failed to patch agent memory");
+    res.status(500).json({ error: "Failed to update agent memory" });
   }
 });
 

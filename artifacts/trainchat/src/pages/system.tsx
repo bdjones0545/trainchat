@@ -65,6 +65,7 @@ import CoachMemoryInsights from "@/components/training/CoachMemoryInsights";
 import EditDrawer, {
   type EditTarget,
   type EditResult,
+  type EditDiff,
   type ChangedIds,
   type ExerciseContext,
 } from "@/components/training/EditDrawer";
@@ -134,8 +135,24 @@ async function restoreChange(changeLogId: number) {
 async function fetchHistory() {
   return customFetch<{ history: any[]; trainingSystemId: number }>("/api/training-system/history");
 }
+async function fetchAgentMemory() {
+  return customFetch<{ agentMemory: AgentMemory | null }>("/api/training-system/agent-memory");
+}
+async function patchAgentMemory(agentMemory: Partial<AgentMemory>) {
+  return customFetch<{ ok: boolean; agentMemory: AgentMemory }>("/api/training-system/agent-memory", {
+    method: "PATCH",
+    body: JSON.stringify({ agentMemory }),
+  });
+}
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
+
+export interface AgentMemory {
+  activeEmphases: string[];
+  activeConstraints: string[];
+  activeBiases: string[];
+  lastModifiers: Array<{ label: string; scope: string; appliedAt: string }>;
+}
 
 export interface HighlightedIds {
   exercises: Set<number>;
@@ -1811,6 +1828,7 @@ function VibeBar({ onEditComplete, onUndone }: VibeBarProps) {
 type AgentScope = "today" | "week" | "block";
 type AgentPanelPhase = "idle" | "preview" | "thinking" | "result";
 type CommandTier = "primary" | "secondary" | "critical";
+type CommandStrength = "subtle" | "moderate" | "aggressive";
 
 const AGENT_SCOPE_LABELS: Record<AgentScope, string> = {
   today: "Today",
@@ -1823,12 +1841,6 @@ interface AgentCommand {
   req: string;
   tier: CommandTier;
   followUps?: Array<{ label: string; req: string }>;
-}
-
-interface ActiveModifier {
-  scope: AgentScope;
-  label: string;
-  colorClass: string;
 }
 
 const AGENT_COMMANDS: Record<AgentScope, AgentCommand[]> = {
@@ -1956,7 +1968,7 @@ const AGENT_COMMANDS: Record<AgentScope, AgentCommand[]> = {
   ],
 };
 
-const THINKING_MESSAGES = [
+const DEFAULT_THINKING = [
   "Reading your command…",
   "Analyzing movement patterns…",
   "Applying changes across your program…",
@@ -1965,21 +1977,97 @@ const THINKING_MESSAGES = [
   "Syncing with your training system…",
 ];
 
-const MODIFIER_COLORS: Record<string, string> = {
-  "More explosive": "text-orange-400 bg-orange-400/10 border-orange-400/20",
-  "More intense": "text-primary bg-primary/10 border-primary/20",
-  "Recovery focus": "text-green-400 bg-green-400/10 border-green-400/20",
-  "Recovery bias": "text-green-400 bg-green-400/10 border-green-400/20",
-  "Less volume": "text-blue-400 bg-blue-400/10 border-blue-400/20",
-  "Deload week": "text-blue-400 bg-blue-400/10 border-blue-400/20",
-  "Rest day": "text-red-400 bg-red-400/10 border-red-400/20",
-  "Travel mode": "text-purple-400 bg-purple-400/10 border-purple-400/20",
-  "More power": "text-orange-400 bg-orange-400/10 border-orange-400/20",
-  "Hypertrophy": "text-primary bg-primary/10 border-primary/20",
-  "Shorter": "text-muted-foreground bg-muted/30 border-border",
-  "Field sport": "text-amber-400 bg-amber-400/10 border-amber-400/20",
-  "More variety": "text-primary bg-primary/10 border-primary/20",
+const CONTEXTUAL_THINKING: Record<string, string[]> = {
+  "More explosive": [
+    "Shifting emphasis toward power output…",
+    "Rebalancing speed and strength…",
+    "Adjusting explosive progression across your program…",
+  ],
+  "More intense": [
+    "Analyzing current load profile…",
+    "Recalibrating intensity targets…",
+    "Adjusting session difficulty…",
+  ],
+  "Recovery focus": [
+    "Reducing fatigue load…",
+    "Rebuilding this week for recovery…",
+    "Protecting progression while lowering stress…",
+  ],
+  "Travel mode": [
+    "Adapting your sessions for limited equipment…",
+    "Replacing gym-dependent movements…",
+    "Preserving intent with simpler tools…",
+  ],
+  "Less volume": [
+    "Recalculating total load…",
+    "Trimming excess volume…",
+    "Preserving quality while reducing quantity…",
+  ],
+  "Rest day": [
+    "Converting today to active recovery…",
+    "Protecting your energy for the week ahead…",
+    "Building in proper rest…",
+  ],
+  "Deload week": [
+    "Restructuring this week for regeneration…",
+    "Softening volume and intensity targets…",
+    "Building your recovery week plan…",
+  ],
+  "More power": [
+    "Shifting this block toward power development…",
+    "Restructuring training emphasis…",
+    "Adjusting exercise selection for power output…",
+  ],
+  "Hypertrophy": [
+    "Shifting this block toward muscle development…",
+    "Increasing time under tension targets…",
+    "Restructuring rep ranges and volume…",
+  ],
+  "Recovery bias": [
+    "Reducing accumulated fatigue across this block…",
+    "Rebuilding for long-term recovery…",
+    "Protecting future performance…",
+  ],
+  "Field sport": [
+    "Adapting movements for field sport demand…",
+    "Shifting emphasis to sport-specific patterns…",
+    "Restructuring session intent…",
+  ],
+  "Shorter": [
+    "Compressing today's session…",
+    "Prioritizing the highest-value work…",
+    "Cutting without losing the core intent…",
+  ],
 };
+
+const MODIFIER_TO_MEMORY: Record<string, { type: "emphasis" | "constraint" | "bias"; value: string }> = {
+  "More explosive": { type: "emphasis", value: "Explosive Focus" },
+  "More intense": { type: "emphasis", value: "Intensity Focus" },
+  "More power": { type: "emphasis", value: "Power Focus" },
+  "Hypertrophy": { type: "emphasis", value: "Hypertrophy Focus" },
+  "Field sport": { type: "emphasis", value: "Field Sport" },
+  "Less volume": { type: "bias", value: "Volume Reduction" },
+  "Recovery focus": { type: "bias", value: "Recovery Focus" },
+  "Recovery bias": { type: "bias", value: "Recovery Bias" },
+  "Deload week": { type: "bias", value: "Deload" },
+  "Rest day": { type: "bias", value: "Rest Day" },
+  "More variety": { type: "bias", value: "Variety Preference" },
+  "Shorter": { type: "constraint", value: "Time Constraint" },
+  "Travel mode": { type: "constraint", value: "Limited Equipment" },
+};
+
+const MEMORY_TAG_COLORS = {
+  emphasis: "text-orange-400 bg-orange-400/10 border-orange-400/20",
+  constraint: "text-purple-400 bg-purple-400/10 border-purple-400/20",
+  bias: "text-blue-400 bg-blue-400/10 border-blue-400/20",
+};
+
+const VIBE_EXAMPLES = [
+  "protect my knee but keep intensity high",
+  "make this week more explosive",
+  "shorten Friday to 30 min",
+  "shift this block toward recovery",
+];
 
 function getImpactPreview(scope: AgentScope, label: string): { sessionsAffected: string; changes: string[] } {
   if (scope === "today") {
@@ -2051,89 +2139,142 @@ interface AgentPanelProps {
 }
 
 function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
+  const queryClient = useQueryClient();
   const [selectedScope, setSelectedScope] = useState<AgentScope>("today");
   const [phase, setPhase] = useState<AgentPanelPhase>("idle");
   const [pendingCommand, setPendingCommand] = useState<AgentCommand | null>(null);
+  const [selectedStrength, setSelectedStrength] = useState<CommandStrength>("moderate");
   const [lastResult, setLastResult] = useState<EditResult | null>(null);
   const [lastCommand, setLastCommand] = useState<AgentCommand | null>(null);
-  const [activeModifiers, setActiveModifiers] = useState<ActiveModifier[]>([]);
   const [thinkingIdx, setThinkingIdx] = useState(0);
+  const [thinkingMessages, setThinkingMessages] = useState<string[]>(DEFAULT_THINKING);
+  const [isUndoing, setIsUndoing] = useState(false);
+  const [undoResult, setUndoResult] = useState<string | null>(null);
+  const [exampleIdx, setExampleIdx] = useState(0);
   const thinkingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const { data: memoryData, refetch: refetchMemory } = useQuery({
+    queryKey: ["agent-memory"],
+    queryFn: fetchAgentMemory,
+    staleTime: 30000,
+    retry: false,
+  });
+  const agentMemory = memoryData?.agentMemory;
+
+  const memoryMutation = useMutation({
+    mutationFn: patchAgentMemory,
+    onSuccess: () => { refetchMemory(); },
+  });
+
+  // Contextual thinking rotation
   useEffect(() => {
     if (phase === "thinking") {
+      const msgs = pendingCommand ? (CONTEXTUAL_THINKING[pendingCommand.label] ?? DEFAULT_THINKING) : DEFAULT_THINKING;
+      setThinkingMessages(msgs);
       setThinkingIdx(0);
       thinkingTimer.current = setInterval(() => {
-        setThinkingIdx((i) => (i + 1) % THINKING_MESSAGES.length);
+        setThinkingIdx((i) => (i + 1) % msgs.length);
       }, 1800);
     } else {
       if (thinkingTimer.current) { clearInterval(thinkingTimer.current); thinkingTimer.current = null; }
     }
     return () => { if (thinkingTimer.current) clearInterval(thinkingTimer.current); };
-  }, [phase]);
+  }, [phase, pendingCommand]);
+
+  // Rotating input example
+  useEffect(() => {
+    const t = setInterval(() => setExampleIdx((i) => (i + 1) % VIBE_EXAMPLES.length), 3500);
+    return () => clearInterval(t);
+  }, []);
 
   const commandMutation = useMutation({
     mutationFn: (req: string) => submitGlobalEdit(req),
     onSuccess: (data) => {
       setLastResult(data);
+      setLastCommand(pendingCommand);
       setPhase("result");
+      // Persist modifier to agent memory
       if (pendingCommand) {
-        const colorClass = MODIFIER_COLORS[pendingCommand.label] ?? "text-primary bg-primary/10 border-primary/20";
-        setActiveModifiers((prev) => {
-          const filtered = prev.filter((m) => !(m.scope === selectedScope && m.label === pendingCommand.label));
-          return [{ scope: selectedScope, label: pendingCommand.label, colorClass }, ...filtered].slice(0, 3);
-        });
-        setLastCommand(pendingCommand);
+        const memMapping = MODIFIER_TO_MEMORY[pendingCommand.label];
+        if (memMapping) {
+          const cur = agentMemory ?? { activeEmphases: [], activeConstraints: [], activeBiases: [], lastModifiers: [] };
+          const newMod = { label: pendingCommand.label, scope: selectedScope, appliedAt: new Date().toISOString() };
+          const lastModifiers = [newMod, ...(cur.lastModifiers ?? []).filter((m) => m.label !== pendingCommand.label)].slice(0, 5);
+          const patch: Partial<AgentMemory> = { lastModifiers };
+          if (memMapping.type === "emphasis") patch.activeEmphases = [...new Set([...(cur.activeEmphases ?? []), memMapping.value])];
+          else if (memMapping.type === "constraint") patch.activeConstraints = [...new Set([...(cur.activeConstraints ?? []), memMapping.value])];
+          else patch.activeBiases = [...new Set([...(cur.activeBiases ?? []), memMapping.value])];
+          memoryMutation.mutate(patch);
+        }
       }
       onEditComplete(data);
     },
-    onError: () => {
-      setPhase("idle");
-      setPendingCommand(null);
+    onError: () => { setPhase("idle"); setPendingCommand(null); },
+  });
+
+  const undoMutation = useMutation({
+    mutationFn: (changeLogId: number) => restoreChange(changeLogId),
+    onSuccess: (data) => {
+      setUndoResult(data.changeSummary ?? "Your last change was reversed.");
+      setIsUndoing(false);
+      queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
+      if (data.changedIds) onUndone(data.changedIds);
+      refetchMemory();
     },
+    onError: () => setIsUndoing(false),
   });
 
   function handleCommandTap(cmd: AgentCommand) {
     if (commandMutation.isPending) return;
     setPendingCommand(cmd);
+    setSelectedStrength("moderate");
     setPhase("preview");
   }
 
   function handleConfirm() {
     if (!pendingCommand) return;
+    const strengthSuffix = selectedStrength === "moderate" ? "" : ` — ${selectedStrength} adjustment`;
     setPhase("thinking");
-    commandMutation.mutate(pendingCommand.req);
+    commandMutation.mutate(pendingCommand.req + strengthSuffix);
   }
 
-  function handleCancel() {
-    setPendingCommand(null);
-    setPhase("idle");
-  }
+  function handleCancel() { setPendingCommand(null); setPhase("idle"); }
 
   function handleFollowUp(req: string) {
     if (commandMutation.isPending) return;
-    setLastResult(null);
-    setLastCommand(null);
-    setPendingCommand(null);
+    setLastResult(null); setLastCommand(null); setPendingCommand(null); setUndoResult(null);
     setPhase("thinking");
     commandMutation.mutate(req);
   }
 
+  function handleUndo() {
+    if (!lastResult?.changeLogId || isUndoing || undoMutation.isPending) return;
+    setIsUndoing(true);
+    undoMutation.mutate(lastResult.changeLogId);
+  }
+
   function handleBackToIdle() {
-    setPhase("idle");
-    setLastResult(null);
-    setLastCommand(null);
-    setPendingCommand(null);
+    setPhase("idle"); setLastResult(null); setLastCommand(null);
+    setPendingCommand(null); setUndoResult(null); setIsUndoing(false);
   }
 
   function handleScopeChange(scope: AgentScope) {
     setSelectedScope(scope);
     if (phase !== "thinking") {
-      setPhase("idle");
-      setLastResult(null);
-      setLastCommand(null);
-      setPendingCommand(null);
+      setPhase("idle"); setLastResult(null); setLastCommand(null);
+      setPendingCommand(null); setUndoResult(null);
     }
+  }
+
+  function removeFromMemory(type: "emphasis" | "constraint" | "bias", value: string) {
+    const cur = agentMemory ?? { activeEmphases: [], activeConstraints: [], activeBiases: [], lastModifiers: [] };
+    const patch: Partial<AgentMemory> = {};
+    if (type === "emphasis") patch.activeEmphases = (cur.activeEmphases ?? []).filter((e) => e !== value);
+    else if (type === "constraint") patch.activeConstraints = (cur.activeConstraints ?? []).filter((e) => e !== value);
+    else patch.activeBiases = (cur.activeBiases ?? []).filter((e) => e !== value);
+    memoryMutation.mutate(patch);
   }
 
   const commands = AGENT_COMMANDS[selectedScope];
@@ -2142,18 +2283,25 @@ function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
   const criticalCmds = commands.filter((c) => c.tier === "critical");
   const preview = pendingCommand ? getImpactPreview(selectedScope, pendingCommand.label) : null;
 
+  const allMemoryTags = [
+    ...(agentMemory?.activeEmphases ?? []).map((v) => ({ type: "emphasis" as const, value: v })),
+    ...(agentMemory?.activeConstraints ?? []).map((v) => ({ type: "constraint" as const, value: v })),
+    ...(agentMemory?.activeBiases ?? []).map((v) => ({ type: "bias" as const, value: v })),
+  ];
+
   return (
     <div className="flex flex-col h-full">
 
-      {/* ── Active modifiers banner ─────────────────────────── */}
-      {activeModifiers.length > 0 && (
+      {/* ── System Memory HUD — persisted from DB ─────────────── */}
+      {allMemoryTags.length > 0 && (
         <div className="px-4 pt-3 flex-shrink-0 space-y-1.5">
-          {activeModifiers.map((mod, i) => (
-            <div key={i} className={`flex items-center gap-2 text-[11px] font-semibold px-3 py-1.5 rounded-xl border ${mod.colorClass}`}>
+          {allMemoryTags.map((tag, i) => (
+            <div key={i} className={`flex items-center gap-2 text-[11px] font-semibold px-3 py-1.5 rounded-xl border ${MEMORY_TAG_COLORS[tag.type]}`}>
               <Zap className="w-3 h-3 flex-shrink-0" />
-              <span className="truncate flex-1">{AGENT_SCOPE_LABELS[mod.scope]}: {mod.label} Active</span>
+              <span className="truncate flex-1">{tag.value} Active</span>
               <button
-                onClick={() => setActiveModifiers((prev) => prev.filter((_, idx) => idx !== i))}
+                onClick={() => removeFromMemory(tag.type, tag.value)}
+                disabled={memoryMutation.isPending}
                 className="opacity-40 hover:opacity-80 transition-opacity flex-shrink-0"
               >
                 <X className="w-3 h-3" />
@@ -2191,47 +2339,32 @@ function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
           <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-wider pt-1 pb-2">
             Quick Commands
           </p>
-
-          {/* Primary — filled */}
           <div className="space-y-2">
             {primaryCmds.map((cmd) => (
-              <button
-                key={cmd.label}
-                onClick={() => handleCommandTap(cmd)}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-primary/8 border border-primary/20 hover:bg-primary/15 hover:border-primary/40 active:scale-[0.99] transition-all duration-150"
-              >
+              <button key={cmd.label} onClick={() => handleCommandTap(cmd)}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-primary/8 border border-primary/20 hover:bg-primary/15 hover:border-primary/40 active:scale-[0.99] transition-all duration-150">
                 <Zap className="w-3.5 h-3.5 text-primary/70 flex-shrink-0" />
                 <span className="text-sm font-semibold text-foreground flex-1 text-left">{cmd.label}</span>
                 <ChevronRight className="w-3.5 h-3.5 text-primary/30 flex-shrink-0" />
               </button>
             ))}
           </div>
-
-          {/* Secondary — outlined */}
           {secondaryCmds.length > 0 && (
             <div className="space-y-1.5 mt-2">
               {secondaryCmds.map((cmd) => (
-                <button
-                  key={cmd.label}
-                  onClick={() => handleCommandTap(cmd)}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl border border-border bg-card hover:border-primary/30 hover:bg-primary/5 active:scale-[0.99] transition-all duration-150"
-                >
+                <button key={cmd.label} onClick={() => handleCommandTap(cmd)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl border border-border bg-card hover:border-primary/30 hover:bg-primary/5 active:scale-[0.99] transition-all duration-150">
                   <span className="text-sm font-medium text-foreground/80 flex-1 text-left">{cmd.label}</span>
                   <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/25 flex-shrink-0" />
                 </button>
               ))}
             </div>
           )}
-
-          {/* Critical — warning/red */}
           {criticalCmds.length > 0 && (
             <div className="space-y-1.5 mt-2">
               {criticalCmds.map((cmd) => (
-                <button
-                  key={cmd.label}
-                  onClick={() => handleCommandTap(cmd)}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl border border-red-500/20 bg-red-500/5 hover:border-red-500/40 hover:bg-red-500/8 active:scale-[0.99] transition-all duration-150"
-                >
+                <button key={cmd.label} onClick={() => handleCommandTap(cmd)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl border border-red-500/20 bg-red-500/5 hover:border-red-500/40 hover:bg-red-500/8 active:scale-[0.99] transition-all duration-150">
                   <span className="text-sm font-medium text-red-400 flex-1 text-left">{cmd.label}</span>
                   <ChevronRight className="w-3.5 h-3.5 text-red-400/30 flex-shrink-0" />
                 </button>
@@ -2241,12 +2374,11 @@ function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
         </div>
       )}
 
-      {/* ── Phase: Preview — impact confirmation ─────────────── */}
+      {/* ── Phase: Preview — impact + strength selector ───────── */}
       {phase === "preview" && pendingCommand && preview && (
-        <div className="flex-1 overflow-y-auto px-4 pb-4 flex flex-col gap-4 pt-1">
-          <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-wider">
-            Impact Preview
-          </p>
+        <div className="flex-1 overflow-y-auto px-4 pb-4 flex flex-col gap-3 pt-1">
+          <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-wider">Impact Preview</p>
+
           <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
@@ -2270,24 +2402,38 @@ function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
               ))}
             </div>
           </div>
+
+          {/* Adjustment level */}
+          <div>
+            <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-wider mb-2">Adjustment Level</p>
+            <div className="flex gap-1.5">
+              {(["subtle", "moderate", "aggressive"] as CommandStrength[]).map((s) => (
+                <button key={s} onClick={() => setSelectedStrength(s)}
+                  className={`flex-1 py-2 rounded-xl text-[11px] font-semibold capitalize border transition-all duration-150 ${
+                    selectedStrength === s
+                      ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                      : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                  }`}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="flex gap-2 mt-auto">
-            <button
-              onClick={handleCancel}
-              className="flex-1 py-3 rounded-xl border border-border text-sm font-semibold text-muted-foreground hover:bg-muted/40 transition-all"
-            >
+            <button onClick={handleCancel}
+              className="flex-1 py-3 rounded-xl border border-border text-sm font-semibold text-muted-foreground hover:bg-muted/40 transition-all">
               Cancel
             </button>
-            <button
-              onClick={handleConfirm}
-              className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-primary/90 active:scale-[0.98] transition-all"
-            >
+            <button onClick={handleConfirm}
+              className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-primary/90 active:scale-[0.98] transition-all">
               Confirm
             </button>
           </div>
         </div>
       )}
 
-      {/* ── Phase: Thinking ─────────────────────────────────── */}
+      {/* ── Phase: Thinking — contextual messages ─────────────── */}
       {phase === "thinking" && (
         <div className="flex-1 flex flex-col items-center justify-center px-6 gap-5">
           <div className="relative">
@@ -2297,53 +2443,116 @@ function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
             <div className="absolute inset-0 rounded-full border border-primary/30 animate-ping" />
           </div>
           <div className="text-center space-y-1.5">
-            <p className="text-sm font-bold text-foreground">{THINKING_MESSAGES[thinkingIdx]}</p>
+            <p className="text-sm font-bold text-foreground">{thinkingMessages[thinkingIdx]}</p>
             <p className="text-xs text-muted-foreground/60">Agent is adjusting your program…</p>
           </div>
         </div>
       )}
 
-      {/* ── Phase: Result ───────────────────────────────────── */}
+      {/* ── Phase: Result — diff + undo ─────────────────────── */}
       {phase === "result" && lastResult && (
-        <div className="flex-1 overflow-y-auto px-4 pb-4 flex flex-col gap-4 pt-2">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-green-500/10 border border-green-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <CheckCircle2 className="w-4 h-4 text-green-400" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-foreground">Applied</p>
-              <p className="text-xs text-muted-foreground/80 leading-relaxed mt-0.5">{lastResult.changeSummary}</p>
-            </div>
-          </div>
+        <div className="flex-1 overflow-y-auto px-4 pb-4 flex flex-col gap-3 pt-2">
+          {!undoResult ? (
+            <>
+              {/* Success header */}
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-green-500/10 border border-green-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <CheckCircle2 className="w-4 h-4 text-green-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-foreground">Applied</p>
+                  <p className="text-xs text-muted-foreground/80 leading-relaxed mt-0.5">{lastResult.changeSummary}</p>
+                </div>
+              </div>
 
-          {lastCommand?.followUps && lastCommand.followUps.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-wider">Next actions</p>
-              {lastCommand.followUps.map((fu) => (
-                <button
-                  key={fu.label}
-                  onClick={() => handleFollowUp(fu.req)}
-                  disabled={commandMutation.isPending}
-                  className="w-full flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-border bg-card hover:border-primary/30 hover:bg-primary/5 transition-all disabled:opacity-40 text-left"
-                >
-                  <ChevronRight className="w-3.5 h-3.5 text-primary/50 flex-shrink-0" />
-                  <span className="text-sm text-foreground/80">{fu.label}</span>
+              {/* Real diff card — built from actual mutation result */}
+              {lastResult.diff && (() => {
+                const d = lastResult.diff;
+                const hasItems = d.changedExercises.length > 0 || d.changedSetsRepsRest.length > 0 || d.changedSessions > 0 || d.changedWeeks > 0;
+                if (!hasItems) return null;
+                return (
+                  <div className="rounded-xl border border-border bg-muted/20 p-3 space-y-2">
+                    <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-wider">What changed</p>
+                    {d.changedExercises.slice(0, 4).map((e, i) => (
+                      <div key={i} className="flex items-center gap-2 text-[11px] flex-wrap">
+                        <span className="text-muted-foreground/40 flex-shrink-0">→</span>
+                        <span className="text-muted-foreground/60 line-through">{e.from}</span>
+                        <span className="text-foreground/80 font-medium">{e.to}</span>
+                      </div>
+                    ))}
+                    {d.changedSetsRepsRest.slice(0, 3).map((p, i) => (
+                      <div key={i} className="flex items-center gap-2 text-[11px] flex-wrap">
+                        <span className="text-muted-foreground/40 flex-shrink-0">→</span>
+                        <span className="text-muted-foreground/60 truncate max-w-[5rem]">{p.label}:</span>
+                        <span className="text-muted-foreground/50 line-through">{p.from}</span>
+                        <span className="text-foreground/80 font-medium">{p.to}</span>
+                      </div>
+                    ))}
+                    {d.changedSessions > 0 && (
+                      <p className="text-[11px] text-muted-foreground/60">{d.changedSessions} session{d.changedSessions !== 1 ? "s" : ""} updated</p>
+                    )}
+                    {d.changedWeeks > 0 && (
+                      <p className="text-[11px] text-muted-foreground/60">{d.changedWeeks} week{d.changedWeeks !== 1 ? "s" : ""} updated</p>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Follow-up suggestions */}
+              {lastCommand?.followUps && lastCommand.followUps.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-wider">Next actions</p>
+                  {lastCommand.followUps.map((fu) => (
+                    <button key={fu.label} onClick={() => handleFollowUp(fu.req)}
+                      disabled={commandMutation.isPending}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-border bg-card hover:border-primary/30 hover:bg-primary/5 transition-all disabled:opacity-40 text-left">
+                      <ChevronRight className="w-3.5 h-3.5 text-primary/50 flex-shrink-0" />
+                      <span className="text-sm text-foreground/80">{fu.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Back + Undo */}
+              <div className="flex items-center justify-between mt-auto pt-1">
+                <button onClick={handleBackToIdle}
+                  className="flex items-center gap-1.5 text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                  <ChevronLeft className="w-3 h-3" />
+                  Back
                 </button>
-              ))}
-            </div>
+                {lastResult.changeLogId && (
+                  <button onClick={handleUndo}
+                    disabled={isUndoing || undoMutation.isPending}
+                    className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60 hover:text-red-400 border border-border hover:border-red-400/30 hover:bg-red-400/5 px-3 py-1.5 rounded-lg transition-all disabled:opacity-40">
+                    <RotateCcw className={`w-3 h-3 ${isUndoing ? "animate-spin" : ""}`} />
+                    {isUndoing ? "Undoing…" : "Undo last action"}
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            /* Undo success */
+            <>
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <RotateCcw className="w-4 h-4 text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-foreground">Reverted</p>
+                  <p className="text-xs text-muted-foreground/80 leading-relaxed mt-0.5">{undoResult}</p>
+                </div>
+              </div>
+              <button onClick={handleBackToIdle}
+                className="flex items-center gap-1.5 text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors mt-auto">
+                <ChevronLeft className="w-3 h-3" />
+                Back to commands
+              </button>
+            </>
           )}
-
-          <button
-            onClick={handleBackToIdle}
-            className="flex items-center gap-2 text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors mt-auto"
-          >
-            <ChevronLeft className="w-3 h-3" />
-            Back to commands
-          </button>
         </div>
       )}
 
-      {/* ── VibeBar — text input, hidden during thinking ─────── */}
+      {/* ── VibeBar — primary control surface ────────────────── */}
       {phase !== "thinking" && (
         <div className="flex-shrink-0 border-t border-border bg-background/98">
           <VibeBar
@@ -2351,11 +2560,17 @@ function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
               setLastResult(result);
               setLastCommand(null);
               setPendingCommand(null);
+              setUndoResult(null);
               setPhase("result");
               onEditComplete(result);
             }}
             onUndone={onUndone}
           />
+          <div className="pb-3 px-4">
+            <p className="text-[10px] text-muted-foreground/35 text-center leading-relaxed">
+              e.g. "{VIBE_EXAMPLES[exampleIdx]}"
+            </p>
+          </div>
         </div>
       )}
     </div>

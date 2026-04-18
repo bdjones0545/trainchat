@@ -72,6 +72,13 @@ export interface ChangeTarget {
   changeDetail?: string;
 }
 
+export interface EditDiff {
+  changedExercises: Array<{ from: string; to: string }>;
+  changedSetsRepsRest: Array<{ label: string; from: string; to: string }>;
+  changedSessions: number;
+  changedWeeks: number;
+}
+
 export interface EditResult {
   intent: string;
   scope: string;
@@ -82,6 +89,7 @@ export interface EditResult {
   changeTargets?: ChangeTarget[];
   updatedData: { today: any; week: any; block: any };
   changeLogId?: number;
+  diff?: EditDiff;
 }
 
 export interface DirectionOption {
