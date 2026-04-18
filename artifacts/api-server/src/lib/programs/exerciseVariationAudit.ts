@@ -42,6 +42,8 @@ export interface ExerciseScoreBreakdown {
     exactRepeatPenalty: number;
     anchorPenalty: number;
     slotRepeatPenalty: number;
+    recentUsePenalty: number;
+    movementClusterPenalty: number;
     seedTiebreaker: number;
     // ── Agent Control Layer dimensions ────────────────────────────────────
     heroSuppressionPenalty: number;
@@ -214,6 +216,8 @@ export function buildPenaltySummary(breakdown: ExerciseScoreBreakdown["factors"]
   if (breakdown.disallowedFamilyPenalty > 0) penalties.push(`disallowed family (−${breakdown.disallowedFamilyPenalty.toFixed(1)})`);
   if (breakdown.anchorPenalty > 0) penalties.push(`anchor penalty (−${breakdown.anchorPenalty.toFixed(1)})`);
   if (breakdown.slotRepeatPenalty > 0) penalties.push(`slot repeat (−${breakdown.slotRepeatPenalty.toFixed(1)})`);
+  if ((breakdown.recentUsePenalty ?? 0) > 0) penalties.push(`recent-window use (−${breakdown.recentUsePenalty.toFixed(1)})`);
+  if ((breakdown.movementClusterPenalty ?? 0) > 0) penalties.push(`movement cluster saturation (−${breakdown.movementClusterPenalty.toFixed(1)})`);
   // Agent Control Layer penalties
   if ((breakdown.heroSuppressionPenalty ?? 0) > 0) penalties.push(`[agent] hero suppression (−${breakdown.heroSuppressionPenalty.toFixed(1)})`);
   if ((breakdown.controlFamilyReductionPenalty ?? 0) > 0) penalties.push(`[agent] family reduction (−${breakdown.controlFamilyReductionPenalty.toFixed(1)})`);

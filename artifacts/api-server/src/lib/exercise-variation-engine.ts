@@ -137,6 +137,15 @@ interface CandidateScore {
     contrastPenalty: number;
     exactRepeatPenalty: number;
     seedTiebreaker: number;
+    // ── Novelty Pressure Layer ────────────────────────────────────────────
+    /** Flat -2.5 penalty if this exercise appeared in any of the last 5 builds.
+     *  Bridges the gap between the 2-build contrast memory and the slow 20-build
+     *  overuse accumulation. Scales with noveltyPressure. */
+    recentUsePenalty: number;
+    /** -1.5 per same-family exercise already chosen in this build's alreadySelected.
+     *  Prevents movement-pattern saturation within a single build (e.g., two
+     *  hip-hinge exercises crowding out push or trunk variety). Capped at -3.0. */
+    movementClusterPenalty: number;
     // ── Block Variation Engine extensions ────────────────────────────────
     blockArchetypeFit: number;
     currentPhaseFit: number;
@@ -282,6 +291,24 @@ function getContrastPenalty(name: string): number {
   if (LAST_BUILD_SELECTIONS.has(name)) return 3.0;
   if (SECOND_LAST_BUILD_SELECTIONS.has(name)) return 1.5;
   return 0;
+}
+
+/**
+ * Recent-window penalty: flat -2.5 if this exercise appeared in ANY of the last
+ * `windowSize` builds (default 5). Bridges the gap between the 2-build contrast
+ * memory (strong, binary) and the slow 20-build overuse accumulation.
+ *
+ * Example: an exercise used in build N-4 has contrastPenalty=0 and overusePenalty=1.2.
+ * Without this, those values barely affect a high-scoring archetype match.
+ * This adds a clear -2.5 signal that says "you already saw this recently — try something else."
+ *
+ * Callers should scale the returned value by (1 + noveltyPressure * 0.5) for stronger
+ * suppression when the similarity detector has flagged program repetition.
+ */
+function getRecentWindowPenalty(name: string, windowSize = 5): number {
+  if (REGISTRY_BUILDS.length === 0) return 0;
+  const recentBuilds = REGISTRY_BUILDS.slice(-windowSize);
+  return recentBuilds.some((b) => b.exercises.includes(name)) ? 2.5 : 0;
 }
 
 // ─── Scoring System ────────────────────────────────────────────────────────────
@@ -476,6 +503,30 @@ function scoreCandidate(
   // Much sharper than the global contrast penalty — this is what makes the user
   // see a different "first explosive" or "primary squat" across generations.
   const slotRepeatPenalty = getSlotRepeatPenalty(ctx.slotName, meta.name);
+
+  // ── Recent-window penalty (-2.5 flat) ────────────────────────────────────
+  // Fires for any exercise that appeared in the last 5 builds — regardless of
+  // slot. This is the "short-window recency" signal that bridges the 2-build
+  // contrast memory and the slow 20-build overuse accumulation.
+  // Scaled by noveltyPressure so similarity-detected repetition suppresses harder.
+  const recentWindowBase = getRecentWindowPenalty(meta.name);
+  const recentUsePenalty = recentWindowBase > 0
+    ? recentWindowBase * (1 + (ctx.noveltyPressure ?? 0) * 0.5)
+    : 0;
+
+  // ── Movement cluster penalty (-1.5 per same-family exercise in this build) ─
+  // Within the current build's alreadySelected set, count exercises that share
+  // the same movement family as this candidate. Each one adds -1.5, capped at
+  // -3.0. Prevents movement-pattern saturation: e.g., a build that already
+  // locked in two hip-hinge exercises is discouraged from adding a third.
+  const movementClusterPenalty = (() => {
+    if (ctx.alreadySelected.size === 0) return 0;
+    const candidateFamily = getExerciseExtendedMeta(meta.name).family;
+    const sameClusterCount = [...ctx.alreadySelected].filter(
+      (n) => getExerciseExtendedMeta(n).family === candidateFamily,
+    ).length;
+    return Math.min(3.0, sameClusterCount * 1.5);
+  })();
 
   // ── Seed tiebreaker (0–1.5, per-candidate) ────────────────────────────────
   // Previous formula: (seed * slotPrime * constant) — produces the SAME value
@@ -759,6 +810,7 @@ function scoreCandidate(
   // ── Total ─────────────────────────────────────────────────────────────────
   const total = sportFit + intentFit + neuralFit + equipFit + noveltyBonus
     - fatiguePenalty - overusePenalty - contrastPenalty - exactRepeatPenalty - slotRepeatPenalty
+    - recentUsePenalty - movementClusterPenalty
     + seedTiebreaker
     + blockArchetypeFit + currentPhaseFit + slotIntentFit + movementBiasFit
     + familyPreferenceFit + velocityIntentFit + stabilityDemandFit + progressionStyleFit
@@ -784,6 +836,8 @@ function scoreCandidate(
       contrastPenalty,
       exactRepeatPenalty,
       seedTiebreaker,
+      recentUsePenalty,
+      movementClusterPenalty,
       blockArchetypeFit,
       currentPhaseFit,
       slotIntentFit,
@@ -1019,6 +1073,8 @@ function ranked(pool: ExerciseMeta[], ctx: ScoreContext, primeMultiplier: number
           progressionStyleFit: c.breakdown.progressionStyleFit,
           anchorPenalty: c.breakdown.anchorPenalty,
           slotRepeatPenalty: c.breakdown.slotRepeatPenalty,
+          recentUsePenalty: c.breakdown.recentUsePenalty,
+          movementClusterPenalty: c.breakdown.movementClusterPenalty,
           // Agent Control Layer dimensions
           heroSuppressionPenalty: c.breakdown.heroSuppressionPenalty,
           controlFamilyBoostFit: c.breakdown.controlFamilyBoostFit,
