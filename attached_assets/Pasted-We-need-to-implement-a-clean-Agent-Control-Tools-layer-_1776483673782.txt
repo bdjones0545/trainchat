@@ -1,0 +1,508 @@
+We need to implement a clean Agent Control Tools layer for TrainChat so the agent can actively steer generation outcomes instead of only interpreting user language and passing it into the program engine.
+
+IMPORTANT
+This is NOT a rewrite of the current architecture.
+This is a control-layer upgrade that must sit cleanly on top of the existing:
+- language system
+- response policy system
+- block variation engine
+- exercise variation engine
+- variance audits
+- reroll logic
+
+GOAL
+Give the TrainChat agent explicit, high-leverage control tools that let it:
+- suppress overused exercises
+- override stale visible day structure
+- force meaningful family distribution changes
+- increase exploration / novelty when needed
+- react to perceived repetition
+- choose stronger reroll behavior intentionally
+- preserve coaching quality while avoiding samey outputs
+
+CORE PROBLEM
+Right now the engine is advanced, but the agent is still too passive.
+It can interpret requests and send context to the engine, but it does not yet have enough top-layer control to force materially different outcomes when needed.
+
+The result:
+- internal scoring changes
+- labels get smarter
+- audits get smarter
+- but user-visible session identity can still collapse into the same squat + hinge + unilateral + trunk spine
+
+We need to add agent-facing control tools that can steer the engine without creating spaghetti or bypassing existing single-source-of-truth logic.
+
+PRIMARY OBJECTIVES
+
+1. Add a formal Agent Control Tools layer
+2. Keep the current architecture intact
+3. Make the agent capable of strong but explainable steering
+4. Route all control actions through structured typed directives
+5. Ensure all control actions are audited in DEV
+6. Avoid randomization and preserve coaching quality
+
+ARCHITECTURAL PRINCIPLE
+
+The agent should not directly manipulate scattered scoring internals.
+The agent should issue structured control directives.
+The generation engine should consume those directives through a single canonical control object.
+
+Do NOT add one-off hacks.
+Do NOT let the agent mutate raw state directly.
+Do NOT create hidden side channels.
+
+Create a single typed object like:
+AgentControlDirectives
+
+This should be the only agent-facing control surface passed into the architecture / ranking pipeline.
+
+NEW CONTROL LAYER
+
+Create a new module or set of modules such as:
+- lib/programs/agentControlTypes.ts
+- lib/programs/agentControlDirectives.ts
+- lib/programs/agentControlResolver.ts
+- lib/programs/agentControlAudit.ts
+
+If similar files already exist, integrate cleanly instead of duplicating.
+
+AGENT CONTROL DIRECTIVES
+
+Create a typed interface like:
+
+AgentControlDirectives = {
+  generationMode?: "default" | "explore" | "high_variance" | "conservative",
+  visibleSpineOverride?: {
+    enabled: boolean,
+    avoidPatterns?: string[],
+    prioritizePatterns?: string[],
+    targetDayIndices?: number[],
+    strength?: number
+  },
+  suppressExercises?: {
+    exerciseIds?: string[],
+    familyIds?: string[],
+    targetDayIndices?: number[],
+    targetSlots?: string[],
+    reason?: string,
+    strength?: number,
+    duration?: "current_day" | "current_program" | "current_block"
+  },
+  forceFamilyDistribution?: {
+    boosts?: Record<string, number>,
+    reductions?: Record<string, number>,
+    bans?: string[],
+    targetDayIndices?: number[],
+    reason?: string
+  },
+  dayIdentityOverrides?: Array<{
+    dayIndex: number,
+    primaryFocus?: string,
+    secondaryFocus?: string,
+    avoidFamilies?: string[],
+    avoidPatterns?: string[],
+    preferredPatterns?: string[],
+    targetNeuralDemand?: "low" | "moderate" | "high",
+    targetFatigue?: "low" | "moderate" | "high",
+    targetVelocityIntent?: "low" | "moderate" | "high"
+  }>,
+  noveltyOverride?: {
+    enabled: boolean,
+    level?: number,
+    target?: "global" | "visible_slots" | "hero_exercises" | "entire_program",
+    reason?: string
+  },
+  rerollStrategyOverride?: {
+    enabled: boolean,
+    preferredActions?: string[],
+    maxAttempts?: number,
+    stopIfVarianceAbove?: number
+  },
+  perceivedRepetitionFlags?: Array<{
+    type: string,
+    severity: "low" | "moderate" | "high",
+    description: string,
+    targetDayIndices?: number[]
+  }>,
+  preserveInstructions?: {
+    keepBlockIdentity?: boolean,
+    keepSplitArchitecture?: boolean,
+    keepUpperDays?: boolean,
+    keepLowerDays?: boolean,
+    keepSpecificExercises?: string[],
+    keepSpecificFamilies?: string[]
+  },
+  explanationTag?: string
+}
+
+These directives should be optional and additive.
+No existing caller should break if no directives are provided.
+
+CONTROL TOOLS TO IMPLEMENT
+
+1. HERO EXERCISE SUPPRESSION TOOL
+Purpose:
+Allow the agent to suppress overused visible anchors without banning them globally.
+
+Example behavior:
+- if back squat has appeared too often recently, reduce its score sharply for current program
+- if Bulgarian split squat is overused in visible unilateral slots, suppress it in those slots
+- if Pallof press dominates trunk selection, reduce it for current program/block
+
+Implementation:
+- suppression should apply through scoring penalties, not hard deletion unless banned explicitly
+- suppression can target exact exercises and/or families
+- suppression should support scope:
+  - current_day
+  - current_program
+  - current_block
+- all penalties must be logged
+
+2. VISIBLE SPINE OVERRIDE TOOL
+Purpose:
+Allow the agent to override stale user-visible session patterns.
+
+Examples of stale visible patterns:
+- jump + squat + hinge + unilateral + trunk
+- same day-1 lower force spine
+- same top 3 visible slots repeated
+
+Implementation:
+- define a visible spine pattern vocabulary
+- allow the agent to:
+  - avoidPatterns
+  - prioritizePatterns
+  - target specific days
+- this should influence slot planning and/or top visible slot reranking
+- do not allow this to violate safety constraints or essential required slots
+
+3. DAY IDENTITY OVERRIDE TOOL
+Purpose:
+Allow the agent to set or modify the visible identity of a day.
+
+Examples:
+- make day 1 more unilateral-power oriented
+- make day 2 less grindy and more elastic
+- make day 3 lower complexity / lower fatigue
+- avoid bilateral grinding on this day
+
+Implementation:
+- day identity overrides should modify:
+  - slot intent
+  - family biases
+  - neural demand target
+  - fatigue target
+  - velocity intent target
+- this must flow through ProgramContextProfile and derived slot intent, not bypass them
+
+4. FAMILY DISTRIBUTION CONTROL TOOL
+Purpose:
+Allow the agent to strongly steer family exposure when needed.
+
+Examples:
+- boost elastic / reactive / ballistic
+- reduce bilateral grinding
+- reduce trunk anti-rotation overuse
+- increase rotational or lateral patterns
+- lower accessory fluff
+
+Implementation:
+- integrate into deriveFamilyBiases and/or downstream ranking math
+- allow boosts, reductions, and bans
+- preserve existing block/phase logic but let agent controls layer on top
+
+5. EXPLORATION MODE / NOVELTY OVERRIDE TOOL
+Purpose:
+Let the agent explicitly request stronger visible variance when the system is over-converging.
+
+Modes:
+- default
+- explore
+- high_variance
+- conservative
+
+Behavior:
+default:
+- current behavior
+
+explore:
+- moderately increase novelty pressure
+- reduce anchor stickiness
+- increase alternate family exposure
+
+high_variance:
+- stronger novelty pressure
+- stronger hero suppression
+- stronger visible-spine diversification
+- more aggressive reroll preference
+
+conservative:
+- minimize unnecessary novelty
+- prioritize stability and fit
+
+Implementation:
+- translate generationMode + noveltyOverride into explicit numeric weighting changes
+- no hidden magic
+- log the resolved values used
+
+6. PERCEIVED REPETITION FEEDBACK TOOL
+Purpose:
+Allow the agent to react when an output still feels repetitive, even if structural audits passed.
+
+Examples:
+- same hero lifts again
+- same day-1 lower identity
+- same visible spine
+- same squat + hinge stack
+
+Implementation:
+- agent should be able to raise a perceived repetition flag
+- this should route into:
+  - stronger hero penalties
+  - visible-slot rerank
+  - reroll strategy override
+- all actions should be audited
+
+7. REROLL STRATEGY OVERRIDE TOOL
+Purpose:
+Allow the agent to influence reroll sequencing when it knows the issue is visible sameness, not just structural similarity.
+
+Examples:
+- rerank visible slots first
+- boost hero penalties before changing split
+- change split before changing archetype
+- cap attempts
+
+Implementation:
+- integrate with existing programVarianceReroll and current fallback system
+- do not duplicate reroll frameworks
+- extend the existing reroll ladder with override preferences
+
+INTEGRATION POINTS
+
+Integrate AgentControlDirectives into the existing pipeline at the correct points:
+1. after language/response policy decides intent
+2. before block/split/exercise selection
+3. inside ProgramContextProfile
+4. inside deriveSlotIntent
+5. inside deriveFamilyBiases
+6. inside exercise ranking
+7. inside perceived/program variance reroll logic
+
+We need clean single-source-of-truth flow such as:
+
+User message
+→ language system
+→ response policy
+→ agent control resolver
+→ AgentControlDirectives
+→ ProgramContextProfile
+→ slot intent / family bias / scoring / reroll
+→ output
+
+Do not let controls bypass the context profile.
+Do not create separate hidden control paths.
+
+PROGRAM CONTEXT INTEGRATION
+
+Extend ProgramContextProfile so it can carry resolved agent controls in normalized form.
+
+Example:
+ResolvedProgramContextProfile = {
+  ...
+  agentControlDirectives,
+  resolvedGenerationMode,
+  resolvedHeroSuppression,
+  resolvedVisibleSpineRules,
+  resolvedDayIdentityTargets,
+  resolvedFamilyBiasOverrides,
+  resolvedNoveltyPressure,
+  resolvedRerollStrategy
+}
+
+This resolved context should be what downstream systems consume.
+
+EXERCISE RANKING INTEGRATION
+
+Update scoring to account for agent controls explicitly.
+
+Examples:
+- suppressExercises adds exact-exercise penalty
+- family suppressions add family penalty
+- day identity overrides adjust velocity/stability/fatigue/complexity fit
+- visible spine override modifies slot winner preferences for top visible slots
+- novelty override amplifies anchor penalties and family novelty bonus
+
+Add scoring breakdown fields for these factors:
+- heroSuppressionPenalty
+- controlFamilyBoostFit
+- controlFamilyReductionPenalty
+- visibleSpineAlignmentFit
+- dayIdentityAlignmentFit
+- controlNoveltyBonus
+- controlNoveltyPenalty
+
+These must appear in DEV audit output.
+
+VISIBLE SPINE PATTERN VOCABULARY
+
+Create a reusable visible pattern vocabulary to avoid string chaos.
+
+Examples:
+- jump_squat_hinge_unilateral_trunk
+- jump_squat_unilateral_trunk
+- throw_hinge_unilateral_trunk
+- elastic_primary_bilateral_support
+- unilateral_primary_lateral_rotational
+- bilateral_force_then_secondary_hinge
+- grindy_lower_stack
+- reactive_lower_stack
+- low_complexity_rebuild_stack
+
+Use normalized IDs, not fragile freeform labels.
+
+AGENT DECISION / RESPONSE INTEGRATION
+
+The response policy layer should be able to trigger controls when appropriate.
+
+Examples:
+If user says:
+“same vibe but less grindy”
+→ preserve block identity
+→ reduce bilateral grinding families
+→ increase velocity intent
+→ maybe visible spine override on lower days
+
+If user says:
+“more pop”
+→ increase elastic / reactive families
+→ suppress slow grinding anchors
+→ raise novelty pressure moderately
+
+If user says:
+“I keep getting the same program”
+→ raise perceived repetition flag
+→ use explore or high_variance mode
+→ trigger hero suppression and visible spine diversification
+
+If user says:
+“keep upper body, change lower days”
+→ preserve upper days
+→ apply day identity overrides to lower days only
+
+DEV AUDIT SYSTEM
+
+Create DEV-only logs:
+- [AgentControlAudit]
+- [AgentControlAuditWarning]
+
+For every generation where controls are present, log:
+- generationId
+- raw trigger reason if available
+- control directives requested
+- resolved control directives used
+- which layers consumed the controls
+- which penalties/boosts were applied
+- whether controls triggered reroll changes
+- whether controls improved perceived/program variance
+- final visible spine summary
+- final hero exercise summary
+
+Add compact grep-friendly lines like:
+[AgentControlAudit] generation=abc123 mode=high_variance heroSuppression=4 visibleSpineOverride=true rerollOverride=true
+
+Warnings:
+[AgentControlAuditWarning] suppression requested but target exercise not found in candidate pools
+[AgentControlAuditWarning] visible spine override requested but required slot constraints prevented change
+[AgentControlAuditWarning] day identity override conflicted with safety constraints
+[AgentControlAuditWarning] high_variance mode enabled but visible spine remained unchanged
+[AgentControlAuditWarning] preserve instruction and suppression target conflict detected
+
+PERCEIVED VARIANCE INTEGRATION
+
+Integrate this cleanly with the Perceived Variance / Program Variance audit systems:
+- agent controls should be able to respond to variance failures
+- variance reroll should be able to consume agent reroll preferences
+- final audits should show whether agent controls improved variance materially
+
+TEST HARNESS
+
+Create a DEV-only harness that simulates the following scenarios and prints a concise matrix:
+
+1. “I keep getting the same program”
+Expected:
+- high_variance mode
+- hero suppression
+- visible spine override
+- stronger novelty pressure
+
+2. “same vibe but less grindy”
+Expected:
+- preserve block identity
+- reduce grinding families
+- boost velocity intent
+- modify lower visible spine
+
+3. “keep upper body, change lower days”
+Expected:
+- preserve upper day identity
+- lower-day overrides only
+
+4. “more explosive”
+Expected:
+- family distribution shifts toward elastic/reactive/ballistic
+- slower anchors penalized in visible slots
+
+5. “don’t give me Bulgarian split squats again”
+Expected:
+- exact exercise suppression for current program/block
+- alternate unilateral slot winner
+
+For each scenario print:
+- interpreted trigger
+- resolved directives
+- affected days
+- affected families
+- affected hero exercises
+- novelty pressure before/after
+- visible spine before/after if applicable
+- example audit summary lines
+
+SUCCESS CRITERIA
+
+This implementation is successful if:
+1. The agent can explicitly suppress overused exercises and patterns
+2. The agent can steer visible day identity without breaking core architecture
+3. The agent can force stronger exploration when repetition is detected
+4. The control directives flow through ProgramContextProfile, not around it
+5. Existing scoring/variance systems remain the foundation, not replaced
+6. All agent controls are auditable and explainable
+7. The agent becomes meaningfully less passive and more coach-like in steering outputs
+8. User-visible session sameness decreases
+
+DELIVERABLES
+
+1. Implement AgentControlDirectives type layer
+2. Implement hero exercise suppression tool
+3. Implement visible spine override tool
+4. Implement day identity override tool
+5. Implement family distribution control tool
+6. Implement exploration / novelty override tool
+7. Implement perceived repetition feedback tool
+8. Implement reroll strategy override integration
+9. Add DEV agent control audit logs and warnings
+10. Add a harness showing controls working across multiple scenarios
+11. Print a concise summary of changed files and why
+12. Print at least 5 example audit outputs where controls materially changed outcomes
+
+IMPORTANT IMPLEMENTATION RULES
+
+- Preserve current architecture
+- Avoid spaghetti patches
+- No direct raw-state mutation from the agent
+- All control flows must be typed and centralized
+- Prefer scoring penalties/boosts over hard bans unless explicitly requested
+- Use existing variance/reroll systems as the foundation
+- Keep the system coach-like, explainable, and safe
+
+Before coding, inspect the current language system, response policy layer, ProgramContextProfile, exercise ranking path, and variance reroll path so the control tools are integrated cleanly at the correct level.
