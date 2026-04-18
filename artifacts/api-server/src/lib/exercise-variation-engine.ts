@@ -1,37 +1,47 @@
 // ─── Exercise + Block Variation Engine ───────────────────────────────────────
 //
-// Slot-based exercise selection with ranked scoring — replaces seeded random
-// pick with an explicit, inspectable scoring system.
+// Slot-based exercise selection with ranked scoring and family-rotation logic.
 //
-// Problem solved:
-//   Without this layer, the AI defaults to the same 4–5 anchors every build:
-//   Broad Jump, Back Squat, Conventional Deadlift, Bulgarian Split Squat, Pallof Press.
+// ── Decision Hierarchy (in priority order) ───────────────────────────────────
+//   PRIMARY (steer which exercise wins):
+//     1. Movement-family rotation via BlockExposureTracker
+//        — prevents same exercise repeating in the same slot across weeks
+//     2. Phase exercise affinity
+//        — ensures week role drives WHICH family member is chosen
+//     3. Equivalence cluster suppression (movementClusterPenalty)
+//        — prevents perceptually similar exercises from filling the same week
+//     4. Sport fit, session intent fit, block archetype fit
+//   SECONDARY (guardrails only — constrain but do not primarily steer):
+//     5. Equipment mismatch (-3 hard)
+//     6. Exact duplicate in this build (-5 hard)
+//     7. Fatigue mismatch (deload/low-fatigue slots)
+//     8. Complexity limit mismatch
+//     9. Disallowed family mismatch
+//    10. Cross-build contrast memory and slot-repeat (soft, reduced)
 //
-// How it works:
-//   1. Each movement slot maps to a candidate pool with annotated metadata.
-//   2. A scoring function ranks candidates on: sport fit, intent fit, neural
-//      demand match, fatigue cost, novelty bonus, and repeat/overuse penalty.
-//   3. Seed provides a deterministic tiebreaker — stable within a build, varied
-//      across builds — so two equally-scored exercises still spread across builds.
-//   4. An overuse registry penalises exercises that have been selected too many
-//      times in recent builds, preventing default anchors from auto-winning by
-//      inertia.
-//   5. Selected exercises are injected into the Architecture Brief as
-//      prescriptions ("use X"), not options ("choose from X, Y, Z").
+// ── NOT used as primary selectors ────────────────────────────────────────────
+//   ✗ ANCHOR_EXTRA_PENALTY — removed. Manual exercise suppression (Back Squat
+//     -2.5, Zercher -2.0, etc.) caused a penalty treadmill: penalise one winner
+//     → next runner-up becomes the new repeated winner → patch again. The new
+//     architecture avoids this through exposure tracking + phase affinity.
+//   ✗ isDefaultAnchor penalty — removed. Default-anchor suppression is now
+//     handled by the exposure gate preventing any exercise from repeating the
+//     same slot across weeks.
+//   ✗ recentWindowPenalty — removed. Fully superseded by blockExposurePenalty
+//     and the reduced cross-build contrast penalties.
+//
+// ── Remaining legacy signals (demoted to soft tiebreakers) ───────────────────
+//   • overusePenalty  — 0.4× scale, cap -2. Very soft long-tail learning only.
+//   • contrastPenalty — max -1.5/-0.75 for last/2nd-ago build. Cross-build soft.
+//   • slotRepeatPenalty — max -3.0 per slot across builds. Cross-build soft.
+//
+// ── Selection audit ───────────────────────────────────────────────────────────
+//   [FamilyRotationAudit]     — per slot pick: family, exposure, penalty applied
+//   [SelectionDecisionAudit]  — per slot pick: which dimensions drove the winner
+//   [ExposureAudit]           — post-build: full slot×exercise×week matrix
 //
 // Key guarantee: coaching correctness is NEVER sacrificed for novelty.
 //   Every candidate in every pool is valid for its slot.
-//
-// Tasks covered:
-//   T1  Slot system with 14 named slots
-//   T2  Candidate pools (static, DB-first ready) with coaching metadata
-//   T3  Explicit scoring formula: sportFit + intentFit + neuralFit + equipFit
-//        + noveltyBonus − fatiguePenalty − overusePenalty − exactRepeatPenalty
-//   T4  Novelty / repeat-avoidance via overuse registry + exactRepeat penalty
-//   T5  4 block template variants (A–D) per session identity
-//   T6  Sport category aware pools (soccer, golf, swim, MMA, hockey, track…)
-//   T7  Coaching logic preserved — neural demand ordering enforced per variant
-//   T9  Debug logging: slot, pool size, top 3 with scores, chosen, penalties
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─── Block Variation Engine Imports ──────────────────────────────────────────
@@ -259,10 +269,13 @@ function recordSlotSelection(slotName: string, exerciseName: string): void {
 }
 
 /**
- * Returns extra penalty for choosing the same exercise in the same slot consecutively.
- * Much sharper than the global contrast penalty because the user sees identical positions.
- * HIGH_VISIBILITY slots (lower_power, bilateral_squat, bilateral_hinge, unilateral_lower, trunk)
- * get an extra multiplier.
+ * Cross-build slot-repeat penalty — demoted to a soft guardrail.
+ * Fires when the same exercise occupies the same slot position across consecutive builds.
+ * Magnitude is intentionally reduced: BlockExposureTracker is the primary intra-block
+ * gate. This signal only governs cross-build slot-level contrast.
+ *   Last build:    −3.0 (high-vis slots: −3.75)
+ *   2 builds ago:  −1.5 (high-vis: −1.875)
+ *   3 builds ago:  −0.75 (high-vis: −0.9375)
  */
 function getSlotRepeatPenalty(slotName: string, exerciseName: string): number {
   const history = SLOT_CONTRAST_REGISTRY[slotName];
@@ -273,12 +286,12 @@ function getSlotRepeatPenalty(slotName: string, exerciseName: string): number {
     "unilateral_lower", "trunk_anti_rotation",
   ].includes(slotName);
 
-  const multiplier = isHighVisibility ? 1.5 : 1.0;
+  const multiplier = isHighVisibility ? 1.25 : 1.0;
 
   const len = history.length;
-  if (history[len - 1] === exerciseName) return 5.0 * multiplier; // last build
-  if (len >= 2 && history[len - 2] === exerciseName) return 3.0 * multiplier; // 2 builds ago
-  if (len >= 3 && history[len - 3] === exerciseName) return 1.5 * multiplier; // 3 builds ago
+  if (history[len - 1] === exerciseName) return 3.0 * multiplier; // last build
+  if (len >= 2 && history[len - 2] === exerciseName) return 1.5 * multiplier; // 2 builds ago
+  if (len >= 3 && history[len - 3] === exerciseName) return 0.75 * multiplier; // 3 builds ago
   return 0;
 }
 
@@ -373,31 +386,17 @@ function getOveruseCount(name: string): number {
 }
 
 /**
- * Extra penalty for exercises used in the most recent builds.
- * Last build: −3, second-to-last: −1.5  → forces real contrast on repeated prompts.
+ * Cross-build contrast penalty — demoted to a soft tiebreaker.
+ * Fires only for exercises used in the last two builds. Magnitude is intentionally
+ * low since BlockExposureTracker is now the primary intra-block gate and
+ * slotRepeatPenalty is the primary cross-build per-slot gate.
+ *   Last build:        −1.5
+ *   Second-to-last:    −0.75
  */
 function getContrastPenalty(name: string): number {
-  if (LAST_BUILD_SELECTIONS.has(name)) return 3.0;
-  if (SECOND_LAST_BUILD_SELECTIONS.has(name)) return 1.5;
+  if (LAST_BUILD_SELECTIONS.has(name)) return 1.5;
+  if (SECOND_LAST_BUILD_SELECTIONS.has(name)) return 0.75;
   return 0;
-}
-
-/**
- * Recent-window penalty: flat -2.5 if this exercise appeared in ANY of the last
- * `windowSize` builds (default 5). Bridges the gap between the 2-build contrast
- * memory (strong, binary) and the slow 20-build overuse accumulation.
- *
- * Example: an exercise used in build N-4 has contrastPenalty=0 and overusePenalty=1.2.
- * Without this, those values barely affect a high-scoring archetype match.
- * This adds a clear -2.5 signal that says "you already saw this recently — try something else."
- *
- * Callers should scale the returned value by (1 + noveltyPressure * 0.5) for stronger
- * suppression when the similarity detector has flagged program repetition.
- */
-function getRecentWindowPenalty(name: string, windowSize = 5): number {
-  if (REGISTRY_BUILDS.length === 0) return 0;
-  const recentBuilds = REGISTRY_BUILDS.slice(-windowSize);
-  return recentBuilds.some((b) => b.exercises.includes(name)) ? 2.5 : 0;
 }
 
 // ─── Scoring System ────────────────────────────────────────────────────────────
@@ -471,44 +470,18 @@ function hasEquipment(exerciseName: string, equipmentLevel: string): boolean {
   });
 }
 
-/**
- * Explicit per-exercise overused-anchor extra penalty.
- * Applied ON TOP of the isDefaultAnchor flag for the worst repeat offenders.
- * Does not ban these exercises — competitors must earn the slot.
- *
- * Tuned based on perceived-variance audit findings:
- * "hero" exercises that dominate visible positions need extra discounting.
- */
-const ANCHOR_EXTRA_PENALTY: Record<string, number> = {
-  // ── Explosive slot anchors ─────────────────────────────────────────────
-  "Broad Jump": 3.0,        // most frequently surfacing explosive default
-  "Box Jump": 3.0,          // ties with Broad Jump for default top pick
-  "Pogo Hops": 2.0,         // appears in warmup AND power slot — double exposure
-
-  // ── Primary squat slot anchors ────────────────────────────────────────
-  "Back Squat": 2.5,        // universal default — needs strong discounting
-  "Front Squat": 1.0,       // secondary default that surfaces too easily
-
-  // ── Primary hinge slot anchors ─────────────────────────────────────────
-  "Conventional Deadlift": 2.0,  // most commonly selected hinge
-  "Romanian Deadlift": 0.5,      // appears when deadlift is penalized, still common
-
-  // ── Unilateral slot anchors ────────────────────────────────────────────
-  "Bulgarian Split Squat": 2.5,  // dominates unilateral slot when no sport filter
-  "Rear-Foot Elevated Split Squat (RFESS)": 0.5, // close to BSS — also surfaces heavily
-
-  // ── Trunk slot anchors ────────────────────────────────────────────────
-  "Pallof Press": 2.5,           // most frequently selected anti-rotation default
-  "Dead Bug": 2.0,               // dominates anti-extension when no sport context
-  "Weighted Pull-Up": 1.0,       // upper pull default
-
-  // ── De-facto repeat winners (not original anchors, but emerging defaults) ──
-  // These exercises score high due to archetype fit but are not marked isDefaultAnchor,
-  // so they receive no suppression. Add explicit penalty to force rotation.
-  "Zercher Squat": 2.0,          // wins bilateral_squat_strength slot by default when Back Squat is penalized
-  "Hatfield Squat": 1.0,         // secondary winner in the squat slot under strength archetypes
-  "Safety Bar Squat": 0.5,       // surfaces frequently as Back Squat alternative
-};
+// ANCHOR_EXTRA_PENALTY has been removed.
+//
+// The old per-exercise hardcoded suppression table (Back Squat: -2.5, BSS: -2.5,
+// Zercher: -2.0, etc.) caused a penalty treadmill: penalise one winner → next
+// runner-up becomes the new repeated winner → patch it too → system becomes
+// hard to reason about and fights the newer family-rotation logic.
+//
+// Repetition is now prevented architecturally:
+//   • BlockExposureTracker: same exercise cannot repeat the same slot week-over-week
+//   • phaseAffinityFit: phase drives which FAMILY MEMBER wins (not Back Squat)
+//   • movementClusterPenalty: cross-family pattern saturation
+//   • slotRepeatPenalty + contrastPenalty: soft cross-build guardrails
 
 // ─── Phase Exercise Affinity ──────────────────────────────────────────────────
 //
@@ -712,16 +685,14 @@ function scoreCandidate(
   // ── Equipment fit (0–1) ───────────────────────────────────────────────────
   const equipFit = hasEquipment(meta.name, ctx.equipmentLevel) ? 1 : -3;
 
-  // ── Novelty bonus + anchor penalty ───────────────────────────────────────
-  const defaultAnchorPenalty = meta.isDefaultAnchor ? -2.5 : 1.0;
-  const anchorExtraPenalty = ANCHOR_EXTRA_PENALTY[meta.name] ?? 0;
-  const baseNoveltyBonus = defaultAnchorPenalty - anchorExtraPenalty;
-  // Scale anchor penalty by novelty pressure from similarity detection
-  const noveltyPressureMultiplier = 1 + (ctx.noveltyPressure ?? 0) * 1.5;
-  const anchorPenalty = meta.isDefaultAnchor ? (2.5 + anchorExtraPenalty) * noveltyPressureMultiplier : 0;
-  const noveltyBonus = meta.isDefaultAnchor
-    ? -anchorPenalty
-    : Math.max(0, baseNoveltyBonus) * (1 + (ctx.noveltyPressure ?? 0) * 0.5);
+  // ── Novelty bonus (flat soft tiebreaker) ─────────────────────────────────
+  // Previously: isDefaultAnchor flag applied -2.5 to -12+ penalty, and
+  // ANCHOR_EXTRA_PENALTY table added up to -3.0 more per exercise.
+  // Removed: repetition prevention is now architectural (BlockExposureTracker,
+  // phaseAffinityFit, movementClusterPenalty). The noveltyBonus is now a
+  // flat +0.5 for ALL exercises — a small tiebreaker that doesn't steer decisions.
+  const noveltyBonus = 0.5;
+  const anchorPenalty = 0; // kept in breakdown for log compatibility
 
   // ── Fatigue penalty ───────────────────────────────────────────────────────
   let fatiguePenalty = 0;
@@ -735,9 +706,13 @@ function scoreCandidate(
     fatiguePenalty = 0.5;
   }
 
-  // ── Overuse penalty (0–6) ─────────────────────────────────────────────────
+  // ── Overuse penalty (0–2, demoted) ───────────────────────────────────────
+  // Formerly: 1.2× scale, cap -6. Demoted to a very soft long-tail signal.
+  // BlockExposureTracker is the primary intra-block anti-repeat gate.
+  // This signal only provides a gentle cross-build recency signal for exercises
+  // that have appeared in many of the last 20 builds.
   const usageCount = getOveruseCount(meta.name);
-  const overusePenalty = Math.min(6, usageCount * 1.2);
+  const overusePenalty = Math.min(2.0, usageCount * 0.4);
 
   // ── Contrast penalty (0–3) ────────────────────────────────────────────────
   const contrastPenalty = getContrastPenalty(meta.name);
@@ -751,15 +726,12 @@ function scoreCandidate(
   // see a different "first explosive" or "primary squat" across generations.
   const slotRepeatPenalty = getSlotRepeatPenalty(ctx.slotName, meta.name);
 
-  // ── Recent-window penalty (-2.5 flat) ────────────────────────────────────
-  // Fires for any exercise that appeared in the last 5 builds — regardless of
-  // slot. This is the "short-window recency" signal that bridges the 2-build
-  // contrast memory and the slow 20-build overuse accumulation.
-  // Scaled by noveltyPressure so similarity-detected repetition suppresses harder.
-  const recentWindowBase = getRecentWindowPenalty(meta.name);
-  const recentUsePenalty = recentWindowBase > 0
-    ? recentWindowBase * (1 + (ctx.noveltyPressure ?? 0) * 0.5)
-    : 0;
+  // recentUsePenalty has been removed.
+  // It was a -2.5 flat penalty for any exercise used in the last 5 builds.
+  // Now superseded by: blockExposurePenalty (primary), contrastPenalty (soft),
+  // slotRepeatPenalty (soft, per-slot). Retaining it would over-penalise
+  // exercises that legitimately belong in a new block.
+  const recentUsePenalty = 0; // kept at 0 for log schema compatibility
 
   // ── Movement cluster penalty (-1.5 per same-family exercise in this build) ─
   // Within the current build's alreadySelected set, count exercises that share
@@ -1119,9 +1091,39 @@ function scoreCandidate(
   }
 
   // ── Total ─────────────────────────────────────────────────────────────────
+  //
+  // New decision hierarchy (read top-to-bottom = highest priority first):
+  //
+  //   PRIMARY positive selectors (steer WHICH exercise wins):
+  //     phaseAffinityFit      (+0 to +2.5)  phase-appropriate family member
+  //     sportFit              (+0 to +4)    sport-specific preference
+  //     blockArchetypeFit     (−3 to +3)    block intent alignment
+  //     intentFit             (+0 to +3)    session intent match
+  //     slotIntentFit         (−2 to +2)    slot-level context match
+  //     currentPhaseFit       (−1 to +2)    phase fatigue/neural match
+  //     clusterAlternativeBonus (+1.5)      cross-build cluster rotation bonus
+  //
+  //   PRIMARY rotation gates (prevent same exercise repeating):
+  //     blockExposurePenalty  (−5 / −9 / −14)  intra-block: same slot, prior weeks
+  //     movementClusterPenalty (−1.5 to −3)     same-week: cross-family saturation
+  //
+  //   GUARDRAILS (true hard/soft constraints):
+  //     equipFit              (−3 hard)     equipment not available
+  //     exactRepeatPenalty    (−5 hard)     same exercise already in this build
+  //     fatiguePenalty        (−0.5 to −2)  fatigue mismatch for slot
+  //     complexityPenalty     (−1 to −3)    complexity limit mismatch
+  //     disallowedFamilyPenalty (−6)        disallowed family
+  //     heroSuppressionPenalty (−12 max)    agent-controlled suppression
+  //
+  //   SOFT TIEBREAKERS (cross-build memory, low magnitude):
+  //     contrastPenalty       (−0.75 to −1.5)  last 2 builds (demoted)
+  //     slotRepeatPenalty     (−0.75 to −3.75) same slot last 3 builds (demoted)
+  //     overusePenalty        (0 to −2)         20-build frequency (demoted)
+  //     noveltyBonus          (+0.5 flat)        universal soft tiebreaker
+  //
   const total = sportFit + intentFit + neuralFit + equipFit + noveltyBonus
     - fatiguePenalty - overusePenalty - contrastPenalty - exactRepeatPenalty - slotRepeatPenalty
-    - recentUsePenalty - movementClusterPenalty + clusterAlternativeBonus
+    - movementClusterPenalty + clusterAlternativeBonus
     + seedTiebreaker
     + blockArchetypeFit + currentPhaseFit + slotIntentFit + movementBiasFit
     + familyPreferenceFit + velocityIntentFit + stabilityDemandFit + progressionStyleFit
@@ -1132,7 +1134,7 @@ function scoreCandidate(
     + visibleSpineAlignmentFit
     + dayIdentityAlignmentFit
     + controlNoveltyBonus - controlNoveltyPenalty
-    // Family Rotation System
+    // PRIMARY: family rotation system
     - blockExposurePenalty
     + phaseAffinityFit;
 
@@ -1144,7 +1146,7 @@ function scoreCandidate(
       intentFit,
       neuralFit,
       equipFit,
-      noveltyBonus: baseNoveltyBonus,
+      noveltyBonus,
       fatiguePenalty,
       overusePenalty,
       contrastPenalty,
@@ -2354,6 +2356,8 @@ export function selectSlotExercises(
       if (process.env.NODE_ENV !== "production") {
         const family = getExerciseFamily(chosen);
         const exposurePenaltyApplied = prevCount >= 3 ? 14 : prevCount === 2 ? 9 : prevCount === 1 ? 5 : 0;
+
+        // [FamilyRotationAudit] — per-pick exposure + family context
         console.log("[FamilyRotationAudit]", JSON.stringify({
           slot: slotName,
           week: blockExposure.currentWeek,
@@ -2365,6 +2369,51 @@ export function selectSlotExercises(
           slotExposureSoFar: Object.fromEntries(blockExposure.getSlotExposure(slotName)),
           top3: debugInfo.top3.map((c) => ({ name: c.name, score: Number(c.score.toFixed(2)) })),
         }));
+
+        // [SelectionDecisionAudit] — shows which scoring dimensions drove the decision
+        // and confirms that legacy penalties are no longer the primary steering force.
+        const winner = debugInfo.top3[0];
+        const winnerBreakdown = winner?.breakdown;
+        if (winnerBreakdown) {
+          const primaryDrivers: string[] = [];
+          if (winnerBreakdown.phaseAffinityFit > 0) primaryDrivers.push(`phaseAffinity:+${winnerBreakdown.phaseAffinityFit.toFixed(2)}`);
+          if (winnerBreakdown.sportFit > 0) primaryDrivers.push(`sportFit:+${winnerBreakdown.sportFit.toFixed(2)}`);
+          if (winnerBreakdown.blockArchetypeFit > 0) primaryDrivers.push(`archetype:+${winnerBreakdown.blockArchetypeFit.toFixed(2)}`);
+          if (winnerBreakdown.clusterAlternativeBonus > 0) primaryDrivers.push(`clusterRotation:+${winnerBreakdown.clusterAlternativeBonus.toFixed(2)}`);
+          if (winnerBreakdown.slotIntentFit > 0) primaryDrivers.push(`slotIntent:+${winnerBreakdown.slotIntentFit.toFixed(2)}`);
+
+          const rotationGates: string[] = [];
+          if (winnerBreakdown.blockExposurePenalty > 0) rotationGates.push(`exposure:-${winnerBreakdown.blockExposurePenalty}`);
+          if (winnerBreakdown.movementClusterPenalty > 0) rotationGates.push(`clusterSat:-${winnerBreakdown.movementClusterPenalty.toFixed(2)}`);
+
+          const guardrails: string[] = [];
+          if (winnerBreakdown.fatiguePenalty > 0) guardrails.push(`fatigue:-${winnerBreakdown.fatiguePenalty}`);
+          if (winnerBreakdown.complexityPenalty > 0) guardrails.push(`complexity:-${winnerBreakdown.complexityPenalty}`);
+          if (winnerBreakdown.exactRepeatPenalty > 0) guardrails.push(`exactRepeat:-${winnerBreakdown.exactRepeatPenalty}`);
+          if (winnerBreakdown.heroSuppressionPenalty > 0) guardrails.push(`heroSuppress:-${winnerBreakdown.heroSuppressionPenalty}`);
+
+          const legacySignals: string[] = [];
+          if (winnerBreakdown.contrastPenalty > 0) legacySignals.push(`contrast:-${winnerBreakdown.contrastPenalty.toFixed(2)}`);
+          if (winnerBreakdown.slotRepeatPenalty > 0) legacySignals.push(`slotRepeat:-${winnerBreakdown.slotRepeatPenalty.toFixed(2)}`);
+          if (winnerBreakdown.overusePenalty > 0) legacySignals.push(`overuse:-${winnerBreakdown.overusePenalty.toFixed(2)}`);
+          // recentUsePenalty is always 0 — included in schema only for compat
+
+          console.log("[SelectionDecisionAudit]", JSON.stringify({
+            slot: slotName,
+            week: blockExposure.currentWeek,
+            phase: programContext?.currentPhase ?? "unknown",
+            selected: chosen,
+            movementFamily: family,
+            score: Number(winner.score.toFixed(3)),
+            primaryDrivers,       // what positively steered the decision
+            rotationGates,        // exposure/cluster signals that suppressed others
+            guardrailsApplied: guardrails,  // true constraints
+            legacySignalsApplied: legacySignals,  // soft tiebreakers (should be small)
+            equivalenceClusterHit: winnerBreakdown.movementClusterPenalty > 0,
+            phaseAffinityBonus: winnerBreakdown.phaseAffinityFit,
+            priorBlockExposure: prevCount,
+          }));
+        }
       }
     }
 

@@ -1,0 +1,212 @@
+SYSTEM REFACTOR — REMOVE PENALTY EXTENSIONS AS PRIMARY SELECTION LOGIC
+
+CONTEXT:
+The exercise selection system has evolved significantly.
+
+We now have:
+- monthly block planning
+- weekly role planning
+- session identity
+- archetype-aware session grammar
+- movement-family rotation
+- block-level exposure tracking
+- equivalence clusters (e.g. RDL-pattern)
+- phase exercise affinity
+- downstream refinement impact logic
+
+At this stage, the old “penalty extension” approach is becoming a liability.
+
+Current problem:
+Penalty extensions were originally used to suppress repetitive winners like Back Squat, Zercher Squat, etc.
+But they now create a penalty treadmill:
+- penalize one winner
+- the next runner-up becomes the new repeated winner
+- the system becomes hard to reason about
+- old penalty logic can fight newer family-rotation logic
+
+We no longer want “manual suppression” to be the primary way the system avoids repetition.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Refactor the exercise selection system so that:
+
+PRIMARY decision logic becomes:
+- movement-family rotation
+- exposure tracking
+- equivalence cluster suppression
+- phase exercise affinity
+- session identity / sport fit
+
+And penalty extensions are reduced to:
+- minimal guardrails only
+
+==================================================
+TASK 1 — AUDIT ALL EXISTING PENALTY EXTENSIONS
+==================================================
+
+Find and list every current manual penalty extension or anchor suppression system, including but not limited to:
+- ANCHOR_EXTRA_PENALTY
+- special-case overuse registries
+- default-anchor suppression
+- manual anti-repeat penalty extensions
+- any per-exercise hardcoded overuse logic
+
+For each one, classify it as:
+A. true guardrail
+B. legacy repetition fix
+C. compensation for weak selection architecture
+
+We need a full map of what still exists.
+
+==================================================
+TASK 2 — DEFINE WHAT PENALTIES SHOULD REMAIN
+==================================================
+
+Keep ONLY penalties that behave like true guardrails.
+
+Examples of guardrail penalties that can remain:
+- equipment mismatch
+- pain / limitation conflict
+- week-role mismatch (e.g. too fatiguing for deload)
+- exact same-week duplicate in same role
+- hard invalid context mismatch
+
+Examples of penalties that should be removed or demoted:
+- exercise-specific anti-anchor penalties as primary repetition control
+- manually extended suppression of “default” lifts just because they tend to win
+- any penalty that is compensating for missing family rotation / exposure logic
+
+==================================================
+TASK 3 — MAKE FAMILY ROTATION THE PRIMARY SELECTOR
+==================================================
+
+The selection system should now work in this order:
+
+1. Determine slot / role / session identity / movement family
+2. Build top candidate pool within the correct family
+3. Apply exposure tracking across the block
+4. Apply equivalence cluster suppression
+5. Apply phase affinity weighting
+6. Apply session identity / sport fit
+7. Choose the best candidate for THIS point in the block
+8. Use remaining guardrail penalties only as secondary constraints
+
+Do NOT let old penalty extensions dominate the ranking.
+
+==================================================
+TASK 4 — REMOVE OR DOWNGRADE MANUAL ANCHOR PENALTIES
+==================================================
+
+Refactor or remove logic that says, in effect:
+- Back Squat gets huge suppression because it wins too often
+- Zercher gets special suppression because it started winning too often
+- etc.
+
+That behavior should now emerge naturally from:
+- exposure tracking
+- family rotation
+- equivalence clustering
+- phase-specific preference
+
+If an exercise still wins repeatedly after that, then the architecture should be improved — not patched with another manual penalty extension.
+
+==================================================
+TASK 5 — KEEP LIGHT NOVELTY PRESSURE ONLY IF NEEDED
+==================================================
+
+If helpful, retain a small novelty pressure as a soft tie-breaker only.
+
+Example:
+- slight preference for a fresh family member among otherwise equivalent candidates
+
+But do NOT use heavy novelty penalties as the main anti-repeat system.
+
+==================================================
+TASK 6 — UPDATE SCORING DOCUMENTATION / COMMENTS
+==================================================
+
+Update code comments and docs so the intended architecture is clear:
+
+PRIMARY:
+- family rotation
+- exposure
+- phase fit
+- identity fit
+
+SECONDARY:
+- guardrail penalties
+
+NOT:
+- manual exercise suppression as a repetition workaround
+
+The system should be understandable to the next developer.
+
+==================================================
+TASK 7 — ADD AUDIT LOGGING FOR THE NEW DECISION HIERARCHY
+==================================================
+
+Add logs such as:
+
+[SelectionDecisionAudit] {
+  slot,
+  weekNumber,
+  dayNumber,
+  movementFamily,
+  phase,
+  selectedExercise,
+  priorExposure,
+  equivalenceClusterHit,
+  phaseAffinityBonus,
+  guardrailPenaltiesApplied,
+  legacyPenaltyExtensionsApplied
+}
+
+We need to verify that legacy penalties are no longer steering most decisions.
+
+==================================================
+TASK 8 — VALIDATION
+==================================================
+
+Generate at least:
+- one 4-week general strength program
+- one 4-week soccer program
+- one 4-week football program
+
+Check:
+- no single lift dominates the block
+- no same-week role duplication unless intentional
+- phase expression still works
+- family rotation still works
+- outputs remain coherent, not random
+
+Also confirm:
+- removing penalty extensions did NOT cause a collapse back into stale repeated defaults
+
+==================================================
+TASK 9 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. all penalty extensions found
+2. which were removed
+3. which were downgraded
+4. which guardrails remain
+5. how the new decision hierarchy works
+6. before/after examples showing that selection is now driven by family rotation rather than manual suppression
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat should no longer rely on “penalty extensions” as the primary defense against repetition.
+
+The system should avoid repetition because it understands:
+- what family it is selecting from
+- what has already been used
+- what belongs in this phase
+- what feels too similar perceptually
+- what this session/week/block is trying to express
+
+Penalties should remain only as light guardrails, not as the main engine.

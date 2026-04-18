@@ -65,14 +65,34 @@ The user interface features a dark theme with electric blue accents and the Inte
   - **Block Phase Hierarchy UI**: Three surfaces expose the monthly/weekly block context without cluttering the experience: (1) A hierarchy breadcrumb line directly under the program title — "Strength Block · Week 2 of 4 · Build" — followed by a helper sentence from `WEEK_ROLE_COPY` (e.g. "Higher volume and progressive overload this week."). (2) The active tab context strip below the tab bar switches from generic copy ("Current build · live") to a compact phase line ("Strength Block · Week 2 · Build") when viewing the Program tab. (3) A subtle notice bar before the day cards appears only on Deload (week 4) and Intensify (week 3) weeks. Week role (Establish/Build/Intensify/Deload) is derived client-side from `program.weekNumber` via `getWeekRole()`. Block name comes from `blockMetadata.blockDisplayName` (passed as `(activeSystem as any)?.metadata`). Clutter avoided: chips only on notable weeks, no per-card repetition, no timeline or dashboard elements.
 - **Sport-Specific Architecture Engine**: Defines `SportProfile`s for various sports, including physical qualities and season modulation.
 - **Return-From-Injury Engine**: Handles users returning from injury with a conservative, region-aware programming mode.
-- **Exercise Variation Engine — Family Rotation System** (`exercise-variation-engine.ts`): Upgraded from penalty-only winner logic to a family-based rotation + exposure control architecture.
-  - **`BlockExposureTracker`** (exported class): Tracks exercise usage per slot across all 4 weeks of a single program build. Instantiated once per build in `program-architecture-engine.ts`, passed through W1→W4 `selectSlotExercises` calls. Applies intra-block exposure penalties: count=1 → -5, count=2 → -9, count≥3 → -14, making it impossible for one exercise to dominate the same slot across the whole block.
-  - **`PHASE_EXERCISE_AFFINITY`** table: Maps `"phase:exerciseName"` to a score bonus (0–2.5). Covers establish/build/intensify/deload phases for squat, hinge, power, and unilateral families. Makes week role change WHICH family member is chosen — not just the sets/reps. Example: `"deload:Belt Squat"` = +2.5 so Belt Squat beats Back Squat during deload; `"intensify:Pause Back Squat"` = +2.0 for peak-force weeks.
-  - **`blockExposurePenalty`** (new scoring dimension in `scoreCandidate`): Applied as the primary rotation gate.
-  - **`phaseAffinityFit`** (new scoring dimension in `scoreCandidate`): Applied additively to prefer phase-optimal family members.
-  - **`[FamilyRotationAudit]`** log: Emitted per slot pick when `blockExposure` is active. Shows slot, week, phase, family, selected exercise, prior block uses, exposure penalty applied, top-3 candidates.
-  - **`[ExposureAudit]`** log: Emitted once after all 4 weeks' slots are resolved. Shows complete slot→exercise→weeks map and highlights any repeated exercises.
-  - **Backward compatible**: All prior penalty systems (overuse registry, contrast memory, slot-repeat penalty, anchor penalty, ANCHOR_EXTRA_PENALTY, novelty pressure) remain as secondary safeguards. The new exposure + affinity layer is additive on top.
+- **Exercise Variation Engine — Family Rotation + Decision Hierarchy** (`exercise-variation-engine.ts`): Refactored from penalty-treadmill architecture to a family-rotation + exposure-tracking pipeline with a strict four-tier decision hierarchy.
+
+  **Tier 1 — PRIMARY SELECTORS** (steer which exercise wins):
+  - `phaseAffinityFit` (+0 to +2.5): `PHASE_EXERCISE_AFFINITY` table maps `"phase:exerciseName"` → score bonus. Covers establish/build/intensify/deload phases for all major slot families. Example: `"deload:Belt Squat"` = +2.5 → Belt Squat beats Back Squat during deload; `"intensify:Pause Back Squat"` = +2.0 for peak-force weeks.
+  - `sportFit`, `blockArchetypeFit`, `intentFit`, `slotIntentFit`, `currentPhaseFit`, `clusterAlternativeBonus`: context-driven positive selection.
+
+  **Tier 2 — ROTATION GATES** (prevent same exercise repeating across weeks):
+  - **`BlockExposureTracker`** (exported class): Tracks exercise usage per slot across all 4 weeks of a single build. Intra-block exposure penalties: count=1 → −5, count=2 → −9, count≥3 → −14. Instantiated once per build in `program-architecture-engine.ts`, passed through W1→W4 `selectSlotExercises` calls.
+  - **`movementClusterPenalty`**: Cross-family equivalence cluster saturation within a single week. Clusters: `rdl-pattern`, `hip-thrust-pattern`, `deadlift-pattern`, `split-squat-pattern`, `lunge-pattern`, `step-up-pattern`, `horizontal-push`, `vertical-push`. Prevents RDL + SL-RDL same-week domination.
+
+  **Tier 3 — GUARDRAILS** (hard/soft constraints): `equipFit` (−3 hard), `exactRepeatPenalty` (−5 hard), `fatiguePenalty`, `complexityPenalty`, `disallowedFamilyPenalty` (−6), `heroSuppressionPenalty` (−12 max).
+
+  **Tier 4 — SOFT TIEBREAKERS** (demoted cross-build memory, low magnitude):
+  - `contrastPenalty`: reduced 3.0/1.5 → 1.5/0.75 (last 2 builds).
+  - `slotRepeatPenalty`: reduced 5/3/1.5 → 3/1.5/0.75, high-vis multiplier 1.5 → 1.25 (same slot, last 3 builds).
+  - `overusePenalty`: scale reduced 1.2× → 0.4×, cap reduced −6 → −2 (20-build frequency).
+  - `noveltyBonus`: was per-exercise anchor-scaled penalty; now a flat +0.5 for ALL exercises (universal soft tiebreaker).
+
+  **Removed entirely:**
+  - `ANCHOR_EXTRA_PENALTY` table (Back Squat: −2.5, BSS: −2.5, Zercher: −2.0, etc.) — caused penalty treadmill.
+  - `recentUsePenalty` (−2.5 flat for any exercise used in last 5 builds) — superseded by BlockExposureTracker.
+  - `isDefaultAnchor` penalty scaling.
+  - `getRecentWindowPenalty` function.
+
+  **Audit logs (development only):**
+  - `[FamilyRotationAudit]`: per slot pick — slot, week, phase, family, selected, prior block uses, exposure penalty, top-3.
+  - `[SelectionDecisionAudit]`: categorised breakdown — `primaryDrivers`, `rotationGates`, `guardrailsApplied`, `legacySignalsApplied`, `phaseAffinityBonus`, `equivalenceClusterHit`.
+  - `[ExposureAudit]`: once after all 4 weeks resolve — full slot→exercise→weeks map.
 - **Harder/Easier OpenAI Fallback Resolver**: A dedicated structured OpenAI resolver that activates when the local exercise library lacks progressions/regressions, providing rich context and structured JSON responses for exercise substitutions, with learning integration.
 - **Intent Family System + Transformation Engine**: Structures natural language into 24 `IntentFamily` types with `TargetScope` resolution, mapping to `TransformationBundle`s with structural change counts, primary/secondary change types, anti-patterns, validation rules, and precise `aiDirective` injection.
 - **Session Identity Sync**: A post-mutation guard that ensures session `label` and `emphasis` remain consistent with the session's training intent after any refinement, using both AI prompt instructions and a deterministic fallback with rule-based templates.
