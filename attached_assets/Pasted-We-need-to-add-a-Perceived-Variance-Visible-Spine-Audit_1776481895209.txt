@@ -1,0 +1,168 @@
+We need to add a Perceived Variance / Visible Spine Audit because the system may now be generating architectural variance internally while still producing programs that look and feel the same to the user.
+
+CORE PROBLEM
+Even with block variation, exercise variation, and program variance audit, the visible output is still over-converging around the same familiar exercise clusters and session spine.
+
+User-visible sameness matters more than internal score differences.
+
+Examples of the issue:
+- same first explosive drill appears repeatedly
+- same primary squat appears repeatedly
+- same hinge appears repeatedly
+- same unilateral lower exercise appears repeatedly
+- same trunk exercise appears repeatedly
+- same session ordering appears repeatedly
+
+The result is:
+different labels, similar perceived program.
+
+GOAL
+Make generated programs feel materially different to the user, especially in the first visible exercises and day identity.
+
+PRIMARY OBJECTIVES
+
+1. Add a Perceived Variance Audit
+2. Detect repeated visible session spines
+3. Increase penalties on overused hero/default lifts
+4. Make reroll logic target visible sameness, not just structural sameness
+5. Force more meaningful alternation among top visible exercises
+
+NEW DEV AUDIT
+Create:
+[PerceivedVarianceAudit]
+[PerceivedVarianceAuditWarning]
+
+VISIBLE SPINE DEFINITION
+For each day, compute a VisibleSpine including:
+- day theme
+- first explosive/power movement
+- first primary lower/upper lift
+- first secondary strength pattern
+- first unilateral/support movement
+- first trunk/conditioning movement
+- slot order of those visible elements
+
+Also compute a program-level VisibleIdentity including:
+- day 1 visible spine
+- day 2 visible spine
+- top hero exercises across the week
+- repeated default anchors
+- session ordering feel
+
+VISIBLE REPETITION DETECTION
+Detect:
+- same day-1 identity repeated
+- same hero lift repeated
+- same top explosive repeated
+- same primary squat repeated
+- same hinge repeated
+- same unilateral lower repeated
+- same trunk repeated
+- same visible session ordering repeated
+- same “jump + squat + hinge + unilateral + trunk” spine repeated
+
+HERO EXERCISE PENALTIES
+Create stronger repeat penalties for frequently surfacing visible anchors, especially when they appear in the first 3-5 visible exercises of a session.
+
+Examples:
+- back squat
+- front squat
+- conventional deadlift
+- trap bar deadlift
+- Bulgarian split squat
+- Pallof press
+- broad jump
+- pogo hops
+- common med-ball defaults
+- common trunk defaults
+
+Do NOT ban them globally.
+But if they were recently used in visible positions, sharply reduce their score unless they are clearly the best valid option.
+
+VISIBLE SLOT ALTERNATION
+For high-visibility slots, require stronger alternation among equally valid options.
+
+Examples:
+explosive slot:
+- broad jump
+- box jump
+- hurdle hop
+- bound
+- med-ball throw
+- jump squat
+- reactive hop pattern
+
+primary squat slot:
+- back squat
+- front squat
+- safety bar squat
+- goblet squat
+- split squat strength emphasis
+- trap bar squat pattern
+- tempo squat variant
+
+hinge slot:
+- RDL
+- trap bar hinge
+- hip thrust
+- supported hinge
+- single-leg hinge
+- cable pull-through
+- tempo hinge variant
+
+unilateral slot:
+- Bulgarian split squat
+- step-up
+- reverse lunge
+- lateral lunge
+- skater squat
+- front-foot elevated split squat
+- rear-foot elevated split squat variant
+
+trunk slot:
+- Pallof press
+- dead bug
+- rollout
+- body saw
+- carry
+- anti-extension variation
+- anti-lateral flexion variation
+- rotational stability variation
+
+REROLL TARGETING
+Enhance reroll so it can trigger specifically on perceived sameness, even if structural variance passes.
+
+Reroll ladder should include:
+1. amplify hero exercise penalties
+2. amplify visible-slot novelty pressure
+3. re-rank top visible slots only
+4. if still stale, select next split
+5. if still stale, select next archetype
+
+Add logs:
+[PerceivedVarianceAuditReroll] action=boost_hero_penalty
+[PerceivedVarianceAuditReroll] action=rerank_visible_slots
+[PerceivedVarianceAuditReroll] action=select_next_split
+[PerceivedVarianceAuditReroll] action=select_next_archetype
+
+NEW FINGERPRINT FIELDS
+Extend fingerprint to include:
+- day1VisibleSpine
+- day2VisibleSpine
+- heroExercises
+- firstExplosiveByDay
+- firstPrimaryLiftByDay
+- firstUnilateralByDay
+- firstTrunkByDay
+- visibleOrderingKey
+
+SUCCESS CRITERIA
+This succeeds if:
+1. Programs stop feeling like “same program with smarter labels”
+2. The first 3-5 visible exercises differ more meaningfully across generations
+3. Day-1 identity varies more clearly
+4. Hero/default exercise repetition drops
+5. Reroll specifically attacks visible sameness
+6. Audit logs clearly show why a program still felt samey if it does
+
+Before coding, inspect current variance audit and exercise ranking paths so this becomes an integrated extension rather than another disconnected patch.

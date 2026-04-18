@@ -55,6 +55,7 @@ import { buildProgramContextProfile } from "./programs/programContextProfile";
 import { buildExtendedFingerprint } from "./programs/programFingerprint";
 import { runProgramVarianceAudit } from "./programs/programVarianceAudit";
 import { emitRerollLog } from "./programs/programVarianceReroll";
+import { runPerceivedVarianceAudit } from "./programs/perceivedVarianceAudit";
 
 // ─── One-time validation on module load ──────────────────────────────────────
 // DEV-only coherence checks fire once per process start.
@@ -2465,6 +2466,17 @@ export function buildArchitectureBrief(
   if (varianceAuditResult.rerollRecommended && !fallbackTriggered) {
     emitRerollLog("boost_novelty_pressure", "low_variance");
   }
+
+  // ── Perceived Variance Audit ──────────────────────────────────────────────
+  // Detects visible sameness: same first explosive, squat, unilateral, trunk.
+  // Emits [PerceivedVarianceAudit], [PerceivedVarianceAuditWarning], [PerceivedVarianceAuditReroll].
+  // The per-slot contrast penalties (injected during scoring) already address
+  // the root cause on the next build — this audit tells us if they're working.
+  runPerceivedVarianceAudit(
+    auditId,
+    slotSelection,
+    blockSelection.split.dayTemplates,
+  );
 
   const arch = computeWeeklyArchitecture(daysPerWeek, sport, goal, splitVariationSeed);
   const isHockey = sport?.toLowerCase().includes("hockey") ?? false;

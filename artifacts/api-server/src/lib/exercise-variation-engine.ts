@@ -144,6 +144,7 @@ interface CandidateScore {
     complexityPenalty: number;
     progressionStyleFit: number;
     anchorPenalty: number;
+    slotRepeatPenalty: number;
   };
 }
 
@@ -178,6 +179,50 @@ const MAX_REGISTRY_AGE_MS = 15 * 60 * 1000; // 15 minutes
 let LAST_BUILD_SELECTIONS: Set<string> = new Set();
 let SECOND_LAST_BUILD_SELECTIONS: Set<string> = new Set();
 
+// ─── Per-Slot Contrast Registry ───────────────────────────────────────────────
+// Tracks the last SLOT_HISTORY_MAX exercises chosen for each slot name.
+// "same slot, same exercise" repeat penalties are much sharper than global contrast
+// because the user visibly sees the same exercise in the same position every time.
+const SLOT_HISTORY_MAX = 5;
+const SLOT_CONTRAST_REGISTRY: Record<string, string[]> = {};
+
+function recordSlotSelection(slotName: string, exerciseName: string): void {
+  if (!SLOT_CONTRAST_REGISTRY[slotName]) SLOT_CONTRAST_REGISTRY[slotName] = [];
+  SLOT_CONTRAST_REGISTRY[slotName].push(exerciseName);
+  while (SLOT_CONTRAST_REGISTRY[slotName].length > SLOT_HISTORY_MAX) {
+    SLOT_CONTRAST_REGISTRY[slotName].shift();
+  }
+}
+
+/**
+ * Returns extra penalty for choosing the same exercise in the same slot consecutively.
+ * Much sharper than the global contrast penalty because the user sees identical positions.
+ * HIGH_VISIBILITY slots (lower_power, bilateral_squat, bilateral_hinge, unilateral_lower, trunk)
+ * get an extra multiplier.
+ */
+function getSlotRepeatPenalty(slotName: string, exerciseName: string): number {
+  const history = SLOT_CONTRAST_REGISTRY[slotName];
+  if (!history || history.length === 0) return 0;
+
+  const isHighVisibility = [
+    "lower_power", "bilateral_squat_strength", "bilateral_hinge_strength",
+    "unilateral_lower", "trunk_anti_rotation",
+  ].includes(slotName);
+
+  const multiplier = isHighVisibility ? 1.5 : 1.0;
+
+  const len = history.length;
+  if (history[len - 1] === exerciseName) return 5.0 * multiplier; // last build
+  if (len >= 2 && history[len - 2] === exerciseName) return 3.0 * multiplier; // 2 builds ago
+  if (len >= 3 && history[len - 3] === exerciseName) return 1.5 * multiplier; // 3 builds ago
+  return 0;
+}
+
+/** Export for audit logging */
+export function getSlotHistory(slotName: string): string[] {
+  return [...(SLOT_CONTRAST_REGISTRY[slotName] ?? [])];
+}
+
 function registerBuildSelections(selections: Record<string, string>): void {
   const now = Date.now();
   const exercises = Object.values(selections).filter(Boolean);
@@ -185,6 +230,11 @@ function registerBuildSelections(selections: Record<string, string>): void {
   // Rotate contrast memory
   SECOND_LAST_BUILD_SELECTIONS = new Set(LAST_BUILD_SELECTIONS);
   LAST_BUILD_SELECTIONS = new Set(exercises);
+
+  // Record per-slot history
+  for (const [slotName, exerciseName] of Object.entries(selections)) {
+    if (exerciseName) recordSlotSelection(slotName, exerciseName);
+  }
 
   // Evict builds that are too old or exceed the cap
   const cutoff = now - MAX_REGISTRY_AGE_MS;
@@ -287,18 +337,33 @@ function hasEquipment(exerciseName: string, equipmentLevel: string): boolean {
 /**
  * Explicit per-exercise overused-anchor extra penalty.
  * Applied ON TOP of the isDefaultAnchor flag for the worst repeat offenders.
- * Does not ban these exercises — just requires competitors to earn significantly
- * lower scores before these can win again.
+ * Does not ban these exercises — competitors must earn the slot.
+ *
+ * Tuned based on perceived-variance audit findings:
+ * "hero" exercises that dominate visible positions need extra discounting.
  */
 const ANCHOR_EXTRA_PENALTY: Record<string, number> = {
-  "Broad Jump": 1.5,
-  "Back Squat": 1.5,
-  "Box Jump": 1.5,
-  "Weighted Pull-Up": 1.0,
-  "Bulgarian Split Squat": 1.0,
-  "Pallof Press": 1.0,
-  "Conventional Deadlift": 1.0,
-  "Dead Bug": 0.5,
+  // ── Explosive slot anchors ─────────────────────────────────────────────
+  "Broad Jump": 3.0,        // most frequently surfacing explosive default
+  "Box Jump": 3.0,          // ties with Broad Jump for default top pick
+  "Pogo Hops": 2.0,         // appears in warmup AND power slot — double exposure
+
+  // ── Primary squat slot anchors ────────────────────────────────────────
+  "Back Squat": 2.5,        // universal default — needs strong discounting
+  "Front Squat": 1.0,       // secondary default that surfaces too easily
+
+  // ── Primary hinge slot anchors ─────────────────────────────────────────
+  "Conventional Deadlift": 2.0,  // most commonly selected hinge
+  "Romanian Deadlift": 0.5,      // appears when deadlift is penalized, still common
+
+  // ── Unilateral slot anchors ────────────────────────────────────────────
+  "Bulgarian Split Squat": 2.5,  // dominates unilateral slot when no sport filter
+  "Rear-Foot Elevated Split Squat (RFESS)": 0.5, // close to BSS — also surfaces heavily
+
+  // ── Trunk slot anchors ────────────────────────────────────────────────
+  "Pallof Press": 2.5,           // most frequently selected anti-rotation default
+  "Dead Bug": 2.0,               // dominates anti-extension when no sport context
+  "Weighted Pull-Up": 1.0,       // upper pull default
 };
 
 function scoreCandidate(
@@ -359,6 +424,12 @@ function scoreCandidate(
 
   // ── Exact repeat penalty (0–5) ────────────────────────────────────────────
   const exactRepeatPenalty = ctx.alreadySelected.has(meta.name) ? 5 : 0;
+
+  // ── Per-slot repeat penalty (0–7.5) ──────────────────────────────────────
+  // Penalises choosing the same exercise in the same slot as a recent build.
+  // Much sharper than the global contrast penalty — this is what makes the user
+  // see a different "first explosive" or "primary squat" across generations.
+  const slotRepeatPenalty = getSlotRepeatPenalty(ctx.slotName, meta.name);
 
   // ── Seed tiebreaker (0–1.5) ───────────────────────────────────────────────
   const seedTiebreaker = (((ctx.seed * slotPrimeMultiplier * 2654435761) % 1) + 1) % 1 * 1.5;
@@ -499,7 +570,8 @@ function scoreCandidate(
 
   // ── Total ─────────────────────────────────────────────────────────────────
   const total = sportFit + intentFit + neuralFit + equipFit + noveltyBonus
-    - fatiguePenalty - overusePenalty - contrastPenalty - exactRepeatPenalty + seedTiebreaker
+    - fatiguePenalty - overusePenalty - contrastPenalty - exactRepeatPenalty - slotRepeatPenalty
+    + seedTiebreaker
     + blockArchetypeFit + currentPhaseFit + slotIntentFit + movementBiasFit
     + familyPreferenceFit + velocityIntentFit + stabilityDemandFit + progressionStyleFit
     - familyReductionPenalty - disallowedFamilyPenalty - complexityPenalty;
@@ -530,6 +602,7 @@ function scoreCandidate(
       complexityPenalty,
       progressionStyleFit,
       anchorPenalty,
+      slotRepeatPenalty,
     },
   };
 }
@@ -600,6 +673,7 @@ function ranked(pool: ExerciseMeta[], ctx: ScoreContext, primeMultiplier: number
           complexityPenalty: c.breakdown.complexityPenalty,
           progressionStyleFit: c.breakdown.progressionStyleFit,
           anchorPenalty: c.breakdown.anchorPenalty,
+          slotRepeatPenalty: c.breakdown.slotRepeatPenalty,
         },
       });
 

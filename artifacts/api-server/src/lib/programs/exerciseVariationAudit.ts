@@ -41,6 +41,7 @@ export interface ExerciseScoreBreakdown {
     contrastPenalty: number;
     exactRepeatPenalty: number;
     anchorPenalty: number;
+    slotRepeatPenalty: number;
     seedTiebreaker: number;
   };
 }
@@ -199,5 +200,6 @@ export function buildPenaltySummary(breakdown: ExerciseScoreBreakdown["factors"]
   if (breakdown.familyReductionPenalty > 0) penalties.push(`reduced family (−${breakdown.familyReductionPenalty.toFixed(1)})`);
   if (breakdown.disallowedFamilyPenalty > 0) penalties.push(`disallowed family (−${breakdown.disallowedFamilyPenalty.toFixed(1)})`);
   if (breakdown.anchorPenalty > 0) penalties.push(`anchor penalty (−${breakdown.anchorPenalty.toFixed(1)})`);
+  if (breakdown.slotRepeatPenalty > 0) penalties.push(`slot repeat (−${breakdown.slotRepeatPenalty.toFixed(1)})`);
   return penalties;
 }
