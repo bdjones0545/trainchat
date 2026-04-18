@@ -1,0 +1,240 @@
+CRITICAL AUDIT + FIX — PREP / POWER LAYERS STILL TOO DETERMINISTIC
+
+CONTEXT:
+Recent fixes worked for the strength layer:
+- primary and secondary strength exercises now show real variation
+- architecture / enforcement is working
+- session identity is improving
+
+But one major issue remains:
+
+1. Power / plyometric selections show little or no variance across weeks
+2. Warm-up / prep is essentially the same every day
+
+Observed behavior:
+- strength exercises vary meaningfully
+- power slots keep repeating the same plyometric choices
+- prep block repeats the same warm-up protocol every session
+- weekly progression changes reps/sets but not movement expression
+
+This makes the program still feel repetitive even though the strength layer is improving.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Introduce real variation into:
+1. prep / warm-up expression
+2. power / plyometric expression
+3. week-to-week movement flavor
+
+without breaking intent, sport relevance, or program quality.
+
+==================================================
+TASK 1 — AUDIT PREP / WARM-UP DETERMINISM
+==================================================
+
+For a full 4-week build, print for every session:
+
+[PrepAudit] {
+  weekNumber,
+  dayNumber,
+  sessionIdentity,
+  prepBlockName,
+  prepExercises,
+  prepSource,
+  prepIntent
+}
+
+Questions:
+- Is the prep block being generated dynamically or pulled from one default warm-up template?
+- Are the same prep movements being reused regardless of session identity?
+- Does prep differ by lower / upper / speed / conditioning day?
+- Does prep differ by week role (Establish / Build / Intensify / Deload)?
+
+FAIL if:
+- warm-up protocol is effectively identical every day
+- prep does not respond to session identity or week context
+
+==================================================
+TASK 2 — AUDIT POWER / PLYOMETRIC DETERMINISM
+==================================================
+
+For each session with a power block, print:
+
+[PowerAudit] {
+  weekNumber,
+  dayNumber,
+  sessionIdentity,
+  powerIntent,
+  candidatePoolSize,
+  topCandidates,
+  selectedExercise,
+  selectedReason
+}
+
+Questions:
+- Is the power pool too small?
+- Are the same 1–2 exercises always winning?
+- Is weekly context only changing sets/reps, not actual exercise choice?
+- Are sport-specific power expressions too narrow?
+
+FAIL if:
+- the same plyometric keeps appearing across multiple weeks when the week role changes
+- variation exists only in dosage, not in movement type
+
+==================================================
+TASK 3 — CREATE PREP FAMILIES
+==================================================
+
+Replace any single default warm-up protocol with prep families.
+
+Build at least these prep families:
+
+1. Elastic / ankle stiffness prep
+2. Sprint mechanics prep
+3. Hip mobility + glute activation prep
+4. Landing / deceleration prep
+5. Trunk / posture prep
+6. Upper structural prep
+
+Rules:
+- every session should select a prep family based on session identity and week context
+- prep should feel relevant to the day
+- prep must not be the same every day
+
+Examples:
+- acceleration day → sprint mechanics + ankle stiffness prep
+- hamstring resilience day → posterior chain prep
+- upper structural day → scap/trunk prep
+- deload week → lower fatigue prep family
+
+==================================================
+TASK 4 — CREATE POWER EXPRESSION FAMILIES
+==================================================
+
+Instead of one generic power slot, define multiple power expression families:
+
+1. Horizontal acceleration power
+2. Vertical projection power
+3. Lateral / COD elastic power
+4. Rotational / med-ball power
+5. Reactive stiffness / plyometric rebound
+6. Contrast power (loaded explosive)
+
+Then map them to session identity + sport + week role.
+
+Examples:
+- soccer acceleration day → horizontal acceleration power
+- basketball elastic day → vertical + lateral elastic power
+- intensification week → lower-volume higher-intent power
+- deload week → lower-fatigue reactive prep or reduced amplitude power
+
+==================================================
+TASK 5 — MAKE WEEK ROLE CHANGE MOVEMENT EXPRESSION, NOT JUST DOSAGE
+==================================================
+
+Right now week progression may only be changing sets/reps/rest.
+
+Fix this so week role can also influence movement family:
+
+Week 1 Establish:
+- simpler, more teachable expressions
+- lower complexity
+- lower amplitude
+
+Week 2 Build:
+- same family or adjacent family
+- more intensity / more specific demand
+
+Week 3 Intensify:
+- sharper, more aggressive, higher intent expression
+- more loaded or more demanding version
+
+Week 4 Deload:
+- lower fatigue, lower impact, simpler expression
+
+Example:
+Week 1 → pogo hops
+Week 2 → snap-down to bound
+Week 3 → loaded trap bar jump or more aggressive bound
+Week 4 → reduced-contact elastic prep
+
+Do not just repeat the same exercise with new reps.
+
+==================================================
+TASK 6 — INCREASE CANDIDATE POOL DIVERSITY FOR PREP + POWER
+==================================================
+
+Audit the library and widen the candidate pools for prep/power.
+
+Specifically:
+- expand soccer-specific elastic / acceleration options
+- expand lateral / deceleration prep options
+- expand low-fatigue deload options
+- expand warm-up/prep movement families
+
+We need enough valid choices so the selector is not forced into the same winner.
+
+==================================================
+TASK 7 — ADD ENFORCEMENT / NOVELTY PRESSURE TO PREP + POWER
+==================================================
+
+Add stronger repetition control for prep and power exercises across the same 4-week block.
+
+Rules:
+- repeated use is allowed only if context justifies it
+- avoid repeating the same prep protocol every day
+- avoid repeating the same plyometric every week unless explicitly intentional
+
+Add logs:
+
+[PrepNoveltyAudit]
+[PowerNoveltyAudit]
+
+We need to know when repetition is deliberate vs accidental.
+
+==================================================
+TASK 8 — VALIDATION
+==================================================
+
+Run one fresh 4-week soccer build.
+
+Compare:
+- Week 1 Day 1
+- Week 2 Day 1
+- Week 3 Day 1
+- Week 4 Day 1
+
+Then compare all sessions within Week 1.
+
+SUCCESS CRITERIA:
+- prep is not identical every day
+- power expression varies across weeks
+- week progression changes movement flavor, not only reps/sets
+- strength layer remains stable and high quality
+
+==================================================
+TASK 9 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. whether prep was using a hidden default template
+2. whether power/plyo pool was too narrow
+3. what prep families were added
+4. what power expression families were added
+5. how week role now changes movement expression
+6. before/after comparison across 4 weeks
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat should not just vary the strength lifts.
+
+It must also vary:
+- how the athlete prepares
+- how power is expressed
+- how the block feels week to week
+
+Prep and power should feel intentional, sport-specific, and progressive — not repeated defaults.
