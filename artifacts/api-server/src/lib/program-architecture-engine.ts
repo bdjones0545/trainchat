@@ -2763,6 +2763,35 @@ export function buildArchitectureBrief(
     // Audit slot layout for each session
     if (process.env.NODE_ENV !== "production") {
       const weekSessionRole = activeWeekPlan.sessionRoles[s.dayNumber - 1];
+
+      // [SessionGrammarAudit] — full grammar decision trace per day
+      const isLowerSession = s.emphasizedPatterns.some(p => ["squat", "hinge", "unilateral_lower"].includes(p));
+      const hasUnilateralBlock = processedFlow.some(b => b.role === "unilateral");
+      const hasFinisherBlock = processedFlow.some(b => b.role === "finisher");
+      const hasPowerBlock = processedFlow.some(b => b.role === "power");
+      const hasSecondaryBlock = processedFlow.some(b => b.role === "secondary");
+      const mandatoryBlocks = processedFlow.filter(b => ["prep", "primary"].includes(b.role)).map(b => b.role);
+      const conditionalBlocks = processedFlow.filter(b => !["prep", "primary"].includes(b.role)).map(b => b.role);
+      console.log("[SessionGrammarAudit]", JSON.stringify({
+        day: s.dayNumber,
+        monthlyBlockType: monthlyPlan.blockType,
+        weeklyBlockRole: activeWeekPlan.role,
+        sessionRole: weekSessionRole?.sessionRole ?? "unknown",
+        blockArchetype: blockSelection.archetypeId,
+        isLowerSession,
+        requiredBlocks: mandatoryBlocks,
+        optionalBlocks: conditionalBlocks,
+        finalBlocksUsed: processedFlow.map(b => b.role),
+        finalBlockOrder: processedFlow.map(b => b.role),
+        blockCount: processedFlow.length,
+        hasUnilateralBlock,
+        hasPowerBlock,
+        hasSecondaryBlock,
+        hasFinisherBlock,
+        sessionIdentity: s.identity,
+        mandateArchetype: blockSelection.archetypeId,
+      }));
+
       console.log("[BuildAudit:SlotLayout]", JSON.stringify({
         day: s.dayNumber,
         identity: s.identity,
@@ -2773,6 +2802,7 @@ export function buildArchitectureBrief(
         weekRole: activeWeekPlan.role,
         sessionRole: weekSessionRole?.sessionRole ?? "unknown",
         blockType: monthlyPlan.blockType,
+        blockArchetype: blockSelection.archetypeId,
       }));
     }
 
@@ -2968,7 +2998,7 @@ Only AFTER the above architecture is locked, select exercises that:
    - Intensify week: peak loads — RPE ceiling 9.5
    - Deload week: 50–60% volume, 65% loads — RPE ceiling 5
 
-${buildVariationMandate(slotSelection, sport)}
+${buildVariationMandate(slotSelection, sport, blockSelection.archetypeId)}
 
 ### VALIDATION CHECKLIST (apply before outputting JSON)
 - [ ] Every session has a clear identity that answers "why does this day exist?"

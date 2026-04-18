@@ -1523,17 +1523,178 @@ export function describeBlockVariant(variant: BlockVariant, sel: SlotExerciseSel
   }
 }
 
+// ─── Archetype-specific session block order descriptions ──────────────────────
+//
+// These replace the generic Variant A/B/C/D template when a specific block
+// archetype is active. Each archetype generates a DIFFERENT numbered step list
+// that matches what buildCNSFlow actually produces for that archetype.
+// The AI follows the numbered list — so this is the highest-leverage fix point.
+
+function describeIntensificationBlockOrder(sel: SlotExerciseSelection): string {
+  return [
+    `### SESSION STRUCTURE — INTENSIFICATION STRENGTH BLOCK`,
+    ``,
+    `This is an INTENSIFICATION block. Session density is managed by LOAD, not exercise count.`,
+    `Fewer movements. Heavier weights. Full rest between sets. No unilateral block.`,
+    ``,
+    `LOWER DAYS (SQUAT-ANCHOR):`,
+    `  1. Neural prep (6–8 min) — hip CARs, thoracic extension, glute activation`,
+    `  2. CNS PRIMER: ${sel.lower_power} — 2–3 sets × 3 sub-maximal reps. NOT a power development block. Primes neural drive. Full rest.`,
+    `  3. PRIMARY COMPOUND: ${sel.bilateral_squat_strength} — 4–5 × 2–4 @ 83–92%. Maximum load. Controlled eccentric, explosive concentric. THIS IS THE SESSION.`,
+    `  4. SECONDARY: ${sel.bilateral_hinge_strength} — 3 × 5–6 @ 75–80%. Posterior chain complement. NOT a second primary.`,
+    `  5. TRUNK CLOSE: ${sel.trunk_anti_rotation} + ${sel.trunk_anti_extension} — 2–3 sets only. Brief. Session close.`,
+    `  *** NO UNILATERAL BLOCK. Load density is the training stimulus, not exercise variety. ***`,
+    ``,
+    `LOWER DAYS (HINGE-ANCHOR):`,
+    `  1. Neural prep (6–8 min)`,
+    `  2. CNS PRIMER: ${sel.lower_power} — 2–3 sets × 3 sub-maximal reps. Primes the pull pattern.`,
+    `  3. PRIMARY COMPOUND: ${sel.bilateral_hinge_strength} — 4 × 2–4 @ 83–90%. Deliberate reset between reps. Maximum posterior chain engagement.`,
+    `  4. SECONDARY: ${sel.unilateral_lower_alt} — 3 × 5–6 per side. Posterior chain integrity, not a volume block.`,
+    `  5. TRUNK CLOSE: ${sel.trunk_anti_rotation} + ${sel.trunk_anti_extension} — 2–3 sets only.`,
+    `  *** NO UNILATERAL SQUAT BLOCK. Fewer total exercises = more load quality. ***`,
+    ``,
+    `UPPER DAYS:`,
+    `  1. Upper prep — scapular positioning, wall slides, thoracic mobility`,
+    `  2. PRIMARY COMPOUND: ${sel.upper_push_primary} or ${sel.upper_pull_primary} (anchor for this day) — 4–5 × 3–5 @ 80–90%. Heavy.`,
+    `  3. STRUCTURAL BALANCE: pulling volume to complement pressing — 3–4 × 5–8`,
+    `  4. TRUNK: ${sel.trunk_anti_rotation} — 2 sets. Brief.`,
+    `  *** Sessions are tight. Heavy primary + structural balance + trunk. No isolation clusters. ***`,
+  ].join("\n");
+}
+
+function describePowerElasticBlockOrder(sel: SlotExerciseSelection): string {
+  return [
+    `### SESSION STRUCTURE — POWER / ELASTIC CONVERSION BLOCK`,
+    ``,
+    `This is a POWER/ELASTIC block. Reactive and elastic output IS the primary training goal.`,
+    `The bilateral compound is the contrast VEHICLE — it potentiates the reactive work.`,
+    `Session is inverted vs standard: elastic/reactive comes FIRST when the CNS is freshest.`,
+    ``,
+    `LOWER DAYS (ALL):`,
+    `  1. Reactive prep — ankle mobility → pogo series (2 × 10 sub-max) → 2 × 3 approach jumps. Activates SSC.`,
+    `  2. ELASTIC/REACTIVE BLOCK (PRIMARY OUTPUT): ${sel.elastic_power} — minimum contact time, maximum stiffness. THEN ${sel.lower_power} — maximum velocity expression. 3–4 sets × 4–5 reps each. FULL REST between every set (2–3 min). *** THIS IS THE SESSION'S MAIN TRAINING GOAL. ***`,
+    `  3. CONTRAST COMPOUND: ${sel.bilateral_squat_strength} or ${sel.bilateral_hinge_strength} — 65–78% load, VELOCITY INTENT on every concentric. This lift potentiates the reactive work above. 4 × 3–5 reps. Bar speed is the intent.`,
+    `  4. TRUNK CLOSE: ${sel.trunk_anti_rotation} — 2 sets. Anti-rotation. Brief close.`,
+    `  *** NO UNILATERAL BLOCK. NO SECONDARY BILATERAL COMPOUND. Elastic output + one contrast compound + brief trunk. ***`,
+    ``,
+    `UPPER DAYS:`,
+    `  1. Upper explosive prep — med ball chest throw (2 × 3) or band-resisted push-up explosive (2 × 5)`,
+    `  2. UPPER POWER: ${sel.rotational_power} or med ball slam — 3 × 5 explosive reps. Upper elastic output.`,
+    `  3. PRIMARY PRESS: ${sel.upper_push_primary} — 4 × 4–5 with VELOCITY INTENT on concentric`,
+    `  4. STRUCTURAL PULL: ${sel.upper_pull_primary} — 4 × 6–8 for scapular integrity`,
+    `  5. TRUNK: ${sel.trunk_anti_rotation} — 2 sets.`,
+    `  *** No hypertrophy isolation clusters. Speed and power dominate this session. ***`,
+  ].join("\n");
+}
+
+function describeAccumulationBlockOrder(sel: SlotExerciseSelection): string {
+  return [
+    `### SESSION STRUCTURE — FOUNDATION / ACCUMULATION BLOCK`,
+    ``,
+    `This is an ACCUMULATION block. Full movement stack. Volume and density are the training stimuli.`,
+    `Every lower session includes a conditioning finisher — this is not optional. It is the accumulation stimulus.`,
+    ``,
+    `LOWER DAYS (SQUAT-ANCHOR):`,
+    `  1. Lower-body neural prep — hip CARs, glute activation, ankle stiffness series`,
+    `  2. POWER: ${sel.lower_power} — 3–4 × 4–5, maximal intent, full reset between reps`,
+    `  3. PRIMARY: ${sel.bilateral_squat_strength} — 4 × 6–10 (volume accumulation, controlled tempo, full depth)`,
+    `  4. SECONDARY HINGE: ${sel.bilateral_hinge_strength} — 3 × 8–10 (posterior chain complement)`,
+    `  5. UNILATERAL: ${sel.unilateral_lower} — 3 × 8–10 per side (positional control + asymmetry exposure)`,
+    `  6. TRUNK: ${sel.trunk_anti_extension} + ${sel.trunk_anti_rotation} — 2–3 sets each`,
+    `  7. CONDITIONING FINISHER: ${sel.conditioning_finisher} — 3–4 sets, high effort sustainable pace. THIS IS NOT REST. It is the density and metabolic accumulation stimulus that closes this block.`,
+    ``,
+    `LOWER DAYS (HINGE-ANCHOR):`,
+    `  1. Lower-body neural prep`,
+    `  2. POWER: ${sel.lower_power} — 3–4 × 4–5`,
+    `  3. PRIMARY: ${sel.bilateral_hinge_strength} — 4 × 6–10`,
+    `  4. SECONDARY SQUAT: ${sel.bilateral_squat_strength} — 3 × 6–8`,
+    `  5. UNILATERAL: ${sel.unilateral_lower_alt} — 3 × 8–10 per side`,
+    `  6. TRUNK: ${sel.trunk_anti_rotation} + ${sel.trunk_anti_extension} — 2–3 sets each`,
+    `  7. CONDITIONING FINISHER: ${sel.conditioning_finisher} — 3–4 sets. Density. Closes the accumulation block.`,
+    ``,
+    `UPPER DAYS:`,
+    `  1. Upper-body neural prep — scapular positioning, wall slides`,
+    `  2. POWER PRIMER: med ball chest throw or push press variation — 3 × 4–5 explosive`,
+    `  3. PRIMARY: ${sel.upper_push_primary} or ${sel.upper_pull_primary} (day anchor) — 4 × 6–10`,
+    `  4. SECONDARY: structural balance pull or press — 3–4 × 8–12`,
+    `  5. ACCESSORY PAIRS: 2–3 exercises for hypertrophy support`,
+    `  6. TRUNK: ${sel.trunk_anti_rotation} + ${sel.trunk_anti_extension} — 2 sets`,
+  ].join("\n");
+}
+
 // ─── Variation Mandate ────────────────────────────────────────────────────────
 
-export function buildVariationMandate(sel: SlotExerciseSelection, sport: string | null): string {
+export function buildVariationMandate(
+  sel: SlotExerciseSelection,
+  sport: string | null,
+  blockArchetype?: string,
+): string {
   const s = sport?.toLowerCase() ?? "";
   const isRotationalSport = s.includes("baseball") || s.includes("softball") || s.includes("tennis") || s.includes("golf");
   const isElasticSport = s.includes("track") || s.includes("sprint") || s.includes("basketball") || s.includes("volleyball");
 
-  const blockVariant = getBlockVariant(sel.block_template_index, sport);
-  const blockDescription = describeBlockVariant(blockVariant, sel);
+  // ── Archetype-specific block order ────────────────────────────────────────
+  // These override the generic Variant A/B/C/D for archetypes that have genuinely
+  // different session structures. This is the fix for macro variation getting
+  // choked at the session grammar level.
+  let blockOrderSection: string;
+  let validationChecklist: string[];
 
-  const variantLabel = blockVariant === "squat_first" ? "A" : blockVariant === "hinge_first" ? "B" : blockVariant === "power_extended" ? "C" : "D";
+  if (blockArchetype === "INTENSIFICATION_STRENGTH") {
+    blockOrderSection = describeIntensificationBlockOrder(sel);
+    validationChecklist = [
+      `- [ ] ${sel.lower_power} is used as the CNS primer (NOT a full power block)`,
+      `- [ ] ${sel.bilateral_squat_strength} is used as the bilateral squat primary at 83–92%`,
+      `- [ ] ${sel.bilateral_hinge_strength} is used as the bilateral hinge primary at 83–90%`,
+      `- [ ] NO unilateral block on lower days — load density replaces volume`,
+      `- [ ] ${sel.trunk_anti_rotation} is used for anti-rotation trunk close`,
+      `- [ ] ${sel.upper_pull_primary} is used as the upper pull primary`,
+      `- [ ] Sessions are TIGHT: 4–5 blocks maximum on lower days`,
+      `- [ ] Power exercise differs across all sessions`,
+    ];
+  } else if (blockArchetype === "POWER_ELASTIC_CONVERSION") {
+    blockOrderSection = describePowerElasticBlockOrder(sel);
+    validationChecklist = [
+      `- [ ] ${sel.elastic_power} appears as the FIRST training block (after prep) on lower days`,
+      `- [ ] ${sel.lower_power} follows elastic work as second reactive block`,
+      `- [ ] ${sel.bilateral_squat_strength} or ${sel.bilateral_hinge_strength} is used as CONTRAST VEHICLE at 65–78%`,
+      `- [ ] NO unilateral block on lower days`,
+      `- [ ] NO secondary bilateral compound on lower days`,
+      `- [ ] ${sel.trunk_anti_rotation} is a brief trunk close (2 sets only)`,
+      `- [ ] Sessions are SHORT: elastic + contrast + trunk = 4 blocks total`,
+      `- [ ] Power exercise differs across all sessions`,
+    ];
+  } else if (blockArchetype === "FOUNDATION_ACCUMULATION" || blockArchetype === "WORK_CAPACITY_BLOCK") {
+    blockOrderSection = describeAccumulationBlockOrder(sel);
+    validationChecklist = [
+      `- [ ] ${sel.lower_power} is used as the power/explosive slot`,
+      `- [ ] ${sel.bilateral_squat_strength} is used as the bilateral squat primary`,
+      `- [ ] ${sel.bilateral_hinge_strength} is used as the bilateral hinge primary`,
+      `- [ ] ${sel.unilateral_lower} is used for unilateral lower on squat-primary days`,
+      `- [ ] ${sel.conditioning_finisher} is used as the conditioning finisher on EVERY lower session`,
+      `- [ ] ${sel.trunk_anti_rotation} is used for anti-rotation trunk work`,
+      `- [ ] ${sel.upper_pull_primary} is used as the upper pull primary`,
+      `- [ ] No two sessions share the same primary lift`,
+      `- [ ] Power exercise differs across all sessions`,
+    ];
+  } else {
+    // Default: use generic variant A/B/C/D (unchanged from original)
+    const blockVariant = getBlockVariant(sel.block_template_index, sport);
+    const blockDescription = describeBlockVariant(blockVariant, sel);
+    const variantLabel = blockVariant === "squat_first" ? "A" : blockVariant === "hinge_first" ? "B" : blockVariant === "power_extended" ? "C" : "D";
+    blockOrderSection = `### SESSION BLOCK ORDER — VARIANT ${variantLabel}\n\n${blockDescription}`;
+    validationChecklist = [
+      `- [ ] ${sel.lower_power} is used as the power/explosive slot`,
+      `- [ ] ${sel.bilateral_squat_strength} is used as the bilateral squat primary`,
+      `- [ ] ${sel.bilateral_hinge_strength} is used as the bilateral hinge primary`,
+      `- [ ] ${sel.unilateral_lower} is used for unilateral lower on squat-primary days`,
+      `- [ ] ${sel.trunk_anti_rotation} is used for anti-rotation trunk work`,
+      `- [ ] ${sel.upper_pull_primary} is used as the upper pull primary`,
+      `- [ ] No two sessions share the same primary lift`,
+      `- [ ] Power exercise differs across all sessions`,
+      `- [ ] Block order follows Variant ${variantLabel} template`,
+    ];
+  }
 
   const lines = [
     `## ⚠️ CRITICAL EXERCISE MANDATE — LOCKED SELECTIONS — DO NOT OVERRIDE ⚠️`,
@@ -1548,6 +1709,7 @@ export function buildVariationMandate(sel: SlotExerciseSelection, sport: string 
     `### LOCKED EXERCISES — USE THESE EXACTLY`,
     ``,
     `- Power / Explosive: ${sel.lower_power}`,
+    `- Elastic / Reactive: ${sel.elastic_power}`,
     `- Bilateral Squat Primary: ${sel.bilateral_squat_strength}`,
     `- Bilateral Hinge Primary: ${sel.bilateral_hinge_strength}`,
     `- Unilateral Lower (squat days): ${sel.unilateral_lower}`,
@@ -1558,8 +1720,8 @@ export function buildVariationMandate(sel: SlotExerciseSelection, sport: string 
     `- Upper Push Secondary: ${sel.upper_push_secondary}`,
     `- Upper Pull Primary: ${sel.upper_pull_primary}`,
     `- Upper Pull Secondary: ${sel.upper_pull_secondary}`,
+    `- Conditioning Finisher: ${sel.conditioning_finisher}`,
     isRotationalSport ? `- Rotational Power: ${sel.rotational_power}` : null,
-    isElasticSport ? `- Elastic / Reactive Power: ${sel.elastic_power}` : null,
     ``,
     `### SUBSTITUTION RULES — PROHIBITED DEFAULTS`,
     ``,
@@ -1572,9 +1734,7 @@ export function buildVariationMandate(sel: SlotExerciseSelection, sport: string 
     `- PROHIBITED as sole trunk exercise: Pallof Press → use ${sel.trunk_anti_rotation}`,
     `- PROHIBITED as upper pull primary: Unweighted Pull-Up → use ${sel.upper_pull_primary}`,
     ``,
-    `### SESSION BLOCK ORDER — VARIANT ${variantLabel}`,
-    ``,
-    blockDescription,
+    blockOrderSection,
     ``,
     `### CROSS-SESSION VARIETY RULES`,
     ``,
@@ -1585,15 +1745,7 @@ export function buildVariationMandate(sel: SlotExerciseSelection, sport: string 
     ``,
     `### FINAL VALIDATION CHECKLIST`,
     ``,
-    `- [ ] ${sel.lower_power} is used as the power/explosive slot`,
-    `- [ ] ${sel.bilateral_squat_strength} is used as the bilateral squat primary`,
-    `- [ ] ${sel.bilateral_hinge_strength} is used as the bilateral hinge primary`,
-    `- [ ] ${sel.unilateral_lower} is used for unilateral lower on squat-primary days`,
-    `- [ ] ${sel.trunk_anti_rotation} is used for anti-rotation trunk work`,
-    `- [ ] ${sel.upper_pull_primary} is used as the upper pull primary`,
-    `- [ ] No two sessions share the same primary lift`,
-    `- [ ] Power exercise differs across all sessions`,
-    `- [ ] Block order follows Variant ${variantLabel} template`,
+    ...validationChecklist,
   ].filter((line): line is string => line !== null);
 
   return lines.join("\n");

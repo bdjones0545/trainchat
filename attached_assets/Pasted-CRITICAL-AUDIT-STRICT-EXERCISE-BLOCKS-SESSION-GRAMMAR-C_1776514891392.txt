@@ -1,0 +1,264 @@
+CRITICAL AUDIT — STRICT EXERCISE BLOCKS / SESSION GRAMMAR
+
+CONTEXT:
+We have already improved:
+- monthly block planning
+- weekly block planning
+- block banners / phase visibility
+- session identity overrides
+- structural branching at the macro level
+
+But programs still often FEEL the same at the session level.
+
+This suggests the problem may no longer be the macro blocks.
+
+The real bottleneck may be the MICRO SESSION GRAMMAR:
+- the exercise blocks are too strict
+- too many blocks are mandatory
+- blocks own movement qualities too rigidly
+- the same sequence keeps reappearing
+- macro variation gets forced through the same micro template
+
+Observed repeated session feel:
+- prep / activation trio
+- jump / power
+- squat
+- hinge
+- unilateral lower
+- trunk anti-rotation
+
+Even when the macro block changes, the session still collapses into this structure.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Audit whether the exercise-block system / session grammar is over-constraining generation, and identify exactly how it is preventing true session-level variety.
+
+==================================================
+TASK 1 — TRACE SESSION CONSTRUCTION FOR DAY 1
+==================================================
+
+For a fresh build, print the exact session construction process for Day 1:
+
+[SessionGrammarAudit] {
+  monthlyBlockType,
+  weeklyBlockRole,
+  sessionRole,
+  blockArchetype,
+  requiredBlocks,
+  optionalBlocks,
+  finalBlocksUsed,
+  finalBlockOrder
+}
+
+We need to see the actual grammar decisions, not just the final exercises.
+
+==================================================
+TASK 2 — IDENTIFY MANDATORY VS OPTIONAL BLOCKS
+==================================================
+
+For each session, classify every block as:
+- required
+- optional
+- conditionally inserted
+- conditionally omitted
+
+Audit blocks such as:
+- prep / activation
+- power / primer
+- primary lift
+- secondary lift
+- unilateral support
+- trunk / anti-rotation
+- conditioning finisher
+
+Questions:
+- Which blocks are always present?
+- Which blocks can actually disappear?
+- Which blocks only look optional in theory but are effectively always inserted?
+
+FAIL if:
+- most sessions always include the same 5–6 blocks
+- optional blocks are not truly optional
+
+==================================================
+TASK 3 — AUDIT BLOCK ORDER RIGIDITY
+==================================================
+
+Determine whether block order is too rigid.
+
+Questions:
+- Is the sequence almost always:
+  prep → power → primary → secondary → unilateral → trunk ?
+- Can power be embedded into a contrast block instead of its own slot?
+- Can unilateral work be the primary driver of a day?
+- Can trunk/support be merged into another block?
+- Can sessions be shorter/tighter depending on block type?
+
+Print examples across at least 3 builds.
+
+FAIL if:
+- different block types still produce nearly identical block order
+
+==================================================
+TASK 4 — AUDIT BLOCK ROLE OWNERSHIP
+==================================================
+
+Determine whether each block owns a quality too rigidly.
+
+Examples to test:
+- Does "power" always mean jump/throw?
+- Does "unilateral" always mean split squat/lunge family?
+- Does "trunk" always mean Pallof/carry?
+- Does "primary" always mean bilateral barbell strength?
+- Does "secondary" always become hinge/accessory strength?
+
+Questions:
+- Can the same adaptation target be expressed in multiple block forms?
+- Or is each quality trapped in one specific block archetype?
+
+FAIL if:
+- movement expression is too hard-coded to the block label
+
+==================================================
+TASK 5 — AUDIT CANDIDATE POOL FREEDOM INSIDE EACH BLOCK
+==================================================
+
+For each block, print:
+- allowed exercise pool size
+- movement families represented
+- % of total relevant library available
+- top repeated winners
+
+We need to know whether the strictness is coming from:
+A. block composition
+B. exercise pool restriction inside the block
+C. both
+
+Examples:
+- Is "unilateral" basically only BSS/lunge variations?
+- Is "trunk" basically only Pallof/carry?
+- Is "power" basically only broad/box jump?
+
+FAIL if:
+- the same 1–3 exercises dominate each block family
+- a block only permits one narrow movement expression
+
+==================================================
+TASK 6 — TEST WHETHER BLOCKS CAN MERGE OR DISAPPEAR
+==================================================
+
+Audit whether the grammar allows:
+
+- no unilateral block on some sessions
+- no trunk block when support is embedded elsewhere
+- no isolated power block if contrast work handles power expression
+- no secondary hinge block when the day should be tighter/heavier
+- finisher only on work-capacity / accumulation structures
+
+We need to know whether the grammar is compositional or fixed.
+
+FAIL if:
+- most days are forced to include the same full stack regardless of macro context
+
+==================================================
+TASK 7 — DEFINE WHERE MACRO VARIATION IS GETTING CHOKED
+==================================================
+
+For at least 3 different macro outcomes:
+- Intensification Strength
+- Power / Elastic Conversion
+- Work Capacity / Foundation Accumulation
+
+Compare Day 1 grammar:
+
+- required blocks
+- final block order
+- omitted blocks
+- merged blocks
+- dominant movement families
+
+Answer:
+- Are macro differences surviving into session grammar?
+- Or are they getting normalized back into the same micro template?
+
+==================================================
+TASK 8 — IDENTIFY TRUE GRAMMAR BOTTLENECK
+==================================================
+
+Rank the top causes:
+
+1. Too many mandatory blocks
+2. Block order too fixed
+3. Block roles too rigid
+4. Candidate pools too narrow inside blocks
+5. Too few merge/omit rules
+6. Macro intent not actually altering micro grammar
+
+Do NOT guess.
+Base ranking on audit logs.
+
+==================================================
+TASK 9 — RECOMMEND / APPLY TARGETED FIX
+==================================================
+
+Based on findings, propose and implement the highest-leverage fix.
+
+Possible fixes include:
+- convert some mandatory blocks into optional blocks
+- allow block omission by archetype
+- allow block merging (e.g. power inside contrast block)
+- broaden movement expression inside blocks
+- allow multiple valid expressions for unilateral/trunk/power
+- make order archetype-sensitive instead of static
+
+Do NOT rewrite everything blindly.
+Fix the actual choke point.
+
+==================================================
+TASK 10 — VALIDATION
+==================================================
+
+Run the same build prompt at least 3 times after the fix.
+
+Compare Day 1:
+- block composition
+- block order
+- omitted/merged blocks
+- exercise stack
+
+SUCCESS CRITERIA:
+The sessions should feel structurally different, not just cosmetically different.
+
+==================================================
+TASK 11 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. exact session grammar observed
+2. which blocks were effectively mandatory
+3. whether block order was too rigid
+4. whether block role ownership was too strict
+5. which block families had overly narrow exercise pools
+6. where macro variation got choked
+7. exact fix applied
+8. before/after Day 1 comparison
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat’s session construction should behave like an adaptive grammar, not a rigid sentence template.
+
+The system should be able to express:
+- power
+- strength
+- unilateral support
+- trunk work
+- conditioning
+- support work
+
+in multiple valid structural forms depending on the block and week context.
+
+Macro variation must survive all the way down into the session grammar.
