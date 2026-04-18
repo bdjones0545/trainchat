@@ -1720,7 +1720,7 @@ function VibeBar({ onEditComplete, onUndone }: VibeBarProps) {
 
         {/* Input row — idle / submitting */}
         {vibeState !== "result" && (
-          <div className="flex items-center gap-2.5 rounded-xl bg-muted/30 border border-border px-3.5 py-2.5 focus-within:border-primary/40 focus-within:bg-muted/50 transition-all duration-150">
+          <div className="flex items-center gap-2.5 rounded-xl bg-muted/30 border border-border/80 px-3.5 py-3 focus-within:border-primary/60 focus-within:bg-muted/50 focus-within:shadow-[0_0_0_1px_rgba(var(--primary-rgb,99,102,241),0.15)] transition-all duration-150">
             <div className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
               {isWorking
                 ? <RotateCcw className="w-3.5 h-3.5 text-primary animate-spin" />
@@ -1732,7 +1732,7 @@ function VibeBar({ onEditComplete, onUndone }: VibeBarProps) {
               value={input}
               onChange={(e) => handleInputChange(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={isWorking ? "Applying…" : "Tell the agent what to change…"}
+              placeholder={isWorking ? "Applying…" : "Command the system… e.g. protect my knee but keep intensity high"}
               disabled={isWorking}
               className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/50 outline-none disabled:opacity-60 min-w-0"
             />
@@ -1809,6 +1809,8 @@ function VibeBar({ onEditComplete, onUndone }: VibeBarProps) {
 // ─── AgentPanel — Mobile bottom-sheet command surface ────────────────────────
 
 type AgentScope = "today" | "week" | "block";
+type AgentPanelPhase = "idle" | "preview" | "thinking" | "result";
+type CommandTier = "primary" | "secondary" | "critical";
 
 const AGENT_SCOPE_LABELS: Record<AgentScope, string> = {
   today: "Today",
@@ -1816,32 +1818,232 @@ const AGENT_SCOPE_LABELS: Record<AgentScope, string> = {
   block: "Full Block",
 };
 
-const AGENT_COMMANDS: Record<AgentScope, Array<{ label: string; req: string }>> = {
+interface AgentCommand {
+  label: string;
+  req: string;
+  tier: CommandTier;
+  followUps?: Array<{ label: string; req: string }>;
+}
+
+interface ActiveModifier {
+  scope: AgentScope;
+  label: string;
+  colorClass: string;
+}
+
+const AGENT_COMMANDS: Record<AgentScope, AgentCommand[]> = {
   today: [
-    { label: "More intense", req: "Increase the intensity for today's session" },
-    { label: "Less volume", req: "Reduce the volume in today's session" },
-    { label: "Rest day", req: "Convert today into a full recovery day" },
-    { label: "Shorter", req: "Shorten today's session — I'm pressed for time" },
-    { label: "Travel mode", req: "I only have dumbbells — adapt today's session accordingly" },
-    { label: "More explosive", req: "Add explosive emphasis to today's training" },
+    {
+      label: "More explosive",
+      req: "Add explosive emphasis to today's training",
+      tier: "primary",
+      followUps: [
+        { label: "Reduce volume to balance?", req: "Reduce volume in today's session to balance the explosive work" },
+        { label: "Apply to next week too?", req: "Apply explosive focus to next week's sessions as well" },
+      ],
+    },
+    {
+      label: "More intense",
+      req: "Increase the intensity for today's session",
+      tier: "primary",
+      followUps: [
+        { label: "Reduce volume to compensate?", req: "Reduce volume in today's session to offset the higher intensity" },
+      ],
+    },
+    {
+      label: "Less volume",
+      req: "Reduce the volume in today's session",
+      tier: "secondary",
+      followUps: [
+        { label: "Make tomorrow harder?", req: "Increase intensity in the next session to compensate" },
+      ],
+    },
+    {
+      label: "Shorter",
+      req: "Shorten today's session — I'm pressed for time",
+      tier: "secondary",
+    },
+    {
+      label: "Travel mode",
+      req: "I only have dumbbells — adapt today's session accordingly",
+      tier: "secondary",
+    },
+    {
+      label: "Rest day",
+      req: "Convert today into a full recovery day",
+      tier: "critical",
+    },
   ],
   week: [
-    { label: "More intense", req: "Increase the overall intensity for this week" },
-    { label: "Less volume", req: "Reduce the total volume this week" },
-    { label: "Deload week", req: "Convert this into a deload week" },
-    { label: "Travel mode", req: "I only have dumbbells this week — adapt accordingly" },
-    { label: "More explosive", req: "Shift this week toward explosive focus" },
-    { label: "Recovery focus", req: "Shift this week toward recovery and reduce fatigue" },
+    {
+      label: "More explosive",
+      req: "Shift this week toward explosive focus",
+      tier: "primary",
+      followUps: [
+        { label: "Reduce volume to match?", req: "Reduce total volume this week to balance the explosive focus" },
+        { label: "Apply to next week?", req: "Apply explosive focus to next week as well" },
+      ],
+    },
+    {
+      label: "Recovery focus",
+      req: "Shift this week toward recovery and reduce fatigue",
+      tier: "primary",
+      followUps: [
+        { label: "Also reduce intensity?", req: "Reduce intensity across this week's sessions" },
+      ],
+    },
+    {
+      label: "More intense",
+      req: "Increase the overall intensity for this week",
+      tier: "primary",
+    },
+    {
+      label: "Less volume",
+      req: "Reduce the total volume this week",
+      tier: "secondary",
+    },
+    {
+      label: "Deload week",
+      req: "Convert this into a deload week",
+      tier: "secondary",
+      followUps: [
+        { label: "Extend deload next week?", req: "Extend the deload into next week as well" },
+      ],
+    },
+    {
+      label: "Travel mode",
+      req: "I only have dumbbells this week — adapt accordingly",
+      tier: "secondary",
+    },
   ],
   block: [
-    { label: "More power", req: "Shift this block toward power development" },
-    { label: "Hypertrophy", req: "Shift this block toward hypertrophy" },
-    { label: "Field sport", req: "Adapt this block for field sport specificity" },
-    { label: "Less volume", req: "Reduce the overall volume across this block" },
-    { label: "Recovery bias", req: "Shift this block toward recovery and regeneration" },
-    { label: "More variety", req: "Add more exercise variety across this block" },
+    {
+      label: "More power",
+      req: "Shift this block toward power development",
+      tier: "primary",
+      followUps: [
+        { label: "Add field sport emphasis?", req: "Add field sport specificity on top of the power focus" },
+      ],
+    },
+    {
+      label: "Hypertrophy",
+      req: "Shift this block toward hypertrophy",
+      tier: "primary",
+      followUps: [
+        { label: "Increase volume to support it?", req: "Increase total volume across this block to support hypertrophy" },
+      ],
+    },
+    {
+      label: "Recovery bias",
+      req: "Shift this block toward recovery and regeneration",
+      tier: "primary",
+    },
+    {
+      label: "Less volume",
+      req: "Reduce the overall volume across this block",
+      tier: "secondary",
+    },
+    {
+      label: "Field sport",
+      req: "Adapt this block for field sport specificity",
+      tier: "secondary",
+    },
+    {
+      label: "More variety",
+      req: "Add more exercise variety across this block",
+      tier: "secondary",
+    },
   ],
 };
+
+const THINKING_MESSAGES = [
+  "Reading your command…",
+  "Analyzing movement patterns…",
+  "Applying changes across your program…",
+  "Calculating training impact…",
+  "Rebuilding session structure…",
+  "Syncing with your training system…",
+];
+
+const MODIFIER_COLORS: Record<string, string> = {
+  "More explosive": "text-orange-400 bg-orange-400/10 border-orange-400/20",
+  "More intense": "text-primary bg-primary/10 border-primary/20",
+  "Recovery focus": "text-green-400 bg-green-400/10 border-green-400/20",
+  "Recovery bias": "text-green-400 bg-green-400/10 border-green-400/20",
+  "Less volume": "text-blue-400 bg-blue-400/10 border-blue-400/20",
+  "Deload week": "text-blue-400 bg-blue-400/10 border-blue-400/20",
+  "Rest day": "text-red-400 bg-red-400/10 border-red-400/20",
+  "Travel mode": "text-purple-400 bg-purple-400/10 border-purple-400/20",
+  "More power": "text-orange-400 bg-orange-400/10 border-orange-400/20",
+  "Hypertrophy": "text-primary bg-primary/10 border-primary/20",
+  "Shorter": "text-muted-foreground bg-muted/30 border-border",
+  "Field sport": "text-amber-400 bg-amber-400/10 border-amber-400/20",
+  "More variety": "text-primary bg-primary/10 border-primary/20",
+};
+
+function getImpactPreview(scope: AgentScope, label: string): { sessionsAffected: string; changes: string[] } {
+  if (scope === "today") {
+    if (label === "Rest day") {
+      return {
+        sessionsAffected: "Today's session",
+        changes: [
+          "Today will be converted to a full recovery day",
+          "All exercises replaced with mobility and regeneration work",
+        ],
+      };
+    }
+    if (label === "Travel mode") {
+      return {
+        sessionsAffected: "Today's session",
+        changes: [
+          "Equipment-dependent exercises will be swapped",
+          "Session rebuilt around bodyweight and dumbbells only",
+        ],
+      };
+    }
+    return {
+      sessionsAffected: "Today's session",
+      changes: [
+        "Exercise selection and loading will be adjusted",
+        "Session intent and targets will be updated",
+      ],
+    };
+  }
+  if (scope === "week") {
+    if (label === "Deload week") {
+      return {
+        sessionsAffected: "All sessions this week",
+        changes: [
+          "Volume reduced by ~40% across all sessions",
+          "Intensity targets softened for full recovery",
+        ],
+      };
+    }
+    if (label === "Travel mode") {
+      return {
+        sessionsAffected: "All sessions this week",
+        changes: [
+          "Equipment-dependent exercises swapped across all days",
+          "Full week rebuilt around minimal equipment",
+        ],
+      };
+    }
+    return {
+      sessionsAffected: "This week (3–5 sessions)",
+      changes: [
+        "Session targets and exercise selection will shift",
+        "Weekly load distribution will be recalculated",
+      ],
+    };
+  }
+  return {
+    sessionsAffected: "Full training block",
+    changes: [
+      "Phase structure and session targets will be restructured",
+      "Progression curves adjusted across all weeks",
+    ],
+  };
+}
 
 interface AgentPanelProps {
   onEditComplete: (result: EditResult) => void;
@@ -1850,107 +2052,312 @@ interface AgentPanelProps {
 
 function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
   const [selectedScope, setSelectedScope] = useState<AgentScope>("today");
-  const [workingLabel, setWorkingLabel] = useState<string | null>(null);
-  const [lastAck, setLastAck] = useState<string | null>(null);
+  const [phase, setPhase] = useState<AgentPanelPhase>("idle");
+  const [pendingCommand, setPendingCommand] = useState<AgentCommand | null>(null);
+  const [lastResult, setLastResult] = useState<EditResult | null>(null);
+  const [lastCommand, setLastCommand] = useState<AgentCommand | null>(null);
+  const [activeModifiers, setActiveModifiers] = useState<ActiveModifier[]>([]);
+  const [thinkingIdx, setThinkingIdx] = useState(0);
+  const thinkingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (phase === "thinking") {
+      setThinkingIdx(0);
+      thinkingTimer.current = setInterval(() => {
+        setThinkingIdx((i) => (i + 1) % THINKING_MESSAGES.length);
+      }, 1800);
+    } else {
+      if (thinkingTimer.current) { clearInterval(thinkingTimer.current); thinkingTimer.current = null; }
+    }
+    return () => { if (thinkingTimer.current) clearInterval(thinkingTimer.current); };
+  }, [phase]);
 
   const commandMutation = useMutation({
     mutationFn: (req: string) => submitGlobalEdit(req),
     onSuccess: (data) => {
-      setWorkingLabel(null);
-      const summary = data.changeSummary?.split(/\.\s/)[0]?.trim()?.replace(/\.$/, "") ?? "Done";
-      setLastAck(summary);
+      setLastResult(data);
+      setPhase("result");
+      if (pendingCommand) {
+        const colorClass = MODIFIER_COLORS[pendingCommand.label] ?? "text-primary bg-primary/10 border-primary/20";
+        setActiveModifiers((prev) => {
+          const filtered = prev.filter((m) => !(m.scope === selectedScope && m.label === pendingCommand.label));
+          return [{ scope: selectedScope, label: pendingCommand.label, colorClass }, ...filtered].slice(0, 3);
+        });
+        setLastCommand(pendingCommand);
+      }
       onEditComplete(data);
-      setTimeout(() => setLastAck(null), 4000);
     },
     onError: () => {
-      setWorkingLabel(null);
+      setPhase("idle");
+      setPendingCommand(null);
     },
   });
 
-  function fireCommand(label: string, req: string) {
+  function handleCommandTap(cmd: AgentCommand) {
     if (commandMutation.isPending) return;
-    setLastAck(null);
-    setWorkingLabel(label);
+    setPendingCommand(cmd);
+    setPhase("preview");
+  }
+
+  function handleConfirm() {
+    if (!pendingCommand) return;
+    setPhase("thinking");
+    commandMutation.mutate(pendingCommand.req);
+  }
+
+  function handleCancel() {
+    setPendingCommand(null);
+    setPhase("idle");
+  }
+
+  function handleFollowUp(req: string) {
+    if (commandMutation.isPending) return;
+    setLastResult(null);
+    setLastCommand(null);
+    setPendingCommand(null);
+    setPhase("thinking");
     commandMutation.mutate(req);
   }
 
+  function handleBackToIdle() {
+    setPhase("idle");
+    setLastResult(null);
+    setLastCommand(null);
+    setPendingCommand(null);
+  }
+
+  function handleScopeChange(scope: AgentScope) {
+    setSelectedScope(scope);
+    if (phase !== "thinking") {
+      setPhase("idle");
+      setLastResult(null);
+      setLastCommand(null);
+      setPendingCommand(null);
+    }
+  }
+
   const commands = AGENT_COMMANDS[selectedScope];
-  const isWorking = commandMutation.isPending;
+  const primaryCmds = commands.filter((c) => c.tier === "primary");
+  const secondaryCmds = commands.filter((c) => c.tier === "secondary");
+  const criticalCmds = commands.filter((c) => c.tier === "critical");
+  const preview = pendingCommand ? getImpactPreview(selectedScope, pendingCommand.label) : null;
 
   return (
     <div className="flex flex-col h-full">
-      {/* Subtext */}
-      <div className="px-4 pt-3 pb-1 flex-shrink-0 text-center">
-        <p className="text-[11px] text-muted-foreground/60">Command your system in plain language</p>
-        <p className="text-[10px] text-muted-foreground/40 mt-0.5">Update today, this week, or the full block</p>
-      </div>
 
-      {/* Scope selector */}
-      <div className="px-4 py-2.5 flex-shrink-0">
-        <div className="flex gap-1 bg-muted/30 border border-border/40 rounded-xl p-1">
-          {(["today", "week", "block"] as AgentScope[]).map((scope) => (
-            <button
-              key={scope}
-              onClick={() => { setSelectedScope(scope); setLastAck(null); }}
-              className={`flex-1 text-[11px] font-semibold py-1.5 rounded-lg transition-all duration-150 ${
-                selectedScope === scope
-                  ? "bg-background text-foreground border border-border shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {AGENT_SCOPE_LABELS[scope]}
-            </button>
+      {/* ── Active modifiers banner ─────────────────────────── */}
+      {activeModifiers.length > 0 && (
+        <div className="px-4 pt-3 flex-shrink-0 space-y-1.5">
+          {activeModifiers.map((mod, i) => (
+            <div key={i} className={`flex items-center gap-2 text-[11px] font-semibold px-3 py-1.5 rounded-xl border ${mod.colorClass}`}>
+              <Zap className="w-3 h-3 flex-shrink-0" />
+              <span className="truncate flex-1">{AGENT_SCOPE_LABELS[mod.scope]}: {mod.label} Active</span>
+              <button
+                onClick={() => setActiveModifiers((prev) => prev.filter((_, idx) => idx !== i))}
+                className="opacity-40 hover:opacity-80 transition-opacity flex-shrink-0"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
           ))}
-        </div>
-      </div>
-
-      {/* Acknowledgment */}
-      {lastAck && (
-        <div className="mx-4 mb-2 flex items-center gap-2 text-[11px] text-primary/80 bg-primary/8 border border-primary/15 rounded-xl px-3 py-2 flex-shrink-0">
-          <CheckCircle2 className="w-3.5 h-3.5 text-primary/70 flex-shrink-0" />
-          <span className="truncate">{lastAck}</span>
         </div>
       )}
 
-      {/* Quick commands */}
-      <div className="flex-1 overflow-y-auto px-4 pb-2">
-        <div className="space-y-2">
-          {commands.map(({ label, req }) => {
-            const isThisWorking = workingLabel === label;
-            return (
+      {/* ── Scope selector ──────────────────────────────────── */}
+      {phase !== "thinking" && (
+        <div className="px-4 pt-3 pb-2 flex-shrink-0">
+          <div className="flex gap-1 bg-muted/30 border border-border/40 rounded-xl p-1">
+            {(["today", "week", "block"] as AgentScope[]).map((scope) => (
               <button
-                key={label}
-                onClick={() => fireCommand(label, req)}
-                disabled={isWorking}
-                className={`w-full text-left px-4 py-3.5 rounded-xl border transition-all duration-150 disabled:cursor-not-allowed ${
-                  isThisWorking
-                    ? "border-primary/30 bg-primary/8"
-                    : "border-border bg-card hover:border-primary/30 hover:bg-primary/5 disabled:opacity-40"
+                key={scope}
+                onClick={() => handleScopeChange(scope)}
+                disabled={commandMutation.isPending}
+                className={`flex-1 text-[11px] font-semibold py-1.5 rounded-lg transition-all duration-150 disabled:cursor-not-allowed ${
+                  selectedScope === scope
+                    ? "bg-background text-foreground border border-border shadow-sm"
+                    : "text-muted-foreground hover:text-foreground disabled:opacity-40"
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  {isThisWorking ? (
-                    <RotateCcw className="w-3.5 h-3.5 text-primary animate-spin flex-shrink-0" />
-                  ) : (
-                    <Zap className="w-3.5 h-3.5 text-primary/40 flex-shrink-0" />
-                  )}
-                  <p className="text-sm font-semibold text-foreground">
-                    {isThisWorking ? "Applying…" : label}
-                  </p>
-                </div>
+                {AGENT_SCOPE_LABELS[scope]}
               </button>
-            );
-          })}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* VibeBar — text input + chips, already connected to pipeline */}
-      <div className="flex-shrink-0 border-t border-border bg-background/98">
-        <VibeBar
-          onEditComplete={onEditComplete}
-          onUndone={onUndone}
-        />
-      </div>
+      {/* ── Phase: Idle — command list ───────────────────────── */}
+      {phase === "idle" && (
+        <div className="flex-1 overflow-y-auto px-4 pb-2">
+          <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-wider pt-1 pb-2">
+            Quick Commands
+          </p>
+
+          {/* Primary — filled */}
+          <div className="space-y-2">
+            {primaryCmds.map((cmd) => (
+              <button
+                key={cmd.label}
+                onClick={() => handleCommandTap(cmd)}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-primary/8 border border-primary/20 hover:bg-primary/15 hover:border-primary/40 active:scale-[0.99] transition-all duration-150"
+              >
+                <Zap className="w-3.5 h-3.5 text-primary/70 flex-shrink-0" />
+                <span className="text-sm font-semibold text-foreground flex-1 text-left">{cmd.label}</span>
+                <ChevronRight className="w-3.5 h-3.5 text-primary/30 flex-shrink-0" />
+              </button>
+            ))}
+          </div>
+
+          {/* Secondary — outlined */}
+          {secondaryCmds.length > 0 && (
+            <div className="space-y-1.5 mt-2">
+              {secondaryCmds.map((cmd) => (
+                <button
+                  key={cmd.label}
+                  onClick={() => handleCommandTap(cmd)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl border border-border bg-card hover:border-primary/30 hover:bg-primary/5 active:scale-[0.99] transition-all duration-150"
+                >
+                  <span className="text-sm font-medium text-foreground/80 flex-1 text-left">{cmd.label}</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/25 flex-shrink-0" />
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Critical — warning/red */}
+          {criticalCmds.length > 0 && (
+            <div className="space-y-1.5 mt-2">
+              {criticalCmds.map((cmd) => (
+                <button
+                  key={cmd.label}
+                  onClick={() => handleCommandTap(cmd)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl border border-red-500/20 bg-red-500/5 hover:border-red-500/40 hover:bg-red-500/8 active:scale-[0.99] transition-all duration-150"
+                >
+                  <span className="text-sm font-medium text-red-400 flex-1 text-left">{cmd.label}</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-red-400/30 flex-shrink-0" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Phase: Preview — impact confirmation ─────────────── */}
+      {phase === "preview" && pendingCommand && preview && (
+        <div className="flex-1 overflow-y-auto px-4 pb-4 flex flex-col gap-4 pt-1">
+          <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-wider">
+            Impact Preview
+          </p>
+          <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
+                <Zap className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-foreground">{pendingCommand.label}</p>
+                <p className="text-[10px] text-muted-foreground">Apply to: {AGENT_SCOPE_LABELS[selectedScope]}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground/70 border-t border-border/40 pt-2.5">
+              <Target className="w-3 h-3 flex-shrink-0" />
+              <span>{preview.sessionsAffected}</span>
+            </div>
+            <div className="space-y-1.5">
+              {preview.changes.map((change, i) => (
+                <div key={i} className="flex items-start gap-2 text-[11px] text-muted-foreground/80">
+                  <span className="text-primary/60 font-bold flex-shrink-0 mt-px">•</span>
+                  <span>{change}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-2 mt-auto">
+            <button
+              onClick={handleCancel}
+              className="flex-1 py-3 rounded-xl border border-border text-sm font-semibold text-muted-foreground hover:bg-muted/40 transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirm}
+              className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-primary/90 active:scale-[0.98] transition-all"
+            >
+              Confirm
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Phase: Thinking ─────────────────────────────────── */}
+      {phase === "thinking" && (
+        <div className="flex-1 flex flex-col items-center justify-center px-6 gap-5">
+          <div className="relative">
+            <div className="w-14 h-14 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
+              <Sparkles className="w-6 h-6 text-primary animate-pulse" />
+            </div>
+            <div className="absolute inset-0 rounded-full border border-primary/30 animate-ping" />
+          </div>
+          <div className="text-center space-y-1.5">
+            <p className="text-sm font-bold text-foreground">{THINKING_MESSAGES[thinkingIdx]}</p>
+            <p className="text-xs text-muted-foreground/60">Agent is adjusting your program…</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Phase: Result ───────────────────────────────────── */}
+      {phase === "result" && lastResult && (
+        <div className="flex-1 overflow-y-auto px-4 pb-4 flex flex-col gap-4 pt-2">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-full bg-green-500/10 border border-green-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <CheckCircle2 className="w-4 h-4 text-green-400" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-foreground">Applied</p>
+              <p className="text-xs text-muted-foreground/80 leading-relaxed mt-0.5">{lastResult.changeSummary}</p>
+            </div>
+          </div>
+
+          {lastCommand?.followUps && lastCommand.followUps.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-wider">Next actions</p>
+              {lastCommand.followUps.map((fu) => (
+                <button
+                  key={fu.label}
+                  onClick={() => handleFollowUp(fu.req)}
+                  disabled={commandMutation.isPending}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-border bg-card hover:border-primary/30 hover:bg-primary/5 transition-all disabled:opacity-40 text-left"
+                >
+                  <ChevronRight className="w-3.5 h-3.5 text-primary/50 flex-shrink-0" />
+                  <span className="text-sm text-foreground/80">{fu.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <button
+            onClick={handleBackToIdle}
+            className="flex items-center gap-2 text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors mt-auto"
+          >
+            <ChevronLeft className="w-3 h-3" />
+            Back to commands
+          </button>
+        </div>
+      )}
+
+      {/* ── VibeBar — text input, hidden during thinking ─────── */}
+      {phase !== "thinking" && (
+        <div className="flex-shrink-0 border-t border-border bg-background/98">
+          <VibeBar
+            onEditComplete={(result) => {
+              setLastResult(result);
+              setLastCommand(null);
+              setPendingCommand(null);
+              setPhase("result");
+              onEditComplete(result);
+            }}
+            onUndone={onUndone}
+          />
+        </div>
+      )}
     </div>
   );
 }

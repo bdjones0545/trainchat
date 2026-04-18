@@ -1,0 +1,257 @@
+We are upgrading the Agent panel (bottom sheet on Active Programs page) into a high-trust, system-connected control interface.
+
+This is NOT a UI-only upgrade.
+Every interaction must be connected to the real agent pipeline and training system.
+
+==================================================
+LOCATION (DO NOT BREAK THIS)
+==================================================
+
+Component:
+- Bottom sheet opened from the Active Programs page (“Ask your coach” bar)
+
+DO NOT:
+- Create a new component
+- Move this to chat
+- Duplicate logic
+
+ONLY upgrade the existing Agent panel.
+
+==================================================
+CORE REQUIREMENT
+==================================================
+
+Every interaction MUST:
+
+1. Route through the real agent pipeline
+   → normalizeToIntentFamily
+   → execution-planner
+   → refinement-impact-engine
+
+2. Mutate the actual program (session / week / block)
+
+3. Persist immediately (auto-save)
+
+4. Update UI (Today / Week views)
+
+5. Send acknowledgment into MAIN CHAT
+
+NO UI-only actions
+NO fake confirmations
+
+==================================================
+TASK 1 — IMPACT PREVIEW SYSTEM (CRITICAL)
+==================================================
+
+Before executing ANY quick command:
+
+Show a confirmation modal:
+
+Example:
+
+-----------------------------------
+Apply to: This Week
+
+• 3 sessions will be updated
+• Power blocks will increase
+• Strength volume will decrease slightly
+
+[Confirm]   [Cancel]
+-----------------------------------
+
+Implementation:
+
+- Add getImpactPreview(command, scope)
+- This function returns:
+  {
+    sessionsAffected,
+    estimatedChanges,
+    affectedSystems
+  }
+
+- On Confirm → execute command through pipeline
+- On Cancel → do nothing
+
+==================================================
+TASK 2 — EXECUTION PIPELINE (SINGLE SOURCE OF TRUTH)
+==================================================
+
+On confirm OR text input:
+
+Build request:
+
+{
+  source: "agent_panel",
+  scope: selectedScope,
+  command: userCommand
+}
+
+Call:
+submitGlobalEdit(request)
+
+This MUST:
+- hit /api/training-system/edit
+- run full pipeline
+- trigger refinement-impact-engine
+- persist changes
+- return summary
+
+==================================================
+TASK 3 — AGENT “THINKING” STATE
+==================================================
+
+While request is processing:
+
+Replace button UI with:
+
+"Agent is adjusting your program…"
+"Analyzing movement patterns…"
+"Applying changes across X sessions…"
+
+This state must last until response returns.
+
+==================================================
+TASK 4 — ACTIVE STATE INDICATOR (PERSISTENT)
+==================================================
+
+After successful execution:
+
+Show a persistent banner at top of panel:
+
+Examples:
+
+⚡ This Week: Explosive Focus Active
+🟡 Reduced Volume Active
+🛠 Travel Mode Active
+
+Store this in local state:
+
+activeModifiers: [
+  { scope: "week", type: "explosive" },
+  { scope: "today", type: "reduced_volume" }
+]
+
+Render dynamically.
+
+==================================================
+TASK 5 — BUTTON HIERARCHY (VISUAL + FUNCTIONAL)
+==================================================
+
+Reclassify buttons:
+
+PRIMARY (large, filled):
+- More explosive
+- More power
+- Hypertrophy
+- Recovery focus
+
+SECONDARY (outlined):
+- Less volume
+- Shorter
+- Travel mode
+
+CRITICAL (warning/red):
+- Rest day
+
+==================================================
+TASK 6 — SMART FOLLOW-UP SUGGESTIONS
+==================================================
+
+After a command executes:
+
+Show dynamic suggestions:
+
+Example:
+
+User taps "More explosive"
+
+Show:
+
+Next actions:
+• Reduce volume?
+• Increase rest intervals?
+• Apply to next week?
+
+These are tappable and trigger the SAME pipeline.
+
+==================================================
+TASK 7 — INPUT FIELD UPGRADE
+==================================================
+
+Replace placeholder:
+
+"Tell the agent what to change…"
+
+With:
+
+"Command the system…"
+
+Add hint examples:
+
+- make today more explosive
+- reduce fatigue this week
+- adjust this block for recovery
+- protect my knee but keep intensity high
+
+Increase visual prominence:
+- slightly taller input
+- stronger border/glow
+
+==================================================
+TASK 8 — CHAT INTEGRATION (MANDATORY)
+==================================================
+
+After EVERY successful command:
+
+Push response to MAIN CHAT:
+
+Examples:
+
+“Increased intensity for today’s session — load and intent adjusted.”
+
+“Shifted this week toward explosive focus — 3 sessions updated and future progression softened.”
+
+Use refinement-impact-engine output for this.
+
+==================================================
+TASK 9 — UI REFRESH (CRITICAL)
+==================================================
+
+After mutation:
+
+Trigger:
+
+- refreshTodaySession()
+- refreshWeekView()
+
+Ensure:
+- no stale data
+- no manual refresh needed
+
+==================================================
+TASK 10 — REMOVE ANY FAKE LOGIC
+==================================================
+
+Audit and remove:
+
+- any onClick handlers that don’t call submitGlobalEdit
+- any static responses
+- any UI-only state changes not tied to backend
+
+==================================================
+FINAL STANDARD
+==================================================
+
+This Agent panel must feel like:
+
+- A real-time control system
+- A programmable training engine
+- A Replit-style agent interface
+
+User taps → system thinks → program changes → UI updates → agent explains
+
+NOT:
+
+- A suggestion list
+- A fake assistant
+- A disconnected UI
