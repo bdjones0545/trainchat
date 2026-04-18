@@ -116,6 +116,18 @@ async function submitQuickEdit(
     body: JSON.stringify({ request, targetContext }),
   });
 }
+async function fetchBlockCompletion() {
+  return customFetch<any>("/api/training-system/block-completion");
+}
+async function markBlockCompleteFn() {
+  return customFetch<any>("/api/training-system/mark-block-complete", { method: "POST" });
+}
+async function continueBlockFn(options: { mode: "next" | "repeat"; adjustments?: string[]; blockTypeOverride?: string }) {
+  return customFetch<any>("/api/training-system/continue-block", {
+    method: "POST",
+    body: JSON.stringify(options),
+  });
+}
 async function restoreChange(changeLogId: number) {
   return customFetch<any>(`/api/training-system/restore/${changeLogId}`, { method: "POST" });
 }
@@ -1084,12 +1096,87 @@ interface BlockViewProps {
   onEditWeek: (week: any, phaseName?: string) => void;
 }
 
+// Modify-Next-Block adjustment options
+const MODIFY_OPTIONS = [
+  { id: "power", label: "Shift focus toward power", blockType: "POWER_ELASTIC_CONVERSION" },
+  { id: "strength", label: "Increase strength emphasis", blockType: "INTENSIFICATION_STRENGTH" },
+  { id: "recovery", label: "Extended recovery focus", blockType: "REBUILD_DELOAD" },
+  { id: "foundation", label: "Re-establish the foundation", blockType: "FOUNDATION_ACCUMULATION" },
+];
+
+const REPEAT_OPTIONS = [
+  { id: "more_volume", label: "Add more volume" },
+  { id: "heavier", label: "Push heavier loads" },
+  { id: "less_fatigue", label: "Reduce fatigue load" },
+  { id: "more_conditioning", label: "Add conditioning" },
+];
+
 function BlockView({ highlightedIds, onEditPhase, onEditWeek }: BlockViewProps) {
+  const queryClient = useQueryClient();
+
   const { data: block, isLoading, error } = useQuery({
     queryKey: ["training-system-block"],
     queryFn: fetchBlockSummary,
     retry: false,
   });
+
+  const { data: completion, isLoading: completionLoading } = useQuery({
+    queryKey: ["training-system-block-completion"],
+    queryFn: fetchBlockCompletion,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+
+  const [showModifySheet, setShowModifySheet] = useState(false);
+  const [showRepeatSheet, setShowRepeatSheet] = useState(false);
+  const [selectedModifyOption, setSelectedModifyOption] = useState<string | null>(null);
+  const [selectedRepeatOptions, setSelectedRepeatOptions] = useState<string[]>([]);
+
+  function invalidateAll() {
+    queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+    queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
+    queryClient.invalidateQueries({ queryKey: ["training-system-block-completion"] });
+    queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+    queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+  }
+
+  const markCompleteMutation = useMutation({
+    mutationFn: markBlockCompleteFn,
+    onSuccess: () => invalidateAll(),
+  });
+
+  const continueBlockMutation = useMutation({
+    mutationFn: continueBlockFn,
+    onSuccess: () => {
+      invalidateAll();
+      setShowModifySheet(false);
+      setShowRepeatSheet(false);
+      setSelectedModifyOption(null);
+      setSelectedRepeatOptions([]);
+    },
+  });
+
+  function handleStartNextBlock() {
+    continueBlockMutation.mutate({ mode: "next" });
+  }
+
+  function handleConfirmModify() {
+    const chosen = MODIFY_OPTIONS.find((o) => o.id === selectedModifyOption);
+    continueBlockMutation.mutate({
+      mode: "next",
+      blockTypeOverride: chosen?.blockType,
+      adjustments: chosen ? [chosen.label] : [],
+    });
+  }
+
+  function handleConfirmRepeat() {
+    continueBlockMutation.mutate({
+      mode: "repeat",
+      adjustments: selectedRepeatOptions
+        .map((id) => REPEAT_OPTIONS.find((o) => o.id === id)?.label)
+        .filter(Boolean) as string[],
+    });
+  }
 
   if (isLoading) return <ViewSkeleton />;
   if (error || !block) {
@@ -1106,8 +1193,121 @@ function BlockView({ highlightedIds, onEditPhase, onEditWeek }: BlockViewProps) 
     ? "ring-2 ring-purple-400/50 ring-offset-1 ring-offset-background"
     : "";
 
+  const isBlockComplete = completion?.isComplete === true;
+  const completedPhaseName = completion?.completedPhase?.name ?? currentPhase?.name ?? "Your Block";
+  const nextRec = completion?.nextRecommendation;
+  const blockChainIndex = completion?.blockChainIndex ?? 0;
+  const isContinuing = continueBlockMutation.isPending;
+
   return (
     <div className="space-y-5">
+
+      {/* ── Block Complete Card ── (shown when block is finished) */}
+      {isBlockComplete && nextRec && (
+        <div className="rounded-2xl border border-green-500/30 bg-gradient-to-br from-green-500/8 via-green-500/3 to-transparent p-5 space-y-4">
+          {/* Header */}
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-green-500/15 border border-green-500/25 flex items-center justify-center flex-shrink-0">
+              <CheckCircle2 className="w-6 h-6 text-green-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                <span className="text-[9px] font-bold uppercase tracking-widest text-green-400 bg-green-400/10 px-2 py-0.5 rounded-full border border-green-400/20">
+                  Block Complete
+                </span>
+                {blockChainIndex > 1 && (
+                  <span className="text-[9px] font-semibold text-muted-foreground/60">
+                    Block {blockChainIndex} of your progression
+                  </span>
+                )}
+              </div>
+              <h2 className="text-base font-bold text-foreground leading-tight">{completedPhaseName}</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">4-week block complete</p>
+            </div>
+          </div>
+
+          {/* What this block built */}
+          {nextRec.whatBuilt?.length > 0 && (
+            <div className="bg-background/50 rounded-xl border border-border p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2.5">What this block built</p>
+              <ul className="space-y-1.5">
+                {nextRec.whatBuilt.map((item: string) => (
+                  <li key={item} className="flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-400 mt-1.5 flex-shrink-0" />
+                    <span className="text-xs text-foreground/80 leading-relaxed">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Next block recommendation */}
+          <div className="bg-background/40 rounded-xl border border-primary/20 p-4">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-primary/70 mb-1">Next recommended phase</p>
+            <p className="text-sm font-bold text-foreground mb-1">{nextRec.displayName}</p>
+            <p className="text-xs text-muted-foreground leading-relaxed italic">"{nextRec.rationale}"</p>
+          </div>
+
+          {/* Action buttons */}
+          <div className="space-y-2.5">
+            <button
+              onClick={handleStartNextBlock}
+              disabled={isContinuing}
+              className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-bold hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-60"
+            >
+              {isContinuing ? (
+                <><RotateCcw className="w-4 h-4 animate-spin" />Building your next block...</>
+              ) : (
+                <><ChevronRight className="w-4 h-4" />Start Next Block</>
+              )}
+            </button>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setShowModifySheet(true)}
+                disabled={isContinuing}
+                className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-card border border-border text-xs font-semibold text-foreground hover:bg-muted/40 hover:border-primary/30 active:scale-[0.98] transition-all disabled:opacity-40"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground" />
+                Modify Next Block
+              </button>
+              <button
+                onClick={() => setShowRepeatSheet(true)}
+                disabled={isContinuing}
+                className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-card border border-border text-xs font-semibold text-foreground hover:bg-muted/40 hover:border-primary/30 active:scale-[0.98] transition-all disabled:opacity-40"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-muted-foreground" />
+                Repeat With Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Mark Complete (manual override) — shown if on week 4 but not yet complete ── */}
+      {!isBlockComplete && !completionLoading && currentPhase && currentWeekNumber === 4 && (
+        <div className="rounded-xl border border-border bg-muted/20 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold text-foreground">Finished the block?</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Mark it complete to unlock your next phase.</p>
+            </div>
+            <button
+              onClick={() => markCompleteMutation.mutate()}
+              disabled={markCompleteMutation.isPending}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-card border border-border text-xs font-semibold text-foreground hover:bg-muted/40 transition-all disabled:opacity-50 flex-shrink-0"
+            >
+              {markCompleteMutation.isPending ? (
+                <RotateCcw className="w-3 h-3 animate-spin" />
+              ) : (
+                <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
+              )}
+              Mark Complete
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Block intelligence — full view in block tab */}
       <BlockStatusCard />
 
@@ -1115,11 +1315,18 @@ function BlockView({ highlightedIds, onEditPhase, onEditWeek }: BlockViewProps) 
       <CoachMemoryInsights />
 
       {/* Current block hero */}
-      {currentPhase && (
+      {currentPhase && !isBlockComplete && (
         <div className={`rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/20 p-5 transition-all duration-500 ${phaseHighlight}`}>
           <div className="flex items-start justify-between gap-3 mb-4">
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">Current Block</p>
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <p className="text-xs font-semibold text-primary uppercase tracking-wider">Current Block</p>
+                {blockChainIndex > 0 && (
+                  <span className="text-[9px] font-semibold text-muted-foreground/50">
+                    · Block {blockChainIndex + 1} of your progression
+                  </span>
+                )}
+              </div>
               <h2 className="text-lg font-bold text-foreground leading-tight">{currentPhase.name}</h2>
               {currentPhase.goal && <p className="text-sm text-muted-foreground mt-1">{currentPhase.goal}</p>}
               {highlightedIds.phases.has(currentPhase.id) && (
@@ -1175,24 +1382,33 @@ function BlockView({ highlightedIds, onEditPhase, onEditWeek }: BlockViewProps) 
       {/* Program roadmap */}
       <div className="rounded-xl bg-card border border-border overflow-hidden">
         <div className="px-5 py-3.5 border-b border-border bg-muted/30">
-          <h3 className="text-sm font-bold text-foreground">Program Roadmap</h3>
+          <h3 className="text-sm font-bold text-foreground">Progression Chain</h3>
         </div>
         <div className="divide-y divide-border">
           {phases.map((phase: any, idx: number) => {
             const isCurrent = phase.status === "current";
             const isCompleted = phase.status === "completed";
             const phaseHL = highlightedIds.phases.has(phase.id);
+            const prevPhaseId = (phase.metadata as any)?.previousPhaseId;
 
             return (
               <div key={phase.id} className={`px-5 py-4 transition-all duration-500 ${isCurrent ? "bg-primary/3" : ""} ${phaseHL ? "bg-purple-400/5" : ""}`}>
+                {prevPhaseId && idx > 0 && (
+                  <div className="flex items-center gap-2 mb-2 pl-4">
+                    <div className="w-px h-4 bg-border" />
+                    <ChevronRight className="w-3 h-3 text-muted-foreground/40 flex-shrink-0" />
+                    <span className="text-[10px] text-muted-foreground/50 font-medium">continues from previous</span>
+                  </div>
+                )}
                 <div className="flex items-start gap-3">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5 border ${isCurrent ? "bg-primary text-primary-foreground border-primary" : isCompleted ? "bg-green-500/10 text-green-400 border-green-500/20" : "bg-muted text-muted-foreground border-border"}`}>
                     {isCompleted ? "✓" : idx + 1}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                      <span className={`font-semibold text-sm ${isCurrent ? "text-foreground" : "text-muted-foreground"}`}>{phase.name}</span>
+                      <span className={`font-semibold text-sm ${isCurrent ? "text-foreground" : isCompleted ? "text-foreground/70" : "text-muted-foreground"}`}>{phase.name}</span>
                       {isCurrent && <span className="text-[9px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">Active</span>}
+                      {isCompleted && <span className="text-[9px] font-bold uppercase tracking-wider text-green-400 bg-green-400/10 px-2 py-0.5 rounded-full border border-green-400/20">Done</span>}
                       {phaseHL && <span className="text-[9px] font-bold uppercase tracking-wider text-purple-400 bg-purple-400/10 px-2 py-0.5 rounded-full border border-purple-400/20">Updated</span>}
                     </div>
                     <p className="text-xs text-muted-foreground">{phase.weekCount} weeks — {phase.goal}</p>
@@ -1241,6 +1457,101 @@ function BlockView({ highlightedIds, onEditPhase, onEditWeek }: BlockViewProps) 
           </div>
         )}
       </div>
+
+      {/* ── Modify Next Block Sheet ── */}
+      {showModifySheet && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowModifySheet(false)} />
+          <div className="relative w-full max-w-lg mx-auto bg-card border border-border rounded-t-3xl sm:rounded-2xl p-6 pb-8 shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
+            <div className="w-10 h-1 rounded-full bg-border mx-auto mb-5 sm:hidden" />
+            <div className="flex items-start justify-between gap-3 mb-5">
+              <div>
+                <h3 className="text-base font-bold text-foreground">Modify Next Block</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Choose a focus shift for your next training phase</p>
+              </div>
+              <button onClick={() => setShowModifySheet(false)} className="w-8 h-8 rounded-lg bg-muted/50 border border-border flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-2 mb-5">
+              {MODIFY_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => setSelectedModifyOption(selectedModifyOption === opt.id ? null : opt.id)}
+                  className={`w-full text-left px-4 py-3.5 rounded-xl border transition-all duration-150 ${selectedModifyOption === opt.id ? "bg-primary/10 border-primary/40 text-foreground" : "bg-muted/30 border-border text-foreground/80 hover:bg-muted/50 hover:border-border/80"}`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium">{opt.label}</span>
+                    {selectedModifyOption === opt.id && <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />}
+                  </div>
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={handleConfirmModify}
+              disabled={isContinuing}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-60"
+            >
+              {isContinuing ? (
+                <><RotateCcw className="w-4 h-4 animate-spin" />Building your next block...</>
+              ) : (
+                <><ChevronRight className="w-4 h-4" />Start Next Block{selectedModifyOption ? " with this focus" : ""}</>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Repeat With Changes Sheet ── */}
+      {showRepeatSheet && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowRepeatSheet(false)} />
+          <div className="relative w-full max-w-lg mx-auto bg-card border border-border rounded-t-3xl sm:rounded-2xl p-6 pb-8 shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
+            <div className="w-10 h-1 rounded-full bg-border mx-auto mb-5 sm:hidden" />
+            <div className="flex items-start justify-between gap-3 mb-5">
+              <div>
+                <h3 className="text-base font-bold text-foreground">Repeat With Changes</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Run the same block type with small adjustments</p>
+              </div>
+              <button onClick={() => setShowRepeatSheet(false)} className="w-8 h-8 rounded-lg bg-muted/50 border border-border flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
+              This starts another 4-week block of similar emphasis — useful if you want to keep building the same quality before moving to the next phase.
+            </p>
+            <div className="space-y-2 mb-5">
+              {REPEAT_OPTIONS.map((opt) => {
+                const isSelected = selectedRepeatOptions.includes(opt.id);
+                return (
+                  <button
+                    key={opt.id}
+                    onClick={() => setSelectedRepeatOptions((prev) => isSelected ? prev.filter((id) => id !== opt.id) : [...prev, opt.id])}
+                    className={`w-full text-left px-4 py-3.5 rounded-xl border transition-all duration-150 ${isSelected ? "bg-primary/10 border-primary/40 text-foreground" : "bg-muted/30 border-border text-foreground/80 hover:bg-muted/50"}`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-medium">{opt.label}</span>
+                      {isSelected && <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              onClick={handleConfirmRepeat}
+              disabled={isContinuing}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-60"
+            >
+              {isContinuing ? (
+                <><RotateCcw className="w-4 h-4 animate-spin" />Building your next block...</>
+              ) : (
+                <><RotateCcw className="w-4 h-4" />Repeat This Block</>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

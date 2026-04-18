@@ -13,6 +13,9 @@ import {
   initializeTrainingSystem,
   createTrainingSystemFromProgram,
   upsertTrainingSystemFromProgram,
+  getBlockCompletionStatus,
+  markBlockComplete,
+  generateContinuationPhase,
   type ChatProgram,
 } from "../lib/training-system-service";
 import {
@@ -455,6 +458,55 @@ router.delete("/training-system/:id", requireAuth, async (req, res): Promise<voi
   } catch (err) {
     logger.error({ err }, "[training-system] DELETE /:id error");
     res.status(500).json({ error: "Failed to delete training system" });
+  }
+});
+
+// ─── GET /training-system/block-completion ────────────────────────────────────
+// Checks if the current 4-week block is complete and returns next-block recommendation
+router.get("/training-system/block-completion", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const userId = req.session.userId!;
+    const status = await getBlockCompletionStatus(userId);
+    res.json(status ?? { isComplete: false, completedPhase: null, nextRecommendation: null, blockChainIndex: 0 });
+  } catch (err) {
+    logger.error({ err }, "[training-system] GET /block-completion error");
+    res.status(500).json({ error: "Failed to check block completion status" });
+  }
+});
+
+// ─── POST /training-system/mark-block-complete ────────────────────────────────
+// Manually marks the current block as completed (manual override)
+router.post("/training-system/mark-block-complete", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const userId = req.session.userId!;
+    const result = await markBlockComplete(userId);
+    res.json(result);
+  } catch (err: any) {
+    logger.error({ err }, "[training-system] POST /mark-block-complete error");
+    const statusCode = err.message?.includes("No") ? 404 : 500;
+    res.status(statusCode).json({ error: err.message ?? "Failed to mark block as complete" });
+  }
+});
+
+// ─── POST /training-system/continue-block ────────────────────────────────────
+// Generates a new continuation block on the existing training system.
+// Body: { mode: "next" | "repeat", adjustments?: string[], blockTypeOverride?: string }
+router.post("/training-system/continue-block", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const userId = req.session.userId!;
+    const { mode, adjustments, blockTypeOverride } = req.body ?? {};
+
+    if (!mode || !["next", "repeat"].includes(mode)) {
+      res.status(400).json({ error: "mode must be 'next' or 'repeat'" });
+      return;
+    }
+
+    const newPhase = await generateContinuationPhase(userId, { mode, adjustments, blockTypeOverride });
+    res.json({ success: true, newPhaseId: newPhase.id, phaseName: newPhase.name });
+  } catch (err: any) {
+    logger.error({ err }, "[training-system] POST /continue-block error");
+    const statusCode = err.message?.includes("No") ? 404 : 500;
+    res.status(statusCode).json({ error: err.message ?? "Failed to generate continuation block" });
   }
 });
 

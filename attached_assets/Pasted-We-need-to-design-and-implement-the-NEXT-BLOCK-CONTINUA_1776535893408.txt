@@ -1,0 +1,266 @@
+We need to design and implement the NEXT BLOCK / CONTINUATION BUILD experience for TrainChat after a user completes a 4-week block.
+
+CONTEXT:
+TrainChat currently generates programs in 4-week blocks:
+- Week 1 = Establish
+- Week 2 = Build
+- Week 3 = Intensify
+- Week 4 = Deload
+
+This 4-week block is the current unit of progression.
+
+We do NOT want to add a separate “month” layer right now.
+Instead, once the 4-week block is completed, the system should intelligently offer a continuation build.
+
+This continuation should feel like:
+- the next training phase
+- the next logical block
+- a coach-guided progression
+- not a generic “start over”
+
+We want both:
+1. UI
+2. backend function / continuation logic
+
+Keep the TrainChat premium, clean, minimal style.
+Do NOT make this feel like a cluttered dashboard.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+When a user completes Week 4 / completes the block, TrainChat should:
+
+- recognize the block is complete
+- explain what was accomplished
+- recommend the next block
+- allow the user to continue into the next block
+- optionally allow the user to modify the next block before generating it
+
+==================================================
+TASK 1 — BLOCK COMPLETION DETECTION
+==================================================
+
+Implement logic to detect when a 4-week block is complete.
+
+A block should be considered complete when:
+- all sessions in Week 4 are logged complete
+OR
+- the user explicitly marks the block complete (manual override if needed)
+
+When block completion is detected:
+- surface the completion state in the UI
+- unlock the continuation flow
+
+==================================================
+TASK 2 — BLOCK COMPLETION UI
+==================================================
+
+Create a premium “Block Complete” experience.
+
+Recommended placement:
+- top of “Block” tab
+- or a full-width premium card in “Today” / “This Week” after completion
+
+Example content:
+
+Block Complete ✅
+You completed your Foundation Strength Block.
+
+What this block built:
+- baseline strength
+- tissue tolerance
+- movement quality
+- readiness for higher intensity work
+
+Next recommended block:
+Power Conversion Block
+
+Buttons:
+- Start Next Block
+- Modify Next Block
+- Repeat With Changes
+
+The UI should feel:
+- premium
+- celebratory, but restrained
+- intelligent
+- coach-like
+
+==================================================
+TASK 3 — CONTINUATION BUILD RECOMMENDATION ENGINE
+==================================================
+
+Implement backend logic to recommend the next block.
+
+The recommendation should use available context such as:
+- current block type
+- completed weeks
+- logged sessions
+- refinements made during the block
+- sport / goal context
+- user profile constraints
+- readiness/check-in data if available
+
+Examples:
+- Foundation Strength → Intensification Strength
+- Intensification Strength → Power Conversion
+- Re-entry Resilience → Foundation Strength
+- Work Capacity → Strength Emphasis
+- Hypertrophy Support → Strength Emphasis or Power Conversion depending on goal
+
+This recommendation should be generated systematically, not randomly.
+
+==================================================
+TASK 4 — CREATE CONTINUATION BUILD ACTION
+==================================================
+
+When user taps “Start Next Block”:
+
+- create a new 4-week block
+- carry forward relevant user context
+- use prior block history as context
+- do NOT simply duplicate the old block
+- generate the new block as a true continuation
+
+Important:
+The new block should feel like the next phase of training, not a restart.
+
+==================================================
+TASK 5 — MODIFY NEXT BLOCK FLOW
+==================================================
+
+If user taps “Modify Next Block”:
+
+Open a clean modal / sheet / inline panel with options like:
+- Shift focus toward power
+- Increase hypertrophy
+- Reduce overall fatigue
+- Add more conditioning
+- Keep same sport emphasis
+- Adjust for limited equipment
+- Rebuild around pain/injury
+
+This should feed into the continuation build logic before generation.
+
+==================================================
+TASK 6 — REPEAT WITH CHANGES FLOW
+==================================================
+
+Add a third option:
+
+“Repeat With Changes”
+
+Meaning:
+- start another 4-week block of similar type
+- but allow small adjustments
+- useful if user wants to keep building same quality
+
+This is NOT the same as “Start Next Block”
+It is a continuation with similar emphasis rather than a phase transition.
+
+==================================================
+TASK 7 — UI PLACEMENT IN THE BLOCK TAB
+==================================================
+
+In the “Block” tab, add a top summary card that shows:
+
+- current block name
+- week progress
+- completion state
+- next block recommendation (if current block complete)
+
+Before completion:
+- show current block overview and progression status
+
+After completion:
+- replace or augment with continuation CTA card
+
+==================================================
+TASK 8 — DATA MODEL / PERSISTENCE
+==================================================
+
+Add whatever persistence is needed so the system can track:
+
+- current block complete or not
+- parent block ID / previous block linkage
+- continuation relationship between blocks
+- recommended next block type
+- user-selected continuation adjustments
+
+We want a clear chain:
+Block A → Block B → Block C
+
+without losing history.
+
+==================================================
+TASK 9 — CONTINUATION HISTORY / CHAIN
+==================================================
+
+If possible, allow the user to understand that the new block is part of a progression chain.
+
+Do this subtly.
+
+Examples:
+- “Next Block”
+- “Block 2 of your progression”
+- “Following your Foundation Strength Block”
+
+Do NOT clutter the UI with giant timelines.
+
+==================================================
+TASK 10 — MOBILE-FIRST UX
+==================================================
+
+Everything must look great on iPhone.
+
+Requirements:
+- clean cards
+- minimal copy
+- thumb-friendly buttons
+- no coach-dashboard clutter
+- continuation CTA should feel exciting and easy
+
+==================================================
+TASK 11 — MICROCOPY
+==================================================
+
+Use strong coach/system language.
+
+Examples:
+- Block Complete
+- Start Next Block
+- Modify Next Block
+- Repeat With Changes
+- Next recommended phase
+- You’ve built the base. Next: convert strength into power.
+- This next block increases intensity while protecting recovery.
+
+Avoid robotic or generic language.
+
+==================================================
+TASK 12 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. what UI components were added
+2. how block completion is detected
+3. how next block recommendation is determined
+4. how continuation build works
+5. how Modify Next Block works
+6. what persistence/data model changes were required
+
+==================================================
+FINAL STANDARD
+==================================================
+
+When a user finishes a 4-week block, TrainChat should feel like a real coach guiding them into the next phase.
+
+The user should not feel like:
+- the program just ends
+- they are starting over from scratch
+
+They should feel like:
+- they completed a meaningful phase
+- the system understands what comes next
+- continuing training is natural, intelligent, and premium

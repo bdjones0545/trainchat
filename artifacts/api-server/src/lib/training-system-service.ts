@@ -7,7 +7,7 @@ import {
   sessionExercises,
   userProfilesTable,
 } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import type { UserProfile } from "@workspace/db";
 import {
   selectSessionExercises,
@@ -1681,4 +1681,354 @@ export async function upsertTrainingSystemFromProgram(
     .where(eq(trainingSystems.id, existingSystem.id));
 
   return { system: updatedSystem, isUpdate: true };
+}
+
+// ─── Block Continuation Engine ─────────────────────────────────────────────────
+//
+// Handles block completion detection, next-block recommendation, and the
+// generation of a true continuation phase on the existing training system.
+//
+// Block chain: FOUNDATION_ACCUMULATION → INTENSIFICATION_STRENGTH
+//              → POWER_ELASTIC_CONVERSION → REBUILD_DELOAD → (cycle repeats)
+
+const CONTINUATION_BLOCK_CONFIGS: Record<string, {
+  phaseName: string;
+  phaseGoal: string;
+  emphasis: string;
+  weekConfigs: { label: string; focus: string; volumeLevel: "low" | "moderate" | "high" | "deload" }[];
+}> = {
+  FOUNDATION_ACCUMULATION: {
+    phaseName: "Foundation Strength Block",
+    phaseGoal: "Build foundational strength across primary movement patterns with increasing volume",
+    emphasis: "Movement quality, progressive volume, tissue adaptation",
+    weekConfigs: [
+      { label: "Week 1 — Establish", focus: "Baseline loading, technique focus across all patterns", volumeLevel: "moderate" },
+      { label: "Week 2 — Accumulate", focus: "Volume building, movement competency at higher loads", volumeLevel: "high" },
+      { label: "Week 3 — Peak Volume", focus: "Maximum volume week, full pattern exposure", volumeLevel: "high" },
+      { label: "Week 4 — Deload", focus: "Recovery and movement consolidation before intensification", volumeLevel: "deload" },
+    ],
+  },
+  INTENSIFICATION_STRENGTH: {
+    phaseName: "Intensification Strength Block",
+    phaseGoal: "Convert accumulated volume into peak strength through progressive heavy loading",
+    emphasis: "Heavy compound loading, strength expression, CNS adaptation",
+    weekConfigs: [
+      { label: "Week 1 — Ramp", focus: "Load introduction, technique at higher intensities", volumeLevel: "moderate" },
+      { label: "Week 2 — Build", focus: "Loading progression, technical proficiency under fatigue", volumeLevel: "high" },
+      { label: "Week 3 — Peak", focus: "Peak intensity week, maximum loading across primary lifts", volumeLevel: "high" },
+      { label: "Week 4 — Deload", focus: "CNS recovery and strength consolidation", volumeLevel: "deload" },
+    ],
+  },
+  POWER_ELASTIC_CONVERSION: {
+    phaseName: "Power Conversion Block",
+    phaseGoal: "Convert peak strength into explosive power and reactive capacity",
+    emphasis: "Rate of force development, elastic energy, contrast training",
+    weekConfigs: [
+      { label: "Week 1 — Introduce", focus: "Power movement exposure, contrast training introduction", volumeLevel: "moderate" },
+      { label: "Week 2 — Develop", focus: "Contrast pairs, elastic loading, plyometric volume build", volumeLevel: "high" },
+      { label: "Week 3 — Express", focus: "Maximum power output, full elastic chain activation", volumeLevel: "high" },
+      { label: "Week 4 — Taper", focus: "CNS freshness, movement quality, competition readiness", volumeLevel: "deload" },
+    ],
+  },
+  REBUILD_DELOAD: {
+    phaseName: "Rebuild & Recovery Block",
+    phaseGoal: "Restore CNS capacity, address tissue quality, and prime the next training cycle",
+    emphasis: "Sub-maximal loading, movement quality, tissue health",
+    weekConfigs: [
+      { label: "Week 1 — Reset", focus: "Active recovery, movement quality restoration", volumeLevel: "low" },
+      { label: "Week 2 — Restore", focus: "Tissue work, sub-maximal loading, pattern reinforcement", volumeLevel: "moderate" },
+      { label: "Week 3 — Rebuild", focus: "Quality volume, re-establishing movement competency", volumeLevel: "moderate" },
+      { label: "Week 4 — Prime", focus: "Prepare CNS and tissue for the next block", volumeLevel: "low" },
+    ],
+  },
+};
+
+function inferBlockTypeFromName(name: string): string {
+  const n = name.toLowerCase();
+  if (n.includes("power") || n.includes("conversion") || n.includes("elastic")) return "POWER_ELASTIC_CONVERSION";
+  if (n.includes("intensif") || n.includes("strength")) return "INTENSIFICATION_STRENGTH";
+  if (n.includes("rebuild") || n.includes("deload") || n.includes("recovery")) return "REBUILD_DELOAD";
+  return "FOUNDATION_ACCUMULATION";
+}
+
+function buildNextBlockRecommendation(blockType: string): {
+  blockType: string;
+  displayName: string;
+  rationale: string;
+  whatBuilt: string[];
+} {
+  const chain: Record<string, { blockType: string; displayName: string; rationale: string; whatBuilt: string[] }> = {
+    FOUNDATION_ACCUMULATION: {
+      blockType: "INTENSIFICATION_STRENGTH",
+      displayName: "Intensification Strength Block",
+      rationale: "You've built the base. Next: convert volume into intensity — heavier loads, peak strength.",
+      whatBuilt: [
+        "Baseline strength and tissue tolerance",
+        "Movement quality across all patterns",
+        "Volume base for intensification",
+        "Consistent training habits and work capacity",
+      ],
+    },
+    INTENSIFICATION_STRENGTH: {
+      blockType: "POWER_ELASTIC_CONVERSION",
+      displayName: "Power Conversion Block",
+      rationale: "Peak strength achieved. Next: convert that strength into explosive power.",
+      whatBuilt: [
+        "Peak strength across main lifts",
+        "CNS efficiency and neuromuscular drive",
+        "High-intensity loading tolerance",
+        "Mental toughness under heavy loads",
+      ],
+    },
+    POWER_ELASTIC_CONVERSION: {
+      blockType: "REBUILD_DELOAD",
+      displayName: "Rebuild & Recovery Block",
+      rationale: "High-output block complete. Recover, restore, and prime the system for the next cycle.",
+      whatBuilt: [
+        "Explosive power and rate of force development",
+        "Elastic energy capacity and reactive strength",
+        "Athletic movement quality",
+        "CNS readiness for high-demand output",
+      ],
+    },
+    REBUILD_DELOAD: {
+      blockType: "FOUNDATION_ACCUMULATION",
+      displayName: "Foundation Strength Block",
+      rationale: "Recovery complete. Begin the next training cycle with a fresh foundation phase.",
+      whatBuilt: [
+        "CNS and tissue restoration",
+        "Movement quality refinement",
+        "Psychological freshness for hard training",
+        "Foundation primed for the next intensity cycle",
+      ],
+    },
+  };
+  return chain[blockType] ?? chain["FOUNDATION_ACCUMULATION"];
+}
+
+// ─── getBlockCompletionStatus ─────────────────────────────────────────────────
+
+export async function getBlockCompletionStatus(userId: number) {
+  const system = await getActiveTrainingSystem(userId);
+  if (!system) return null;
+
+  const allPhases = await db
+    .select()
+    .from(trainingPhases)
+    .where(eq(trainingPhases.trainingSystemId, system.id))
+    .orderBy(trainingPhases.orderIndex);
+
+  const currentPhase = allPhases.find((p) => p.status === "current") ?? null;
+  const completedPhases = allPhases.filter((p) => p.status === "completed");
+
+  // Check if current phase's Week 4 is marked completed (natural completion)
+  let isCurrentPhaseWeek4Complete = false;
+  if (currentPhase) {
+    const [week4] = await db
+      .select()
+      .from(trainingWeeks)
+      .where(and(eq(trainingWeeks.trainingPhaseId, currentPhase.id), eq(trainingWeeks.weekNumber, 4)));
+    isCurrentPhaseWeek4Complete = week4?.status === "completed";
+  }
+
+  const isComplete = isCurrentPhaseWeek4Complete || (!currentPhase && completedPhases.length > 0);
+
+  // The phase to use for recommendations
+  const completedPhaseForRec = (isCurrentPhaseWeek4Complete && currentPhase)
+    ? currentPhase
+    : completedPhases[completedPhases.length - 1] ?? null;
+
+  if (!isComplete || !completedPhaseForRec) {
+    return {
+      isComplete: false,
+      completedPhase: null,
+      nextRecommendation: null,
+      blockChainIndex: completedPhases.length,
+    };
+  }
+
+  const blockType = (completedPhaseForRec.metadata as any)?.blockType
+    ?? inferBlockTypeFromName(completedPhaseForRec.name);
+  const nextRecommendation = buildNextBlockRecommendation(blockType);
+
+  return {
+    isComplete: true,
+    completedPhase: {
+      id: completedPhaseForRec.id,
+      name: completedPhaseForRec.name,
+      goal: completedPhaseForRec.goal,
+      blockType,
+    },
+    nextRecommendation,
+    blockChainIndex: completedPhases.length + (isCurrentPhaseWeek4Complete ? 1 : 0),
+  };
+}
+
+// ─── markBlockComplete ─────────────────────────────────────────────────────────
+
+export async function markBlockComplete(userId: number) {
+  const system = await getActiveTrainingSystem(userId);
+  if (!system) throw new Error("No active training system found");
+
+  const [currentPhase] = await db
+    .select()
+    .from(trainingPhases)
+    .where(and(eq(trainingPhases.trainingSystemId, system.id), eq(trainingPhases.status, "current")));
+
+  if (!currentPhase) throw new Error("No current phase to mark as complete");
+
+  await db.update(trainingWeeks).set({ status: "completed" }).where(eq(trainingWeeks.trainingPhaseId, currentPhase.id));
+  await db.update(trainingPhases).set({ status: "completed" }).where(eq(trainingPhases.id, currentPhase.id));
+
+  logger.info({ userId, phaseId: currentPhase.id }, "[TrainingSystem] markBlockComplete — phase marked as completed");
+  return { completedPhaseId: currentPhase.id, phaseName: currentPhase.name };
+}
+
+// ─── generateContinuationPhase ────────────────────────────────────────────────
+
+export async function generateContinuationPhase(
+  userId: number,
+  options: { mode: "next" | "repeat"; adjustments?: string[]; blockTypeOverride?: string }
+): Promise<typeof trainingPhases.$inferSelect> {
+  const system = await getActiveTrainingSystem(userId);
+  if (!system) throw new Error("No active training system found");
+
+  const allPhases = await db
+    .select()
+    .from(trainingPhases)
+    .where(eq(trainingPhases.trainingSystemId, system.id))
+    .orderBy(trainingPhases.orderIndex);
+
+  const currentPhase = allPhases.find((p) => p.status === "current") ?? null;
+  const lastCompletedPhase = [...allPhases].reverse().find((p) => p.status === "completed") ?? null;
+  const previousPhase = currentPhase ?? lastCompletedPhase;
+  if (!previousPhase) throw new Error("No existing phase to continue from");
+
+  // Mark current phase and all its weeks as completed
+  if (currentPhase && currentPhase.status === "current") {
+    await db.update(trainingWeeks).set({ status: "completed" }).where(eq(trainingWeeks.trainingPhaseId, currentPhase.id));
+    await db.update(trainingPhases).set({ status: "completed" }).where(eq(trainingPhases.id, currentPhase.id));
+  }
+
+  const previousBlockType = (previousPhase.metadata as any)?.blockType
+    ?? inferBlockTypeFromName(previousPhase.name);
+  const recommendation = buildNextBlockRecommendation(previousBlockType);
+  const nextBlockType = options.blockTypeOverride
+    ?? (options.mode === "repeat" ? previousBlockType : recommendation.blockType);
+
+  const [profile] = await db.select().from(userProfilesTable).where(eq(userProfilesTable.userId, userId));
+  const goal = profile ? normalizeGoal(profile.trainingGoal) : "general_fitness";
+  const daysPerWeek = profile?.daysPerWeek ?? 3;
+  const equipment = profile ? normalizeEquipment(profile.equipmentAccess) : "full_gym";
+  const experience = profile ? normalizeExperience(profile.experienceLevel ?? "intermediate") : "intermediate";
+  const injuryFlags = detectInjuryFlags(profile?.injuries ?? null);
+
+  const coachGoal: CoachGoalType = goal === "athletic" ? "athletic_performance" : (goal as CoachGoalType);
+  const coachEquipment: CoachEquipmentLevel =
+    equipment === "dumbbells" ? "dumbbells_only" :
+    equipment === "minimal" ? "home_limited" :
+    (equipment as CoachEquipmentLevel);
+
+  const nextBlockConfig = CONTINUATION_BLOCK_CONFIGS[nextBlockType] ?? CONTINUATION_BLOCK_CONFIGS["FOUNDATION_ACCUMULATION"];
+  const blockChainIndex = allPhases.length;
+
+  const [newPhase] = await db.insert(trainingPhases).values({
+    trainingSystemId: system.id,
+    name: nextBlockConfig.phaseName,
+    goal: nextBlockConfig.phaseGoal,
+    emphasis: nextBlockConfig.emphasis,
+    weekCount: 4,
+    orderIndex: blockChainIndex,
+    status: "current",
+    notes: options.adjustments?.length ? `Coach adjustments: ${options.adjustments.join(", ")}` : null,
+    metadata: {
+      blockType: nextBlockType,
+      blockDisplayName: nextBlockConfig.phaseName,
+      previousPhaseId: previousPhase.id,
+      blockChainIndex,
+      adjustments: options.adjustments ?? [],
+      continuationMode: options.mode,
+    },
+  }).returning();
+
+  await db.update(trainingSystems).set({ currentPhaseId: newPhase.id }).where(eq(trainingSystems.id, system.id));
+
+  const splitDays = splitMaps[Math.min(daysPerWeek, 6)] ?? splitMaps[3];
+
+  for (let weekIdx = 0; weekIdx < 4; weekIdx++) {
+    const weekConfig = nextBlockConfig.weekConfigs[weekIdx];
+    const weekNumber = weekIdx + 1;
+    const isDeload = weekConfig.volumeLevel === "deload" || weekConfig.volumeLevel === "low";
+
+    const [week] = await db.insert(trainingWeeks).values({
+      trainingPhaseId: newPhase.id,
+      weekNumber,
+      label: weekConfig.label,
+      focus: weekConfig.focus,
+      volumeLevel: weekConfig.volumeLevel,
+      status: weekIdx === 0 ? "current" : "upcoming",
+      orderIndex: weekIdx,
+    }).returning();
+
+    for (let sessionIdx = 0; sessionIdx < splitDays.length; sessionIdx++) {
+      const splitDay = splitDays[sessionIdx];
+
+      const [session] = await db.insert(trainingSessions).values({
+        trainingWeekId: week.id,
+        label: splitDay.label,
+        sessionType: splitDay.sessionType,
+        dayOfWeek: splitDay.dayOfWeek,
+        emphasis: splitDay.emphasis,
+        warmupNotes: getWarmupNotes(splitDay.sessionType, splitDay.emphasis),
+        coachingNotes: getCoachingNotes(goal, weekIdx, splitDay.label),
+        isRestDay: false,
+        orderIndex: sessionIdx,
+      }).returning();
+
+      const coachExercises = await selectSessionExercises({
+        sessionType: splitDay.coachSessionType,
+        goal: coachGoal,
+        experience: experience as CoachExperienceTier,
+        equipment: coachEquipment,
+        injuryFlags: injuryFlags.map(String),
+        weekNumber: isDeload ? 4 : weekNumber,
+      });
+
+      const rawCoachExercises = isDeload
+        ? coachExercises.slice(0, Math.max(Math.ceil(coachExercises.length * 0.6), 2))
+        : coachExercises;
+
+      const mappedExercises = rawCoachExercises.map((ex) => {
+        const category: ExerciseCategory =
+          ex.role === "explosive"    ? "power" :
+          ex.role === "primary"      ? "primary" :
+          ex.role === "secondary"    ? "secondary" :
+          ex.role === "conditioning" ? "conditioning" :
+          "accessory";
+        return { ...ex, category };
+      });
+      const orderedExercises = sortExercisesByCategory(mappedExercises);
+
+      for (let exIdx = 0; exIdx < orderedExercises.length; exIdx++) {
+        const ex = orderedExercises[exIdx];
+        await db.insert(sessionExercises).values({
+          trainingSessionId: session.id,
+          name: ex.name,
+          category: ex.category,
+          sets: ex.sets,
+          reps: ex.reps,
+          rest: ex.rest,
+          tempo: null,
+          notes: ex.notes,
+          orderIndex: exIdx,
+        });
+      }
+    }
+  }
+
+  logger.info(
+    { userId, systemId: system.id, newPhaseId: newPhase.id, nextBlockType, mode: options.mode },
+    "[TrainingSystem] generateContinuationPhase — new block created"
+  );
+  return newPhase;
 }
