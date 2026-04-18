@@ -1,0 +1,190 @@
+CRITICAL AUDIT — IS DAY 1 BYPASSING THE NEW GENERATION LOGIC?
+
+CONTEXT:
+Programs still feel stale on the initial build, and the sameness is most obvious on Day 1.
+
+Observed repeated Day 1 pattern across builds and even across sports:
+- activation trio
+- jump
+- squat
+- pull / hinge
+- unilateral
+- trunk
+
+Hypothesis:
+Day 1 may not be receiving the same new block/session/archetype adjustments as the rest of the build, OR Day 1 may still be hardcoded into a universal starter template.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Determine whether Day 1 is bypassing the new generation logic or being forced into a fixed default session structure on initial build.
+
+==================================================
+TASK 1 — TRACE DAY 1 VS DAY 2/3/4 THROUGH THE FULL PIPELINE
+==================================================
+
+For a fresh initial build, log separately for:
+- Day 1
+- Day 2
+- Day 3
+- Day 4 (if present)
+
+For each day print:
+
+[DayPipelineAudit] {
+  dayIndex,
+  sport,
+  monthlyBlockType,
+  weeklyBlockRole,
+  sessionRole,
+  blockArchetype,
+  variationMandateApplied,
+  buildCNSFlowApplied,
+  applyBlockArchetypeIdentityOverrideApplied,
+  finalBlockOrder,
+  exerciseWinners
+}
+
+We need to compare whether Day 1 is actually taking the same path as later days.
+
+==================================================
+TASK 2 — CHECK FOR DAY 1 SPECIAL-CASE LOGIC
+==================================================
+
+Audit the following for any first-day bias or hardcoded defaults:
+- buildArchitectureBrief
+- computeWeeklyArchitecture
+- buildSessionsForDayCount
+- buildCNSFlow
+- buildVariationMandate
+- session role assignment functions
+- any helper that treats dayIndex === 0 specially
+
+Search for:
+- dayIndex === 0
+- first day
+- lower first
+- default Day 1
+- starter session
+- lead session
+- primary opener
+
+We need to know if Day 1 is being forced into a default structure.
+
+==================================================
+TASK 3 — VERIFY ARCHETYPE + BLOCK ADJUSTMENTS APPLY TO DAY 1
+==================================================
+
+Explicitly confirm whether Day 1 receives:
+- blockArchetype
+- session identity override
+- archetype-aware variation mandate
+- slot composition differences
+- scoring/context differences in exercise selection
+
+FAIL if:
+- Day 1 uses a legacy/default structure while later days use the new logic
+
+==================================================
+TASK 4 — COMPARE SAME PROMPT ACROSS SPORTS
+==================================================
+
+Run initial builds for:
+- soccer
+- football
+- basketball
+- generic strength
+
+Compare Day 1 only.
+
+Question:
+Is Day 1 still structurally the same across sports?
+
+If yes, identify whether sport context is:
+- not reaching Day 1
+- or being overridden by a universal starter-session template
+
+==================================================
+TASK 5 — CHECK WHETHER “FIRST IMPRESSION DAY” IS HARD-WIRED
+==================================================
+
+Determine whether the system is intentionally optimizing Day 1 for a “safe generic opener”:
+- lower-body emphasis
+- jump + squat + unilateral + trunk
+- broad transfer language
+
+If so, this is likely the reason every initial build feels the same.
+
+We need to know whether this behavior is:
+- deliberate legacy design
+- accidental fallback
+- hidden default template
+
+==================================================
+TASK 6 — IDENTIFY EXACT COLLAPSE POINT
+==================================================
+
+Return exactly where Day 1 becomes stale:
+
+A. Weekly architecture always assigns same Day 1 role
+B. Session role gets different labels but same structure
+C. Day 1 bypasses archetype-aware buildCNSFlow
+D. Variation mandate re-normalizes Day 1 into one default
+E. Exercise scoring collapses to same winners only on Day 1
+F. Sport-specific logic does not affect Day 1
+
+Rank the top 2 causes.
+
+==================================================
+TASK 7 — APPLY TARGETED FIX
+==================================================
+
+Once the collapse point is found, apply the smallest correct fix.
+
+Examples:
+- remove Day 1 hardcoded default template
+- let Day 1 inherit full archetype-specific structure
+- allow Day 1 session role to vary more aggressively
+- ensure sport logic affects Day 1 block composition
+- ensure exercise scoring context for Day 1 is not using a legacy fallback
+
+Do NOT rewrite the whole system unless necessary.
+Fix the exact point where Day 1 diverges from the new architecture.
+
+==================================================
+TASK 8 — VALIDATION
+==================================================
+
+Run 3 identical initial builds and compare Day 1.
+
+SUCCESS CRITERIA:
+- Day 1 should no longer always be the same
+- differences should show up on the first visible session
+- sport/build context should be reflected immediately
+
+==================================================
+TASK 9 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. whether Day 1 was bypassing the new logic
+2. whether Day 1 had any hardcoded defaults
+3. exact files/functions involved
+4. exact fix applied
+5. before/after comparison of Day 1 across 3 builds and 3 sports
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Day 1 must be fully governed by the same new architecture as the rest of the build.
+
+The first visible session must reflect:
+- sport context
+- block archetype
+- weekly role
+- session identity
+- exercise diversity
+
+If Day 1 is stale, the whole product feels stale.
