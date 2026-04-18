@@ -1,0 +1,219 @@
+CRITICAL AUDIT — PROGRAMS STILL COLLAPSE TO THE SAME DAY TEMPLATE
+
+We fixed:
+- stale UI state
+- stale cache issues
+- block metadata visibility
+- hierarchical monthly/weekly generation
+
+But programs still FEEL the same because the actual built sessions keep collapsing to the same exercise stack.
+
+Observed repeated pattern:
+- activation trio
+- jump
+- back squat
+- conventional deadlift
+- Bulgarian split squat
+- Pallof press
+
+Even when block context changes (e.g. Intensification Strength Block), Day 1 still converges to the same canonical lower-body template.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Find the exact layer where generation collapses back to the same session structure and fix it so block/week context produces meaningfully different day construction.
+
+==================================================
+TASK 1 — TRACE ONE FULL BUILD END TO END
+==================================================
+
+For a fresh build, log:
+
+[BuildAudit:MonthlyBlock]
+[BuildAudit:WeeklyBlock]
+[BuildAudit:SessionRole]
+[BuildAudit:SlotLayout]
+[BuildAudit:ExerciseCandidates]
+[BuildAudit:ExerciseWinners]
+
+For Day 1 specifically, print:
+- block type
+- week role
+- session role
+- slot list (in order)
+- top 5 candidate exercises per slot with scores
+- winning exercise per slot
+
+We need to see exactly where variety collapses.
+
+==================================================
+TASK 2 — AUDIT SESSION ROLE DIFFERENTIATION
+==================================================
+
+Check whether different block types actually produce different Day 1 session roles.
+
+Compare:
+- intensification strength block
+- power conversion block
+- work capacity block
+
+If all 3 still assign effectively the same Day 1 role (lower power + squat + hinge + unilateral + trunk), that is a failure.
+
+==================================================
+TASK 3 — AUDIT SLOT LAYOUT GENERATION
+==================================================
+
+Check whether the slot layout for Day 1 is effectively static.
+
+Log:
+- total slots per session
+- slot types used
+- slot order
+
+Questions to answer:
+- Is Day 1 always using the same slot family?
+- Are warmup + power + squat + hinge + unilateral + trunk ALWAYS present together?
+- Does block type meaningfully change slot composition OR just exercise selection?
+
+FAIL if:
+- slot layout remains identical across different block types
+
+==================================================
+TASK 4 — NEW: SLOT STRICTNESS AUDIT (CRITICAL)
+==================================================
+
+Determine whether the slot system is OVER-CONSTRAINING generation.
+
+For each slot, log:
+- allowed exercise pool size
+- % of total exercise library accessible
+- how many candidates survive filtering
+- how often the same 1–3 exercises win
+
+Then answer:
+
+1. Are slots too narrow (e.g. only 5–10 valid exercises)?
+2. Are slots forcing specific archetypes (e.g. “bilateral squat strength” always → back squat)?
+3. Are multiple slots overlapping in function (creating redundant structure)?
+4. Are we forcing ALL slots instead of conditionally including them?
+
+CRITICAL QUESTION:
+→ Are slots acting as GUIDELINES or as HARD CONSTRAINTS?
+
+FAIL if:
+- slots eliminate too much of the exercise library
+- slots force the same movement pattern every build
+- slots prevent block-specific variation in structure
+
+==================================================
+TASK 5 — AUDIT EXERCISE WINNER COLLAPSE
+==================================================
+
+For repeated offenders:
+- Back Squat
+- Broad Jump
+- Conventional Deadlift
+- Bulgarian Split Squat
+- Pallof Press
+
+log exactly why they are still winning.
+
+Check:
+- raw score
+- anchor penalty
+- novelty bonus/penalty
+- intent fit
+- sport fit
+- fatigue adjustment
+- block/week adjustment
+
+Determine:
+- are they winning because of scoring?
+- OR because slots leave no real alternatives?
+
+==================================================
+TASK 6 — VERIFY BLOCK CONTEXT AFFECTS STRUCTURE
+==================================================
+
+For each block type, define expected Day 1 structure:
+
+Intensification Strength:
+- fewer total movements
+- stronger primary lift bias
+- less redundancy
+
+Power Conversion:
+- more elastic work
+- less heavy bilateral stacking
+
+Work Capacity:
+- denser structure
+- more conditioning / accessory blending
+
+Compare expected vs actual.
+
+FAIL if:
+- structure does not change, only labels do
+
+==================================================
+TASK 7 — IDENTIFY TRUE COLLAPSE POINT
+==================================================
+
+Return EXACTLY where sameness is introduced:
+
+A. Session role layer
+B. Slot layout layer
+C. Slot strictness (over-constrained pools)
+D. Exercise scoring dominance
+
+Rank the top 2 causes.
+
+==================================================
+TASK 8 — APPLY FIX (TARGETED, NOT GENERIC)
+==================================================
+
+Depending on findings:
+
+If SLOT STRICTNESS is the issue:
+- loosen slot constraints
+- expand candidate pools
+- allow multi-role exercises
+- introduce probabilistic slot omission
+
+If SLOT LAYOUT is the issue:
+- make slot composition block-dependent
+- allow different slot families per block
+
+If SESSION ROLE is the issue:
+- expand role templates
+- vary day identity more aggressively
+
+If EXERCISE SCORING is the issue:
+- increase anchor penalties
+- diversify top-tier candidates
+
+==================================================
+TASK 9 — VALIDATION
+==================================================
+
+Run 3 builds with identical inputs.
+
+Compare Day 1 across all builds:
+- slot layout
+- movement patterns
+- exercise selection
+
+SUCCESS CRITERIA:
+Programs should feel structurally different, not just cosmetically different.
+
+==================================================
+FINAL STANDARD
+==================================================
+
+The system must produce:
+- different session identities
+- different structural compositions
+- different exercise stacks
+
+Block variation must be REAL, not superficial.
