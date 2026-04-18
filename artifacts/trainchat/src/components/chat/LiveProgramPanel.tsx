@@ -536,6 +536,21 @@ function ProgramTab({
   const [refineInput, setRefineInput] = useState("");
   const [showProgramUpdated, setShowProgramUpdated] = useState(false);
 
+  // ── Week selector state ──────────────────────────────────────────────────
+  const currentWeekNum = program?.weekNumber ?? null;
+  const [selectedWeek, setSelectedWeek] = useState<number>(currentWeekNum ?? 1);
+
+  useEffect(() => {
+    if (currentWeekNum !== null) setSelectedWeek(currentWeekNum);
+  }, [currentWeekNum]);
+
+  const { data: altWeekData, isLoading: altWeekLoading } = useQuery({
+    queryKey: ["week-view-select", selectedWeek],
+    queryFn: () => customFetch<any>(`/api/training-system/week?weekNumber=${selectedWeek}`),
+    enabled: !!isSaved && currentWeekNum !== null && selectedWeek !== currentWeekNum,
+    staleTime: 30_000,
+  });
+
   // ── Learn Exercise modal state (centralized) ─────────────────────────────
   const [learnModalOpen, setLearnModalOpen] = useState(false);
   const [selectedExercise, setSelectedExercise] = useState<LearnExerciseData | null>(null);
@@ -790,6 +805,28 @@ function ProgramTab({
   const lockedDayCount = isPremium ? 0 : Math.max(0, days.length - 1);
   const showPaywall = !isPremium && days.length > 1;
 
+  // When a different week is selected, transform that week's API response into
+  // the same shape as program.days so the rendering layer is identical.
+  const viewingAltWeek = !!altWeekData && selectedWeek !== currentWeekNum;
+  const viewDays = viewingAltWeek
+    ? (altWeekData.sessions ?? [])
+        .filter((s: any) => !s.isRestDay)
+        .map((s: any, idx: number) => ({
+          dayNumber: idx + 1,
+          name: s.label,
+          focus: s.emphasis ?? undefined,
+          dayOfWeek: s.dayOfWeek ?? undefined,
+          exercises: (s.exercises ?? []).map((ex: any) => ({
+            name: ex.name,
+            sets: typeof ex.sets === "number" ? ex.sets : 3,
+            reps: ex.reps ?? "10",
+            rest: ex.rest ?? "60s",
+            notes: ex.notes ?? undefined,
+          })),
+          notes: s.coachingNotes ?? undefined,
+        }))
+    : days;
+
   const isUpdating = buildingState?.isBuilding && !!program;
   const updatePhase = isUpdating ? getBuildPhase(buildingState!.stage) : null;
 
@@ -914,6 +951,32 @@ function ProgramTab({
                 {WEEK_ROLE_COPY[weekRole]}
               </p>
             )}
+          </div>
+        )}
+
+        {/* Week selector — W1-W4 tabs, shown when program is DB-backed and has a weekNumber */}
+        {isSaved && currentWeekNum && (
+          <div className="flex items-center gap-1 mb-2.5">
+            {[1, 2, 3, 4].map((wk) => {
+              const isSelected = selectedWeek === wk;
+              const isCurrent = wk === currentWeekNum;
+              return (
+                <button
+                  key={wk}
+                  onClick={() => setSelectedWeek(wk)}
+                  className={`flex-1 py-1.5 text-[9px] font-bold uppercase tracking-wider rounded-md transition-all ${
+                    isSelected
+                      ? "bg-primary/15 text-primary border border-primary/30"
+                      : "text-muted-foreground/55 hover:text-muted-foreground border border-transparent hover:border-border/40 hover:bg-muted/30"
+                  }`}
+                >
+                  W{wk}
+                  {isCurrent && (
+                    <span className="ml-0.5 text-[7px] text-primary/60 align-middle">●</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -1124,7 +1187,12 @@ function ProgramTab({
 
       {/* Days */}
       <div className="p-3 space-y-2">
-        {days.map((day, idx) => {
+        {altWeekLoading && (
+          <div className="flex items-center justify-center py-6">
+            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground/50" />
+          </div>
+        )}
+        {!altWeekLoading && viewDays.map((day, idx) => {
           const isLocked = !isPremium && idx > 0;
           const isExpanded = expandedDay === idx;
           const dayDiff = animatedKeys.get(`d${idx}`);

@@ -143,6 +143,140 @@ function transformationForBlockType(blockType: string): string {
   return map[blockType] ?? "recovery";
 }
 
+// ─── Exercise Swap Tables ─────────────────────────────────────────────────────
+// Canonical exercises per training focus × movement family.
+// Index 0 = preferred canonical; subsequent entries = fallbacks.
+// Only primary/power category exercises get swapped — accessories keep their
+// identity and only receive prescription (reps/rest) adjustments.
+
+const FOCUS_EXERCISES: Record<string, Record<string, string[]>> = {
+  power: {
+    squat_lunge:       ["Box Jump", "Jump Squat", "Broad Jump"],
+    hinge_deadlift:    ["Power Clean", "Hang Power Snatch", "Kettlebell Swing"],
+    push_press:        ["Push Press", "Push Jerk", "Plyometric Push-Up"],
+    pull_row:          ["Hang High Pull", "Explosive Pull-Up"],
+    jump_plyometric:   ["Depth Jump", "Hurdle Hop", "Box Jump"],
+    carry_stability:   ["Farmer's Carry", "Suitcase Carry"],
+    core_anti_rotation: ["Medicine Ball Rotational Throw", "Pallof Press"],
+  },
+  strength: {
+    squat_lunge:       ["Barbell Back Squat", "Front Squat", "Bulgarian Split Squat"],
+    hinge_deadlift:    ["Conventional Deadlift", "Trap Bar Deadlift", "Romanian Deadlift"],
+    push_press:        ["Barbell Bench Press", "Overhead Press", "Weighted Dip"],
+    pull_row:          ["Weighted Pull-Up", "Barbell Row", "Pendlay Row"],
+    jump_plyometric:   ["Box Jump", "Broad Jump"],
+    carry_stability:   ["Farmer's Carry", "Overhead Carry"],
+    core_anti_rotation: ["Pallof Press", "Dead Bug"],
+  },
+  hypertrophy: {
+    squat_lunge:       ["Hack Squat", "Leg Press", "Dumbbell Goblet Squat"],
+    hinge_deadlift:    ["Romanian Deadlift", "Lying Leg Curl", "Hip Thrust"],
+    push_press:        ["Incline Dumbbell Press", "Cable Fly", "Dumbbell Shoulder Press"],
+    pull_row:          ["Lat Pulldown", "Cable Row", "Single-Arm Dumbbell Row"],
+    jump_plyometric:   ["Step-Up", "Box Step-Up"],
+    carry_stability:   ["Copenhagen Plank", "Pallof Press"],
+    core_anti_rotation: ["Cable Crunch", "Hollow Hold", "Leg Raise"],
+  },
+  endurance: {
+    squat_lunge:       ["Goblet Squat", "Walking Lunge", "Step-Up"],
+    hinge_deadlift:    ["Dumbbell Romanian Deadlift", "Hip Thrust", "Glute Bridge"],
+    push_press:        ["Dumbbell Bench Press", "Push-Up"],
+    pull_row:          ["Dumbbell Row", "Lat Pulldown"],
+    jump_plyometric:   ["Jump Rope", "Box Step-Up"],
+    carry_stability:   ["Plank Walk", "Sandbag Carry"],
+    core_anti_rotation: ["Plank", "Bird Dog"],
+  },
+  recovery: {
+    squat_lunge:       ["Goblet Squat", "Bodyweight Squat"],
+    hinge_deadlift:    ["Glute Bridge", "Hip Hinge Drill"],
+    push_press:        ["Push-Up", "Dumbbell Press"],
+    pull_row:          ["Face Pull", "Band Pull-Apart"],
+    jump_plyometric:   ["Box Step-Up", "Low Box Step"],
+    carry_stability:   ["Plank", "Dead Bug"],
+    core_anti_rotation: ["Bird Dog", "Pallof Press"],
+  },
+};
+
+function mapTransformationToFocusKey(transformation: string): string {
+  switch (transformation) {
+    case "power":
+    case "power_explosive_focus":
+    case "speed_focus":
+      return "power";
+    case "strength":
+    case "strength_focus":
+    case "increase_difficulty":
+      return "strength";
+    case "hypertrophy":
+    case "hypertrophy_focus":
+    case "increase_volume":
+      return "hypertrophy";
+    case "endurance":
+    case "endurance_focus":
+    case "conditioning_focus":
+    case "reduce_time":
+      return "endurance";
+    case "recovery":
+    case "recovery_focus":
+    case "fatigue_management":
+    case "decrease_difficulty":
+    case "decrease_volume":
+      return "recovery";
+    default:
+      return "strength";
+  }
+}
+
+function detectExerciseMovementFamily(name: string): string {
+  const n = name.toLowerCase();
+  if (/\b(squat|lunge|step.?up|split squat|leg press|hack squat|goblet)\b/.test(n)) return "squat_lunge";
+  if (/\b(deadlift|rdl|romanian|hip hinge|swing|hip thrust|glute bridge|back extension)\b/.test(n)) return "hinge_deadlift";
+  if (/\b(bench press|push.?up|overhead press|military press|dip|shoulder press|incline|decline|chest fly|push jerk|push press)\b/.test(n)) return "push_press";
+  if (/\b(pull.?up|chin.?up|\brow\b|lat pulldown|cable row|face pull|rear delt|inverted row|high pull)\b/.test(n)) return "pull_row";
+  if (/\b(box jump|broad jump|depth jump|hurdle|bound|jump squat|plyometric|sprint)\b/.test(n)) return "jump_plyometric";
+  if (/\b(carry|plank|dead bug|bird dog|pallof|anti.?rotation|copenhagen)\b/.test(n)) return "carry_stability";
+  if (/\b(crunch|sit.?up|hollow|leg raise|woodchop|rotation|russian twist)\b/.test(n)) return "core_anti_rotation";
+  return "unknown";
+}
+
+function exerciseAlreadyFitsFocus(exerciseName: string, targetList: string[]): boolean {
+  const nameWords = exerciseName.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
+  return targetList.some((target) => {
+    const targetWords = target.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
+    return nameWords.some((nw) => targetWords.some((tw) => nw.includes(tw) || tw.includes(nw)));
+  });
+}
+
+async function swapExercisesForFocus(
+  session: { exercises: Array<{ id: number; name: string; category: string }> },
+  transformation: string,
+): Promise<number> {
+  const focusKey = mapTransformationToFocusKey(transformation);
+  const focusMap = FOCUS_EXERCISES[focusKey] ?? {};
+  let swapCount = 0;
+
+  for (const exercise of session.exercises) {
+    if (!["primary", "power"].includes(exercise.category)) continue;
+
+    const family = detectExerciseMovementFamily(exercise.name);
+    if (family === "unknown") continue;
+
+    const targetList = focusMap[family];
+    if (!targetList?.length) continue;
+
+    if (exerciseAlreadyFitsFocus(exercise.name, targetList)) continue;
+
+    await db
+      .update(sessionExercises)
+      .set({ name: targetList[0] })
+      .where(eq(sessionExercises.id, exercise.id));
+
+    swapCount++;
+  }
+
+  return swapCount;
+}
+
 // ─── Week Scope ───────────────────────────────────────────────────────────────
 
 async function applyWeekScope(
@@ -182,12 +316,13 @@ async function applyWeekScope(
 
   let exerciseCount = 0;
   let sessionCount = 0;
+  let totalSwapped = 0;
 
   for (const week of weeksToMutate) {
     for (const session of week.sessions) {
       if (session.isRestDay) continue;
 
-      // Update all exercises in this session
+      // Update prescriptions (reps / rest) for all exercises
       const exerciseIds = session.exercises
         .map((e) => e.id)
         .filter((id): id is number => id != null);
@@ -204,6 +339,10 @@ async function applyWeekScope(
         exerciseCount += exerciseIds.length;
       }
 
+      // Swap primary exercises to match the target training focus
+      const sessionSwaps = await swapExercisesForFocus(session, transformation);
+      totalSwapped += sessionSwaps;
+
       // Update session label + emphasis
       await db
         .update(trainingSessions)
@@ -214,7 +353,10 @@ async function applyWeekScope(
     }
   }
 
-  const changeSummary = `${weekLabel} shifted to ${transformation} focus — updated ${sessionCount} session${sessionCount !== 1 ? "s" : ""} (${exerciseCount} exercise prescription${exerciseCount !== 1 ? "s" : ""} adjusted).`;
+  const swapSuffix = totalSwapped > 0
+    ? `, ${totalSwapped} primary exercise${totalSwapped !== 1 ? "s" : ""} swapped to match ${transformation} focus`
+    : "";
+  const changeSummary = `${weekLabel} shifted to ${transformation} focus — updated ${sessionCount} session${sessionCount !== 1 ? "s" : ""} (${exerciseCount} prescription${exerciseCount !== 1 ? "s" : ""} adjusted${swapSuffix}).`;
 
   logger.info(
     { systemId, transformation, weekLabel, sessionCount, exerciseCount },
@@ -260,6 +402,7 @@ async function applyBlockScope(
 
   let exerciseCount = 0;
   let sessionCount = 0;
+  let totalSwapped = 0;
 
   // Apply to ALL sessions across ALL weeks
   for (const phase of fullSystem.phases) {
@@ -282,6 +425,10 @@ async function applyBlockScope(
 
           exerciseCount += exerciseIds.length;
         }
+
+        // Swap primary exercises to match the new block focus
+        const sessionSwaps = await swapExercisesForFocus(session, transformation);
+        totalSwapped += sessionSwaps;
 
         await db
           .update(trainingSessions)
@@ -309,7 +456,10 @@ async function applyBlockScope(
     .set({ metadata: updatedMetadata })
     .where(eq(trainingSystems.id, systemId));
 
-  const changeSummary = `Block shifted to **${newBlockPlan.displayName}** — ${newBlockPlan.primaryAdaptation.toLowerCase()}. Updated ${sessionCount} session${sessionCount !== 1 ? "s" : ""} (${exerciseCount} exercise prescription${exerciseCount !== 1 ? "s" : ""}) across the full program.`;
+  const swapSuffix = totalSwapped > 0
+    ? `, ${totalSwapped} primary exercise${totalSwapped !== 1 ? "s" : ""} updated to match ${newBlockPlan.displayName}`
+    : "";
+  const changeSummary = `Block shifted to **${newBlockPlan.displayName}** — ${newBlockPlan.primaryAdaptation.toLowerCase()}. Updated ${sessionCount} session${sessionCount !== 1 ? "s" : ""} (${exerciseCount} prescription${exerciseCount !== 1 ? "s" : ""} adjusted${swapSuffix}) across the full program.`;
 
   logger.info(
     { systemId, blockType, transformation, sessionCount, exerciseCount, displayName: newBlockPlan.displayName },

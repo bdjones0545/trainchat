@@ -1,0 +1,279 @@
+CRITICAL FIX PASS — CLOSE THE FINAL SYSTEM GAPS (PERSISTENCE, WEEK UI, REFINEMENT SWAPS)
+
+CONTEXT:
+The full system audit confirmed that the core generation engine is working correctly:
+- 4-week blocks are generated
+- family rotation, exposure tracking, and phase affinity are working
+- multi-build variation is working
+
+However, three high-impact gaps remain:
+
+1. Programs are not persisted to the DB immediately after build (draft-only state)
+2. Week tab switching in the UI may not be loading real Week 2/3/4 data from the DB
+3. Week/block refinements only change dosage (sets/reps/rest), not actual exercises
+
+These gaps create:
+- UI inconsistency
+- broken progression experience
+- mismatch between agent messaging and actual system changes
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Close the final integration gaps so TrainChat behaves like a complete system:
+
+- Every build immediately becomes a real persisted training system
+- Week navigation shows real week data (not draft placeholders)
+- Refinements modify exercises when appropriate, not just prescription
+
+==================================================
+TASK 1 — AUTO-PERSIST AFTER REBUILD_PROGRAM
+==================================================
+
+Remove the “save gate” requirement.
+
+After REBUILD_PROGRAM completes:
+
+- Immediately call:
+  upsertTrainingSystemFromProgram(program)
+
+- Ensure:
+  - phases → weeks → sessions → exercises are created in DB
+  - current trainingSystemId is set as active
+  - program.weekNumber = 1 is correctly initialized
+
+Add log:
+
+[AutoPersistAudit] {
+  trainingSystemId,
+  totalWeeksPersisted,
+  totalSessions,
+  totalExercises,
+  persisted: true
+}
+
+RESULT:
+User never interacts with a draft-only program.
+Everything becomes a real system instantly.
+
+==================================================
+TASK 2 — FIX WEEK TAB → DB DATA FLOW
+==================================================
+
+Ensure LiveProgramPanel week switching loads REAL DB data.
+
+When user selects Week N:
+
+- Call:
+  GET /training-system/week?weekNumber=N
+
+- Replace panel data with returned:
+  - sessions
+  - exercises
+  - metadata
+
+Do NOT rely on:
+- program.weekNumber from draft state
+- local static data
+
+Add log:
+
+[WeekFetchAudit] {
+  selectedWeek,
+  source: "db",
+  sessionCount,
+  exerciseCount
+}
+
+RESULT:
+Week 1, 2, 3, 4 display different actual content.
+
+==================================================
+TASK 3 — ENSURE TODAY MATCHES DB STATE
+==================================================
+
+Verify:
+- /training-system/today pulls from persisted DB
+- not from draft program
+
+Confirm:
+- correct session is selected based on:
+  - current day of week
+  - active training system
+
+Add log:
+
+[TodaySourceAudit] {
+  source: "db",
+  matchedDay,
+  sessionId
+}
+
+==================================================
+TASK 4 — UPGRADE HIERARCHICAL REFINEMENT (EXERCISE-AWARE)
+==================================================
+
+Current issue:
+- week_scope and block_scope refinements only mutate reps/rest
+- they do NOT change exercise selection
+
+Fix:
+
+When refinement intent includes:
+- "explosive"
+- "power"
+- "recovery"
+- "strength"
+- "reduce fatigue"
+- "injury/pain"
+
+THEN:
+
+1. Re-run targeted exercise selection using:
+   - movement family
+   - phase affinity
+   - exposure tracker
+   - equivalence clusters
+
+2. Replace affected exercises in:
+   - current week (week_scope)
+   - all weeks (block_scope)
+   - downstream weeks (if applicable)
+
+Example:
+"Make this week more explosive"
+→ replace primary strength lifts with power/contrast or elastic expressions where appropriate
+
+==================================================
+TASK 5 — FIX DOWNSTREAM PROPAGATION (REAL, NOT JUST MESSAGE)
+==================================================
+
+Current issue:
+- processHierarchicalImpact() claims downstream changes
+- but only current week is mutated
+
+Fix:
+
+When impactScope = downstream_weeks or full_block:
+
+- actually apply mutations to:
+  - future weeks in DB
+  - not just current session
+
+Use:
+- movement family matching
+- slot identity
+- phase context
+
+Add log:
+
+[RefinementPropagationAudit] {
+  impactScope,
+  weeksAffected,
+  sessionsAffected,
+  exercisesReplaced
+}
+
+==================================================
+TASK 6 — ALIGN AGENT RESPONSE WITH REAL CHANGES
+==================================================
+
+Ensure the agent only claims changes that actually occurred.
+
+If:
+- no downstream mutation occurred
+→ do NOT say "future weeks adjusted"
+
+If:
+- downstream mutation occurred
+→ include:
+  - number of sessions affected
+  - type of changes
+
+==================================================
+TASK 7 — ELIMINATE DRAFT VS DB DUALITY
+==================================================
+
+Ensure all UI components use:
+- DB-backed training system
+NOT:
+- assistant message structuredData (draft)
+
+This includes:
+- Today view
+- This Week
+- Block tab
+- Week navigation
+
+Draft data should only exist transiently during build.
+
+==================================================
+TASK 8 — REMOVE LEGACY EXERCISE SYSTEM PATH
+==================================================
+
+Audit usage of:
+- training-system-service.ts exerciseLibrary
+- initializeTrainingSystem()
+- selectSessionExercises()
+
+If these bypass the new architecture engine:
+- deprecate or remove them
+- or route them into the modern selection system
+
+We must have ONE source of truth for exercise selection.
+
+==================================================
+TASK 9 — VALIDATION
+==================================================
+
+Test full flow:
+
+1. Build program
+2. Immediately:
+   - switch to Week 2 → verify different exercises
+   - switch to Week 3/4 → verify different exercises
+3. Open Today → verify correct DB session
+4. Apply refinements:
+   - “make this week more explosive”
+   - verify exercise swaps, not just reps
+   - verify future weeks update if needed
+
+SUCCESS CRITERIA:
+- no draft-only state
+- week switching shows real variation
+- refinements modify exercises when appropriate
+- agent messaging matches actual system state
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+
+1. how auto-persistence was implemented
+2. how week switching now fetches DB data
+3. how refinement now swaps exercises
+4. how downstream propagation is applied
+5. what legacy systems were removed or replaced
+6. before/after examples of:
+   - week switching
+   - refinement behavior
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat must behave as a fully integrated system:
+
+- builds → immediately persisted
+- UI → reflects real DB data
+- refinements → change real exercises
+- agent → accurately describes what changed
+
+No disconnect between:
+- build
+- storage
+- UI
+- refinement
+- messaging
