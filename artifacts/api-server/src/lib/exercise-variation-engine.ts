@@ -34,6 +34,21 @@
 //   T9  Debug logging: slot, pool size, top 3 with scores, chosen, penalties
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── Block Variation Engine Imports ──────────────────────────────────────────
+import { getExerciseExtendedMeta, getExerciseFamily } from "./programs/exerciseExtendedMeta";
+import { deriveSlotIntent, type SlotIntentResult } from "./programs/deriveSlotIntent";
+import { deriveFamilyBiases, getFamilyBiasScore, type FamilyBiasResult } from "./programs/deriveFamilyBiases";
+import {
+  emitExerciseVariationAudit,
+  emitExerciseVariationWarning,
+  validateSelectionCoherence,
+  buildWinReasons,
+  buildPenaltySummary,
+  type ExerciseScoreBreakdown,
+  type SlotAuditPayload,
+} from "./programs/exerciseVariationAudit";
+import type { ProgramContextProfile } from "./programs/programContextProfile";
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /** Coaching metadata for each exercise in a pool. */
@@ -67,6 +82,18 @@ export interface ScoreContext {
   seed: number;
   /** Slot name — used in debug logs. */
   slotName: string;
+
+  // ── Block Variation Engine extensions ───────────────────────────────────
+  /** Derived slot intent from the block archetype + phase. When provided, enables block-aware scoring. */
+  slotIntent?: SlotIntentResult;
+  /** Family bias scores from deriveFamilyBiases(). When provided, enables family-level ranking. */
+  familyBiases?: FamilyBiasResult;
+  /** Full program context profile. Enables all extended scoring dimensions. */
+  programContext?: ProgramContextProfile;
+  /** Novelty pressure from similarity detection. Higher = stronger push toward variety. */
+  noveltyPressure?: number;
+  /** Generation ID for audit correlation. */
+  generationId?: string;
 }
 
 export interface SlotExerciseSelection {
@@ -93,6 +120,7 @@ interface CandidateScore {
   name: string;
   score: number;
   breakdown: {
+    // ── Original dimensions ──────────────────────────────────────────────
     sportFit: number;
     intentFit: number;
     neuralFit: number;
@@ -103,6 +131,19 @@ interface CandidateScore {
     contrastPenalty: number;
     exactRepeatPenalty: number;
     seedTiebreaker: number;
+    // ── Block Variation Engine extensions ────────────────────────────────
+    blockArchetypeFit: number;
+    currentPhaseFit: number;
+    slotIntentFit: number;
+    movementBiasFit: number;
+    familyPreferenceFit: number;
+    familyReductionPenalty: number;
+    disallowedFamilyPenalty: number;
+    velocityIntentFit: number;
+    stabilityDemandFit: number;
+    complexityPenalty: number;
+    progressionStyleFit: number;
+    anchorPenalty: number;
   };
 }
 
@@ -286,42 +327,182 @@ function scoreCandidate(
   // ── Equipment fit (0–1) ───────────────────────────────────────────────────
   const equipFit = hasEquipment(meta.name, ctx.equipmentLevel) ? 1 : -3;
 
-  // ── Novelty bonus ─────────────────────────────────────────────────────────
-  // isDefaultAnchor: −2.5 (was −1) — substantially reduces win rate of over-used classics.
-  // Non-anchors: +1.0 — gives alternatives a meaningful head-start.
-  // Explicit per-exercise extra penalty for the worst repeat offenders.
+  // ── Novelty bonus + anchor penalty ───────────────────────────────────────
   const defaultAnchorPenalty = meta.isDefaultAnchor ? -2.5 : 1.0;
   const anchorExtraPenalty = ANCHOR_EXTRA_PENALTY[meta.name] ?? 0;
-  const noveltyBonus = defaultAnchorPenalty - anchorExtraPenalty;
+  const baseNoveltyBonus = defaultAnchorPenalty - anchorExtraPenalty;
+  // Scale anchor penalty by novelty pressure from similarity detection
+  const noveltyPressureMultiplier = 1 + (ctx.noveltyPressure ?? 0) * 1.5;
+  const anchorPenalty = meta.isDefaultAnchor ? (2.5 + anchorExtraPenalty) * noveltyPressureMultiplier : 0;
+  const noveltyBonus = meta.isDefaultAnchor
+    ? -anchorPenalty
+    : Math.max(0, baseNoveltyBonus) * (1 + (ctx.noveltyPressure ?? 0) * 0.5);
 
-  // ── Fatigue penalty (0–2) ─────────────────────────────────────────────────
+  // ── Fatigue penalty ───────────────────────────────────────────────────────
   let fatiguePenalty = 0;
-  if (ctx.lowFatigue && FATIGUE_ORDER[meta.fatigueCost] === 2) {
+  const slotLowFatigue = ctx.slotIntent?.targetFatigueCost === "low" || ctx.lowFatigue;
+  const slotModerateFatigue = ctx.slotIntent?.targetFatigueCost === "moderate";
+  if (slotLowFatigue && FATIGUE_ORDER[meta.fatigueCost] === 2) {
     fatiguePenalty = 2;
-  } else if (ctx.lowFatigue && FATIGUE_ORDER[meta.fatigueCost] === 1) {
+  } else if (slotLowFatigue && FATIGUE_ORDER[meta.fatigueCost] === 1) {
     fatiguePenalty = 1;
+  } else if (slotModerateFatigue && FATIGUE_ORDER[meta.fatigueCost] === 2) {
+    fatiguePenalty = 0.5;
   }
 
-  // ── Overuse penalty — proper sliding window (0–6) ────────────────────────
-  // Each build that contained this exercise adds 1.2 penalty points (was 1.0, capped at 3).
-  // Cap raised to 6 so heavily repeated exercises truly fall behind alternatives.
+  // ── Overuse penalty (0–6) ─────────────────────────────────────────────────
   const usageCount = getOveruseCount(meta.name);
   const overusePenalty = Math.min(6, usageCount * 1.2);
 
-  // ── Contrast penalty — immediate build-to-build rotation (0–3) ───────────
-  // Last build: −3.0, second-to-last: −1.5 — the strongest variety lever.
+  // ── Contrast penalty (0–3) ────────────────────────────────────────────────
   const contrastPenalty = getContrastPenalty(meta.name);
 
   // ── Exact repeat penalty (0–5) ────────────────────────────────────────────
   const exactRepeatPenalty = ctx.alreadySelected.has(meta.name) ? 5 : 0;
 
   // ── Seed tiebreaker (0–1.5) ───────────────────────────────────────────────
-  // Raised from 0–0.99 → 0–1.5 so tiebreaks have meaningful spread.
-  // Deterministic within a build (same seed produces same ranking), varied across builds.
   const seedTiebreaker = (((ctx.seed * slotPrimeMultiplier * 2654435761) % 1) + 1) % 1 * 1.5;
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ── Block Variation Engine extended scoring dimensions ─────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const exMeta = getExerciseExtendedMeta(meta.name);
+  const exerciseFamily = exMeta.family;
+  const profile = ctx.programContext;
+  const weights = profile?.blockSpecificRankingWeights;
+
+  // ── Block archetype fit (−3 to +3) ────────────────────────────────────────
+  let blockArchetypeFit = 0;
+  if (profile) {
+    const archetype = profile.blockArchetype;
+    const intentSet = new Set(meta.intentTags);
+    if (archetype === "INTENSIFICATION_STRENGTH") {
+      if (intentSet.has("strength")) blockArchetypeFit += 2;
+      if (exMeta.velocityIntent === "slow_grind") blockArchetypeFit += 0.5;
+      if (intentSet.has("endurance")) blockArchetypeFit -= 1.5;
+    } else if (archetype === "POWER_ELASTIC_CONVERSION") {
+      if (intentSet.has("elastic") || intentSet.has("speed")) blockArchetypeFit += 2.5;
+      if (intentSet.has("power")) blockArchetypeFit += 1.5;
+      if (exMeta.velocityIntent === "explosive" || exMeta.velocityIntent === "ballistic") blockArchetypeFit += 1;
+      if (exMeta.velocityIntent === "slow_grind" && meta.fatigueCost === "high") blockArchetypeFit -= 2;
+    } else if (archetype === "FOUNDATION_ACCUMULATION") {
+      if (intentSet.has("hypertrophy")) blockArchetypeFit += 1.5;
+      if (intentSet.has("strength")) blockArchetypeFit += 1;
+      if (intentSet.has("stability")) blockArchetypeFit += 0.5;
+      if (exerciseFamily === "elastic_reactive" || exerciseFamily === "plyometric") blockArchetypeFit -= 1;
+    } else if (archetype === "REBUILD_DELOAD") {
+      if (intentSet.has("stability") || intentSet.has("mobility")) blockArchetypeFit += 2.5;
+      if (meta.fatigueCost === "low") blockArchetypeFit += 1.5;
+      if (meta.neuralDemand === "high") blockArchetypeFit -= 2.5;
+      if (exMeta.complexity === "complex") blockArchetypeFit -= 1.5;
+    }
+    blockArchetypeFit *= (weights?.blockArchetypeFitWeight ?? 1);
+    blockArchetypeFit = Math.max(-3, Math.min(3, blockArchetypeFit));
+  }
+
+  // ── Current phase fit (−1 to +2) ──────────────────────────────────────────
+  let currentPhaseFit = 0;
+  if (profile) {
+    const phase = profile.currentPhase;
+    if (phase === "intensify") {
+      if (meta.neuralDemand === "high") currentPhaseFit += 1.5;
+      if (meta.fatigueCost === "low" && !meta.intentTags.includes("power")) currentPhaseFit -= 0.5;
+    } else if (phase === "build") {
+      if (meta.fatigueCost === "high") currentPhaseFit += 0.5;
+    } else if (phase === "deload" || phase === "establish") {
+      if (meta.fatigueCost === "low") currentPhaseFit += 1;
+      if (meta.neuralDemand === "low") currentPhaseFit += 0.5;
+      if (meta.fatigueCost === "high" && phase === "deload") currentPhaseFit -= 1.5;
+    }
+    currentPhaseFit = Math.max(-1, Math.min(2, currentPhaseFit));
+  }
+
+  // ── Slot intent fit (−2 to +2) ────────────────────────────────────────────
+  let slotIntentFit = 0;
+  if (ctx.slotIntent) {
+    const si = ctx.slotIntent;
+    const slotNeuralLevel = NEURAL_ORDER[si.targetNeuralDemand] ?? 1;
+    const exNeuralLevel = NEURAL_ORDER[meta.neuralDemand] ?? 1;
+    if (exNeuralLevel === slotNeuralLevel) slotIntentFit += 0.5;
+    else if (Math.abs(exNeuralLevel - slotNeuralLevel) > 1) slotIntentFit -= 0.5;
+    if (si.targetVelocityIntent === "explosive" || si.targetVelocityIntent === "ballistic") {
+      if (exMeta.velocityIntent === "explosive" || exMeta.velocityIntent === "ballistic") slotIntentFit += 1;
+      else if (exMeta.velocityIntent === "slow_grind") slotIntentFit -= 0.5;
+    } else if (si.targetVelocityIntent === "slow_grind") {
+      if (exMeta.velocityIntent === "slow_grind") slotIntentFit += 0.5;
+      else if (exMeta.velocityIntent === "explosive") slotIntentFit -= 0.5;
+    }
+    if (si.preferredFamilies.includes(exerciseFamily)) slotIntentFit += 1;
+    if (si.disallowedFamilies.includes(exerciseFamily)) slotIntentFit -= 2;
+    if (si.reducedFamilies.includes(exerciseFamily)) slotIntentFit -= 0.5;
+    slotIntentFit *= (weights?.slotIntentFitWeight ?? 1);
+    slotIntentFit = Math.max(-2, Math.min(2, slotIntentFit));
+  }
+
+  // ── Movement bias fit (0 to +2) ───────────────────────────────────────────
+  let movementBiasFit = 0;
+  if (profile?.movementBiases?.length) {
+    const biasSet = new Set(profile.movementBiases.map((b) => b.toLowerCase()));
+    if (biasSet.has(exerciseFamily) || meta.intentTags.some((t) => biasSet.has(t))) {
+      movementBiasFit = Math.min(2, 1.5 * (weights?.movementBiasFitWeight ?? 1));
+    }
+  }
+
+  // ── Family bias (preference, reduction, disallowed) ───────────────────────
+  let familyPreferenceFit = 0;
+  let familyReductionPenalty = 0;
+  let disallowedFamilyPenalty = 0;
+  if (ctx.familyBiases) {
+    const biasScore = getFamilyBiasScore(ctx.familyBiases, exerciseFamily);
+    if (biasScore > 0) familyPreferenceFit = Math.min(2, biasScore * (weights?.familyPreferenceFitWeight ?? 1));
+    else if (biasScore < -4) disallowedFamilyPenalty = Math.min(6, Math.abs(biasScore));
+    else if (biasScore < 0) familyReductionPenalty = Math.min(2, Math.abs(biasScore));
+  }
+
+  // ── Velocity intent fit (0 to +1.5) ──────────────────────────────────────
+  let velocityIntentFit = 0;
+  if (ctx.slotIntent) {
+    const targetVel = ctx.slotIntent.targetVelocityIntent;
+    const exVel = exMeta.velocityIntent;
+    if (targetVel === exVel) velocityIntentFit = 1 * (weights?.velocityIntentFitWeight ?? 1);
+    else if ((targetVel === "explosive" && exVel === "ballistic") || (targetVel === "ballistic" && exVel === "explosive")) {
+      velocityIntentFit = 0.5 * (weights?.velocityIntentFitWeight ?? 1);
+    }
+    velocityIntentFit = Math.min(1.5, velocityIntentFit);
+  }
+
+  // ── Stability demand fit (0 to +0.5) ─────────────────────────────────────
+  let stabilityDemandFit = 0;
+  if (ctx.slotIntent) {
+    const STAB_ORDER: Record<string, number> = { low: 0, moderate: 1, high: 2 };
+    const diff = Math.abs((STAB_ORDER[ctx.slotIntent.targetStabilityDemand] ?? 1) - (STAB_ORDER[exMeta.stabilityDemand] ?? 1));
+    stabilityDemandFit = diff === 0 ? 0.5 : 0;
+  }
+
+  // ── Complexity penalty (0 to −3) ─────────────────────────────────────────
+  let complexityPenalty = 0;
+  if (ctx.slotIntent) {
+    if (ctx.slotIntent.complexityLimit === "low") {
+      if (exMeta.complexity === "complex") complexityPenalty = 2.5 * (weights?.complexityPenaltyWeight ?? 1);
+      else if (exMeta.complexity === "moderate") complexityPenalty = 1 * (weights?.complexityPenaltyWeight ?? 1);
+    } else if (ctx.slotIntent.complexityLimit === "moderate" && exMeta.complexity === "complex") {
+      complexityPenalty = 1 * (weights?.complexityPenaltyWeight ?? 1);
+    }
+    complexityPenalty = Math.min(3, complexityPenalty);
+  }
+
+  // ── Progression style fit (0 to +0.5) ────────────────────────────────────
+  let progressionStyleFit = 0;
+  if (profile?.progressionStyle === "wave_load" && exMeta.complexity !== "simple") progressionStyleFit = 0.3;
+  else if (profile?.progressionStyle === "linear" && exMeta.complexity === "simple") progressionStyleFit = 0.3;
+
+  // ── Total ─────────────────────────────────────────────────────────────────
   const total = sportFit + intentFit + neuralFit + equipFit + noveltyBonus
-    - fatiguePenalty - overusePenalty - contrastPenalty - exactRepeatPenalty + seedTiebreaker;
+    - fatiguePenalty - overusePenalty - contrastPenalty - exactRepeatPenalty + seedTiebreaker
+    + blockArchetypeFit + currentPhaseFit + slotIntentFit + movementBiasFit
+    + familyPreferenceFit + velocityIntentFit + stabilityDemandFit + progressionStyleFit
+    - familyReductionPenalty - disallowedFamilyPenalty - complexityPenalty;
 
   return {
     name: meta.name,
@@ -331,12 +512,24 @@ function scoreCandidate(
       intentFit,
       neuralFit,
       equipFit,
-      noveltyBonus,
+      noveltyBonus: baseNoveltyBonus,
       fatiguePenalty,
       overusePenalty,
       contrastPenalty,
       exactRepeatPenalty,
       seedTiebreaker,
+      blockArchetypeFit,
+      currentPhaseFit,
+      slotIntentFit,
+      movementBiasFit,
+      familyPreferenceFit,
+      familyReductionPenalty,
+      disallowedFamilyPenalty,
+      velocityIntentFit,
+      stabilityDemandFit,
+      complexityPenalty,
+      progressionStyleFit,
+      anchorPenalty,
     },
   };
 }
@@ -347,6 +540,7 @@ function ranked(pool: ExerciseMeta[], ctx: ScoreContext, primeMultiplier: number
 
   const top3 = scored.slice(0, 3);
   const chosen = scored[0]?.name ?? pool[0]?.name ?? "Back Squat";
+  const chosenScore = scored[0] ?? null;
 
   const debugInfo: SlotDebugInfo = {
     slot: ctx.slotName,
@@ -358,6 +552,7 @@ function ranked(pool: ExerciseMeta[], ctx: ScoreContext, primeMultiplier: number
   };
 
   if (process.env.NODE_ENV !== "production") {
+    // ── Original audit log ────────────────────────────────────────────────
     console.log("[BuildAudit:Variation]", JSON.stringify({
       slot: ctx.slotName,
       sport: ctx.sport,
@@ -373,6 +568,83 @@ function ranked(pool: ExerciseMeta[], ctx: ScoreContext, primeMultiplier: number
       contrastPenaltyActive: LAST_BUILD_SELECTIONS.size > 0,
       lastBuildAnchors: [...LAST_BUILD_SELECTIONS].slice(0, 6),
     }));
+
+    // ── Extended Block Variation Audit ────────────────────────────────────
+    if (ctx.programContext && chosenScore) {
+      const chosenExMeta = getExerciseExtendedMeta(chosen);
+
+      // Build factor objects for top candidates
+      const toFactors = (c: CandidateScore): ExerciseScoreBreakdown => ({
+        exerciseName: c.name,
+        totalScore: c.score,
+        factors: {
+          sportFit: c.breakdown.sportFit,
+          intentFit: c.breakdown.intentFit,
+          neuralFit: c.breakdown.neuralFit,
+          equipFit: c.breakdown.equipFit,
+          noveltyBonus: c.breakdown.noveltyBonus,
+          fatiguePenalty: c.breakdown.fatiguePenalty,
+          overusePenalty: c.breakdown.overusePenalty,
+          contrastPenalty: c.breakdown.contrastPenalty,
+          exactRepeatPenalty: c.breakdown.exactRepeatPenalty,
+          seedTiebreaker: c.breakdown.seedTiebreaker,
+          blockArchetypeFit: c.breakdown.blockArchetypeFit,
+          currentPhaseFit: c.breakdown.currentPhaseFit,
+          slotIntentFit: c.breakdown.slotIntentFit,
+          movementBiasFit: c.breakdown.movementBiasFit,
+          familyPreferenceFit: c.breakdown.familyPreferenceFit,
+          familyReductionPenalty: c.breakdown.familyReductionPenalty,
+          disallowedFamilyPenalty: c.breakdown.disallowedFamilyPenalty,
+          velocityIntentFit: c.breakdown.velocityIntentFit,
+          stabilityDemandFit: c.breakdown.stabilityDemandFit,
+          complexityPenalty: c.breakdown.complexityPenalty,
+          progressionStyleFit: c.breakdown.progressionStyleFit,
+          anchorPenalty: c.breakdown.anchorPenalty,
+        },
+      });
+
+      const topCandidates = scored.slice(0, 5).map(toFactors);
+      const chosenBreakdown = toFactors(chosenScore);
+
+      const payload: SlotAuditPayload = {
+        generationId: ctx.generationId ?? "unknown",
+        chosenBlockArchetype: ctx.programContext.blockArchetype,
+        chosenPhase: ctx.programContext.currentPhase,
+        chosenSplitArchitecture: ctx.programContext.splitArchitecture,
+        dayIndex: 0,
+        dayTheme: ctx.slotName,
+        slotId: ctx.slotName,
+        slotIntentLabel: ctx.slotIntent?.slotIntentLabel ?? ctx.slotName,
+        targetStimulus: ctx.slotIntent?.targetStimulus ?? "",
+        poolSize: pool.length,
+        topCandidates,
+        chosenExercise: chosen,
+        winReasons: buildWinReasons(chosenBreakdown.factors),
+        penaltiesApplied: buildPenaltySummary(chosenBreakdown.factors),
+        noveltyPressureApplied: ctx.noveltyPressure ?? 0,
+        familyBiasApplied: ctx.familyBiases?.boostedFamilies ?? [],
+        phaseModifierApplied: ctx.programContext.currentPhase,
+        blockModifierApplied: ctx.programContext.blockArchetype,
+        rerankOccurred: false,
+        rerankReason: null,
+        exerciseFamily: chosenExMeta.family,
+        complexity: chosenExMeta.complexity,
+        velocityIntent: chosenExMeta.velocityIntent,
+      };
+
+      emitExerciseVariationAudit(payload);
+
+      // Validate coherence
+      validateSelectionCoherence(
+        ctx.programContext.blockArchetype,
+        ctx.slotName,
+        chosen,
+        chosenExMeta.family,
+        pool.find((m) => m.name === chosen)?.fatigueCost ?? "moderate",
+        pool.find((m) => m.name === chosen)?.neuralDemand ?? "moderate",
+        chosenExMeta.complexity,
+      );
+    }
   }
 
   return { chosen, debugInfo };
@@ -757,6 +1029,7 @@ export function selectSlotExercises(
   equipmentLevel: "full_gym" | "dumbbells_only" | "home_limited" | "bodyweight" = "full_gym",
   lowFatigue?: boolean,
   blockContext?: BlockSelectionContext,
+  programContext?: ProgramContextProfile,
 ): SlotExerciseSelection {
   const alreadySelected = new Set<string>();
   const debugInfos: SlotDebugInfo[] = [];
@@ -765,7 +1038,18 @@ export function selectSlotExercises(
   const effectiveLowFatigue =
     lowFatigue ||
     blockContext?.weekRole === "deload" ||
-    blockContext?.weekRole === "establish";
+    blockContext?.weekRole === "establish" ||
+    programContext?.currentPhase === "deload";
+
+  // Pre-derive family biases once per build (same archetype + phase for all slots)
+  const sharedFamilyBiases = programContext
+    ? deriveFamilyBiases(programContext)
+    : undefined;
+
+  // Stable generation ID for audit log correlation
+  const generationId = programContext
+    ? `${programContext.blockArchetype}:${programContext.currentPhase}:${seed.toFixed(4)}`
+    : undefined;
 
   function pick(
     pool: ExerciseMeta[],
@@ -779,6 +1063,11 @@ export function selectSlotExercises(
       intent,
     );
 
+    // Derive per-slot intent from block archetype + phase
+    const slotIntent = programContext
+      ? deriveSlotIntent(programContext, slotName)
+      : undefined;
+
     const ctx: ScoreContext = {
       sport,
       goal,
@@ -788,6 +1077,11 @@ export function selectSlotExercises(
       lowFatigue: effectiveLowFatigue,
       seed,
       slotName,
+      slotIntent,
+      familyBiases: sharedFamilyBiases,
+      programContext,
+      noveltyPressure: programContext?.noveltyPressure,
+      generationId,
     };
     const { chosen, debugInfo } = ranked(pool, ctx, primeMultiplier);
     debugInfos.push(debugInfo);

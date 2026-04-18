@@ -1,0 +1,324 @@
+We need to implement a full Program Variance Audit system for TrainChat. The purpose is to verify that every generated program has meaningful variance and is not collapsing into the same output pattern across blocks, splits, slots, and exercise selection.
+
+GOAL
+Audit every generated program to ensure there is real variance across outputs.
+
+CORE PROBLEM
+Even after adding Block Variation and Exercise Variation, the system may still over-converge. It might change labels, shuffle exercises, or slightly alter slot choices while still producing functionally similar programs. We need a structured audit layer that measures variance, detects stale generation patterns, and explains where similarity is still leaking through.
+
+PRIMARY OBJECTIVES
+
+1. Add a Program Variance Audit after every generation
+2. Compare each new program against recent generated programs
+3. Detect both high-level and low-level over-similarity
+4. Identify exactly which layer is failing to vary:
+   - block archetype
+   - phase
+   - split architecture
+   - day themes
+   - slot ordering
+   - movement family distribution
+   - top lift patterns
+   - exact exercise selection
+5. Trigger warnings when variance falls below threshold
+6. Support optional re-roll / fallback if the new output is too similar
+7. Keep everything DEV-visible and easy to grep
+
+NEW DEV AUDIT SYSTEM
+
+Create a DEV-only structured audit called:
+[ProgramVarianceAudit]
+
+This audit should run after a program is generated and after any fallback/rerank path.
+
+It must compare the newly generated program against the last N recent programs for that user/session/context.
+
+Minimum comparison window:
+- last 5 generated programs if available
+
+If user history is unavailable, compare against recent in-session generations.
+
+WHAT THE AUDIT MUST MEASURE
+
+A. Block-level variance
+Compare:
+- blockArchetype
+- phase
+- block label
+- progression style
+- neural demand profile
+- fatigue profile
+
+B. Split-level variance
+Compare:
+- splitArchitecture
+- weekly rhythm
+- day themes
+- day ordering
+- high/low distribution
+- lower/upper balance
+- push/pull balance
+- conditioning placement
+- elastic exposure placement
+
+C. Slot-level variance
+Compare:
+- slot ordering by day
+- slot density
+- required vs optional slot usage
+- same slot pattern repetition
+- day structure similarity
+
+D. Movement family variance
+Compare:
+- bilateral lower emphasis
+- unilateral lower emphasis
+- upper push volume
+- upper pull volume
+- rotational exposure
+- elastic/power exposure
+- trunk emphasis
+- conditioning emphasis
+
+E. Exercise-level variance
+Compare:
+- exact exercise repeats
+- repeated primary lift patterns
+- repeated secondary patterns
+- repeated assistance clusters
+- repeated warm-up/prep patterns
+- repeated finisher patterns
+
+F. Program identity variance
+Compare:
+- top 1-2 primary exercises per day
+- overall “feel” fingerprint
+- whether the program meaningfully feels different or just cosmetically different
+
+PROGRAM FINGERPRINT REQUIREMENT
+
+Implement or expand a normalized ProgramFingerprint that includes:
+- blockArchetype
+- currentPhase
+- splitArchitecture
+- dayThemes
+- slotOrderByDay
+- primaryExerciseIdsByDay
+- primaryExerciseFamiliesByDay
+- secondaryFamilyDistribution
+- bilateralLowerCount
+- unilateralLowerCount
+- upperPushCount
+- upperPullCount
+- rotationalCount
+- elasticCount
+- trunkCount
+- conditioningCount
+- neuralDemandDistribution
+- fatigueDistribution
+- sessionDensityProfile
+- movementBiasProfile
+
+This fingerprint should be the canonical basis for variance comparison.
+
+SIMILARITY SCORING
+
+Create a weighted similarity score from 0.00 to 1.00 where:
+- 0.00 = highly different
+- 1.00 = nearly identical
+
+Break the similarity score into layers:
+
+- blockSimilarity
+- splitSimilarity
+- slotSimilarity
+- familySimilarity
+- exerciseSimilarity
+- identitySimilarity
+
+Then compute:
+overallSimilarity
+
+Example:
+overallSimilarity =
+  blockSimilarity * 0.15 +
+  splitSimilarity * 0.20 +
+  slotSimilarity * 0.15 +
+  familySimilarity * 0.20 +
+  exerciseSimilarity * 0.20 +
+  identitySimilarity * 0.10
+
+Weights can be adjusted, but they must be explicit and logged.
+
+VARIANCE SCORING
+
+Also compute the inverse:
+varianceScore = 1 - overallSimilarity
+
+Add qualitative buckets:
+- EXCELLENT_VARIANCE
+- GOOD_VARIANCE
+- BORDERLINE_VARIANCE
+- LOW_VARIANCE
+- STALE_OUTPUT
+
+THRESHOLDS
+
+Define explicit thresholds such as:
+- varianceScore >= 0.65 → acceptable
+- varianceScore 0.50–0.64 → borderline
+- varianceScore < 0.50 → too similar
+- varianceScore < 0.35 → stale output / likely reroll needed
+
+These can be tuned, but must be centralized and logged.
+
+AUDIT OUTPUT
+
+For every generation, log:
+- generationId
+- userId if available
+- comparisonWindowSize
+- comparedProgramIds
+- chosenBlockArchetype
+- chosenPhase
+- chosenSplitArchitecture
+- newProgramFingerprint
+- per-program similarity breakdowns
+- closestMatchProgramId
+- closestMatchSimilarity
+- overallSimilarityAverage
+- varianceScore
+- varianceBucket
+- lowVarianceReasons
+- rerollRecommended (true/false)
+- rerollTriggered (true/false)
+- rerollReason
+- postRerollVarianceScore if reroll happened
+
+Also create a concise grep-friendly summary line like:
+[ProgramVarianceAudit] generation=abc123 variance=0.61 bucket=GOOD_VARIANCE closestMatch=0.42 reroll=false
+
+LOW VARIANCE REASON DETECTION
+
+Add human-readable explanations for why a program scored as too similar.
+
+Examples:
+- same block archetype as 3 of last 5 programs
+- same split architecture as most recent program
+- same top lower-body primary lift on days 1 and 3
+- same slot ordering across all days
+- same bilateral/unilateral family balance as prior program
+- same trunk and conditioning finishers as last 2 programs
+- exercise swaps occurred, but day identity remained unchanged
+
+These reasons should be collected into:
+lowVarianceReasons: string[]
+
+REROLL / FALLBACK INTEGRATION
+
+If varianceScore is below threshold:
+1. first try stronger novelty pressure inside exercise ranking
+2. if still too similar, try next-best split architecture
+3. if still too similar, try next-best block archetype if valid
+4. if fallback is used, log every reroll step
+
+Important:
+- do not randomize blindly
+- do not break safety or fit constraints
+- all rerolls must be explainable
+- all rerolls must be audited
+
+Add logs like:
+[ProgramVarianceAuditReroll] reason=low_variance action=boost_novelty_pressure
+[ProgramVarianceAuditReroll] reason=low_variance action=select_next_split
+[ProgramVarianceAuditReroll] reason=low_variance action=select_next_archetype
+
+DEV WARNINGS
+
+Add warnings for suspicious patterns:
+[ProgramVarianceAuditWarning] new program is below variance threshold but no reroll triggered
+[ProgramVarianceAuditWarning] same split architecture selected 4 generations in a row
+[ProgramVarianceAuditWarning] same primary lower lift repeated excessively
+[ProgramVarianceAuditWarning] block variance exists but exercise variance remains low
+[ProgramVarianceAuditWarning] exercise variance exists but split/day identity remains stale
+[ProgramVarianceAuditWarning] fallback reroll executed but variance did not improve
+
+VALIDATION / TEST SCENARIOS
+
+Create a DEV test harness or debug utility to simulate multiple generations with similar inputs.
+
+We need to test:
+1. Same user, same constraints, generate 5 times
+   - outputs should not collapse into near-identical programs
+2. Same goal, different days/week
+   - split variation should change meaningfully
+3. Same days/week, different mode (strength vs speed)
+   - family distribution and day feel should change meaningfully
+4. Deload/rebuild vs intensification
+   - primary lifts, density, and fatigue profile should diverge clearly
+5. Power/elastic conversion
+   - program should materially differ from foundation/intensification
+
+For this harness, print a compact matrix showing:
+- generation number
+- block
+- split
+- primary day themes
+- variance score
+- closest match score
+- reroll status
+
+OPTIONAL DEV SUMMARY TABLE
+
+If helpful, add a DEV-only console.table or structured output summarizing recent generations:
+- generationId
+- block
+- phase
+- split
+- top day 1 lift
+- top day 2 lift
+- variance score
+- variance bucket
+
+FILES / ARCHITECTURE
+
+Create or refactor toward files like:
+- lib/programs/programVarianceAudit.ts
+- lib/programs/programFingerprint.ts
+- lib/programs/programSimilarity.ts
+- lib/programs/programVarianceThresholds.ts
+- lib/programs/programVarianceReasons.ts
+- lib/programs/programVarianceReroll.ts
+
+If similar files already exist, integrate cleanly and avoid duplication.
+
+SINGLE SOURCE OF TRUTH
+
+The variance audit must compare against derived program state only.
+Do not let raw state or bypassed UI labels influence the audit.
+Use the same canonical fingerprint used by the generation system.
+
+SUCCESS CRITERIA
+
+This implementation is successful if:
+1. Every generation gets a variance score and audit log
+2. We can clearly see whether a new program is materially different from recent ones
+3. The audit identifies which layer is still over-converging
+4. Low-variance outputs trigger explainable reroll/fallback logic
+5. Repeated stale program generation becomes measurable instead of subjective
+6. The system still preserves coaching quality and constraint fit
+7. We can run a multi-generation DEV test and visibly confirm variance
+
+DELIVERABLES
+
+1. Implement Program Variance Audit
+2. Implement normalized fingerprint comparison across recent programs
+3. Add qualitative variance buckets and thresholds
+4. Add lowVarianceReasons detection
+5. Add reroll/fallback integration for low-variance outputs
+6. Add DEV warnings for repeated stale structure
+7. Add a multi-generation debug harness that generates several programs with similar inputs and prints the comparison results
+8. Print a concise summary of changed files and why
+9. Print at least 5 example audit outputs showing variance measurement across generated programs
+
+Before coding, inspect the current generation pipeline and recent fingerprint/similarity utilities so this is integrated as a true audit layer rather than another disconnected patch.

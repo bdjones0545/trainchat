@@ -51,6 +51,7 @@ import { buildFingerprint, recordFingerprint, computeSimilarity, getRecentFinger
 import { emitBlockRulesAudit, buildFingerprintString, generateAuditId } from "./programs/blockRulesAudit";
 import { validateArchetypeCoherence } from "./programs/blockArchetypes";
 import { validateSplitArchitectures } from "./programs/splitArchitectures";
+import { buildProgramContextProfile } from "./programs/programContextProfile";
 
 // ─── One-time validation on module load ──────────────────────────────────────
 // DEV-only coherence checks fire once per process start.
@@ -2294,9 +2295,26 @@ export function buildArchitectureBrief(
     weekRole: activeWeekPlan.role,
   };
 
+  // Estimate novelty pressure from recent fingerprint history (pre-similarity check)
+  // Used to amplify exercise variety when recent builds have been too homogeneous.
+  const recentFingerprintsPreview = getRecentFingerprints(3);
+  const estimatedNoveltyPressure = Math.min(0.8, recentFingerprintsPreview.length * 0.25);
+
+  // Build the unified program context profile — connects Block Variation Engine
+  // to Exercise Variation Engine so block archetype drives exercise scoring.
+  const programContext = buildProgramContextProfile({
+    archetypeId: blockSelection.archetypeId,
+    splitId: blockSelection.splitId,
+    constraints: userConstraints,
+    currentPhase: "establish",
+    noveltyPressure: estimatedNoveltyPressure,
+    variationSeed: blockSelection.variationSeed,
+    generationId: auditId,
+  });
+
   // Use the split's variationSeed for session template selection
   const splitVariationSeed = blockSelection.variationSeed;
-  const slotSelection = selectSlotExercises(splitVariationSeed, sport, goal, neuralDemand, equipmentLevel, isDeload, blockCtx);
+  const slotSelection = selectSlotExercises(splitVariationSeed, sport, goal, neuralDemand, equipmentLevel, isDeload, blockCtx, programContext);
   _lastSlotSelection = slotSelection;
 
   // ── STEP 9: Similarity check ──────────────────────────────────────────────
