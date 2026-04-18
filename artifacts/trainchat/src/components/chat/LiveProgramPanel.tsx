@@ -436,57 +436,24 @@ const EXERCISE_ACTIONS: { label: string; buildMessage: (name: string) => string 
   { label: "Harder", buildMessage: (n) => `Make ${n} harder` },
 ];
 
-const BLOCK_TYPE_COLORS: Record<string, { bg: string; border: string; text: string; dot: string }> = {
-  power_conversion:     { bg: "bg-orange-500/8",  border: "border-orange-500/20", text: "text-orange-400",  dot: "bg-orange-400" },
-  hypertrophy_support:  { bg: "bg-violet-500/8",  border: "border-violet-500/20", text: "text-violet-400",  dot: "bg-violet-400" },
-  strength_emphasis:    { bg: "bg-blue-500/8",    border: "border-blue-500/20",   text: "text-blue-400",    dot: "bg-blue-400"   },
-  work_capacity:        { bg: "bg-green-500/8",   border: "border-green-500/20",  text: "text-green-400",   dot: "bg-green-400"  },
-  re_entry_resilience:  { bg: "bg-amber-500/8",   border: "border-amber-500/20",  text: "text-amber-400",   dot: "bg-amber-400"  },
+
+const WEEK_ROLES: Record<number, string> = {
+  1: "Establish",
+  2: "Build",
+  3: "Intensify",
+  4: "Deload",
 };
 
-function BlockPhaseBanner({ blockMetadata }: { blockMetadata: BlockMetadata }) {
-  const { blockType, blockDisplayName, missionStatement, primaryAdaptation, volumeProfile, intensityProfile } = blockMetadata;
-  if (!blockDisplayName && !blockType) return null;
-  const colors = (blockType && BLOCK_TYPE_COLORS[blockType]) ?? {
-    bg: "bg-primary/6", border: "border-primary/15", text: "text-primary", dot: "bg-primary",
-  };
-  return (
-    <div className={`mx-4 mt-3 mb-1 rounded-xl border px-3 py-2.5 ${colors.bg} ${colors.border}`}>
-      <div className="flex items-center gap-2 mb-1">
-        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${colors.dot}`} />
-        <span className={`text-[9px] font-bold uppercase tracking-[0.14em] ${colors.text}`}>
-          {blockDisplayName ?? blockType ?? "Training Block"}
-        </span>
-        {primaryAdaptation && (
-          <span className="ml-auto text-[9px] text-muted-foreground/60 font-medium truncate">
-            {primaryAdaptation}
-          </span>
-        )}
-      </div>
-      {missionStatement && (
-        <p
-          className="text-[10px] text-foreground/70 leading-relaxed mb-1.5"
-          style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } as React.CSSProperties}
-        >
-          {missionStatement}
-        </p>
-      )}
-      {(volumeProfile || intensityProfile) && (
-        <div className="flex items-center gap-2 flex-wrap">
-          {volumeProfile && (
-            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md bg-black/10 text-[9px] font-medium ${colors.text}`}>
-              Vol: {volumeProfile}
-            </span>
-          )}
-          {intensityProfile && (
-            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md bg-black/10 text-[9px] font-medium ${colors.text}`}>
-              Int: {intensityProfile}
-            </span>
-          )}
-        </div>
-      )}
-    </div>
-  );
+const WEEK_ROLE_COPY: Record<string, string> = {
+  Establish: "Locking in movement quality and baseline volume.",
+  Build:     "Higher volume and progressive overload this week.",
+  Intensify: "Peak loading and force expression this week.",
+  Deload:    "Reduced fatigue and recovery emphasis this week.",
+};
+
+function getWeekRole(weekNumber?: number | null): string | null {
+  if (!weekNumber) return null;
+  return WEEK_ROLES[weekNumber] ?? null;
 }
 
 function ProgramTab({
@@ -779,6 +746,14 @@ function ProgramTab({
   const isUpdating = buildingState?.isBuilding && !!program;
   const updatePhase = isUpdating ? getBuildPhase(buildingState!.stage) : null;
 
+  const weekRole = getWeekRole(program.weekNumber);
+  const blockName = blockMetadata?.blockDisplayName ?? null;
+  const hierarchyParts = [
+    blockName,
+    program.weekNumber ? `Week ${program.weekNumber} of 4` : null,
+    weekRole,
+  ].filter(Boolean) as string[];
+
   return (
     <div className="relative flex flex-col h-full overflow-hidden">
       <style>{`
@@ -853,20 +828,13 @@ function ProgramTab({
       {/* ── Program Summary Card ───────────────────────────────────────────── */}
       <div className="px-4 pt-4 pb-3 border-b border-border">
         {/* Live status row */}
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-2">
           <div className="flex items-center gap-1.5 min-w-0">
             <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse flex-shrink-0" style={{ animationDuration: "2s" }} />
             <span className="text-[9px] font-bold text-primary uppercase tracking-[0.14em] truncate">
               Live Program
             </span>
           </div>
-          {(program.weekNumber || program.blockLabel) && (
-            <span className="ml-1 text-[9px] text-muted-foreground/60 font-medium truncate">
-              {program.weekNumber ? `Week ${program.weekNumber}` : ""}
-              {program.weekNumber && program.blockLabel ? " · " : ""}
-              {program.blockLabel ?? ""}
-            </span>
-          )}
           {!isPremium && (
             <span className="ml-auto text-[9px] font-semibold text-amber-400/80 flex items-center gap-1 flex-shrink-0">
               <Lock className="w-2.5 h-2.5" /> Preview
@@ -885,6 +853,20 @@ function ProgramTab({
             </span>
           )}
         </div>
+
+        {/* Hierarchy breadcrumb — block phase · week number · week role */}
+        {hierarchyParts.length > 0 && (
+          <div className="mb-2.5">
+            <p className="text-[10px] font-semibold text-muted-foreground/70 tracking-wide leading-snug">
+              {hierarchyParts.join(" · ")}
+            </p>
+            {weekRole && WEEK_ROLE_COPY[weekRole] && (
+              <p className="text-[10px] text-muted-foreground/48 leading-relaxed mt-0.5">
+                {WEEK_ROLE_COPY[weekRole]}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Meta chips */}
         {(program.splitType || days.length > 0) && (
@@ -1081,9 +1063,14 @@ function ProgramTab({
         </div>
       )}
 
-      {/* Block Phase Banner */}
-      {blockMetadata && (blockMetadata.blockDisplayName || blockMetadata.blockType) && (
-        <BlockPhaseBanner blockMetadata={blockMetadata} />
+      {/* Week role notice — shown only for Deload and Intensify weeks where context adds clarity */}
+      {(weekRole === "Deload" || weekRole === "Intensify") && (
+        <div className="mx-4 mt-3 mb-1 flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/30 border border-border/40">
+          <div className={`w-1 h-3 rounded-full flex-shrink-0 ${weekRole === "Deload" ? "bg-amber-400/60" : "bg-blue-400/70"}`} />
+          <p className="text-[10px] text-muted-foreground/65 leading-snug">
+            {weekRole === "Deload" ? "Deload week — reduced fatigue" : "Intensify week — peak loading"}
+          </p>
+        </div>
       )}
 
       {/* Days */}
@@ -1946,6 +1933,18 @@ export default function LiveProgramPanel({
 
   const activeTabMeta = tabs.find((t) => t.id === activeTab);
 
+  const outerWeekRole = getWeekRole(program?.weekNumber);
+  const outerBlockName = blockMetadata?.blockDisplayName ?? null;
+  const phaseContextLine = (() => {
+    if (activeTab !== "program") return null;
+    const parts = [
+      outerBlockName,
+      program?.weekNumber ? `Week ${program.weekNumber}` : null,
+      outerWeekRole,
+    ].filter(Boolean);
+    return parts.length > 0 ? parts.join(" · ") : null;
+  })();
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Training system created — transient success indicator */}
@@ -1987,7 +1986,7 @@ export default function LiveProgramPanel({
       {activeTabMeta && (
         <div className="flex-shrink-0 px-3 py-1 bg-muted/20 border-b border-border/40">
           <span className="text-[9px] text-muted-foreground/50 font-medium tracking-wide">
-            {activeTabMeta.subtitle}
+            {phaseContextLine ?? activeTabMeta.subtitle}
           </span>
         </div>
       )}
