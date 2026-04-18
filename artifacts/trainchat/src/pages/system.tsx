@@ -1856,7 +1856,7 @@ interface HistoryViewProps {
 }
 
 const SOURCE_LABELS: Record<string, string> = {
-  ai_edit: "AI Coach", quick_action: "Quick Action",
+  ai_edit: "Agent", quick_action: "Quick Command",
   restore: "Restore", initialize: "Program Init", auto_adjust: "Auto Adjust",
 };
 const SOURCE_COLORS: Record<string, string> = {

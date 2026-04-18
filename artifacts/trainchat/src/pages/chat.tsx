@@ -1328,7 +1328,7 @@ export default function Chat() {
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-foreground truncate">{displayName}</p>
             <p className="text-[10px] text-muted-foreground/60">
-              AI Coach Active
+              Agent Active
             </p>
           </div>
           {calibrationScore > 0 && (

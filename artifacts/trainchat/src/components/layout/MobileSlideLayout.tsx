@@ -105,7 +105,7 @@ export default function MobileSlideLayout({
             <div className="flex items-center gap-2">
               <div className="w-8 h-1 rounded-full bg-muted-foreground/30 mx-auto" />
             </div>
-            <span className="text-sm font-bold text-foreground absolute left-1/2 -translate-x-1/2">AI Coach</span>
+            <span className="text-sm font-bold text-foreground absolute left-1/2 -translate-x-1/2">Agent</span>
             <button
               onClick={onPanelClose}
               className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"

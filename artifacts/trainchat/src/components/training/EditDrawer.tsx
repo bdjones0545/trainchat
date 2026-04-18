@@ -1056,7 +1056,7 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
                   </span>
                   <span className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
                     <Sparkles className="w-3 h-3" />
-                    {phase === "directions" ? "Choose Direction" : isExercise ? "Log + Edit" : "Edit with Coach"}
+                    {phase === "directions" ? "Choose Direction" : isExercise ? "Log + Command" : "Command Agent"}
                   </span>
                 </div>
                 <h3 className="font-bold text-base text-foreground leading-tight truncate">
@@ -1098,7 +1098,7 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
             {/* ── Quick Actions ──── */}
             <div className="px-5 pt-4 pb-3 flex-shrink-0">
               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2.5">
-                Quick Actions
+                Quick Commands
               </p>
               <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
                 {suggestions.map((s) => (
@@ -1118,12 +1118,12 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
             {/* ── Custom Request ──── */}
             <div className="px-5 pt-4 pb-6 flex-shrink-0">
               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2.5">
-                Custom Request
+                Agent Command
               </p>
               {loggedFeedback && (
                 <div className="mb-3 flex items-center gap-2 text-[10px] text-primary/70 bg-primary/5 border border-primary/15 rounded-lg px-3 py-2">
                   <Sparkles className="w-3 h-3 flex-shrink-0" />
-                  <span>Performance logged — coach suggestion pre-filled below</span>
+                  <span>Performance logged — agent command pre-filled below</span>
                 </div>
               )}
               <div className="flex gap-2.5 items-end">
@@ -1132,7 +1132,7 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={`Tell your coach what to change about this ${target.type}…`}
+                  placeholder={`Tell the agent what to change…`}
                   rows={3}
                   className="flex-1 bg-muted/30 border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 resize-none focus:outline-none focus:border-primary/50 focus:bg-muted/50 transition-all duration-150"
                 />
@@ -1224,13 +1224,13 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
             <div className="text-center">
               <p className="font-bold text-foreground text-base mb-1.5">
                 {directionsMutation.isPending
-                  ? "Thinking through the best directions…"
-                  : "Applying your choice…"}
+                  ? "Reading your command…"
+                  : "Executing…"}
               </p>
               <p className="text-sm text-muted-foreground">
                 {directionsMutation.isPending
-                  ? "Let's figure out what makes the most sense here"
-                  : "Your coach is making the update now"}
+                  ? "The agent will adapt your training system"
+                  : "Agent is applying the update now"}
               </p>
             </div>
           </div>
