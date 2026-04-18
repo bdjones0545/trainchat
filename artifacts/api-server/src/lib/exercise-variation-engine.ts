@@ -687,6 +687,66 @@ function getUpperPushPool(sport: string | null): ExerciseMeta[] {
   return UPPER_PUSH_PRIMARY_POOL;
 }
 
+// ─── Block/Week Context for Hierarchical Selection ───────────────────────────
+
+export interface BlockSelectionContext {
+  /** Block type from monthly-block-planner — modulates intent scoring. */
+  blockType?: string;
+  /** Week role — deload/establish drives lowFatigue, intensify drives high-intensity intent. */
+  weekRole?: "establish" | "build" | "intensify" | "deload";
+}
+
+/** Derive intent array from block context to enrich scoring. */
+function deriveBlockIntent(
+  blockType: string | undefined,
+  weekRole: string | undefined,
+  baseIntent: ScoreContext["sessionIntent"],
+): ScoreContext["sessionIntent"] {
+  const merged = new Set(baseIntent);
+
+  if (blockType === "hypertrophy_support") {
+    merged.add("hypertrophy");
+  } else if (blockType === "power_conversion") {
+    merged.add("power");
+    merged.add("elastic");
+    merged.add("speed");
+  } else if (blockType === "work_capacity") {
+    merged.add("endurance");
+  } else if (blockType === "re_entry_resilience" || blockType === "resilience_block" || blockType === "control_block" || blockType === "re_entry_block") {
+    merged.add("stability");
+    merged.add("mobility");
+  } else if (blockType === "strength_emphasis" || blockType === "intensification") {
+    merged.add("strength");
+  }
+
+  if (weekRole === "intensify") {
+    merged.add("strength");
+    merged.add("power");
+  } else if (weekRole === "deload" || weekRole === "establish") {
+    merged.add("stability");
+    merged.add("mobility");
+  }
+
+  return [...merged] as ScoreContext["sessionIntent"];
+}
+
+/** Audit log for slot exercise selections with block context. */
+function auditSlotSelection(
+  slotName: string,
+  chosen: string,
+  blockType: string | undefined,
+  weekRole: string | undefined,
+): void {
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[BuildAudit:ExerciseSelection]", JSON.stringify({
+      slot: slotName,
+      chosen,
+      blockType: blockType ?? "none",
+      weekRole: weekRole ?? "none",
+    }));
+  }
+}
+
 // ─── Main Selection Function ───────────────────────────────────────────────────
 
 export function selectSlotExercises(
@@ -696,9 +756,16 @@ export function selectSlotExercises(
   neuralDemand: "high" | "moderate" | "low" = "high",
   equipmentLevel: "full_gym" | "dumbbells_only" | "home_limited" | "bodyweight" = "full_gym",
   lowFatigue?: boolean,
+  blockContext?: BlockSelectionContext,
 ): SlotExerciseSelection {
   const alreadySelected = new Set<string>();
   const debugInfos: SlotDebugInfo[] = [];
+
+  // Deload and establish weeks always drive low-fatigue selection
+  const effectiveLowFatigue =
+    lowFatigue ||
+    blockContext?.weekRole === "deload" ||
+    blockContext?.weekRole === "establish";
 
   function pick(
     pool: ExerciseMeta[],
@@ -706,19 +773,26 @@ export function selectSlotExercises(
     intent: ScoreContext["sessionIntent"],
     primeMultiplier: number,
   ): string {
+    const enrichedIntent = deriveBlockIntent(
+      blockContext?.blockType,
+      blockContext?.weekRole,
+      intent,
+    );
+
     const ctx: ScoreContext = {
       sport,
       goal,
-      sessionIntent: intent,
+      sessionIntent: enrichedIntent,
       alreadySelected,
       equipmentLevel,
-      lowFatigue,
+      lowFatigue: effectiveLowFatigue,
       seed,
       slotName,
     };
     const { chosen, debugInfo } = ranked(pool, ctx, primeMultiplier);
     debugInfos.push(debugInfo);
     alreadySelected.add(chosen);
+    auditSlotSelection(slotName, chosen, blockContext?.blockType, blockContext?.weekRole);
     return chosen;
   }
 

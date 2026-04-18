@@ -25,6 +25,7 @@ import {
   buildUpperPullDescription,
   buildRotationalPowerDescription,
   type SlotExerciseSelection,
+  type BlockSelectionContext,
 } from "./exercise-variation-engine";
 // getBlockVariant / describeBlockVariant are used inside buildVariationMandate — no direct call needed here
 
@@ -32,6 +33,18 @@ import {
   detectSpecialPopulation,
   buildSpecialPopArchitectureBrief,
 } from "./special-populations-engine";
+
+import {
+  buildMonthlyBlockPlan,
+  buildMonthlyBlockContext,
+  type MonthlyBlockPlan,
+} from "./monthly-block-planner";
+
+import {
+  buildWeeklyBlockPlans,
+  buildWeeklyBlockContext,
+  type WeeklyBlockPlan,
+} from "./weekly-block-planner";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -2177,16 +2190,25 @@ export function buildArchitectureBrief(
   // engine. This is a hard early exit — special populations never reach athlete templates.
   const spProfile = detectSpecialPopulation(userRequest, goal);
   if (spProfile) {
+    // Build special-population monthly block plan for audit tracing
+    const spMonthlyPlan = buildMonthlyBlockPlan(goal, sport, null, seed, true);
+    const spWeeklyPlans = buildWeeklyBlockPlans(spMonthlyPlan, daysPerWeek, sport, seed);
+
     if (process.env.NODE_ENV !== "production") {
       console.log("[BuildAudit:Architecture]", JSON.stringify({
         path: "special_population",
         spProfile: spProfile.population,
         seed: Number(seed.toFixed(4)),
         daysPerWeek, sport, goal,
+        spBlockType: spMonthlyPlan.blockType,
         lockedSelections: null,
       }));
     }
-    return buildSpecialPopArchitectureBrief(daysPerWeek, goal, userRequest, spProfile, seed);
+    // Inject the SP monthly block context into the brief
+    const spMonthlyCtx = buildMonthlyBlockContext(spMonthlyPlan);
+    const spWeeklyCtx = buildWeeklyBlockContext(spWeeklyPlans, 1);
+    const spBrief = buildSpecialPopArchitectureBrief(daysPerWeek, goal, userRequest, spProfile, seed);
+    return `${spMonthlyCtx}\n\n${spWeeklyCtx}\n\n${spBrief}`;
   }
 
   // Detect neural demand from request context
@@ -2202,7 +2224,29 @@ export function buildArchitectureBrief(
     reqLc.includes("dumbbell only") || reqLc.includes("no barbell") ? "dumbbells_only" :
     hasLimitedEquipment ? "home_limited" : "full_gym";
 
-  const slotSelection = selectSlotExercises(seed, sport, goal, neuralDemand, equipmentLevel, isDeload);
+  // ── Hierarchical Planning — Layer 1: Monthly Block ─────────────────────────
+  // Extract experience/training level from request for monthly block selection
+  const experienceHint = reqLc.includes("beginner") ? "beginner" :
+    reqLc.includes("novice") ? "novice" :
+    reqLc.includes("intermediate") ? "intermediate" :
+    reqLc.includes("advanced") ? "advanced" :
+    reqLc.includes("just starting") || reqLc.includes("new to") ? "beginner" : null;
+
+  const monthlyPlan = buildMonthlyBlockPlan(goal, sport, experienceHint, seed, false);
+
+  // ── Hierarchical Planning — Layer 2: Weekly Block ──────────────────────────
+  const weeklyPlans = buildWeeklyBlockPlans(monthlyPlan, daysPerWeek, sport, seed);
+  // For program generation we always generate Week 1 (establish) as the template
+  // but the AI is given the full 4-week arc context.
+  const activeWeekPlan = weeklyPlans[0]; // establish week
+
+  // Build block context for exercise selection — Week 1 uses establish-week intent
+  const blockCtx: BlockSelectionContext = {
+    blockType: String(monthlyPlan.blockType),
+    weekRole: activeWeekPlan.role,
+  };
+
+  const slotSelection = selectSlotExercises(seed, sport, goal, neuralDemand, equipmentLevel, isDeload, blockCtx);
   _lastSlotSelection = slotSelection;
 
   if (process.env.NODE_ENV !== "production") {
@@ -2299,6 +2343,23 @@ export function buildArchitectureBrief(
     const processedFlow = s.cnsFlow.map((b) => overlayBlockWithSlot(b, s.emphasizedPatterns, s.neuralDemand));
     const flowRoles = processedFlow.map((b) => `[${b.role.toUpperCase()}] ${b.description}`).join("\n    ");
     const sportLine = s.sportNotes ? `\n  SPORT OVERLAY: ${s.sportNotes}` : "";
+
+    // Audit slot layout for each session
+    if (process.env.NODE_ENV !== "production") {
+      const weekSessionRole = activeWeekPlan.sessionRoles[s.dayNumber - 1];
+      console.log("[BuildAudit:SlotLayout]", JSON.stringify({
+        day: s.dayNumber,
+        identity: s.identity,
+        primaryPattern: s.primaryPattern,
+        emphasizedPatterns: s.emphasizedPatterns,
+        neuralDemand: s.neuralDemand,
+        cnsBlocks: processedFlow.map(b => b.role),
+        weekRole: activeWeekPlan.role,
+        sessionRole: weekSessionRole?.sessionRole ?? "unknown",
+        blockType: monthlyPlan.blockType,
+      }));
+    }
+
     return [
       `  DAY ${s.dayNumber} — ${s.identity}`,
       `  Neural demand: ${s.neuralDemand.toUpperCase()} | Primary pattern: ${s.primaryPattern.replace("_", " ")}`,
@@ -2420,6 +2481,17 @@ ELIMINATE from this baseball program:
     return "";
   })();
 
+  // Build hierarchical context blocks for prompt injection
+  const monthlyBlockContext = buildMonthlyBlockContext(monthlyPlan);
+  const weeklyBlockContext = buildWeeklyBlockContext(weeklyPlans, 1);
+
+  // Build session role annotation for the active week
+  const sessionRoleAnnotation = activeWeekPlan.sessionRoles
+    .map((sr, i) =>
+      `  Day ${i + 1} session role: ${sr.sessionRole} — ${sr.emphasis} (Neural: ${sr.neuralDemand}, Stress: ${sr.stressLevel}, Volume bias: ${sr.volumeBias}, Intensity bias: ${sr.intensityBias})`
+    )
+    .join("\n");
+
   return `## PROGRAM ARCHITECTURE BRIEF — MANDATORY STRUCTURE
 The following architecture MUST be used as the blueprint for this program.
 DO NOT begin exercise selection until this structure is established.
@@ -2427,6 +2499,13 @@ DO NOT begin exercise selection until this structure is established.
 ### REQUESTED BUILD
 User request: "${userRequest.slice(0, 120)}"
 Days/week: ${arch.daysPerWeek} | Sport: ${arch.sport ?? "General"} | Goal: ${arch.goal ?? "Athletic performance"}
+
+${monthlyBlockContext}
+
+${weeklyBlockContext}
+
+### WEEK 1 SESSION ROLE ASSIGNMENTS (inherit into session architecture below)
+${sessionRoleAnnotation}
 
 ### WEEKLY RHYTHM
 ${arch.weeklyRhythm}
@@ -2447,11 +2526,23 @@ ${arch.recoveryNotes}
 ${conditioningOverlay}${sportOverlayBlock}
 ### EXERCISE SELECTION MANDATE
 Only AFTER the above architecture is locked, select exercises that:
-1. Match the session's primary and secondary patterns
+1. Match the session's primary and secondary patterns AND the session role from the weekly block plan
 2. Follow the CNS flow sequence (prep → power → primary → secondary → unilateral → trunk)
 3. Use the coaching cue standard: POSITION + INTENT + TRANSFER (not muscle cues)
 4. Vary exercises across sessions — no repeated primary lifts
 5. Minimum 5 meaningful exercises per session (6–8 optimal for full sessions)
+6. Exercise sets/reps/load must reflect the BLOCK TYPE and WEEK ROLE:
+   - Accumulation block: 3–5 sets × 8–15 reps, RPE 7–8
+   - Intensification block: 3–5 sets × 3–6 reps, RPE 8–9
+   - Strength emphasis: 3–5 sets × 3–6 reps, 80–90%+ 1RM language
+   - Power conversion: 3–5 sets × 3–5 reps explosive + strength contrast
+   - Hypertrophy support: 3–5 sets × 6–12 reps, full ROM priority
+   - Work capacity: higher density, circuit-style finishers appropriate
+   - Re-entry resilience: 2–3 sets × 10–15 reps, RPE 5–6 MAXIMUM
+   - Establish week: loading notes per day role above — RPE ceiling 7
+   - Build week: add sets/reps vs Week 1 — RPE ceiling 8
+   - Intensify week: peak loads — RPE ceiling 9.5
+   - Deload week: 50–60% volume, 65% loads — RPE ceiling 5
 
 ${buildVariationMandate(slotSelection, sport)}
 
@@ -2679,6 +2770,15 @@ export function enforceVariationMandateOnProgram(
       return ex;
     }),
   }));
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[BuildAudit:Reconciliation]", JSON.stringify({
+      stage: "variation_mandate_enforcement",
+      replacementsAvailable: Object.keys(replacements).length,
+      enforced,
+      replacementMap: replacements,
+    }));
+  }
 
   if (enforced > 0) {
     const logger = (global as Record<string, unknown>).__trainchatLogger;

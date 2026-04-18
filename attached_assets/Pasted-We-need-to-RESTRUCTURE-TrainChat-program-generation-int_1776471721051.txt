@@ -1,0 +1,210 @@
+We need to RESTRUCTURE TrainChat program generation into a hierarchical planning system.
+
+CURRENT PROBLEM:
+Programs are being generated too directly at the session/program level.
+This causes:
+- repeated-feeling day structures
+- static weekly patterns
+- exercise variation doing too much work
+- blocks/day labels being decided too late or feeling generic
+
+We need to move to a top-down programming architecture:
+
+1. Monthly block generation
+2. Weekly block generation
+3. Session/day generation inside those weekly blocks
+4. Exercise generation inside those sessions
+5. Final reconciliation
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make TrainChat generate programs like a real programming system:
+
+- month defines the mission
+- week defines the emphasis
+- day defines the session role
+- exercises serve the day
+
+==================================================
+TASK 1 — ADD MONTHLY BLOCK GENERATION LAYER
+==================================================
+
+Create a monthly block planner that runs first.
+
+It should decide:
+- monthly block type
+- primary adaptation target
+- secondary adaptation target
+- volume/intensity profile
+- neural demand profile
+- progression philosophy
+- sport/goal bias
+- special population framing if relevant
+
+Example monthly block types:
+- accumulation
+- intensification
+- strength emphasis
+- power conversion
+- work capacity
+- re-entry / resilience
+- hypertrophy support
+
+Output should be a structured MonthlyBlockPlan object.
+
+==================================================
+TASK 2 — ADD WEEKLY BLOCK GENERATION LAYER
+==================================================
+
+Inside the monthly block, generate weekly blocks.
+
+Each week should define:
+- weekly emphasis
+- stress allocation
+- intensity/volume bias
+- deload / intensify / build role
+- session role distribution
+
+Example:
+Week 1 = establish
+Week 2 = build
+Week 3 = intensify
+Week 4 = deload/consolidate
+
+Output should be structured WeeklyBlockPlan objects.
+
+==================================================
+TASK 3 — GENERATE SESSIONS INSIDE WEEKLY CONTEXT
+==================================================
+
+Session/day generation must happen inside the weekly block context.
+
+Each session should inherit:
+- month goal
+- week emphasis
+- stress rules
+- session role for that day
+
+Examples:
+- Lower strength support inside build week
+- Upper mixed strength inside intensification week
+- Rotational power + trunk support inside conversion week
+
+Do NOT generate days in isolation anymore.
+
+==================================================
+TASK 4 — SLOT SYSTEM MUST BE DRIVEN BY SESSION ROLE
+==================================================
+
+The slot/block system should now be driven by the session role created by the weekly block planner.
+
+Example:
+If a day role is "lower power + unilateral support", slots should reflect that.
+If a day role is "upper mixed strength", slots should reflect that.
+
+Do not use one static slot pattern for all weeks.
+
+==================================================
+TASK 5 — EXERCISE GENERATION HAPPENS LAST
+==================================================
+
+Only after:
+- month exists
+- week exists
+- day/session role exists
+
+should the exercise variation engine select actual exercises.
+
+This means the variation engine receives much richer context.
+
+==================================================
+TASK 6 — RECONCILIATION STILL EXISTS
+==================================================
+
+Keep the Block Reconciliation Engine, but now it should refine/finalize labels inside this hierarchy rather than rescue a flat generation system.
+
+Hierarchy:
+- monthly plan proposes
+- weekly plan shapes
+- session generation builds
+- exercise engine fills
+- reconciliation finalizes
+
+==================================================
+TASK 7 — SUPPORT SPECIAL POPULATIONS
+==================================================
+
+Special populations must use the same hierarchy, but with different block families.
+
+Monthly blocks might become:
+- resilience block
+- control block
+- re-entry block
+- low-impact strength block
+
+Weekly blocks and sessions must use safe/control-oriented framing.
+
+==================================================
+TASK 8 — ADD AUDIT LOGGING
+==================================================
+
+Add logs:
+
+[BuildAudit:MonthlyBlock]
+[BuildAudit:WeeklyBlock]
+[BuildAudit:SessionRole]
+[BuildAudit:SlotLayout]
+[BuildAudit:ExerciseSelection]
+[BuildAudit:Reconciliation]
+
+We need to trace how the full hierarchy was built.
+
+==================================================
+TASK 9 — TEST CASES
+==================================================
+
+Run:
+1. repeated 3-day strength builds
+Expected:
+- different monthly/weekly context can produce meaningfully different programs
+
+2. football performance build
+Expected:
+- monthly and weekly blocks align with sport intent
+
+3. special population build
+Expected:
+- hierarchy still works but uses safe/re-entry framing
+
+4. refinements
+Expected:
+- refinements can alter session/day behavior without breaking the larger block structure
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. new hierarchy files/modules
+2. monthly block schema
+3. weekly block schema
+4. how sessions now inherit context
+5. where exercise generation now occurs
+6. how reconciliation fits into the new pipeline
+7. before/after explanation of why this reduces same-program repetition
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat should no longer generate programs flatly.
+
+It should generate:
+- month first
+- week second
+- session third
+- exercises fourth
+
+so the final output feels like a real programming system, not just repeated day templates with different exercises.
