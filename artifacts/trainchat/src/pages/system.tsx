@@ -3018,7 +3018,7 @@ export default function SystemPage() {
               className="w-full flex items-center gap-3 bg-card border border-border rounded-2xl px-4 py-3.5 hover:border-primary/40 active:scale-[0.98] transition-all duration-150"
             >
               <Sparkles className="w-4 h-4 text-primary/70 flex-shrink-0" />
-              <span className="flex-1 text-left text-sm text-muted-foreground/60">Tell the agent what to change…</span>
+              <span className="flex-1 text-left text-sm text-muted-foreground/60">Command the agent…</span>
               <ChevronUp className="w-4 h-4 text-muted-foreground/40 flex-shrink-0" />
             </button>
           ) : (
