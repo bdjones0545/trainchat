@@ -1,0 +1,461 @@
+We already have a language system in TrainChat. This is NOT a net-new language feature build. This is a system upgrade.
+
+GOAL
+Upgrade the existing language system so it can handle much broader English coaching language, map user phrasing more reliably into programming intent, and respond appropriately across vague, direct, slangy, emotional, and conversational inputs.
+
+CORE PROBLEM
+The current language system likely works for many straightforward requests, but we need to harden and expand it so the agent can better interpret real-world English at scale.
+
+The goal is NOT to literally “cover all English.”
+The goal is to make the existing language system robust across broad English input patterns relevant to:
+- training goals
+- program creation
+- program modification
+- recovery feedback
+- pain/constraint updates
+- vibe-coding style edits
+- preference language
+- natural conversational follow-ups
+
+PRIMARY OBJECTIVES
+
+1. Audit the current language system
+2. Identify current strengths, blind spots, and over-reliance on narrow patterns
+3. Expand concept coverage for broad English coaching language
+4. Improve mapping from user language → structured programming intent
+5. Improve ambiguity detection, confidence scoring, and conflict detection
+6. Preserve current working behavior while upgrading interpretation quality
+7. Add DEV audit visibility so we can see what the system thinks the user meant
+
+IMPORTANT
+This is an UPDATE to the existing language system.
+Do not replace working logic blindly.
+Do not create a giant brittle phrase list.
+Do not hardcode endless if/else branches.
+Enhance the current architecture cleanly.
+
+PHASE 1 — AUDIT THE CURRENT SYSTEM
+
+First inspect the existing language understanding pipeline and document:
+
+- where user text enters the system
+- how it is normalized
+- how intent is currently extracted
+- how goals/constraints/preferences are currently mapped
+- whether synonyms/slang are handled
+- whether ambiguity/confidence are tracked
+- whether structured intent objects already exist
+- where the system passes interpreted meaning into the program engine
+- where interpretation is too shallow or too brittle
+- where surface-word matching is overused
+- where existing logic can be extended instead of replaced
+
+Print a concise audit summary before major code changes:
+1. current language pipeline
+2. current structured outputs
+3. current limitations
+4. best integration points for the upgrade
+
+LANGUAGE SYSTEM UPGRADE TARGET
+
+We need broader English coverage specifically for coaching and training language.
+
+The upgraded language system must better interpret all of the following categories:
+
+1. GOAL LANGUAGE
+Examples:
+- get stronger
+- get faster
+- be more explosive
+- look better
+- build muscle
+- lean out
+- more athletic
+- improve conditioning
+- move better
+- recover
+- return gradually
+
+2. MODIFICATION LANGUAGE
+Examples:
+- make it more athletic
+- change the lower days
+- simplify this
+- make it harder
+- reduce fatigue
+- add more speed work
+- tone down the leg volume
+- swap out heavy squats
+- keep the structure but change the exercises
+
+3. PRESERVATION LANGUAGE
+Examples:
+- keep upper body the same
+- keep the vibe
+- don’t remove the med ball work
+- leave the sprint work in
+- I liked the last program except day 2
+- keep the same structure
+
+4. CONSTRAINT LANGUAGE
+Examples:
+- I only have 35 minutes
+- I’m beat up
+- knees are bothering me
+- low energy today
+- no barbell
+- traveling this week
+- only dumbbells
+- need lower impact
+- I can train 3 days
+
+5. PREFERENCE / STYLE LANGUAGE
+Examples:
+- less bodybuilding
+- more athletic
+- more game-speed
+- less grindy
+- more pop
+- simpler
+- more advanced
+- more variety
+- less boring
+- more structured
+
+6. RECOVERY / STATE LANGUAGE
+Examples:
+- I’m smoked
+- I feel fresh
+- cooked today
+- sore legs
+- low motivation
+- want to train but not get crushed
+- need a lighter day
+
+7. CONVERSATIONAL FOLLOW-UP LANGUAGE
+Examples:
+- actually keep the upper days
+- never mind make it shorter
+- same idea but more explosive
+- I liked the last one better
+- go back to something like that
+- keep that but easier on my knees
+
+8. FUZZY / METAPHORIC ENGLISH
+Examples:
+- I want to feel springy
+- make it hit harder
+- not so grindy
+- sharper, not smoked
+- more bounce
+- cleaner
+- more game-like
+- less stiff
+- more pop
+
+REQUIRED UPGRADE APPROACH
+
+Do not solve this with one giant keyword list.
+
+Instead extend the current system into layered interpretation:
+
+LAYER 1 — NORMALIZATION
+Improve preprocessing and concept normalization for:
+- typo tolerance
+- plural/singular normalization
+- phrase cleanup
+- synonym grouping
+- slang grouping
+- fuzzy phrase mapping
+
+Examples:
+- explosive / pop / springy / bounce / game-speed
+- smoked / cooked / beat up / fried
+- grindy / heavy / sluggish
+- simpler / easier / less complicated
+
+LAYER 2 — STRUCTURED EXTRACTION
+Upgrade the system so a single message can extract multiple categories at once:
+- requestType
+- primaryGoal
+- secondaryGoals
+- requestedChanges
+- preserveInstructions
+- constraints
+- stylePreferences
+- recoveryState
+- equipmentConstraints
+- scheduleConstraints
+- ambiguityFlags
+- confidenceScore
+
+If a structured intent object already exists, extend it instead of replacing it.
+
+Ideal shape should be something like:
+AgentIntentProfile = {
+  requestType,
+  primaryGoal,
+  secondaryGoals,
+  requestedChanges,
+  preserveInstructions,
+  constraints,
+  stylePreferences,
+  recoveryState,
+  equipmentConstraints,
+  scheduleConstraints,
+  ambiguityFlags,
+  contradictions,
+  confidenceScore,
+  sourceUtterance,
+}
+
+LAYER 3 — INTERPRETATION / PROGRAM TRANSLATION
+Upgrade the mapping from language meaning into programming meaning.
+
+Examples:
+“more athletic”
+→ increase power / movement quality / performance bias
+→ reduce bodybuilding isolation bias
+→ maybe increase elastic / rotational / speed-support exposure depending on context
+
+“less grindy”
+→ reduce high-fatigue bilateral grinding
+→ reduce excessive density
+→ increase velocity intent or cleaner movement selection
+
+“keep the vibe”
+→ preserve current block identity, weekly rhythm, and broad training feel unless user also requests specific changes
+
+“smoked today”
+→ lower fatigue ceiling
+→ lower neural demand
+→ prefer easier completion
+→ maybe trigger lighter-day logic instead of a full rewrite
+
+This translation layer must produce structured programming directives, not just chat wording.
+
+LAYER 4 — CONFLICT / AMBIGUITY HANDLING
+Add stronger detection for:
+- vague requests
+- contradictory requests
+- underspecified change requests
+- low-confidence interpretation
+
+Examples:
+- “make it better” → ambiguous
+- “more volume, less fatigue, shorter sessions” → conflicting tradeoffs
+- “same vibe but different everything” → contradiction
+
+The system should:
+- detect ambiguity
+- detect contradiction
+- assign confidence
+- choose the safest grounded interpretation
+- log what tradeoff it made
+
+IMPORTANT:
+Do not make the agent freeze on ambiguity.
+Do not over-ask for clarification.
+Make the best grounded interpretation and audit it.
+
+LANGUAGE COVERAGE EXPANSION
+
+Add concept dictionaries / mapping tables / ontology-style grouping for broad English coaching meaning.
+
+Minimum concept clusters to support:
+
+GOALS
+- strength
+- hypertrophy
+- fat loss
+- athleticism
+- speed
+- power
+- conditioning
+- recovery
+- movement quality
+- return to training
+
+MODIFIERS
+- increase
+- decrease
+- replace
+- preserve
+- simplify
+- intensify
+- deload
+- rebalance
+- shorten
+- progress
+- regress
+
+PREFERENCES
+- athletic
+- explosive
+- game-speed
+- less bodybuilding
+- cleaner
+- sharper
+- more variety
+- more structure
+- more advanced
+- lower impact
+- lower fatigue
+
+RECOVERY / FATIGUE STATES
+- fresh
+- tired
+- sore
+- beat up
+- smoked
+- cooked
+- fried
+- low energy
+- sharp
+- flat
+
+PROGRAM PART REFERENCES
+- whole plan
+- block
+- week
+- lower days
+- upper days
+- leg day
+- speed work
+- med ball work
+- finisher
+- warm-up
+- sprint work
+- mobility
+
+PRESERVATION TOKENS
+- keep
+- leave
+- don’t change
+- same vibe
+- still want
+- keep the structure
+- leave upper body
+- keep the med ball work
+
+AUDIT / OBSERVABILITY
+
+Add a DEV-only audit system for the language upgrade.
+
+Create logs like:
+[LanguageSystemAudit]
+[LanguageSystemAuditWarning]
+
+For every interpreted user message, log:
+- rawUserMessage
+- normalizedMessage
+- extractedRequestType
+- extractedGoals
+- extractedRequestedChanges
+- extractedPreserveInstructions
+- extractedConstraints
+- extractedStylePreferences
+- extractedRecoveryState
+- extractedAmbiguities
+- extractedContradictions
+- confidenceScore
+- resultingProgrammingDirectives
+
+Add concise grep-friendly lines like:
+[LanguageSystemAudit] type=modify_program goal=power changes=increase_explosive_emphasis|reduce_fatigue preserve=upper_days confidence=0.81
+
+Add warnings like:
+[LanguageSystemAuditWarning] vague preference detected: "make it better"
+[LanguageSystemAuditWarning] contradiction detected: "more volume" + "shorter sessions" + "less fatigue"
+[LanguageSystemAuditWarning] preserve instruction present but no preserved target resolved
+[LanguageSystemAuditWarning] low confidence interpretation used fallback directive mapping
+
+CONTEXT / MEMORY AWARENESS
+
+Where the current system supports context, improve the language upgrade so it can reference:
+- current active program
+- prior program identity
+- preserved block feel
+- recently liked/disliked features
+- current training mode (strength vs speed)
+
+Examples:
+“keep the same vibe”
+should use current program context, not generic assumptions.
+
+“I liked last week except leg day”
+should preserve more than it changes.
+
+Do not add brittle hidden assumptions.
+Use actual available state.
+
+TEST HARNESS / COVERAGE CHECK
+
+Create a DEV-only language coverage harness that runs a broad set of English examples through the interpreter and prints the structured output.
+
+Include test cases for:
+1. direct requests
+2. vague requests
+3. slang / metaphor requests
+4. fatigue / recovery states
+5. preservation requests
+6. contradiction requests
+7. conversational edits
+8. equipment/schedule constraints
+9. mixed multi-intent requests
+
+Example test inputs:
+- make it more athletic
+- less bodybuilding, more performance
+- I’m smoked today but still want to train
+- keep the upper days and fix the lower days
+- same vibe, just more pop
+- no barbell this week
+- I only have 30 minutes
+- I liked the last one except day 2
+- more explosive but don’t destroy me
+- make it cleaner and less grindy
+- go back to something like the last block
+- keep the med ball work but make the lift easier on my knees
+
+For each example print:
+- raw input
+- normalized concepts
+- extracted structured intent
+- confidence
+- ambiguity/contradiction notes
+- resulting programming directives
+
+SUCCESS CRITERIA
+
+This upgrade is successful if:
+1. The existing language system handles a much broader range of English coaching phrasing
+2. One user message can reliably produce multiple structured outputs at once
+3. Vague and slangy inputs map into useful coaching meaning
+4. Preserve/change/constraint language is all captured together
+5. Ambiguity and contradiction are detected and logged
+6. The system produces structured programming directives instead of shallow keyword matches
+7. Existing working flows are preserved
+8. DEV audit logs make it obvious what the system believed the user meant
+
+DELIVERABLES
+
+1. Audit the current language system and identify integration points
+2. Upgrade normalization and concept grouping
+3. Upgrade structured intent extraction
+4. Upgrade programming directive translation
+5. Add ambiguity / contradiction / confidence handling
+6. Add DEV audit logs and warnings
+7. Add a language coverage test harness with broad English examples
+8. Print a concise summary of changed files and why
+9. Print example audit outputs for at least 10 varied English inputs
+
+IMPORTANT IMPLEMENTATION RULES
+
+- This is an upgrade, not a rewrite unless the audit proves a rewrite is necessary
+- Preserve the current architecture where possible
+- Prefer typed structured outputs
+- Prefer centralized concept mapping over scattered phrase hacks
+- Avoid spaghetti branching
+- Keep the language system separate from final program generation
+- The language layer should interpret; downstream systems should decide
