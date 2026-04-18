@@ -1732,7 +1732,7 @@ function VibeBar({ onEditComplete, onUndone }: VibeBarProps) {
               value={input}
               onChange={(e) => handleInputChange(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={isWorking ? "Applying…" : 'Quick command… e.g. "swap bench" or "more sets"'}
+              placeholder={isWorking ? "Applying…" : "Tell the agent what to change…"}
               disabled={isWorking}
               className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/50 outline-none disabled:opacity-60 min-w-0"
             />
@@ -1801,6 +1801,155 @@ function VibeBar({ onEditComplete, onUndone }: VibeBarProps) {
         {submitError && (
           <p className="text-[11px] text-red-400 pl-1">Something went wrong — try again.</p>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── AgentPanel — Mobile bottom-sheet command surface ────────────────────────
+
+type AgentScope = "today" | "week" | "block";
+
+const AGENT_SCOPE_LABELS: Record<AgentScope, string> = {
+  today: "Today",
+  week: "This Week",
+  block: "Full Block",
+};
+
+const AGENT_COMMANDS: Record<AgentScope, Array<{ label: string; req: string }>> = {
+  today: [
+    { label: "More intense", req: "Increase the intensity for today's session" },
+    { label: "Less volume", req: "Reduce the volume in today's session" },
+    { label: "Rest day", req: "Convert today into a full recovery day" },
+    { label: "Shorter", req: "Shorten today's session — I'm pressed for time" },
+    { label: "Travel mode", req: "I only have dumbbells — adapt today's session accordingly" },
+    { label: "More explosive", req: "Add explosive emphasis to today's training" },
+  ],
+  week: [
+    { label: "More intense", req: "Increase the overall intensity for this week" },
+    { label: "Less volume", req: "Reduce the total volume this week" },
+    { label: "Deload week", req: "Convert this into a deload week" },
+    { label: "Travel mode", req: "I only have dumbbells this week — adapt accordingly" },
+    { label: "More explosive", req: "Shift this week toward explosive focus" },
+    { label: "Recovery focus", req: "Shift this week toward recovery and reduce fatigue" },
+  ],
+  block: [
+    { label: "More power", req: "Shift this block toward power development" },
+    { label: "Hypertrophy", req: "Shift this block toward hypertrophy" },
+    { label: "Field sport", req: "Adapt this block for field sport specificity" },
+    { label: "Less volume", req: "Reduce the overall volume across this block" },
+    { label: "Recovery bias", req: "Shift this block toward recovery and regeneration" },
+    { label: "More variety", req: "Add more exercise variety across this block" },
+  ],
+};
+
+interface AgentPanelProps {
+  onEditComplete: (result: EditResult) => void;
+  onUndone: (changedIds: any) => void;
+}
+
+function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
+  const [selectedScope, setSelectedScope] = useState<AgentScope>("today");
+  const [workingLabel, setWorkingLabel] = useState<string | null>(null);
+  const [lastAck, setLastAck] = useState<string | null>(null);
+
+  const commandMutation = useMutation({
+    mutationFn: (req: string) => submitGlobalEdit(req),
+    onSuccess: (data) => {
+      setWorkingLabel(null);
+      const summary = data.changeSummary?.split(/\.\s/)[0]?.trim()?.replace(/\.$/, "") ?? "Done";
+      setLastAck(summary);
+      onEditComplete(data);
+      setTimeout(() => setLastAck(null), 4000);
+    },
+    onError: () => {
+      setWorkingLabel(null);
+    },
+  });
+
+  function fireCommand(label: string, req: string) {
+    if (commandMutation.isPending) return;
+    setLastAck(null);
+    setWorkingLabel(label);
+    commandMutation.mutate(req);
+  }
+
+  const commands = AGENT_COMMANDS[selectedScope];
+  const isWorking = commandMutation.isPending;
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Subtext */}
+      <div className="px-4 pt-3 pb-1 flex-shrink-0 text-center">
+        <p className="text-[11px] text-muted-foreground/60">Command your system in plain language</p>
+        <p className="text-[10px] text-muted-foreground/40 mt-0.5">Update today, this week, or the full block</p>
+      </div>
+
+      {/* Scope selector */}
+      <div className="px-4 py-2.5 flex-shrink-0">
+        <div className="flex gap-1 bg-muted/30 border border-border/40 rounded-xl p-1">
+          {(["today", "week", "block"] as AgentScope[]).map((scope) => (
+            <button
+              key={scope}
+              onClick={() => { setSelectedScope(scope); setLastAck(null); }}
+              className={`flex-1 text-[11px] font-semibold py-1.5 rounded-lg transition-all duration-150 ${
+                selectedScope === scope
+                  ? "bg-background text-foreground border border-border shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {AGENT_SCOPE_LABELS[scope]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Acknowledgment */}
+      {lastAck && (
+        <div className="mx-4 mb-2 flex items-center gap-2 text-[11px] text-primary/80 bg-primary/8 border border-primary/15 rounded-xl px-3 py-2 flex-shrink-0">
+          <CheckCircle2 className="w-3.5 h-3.5 text-primary/70 flex-shrink-0" />
+          <span className="truncate">{lastAck}</span>
+        </div>
+      )}
+
+      {/* Quick commands */}
+      <div className="flex-1 overflow-y-auto px-4 pb-2">
+        <div className="space-y-2">
+          {commands.map(({ label, req }) => {
+            const isThisWorking = workingLabel === label;
+            return (
+              <button
+                key={label}
+                onClick={() => fireCommand(label, req)}
+                disabled={isWorking}
+                className={`w-full text-left px-4 py-3.5 rounded-xl border transition-all duration-150 disabled:cursor-not-allowed ${
+                  isThisWorking
+                    ? "border-primary/30 bg-primary/8"
+                    : "border-border bg-card hover:border-primary/30 hover:bg-primary/5 disabled:opacity-40"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  {isThisWorking ? (
+                    <RotateCcw className="w-3.5 h-3.5 text-primary animate-spin flex-shrink-0" />
+                  ) : (
+                    <Zap className="w-3.5 h-3.5 text-primary/40 flex-shrink-0" />
+                  )}
+                  <p className="text-sm font-semibold text-foreground">
+                    {isThisWorking ? "Applying…" : label}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* VibeBar — text input + chips, already connected to pipeline */}
+      <div className="flex-shrink-0 border-t border-border bg-background/98">
+        <VibeBar
+          onEditComplete={onEditComplete}
+          onUndone={onUndone}
+        />
       </div>
     </div>
   );
@@ -2600,39 +2749,10 @@ export default function SystemPage() {
   );
 
   const bottomPanelContent = hasSystem ? (
-    <div className="flex flex-col h-full">
-      <div className="px-4 py-3 flex-shrink-0">
-        <p className="text-[11px] text-muted-foreground text-center">Your AI coach is ready to adapt your plan</p>
-      </div>
-      <div className="flex-1 overflow-y-auto px-4 pb-2">
-        <div className="space-y-2">
-          {[
-            { label: "More intense", req: "Increase the overall intensity for this session" },
-            { label: "Less volume", req: "Reduce the total volume this week" },
-            { label: "Rest day today", req: "Convert today into a full recovery day" },
-            { label: "Shorter session", req: "Shorten today's session — I'm pressed for time" },
-            { label: "Travel mode", req: "I only have dumbbells — adapt accordingly" },
-            { label: "More explosive", req: "Add explosive emphasis to today's training" },
-          ].map(({ label, req }) => (
-            <button
-              key={label}
-              className="w-full text-left px-4 py-3.5 rounded-xl border border-border bg-card hover:border-primary/30 hover:bg-primary/5 transition-all"
-              onClick={() => {
-                setMobilePanel(null);
-              }}
-            >
-              <p className="text-sm font-semibold text-foreground">{label}</p>
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="flex-shrink-0 border-t border-border bg-background/98">
-        <VibeBar
-          onEditComplete={(result) => { handleGlobalEditComplete(result); setMobilePanel(null); }}
-          onUndone={handleRestored}
-        />
-      </div>
-    </div>
+    <AgentPanel
+      onEditComplete={(result) => { handleGlobalEditComplete(result); setMobilePanel(null); }}
+      onUndone={handleRestored}
+    />
   ) : undefined;
 
   return (
@@ -2898,7 +3018,7 @@ export default function SystemPage() {
               className="w-full flex items-center gap-3 bg-card border border-border rounded-2xl px-4 py-3.5 hover:border-primary/40 active:scale-[0.98] transition-all duration-150"
             >
               <Sparkles className="w-4 h-4 text-primary/70 flex-shrink-0" />
-              <span className="flex-1 text-left text-sm text-muted-foreground/60">Ask your coach or give a command…</span>
+              <span className="flex-1 text-left text-sm text-muted-foreground/60">Tell the agent what to change…</span>
               <ChevronUp className="w-4 h-4 text-muted-foreground/40 flex-shrink-0" />
             </button>
           ) : (

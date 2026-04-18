@@ -1,0 +1,156 @@
+We need to upgrade the bottom sheet on the Active Programs page (currently labeled “AI Coach”) into a fully functional AGENT command surface.
+
+==================================================
+LOCATION (CRITICAL)
+==================================================
+
+This applies ONLY to:
+
+- The bottom sheet component opened from the “Ask your coach” / quick command bar
+- Located at the bottom of the Active Programs page (Today / This Week / Block / History view)
+
+DO NOT create a new component.
+DO NOT modify the main chat.
+DO NOT move this to another screen.
+
+You must UPDATE the existing bottom sheet in place.
+
+==================================================
+GOAL
+==================================================
+
+Convert this bottom sheet from a static UI with non-functional buttons into a live system control panel where every action:
+
+1. Sends a real command to the agent pipeline
+2. Mutates the training system (session/week/block)
+3. Auto-saves immediately
+4. Updates the UI instantly
+5. Posts an agent acknowledgment in the main chat
+
+This should feel like controlling a system, not tapping suggestions.
+
+==================================================
+TASK 1 — RENAME + POSITIONING
+==================================================
+
+Change title:
+"AI Coach" → "Agent"
+
+Replace subtext with:
+"Command your system in plain language"
+"Update today, this week, or the full block"
+
+==================================================
+TASK 2 — ADD SCOPE SELECTOR (TOP OF SHEET)
+==================================================
+
+At the top of this bottom sheet, add:
+
+[ Today ]   [ This Week ]   [ Full Block ]
+
+- Default = Today
+- Store in local state (selectedScope)
+- This scope controls how commands are applied downstream
+
+==================================================
+TASK 3 — CONNECT QUICK ACTION BUTTONS
+==================================================
+
+The existing buttons MUST become functional.
+
+Map them:
+
+More intense → "increase intensity"
+Less volume → "reduce volume"
+Rest day today → "convert today to recovery session"
+Shorter session → "reduce session duration"
+Travel mode → "adapt to limited equipment"
+More explosive → "shift to explosive focus"
+
+On press:
+
+1. Build request object:
+{
+  source: "quick_action",
+  scope: selectedScope,
+  command: mappedCommand
+}
+
+2. Send through EXISTING pipeline:
+- normalizeToIntentFamily
+- execution-planner
+- refinement-impact-engine
+
+3. Apply mutation
+4. Auto-save (use existing persistence logic)
+5. Refresh UI:
+   - Today view
+   - This Week view
+
+==================================================
+TASK 4 — LOADING + FEEDBACK
+==================================================
+
+When a button is pressed:
+
+- Show "Applying…" state
+- Disable buttons briefly
+- After success → subtle success feedback
+
+This must feel instant and responsive.
+
+==================================================
+TASK 5 — CHAT INTEGRATION
+==================================================
+
+After mutation:
+
+- Push a response into the MAIN CHAT thread
+
+Examples:
+“Increased intensity for today’s session.”
+“Shifted this week toward explosive focus — 3 sessions updated.”
+
+==================================================
+TASK 6 — INPUT FIELD UPGRADE
+==================================================
+
+In THIS SAME bottom sheet:
+
+Replace placeholder:
+"Quick command..."
+
+With:
+"Tell the agent what to change…"
+
+Add hint examples:
+- make today more explosive
+- reduce fatigue this week
+- adjust this block for recovery
+
+This input must use the SAME pipeline as buttons.
+
+==================================================
+TASK 7 — SINGLE SOURCE OF TRUTH
+==================================================
+
+Buttons and text input MUST use the SAME backend flow.
+
+NO duplicate logic  
+NO UI-only handlers  
+NO fake responses  
+
+==================================================
+FINAL STANDARD
+==================================================
+
+This bottom sheet should feel like:
+
+- A live control panel for the training system
+- A real agent interface
+- Immediate cause → effect interaction
+
+NOT:
+- A suggestion list
+- A chatbot wrapper
+- A disconnected UI
