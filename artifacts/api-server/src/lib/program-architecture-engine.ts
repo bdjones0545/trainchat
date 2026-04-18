@@ -120,14 +120,107 @@ export interface WeeklyArchitecture {
 }
 
 // ─── Standard CNS flow ───────────────────────────────────────────────────────
+//
+// blockArchetype drives STRUCTURAL slot composition — which blocks exist, not
+// just which exercises fill them. This is the primary fix for the "same day
+// template" collapse problem.
+//
+// INTENSIFICATION_STRENGTH  → fewer slots (no unilateral), brief power primer
+// POWER_ELASTIC_CONVERSION  → elastic/reactive slot leads, contrast structure
+// WORK_CAPACITY / FOUNDATION_ACCUMULATION → full stack + conditioning finisher
+// Default                    → standard 5-block template (unchanged)
 
 function buildCNSFlow(
   patterns: MovementPattern[],
   neuralDemand: NeuralDemand,
   sel?: SlotExerciseSelection,
+  blockArchetype?: string,
 ): CNSBlock[] {
   const blocks: CNSBlock[] = [];
   const isHingeDay = patterns.includes("hinge") && !patterns.includes("squat");
+  const isLowerSession = patterns.includes("squat") || patterns.includes("hinge") || patterns.includes("unilateral_lower");
+
+  // ── INTENSIFICATION_STRENGTH structural template ───────────────────────────
+  // Fewer total blocks. Power is a brief CNS primer, not full development.
+  // Unilateral block is removed — session density is managed by load, not volume.
+  if (blockArchetype === "INTENSIFICATION_STRENGTH" && isLowerSession) {
+    blocks.push({
+      role: "prep",
+      description: "Intensification lower prep: hip CARs, thoracic extension, glute activation — 6–8 min. QUALITY over duration. CNS must be fresh.",
+    });
+    if (neuralDemand !== "low") {
+      blocks.push({
+        role: "power",
+        description: sel
+          ? `CNS POTENTIATION PRIMER (not full power development): 2–3 sets × 3 reps of ${sel.lower_power} at sub-maximal intent. Goal: prime neural drive for the heavy compound. REST FULLY before primary lift.`
+          : "CNS POTENTIATION PRIMER: 2–3 sets × 3 sub-maximal vertical jumps — primes neural drive, NOT a full power development block. Full rest before primary lift.",
+      });
+    }
+    blocks.push({
+      role: "primary",
+      description: sel
+        ? buildSquatPrimaryDescription(sel).replace("3–5", "2–4") + " INTENSIFICATION: fewer reps, heavier load, maximum bar speed on concentric."
+        : patterns.includes("squat")
+          ? "PRIMARY BILATERAL SQUAT — INTENSIFICATION: Heavy bilateral squat (4–5 × 2–4 @ 83–92%). Maximum load, controlled eccentric, explosive concentric. This IS the session."
+          : "PRIMARY BILATERAL HINGE — INTENSIFICATION: Heavy deadlift pattern (4 × 2–4 @ 83–90%). Every rep is deliberate — reset, breathe, maximum engagement.",
+    });
+    blocks.push({
+      role: "secondary",
+      description: sel
+        ? (isHingeDay
+          ? `Secondary: ${sel.unilateral_lower} — load-matched single-leg complement (3 × 5–6). Reinforces the primary pattern demand.`
+          : `Secondary: ${sel.bilateral_hinge_strength} — heavy posterior chain complement (3 × 5–6 @ ~75–80%). Keeps posterior chain engaged.`)
+        : patterns.includes("squat")
+          ? "Secondary: Heavy Romanian Deadlift (3 × 5–6 @ ~75–80%) — posterior chain complement to the heavy squat. NOT a hypertrophy accessory."
+          : "Secondary: Heavy single-leg RDL (3 × 5–6 per side) — unilateral posterior chain integrity after heavy bilateral hinge.",
+    });
+    blocks.push({
+      role: "trunk",
+      description: sel
+        ? buildTrunkDescription(sel, patterns.includes("rotational"))
+        : "TRUNK INTEGRITY (Intensification): Pallof press variant paired with ab wheel rollout. 2–3 sets only. Trunk work is the session close — brief and structural.",
+    });
+    return blocks;
+  }
+
+  // ── POWER_ELASTIC_CONVERSION structural template ──────────────────────────
+  // Elastic/reactive work IS the session anchor. Bilateral compound is the
+  // contrast vehicle — it potentiates the reactive work, not the other way around.
+  // No secondary compound. No unilateral block. Structure is inverted vs default.
+  if (blockArchetype === "POWER_ELASTIC_CONVERSION" && isLowerSession) {
+    blocks.push({
+      role: "prep",
+      description: "Reactive power prep: ankle mobility → pogo hop series (2 × 10 sub-max) → 2 × 3 approach jump to box — activating the stretch-shortening cycle before loading.",
+    });
+    blocks.push({
+      role: "power",
+      description: sel
+        ? `ELASTIC/REACTIVE BLOCK (PRIMARY OUTPUT): ${sel.elastic_power} — minimum contact time, maximum stiffness. Then ${sel.lower_power} — maximum velocity expression. 3–4 sets × 4–5 reps each. FULL REST between sets (2–3 min). THIS is the session's primary training goal.`
+        : "ELASTIC/REACTIVE BLOCK (PRIMARY OUTPUT): Reactive bound series → hurdle hop series — minimum ground contact time, maximum stiffness output. THEN: maximum-displacement jump (horizontal). 3–4 sets × 4–5 reps. Full rest between every set. THIS is the session's primary training goal.",
+    });
+    blocks.push({
+      role: "primary",
+      description: sel
+        ? `CONTRAST POTENTIATION COMPOUND: ${sel.bilateral_squat_strength || sel.bilateral_hinge_strength} at 65–78% — VELOCITY INTENT on every concentric. This lift potentiates the reactive work above, it is NOT a strength accumulation exercise. 4 × 3–5 reps, max bar speed.`
+        : patterns.includes("squat")
+          ? "CONTRAST POTENTIATION COMPOUND: Bilateral squat variant at 65–78% — EXPLOSIVE INTENT on concentric. This is the contrast vehicle for the elastic work, not a strength accumulation session. 4 × 3–5 explosive reps."
+          : "CONTRAST POTENTIATION COMPOUND: Bilateral hinge variant at 65–78% — ballistic hip extension intent. Speed-strength expression, not grinding maximal load. 4 × 3–4 reps.",
+    });
+    blocks.push({
+      role: "trunk",
+      description: sel
+        ? buildTrunkDescription(sel, patterns.includes("rotational"))
+        : "Reactive trunk close: anti-rotation + lateral stability — 2 sets each, brief. Trunk work is the session close, NOT the session anchor.",
+    });
+    return blocks;
+  }
+
+  // ── WORK_CAPACITY / FOUNDATION_ACCUMULATION structural template ──────────
+  // Full slot stack. Conditioning finisher is present regardless of neural demand.
+  // Volume and density are the primary training stimuli.
+  const isWorkCapacity = blockArchetype === "WORK_CAPACITY_BLOCK" || blockArchetype === "FOUNDATION_ACCUMULATION";
+
+  // ─── Standard 5-6 block template (default + work capacity) ────────────────
 
   blocks.push({
     role: "prep",
@@ -240,6 +333,16 @@ function buildCNSFlow(
     });
   }
 
+  // Work capacity / accumulation blocks get a conditioning finisher on lower sessions
+  if (isWorkCapacity && isLowerSession && neuralDemand !== "low") {
+    blocks.push({
+      role: "finisher",
+      description: sel
+        ? `WORK CAPACITY FINISHER — ${sel.conditioning_finisher}: density/capacity work to close the session. This is NOT rest — it is the accumulation stimulus. 3–4 sets, moderate intensity, continuous effort.`
+        : "WORK CAPACITY FINISHER: Kettlebell swing complex (4 × 15) OR sled push (4 × 20m) OR loaded carry complex (3 × 30m each side) — choose based on session load. Density and capacity, not power. Closes the accumulation block.",
+    });
+  }
+
   return blocks;
 }
 
@@ -250,6 +353,7 @@ function buildSessionsForDayCount(
   sport: string | null,
   goal: string | null,
   variationSeed?: number,
+  blockArchetype?: string,
 ): SessionArchitecture[] {
   const isHockey = sport?.toLowerCase().includes("hockey") ?? false;
   const s = sport?.toLowerCase() ?? "";
@@ -1643,7 +1747,7 @@ function buildSessionsForDayCount(
         neuralDemand: "high",
         primaryPattern: "squat",
         emphasizedPatterns: ["squat", "upper_push", "power", "trunk"],
-        cnsFlow: buildCNSFlow(["squat", "upper_push", "power", "trunk"], "high"),
+        cnsFlow: buildCNSFlow(["squat", "upper_push", "power", "trunk"], "high", undefined, blockArchetype),
         sportNotes: isHockey ? "Bias lateral drive mechanics off squat; include hip flexor control" : undefined,
       },
       {
@@ -1653,7 +1757,7 @@ function buildSessionsForDayCount(
         neuralDemand: "moderate",
         primaryPattern: "hinge",
         emphasizedPatterns: ["hinge", "upper_pull", "unilateral_lower", "trunk", "rotational"],
-        cnsFlow: buildCNSFlow(["hinge", "upper_pull", "unilateral_lower", "rotational"], "moderate"),
+        cnsFlow: buildCNSFlow(["hinge", "upper_pull", "unilateral_lower", "rotational"], "moderate", undefined, blockArchetype),
         sportNotes: isHockey ? "Rotational trunk work essential; single-leg RDL for edge mechanics" : undefined,
       },
     ];
@@ -1670,7 +1774,7 @@ function buildSessionsForDayCount(
           neuralDemand: "high",
           primaryPattern: "upper_pull",
           emphasizedPatterns: ["upper_pull", "upper_push", "power", "trunk", "rotational"],
-          cnsFlow: buildCNSFlow(["upper_pull", "upper_push", "power", "rotational", "trunk"], "high"),
+          cnsFlow: buildCNSFlow(["upper_pull", "upper_push", "power", "rotational", "trunk"], "high", undefined, blockArchetype),
           sportNotes: isHockey ? "Weighted pull-up; rotational med ball throw; face pull" : undefined,
         },
         {
@@ -1680,7 +1784,7 @@ function buildSessionsForDayCount(
           neuralDemand: "high",
           primaryPattern: "squat",
           emphasizedPatterns: ["squat", "power", "unilateral_lower", "lateral", "trunk"],
-          cnsFlow: buildCNSFlow(["squat", "power", "unilateral_lower", "lateral", "trunk"], "high"),
+          cnsFlow: buildCNSFlow(["squat", "power", "unilateral_lower", "lateral", "trunk"], "high", undefined, blockArchetype),
           sportNotes: isHockey ? "Lateral bound; front squat or safety bar squat; lateral step-up; Copenhagen plank" : undefined,
         },
         {
@@ -1690,7 +1794,7 @@ function buildSessionsForDayCount(
           neuralDemand: "moderate",
           primaryPattern: "hinge",
           emphasizedPatterns: ["hinge", "unilateral_lower", "trunk", "lateral"],
-          cnsFlow: buildCNSFlow(["hinge", "unilateral_lower", "lateral", "trunk"], "moderate"),
+          cnsFlow: buildCNSFlow(["hinge", "unilateral_lower", "lateral", "trunk"], "moderate", undefined, blockArchetype),
           sportNotes: isHockey ? "Single-leg RDL; lateral lunge; Copenhagen plank; carry complex" : undefined,
         },
       ];
@@ -1706,7 +1810,7 @@ function buildSessionsForDayCount(
           neuralDemand: "high",
           primaryPattern: "hinge",
           emphasizedPatterns: ["hinge", "power", "unilateral_lower", "trunk"],
-          cnsFlow: buildCNSFlow(["hinge", "power", "unilateral_lower", "trunk"], "high"),
+          cnsFlow: buildCNSFlow(["hinge", "power", "unilateral_lower", "trunk"], "high", undefined, blockArchetype),
           sportNotes: isHockey ? "RDL + single-leg RDL for edge mechanics; reactive bound after hinge warm-up" : undefined,
         },
         {
@@ -1716,7 +1820,7 @@ function buildSessionsForDayCount(
           neuralDemand: "moderate",
           primaryPattern: "upper_push",
           emphasizedPatterns: ["upper_push", "upper_pull", "trunk"],
-          cnsFlow: buildCNSFlow(["upper_push", "upper_pull", "trunk"], "moderate"),
+          cnsFlow: buildCNSFlow(["upper_push", "upper_pull", "trunk"], "moderate", undefined, blockArchetype),
           sportNotes: isHockey ? "Landmine press for rotational load transfer; face pull between sets" : undefined,
         },
         {
@@ -1726,7 +1830,7 @@ function buildSessionsForDayCount(
           neuralDemand: "high",
           primaryPattern: "squat",
           emphasizedPatterns: ["squat", "upper_pull", "unilateral_lower", "rotational", "trunk"],
-          cnsFlow: buildCNSFlow(["squat", "upper_pull", "unilateral_lower", "rotational"], "high"),
+          cnsFlow: buildCNSFlow(["squat", "upper_pull", "unilateral_lower", "rotational"], "high", undefined, blockArchetype),
           sportNotes: isHockey ? "Lateral squat variant; weighted chin-up; Copenhagen plank for groin health" : undefined,
         },
       ];
@@ -1739,7 +1843,7 @@ function buildSessionsForDayCount(
         neuralDemand: "high",
         primaryPattern: "squat",
         emphasizedPatterns: ["squat", "power", "unilateral_lower", "trunk"],
-        cnsFlow: buildCNSFlow(["squat", "power", "unilateral_lower", "trunk"], "high"),
+        cnsFlow: buildCNSFlow(["squat", "power", "unilateral_lower", "trunk"], "high", undefined, blockArchetype),
         sportNotes: isHockey ? "Lateral bound before squats; RFESS for single-leg transfer; Pallof press for anti-rotation" : undefined,
       },
       {
@@ -1749,7 +1853,7 @@ function buildSessionsForDayCount(
         neuralDemand: "moderate",
         primaryPattern: "upper_push",
         emphasizedPatterns: ["upper_push", "upper_pull", "trunk"],
-        cnsFlow: buildCNSFlow(["upper_push", "upper_pull", "trunk"], "moderate"),
+        cnsFlow: buildCNSFlow(["upper_push", "upper_pull", "trunk"], "moderate", undefined, blockArchetype),
         sportNotes: isHockey ? "Bias overhead pressing; rotational med ball work; face pull for shoulder cuff" : undefined,
       },
       {
@@ -1759,7 +1863,7 @@ function buildSessionsForDayCount(
         neuralDemand: "high",
         primaryPattern: "hinge",
         emphasizedPatterns: ["hinge", "power", "unilateral_lower", "lateral", "trunk", "rotational"],
-        cnsFlow: buildCNSFlow(["hinge", "power", "unilateral_lower", "lateral", "rotational"], "high"),
+        cnsFlow: buildCNSFlow(["hinge", "power", "unilateral_lower", "lateral", "rotational"], "high", undefined, blockArchetype),
         sportNotes: isHockey ? "Reactive lateral bounds; single-leg RDL; lateral lunge; Copenhagen plank" : undefined,
       },
     ];
@@ -1775,7 +1879,7 @@ function buildSessionsForDayCount(
           neuralDemand: "high",
           primaryPattern: "squat",
           emphasizedPatterns: ["squat", "power", "unilateral_lower", "trunk", "lateral"],
-          cnsFlow: buildCNSFlow(["squat", "power", "unilateral_lower", "lateral", "trunk"], "high"),
+          cnsFlow: buildCNSFlow(["squat", "power", "unilateral_lower", "lateral", "trunk"], "high", undefined, blockArchetype),
           sportNotes: "Lateral bound before squats; RFESS or lateral step-up for edge transfer; Pallof press anti-rotation for body contact stability",
         },
         {
@@ -1785,7 +1889,7 @@ function buildSessionsForDayCount(
           neuralDemand: "moderate",
           primaryPattern: "upper_push",
           emphasizedPatterns: ["upper_push", "upper_pull", "rotational", "trunk"],
-          cnsFlow: buildCNSFlow(["upper_push", "upper_pull", "rotational", "trunk"], "moderate"),
+          cnsFlow: buildCNSFlow(["upper_push", "upper_pull", "rotational", "trunk"], "moderate", undefined, blockArchetype),
           sportNotes: "Med ball rotational throw before pressing; landmine press as sport-specific horizontal force; face pull / band external rotation for cuff tolerance",
         },
         {
@@ -1795,7 +1899,7 @@ function buildSessionsForDayCount(
           neuralDemand: "moderate",
           primaryPattern: "hinge",
           emphasizedPatterns: ["hinge", "unilateral_lower", "power", "lateral", "trunk"],
-          cnsFlow: buildCNSFlow(["hinge", "unilateral_lower", "power", "lateral", "trunk"], "moderate"),
+          cnsFlow: buildCNSFlow(["hinge", "unilateral_lower", "power", "lateral", "trunk"], "moderate", undefined, blockArchetype),
           sportNotes: "Single-leg RDL for posterior chain + balance; lateral lunge for adductor resilience; Copenhagen plank; snap-down drill for deceleration mechanics",
         },
         {
@@ -1805,7 +1909,7 @@ function buildSessionsForDayCount(
           neuralDemand: "high",
           primaryPattern: "power",
           emphasizedPatterns: ["power", "squat", "lateral", "rotational", "trunk", "unilateral_lower"],
-          cnsFlow: buildCNSFlow(["power", "squat", "lateral", "rotational", "trunk"], "high"),
+          cnsFlow: buildCNSFlow(["power", "squat", "lateral", "rotational", "trunk"], "high", undefined, blockArchetype),
           sportNotes: "Broad jump + lateral bound pairing; sled push or acceleration drill; rotational med ball; carry complex for trunk under locomotion",
         },
       ];
@@ -1821,7 +1925,7 @@ function buildSessionsForDayCount(
           neuralDemand: "high",
           primaryPattern: "hinge",
           emphasizedPatterns: ["hinge", "power", "unilateral_lower", "trunk"],
-          cnsFlow: buildCNSFlow(["hinge", "power", "unilateral_lower", "trunk"], "high"),
+          cnsFlow: buildCNSFlow(["hinge", "power", "unilateral_lower", "trunk"], "high", undefined, blockArchetype),
           sportNotes: isHockey ? "RDL + single-leg RDL as primary hinge; lateral bound as power primer" : undefined,
         },
         {
@@ -1831,7 +1935,7 @@ function buildSessionsForDayCount(
           neuralDemand: "moderate",
           primaryPattern: "upper_push",
           emphasizedPatterns: ["upper_push", "upper_pull", "trunk"],
-          cnsFlow: buildCNSFlow(["upper_push", "upper_pull", "trunk"], "moderate"),
+          cnsFlow: buildCNSFlow(["upper_push", "upper_pull", "trunk"], "moderate", undefined, blockArchetype),
           sportNotes: isHockey ? "Landmine press as sport-specific horizontal force; face pull and external rotation for rotator cuff tolerance" : undefined,
         },
         {
@@ -1841,7 +1945,7 @@ function buildSessionsForDayCount(
           neuralDemand: "moderate",
           primaryPattern: "squat",
           emphasizedPatterns: ["squat", "power", "unilateral_lower", "lateral", "trunk"],
-          cnsFlow: buildCNSFlow(["squat", "power", "unilateral_lower", "lateral", "trunk"], "moderate"),
+          cnsFlow: buildCNSFlow(["squat", "power", "unilateral_lower", "lateral", "trunk"], "moderate", undefined, blockArchetype),
           sportNotes: isHockey ? "Lateral step-up and Copenhagen plank in unilateral block; anti-rotation trunk emphasis" : undefined,
         },
         {
@@ -1851,7 +1955,7 @@ function buildSessionsForDayCount(
           neuralDemand: "high",
           primaryPattern: "upper_pull",
           emphasizedPatterns: ["upper_pull", "rotational", "power", "trunk"],
-          cnsFlow: buildCNSFlow(["upper_pull", "rotational", "power", "trunk"], "high"),
+          cnsFlow: buildCNSFlow(["upper_pull", "rotational", "power", "trunk"], "high", undefined, blockArchetype),
           sportNotes: isHockey ? "Weighted chin-up or bent-over row; med ball rotational throw; carry complex" : undefined,
         },
       ];
@@ -1867,7 +1971,7 @@ function buildSessionsForDayCount(
           neuralDemand: "high",
           primaryPattern: "squat",
           emphasizedPatterns: ["squat", "power", "unilateral_lower", "trunk"],
-          cnsFlow: buildCNSFlow(["squat", "power", "unilateral_lower", "trunk"], "high"),
+          cnsFlow: buildCNSFlow(["squat", "power", "unilateral_lower", "trunk"], "high", undefined, blockArchetype),
         },
         {
           dayNumber: 2,
@@ -1876,7 +1980,7 @@ function buildSessionsForDayCount(
           neuralDemand: "moderate",
           primaryPattern: "upper_pull",
           emphasizedPatterns: ["upper_pull", "upper_push", "trunk"],
-          cnsFlow: buildCNSFlow(["upper_pull", "upper_push", "trunk"], "moderate"),
+          cnsFlow: buildCNSFlow(["upper_pull", "upper_push", "trunk"], "moderate", undefined, blockArchetype),
         },
         {
           dayNumber: 3,
@@ -1885,7 +1989,7 @@ function buildSessionsForDayCount(
           neuralDemand: "moderate",
           primaryPattern: "hinge",
           emphasizedPatterns: ["hinge", "unilateral_lower", "power", "lateral", "trunk"],
-          cnsFlow: buildCNSFlow(["hinge", "unilateral_lower", "power", "lateral", "trunk"], "moderate"),
+          cnsFlow: buildCNSFlow(["hinge", "unilateral_lower", "power", "lateral", "trunk"], "moderate", undefined, blockArchetype),
         },
         {
           dayNumber: 4,
@@ -1894,7 +1998,7 @@ function buildSessionsForDayCount(
           neuralDemand: "high",
           primaryPattern: "upper_push",
           emphasizedPatterns: ["upper_push", "power", "squat", "unilateral_lower", "trunk"],
-          cnsFlow: buildCNSFlow(["upper_push", "power", "squat", "trunk"], "high"),
+          cnsFlow: buildCNSFlow(["upper_push", "power", "squat", "trunk"], "high", undefined, blockArchetype),
         },
       ];
     }
@@ -1906,7 +2010,7 @@ function buildSessionsForDayCount(
         neuralDemand: "high",
         primaryPattern: "squat",
         emphasizedPatterns: ["squat", "power", "unilateral_lower", "trunk"],
-        cnsFlow: buildCNSFlow(["squat", "power", "unilateral_lower", "trunk"], "high"),
+        cnsFlow: buildCNSFlow(["squat", "power", "unilateral_lower", "trunk"], "high", undefined, blockArchetype),
       },
       {
         dayNumber: 2,
@@ -1915,7 +2019,7 @@ function buildSessionsForDayCount(
         neuralDemand: "moderate",
         primaryPattern: "upper_push",
         emphasizedPatterns: ["upper_push", "upper_pull", "trunk"],
-        cnsFlow: buildCNSFlow(["upper_push", "upper_pull", "trunk"], "moderate"),
+        cnsFlow: buildCNSFlow(["upper_push", "upper_pull", "trunk"], "moderate", undefined, blockArchetype),
       },
       {
         dayNumber: 3,
@@ -1924,7 +2028,7 @@ function buildSessionsForDayCount(
         neuralDemand: "moderate",
         primaryPattern: "hinge",
         emphasizedPatterns: ["hinge", "unilateral_lower", "power", "lateral", "trunk"],
-        cnsFlow: buildCNSFlow(["hinge", "unilateral_lower", "power", "lateral", "trunk"], "moderate"),
+        cnsFlow: buildCNSFlow(["hinge", "unilateral_lower", "power", "lateral", "trunk"], "moderate", undefined, blockArchetype),
       },
       {
         dayNumber: 4,
@@ -1933,7 +2037,7 @@ function buildSessionsForDayCount(
         neuralDemand: "high",
         primaryPattern: "power",
         emphasizedPatterns: ["power", "squat", "hinge", "unilateral_lower", "trunk", "rotational"],
-        cnsFlow: buildCNSFlow(["power", "squat", "unilateral_lower", "rotational", "trunk"], "high"),
+        cnsFlow: buildCNSFlow(["power", "squat", "unilateral_lower", "rotational", "trunk"], "high", undefined, blockArchetype),
       },
     ];
   }
@@ -1949,7 +2053,7 @@ function buildSessionsForDayCount(
           neuralDemand: "high",
           primaryPattern: "squat",
           emphasizedPatterns: ["squat", "power", "unilateral_lower", "trunk"],
-          cnsFlow: buildCNSFlow(["squat", "power", "unilateral_lower", "trunk"], "high"),
+          cnsFlow: buildCNSFlow(["squat", "power", "unilateral_lower", "trunk"], "high", undefined, blockArchetype),
           sportNotes: isHockey ? "Lateral drive bias from squat; lateral bound" : undefined,
         },
         {
@@ -1959,7 +2063,7 @@ function buildSessionsForDayCount(
           neuralDemand: "moderate",
           primaryPattern: "upper_push",
           emphasizedPatterns: ["upper_push", "trunk"],
-          cnsFlow: buildCNSFlow(["upper_push", "trunk"], "moderate"),
+          cnsFlow: buildCNSFlow(["upper_push", "trunk"], "moderate", undefined, blockArchetype),
           sportNotes: isHockey ? "Landmine press; rotational med ball work; face pull between sets" : undefined,
         },
         {
@@ -1969,7 +2073,7 @@ function buildSessionsForDayCount(
           neuralDemand: "moderate",
           primaryPattern: "upper_pull",
           emphasizedPatterns: ["upper_pull", "hinge", "trunk"],
-          cnsFlow: buildCNSFlow(["upper_pull", "hinge", "trunk"], "moderate"),
+          cnsFlow: buildCNSFlow(["upper_pull", "hinge", "trunk"], "moderate", undefined, blockArchetype),
           sportNotes: isHockey ? "Bent-over row; weighted chin-up; rotational trunk work" : undefined,
         },
         {
@@ -1979,7 +2083,7 @@ function buildSessionsForDayCount(
           neuralDemand: "moderate",
           primaryPattern: "hinge",
           emphasizedPatterns: ["hinge", "unilateral_lower", "lateral", "trunk"],
-          cnsFlow: buildCNSFlow(["hinge", "unilateral_lower", "lateral", "trunk"], "moderate"),
+          cnsFlow: buildCNSFlow(["hinge", "unilateral_lower", "lateral", "trunk"], "moderate", undefined, blockArchetype),
           sportNotes: isHockey ? "Single-leg RDL; lateral lunge; Copenhagen plank" : undefined,
         },
         {
@@ -1989,7 +2093,7 @@ function buildSessionsForDayCount(
           neuralDemand: "high",
           primaryPattern: "power",
           emphasizedPatterns: ["power", "squat", "hinge", "rotational", "lateral", "trunk"],
-          cnsFlow: buildCNSFlow(["power", "squat", "lateral", "rotational", "trunk"], "high"),
+          cnsFlow: buildCNSFlow(["power", "squat", "lateral", "rotational", "trunk"], "high", undefined, blockArchetype),
           sportNotes: isHockey ? "Broad jump + lateral bound complex; sled push; rotational med ball; carry" : undefined,
         },
       ];
@@ -2002,7 +2106,7 @@ function buildSessionsForDayCount(
         neuralDemand: "high",
         primaryPattern: "squat",
         emphasizedPatterns: ["squat", "power", "unilateral_lower", "trunk"],
-        cnsFlow: buildCNSFlow(["squat", "power", "unilateral_lower", "trunk"], "high"),
+        cnsFlow: buildCNSFlow(["squat", "power", "unilateral_lower", "trunk"], "high", undefined, blockArchetype),
         sportNotes: isHockey ? "Lateral drive bias from squat; lateral bound" : undefined,
       },
       {
@@ -2012,7 +2116,7 @@ function buildSessionsForDayCount(
         neuralDemand: "moderate",
         primaryPattern: "upper_push",
         emphasizedPatterns: ["upper_push", "trunk"],
-        cnsFlow: buildCNSFlow(["upper_push", "trunk"], "moderate"),
+        cnsFlow: buildCNSFlow(["upper_push", "trunk"], "moderate", undefined, blockArchetype),
         sportNotes: isHockey ? "Rotational med ball press; landmine press; face pull" : undefined,
       },
       {
@@ -2022,7 +2126,7 @@ function buildSessionsForDayCount(
         neuralDemand: "moderate",
         primaryPattern: "hinge",
         emphasizedPatterns: ["hinge", "unilateral_lower", "lateral", "trunk"],
-        cnsFlow: buildCNSFlow(["hinge", "unilateral_lower", "lateral", "trunk"], "moderate"),
+        cnsFlow: buildCNSFlow(["hinge", "unilateral_lower", "lateral", "trunk"], "moderate", undefined, blockArchetype),
         sportNotes: isHockey ? "Single-leg RDL; lateral lunge; Copenhagen plank" : undefined,
       },
       {
@@ -2032,7 +2136,7 @@ function buildSessionsForDayCount(
         neuralDemand: "moderate",
         primaryPattern: "upper_pull",
         emphasizedPatterns: ["upper_pull", "upper_push", "trunk"],
-        cnsFlow: buildCNSFlow(["upper_pull", "upper_push", "trunk"], "moderate"),
+        cnsFlow: buildCNSFlow(["upper_pull", "upper_push", "trunk"], "moderate", undefined, blockArchetype),
         sportNotes: isHockey ? "Bent-over row; weighted chin-up; rotational trunk" : undefined,
       },
       {
@@ -2042,7 +2146,7 @@ function buildSessionsForDayCount(
         neuralDemand: "high",
         primaryPattern: "power",
         emphasizedPatterns: ["power", "squat", "hinge", "rotational", "lateral", "trunk"],
-        cnsFlow: buildCNSFlow(["power", "squat", "lateral", "rotational", "trunk"], "high"),
+        cnsFlow: buildCNSFlow(["power", "squat", "lateral", "rotational", "trunk"], "high", undefined, blockArchetype),
         sportNotes: isHockey ? "Broad jump + lateral bound complex; sled push; rotational med ball; carry" : undefined,
       },
     ];
@@ -2057,7 +2161,7 @@ function buildSessionsForDayCount(
         neuralDemand: "high",
         primaryPattern: "squat",
         emphasizedPatterns: ["squat", "power", "trunk"],
-        cnsFlow: buildCNSFlow(["squat", "power", "trunk"], "high"),
+        cnsFlow: buildCNSFlow(["squat", "power", "trunk"], "high", undefined, blockArchetype),
         sportNotes: isHockey ? "Lateral bound before squats; Pallof press" : undefined,
       },
       {
@@ -2067,7 +2171,7 @@ function buildSessionsForDayCount(
         neuralDemand: "moderate",
         primaryPattern: "upper_push",
         emphasizedPatterns: ["upper_push", "trunk"],
-        cnsFlow: buildCNSFlow(["upper_push", "trunk"], "moderate"),
+        cnsFlow: buildCNSFlow(["upper_push", "trunk"], "moderate", undefined, blockArchetype),
       },
       {
         dayNumber: 3,
@@ -2076,7 +2180,7 @@ function buildSessionsForDayCount(
         neuralDemand: "moderate",
         primaryPattern: "hinge",
         emphasizedPatterns: ["hinge", "unilateral_lower", "trunk"],
-        cnsFlow: buildCNSFlow(["hinge", "unilateral_lower", "trunk"], "moderate"),
+        cnsFlow: buildCNSFlow(["hinge", "unilateral_lower", "trunk"], "moderate", undefined, blockArchetype),
         sportNotes: isHockey ? "Single-leg RDL; lateral lunge; Copenhagen plank" : undefined,
       },
       {
@@ -2086,7 +2190,7 @@ function buildSessionsForDayCount(
         neuralDemand: "moderate",
         primaryPattern: "upper_pull",
         emphasizedPatterns: ["upper_pull", "trunk"],
-        cnsFlow: buildCNSFlow(["upper_pull", "trunk"], "moderate"),
+        cnsFlow: buildCNSFlow(["upper_pull", "trunk"], "moderate", undefined, blockArchetype),
         sportNotes: isHockey ? "Rotational med ball; face pull; band external rotation" : undefined,
       },
       {
@@ -2096,7 +2200,7 @@ function buildSessionsForDayCount(
         neuralDemand: "high",
         primaryPattern: "power",
         emphasizedPatterns: ["power", "unilateral_lower", "lateral", "rotational", "trunk"],
-        cnsFlow: buildCNSFlow(["power", "unilateral_lower", "lateral", "rotational", "trunk"], "high"),
+        cnsFlow: buildCNSFlow(["power", "unilateral_lower", "lateral", "rotational", "trunk"], "high", undefined, blockArchetype),
         sportNotes: isHockey ? "Broad jump + lateral bound; lateral step-up; rotational med ball" : undefined,
       },
       {
@@ -2106,7 +2210,7 @@ function buildSessionsForDayCount(
         neuralDemand: "low",
         primaryPattern: "trunk",
         emphasizedPatterns: ["trunk", "lateral", "rotational", "locomotion"],
-        cnsFlow: buildCNSFlow(["trunk", "lateral", "rotational"], "low"),
+        cnsFlow: buildCNSFlow(["trunk", "lateral", "rotational"], "low", undefined, blockArchetype),
         sportNotes: isHockey ? "Sled push; lateral band work; carry complex; hip flexor + adductor care" : undefined,
       },
     ];
@@ -2149,17 +2253,116 @@ function computeMovementAllocation(sessions: SessionArchitecture[], sport: strin
 
 // ─── Main: compute weekly architecture ───────────────────────────────────────
 
+// ─── Block-archetype session identity overrides ───────────────────────────────
+// Applied as post-processing after buildSessionsForDayCount so sport-specific
+// templates are not affected. Only changes identity + intent labels for generic
+// (non-sport) programs, giving the AI different framing per block context.
+function applyBlockArchetypeIdentityOverride(
+  session: SessionArchitecture,
+  blockArchetype: string,
+): SessionArchitecture {
+  const p = session.primaryPattern;
+
+  if (blockArchetype === "INTENSIFICATION_STRENGTH") {
+    if (p === "squat") {
+      return {
+        ...session,
+        identity: "Maximum Lower Force — Intensification Block",
+        intent: "Peak bilateral squat force via progressive overload. Fewer total movements, heavier load. Quality and load density over volume. No superfluous accessory.",
+      };
+    }
+    if (p === "hinge") {
+      return {
+        ...session,
+        identity: "Posterior Chain Intensification — Peak Hinge Force",
+        intent: "Heavy deadlift-pattern posterior chain maximal loading. Minimal accessory volume. Two compound movements, heavy loading, full rest between sets.",
+      };
+    }
+    if (p === "upper_push") {
+      return {
+        ...session,
+        identity: "Horizontal Press Strength — Intensification Block",
+        intent: "Peak pressing force via heavy bilateral compound with full rest. Pull volume for structural balance. Session density is managed by load, not exercise count.",
+      };
+    }
+    if (p === "upper_pull") {
+      return {
+        ...session,
+        identity: "Vertical + Horizontal Pull Strength — Intensification Block",
+        intent: "Maximum pulling load with full rest. Scapular strength and posterior shoulder development. Session identity is pulling strength, not volume.",
+      };
+    }
+  }
+
+  if (blockArchetype === "POWER_ELASTIC_CONVERSION") {
+    if (p === "squat" || p === "power") {
+      return {
+        ...session,
+        identity: "Elastic/Reactive Power Development + Lower Contrast",
+        intent: "Reactive and elastic output IS the primary performance goal. Bilateral squat is the contrast potentiation vehicle — bar speed on every rep. Session opens with elastic work, compounds are the contrast partner.",
+      };
+    }
+    if (p === "hinge") {
+      return {
+        ...session,
+        identity: "Hip Drive Power + Elastic Posterior Chain",
+        intent: "Ballistic hip extension and elastic hamstring loading. Hinge compound as loaded contrast. Speed-strength day — velocity intent throughout.",
+      };
+    }
+    if (p === "upper_push") {
+      return {
+        ...session,
+        identity: "Upper Power Expression + Press Contrast",
+        intent: "Upper explosive output via ballistic pressing or med ball. Horizontal press as the contrast compound. Speed and power dominates this session, not grinding load.",
+      };
+    }
+  }
+
+  if (blockArchetype === "FOUNDATION_ACCUMULATION" || blockArchetype === "WORK_CAPACITY_BLOCK") {
+    if (p === "squat") {
+      return {
+        ...session,
+        identity: "Lower Volume Accumulation — Squat Foundation",
+        intent: "Bilateral squat volume and posterior chain accumulation. Full movement stack. Work capacity finisher closes the session — density is the training stimulus.",
+      };
+    }
+    if (p === "hinge") {
+      return {
+        ...session,
+        identity: "Posterior Chain Volume — Hinge Accumulation",
+        intent: "Hinge-dominant volume accumulation with full unilateral and trunk stack. Conditioning finisher to close. Building structural and metabolic capacity.",
+      };
+    }
+  }
+
+  return session;
+}
+
 export function computeWeeklyArchitecture(
   daysPerWeek: number,
   sport: string | null,
   goal: string | null,
   variationSeed?: number,
+  blockArchetype?: string,
 ): WeeklyArchitecture {
   const days = Math.max(2, Math.min(6, daysPerWeek));
-  const sessions = buildSessionsForDayCount(days, sport, goal, variationSeed);
-  const movementAllocation = computeMovementAllocation(sessions, sport);
+  let sessions = buildSessionsForDayCount(days, sport, goal, variationSeed, blockArchetype);
 
-  const isHockey = sport?.toLowerCase().includes("hockey") ?? false;
+  // Apply block-archetype session identity overrides for generic (non-sport) programs.
+  // Sport-specific templates already have bespoke identities and are left untouched.
+  const sportLc = sport?.toLowerCase() ?? "";
+  const hasSportTemplate = sportLc.includes("hockey") || sportLc.includes("football") ||
+    sportLc.includes("basketball") || sportLc.includes("soccer") || sportLc.includes("baseball") ||
+    sportLc.includes("softball") || sportLc.includes("tennis") || sportLc.includes("golf") ||
+    sportLc.includes("swim") || sportLc.includes("rowing") || sportLc.includes("cycling") ||
+    sportLc.includes("mma") || sportLc.includes("boxing") || sportLc.includes("wrestling");
+
+  if (blockArchetype && !hasSportTemplate) {
+    sessions = sessions.map((s) => applyBlockArchetypeIdentityOverride(s, blockArchetype));
+  }
+
+  const movementAllocation = computeMovementAllocation(sessions, sport);
+  const isHockey = sportLc.includes("hockey");
 
   const weeklyRhythm = sessions
     .map((s) => `Day ${s.dayNumber} (${s.neuralDemand.toUpperCase()} CNS): ${s.identity}`)
@@ -2482,7 +2685,7 @@ export function buildArchitectureBrief(
     blockSelection.split.dayTemplates,
   );
 
-  const arch = computeWeeklyArchitecture(daysPerWeek, sport, goal, splitVariationSeed);
+  const arch = computeWeeklyArchitecture(daysPerWeek, sport, goal, splitVariationSeed, blockSelection.archetypeId);
   const isHockey = sport?.toLowerCase().includes("hockey") ?? false;
   const isFootball = !!(sport && /\bfootball\b/i.test(sport) && !/soccer/.test(sport.toLowerCase()));
   const isBasketball = !!(sport && /basketball/i.test(sport));
