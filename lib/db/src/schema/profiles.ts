@@ -13,11 +13,27 @@ export const userProfilesTable = pgTable("user_profiles", {
   sessionDuration: integer("session_duration").notNull(),
   equipmentAccess: text("equipment_access").notNull(),
   injuries: text("injuries"),
+  /**
+   * Primary sport focus — used as the main sport for programming.
+   * Existing field: preserved exactly as before for backward compatibility.
+   */
   sportFocus: text("sport_focus"),
   exercisePreferences: text("exercise_preferences"),
   exercisesToAvoid: text("exercises_to_avoid"),
   yearsTraining: integer("years_training"),
   calibrationScore: integer("calibration_score").default(0),
+  /**
+   * Secondary sports — JSON array of sport IDs (e.g. ["pickleball", "golf"]).
+   * Stored as text (JSON-serialized). Optional. Falls back gracefully when null.
+   * Example: '["pickleball","golf"]'
+   */
+  secondarySports: text("secondary_sports"),
+  /**
+   * Position or role within the primary sport.
+   * Examples: "bowler" (cricket), "setter" (volleyball), "pitcher" (baseball)
+   * Optional. Falls back gracefully when null.
+   */
+  positionOrRole: text("position_or_role"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

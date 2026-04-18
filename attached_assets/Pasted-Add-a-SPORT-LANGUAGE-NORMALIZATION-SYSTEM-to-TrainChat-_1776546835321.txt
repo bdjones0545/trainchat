@@ -1,0 +1,304 @@
+Add a SPORT LANGUAGE NORMALIZATION SYSTEM to TrainChat so the app can understand slang, shorthand, nicknames, role words, and informal sport references such as “boxer,” “pickle,” “flag,” “lax,” “pitcher,” etc., and safely map them to canonical sport profiles.
+
+GOAL
+Users should not need to type exact formal sport names.
+The system should understand natural language sport identity and convert it into canonical sport/profile IDs that the ranking and programming engine can use.
+
+CORE PRINCIPLE
+Separate:
+1. what the user said
+2. what the system thinks it means
+3. the canonical sport/profile ID used by the app
+
+Do NOT rely on exact string matching only.
+
+==================================================
+PHASE 1 — CREATE SPORT LANGUAGE NORMALIZER
+==================================================
+
+Create a new file:
+- sport-language-normalizer.ts
+
+Define:
+
+type SportResolution = {
+  rawInput: string
+  normalizedText: string
+  matchedAlias?: string
+  canonicalSportId?: string
+  canonicalRoleId?: string
+  confidence: number
+  ambiguity?: string[]
+  resolutionType: "exact" | "alias" | "contextual" | "ambiguous" | "none"
+}
+
+Create:
+
+function resolveSportLanguage(input: {
+  text: string
+  currentProfile?: {
+    primarySport?: string
+    secondarySports?: string[]
+    positionOrRole?: string
+  }
+  availableSports: string[]
+}): SportResolution
+
+Requirements:
+- normalize casing
+- strip punctuation safely
+- support singular/plural variants
+- support slang and shorthand
+- support role-based words
+- support common misspellings
+- return confidence score
+- do not crash on unknown phrases
+
+==================================================
+PHASE 2 — BUILD ALIAS REGISTRY
+==================================================
+
+Create a structured alias map, not just a flat object.
+
+Example:
+
+type SportAliasEntry = {
+  canonicalSportId: string
+  aliases: string[]
+  roleAliases?: Array<{
+    canonicalRoleId: string
+    aliases: string[]
+  }>
+  ambiguousAliases?: string[]
+}
+
+Add alias coverage for at least:
+
+boxing:
+- boxer
+- boxing
+- fighter
+
+pickleball:
+- pickle
+- pickleball
+- pickles (low confidence slang)
+
+flag_football:
+- flag
+- flag football
+
+lacrosse:
+- lax
+- lacrosse
+
+basketball:
+- hoops
+- ball
+- basketball
+- hooper
+
+baseball:
+- baseball
+- ballplayer
+
+baseball_pitcher:
+- pitcher
+- thrower
+
+volleyball:
+- volleyball
+- vb
+
+wrestling:
+- wrestler
+- wrestling
+- grappler
+
+mma:
+- mma
+- mixed martial arts
+- cage fighter
+
+bowling:
+- bowling
+- bowler
+
+cricket:
+- cricket
+
+cricket_bowler:
+- cricket bowler
+- bowler
+
+cricket_batter:
+- batter
+
+cricket_wicketkeeper:
+- wicketkeeper
+- keeper
+
+golf:
+- golfer
+- golf
+
+softball:
+- softball
+
+rugby:
+- rugby player
+- rugby
+
+badminton:
+- badminton
+
+padel:
+- padel
+
+squash:
+- squash
+
+Important:
+Some aliases are ambiguous and must not auto-resolve at high confidence without context:
+- bowler
+- keeper
+- football
+- ball
+- fighter
+
+==================================================
+PHASE 3 — ADD CONTEXTUAL DISAMBIGUATION
+==================================================
+
+Create helper logic:
+
+function disambiguateSportAlias(input: {
+  normalizedText: string
+  candidateMatches: SportResolutionCandidate[]
+  currentProfile?: {
+    primarySport?: string
+    secondarySports?: string[]
+    positionOrRole?: string
+  }
+}): SportResolution
+
+Rules:
+- If current profile already contains cricket, “bowler” should prefer cricket_bowler
+- If current profile already contains bowling, “bowler” should prefer bowling
+- If text includes “cricket bowler”, resolve directly to cricket_bowler
+- If text includes “wicketkeeper” or “keeper” with cricket nearby, resolve to cricket_wicketkeeper
+- If text includes “goalkeeper” or soccer nearby, do not route to cricket
+- If ambiguity remains, return resolutionType = "ambiguous" and list candidate sports
+
+Do not silently force low-confidence ambiguous matches.
+
+==================================================
+PHASE 4 — SUPPORT PHRASE EXTRACTION FROM CHAT
+==================================================
+
+The system should detect sport identity from natural sentences, not just isolated words.
+
+Examples it should parse:
+- “I’m a boxer.”
+- “I play pickle 3 times a week.”
+- “I do flag and run track.”
+- “Former wrestler, now getting into MMA.”
+- “I’m a cricket bowler.”
+- “Mostly a bowler, but I also bat.”
+- “I’m a pitcher.”
+- “I coach lax.”
+
+Create helpers that can scan full free-text input and extract likely sport mentions.
+
+==================================================
+PHASE 5 — STORE RAW + CANONICAL
+==================================================
+
+When a sport is detected or selected, store both:
+- rawSportInput
+- canonicalSportId
+- canonicalRoleId if applicable
+- confidence
+
+This is important for:
+- future explainability
+- debugging
+- improving the alias system later
+
+==================================================
+PHASE 6 — SAFE FALLBACK BEHAVIOR
+==================================================
+
+If no confident match is found:
+- do not break flow
+- leave sport unresolved
+- fall back to current behavior
+- log the unknown phrase for future alias expansion
+
+If ambiguous:
+- mark it as ambiguous
+- do not overwrite an existing strong sport identity unless confidence is high
+
+==================================================
+PHASE 7 — EXPLAINABILITY
+==================================================
+
+Return useful debug/explain fields such as:
+- rawInput
+- matchedAlias
+- canonicalSportId
+- confidence
+- ambiguity candidates
+
+This should let the agent later say things like:
+- “I interpreted ‘pickle’ as pickleball.”
+- “I interpreted ‘boxer’ as boxing.”
+- “I found ‘bowler’ ambiguous between bowling and cricket bowler, so I preserved your current cricket profile.”
+
+==================================================
+PHASE 8 — INTEGRATE WITH USER PROFILE + PROGRAMMING
+==================================================
+
+Use the normalized result everywhere sport identity matters:
+- onboarding/intake
+- profile editing
+- chat-based sport updates
+- ranking engine
+- program generation
+
+Do not duplicate alias logic across multiple files.
+
+==================================================
+PHASE 9 — TESTS
+==================================================
+
+Add tests for:
+1. “boxer” -> boxing
+2. “pickle” -> pickleball
+3. “flag” -> flag_football
+4. “lax” -> lacrosse
+5. “pitcher” -> baseball_pitcher
+6. “I’m a cricket bowler” -> cricket_bowler
+7. “bowler” resolves to cricket_bowler when current profile is cricket
+8. “bowler” resolves to bowling when current profile is bowling
+9. “keeper” remains ambiguous without context
+10. unknown slang does not crash the system
+
+==================================================
+PHASE 10 — KEEP IT EXTENSIBLE
+==================================================
+
+Requirements:
+- centralize all alias logic
+- make it easy to add new slang later
+- do not hardcode sport parsing into prompts only
+- use canonical IDs downstream
+- preserve raw language for audit/debugging
+
+DELIVERABLES
+When complete, show:
+1. exact files created or edited
+2. alias examples supported
+3. ambiguous cases and how they are handled
+4. one example resolution object for “I’m a boxer”
+5. one example resolution object for “I’m a bowler”

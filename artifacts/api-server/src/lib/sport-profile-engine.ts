@@ -29,7 +29,22 @@ export type SportKey =
   | "swimming"
   | "golf"
   | "rowing"
-  | "cycling";
+  | "cycling"
+  // ── New sports (Phase 1 expansion) ──────────────────────────────────────
+  | "pickleball"
+  | "padel"
+  | "badminton"
+  | "squash"
+  | "bowling"
+  | "flag_football"
+  | "softball"
+  | "wrestling"
+  | "boxing"
+  | "mma"
+  | "cricket"
+  | "cricket_bowler"
+  | "cricket_batter"
+  | "cricket_wicketkeeper";
 
 export type SeasonContext = "off_season" | "pre_season" | "in_season" | "post_season" | null;
 
@@ -1155,6 +1170,690 @@ export const SPORT_PROFILES: Record<SportKey, SportProfile> = {
     architectureDistinctions: "Rowing demands posterior chain strength AND aerobic capacity together — it is one of the most complete athletic demands. The gym must develop both, and ergo conditioning must be part of the program.",
   },
 
+  // ── PICKLEBALL ────────────────────────────────────────────────────────────────
+  pickleball: {
+    key: "pickleball",
+    displayName: "Pickleball",
+    tagline: "Lateral deceleration, reactive split-step, anti-rotation stability, and paddle-elbow resilience",
+    physicalQualities: [
+      { quality: "Lateral deceleration and court coverage", priority: "primary", description: "The kitchen line demands constant lateral shuffle and rapid stop-start — deceleration is the defining physical demand" },
+      { quality: "Reactive split-step and elastic reactivity", priority: "primary", description: "Every opponent shot requires a reactive split-step — SSC efficiency determines court coverage quality" },
+      { quality: "Anti-rotation trunk stability", priority: "primary", description: "Dink stability and paddle control at the net demand a stiff, controlled trunk — trunk bracing prevents unnecessary body rotation" },
+      { quality: "Shoulder and elbow resilience", priority: "secondary", description: "Lateral epicondylitis ('pickleball elbow') and rotator cuff overuse are the most common pickleball injuries — shoulder care is mandatory" },
+      { quality: "Change of direction and acceleration", priority: "secondary", description: "Short explosive court dashes from the baseline to the kitchen and back — repeat COD effort" },
+    ],
+    conditioning: {
+      primaryEnergySystem: "Alactic + repeat burst — short point exchanges with near-full recovery",
+      secondaryEnergySystem: "Aerobic base for game-length endurance (2–3 hr recreational sessions)",
+      weeklyVolume: "1–2 conditioning sessions. Lateral agility, reactive footwork, not long aerobic runs.",
+      sessionFormat: "Lateral shuffle intervals: 6–10 × 10m lateral with decel stop, 60s rest | OR: split-step reactive drills × 8–12 reps",
+      antiPattern: "NEVER program heavy long-duration aerobic conditioning as the primary prescription. Pickleball is short-burst reactive, not endurance. Heavy bilateral lifting without lateral work misses the primary physical demand.",
+      sportNote: "Pickleball athletes need lateral deceleration, reactive stiffness, and shoulder/elbow resilience above all else. The sport is played at a low top speed but with constant direction changes on a small court.",
+    },
+    sessionArchetypes: [
+      { name: "Lateral Decel + Reactive Footwork", intent: "Lateral bounds, split-step drills, Cossack squat — the primary movement demands of pickleball", primaryFocus: ["lateral", "power", "unilateral_lower"], recoveryPriority: "moderate" },
+      { name: "Anti-Rotation + Shoulder Resilience", intent: "Pallof press, face pull, external rotation — trunk stability for dink control and elbow/shoulder injury prevention", primaryFocus: ["trunk", "upper_pull", "upper_push"], recoveryPriority: "low" },
+      { name: "Unilateral Lower + COD Support", intent: "Single-leg strength, lateral lunge, step-up — unilateral lower body for wide-ball lunges and court coverage", primaryFocus: ["unilateral_lower", "power", "trunk"], recoveryPriority: "moderate" },
+    ],
+    exerciseEmphasis: {
+      mustInclude: [
+        "Lateral bound or lateral box jump",
+        "Pallof press (anti-rotation)",
+        "Face pull or external rotation (shoulder/elbow care)",
+        "Lateral lunge or Cossack squat",
+        "Single-leg lower body (RFESS, step-up)",
+      ],
+      preferred: [
+        "Single-leg pogo or ankle hops (reactive stiffness)",
+        "Copenhagen plank (adductor/groin resilience)",
+        "Cable woodchop (rotational control)",
+        "Nordic hamstring curl",
+        "Wrist and forearm loading (reverse curl, farmer's carry)",
+        "Reactive agility drill (split-step pattern)",
+      ],
+      reduced: [
+        "Heavy bilateral back squat without lateral work balance",
+        "Long aerobic conditioning runs",
+        "High-volume overhead pressing without shoulder care balance",
+      ],
+      eliminated: [
+        "Long steady-state cardio as primary conditioning",
+        "Programs with no lateral movement training — court coverage is everything",
+      ],
+      tissueConsiderations: [
+        "Lateral epicondyle (elbow) — face pull and external rotation every session",
+        "Rotator cuff — overhead patterns with care; band work protective",
+        "Wrist/forearm — forearm flexor/extensor balance for paddle control",
+        "Ankle — lateral decel demands ankle stiffness training",
+        "Knee — lunging patterns require VMO strength and tracking",
+      ],
+    },
+    weeklyArchitectureGuidance: {
+      threeDayShape: "Day 1: Lateral Decel + Reactive Footwork | Day 2: Anti-Rotation + Shoulder Resilience | Day 3: Unilateral Lower + COD",
+      fourDayShape: "Day 1: Lateral Reactive + Lower | Day 2: Shoulder + Trunk | Day 3: Unilateral Strength | Day 4: Conditioning + Mobility",
+    },
+    seasonModulation: {
+      off_season: { volumeModifier: 1.0, intensityModifier: 1.0, conditioningReduction: 1.0, priorityShift: "Build lateral strength, reactive stiffness, and shoulder resilience", mandatoryAdjustments: [] },
+      pre_season: { volumeModifier: 0.85, intensityModifier: 0.9, conditioningReduction: 0.8, priorityShift: "Sharpen reactive quality and shoulder care", mandatoryAdjustments: ["Increase agility volume", "Elbow/shoulder care every session"] },
+      in_season: { volumeModifier: 0.6, intensityModifier: 0.8, conditioningReduction: 0.3, priorityShift: "Maintenance — games provide primary training stimulus", mandatoryAdjustments: ["2× sessions max", "Face pull and external rotation every session", "No heavy overhead pressing day of play"] },
+      post_season: { volumeModifier: 0.4, intensityModifier: 0.65, conditioningReduction: 0.2, priorityShift: "Elbow and shoulder restoration", mandatoryAdjustments: ["Focus on tissue recovery", "Eccentric forearm loading"] },
+    },
+    positionOverlays: {},
+    validationRules: [
+      "Lateral movement training mandatory (lateral bound, lateral lunge, or COD drill)",
+      "Shoulder/elbow care (face pull, external rotation) every session",
+      "Anti-rotation work (Pallof press) present every session",
+      "No long aerobic conditioning as primary prescription",
+    ],
+    architectureDistinctions: "Pickleball is a lateral-reactive sport played on a small court. Acceleration tops out at ~10m. The defining demands are deceleration, reactive split-step, and anti-rotation dink stability — not straight-line speed or aerobic endurance. Elbow and shoulder injury prevention is mandatory.",
+  },
+
+  // ── PADEL ─────────────────────────────────────────────────────────────────────
+  padel: {
+    key: "padel",
+    displayName: "Padel",
+    tagline: "Lateral-reactive court coverage, rotational shot power, wall-reaction stiffness, and elbow/shoulder resilience",
+    physicalQualities: [
+      { quality: "Lateral deceleration and court coverage", priority: "primary", description: "Padel's enclosed court demands constant lateral shuttle and rapid decel — players must also react off walls" },
+      { quality: "Rotational shot power", priority: "primary", description: "Padel shots require hip-shoulder rotation through impact — rotational power directly increases shot velocity" },
+      { quality: "Wall-reaction elastic stiffness", priority: "primary", description: "Reacting to balls off the glass walls is a unique padel demand — SSC stiffness and reactive ability are essential" },
+      { quality: "Elbow and shoulder resilience", priority: "secondary", description: "Similar overuse profile to pickleball — lateral epicondylitis and rotator cuff are primary injury risks" },
+    ],
+    conditioning: {
+      primaryEnergySystem: "Alactic + repeat burst — similar to pickleball but with longer point sequences",
+      secondaryEnergySystem: "Aerobic support for 1–2 hr match duration",
+      weeklyVolume: "1–2 conditioning sessions. Lateral reactive drills and repeat sprint ability.",
+      sessionFormat: "Lateral shuttle intervals + split-step reactive drills × 8–12 with 60s rest",
+      antiPattern: "Do not substitute lateral agility with bilateral strength-only sessions. Wall-reaction and lateral movement must be trained.",
+      sportNote: "Padel combines racket sport demands with wall-play reactions. Both lateral COD and rotational power need development.",
+    },
+    sessionArchetypes: [
+      { name: "Lateral Reactive + Rotational Power", intent: "Court movement + med ball rotational work — the two primary padel performance demands", primaryFocus: ["lateral", "rotational", "power"], recoveryPriority: "moderate" },
+      { name: "Shoulder Resilience + Anti-Rotation", intent: "External rotation, face pull, Pallof press — elbow/shoulder care and trunk control", primaryFocus: ["trunk", "upper_pull"], recoveryPriority: "low" },
+    ],
+    exerciseEmphasis: {
+      mustInclude: ["Lateral bound or lateral box jump", "Med ball rotational throw", "Face pull or external rotation", "Pallof press"],
+      preferred: ["Copenhagen plank", "Single-leg pogo", "Cable woodchop", "Lateral lunge", "Wrist/forearm loading"],
+      reduced: ["Long aerobic conditioning", "Heavy bilateral work without lateral balance"],
+      eliminated: ["Programs with no lateral movement or rotational development"],
+      tissueConsiderations: ["Lateral elbow — external rotation and face pull mandatory", "Rotator cuff — shoulder care every session", "Ankle — lateral decel demands stiffness training"],
+    },
+    weeklyArchitectureGuidance: {
+      threeDayShape: "Day 1: Lateral Reactive + Lower | Day 2: Rotational Power + Trunk | Day 3: Shoulder + Unilateral",
+      fourDayShape: "Day 1: Lateral + Lower | Day 2: Rotational Power | Day 3: Shoulder Resilience | Day 4: COD + Conditioning",
+    },
+    seasonModulation: {
+      off_season: { volumeModifier: 1.0, intensityModifier: 1.0, conditioningReduction: 1.0, priorityShift: "Build rotational power, lateral strength, and shoulder resilience", mandatoryAdjustments: [] },
+      pre_season: { volumeModifier: 0.85, intensityModifier: 0.9, conditioningReduction: 0.8, priorityShift: "Sharpen reactive agility and shot power", mandatoryAdjustments: [] },
+      in_season: { volumeModifier: 0.6, intensityModifier: 0.8, conditioningReduction: 0.3, priorityShift: "Maintenance and shoulder protection", mandatoryAdjustments: ["Face pull every session", "2× sessions max"] },
+      post_season: { volumeModifier: 0.4, intensityModifier: 0.65, conditioningReduction: 0.2, priorityShift: "Shoulder and elbow restoration", mandatoryAdjustments: [] },
+    },
+    positionOverlays: {},
+    validationRules: ["Lateral movement training mandatory", "Shoulder/elbow care every session", "Rotational power present"],
+    architectureDistinctions: "Padel is played in an enclosed glass court — wall reactions create unique reactive demands beyond typical racket sports. Rotational power for shot-making and lateral deceleration for court coverage are equally important.",
+  },
+
+  // ── BADMINTON ─────────────────────────────────────────────────────────────────
+  badminton: {
+    key: "badminton",
+    displayName: "Badminton",
+    tagline: "Overhead smash power, extreme lunge mechanics, reactive split-step, and high aerobic demand",
+    physicalQualities: [
+      { quality: "Overhead smash and arm speed", priority: "primary", description: "The smash is badminton's signature — rotator cuff strength, wrist speed, and shoulder endurance define performance" },
+      { quality: "Lunge mechanics (four-corner coverage)", priority: "primary", description: "Badminton requires deep lunges to all four court corners — unilateral lower body strength and hip flexibility are critical" },
+      { quality: "Reactive split-step and elastic stiffness", priority: "primary", description: "The shuttle travels faster than any other racket sport object — reactive stiffness and split-step timing are survival skills" },
+      { quality: "High aerobic capacity", priority: "secondary", description: "Badminton is the most aerobically demanding racket sport — sustained 45-minute sets at high intensity" },
+    ],
+    conditioning: {
+      primaryEnergySystem: "Aerobic + repeat sprint — high aerobic base with explosive burst pattern",
+      secondaryEnergySystem: "Alactic — split-step and explosive court coverage",
+      weeklyVolume: "2 conditioning sessions. Mix of aerobic base and reactive sprint work.",
+      sessionFormat: "6–8 × 20m shuttle sprints with 60s rest + aerobic base running 20 min at 65–70% max HR",
+      antiPattern: "Do not neglect aerobic conditioning — badminton is uniquely aerobic for a racket sport. Do not skip overhead shoulder care.",
+      sportNote: "Badminton players need both a high aerobic engine AND explosive reactive qualities. Heavy overhead smash volume creates significant rotator cuff load.",
+    },
+    sessionArchetypes: [
+      { name: "Overhead Strength + Shoulder Care", intent: "Landmine press, external rotation, face pull — overhead power and rotator cuff protection", primaryFocus: ["upper_push", "upper_pull", "trunk"], recoveryPriority: "moderate" },
+      { name: "Lunge Strength + Reactive Footwork", intent: "Lateral lunge, split-step drills, single-leg lower — four-corner coverage and lunge deceleration", primaryFocus: ["unilateral_lower", "lateral", "power"], recoveryPriority: "high" },
+      { name: "Aerobic Conditioning + Trunk", intent: "Aerobic intervals + anti-rotation work — match endurance and trunk control", primaryFocus: ["trunk", "locomotion"], conditioningRole: "Aerobic + repeat sprint", recoveryPriority: "moderate" },
+    ],
+    exerciseEmphasis: {
+      mustInclude: ["Lateral lunge or Cossack squat (four-corner lunge)", "Face pull and external rotation (rotator cuff)", "Single-leg lower (RFESS, step-up)", "Lateral bound or reactive footwork drills"],
+      preferred: ["Landmine press (shoulder-joint-friendly overhead)", "Copenhagen plank (groin for extreme lunge positions)", "Nordic hamstring curl", "Pallof press", "Single-leg pogo"],
+      reduced: ["Heavy barbell overhead press — shoulder joint risk without functional transfer", "Long bilateral slow lifting sessions without reactive work"],
+      eliminated: ["Neglecting aerobic conditioning", "Neglecting rotator cuff care — smash volume creates overuse"],
+      tissueConsiderations: ["Rotator cuff — mandatory care every session", "Groin/adductor — extreme lunge positions; Copenhagen plank essential", "Ankle — lateral court movement; stiffness training required", "Shoulder — highest overhead demand of common racket sports"],
+    },
+    weeklyArchitectureGuidance: {
+      threeDayShape: "Day 1: Lunge + Reactive Lower | Day 2: Overhead + Shoulder Care | Day 3: Aerobic Conditioning + Trunk",
+      fourDayShape: "Day 1: Lunge + Lower | Day 2: Overhead + Shoulder | Day 3: Aerobic Conditioning | Day 4: Reactive Footwork + Trunk",
+    },
+    seasonModulation: {
+      off_season: { volumeModifier: 1.0, intensityModifier: 1.0, conditioningReduction: 1.0, priorityShift: "Build aerobic base, lunge strength, and overhead resilience", mandatoryAdjustments: [] },
+      pre_season: { volumeModifier: 0.85, intensityModifier: 0.9, conditioningReduction: 0.8, priorityShift: "Sharpen reactive quality and aerobic sharpness", mandatoryAdjustments: [] },
+      in_season: { volumeModifier: 0.6, intensityModifier: 0.8, conditioningReduction: 0.3, priorityShift: "Maintenance — protect shoulder and groin", mandatoryAdjustments: ["Face pull every session", "Copenhagen plank every session"] },
+      post_season: { volumeModifier: 0.4, intensityModifier: 0.65, conditioningReduction: 0.2, priorityShift: "Shoulder restoration and groin recovery", mandatoryAdjustments: [] },
+    },
+    positionOverlays: {},
+    validationRules: ["Lunge mechanics training mandatory", "Rotator cuff care every session", "Aerobic conditioning present", "Lateral reactive work present"],
+    architectureDistinctions: "Badminton demands the highest aerobic output of any racket sport AND the highest overhead load. Lunge depth and four-corner coverage are physically unique. No other racket sport combines this aerobic demand with such extreme lunge positions.",
+  },
+
+  // ── SQUASH ────────────────────────────────────────────────────────────────────
+  squash: {
+    key: "squash",
+    displayName: "Squash",
+    tagline: "Extreme aerobic capacity, lunge mechanics, lateral deceleration, and repeat sprint ability",
+    physicalQualities: [
+      { quality: "Aerobic capacity (extremely high)", priority: "primary", description: "Squash generates higher heart rates than almost any other sport — the aerobic engine must be extensively developed" },
+      { quality: "Lunge mechanics and groin strength", priority: "primary", description: "Extreme lunge positions to all four corners — groin, hip, and quad strength directly limit performance and injury risk" },
+      { quality: "Lateral deceleration and COD", priority: "primary", description: "Constant direction changes in a small enclosed space — deceleration quality determines court coverage efficiency" },
+      { quality: "Repeat sprint ability", priority: "secondary", description: "High-intensity point after high-intensity point with incomplete recovery — repeat sprint capacity is directly trained" },
+    ],
+    conditioning: {
+      primaryEnergySystem: "Aerobic — very high VO2max demand; squash sustains near-maximal heart rate",
+      secondaryEnergySystem: "Glycolytic repeat sprint — intense point exchanges",
+      weeklyVolume: "2 dedicated conditioning sessions. Aerobic base and repeat sprint work both required.",
+      sessionFormat: "Aerobic: 25–35 min at 70–80% max HR | RSA: 8–12 × 20–30m with 30s rest",
+      antiPattern: "Do not neglect aerobic conditioning — squash is among the highest aerobic demand sports. Skipping aerobic base limits performance.",
+      sportNote: "Squash is more aerobically demanding than soccer or basketball. Both a high aerobic base AND explosive repeat sprint capacity must be developed.",
+    },
+    sessionArchetypes: [
+      { name: "Lunge Strength + Lateral Lower", intent: "Cossack squat, lateral lunge, Copenhagen plank — the extreme groin and hip demands of squash lunge mechanics", primaryFocus: ["unilateral_lower", "lateral", "trunk"], recoveryPriority: "high" },
+      { name: "Aerobic Conditioning + Trunk", intent: "Aerobic base work + anti-rotation trunk — match endurance and control", primaryFocus: ["trunk", "locomotion"], conditioningRole: "Aerobic — sustained intensity", recoveryPriority: "moderate" },
+      { name: "Upper Structural + Shoulder Care", intent: "Pulling strength, face pull, structural balance — overhead and shoulder maintenance", primaryFocus: ["upper_pull", "upper_push", "trunk"], recoveryPriority: "low" },
+    ],
+    exerciseEmphasis: {
+      mustInclude: ["Cossack squat or lateral lunge", "Copenhagen plank", "Aerobic conditioning", "Lateral bound or reactive drill"],
+      preferred: ["RFESS", "Nordic hamstring curl", "Face pull", "Pallof press", "Single-leg RDL"],
+      reduced: ["Heavy bilateral without lateral balance", "Anaerobic-only conditioning"],
+      eliminated: ["Neglecting aerobic conditioning — squash is an aerobic sport"],
+      tissueConsiderations: ["Groin/adductor — extreme lunge positions; Copenhagen plank mandatory", "Ankle — lateral decel demands", "Knee — deep lunge mechanics; VMO and glute strength essential"],
+    },
+    weeklyArchitectureGuidance: {
+      threeDayShape: "Day 1: Lunge + Lateral Lower | Day 2: Aerobic Conditioning + Trunk | Day 3: Upper + Shoulder Care",
+      fourDayShape: "Day 1: Lunge + Lower | Day 2: Aerobic Conditioning | Day 3: Upper + Trunk | Day 4: Reactive COD + Mobility",
+    },
+    seasonModulation: {
+      off_season: { volumeModifier: 1.0, intensityModifier: 1.0, conditioningReduction: 1.0, priorityShift: "Build aerobic base, lunge capacity, and COD quality", mandatoryAdjustments: [] },
+      pre_season: { volumeModifier: 0.85, intensityModifier: 0.9, conditioningReduction: 0.85, priorityShift: "Sharpen aerobic intensity and reactive quality", mandatoryAdjustments: [] },
+      in_season: { volumeModifier: 0.6, intensityModifier: 0.8, conditioningReduction: 0.35, priorityShift: "Maintenance — protect groin and shoulder", mandatoryAdjustments: ["Copenhagen plank every session", "2× sessions max"] },
+      post_season: { volumeModifier: 0.4, intensityModifier: 0.65, conditioningReduction: 0.2, priorityShift: "Groin and lower limb restoration", mandatoryAdjustments: [] },
+    },
+    positionOverlays: {},
+    validationRules: ["Aerobic conditioning mandatory", "Lunge mechanics training present", "Copenhagen plank present", "Lateral reactive work present"],
+    architectureDistinctions: "Squash is one of the most aerobically demanding sports in existence. The combination of extreme lunge depths, constant direction changes, and sustained near-maximal intensity creates a uniquely demanding training environment.",
+  },
+
+  // ── BOWLING ───────────────────────────────────────────────────────────────────
+  bowling: {
+    key: "bowling",
+    displayName: "Bowling (10-Pin)",
+    tagline: "Rotational power, anti-rotation stability, unilateral asymmetry resilience, and forearm/wrist control",
+    physicalQualities: [
+      { quality: "Rotational power and wrist control", priority: "primary", description: "Ball release is a rotational power expression through wrist snap — forearm and wrist control directly determines hook and speed" },
+      { quality: "Anti-rotation trunk stability", priority: "primary", description: "A stable, controlled trunk through the approach prevents back injury and improves consistency" },
+      { quality: "Unilateral asymmetry resilience", priority: "primary", description: "Every delivery is a single-arm, single-side motion — repeated asymmetrical loading requires counterbalancing and tissue tolerance" },
+      { quality: "Hip hinge mechanics and approach deceleration", priority: "secondary", description: "The slide delivery requires hip hinge, lateral lunge, and controlled deceleration to the foul line" },
+    ],
+    conditioning: {
+      primaryEnergySystem: "Minimal aerobic demand — bowling is a skill and power expression sport",
+      secondaryEnergySystem: "None significant",
+      weeklyVolume: "No dedicated conditioning required. Focus is structural balance, rotation, and asymmetry correction.",
+      sessionFormat: "Mobility circuit and rotational power development are more valuable than traditional conditioning",
+      antiPattern: "Do NOT program aggressive aerobic conditioning for bowling. Do NOT overload the delivery arm without counterbalancing the non-delivery side.",
+      sportNote: "Bowling fitness is about rotational power, trunk stability, forearm/wrist tolerance, and correcting the asymmetrical loading that repeated deliveries create.",
+    },
+    sessionArchetypes: [
+      { name: "Rotational Power + Anti-Rotation", intent: "Med ball rotational throw, landmine rotation, Pallof press — the core bowling performance and protection demands", primaryFocus: ["rotational", "trunk", "power"], recoveryPriority: "moderate" },
+      { name: "Unilateral Lower + Hip Hinge", intent: "Single-leg work, hip hinge, slide mechanics — approach deceleration and asymmetry correction", primaryFocus: ["unilateral_lower", "hinge", "trunk"], recoveryPriority: "moderate" },
+      { name: "Forearm + Shoulder Balance + Structural", intent: "Forearm loading, pulling strength, structural balance — protect the delivery arm and correct overdevelopment", primaryFocus: ["upper_pull", "upper_push"], recoveryPriority: "low" },
+    ],
+    exerciseEmphasis: {
+      mustInclude: ["Pallof press (anti-rotation)", "Med ball rotational throw or landmine rotation", "Single-leg lower body work", "Forearm and wrist loading (farmer's carry, wrist flexor/extensor work)"],
+      preferred: ["RDL (hip hinge for approach)", "Single-arm row (counterbalance delivery arm)", "Cable woodchop", "Lateral lunge (slide mechanics)", "Posterior chain work"],
+      reduced: ["Heavy bilateral pressing without pulling balance", "High-volume delivery-arm isolation loading"],
+      eliminated: ["Neglecting non-delivery side — asymmetry accumulates over a season"],
+      tissueConsiderations: ["Wrist/forearm — most common bowling injury; eccentric loading and tolerance work", "Low back — repetitive rotation; anti-rotation mandatory", "Hip/groin — slide mechanics; single-leg and lateral work", "Delivery shoulder — rotator cuff care for repeated swing"],
+    },
+    weeklyArchitectureGuidance: {
+      threeDayShape: "Day 1: Rotational Power + Anti-Rotation | Day 2: Unilateral Lower + Hip Hinge | Day 3: Forearm + Structural Balance",
+      fourDayShape: "Day 1: Rotation + Trunk | Day 2: Unilateral + Hinge | Day 3: Structural + Forearm | Day 4: Mobility + Asymmetry Correction",
+    },
+    seasonModulation: {
+      off_season: { volumeModifier: 1.0, intensityModifier: 1.0, conditioningReduction: 1.0, priorityShift: "Build rotational power, asymmetry resilience, and forearm tolerance", mandatoryAdjustments: [] },
+      pre_season: { volumeModifier: 0.85, intensityModifier: 0.9, conditioningReduction: 0.9, priorityShift: "Sharpen wrist/forearm conditioning and rotation quality", mandatoryAdjustments: [] },
+      in_season: { volumeModifier: 0.6, intensityModifier: 0.8, conditioningReduction: 0.5, priorityShift: "Maintenance — protect wrist and low back", mandatoryAdjustments: ["Pallof press every session", "No heavy wrist loading day of competition"] },
+      post_season: { volumeModifier: 0.4, intensityModifier: 0.65, conditioningReduction: 0.4, priorityShift: "Wrist, low back, and asymmetry restoration", mandatoryAdjustments: [] },
+    },
+    positionOverlays: {},
+    validationRules: ["Anti-rotation (Pallof press) mandatory every session", "Rotational power work present", "Forearm/wrist loading included", "Unilateral asymmetry correction included"],
+    architectureDistinctions: "Bowling is a precision sport with a completely unique asymmetrical loading pattern. Every delivery loads one side of the body repeatedly. The gym program must counterbalance this asymmetry, develop rotational power for delivery, and protect the wrist, forearm, and low back.",
+  },
+
+  // ── FLAG FOOTBALL ─────────────────────────────────────────────────────────────
+  flag_football: {
+    key: "flag_football",
+    displayName: "Flag Football",
+    tagline: "Linear speed, change of direction, reactive cutting, and hamstring resilience",
+    physicalQualities: [
+      { quality: "Linear acceleration and top speed", priority: "primary", description: "Route running and open-field pursuit demand both first-step acceleration and true top-speed development — no collision protection means speed wins" },
+      { quality: "Change of direction and cutting mechanics", priority: "primary", description: "Route breaks, defensive juke moves, and flag-pulling pursuit — COD quality separates flag football athletes" },
+      { quality: "Reactive deceleration and elastic stiffness", priority: "primary", description: "Sharp route breaks require controlled deceleration — elastic stiffness and single-leg decel are the foundation" },
+      { quality: "Hamstring resilience", priority: "secondary", description: "High-speed running without collision protection creates hamstring strain risk — posterior chain resilience is mandatory" },
+    ],
+    conditioning: {
+      primaryEnergySystem: "Alactic — short explosive route or pursuit, then rest between plays",
+      secondaryEnergySystem: "Repeat sprint ability — high output play after play across a game",
+      weeklyVolume: "1–2 sprint conditioning sessions. Short explosive repeats with full recovery — mirror game demands.",
+      sessionFormat: "Sprint repeats: 8–12 × 20–30m at 95–100% with 90s rest | OR: COD shuttle × 6–10 with full recovery",
+      antiPattern: "NEVER substitute sprint conditioning with long aerobic runs. Flag football is alactic — short explosive bursts with full recovery. Aerobic endurance does not directly transfer.",
+      sportNote: "Flag football without collision demands means speed and agility carry even more weight. Speed and COD are the primary physical performance differentiators.",
+    },
+    sessionArchetypes: [
+      { name: "Acceleration + Lower Strength", intent: "Sprint mechanics (10–30m) + unilateral lower strength — first-step and route-running speed", primaryFocus: ["locomotion", "unilateral_lower", "hinge"], recoveryPriority: "high" },
+      { name: "COD + Reactive Agility", intent: "Reactive cut drills, lateral bounds, 5-10-5 — route break mechanics and defensive COD", primaryFocus: ["lateral", "power", "trunk"], recoveryPriority: "moderate" },
+      { name: "Hamstring + Posterior Chain Resilience", intent: "Nordic curls, single-leg RDL, glute work — prevent the most common flag football injury", primaryFocus: ["hinge", "unilateral_lower", "trunk"], recoveryPriority: "moderate" },
+    ],
+    exerciseEmphasis: {
+      mustInclude: ["Sprint work (10–30m)", "Nordic hamstring curl", "Lateral bound or COD drill", "Unilateral lower (RFESS, split squat)", "Reactive agility drill"],
+      preferred: ["Sled push (acceleration mechanics)", "Broad jump", "Depth jump", "Single-leg RDL", "Copenhagen plank"],
+      reduced: ["Heavy bilateral slow loading without sprint/COD balance", "Long aerobic conditioning"],
+      eliminated: ["Long steady-state cardio as conditioning prescription", "Programs with no sprint or COD training"],
+      tissueConsiderations: ["Hamstring — #1 flag football injury; Nordic curls mandatory", "Knee — COD demands; VMO and glute strength", "Ankle — deceleration and cut demands"],
+    },
+    weeklyArchitectureGuidance: {
+      threeDayShape: "Day 1: Acceleration + Lower Strength | Day 2: COD + Reactive Agility | Day 3: Hamstring + Posterior Chain",
+      fourDayShape: "Day 1: Acceleration + Sprint | Day 2: Lower Strength | Day 3: COD + Reactive | Day 4: Posterior Chain + Conditioning",
+    },
+    seasonModulation: {
+      off_season: { volumeModifier: 1.0, intensityModifier: 1.0, conditioningReduction: 1.0, priorityShift: "Build speed, COD capacity, and hamstring resilience", mandatoryAdjustments: ["Full sprint volume", "Nordic progression"] },
+      pre_season: { volumeModifier: 0.85, intensityModifier: 0.95, conditioningReduction: 0.8, priorityShift: "Sharpen cutting mechanics and sprint quality", mandatoryAdjustments: ["Increase agility volume"] },
+      in_season: { volumeModifier: 0.6, intensityModifier: 0.85, conditioningReduction: 0.25, priorityShift: "Maintain speed and freshness — games provide conditioning", mandatoryAdjustments: ["Nordic curls every session", "No sprint work day before game"] },
+      post_season: { volumeModifier: 0.4, intensityModifier: 0.65, conditioningReduction: 0.2, priorityShift: "Hamstring and lower limb restoration", mandatoryAdjustments: [] },
+    },
+    positionOverlays: {
+      skill: "Receiver/DB overlay: MAXIMIZE acceleration (10–30m sprint), COD, and reactive agility. Add backpedal and break mechanics. Reduce heavy bilateral loading relative to skill demands.",
+    },
+    validationRules: ["Sprint work (10–30m) mandatory", "Nordic hamstring curl mandatory", "COD or reactive agility work present", "No long aerobic conditioning as primary prescription"],
+    architectureDistinctions: "Flag football is pure speed and agility — no collision means the physical game is won by acceleration, cutting mechanics, and separation. The hamstring is at high risk without contact protection. This program must look like a speed-and-agility program, NOT a strength sport program.",
+  },
+
+  // ── SOFTBALL ──────────────────────────────────────────────────────────────────
+  softball: {
+    key: "softball",
+    displayName: "Softball",
+    tagline: "Rotational bat power, acceleration, lower-body resilience, and throwing arm care",
+    physicalQualities: [
+      { quality: "Rotational bat power", priority: "primary", description: "The batting swing is the primary power expression — hip-shoulder separation and rotational speed through impact" },
+      { quality: "Acceleration and base-running speed", priority: "primary", description: "Short explosive base-running sprints — acceleration quality is the primary speed demand" },
+      { quality: "Throwing arm resilience", priority: "secondary", description: "Underhand pitching creates different shoulder demands than baseball, but throwing arm care is still essential for all positions" },
+      { quality: "Posterior chain strength and hamstring resilience", priority: "secondary", description: "Base-running sprints create hamstring injury risk — posterior chain resilience is protective" },
+    ],
+    conditioning: {
+      primaryEnergySystem: "Alactic — short explosive base runs and play-to-play explosive efforts",
+      secondaryEnergySystem: "Minimal aerobic demand",
+      weeklyVolume: "1 sprint conditioning session. Short explosive repeats — base-running simulation.",
+      sessionFormat: "Sprint repeats: 8–10 × 20–30m with full recovery",
+      antiPattern: "Do not program aerobic endurance conditioning for softball. The sport is alactic — short explosive play with full recovery.",
+      sportNote: "Softball fitness centers on rotational power for batting and explosive acceleration for base running. Underhand pitching biomechanics create different arm demands than baseball.",
+    },
+    sessionArchetypes: [
+      { name: "Rotational Power + Lower Strength", intent: "Med ball rotational throw + bilateral/unilateral lower strength — bat power and base-running foundation", primaryFocus: ["rotational", "squat", "hinge"], recoveryPriority: "high" },
+      { name: "Acceleration + Posterior Chain", intent: "Sprint work + Nordic curls + single-leg RDL — base-running speed and hamstring resilience", primaryFocus: ["locomotion", "hinge", "unilateral_lower"], recoveryPriority: "high" },
+      { name: "Upper Structural + Arm Care", intent: "Pulling strength balance + shoulder care — protect the throwing arm from overuse", primaryFocus: ["upper_pull", "upper_push", "trunk"], recoveryPriority: "moderate" },
+    ],
+    exerciseEmphasis: {
+      mustInclude: ["Med ball rotational throw", "Sprint work (20–30m)", "Nordic hamstring curl", "Pallof press"],
+      preferred: ["Hip thrust", "Reverse lunge", "Single-leg RDL", "Face pull", "Band pull-apart", "Cable woodchop"],
+      reduced: ["Long aerobic conditioning", "Heavy bilateral loading without rotational balance"],
+      eliminated: ["Long steady-state cardio", "Programs with no rotational development"],
+      tissueConsiderations: ["Hamstring — base running sprint risk; Nordic curls mandatory", "Shoulder — throwing arm; face pull and external rotation", "Low back — rotational batting load"],
+    },
+    weeklyArchitectureGuidance: {
+      threeDayShape: "Day 1: Rotational Power + Lower | Day 2: Acceleration + Posterior Chain | Day 3: Upper + Arm Care",
+      fourDayShape: "Day 1: Rotation + Lower | Day 2: Acceleration + Posterior Chain | Day 3: Upper Structural | Day 4: Trunk + Conditioning",
+    },
+    seasonModulation: {
+      off_season: { volumeModifier: 1.0, intensityModifier: 1.0, conditioningReduction: 1.0, priorityShift: "Build rotational power, acceleration, and structural balance", mandatoryAdjustments: [] },
+      pre_season: { volumeModifier: 0.85, intensityModifier: 0.9, conditioningReduction: 0.8, priorityShift: "Sharpen bat power and base-running speed", mandatoryAdjustments: [] },
+      in_season: { volumeModifier: 0.6, intensityModifier: 0.8, conditioningReduction: 0.3, priorityShift: "Maintenance — protect arm and posterior chain", mandatoryAdjustments: ["Face pull every session", "Nordic curls maintained"] },
+      post_season: { volumeModifier: 0.4, intensityModifier: 0.65, conditioningReduction: 0.2, priorityShift: "Shoulder and posterior chain restoration", mandatoryAdjustments: [] },
+    },
+    positionOverlays: {
+      pitcher: "Pitcher overlay: De-emphasize heavy overhead pressing. Emphasize rotational control, scapular health, and eccentric arm deceleration. Underhand mechanics stress the elbow flexor chain differently than baseball — prioritize forearm and wrist care.",
+    },
+    validationRules: ["Rotational power present (med ball or cable rotation)", "Sprint work present", "Nordic hamstring curl included", "Shoulder care (face pull) present"],
+    architectureDistinctions: "Softball shares baseball's bat-power and sprint demands but uses underhand pitching, creating different shoulder biomechanics. Rotational bat power and acceleration are the primary performance demands. The program should look like an athletic development program for a rotational power + speed sport.",
+  },
+
+  // ── WRESTLING ─────────────────────────────────────────────────────────────────
+  wrestling: {
+    key: "wrestling",
+    displayName: "Wrestling",
+    tagline: "Anti-rotation strength, grip and clinch power, explosive level change, and match-duration conditioning",
+    physicalQualities: [
+      { quality: "Anti-rotation and trunk stiffness", priority: "primary", description: "Resisting takedowns and maintaining position requires extreme anti-rotation strength — the trunk must resist rotation under maximal applied force" },
+      { quality: "Grip, clinch, and upper body pulling", priority: "primary", description: "Tie-up strength, grip endurance, and pulling power determine who controls the match — grip training is non-negotiable" },
+      { quality: "Explosive level change and penetration", priority: "primary", description: "The penetration shot — explosive single-leg level change — is the most important offensive skill. Lower body explosiveness and single-leg control are critical" },
+      { quality: "Rotational power for throws and sweeps", priority: "secondary", description: "Throws, trips, and scrambles require rotational power — hip rotation and trunk loading for offensive finishing" },
+      { quality: "Repeat-effort conditioning", priority: "secondary", description: "Match-length at near-maximal effort — repeat-effort capacity must be developed specifically" },
+    ],
+    conditioning: {
+      primaryEnergySystem: "Alactic + glycolytic — explosive efforts with incomplete recovery across a 6-minute match",
+      secondaryEnergySystem: "Aerobic support for tournament day (multiple matches)",
+      weeklyVolume: "1–2 conditioning sessions. Specific wrestling conditioning (grip, repeat explosive effort) preferred over generic cardio.",
+      sessionFormat: "Repeat explosive circuit: takedown drill series × 6–10 min | OR: grip endurance + resist/hold drill | Aerobic base: 20 min steady-state 2x/week",
+      antiPattern: "Do not neglect grip training — wrestlers who cannot maintain grip control lose matches regardless of other attributes.",
+      sportNote: "Wrestling demands a unique combination of upper-body pulling, anti-rotation trunk strength, and explosive lower-body level change. All three must be developed simultaneously.",
+    },
+    sessionArchetypes: [
+      { name: "Anti-Rotation + Trunk Stiffness", intent: "Loaded carries, Pallof press, landmine anti-rotation — resisting external rotation force under load", primaryFocus: ["trunk", "rotational", "upper_pull"], recoveryPriority: "moderate" },
+      { name: "Explosive Lower + Level Change", intent: "Split squat, single-leg lower, broad jump — penetration shot power and level-change explosiveness", primaryFocus: ["unilateral_lower", "power", "squat"], recoveryPriority: "high" },
+      { name: "Grip + Upper Pulling + Rotational", intent: "Rows, farmer's carry, rotational med ball — clinch strength, grip endurance, and throw power", primaryFocus: ["upper_pull", "rotational", "trunk"], recoveryPriority: "moderate" },
+    ],
+    exerciseEmphasis: {
+      mustInclude: ["Loaded carries (farmer's carry, suitcase carry)", "Pallof press", "Single-leg lower body", "Horizontal pulling (rows)", "Med ball rotational throw"],
+      preferred: ["Power clean or hang clean", "Broad jump", "Split jump", "Reverse lunge", "Copenhagen plank (groin for scrambles)", "Face-down grip holds"],
+      reduced: ["Heavy bilateral pressing without pulling balance — wrestlers are pull-dominant sports", "Isolation work without functional carry-over"],
+      eliminated: ["Programs with no grip training", "Neglecting anti-rotation work — match positioning depends on it"],
+      tissueConsiderations: ["Shoulder — joint lock exposure; external rotation care", "Knee — penetration shot position", "Groin/hip — scramble positions; Copenhagen plank mandatory", "Neck — contact sport; neck strengthening appropriate"],
+    },
+    weeklyArchitectureGuidance: {
+      threeDayShape: "Day 1: Anti-Rotation + Trunk | Day 2: Explosive Lower + Level Change | Day 3: Grip + Pulling + Rotational",
+      fourDayShape: "Day 1: Trunk + Anti-Rotation | Day 2: Lower Explosiveness | Day 3: Grip + Upper Pull | Day 4: Rotational + Conditioning",
+    },
+    seasonModulation: {
+      off_season: { volumeModifier: 1.0, intensityModifier: 1.0, conditioningReduction: 1.0, priorityShift: "Build grip strength, anti-rotation, and lower body explosiveness", mandatoryAdjustments: [] },
+      pre_season: { volumeModifier: 0.85, intensityModifier: 0.9, conditioningReduction: 0.8, priorityShift: "Sharpen match conditioning and grip endurance", mandatoryAdjustments: [] },
+      in_season: { volumeModifier: 0.6, intensityModifier: 0.85, conditioningReduction: 0.3, priorityShift: "Maintenance — protect shoulders and knees", mandatoryAdjustments: ["2× sessions max", "External rotation care every session"] },
+      post_season: { volumeModifier: 0.4, intensityModifier: 0.65, conditioningReduction: 0.2, priorityShift: "Shoulder and groin restoration", mandatoryAdjustments: [] },
+    },
+    positionOverlays: {},
+    validationRules: ["Grip training (carry or grip-specific) mandatory", "Anti-rotation (Pallof press) mandatory", "Explosive lower body present", "Pulling strength > pressing strength"],
+    architectureDistinctions: "Wrestling is the most grip-intensive and anti-rotation-demanding of all sports. The program must develop the ability to resist rotation under maximal applied force, explosive single-leg level change, and grip endurance that lasts a full match.",
+  },
+
+  // ── BOXING ────────────────────────────────────────────────────────────────────
+  boxing: {
+    key: "boxing",
+    displayName: "Boxing",
+    tagline: "Rotational punch power, lateral footwork, trunk stiffness for punch resistance, and round conditioning",
+    physicalQualities: [
+      { quality: "Rotational punch power", priority: "primary", description: "Punching force comes from ground force through hip rotation — rotational power from hips through trunk directly increases knockout ability" },
+      { quality: "Trunk stiffness for punch receipt", priority: "primary", description: "The ability to absorb and brace against incoming punches — anti-rotation and trunk stiffness are protective" },
+      { quality: "Lateral footwork and defensive movement", priority: "primary", description: "Slipping, rolling, and laterally evading punches — footwork agility is as important as punching for defensive boxing" },
+      { quality: "Round conditioning and repeat-effort capacity", priority: "secondary", description: "3-minute rounds at near-maximum effort — repeat sprint and aerobic capacity must be developed to last rounds" },
+    ],
+    conditioning: {
+      primaryEnergySystem: "Glycolytic + alactic — 3-minute rounds at high intensity with 1-minute rest",
+      secondaryEnergySystem: "Aerobic base for multi-round endurance",
+      weeklyVolume: "2 conditioning sessions. Round-specific intervals + aerobic base.",
+      sessionFormat: "3 min work / 1 min rest × 8–12 rounds shadow boxing or bag work | Aerobic base: 20–30 min steady-state",
+      antiPattern: "Do NOT neglect trunk stiffness training — a weak trunk gets hurt by punches. Do not prioritize upper body isolation over rotational power development.",
+      sportNote: "Boxing power comes from the ground up — legs → hips → trunk → arms. The gym program must develop this kinetic chain, not just arm-specific strength.",
+    },
+    sessionArchetypes: [
+      { name: "Rotational Power + Trunk Bracing", intent: "Med ball rotation, Pallof press, rotational cable work — punch power generation and receipt", primaryFocus: ["rotational", "trunk", "power"], recoveryPriority: "high" },
+      { name: "Footwork + Lateral Conditioning", intent: "Lateral agility, shuffle drills, COD — defensive footwork movement patterns", primaryFocus: ["lateral", "locomotion", "trunk"], recoveryPriority: "moderate" },
+      { name: "Upper Structural + Shoulder Resilience", intent: "Pulling strength, face pull, external rotation — balance the heavy punching volume from training", primaryFocus: ["upper_pull", "upper_push", "trunk"], recoveryPriority: "moderate" },
+    ],
+    exerciseEmphasis: {
+      mustInclude: ["Med ball rotational throw", "Pallof press", "Lateral footwork agility drill", "Upper body pull (row)"],
+      preferred: ["KB swing", "Landmine rotation", "Sled push (footwork base)", "Face pull", "Copenhagen plank", "Broad jump"],
+      reduced: ["Heavy bilateral pressing without rotational balance", "Isolation arm work without kinetic chain development"],
+      eliminated: ["Programs with no rotational power development", "Neglecting trunk stiffness — defensive exposure"],
+      tissueConsiderations: ["Shoulder — punching volume; external rotation care mandatory", "Wrist/hand — impact forces; wrist strength and wrapping", "Low back — rotational loading; anti-rotation protective"],
+    },
+    weeklyArchitectureGuidance: {
+      threeDayShape: "Day 1: Rotational Power + Trunk | Day 2: Footwork + Lateral | Day 3: Upper Structural + Conditioning",
+      fourDayShape: "Day 1: Rotation + Trunk | Day 2: Lower + Footwork | Day 3: Upper + Shoulder Care | Day 4: Conditioning + Trunk",
+    },
+    seasonModulation: {
+      off_season: { volumeModifier: 1.0, intensityModifier: 1.0, conditioningReduction: 1.0, priorityShift: "Build rotational power, trunk stiffness, and aerobic base", mandatoryAdjustments: [] },
+      pre_season: { volumeModifier: 0.85, intensityModifier: 0.9, conditioningReduction: 0.8, priorityShift: "Sharpen round conditioning and footwork quality", mandatoryAdjustments: [] },
+      in_season: { volumeModifier: 0.6, intensityModifier: 0.85, conditioningReduction: 0.3, priorityShift: "Maintenance — protect shoulders and wrists around camp", mandatoryAdjustments: ["Face pull every session", "No heavy pressing day before sparring"] },
+      post_season: { volumeModifier: 0.4, intensityModifier: 0.65, conditioningReduction: 0.2, priorityShift: "Shoulder and wrist restoration", mandatoryAdjustments: [] },
+    },
+    positionOverlays: {},
+    validationRules: ["Rotational power (med ball or cable) mandatory", "Trunk anti-rotation (Pallof press) mandatory", "Shoulder care present", "Conditioning component present"],
+    architectureDistinctions: "Boxing power is rotational — it comes from the ground through the hips, not the arms. The gym program must develop the full kinetic chain for punch power, AND trunk stiffness for defensive durability. Footwork agility is equally important to punching.",
+  },
+
+  // ── MMA ───────────────────────────────────────────────────────────────────────
+  mma: {
+    key: "mma",
+    displayName: "Mixed Martial Arts (MMA)",
+    tagline: "Rotational power, anti-rotation, grip endurance, explosive grappling, and multi-round conditioning",
+    physicalQualities: [
+      { quality: "Anti-rotation and trunk stiffness", priority: "primary", description: "Defending takedowns, maintaining position, and absorbing strikes — trunk stiffness is the universal athletic currency of MMA" },
+      { quality: "Rotational power for striking and throwing", priority: "primary", description: "Punches, kicks, and takedowns all require hip rotation — rotational power generation is the foundation of offensive output" },
+      { quality: "Grip, clinch, and grappling strength", priority: "primary", description: "Clinch control, takedown finishing, and submission defense all require grip and upper-body pulling strength" },
+      { quality: "Single-leg control and explosive lower body", priority: "secondary", description: "Takedown shooting, sprawl defense, and positional scrambles — unilateral lower body explosiveness is essential" },
+      { quality: "Multi-round conditioning", priority: "secondary", description: "3–5 rounds at near-maximal effort — the energy system demand is extreme" },
+    ],
+    conditioning: {
+      primaryEnergySystem: "Glycolytic + alactic — high-intensity efforts with incomplete recovery across 3–5 rounds",
+      secondaryEnergySystem: "Aerobic base for recovery between and within rounds",
+      weeklyVolume: "2 conditioning sessions. Sport-specific conditioning (grappling, striking) preferred.",
+      sessionFormat: "5-minute round circuit × 5 rounds at maximum effort with 1-minute rest | Aerobic base: 20 min steady-state",
+      antiPattern: "Do not program exclusively striking or grappling conditioning — MMA requires both. Do not neglect grip training.",
+      sportNote: "MMA is the most physically demanding combat sport. All physical qualities — power, strength, grip, conditioning — must be developed together.",
+    },
+    sessionArchetypes: [
+      { name: "Anti-Rotation + Grip + Pulling", intent: "Suitcase carry, farmer's carry, rows, Pallof press — position resistance, grip endurance, and pulling power", primaryFocus: ["trunk", "upper_pull", "rotational"], recoveryPriority: "moderate" },
+      { name: "Rotational Power + Explosive Lower", intent: "Med ball rotation, power clean, split jump — striking power and takedown explosiveness", primaryFocus: ["rotational", "power", "unilateral_lower"], recoveryPriority: "high" },
+      { name: "Conditioning + Structural Balance", intent: "Round-specific interval conditioning + structural balance work — match endurance and tissue resilience", primaryFocus: ["trunk", "locomotion", "upper_pull"], conditioningRole: "Glycolytic / repeat sprint — round-specific", recoveryPriority: "high" },
+    ],
+    exerciseEmphasis: {
+      mustInclude: ["Loaded carries (farmer's, suitcase)", "Pallof press", "Med ball rotational throw", "Horizontal pull (rows)", "Single-leg lower"],
+      preferred: ["Power clean or hang clean", "Split jump", "Copenhagen plank", "Face pull", "Broad jump", "Kettlebell swing"],
+      reduced: ["Heavy bilateral pressing dominance without pulling balance", "Isolation without functional transfer"],
+      eliminated: ["Programs missing grip training", "Neglecting anti-rotation work"],
+      tissueConsiderations: ["Shoulder — joint locks; external rotation mandatory", "Groin/hip — grappling positions; Copenhagen plank essential", "Wrist/hand — grappling and striking", "Knee — takedown positions"],
+    },
+    weeklyArchitectureGuidance: {
+      threeDayShape: "Day 1: Anti-Rotation + Grip + Pull | Day 2: Rotational Power + Explosive Lower | Day 3: Conditioning + Structural",
+      fourDayShape: "Day 1: Trunk + Anti-Rotation | Day 2: Power + Lower | Day 3: Grip + Pull | Day 4: Conditioning + Balance",
+    },
+    seasonModulation: {
+      off_season: { volumeModifier: 1.0, intensityModifier: 1.0, conditioningReduction: 1.0, priorityShift: "Build all physical qualities — power, grip, conditioning, trunk", mandatoryAdjustments: [] },
+      pre_season: { volumeModifier: 0.85, intensityModifier: 0.9, conditioningReduction: 0.8, priorityShift: "Sharpen conditioning and match-specific qualities", mandatoryAdjustments: [] },
+      in_season: { volumeModifier: 0.6, intensityModifier: 0.85, conditioningReduction: 0.3, priorityShift: "Camp maintenance — protect from overuse, keep power sharp", mandatoryAdjustments: ["2× sessions max", "External rotation every session", "Copenhagen plank maintained"] },
+      post_season: { volumeModifier: 0.4, intensityModifier: 0.65, conditioningReduction: 0.2, priorityShift: "Full body restoration", mandatoryAdjustments: [] },
+    },
+    positionOverlays: {},
+    validationRules: ["Grip training mandatory", "Anti-rotation mandatory", "Rotational power present", "Conditioning component present", "Upper pull > upper press"],
+    architectureDistinctions: "MMA is the most complete physical sport — requiring strength, power, grip, anti-rotation, and conditioning all at high levels. No single quality can be sacrificed. The program must develop the full kinetic chain for striking AND the grappling demands simultaneously.",
+  },
+
+  // ── CRICKET ───────────────────────────────────────────────────────────────────
+  cricket: {
+    key: "cricket",
+    displayName: "Cricket",
+    tagline: "Rotational batting power, bowling-specific unilateral mechanics, overhead resilience, and match-duration aerobic capacity",
+    physicalQualities: [
+      { quality: "Rotational power (batting) and arm speed (bowling/throwing)", priority: "primary", description: "Both batting and throwing require explosive hip-to-shoulder rotation — developing both directions of rotational power" },
+      { quality: "Overhead resilience and arm care", priority: "primary", description: "Bowling and throwing create substantial overhead load — rotator cuff and scapular health are protective" },
+      { quality: "Unilateral lower body control", priority: "secondary", description: "Bowling delivery stride, batting footwork, and fielding involve extreme unilateral demands" },
+      { quality: "Match-duration aerobic capacity", priority: "secondary", description: "Test and limited-overs cricket can last hours — aerobic base supports sustained performance and recovery between spells" },
+    ],
+    conditioning: {
+      primaryEnergySystem: "Alactic (explosive bowling spells, batting, fielding) + aerobic base (long match duration)",
+      secondaryEnergySystem: "Repeat sprint (between-wicket running)",
+      weeklyVolume: "1–2 conditioning sessions. Sprint conditioning and aerobic base both relevant.",
+      sessionFormat: "Sprint repeats: 6–8 × 20–30m | Aerobic base: 20 min at 65% max HR",
+      antiPattern: "Do not neglect overhead resilience — both fast bowlers and fielders accumulate massive overhead loading across a match or season.",
+      sportNote: "Cricket is unique in having specialist roles (bowler/batter) with very different physical demands. Role-specific programming is highly recommended.",
+    },
+    sessionArchetypes: [
+      { name: "Rotational Power + Overhead Care", intent: "Med ball rotational throw, landmine rotation, face pull — batting power and throwing arm resilience", primaryFocus: ["rotational", "trunk", "upper_pull"], recoveryPriority: "moderate" },
+      { name: "Unilateral Lower + Hip Hinge", intent: "RFESS, single-leg RDL, step-up — delivery stride strength and fielding agility", primaryFocus: ["unilateral_lower", "hinge", "trunk"], recoveryPriority: "high" },
+      { name: "Upper Structural + Trunk", intent: "Pulling strength, anti-rotation, trunk endurance — structural balance for match duration", primaryFocus: ["upper_pull", "upper_push", "trunk"], recoveryPriority: "moderate" },
+    ],
+    exerciseEmphasis: {
+      mustInclude: ["Med ball rotational throw", "Face pull and external rotation", "Single-leg lower body", "Anti-rotation (Pallof press)"],
+      preferred: ["Landmine rotation", "RFESS", "Nordic hamstring curl", "Single-leg RDL", "Pull-up or lat pull-down"],
+      reduced: ["Heavy bilateral loading without rotational balance", "Long aerobic conditioning without sprint component"],
+      eliminated: ["Neglecting shoulder care — arm-intensive sport with high overuse risk"],
+      tissueConsiderations: ["Shoulder — very high overhead load; external rotation mandatory", "Low back (bowlers) — lumbar stress fracture risk; anti-extension mandatory", "Hamstring — between-wicket running", "Wrist/forearm (batters) — bat impact"],
+    },
+    weeklyArchitectureGuidance: {
+      threeDayShape: "Day 1: Rotational Power + Overhead Care | Day 2: Unilateral Lower + Hinge | Day 3: Upper Structural + Trunk",
+      fourDayShape: "Day 1: Rotation + Overhead | Day 2: Lower + Hinge | Day 3: Upper + Trunk | Day 4: Sprint Conditioning + Mobility",
+    },
+    seasonModulation: {
+      off_season: { volumeModifier: 1.0, intensityModifier: 1.0, conditioningReduction: 1.0, priorityShift: "Build rotational power, structural balance, and aerobic base", mandatoryAdjustments: [] },
+      pre_season: { volumeModifier: 0.85, intensityModifier: 0.9, conditioningReduction: 0.8, priorityShift: "Sharpen bowling-specific conditioning and batting power", mandatoryAdjustments: [] },
+      in_season: { volumeModifier: 0.6, intensityModifier: 0.8, conditioningReduction: 0.35, priorityShift: "Maintenance — protect shoulder and low back", mandatoryAdjustments: ["Face pull every session", "No heavy overhead pressing match day"] },
+      post_season: { volumeModifier: 0.4, intensityModifier: 0.65, conditioningReduction: 0.2, priorityShift: "Shoulder, lumbar, and full body restoration", mandatoryAdjustments: [] },
+    },
+    positionOverlays: {
+      pitcher: "Fast Bowler overlay: MAXIMIZE trunk stiffness, anti-rotation, overhead eccentric loading, unilateral delivery stride. Add lumbar stress fracture prevention (anti-extension). HIGH priority on shoulder/elbow eccentric work. Reduce heavy bilateral lifting in-season.",
+      hitter_field: "Batter/Fielder overlay: MAXIMIZE rotational bat power (hip-shoulder separation), acceleration for between-wicket running, and overhead throwing arm resilience. Add lateral lunging for fielding. Reduce unilateral lower-body loading volume.",
+    },
+    validationRules: ["Rotational power present", "Overhead care (face pull, external rotation) mandatory", "Unilateral lower body present", "Anti-rotation present"],
+    architectureDistinctions: "Cricket is unique in having specialist roles with dramatically different physical demands. A fast bowler's program should look nothing like a batter's. Both share rotational power and arm-care needs, but the bowler demands extreme unilateral loading and lumbar protection while the batter demands bat-specific rotational speed.",
+  },
+
+  // ── CRICKET BOWLER ────────────────────────────────────────────────────────────
+  cricket_bowler: {
+    key: "cricket_bowler",
+    displayName: "Cricket — Fast Bowler",
+    tagline: "Trunk rotation power, anti-rotation delivery brace, overhead eccentric resilience, and lumbar spine protection",
+    physicalQualities: [
+      { quality: "Trunk rotation and delivery power", priority: "primary", description: "Fast bowling is a full-body rotational power expression — run-up momentum converts to shoulder and arm speed through trunk rotation" },
+      { quality: "Overhead eccentric control and arm deceleration", priority: "primary", description: "The bowling arm undergoes massive deceleration forces after release — eccentric rotator cuff strength is injury prevention" },
+      { quality: "Lumbar spine protection", priority: "primary", description: "Stress fractures of the lumbar spine are the most common and career-ending injury in fast bowling — anti-extension is critical" },
+      { quality: "Unilateral delivery stride mechanics", priority: "secondary", description: "The front-foot landing is a massive unilateral bracing event — the front leg takes extraordinary force on every delivery" },
+      { quality: "Repeat bowling spell conditioning", priority: "secondary", description: "Multiple long bowling spells across a day's play — repeat explosive capacity must be developed" },
+    ],
+    conditioning: {
+      primaryEnergySystem: "Alactic (delivery) + aerobic base (bowling spells across a day)",
+      secondaryEnergySystem: "Repeat sprint (run-up × many deliveries across multiple spells)",
+      weeklyVolume: "1 conditioning session. Aerobic base for spell recovery.",
+      sessionFormat: "Aerobic base: 20–25 min | Sprint repeats simulating run-up: 8 × 20m with full recovery",
+      antiPattern: "Do not neglect lumbar spine care — back stress fractures end careers. Do not prescribe heavy overhead barbell pressing — arm deceleration load is already extreme.",
+      sportNote: "The fast bowler is arguably the most physically stressed athlete in team sports — dozens of maximal-effort deliveries per match, with repetitive extreme forces on the lumbar spine and bowling arm.",
+    },
+    sessionArchetypes: [
+      { name: "Trunk Rotation + Anti-Extension", intent: "Landmine rotation, Pallof press, dead bug — delivery power and lumbar spine protection", primaryFocus: ["rotational", "trunk", "power"], recoveryPriority: "moderate" },
+      { name: "Overhead Eccentric + Shoulder Care", intent: "External rotation, face pull, eccentric overhead loading — protect the bowling arm from deceleration injury", primaryFocus: ["upper_pull", "upper_push"], recoveryPriority: "low" },
+      { name: "Unilateral Delivery Stride Strength", intent: "RFESS, single-leg RDL, step-up — front-foot landing force and delivery stride mechanics", primaryFocus: ["unilateral_lower", "hinge", "trunk"], recoveryPriority: "high" },
+    ],
+    exerciseEmphasis: {
+      mustInclude: ["Dead bug (anti-extension, lumbar protection)", "External rotation and face pull (every session)", "RFESS or single-leg lower", "Landmine rotation (delivery power)", "Pallof press"],
+      preferred: ["Single-leg RDL", "Nordic hamstring curl (run-up resilience)", "Copenhagen plank", "Prone Y-T-W", "Hip thrust"],
+      reduced: ["Heavy barbell overhead press — arm decel load is already high", "Heavy bilateral squat in-season — delivery stride load is sufficient"],
+      eliminated: ["Neglecting lumbar spine care — stress fracture is the most common bowling injury", "Neglecting eccentric shoulder work"],
+      tissueConsiderations: ["Lumbar spine — #1 priority; anti-extension mandatory every session", "Bowling shoulder/elbow — eccentric rotator cuff work mandatory", "Hamstring — run-up load; Nordic curls", "Front-foot knee — delivery stride landing forces"],
+    },
+    weeklyArchitectureGuidance: {
+      threeDayShape: "Day 1: Trunk Rotation + Anti-Extension | Day 2: Overhead Eccentric + Shoulder | Day 3: Unilateral Delivery Stride",
+      fourDayShape: "Day 1: Trunk + Anti-Extension | Day 2: Shoulder Eccentric | Day 3: Unilateral Lower | Day 4: Conditioning + Mobility",
+    },
+    seasonModulation: {
+      off_season: { volumeModifier: 1.0, intensityModifier: 1.0, conditioningReduction: 1.0, priorityShift: "Build trunk rotation power, lumbar resilience, and shoulder eccentric strength", mandatoryAdjustments: ["Full anti-extension program", "Progressive eccentric shoulder loading"] },
+      pre_season: { volumeModifier: 0.85, intensityModifier: 0.9, conditioningReduction: 0.8, priorityShift: "Sharpen delivery mechanics and shoulder resilience as bowling load increases", mandatoryAdjustments: ["Increase shoulder eccentric work as bowling volume rises"] },
+      in_season: { volumeModifier: 0.6, intensityModifier: 0.8, conditioningReduction: 0.3, priorityShift: "Maintain — protect lumbar and shoulder from overuse", mandatoryAdjustments: ["Dead bug every session", "Face pull and external rotation every session", "2× gym sessions max", "No heavy overhead pressing"] },
+      post_season: { volumeModifier: 0.4, intensityModifier: 0.65, conditioningReduction: 0.2, priorityShift: "Lumbar and shoulder restoration — this is when injuries develop from accumulated load", mandatoryAdjustments: ["No heavy axial loading", "Eccentric shoulder restoration", "Lumbar mobility focus"] },
+    },
+    positionOverlays: {},
+    validationRules: ["Dead bug or anti-extension mandatory every session", "External rotation and face pull mandatory every session", "Single-leg lower present", "No heavy overhead barbell pressing", "Lumbar protection accounted for"],
+    architectureDistinctions: "The fast cricket bowler has the most distinctive and injury-specific training requirements of any cricket role. The lumbar spine and bowling shoulder demand specialized protection that must be present every session. Trunk rotation power for delivery and eccentric arm deceleration strength are the two defining development qualities.",
+  },
+
+  // ── CRICKET BATTER ────────────────────────────────────────────────────────────
+  cricket_batter: {
+    key: "cricket_batter",
+    displayName: "Cricket — Batter",
+    tagline: "Rotational bat power, hip-shoulder separation, bat-grip endurance, and between-wicket sprint resilience",
+    physicalQualities: [
+      { quality: "Rotational bat power and hip-shoulder separation", priority: "primary", description: "The batting stroke is a hip-shoulder separation rotational power expression — identical physical demands to baseball batting" },
+      { quality: "Bat-grip and forearm endurance", priority: "primary", description: "Grip control through impact and sustained innings play — forearm endurance prevents premature fatigue" },
+      { quality: "Between-wicket sprint resilience", priority: "secondary", description: "Running between wickets is explosive acceleration — posterior chain strength and hamstring resilience are protective" },
+      { quality: "Lateral footwork and stance mechanics", priority: "secondary", description: "Pre-delivery movement and attack footwork require lateral agility and single-leg stability" },
+    ],
+    conditioning: {
+      primaryEnergySystem: "Alactic (between-wicket running) with extended low-intensity time at crease",
+      secondaryEnergySystem: "Aerobic base for long innings concentration",
+      weeklyVolume: "1 conditioning session. Sprint conditioning for between-wicket resilience.",
+      sessionFormat: "Sprint repeats: 8–10 × 20–30m with full recovery — simulating between-wicket running demands",
+      antiPattern: "Do not neglect rotational power — the batting stroke is the primary performance expression. Do not overload overhead pressing without shoulder care balance.",
+      sportNote: "Cricket batting is primarily a rotational power sport with brief explosive sprint demands. The gym should develop bat power and sprint resilience.",
+    },
+    sessionArchetypes: [
+      { name: "Rotational Power + Grip Endurance", intent: "Med ball rotational throw, cable woodchop, farmer's carry — bat power and forearm endurance", primaryFocus: ["rotational", "trunk", "upper_pull"], recoveryPriority: "moderate" },
+      { name: "Sprint + Posterior Chain", intent: "Sprint repeats, Nordic curls, single-leg RDL — between-wicket running quality and hamstring protection", primaryFocus: ["locomotion", "hinge", "unilateral_lower"], recoveryPriority: "high" },
+    ],
+    exerciseEmphasis: {
+      mustInclude: ["Med ball rotational throw", "Sprint work (20–30m)", "Nordic hamstring curl", "Farmer's carry (grip endurance)"],
+      preferred: ["Cable woodchop", "Reverse lunge (lateral footwork)", "Hip thrust", "Face pull", "RFESS"],
+      reduced: ["Heavy overhead pressing without shoulder care", "Long aerobic conditioning without sprint component"],
+      eliminated: ["Programs with no rotational development"],
+      tissueConsiderations: ["Wrist/forearm — bat impact grip; eccentric loading", "Hamstring — sprint risk; Nordic curls", "Low back — rotational batting load"],
+    },
+    weeklyArchitectureGuidance: {
+      threeDayShape: "Day 1: Rotational Power + Grip | Day 2: Sprint + Posterior Chain | Day 3: Upper + Trunk",
+      fourDayShape: "Day 1: Rotation + Grip | Day 2: Sprint + Lower | Day 3: Upper + Shoulder | Day 4: Trunk + Mobility",
+    },
+    seasonModulation: {
+      off_season: { volumeModifier: 1.0, intensityModifier: 1.0, conditioningReduction: 1.0, priorityShift: "Build rotational power, grip strength, and sprint resilience", mandatoryAdjustments: [] },
+      pre_season: { volumeModifier: 0.85, intensityModifier: 0.9, conditioningReduction: 0.8, priorityShift: "Sharpen bat power and sprint quality", mandatoryAdjustments: [] },
+      in_season: { volumeModifier: 0.6, intensityModifier: 0.8, conditioningReduction: 0.3, priorityShift: "Maintenance — protect wrist and hamstring", mandatoryAdjustments: ["Nordic curls maintained", "2× sessions max"] },
+      post_season: { volumeModifier: 0.4, intensityModifier: 0.65, conditioningReduction: 0.2, priorityShift: "Wrist and lower limb restoration", mandatoryAdjustments: [] },
+    },
+    positionOverlays: {},
+    validationRules: ["Rotational power mandatory", "Sprint work present", "Nordic hamstring curl present", "Grip training (farmer's carry or specific) present"],
+    architectureDistinctions: "Cricket batting is primarily a rotational power sport. The gym program should resemble a baseball batter's program — med ball rotation, grip strength, sprint resilience, and anti-rotation control. A bowler's program looks entirely different.",
+  },
+
+  // ── CRICKET WICKETKEEPER ──────────────────────────────────────────────────────
+  cricket_wicketkeeper: {
+    key: "cricket_wicketkeeper",
+    displayName: "Cricket — Wicketkeeper",
+    tagline: "Reactive catching mechanics, deep-squat endurance, lateral dive strength, and grip resilience",
+    physicalQualities: [
+      { quality: "Reactive catching and dive mechanics", priority: "primary", description: "The keeper must react to deflections and diving chances in a fraction of a second — reactive elasticity and lateral dive control define performance" },
+      { quality: "Deep squat endurance and knee resilience", priority: "primary", description: "The keeping stance is a deep squat maintained for entire innings — knee tolerance and postural endurance are non-negotiable" },
+      { quality: "Lateral dive and single-leg landing control", priority: "primary", description: "Diving catches require extreme unilateral lateral loading — hip, groin, and lateral chain strength are protective" },
+      { quality: "Grip and hand resilience", priority: "secondary", description: "Takes through gloves create repetitive impact loads on wrists and hands — grip tolerance training is protective" },
+    ],
+    conditioning: {
+      primaryEnergySystem: "Aerobic base for innings-length endurance",
+      secondaryEnergySystem: "Alactic reactive bursts (diving, sprinting for run-outs)",
+      weeklyVolume: "1 conditioning session. Aerobic base for sustained performance.",
+      sessionFormat: "Aerobic base: 20 min at 65% max HR | Reactive agility drills: 6–10 × lateral reactive movements",
+      antiPattern: "Do not neglect knee and deep squat endurance — the keeping position creates sustained knee stress unlike any other sport.",
+      sportNote: "The wicketkeeper is the most position-specific role in cricket with unique physical demands. Deep-squat tolerance and reactive dive mechanics must be specifically trained.",
+    },
+    sessionArchetypes: [
+      { name: "Deep Squat Tolerance + Knee Resilience", intent: "Goblet squat, squat endurance, VMO and glute work — keeping stance endurance", primaryFocus: ["squat", "unilateral_lower", "trunk"], recoveryPriority: "moderate" },
+      { name: "Lateral Dive + Reactive Catching", intent: "Lateral bound, single-leg landing, reactive agility — dive catch mechanics", primaryFocus: ["lateral", "power", "unilateral_lower"], recoveryPriority: "moderate" },
+      { name: "Grip + Upper + Trunk", intent: "Grip loading, pulling strength, anti-rotation — hand resilience and general structural balance", primaryFocus: ["upper_pull", "trunk"], recoveryPriority: "low" },
+    ],
+    exerciseEmphasis: {
+      mustInclude: ["Goblet squat or deep squat variant (keeping stance)", "Lateral bound or reactive lateral drill", "Copenhagen plank (groin for diving)", "Single-leg lower"],
+      preferred: ["Step-down (eccentric knee loading)", "Face pull", "Farmer's carry (grip)", "Pallof press", "Single-leg RDL"],
+      reduced: ["Heavy spinal loading without knee tolerance balance", "Neglecting lateral movements"],
+      eliminated: ["Programs with no lateral or reactive movement training"],
+      tissueConsiderations: ["Knee — deep squat endurance position; VMO and glute essential", "Groin/hip — lateral diving; Copenhagen plank mandatory", "Wrist/hand — ball impact through gloves", "Low back — sustained flexion in keeping stance"],
+    },
+    weeklyArchitectureGuidance: {
+      threeDayShape: "Day 1: Deep Squat + Knee Resilience | Day 2: Lateral Dive + Reactive | Day 3: Grip + Upper + Trunk",
+      fourDayShape: "Day 1: Squat + Knee | Day 2: Lateral Reactive | Day 3: Grip + Upper | Day 4: Mobility + Lower Balance",
+    },
+    seasonModulation: {
+      off_season: { volumeModifier: 1.0, intensityModifier: 1.0, conditioningReduction: 1.0, priorityShift: "Build knee tolerance, lateral dive strength, and grip resilience", mandatoryAdjustments: [] },
+      pre_season: { volumeModifier: 0.85, intensityModifier: 0.9, conditioningReduction: 0.8, priorityShift: "Sharpen reactive catching mechanics and squat endurance", mandatoryAdjustments: [] },
+      in_season: { volumeModifier: 0.6, intensityModifier: 0.8, conditioningReduction: 0.3, priorityShift: "Maintain knee resilience and lateral strength", mandatoryAdjustments: ["Copenhagen plank every session", "Knee VMO work maintained"] },
+      post_season: { volumeModifier: 0.4, intensityModifier: 0.65, conditioningReduction: 0.2, priorityShift: "Knee and wrist restoration", mandatoryAdjustments: [] },
+    },
+    positionOverlays: {},
+    validationRules: ["Deep squat training present", "Lateral reactive movement present", "Copenhagen plank present", "Grip training present"],
+    architectureDistinctions: "The wicketkeeper has the most distinctive positional demands in cricket. Deep-squat endurance, lateral dive strength, and reactive catching mechanics cannot be adequately developed by generic cricket programming. The program should look nothing like a bowler's program.",
+  },
+
   // ── CYCLING ───────────────────────────────────────────────────────────────────
   cycling: {
     key: "cycling",
@@ -1224,8 +1923,26 @@ export function mapSportToProfile(sport: string | null): SportProfile | null {
   if (s.includes("lacrosse")) return SPORT_PROFILES.lacrosse;
   if (s.includes("track") || s.includes("sprint") || s.includes("sprinting")) return SPORT_PROFILES.track;
   if (s.includes("volleyball")) return SPORT_PROFILES.volleyball;
-  if (s.includes("tennis") || s.includes("racket") || s.includes("racquet") || s.includes("squash") || s.includes("pickleball") || s.includes("padel")) return SPORT_PROFILES.tennis;
-  if (s.includes("mma") || s.includes("jiu-jitsu") || s.includes("jiu jitsu") || s.includes("bjj") || s.includes("wrestling") || s.includes("judo") || s.includes("boxing") || s.includes("muay thai") || s.includes("martial arts") || s.includes("combat") || s.includes("grappling") || s.includes("kickboxing")) return SPORT_PROFILES.combat_sports;
+  // ── New sport-specific mappings (supersede generic catch-alls below) ──────
+  if (s.includes("pickleball")) return SPORT_PROFILES.pickleball;
+  if (s.includes("padel")) return SPORT_PROFILES.padel;
+  if (s.includes("badminton")) return SPORT_PROFILES.badminton;
+  if (s.includes("squash")) return SPORT_PROFILES.squash;
+  if (s.includes("bowling")) return SPORT_PROFILES.bowling;
+  if (s.includes("flag football") || s.includes("flag_football")) return SPORT_PROFILES.flag_football;
+  if (s.includes("softball")) return SPORT_PROFILES.softball;
+  if (s.includes("wrestling") || s.includes("grappling")) return SPORT_PROFILES.wrestling;
+  if (s.includes("boxing") || s.includes("muay thai") || s.includes("kickboxing")) return SPORT_PROFILES.boxing;
+  if (s.includes("mma") || s.includes("mixed martial arts")) return SPORT_PROFILES.mma;
+  // Cricket role-based subprofiles (check before base cricket)
+  if (s.includes("cricket") && (s.includes("bowler") || s.includes("fast bowl") || s.includes("spin bowl"))) return SPORT_PROFILES.cricket_bowler;
+  if (s.includes("cricket") && (s.includes("batter") || s.includes("batsman") || s.includes("batting"))) return SPORT_PROFILES.cricket_batter;
+  if (s.includes("cricket") && (s.includes("keeper") || s.includes("wicketkeeper"))) return SPORT_PROFILES.cricket_wicketkeeper;
+  if (s.includes("cricket")) return SPORT_PROFILES.cricket;
+  // Jiu-jitsu, judo → wrestling (grappling-first sports)
+  if (s.includes("jiu-jitsu") || s.includes("jiu jitsu") || s.includes("bjj") || s.includes("judo")) return SPORT_PROFILES.wrestling;
+  if (s.includes("tennis") || s.includes("racket") || s.includes("racquet")) return SPORT_PROFILES.tennis;
+  if (s.includes("combat") || s.includes("martial arts")) return SPORT_PROFILES.combat_sports;
   if (s.includes("swim") || s.includes("swimming") || s.includes("pool")) return SPORT_PROFILES.swimming;
   if (s.includes("golf") || s.includes("golfer")) return SPORT_PROFILES.golf;
   if (s.includes("rowing") || s.includes("crew") || s.includes("sculling") || s.includes("ergo") || s.includes("ergometer")) return SPORT_PROFILES.rowing;
@@ -1264,6 +1981,22 @@ export function detectPosition(request: string, sport: SportKey | null): PlayerP
     if (/pitcher|p$|starting pitcher|closer|reliever/.test(r)) return "pitcher";
     if (/hitter|batter|fielder|outfield|infield|catcher|shortstop/.test(r)) return "hitter_field";
   }
+  if (sport === "softball") {
+    if (/pitcher/.test(r)) return "pitcher";
+    if (/catcher|fielder|infield|outfield/.test(r)) return "hitter_field";
+  }
+  if (sport === "volleyball") {
+    if (/setter/.test(r)) return "setter";
+    if (/libero/.test(r)) return "libero";
+    if (/hitter|outside|opposite|middle blocker/.test(r)) return "hitter";
+  }
+  if (sport === "cricket") {
+    if (/bowler|fast bowl|spin bowl/.test(r)) return "pitcher";   // maps to pitcher position overlay
+    if (/batter|batsman/.test(r)) return "hitter_field";
+    if (/keeper|wicketkeeper/.test(r)) return null; // keeper is its own profile
+  }
+  if (sport === "cricket_bowler") return "pitcher";
+  if (sport === "cricket_batter") return "hitter_field";
 
   return null;
 }

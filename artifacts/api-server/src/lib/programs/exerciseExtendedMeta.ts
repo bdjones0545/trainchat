@@ -28,6 +28,54 @@ export interface ExerciseExtendedMeta {
   complexity: "simple" | "moderate" | "complex";
   velocityIntent: "slow_grind" | "moderate" | "ballistic" | "explosive";
   stabilityDemand: "low" | "moderate" | "high";
+
+  // ── Sport Fit Tags (Phase 2) ──────────────────────────────────────────────
+  // These extend the existing metadata safely. All fields are optional.
+  // When present, they power the scoreSportFit() engine.
+  // When absent, the scorer falls back to family/intentTags.
+
+  /**
+   * Primary athletic qualities this exercise develops.
+   * Values map to demand dimensions in SportDemandProfile.
+   *
+   * Examples: "acceleration", "lateral_decel", "rotation_power",
+   * "anti_rotation", "elastic_stiffness", "overhead_stability",
+   * "unilateral_balance", "grip_endurance", "trunk_stiffness",
+   * "reactive_footwork", "cod", "max_velocity"
+   */
+  movementQualities?: string[];
+
+  /**
+   * Joints / tissues primarily loaded by this exercise.
+   * Used to match against SportDemandProfile.injuryBias for
+   * injury-prevention scoring.
+   *
+   * Examples: "ankle_stiffness", "knee_dominant", "hip_dominant",
+   * "shoulder_stability", "elbow_load", "wrist_forearm", "lumbar_control",
+   * "hamstring"
+   */
+  jointDemands?: string[];
+
+  /**
+   * Energy systems this exercise trains.
+   * Examples: "alactic", "glycolytic", "aerobic", "repeat_sprint"
+   */
+  energySystemTags?: string[];
+
+  /**
+   * Sport transfer tags — high-level bridge labels between exercise
+   * qualities and sport performance concepts.
+   * Examples: "first_step", "sprint_mechanics", "reactive_speed",
+   * "tackle_resilience", "court_coverage", "arm_care"
+   */
+  transferTags?: string[];
+
+  /**
+   * Sports this exercise has particular relevance for.
+   * Used as a supplemental signal when demand profile scoring is ambiguous.
+   * Examples: "pickleball", "cricket_bowler", "flag_football"
+   */
+  sportTags?: string[];
 }
 
 const DEFAULT_EXTENDED: ExerciseExtendedMeta = {
@@ -292,12 +340,426 @@ export const EXERCISE_EXTENDED_META: Record<string, ExerciseExtendedMeta> = {
   "Leg Extension":                     { family: "isolation_accessory", complexity: "simple", velocityIntent: "slow_grind", stabilityDemand: "low" },
 };
 
+// ─── Sport Quality Tag Enrichment ────────────────────────────────────────────
+//
+// Adds movementQualities, jointDemands, energySystemTags, transferTags, and
+// sportTags to exercises without touching any existing field.
+//
+// This table is the authoritative source for sport-fit scoring metadata.
+// Add new exercises here as the library grows — no existing entry needs
+// to be modified.
+//
+// Keyed by exercise name (must match EXERCISE_EXTENDED_META or DB name exactly).
+
+export const EXERCISE_SPORT_TAGS: Record<string, Partial<ExerciseExtendedMeta>> = {
+
+  // ── Lateral / Reactive Exercises ─────────────────────────────────────────
+  "Lateral Bound": {
+    movementQualities: ["lateral_decel", "elastic_stiffness", "cod", "unilateral_balance"],
+    jointDemands: ["ankle_stiffness", "hip_dominant"],
+    energySystemTags: ["alactic"],
+    transferTags: ["court_coverage", "reactive_speed"],
+  },
+  "Single-Leg Pogo": {
+    movementQualities: ["elastic_stiffness", "reactive_footwork", "unilateral_balance"],
+    jointDemands: ["ankle_stiffness"],
+    energySystemTags: ["alactic"],
+    transferTags: ["reactive_speed", "court_coverage"],
+  },
+  "Pogo Jumps": {
+    movementQualities: ["elastic_stiffness", "reactive_footwork"],
+    jointDemands: ["ankle_stiffness"],
+    energySystemTags: ["alactic"],
+    transferTags: ["reactive_speed"],
+  },
+  "Hurdle Hops": {
+    movementQualities: ["elastic_stiffness", "reactive_footwork", "deceleration"],
+    jointDemands: ["ankle_stiffness", "knee_dominant"],
+    energySystemTags: ["alactic"],
+    transferTags: ["reactive_speed"],
+  },
+  "Ankle Hop": {
+    movementQualities: ["elastic_stiffness", "reactive_footwork"],
+    jointDemands: ["ankle_stiffness"],
+    energySystemTags: ["alactic"],
+    transferTags: ["reactive_speed"],
+  },
+  "Lateral Box Jump": {
+    movementQualities: ["lateral_decel", "elastic_stiffness", "cod", "acceleration"],
+    jointDemands: ["ankle_stiffness", "knee_dominant"],
+    energySystemTags: ["alactic"],
+    transferTags: ["court_coverage", "reactive_speed"],
+  },
+  "Reactive Bound Series": {
+    movementQualities: ["elastic_stiffness", "reactive_footwork", "lateral_decel", "cod"],
+    jointDemands: ["ankle_stiffness"],
+    energySystemTags: ["alactic"],
+    transferTags: ["reactive_speed", "court_coverage"],
+  },
+  "Depth Jump": {
+    movementQualities: ["elastic_stiffness", "deceleration", "acceleration"],
+    jointDemands: ["ankle_stiffness", "knee_dominant"],
+    energySystemTags: ["alactic"],
+    transferTags: ["reactive_speed"],
+  },
+  "Depth Drop": {
+    movementQualities: ["deceleration", "elastic_stiffness"],
+    jointDemands: ["ankle_stiffness", "knee_dominant"],
+    energySystemTags: ["alactic"],
+    transferTags: ["reactive_speed"],
+  },
+  "Linear Bounds": {
+    movementQualities: ["elastic_stiffness", "acceleration"],
+    jointDemands: ["ankle_stiffness", "hip_dominant"],
+    energySystemTags: ["alactic"],
+    transferTags: ["sprint_mechanics"],
+  },
+  "Triple Extension Sprint Drill": {
+    movementQualities: ["acceleration", "max_velocity", "elastic_stiffness"],
+    jointDemands: ["ankle_stiffness", "hip_dominant", "hamstring"],
+    energySystemTags: ["alactic"],
+    transferTags: ["sprint_mechanics"],
+  },
+  "A-Skip": {
+    movementQualities: ["acceleration", "elastic_stiffness"],
+    jointDemands: ["ankle_stiffness"],
+    energySystemTags: ["alactic"],
+    transferTags: ["sprint_mechanics"],
+  },
+  "B-Skip": {
+    movementQualities: ["max_velocity", "elastic_stiffness"],
+    jointDemands: ["ankle_stiffness", "hamstring"],
+    energySystemTags: ["alactic"],
+    transferTags: ["sprint_mechanics"],
+  },
+
+  // ── Plyometric Exercises ──────────────────────────────────────────────────
+  "Box Jump": {
+    movementQualities: ["acceleration", "elastic_stiffness"],
+    jointDemands: ["knee_dominant", "ankle_stiffness"],
+    energySystemTags: ["alactic"],
+    transferTags: ["first_step"],
+  },
+  "Broad Jump": {
+    movementQualities: ["acceleration", "elastic_stiffness"],
+    jointDemands: ["hip_dominant", "knee_dominant"],
+    energySystemTags: ["alactic"],
+    transferTags: ["sprint_mechanics", "first_step"],
+  },
+  "Squat Jump": {
+    movementQualities: ["acceleration", "elastic_stiffness"],
+    jointDemands: ["knee_dominant"],
+    energySystemTags: ["alactic"],
+    transferTags: ["first_step"],
+  },
+  "Jump Squat": {
+    movementQualities: ["acceleration", "elastic_stiffness"],
+    jointDemands: ["knee_dominant"],
+    energySystemTags: ["alactic"],
+    transferTags: ["first_step"],
+  },
+  "Split Jump": {
+    movementQualities: ["elastic_stiffness", "unilateral_balance", "deceleration"],
+    jointDemands: ["knee_dominant", "hip_dominant"],
+    energySystemTags: ["alactic"],
+    transferTags: ["first_step"],
+  },
+  "Power Clean (from floor)": {
+    movementQualities: ["acceleration", "elastic_stiffness", "max_velocity"],
+    jointDemands: ["hip_dominant", "ankle_stiffness", "lumbar_control"],
+    energySystemTags: ["alactic"],
+    transferTags: ["first_step", "sprint_mechanics"],
+  },
+  "Hang Power Clean": {
+    movementQualities: ["acceleration", "elastic_stiffness"],
+    jointDemands: ["hip_dominant"],
+    energySystemTags: ["alactic"],
+    transferTags: ["first_step"],
+  },
+
+  // ── Rotational / Anti-Rotation ────────────────────────────────────────────
+  "Med Ball Rotational Throw": {
+    movementQualities: ["rotation_power", "elastic_stiffness"],
+    jointDemands: ["lumbar_control", "hip_dominant"],
+    energySystemTags: ["alactic"],
+    transferTags: ["swing_power", "strike_power"],
+    sportTags: ["baseball", "golf", "cricket", "boxing", "mma"],
+  },
+  "Rotational Med Ball Slam": {
+    movementQualities: ["rotation_power", "anti_rotation"],
+    jointDemands: ["lumbar_control"],
+    energySystemTags: ["alactic"],
+    transferTags: ["swing_power", "strike_power"],
+    sportTags: ["baseball", "golf", "boxing"],
+  },
+  "Med Ball Scoop Toss": {
+    movementQualities: ["rotation_power", "acceleration"],
+    jointDemands: ["hip_dominant"],
+    energySystemTags: ["alactic"],
+    transferTags: ["first_step", "swing_power"],
+  },
+  "Landmine Rotation": {
+    movementQualities: ["rotation_power", "anti_rotation", "trunk_stiffness"],
+    jointDemands: ["lumbar_control"],
+    energySystemTags: ["alactic"],
+    transferTags: ["swing_power"],
+    sportTags: ["baseball", "golf", "bowling", "cricket"],
+  },
+  "Cable Woodchop": {
+    movementQualities: ["rotation_power", "anti_rotation"],
+    jointDemands: ["lumbar_control"],
+    energySystemTags: ["alactic"],
+    transferTags: ["swing_power"],
+    sportTags: ["golf", "baseball", "bowling"],
+  },
+  "MB Side Slam": {
+    movementQualities: ["rotation_power"],
+    jointDemands: ["lumbar_control"],
+    energySystemTags: ["alactic"],
+    transferTags: ["swing_power"],
+  },
+
+  // ── Anti-Rotation / Trunk Stability ───────────────────────────────────────
+  "Pallof Press": {
+    movementQualities: ["anti_rotation", "trunk_stiffness"],
+    jointDemands: ["lumbar_control"],
+    energySystemTags: [],
+    transferTags: ["tackle_resilience", "contact_readiness"],
+    sportTags: ["pickleball", "golf", "bowling", "wrestling"],
+  },
+  "Half-Kneeling Pallof Press": {
+    movementQualities: ["anti_rotation", "trunk_stiffness", "unilateral_balance"],
+    jointDemands: ["lumbar_control", "hip_stability"],
+    energySystemTags: [],
+    transferTags: ["tackle_resilience"],
+  },
+  "Tall-Kneeling Pallof Press": {
+    movementQualities: ["anti_rotation", "trunk_stiffness"],
+    jointDemands: ["lumbar_control"],
+    energySystemTags: [],
+    transferTags: ["tackle_resilience"],
+  },
+  "Standing Anti-Rotation Press": {
+    movementQualities: ["anti_rotation", "trunk_stiffness"],
+    jointDemands: ["lumbar_control"],
+    energySystemTags: [],
+    transferTags: ["tackle_resilience"],
+  },
+  "Landmine Anti-Rotation": {
+    movementQualities: ["anti_rotation", "trunk_stiffness", "rotation_power"],
+    jointDemands: ["lumbar_control"],
+    energySystemTags: [],
+    transferTags: ["tackle_resilience"],
+  },
+  "Suitcase Carry": {
+    movementQualities: ["anti_rotation", "trunk_stiffness", "grip_endurance", "unilateral_balance"],
+    jointDemands: ["lumbar_control", "wrist_forearm"],
+    energySystemTags: ["aerobic"],
+    transferTags: ["tackle_resilience", "contact_readiness"],
+    sportTags: ["bowling", "wrestling", "mma"],
+  },
+  "Farmers Carry": {
+    movementQualities: ["trunk_stiffness", "grip_endurance", "anti_rotation"],
+    jointDemands: ["wrist_forearm", "lumbar_control"],
+    energySystemTags: ["aerobic"],
+    transferTags: ["tackle_resilience"],
+    sportTags: ["wrestling", "rugby", "mma"],
+  },
+  "Dead Bug": {
+    movementQualities: ["anti_rotation", "trunk_stiffness"],
+    jointDemands: ["lumbar_control"],
+    energySystemTags: [],
+    transferTags: ["contact_readiness"],
+  },
+  "Copenhagen Plank": {
+    movementQualities: ["anti_rotation", "unilateral_balance", "trunk_stiffness"],
+    jointDemands: ["hip_dominant", "hip_stability"],
+    energySystemTags: [],
+    transferTags: ["court_coverage", "groin_resilience"],
+    sportTags: ["pickleball", "badminton", "squash", "soccer", "hockey"],
+  },
+
+  // ── Unilateral Lower Body ─────────────────────────────────────────────────
+  "Lateral Lunge": {
+    movementQualities: ["lateral_decel", "cod", "unilateral_balance"],
+    jointDemands: ["hip_dominant", "knee_dominant", "hip_stability"],
+    energySystemTags: [],
+    transferTags: ["court_coverage", "reactive_speed"],
+    sportTags: ["pickleball", "badminton", "squash", "padel"],
+  },
+  "Cossack Squat": {
+    movementQualities: ["lateral_decel", "unilateral_balance", "cod"],
+    jointDemands: ["hip_dominant", "hip_stability", "knee_dominant"],
+    energySystemTags: [],
+    transferTags: ["court_coverage", "groin_resilience"],
+    sportTags: ["pickleball", "badminton", "squash"],
+  },
+  "Single-Leg Romanian Deadlift": {
+    movementQualities: ["unilateral_balance", "deceleration"],
+    jointDemands: ["hamstring", "hip_dominant"],
+    energySystemTags: [],
+    transferTags: ["reactive_speed", "sprint_mechanics"],
+  },
+  "Kickstand RDL": {
+    movementQualities: ["unilateral_balance", "deceleration"],
+    jointDemands: ["hamstring", "hip_dominant"],
+    energySystemTags: [],
+    transferTags: ["sprint_mechanics"],
+  },
+  "Single-Leg Hip Thrust": {
+    movementQualities: ["unilateral_balance"],
+    jointDemands: ["hip_dominant", "hamstring"],
+    energySystemTags: [],
+    transferTags: ["first_step"],
+  },
+  "Bulgarian Split Squat": {
+    movementQualities: ["unilateral_balance", "deceleration"],
+    jointDemands: ["knee_dominant", "hip_dominant"],
+    energySystemTags: [],
+    transferTags: ["first_step", "sprint_mechanics"],
+  },
+  "Rear-Foot Elevated Split Squat (RFESS)": {
+    movementQualities: ["unilateral_balance", "deceleration"],
+    jointDemands: ["knee_dominant", "hip_dominant"],
+    energySystemTags: [],
+    transferTags: ["first_step", "sprint_mechanics"],
+  },
+  "Pistol Squat": {
+    movementQualities: ["unilateral_balance", "deceleration", "elastic_stiffness"],
+    jointDemands: ["knee_dominant", "ankle_stiffness"],
+    energySystemTags: [],
+    transferTags: ["court_coverage"],
+  },
+  "Step-Up with Knee Drive": {
+    movementQualities: ["unilateral_balance", "acceleration"],
+    jointDemands: ["knee_dominant", "hip_dominant"],
+    energySystemTags: ["alactic"],
+    transferTags: ["first_step"],
+  },
+
+  // ── Hamstring / Posterior Chain ───────────────────────────────────────────
+  "Nordics (Nordic Hamstring Curl)": {
+    movementQualities: ["deceleration"],
+    jointDemands: ["hamstring"],
+    energySystemTags: [],
+    transferTags: ["sprint_mechanics", "reactive_speed"],
+    sportTags: ["flag_football", "soccer", "lacrosse", "rugby"],
+  },
+  "Glute-Ham Raise": {
+    movementQualities: ["deceleration"],
+    jointDemands: ["hamstring", "hip_dominant"],
+    energySystemTags: [],
+    transferTags: ["sprint_mechanics"],
+  },
+  "Romanian Deadlift": {
+    movementQualities: ["deceleration", "trunk_stiffness"],
+    jointDemands: ["hamstring", "lumbar_control"],
+    energySystemTags: [],
+    transferTags: ["sprint_mechanics"],
+  },
+  "Romanian Deadlift (heavy)": {
+    movementQualities: ["deceleration", "trunk_stiffness"],
+    jointDemands: ["hamstring", "lumbar_control"],
+    energySystemTags: [],
+    transferTags: ["sprint_mechanics"],
+  },
+
+  // ── Overhead / Shoulder ───────────────────────────────────────────────────
+  "Overhead Press (barbell)": {
+    movementQualities: ["overhead_stability"],
+    jointDemands: ["shoulder_stability"],
+    energySystemTags: [],
+    transferTags: ["arm_care"],
+  },
+  "Dumbbell Overhead Press": {
+    movementQualities: ["overhead_stability"],
+    jointDemands: ["shoulder_stability"],
+    energySystemTags: [],
+    transferTags: ["arm_care"],
+    sportTags: ["volleyball", "badminton", "cricket_bowler"],
+  },
+  "Landmine Press": {
+    movementQualities: ["overhead_stability", "anti_rotation"],
+    jointDemands: ["shoulder_stability"],
+    energySystemTags: [],
+    transferTags: ["arm_care"],
+    sportTags: ["volleyball", "baseball_pitcher", "cricket_bowler"],
+  },
+  "Face Pull": {
+    movementQualities: ["overhead_stability"],
+    jointDemands: ["shoulder_stability", "elbow_load"],
+    energySystemTags: [],
+    transferTags: ["arm_care"],
+    sportTags: ["volleyball", "cricket_bowler", "baseball_pitcher", "pickleball"],
+  },
+  "Band Pull-Apart": {
+    movementQualities: ["overhead_stability"],
+    jointDemands: ["shoulder_stability"],
+    energySystemTags: [],
+    transferTags: ["arm_care"],
+  },
+  "External Rotation (band)": {
+    movementQualities: ["overhead_stability"],
+    jointDemands: ["shoulder_stability", "elbow_load"],
+    energySystemTags: [],
+    transferTags: ["arm_care"],
+    sportTags: ["volleyball", "cricket_bowler", "baseball_pitcher", "pickleball", "padel"],
+  },
+  "Prone Y-T-W": {
+    movementQualities: ["overhead_stability"],
+    jointDemands: ["shoulder_stability"],
+    energySystemTags: [],
+    transferTags: ["arm_care"],
+  },
+
+  // ── Grip / Forearm ────────────────────────────────────────────────────────
+  "Farmers Carry": {
+    movementQualities: ["trunk_stiffness", "grip_endurance", "anti_rotation"],
+    jointDemands: ["wrist_forearm", "lumbar_control"],
+    energySystemTags: ["aerobic"],
+    transferTags: ["tackle_resilience"],
+    sportTags: ["wrestling", "rugby", "mma"],
+  },
+
+  // ── Conditioning / Sprint ─────────────────────────────────────────────────
+  "Sprint Repeats": {
+    movementQualities: ["acceleration", "max_velocity", "repeat_sprint"],
+    jointDemands: ["hamstring", "ankle_stiffness"],
+    energySystemTags: ["alactic", "repeat_sprint"],
+    transferTags: ["sprint_mechanics", "first_step"],
+    sportTags: ["flag_football", "soccer", "lacrosse", "rugby", "basketball"],
+  },
+  "Sled Push": {
+    movementQualities: ["acceleration", "trunk_stiffness"],
+    jointDemands: ["hip_dominant", "knee_dominant"],
+    energySystemTags: ["alactic"],
+    transferTags: ["first_step", "sprint_mechanics"],
+    sportTags: ["flag_football", "football", "rugby"],
+  },
+  "Sled Pull": {
+    movementQualities: ["acceleration", "deceleration"],
+    jointDemands: ["hip_dominant"],
+    energySystemTags: ["alactic"],
+    transferTags: ["sprint_mechanics"],
+  },
+  "KB Swing": {
+    movementQualities: ["elastic_stiffness", "rotation_power", "anti_rotation"],
+    jointDemands: ["hip_dominant", "lumbar_control"],
+    energySystemTags: ["alactic", "repeat_sprint"],
+    transferTags: ["first_step"],
+  },
+};
+
 /**
  * Look up extended metadata for an exercise by name.
+ * Merges base structural metadata with sport quality tags.
  * Returns safe defaults if the exercise is not found.
  */
 export function getExerciseExtendedMeta(exerciseName: string): ExerciseExtendedMeta {
-  return EXERCISE_EXTENDED_META[exerciseName] ?? DEFAULT_EXTENDED;
+  const base = EXERCISE_EXTENDED_META[exerciseName] ?? DEFAULT_EXTENDED;
+  const sportTags = EXERCISE_SPORT_TAGS[exerciseName];
+  if (!sportTags) return base;
+  return { ...base, ...sportTags };
 }
 
 /** Get the family tag for an exercise. */
