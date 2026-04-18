@@ -143,8 +143,8 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       metadata: { source, targetLabel: targetContext?.label },
     });
 
-    // 4. Apply the edit plan to the database
-    const editResult = await applyEditPlan(editPlan);
+    // 4. Apply the edit plan to the database (with family propagation across weeks)
+    const editResult = await applyEditPlan(editPlan, undefined, activeSystem.id);
 
     // 5. Persist the change log entry
     let changeLogId: number | undefined;

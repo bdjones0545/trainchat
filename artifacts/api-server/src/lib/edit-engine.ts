@@ -7,6 +7,12 @@
  * Phase 3: Returns changedIds for frontend change highlighting.
  * Phase 4: Captures before/after snapshots for every change — used by
  *          change-log-service to enable full restore capability.
+ *
+ * Family Propagation: when an exercise-level change (replace or update) is
+ * applied and trainingSystemId is provided, the same change is automatically
+ * propagated to all other occurrences of the same exercise name in upcoming
+ * and current weeks within the same training system. This keeps the program
+ * consistent across weeks when a user adjusts an exercise.
  */
 
 import { db } from "@workspace/db";
@@ -16,7 +22,7 @@ import {
   trainingWeeks,
   trainingPhases,
 } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and, inArray, ne } from "drizzle-orm";
 import { logger } from "./logger";
 import type { EditPlan, EditChange } from "./edit-intent-service";
 import type { SystemSnapshot } from "./change-log-service";
@@ -407,6 +413,139 @@ async function captureAfterSnapshot(changedIds: ChangedIds): Promise<SystemSnaps
   return snapshot;
 }
 
+// ─── Family Propagation ────────────────────────────────────────────────────────
+//
+// When a user changes an exercise at the exercise level, that same exercise
+// almost always appears in multiple weeks of the program. Without propagation,
+// only the targeted instance changes — leaving the program inconsistent.
+//
+// This function finds all sibling exercise rows (same name, same training system,
+// upcoming/current weeks, not the original row) and applies the same mutation.
+// "Same session slot" is determined by matching the session label — this ensures
+// we don't propagate a change on "Lower Power" exercises into an "Upper Strength"
+// session that happens to contain the same exercise name.
+
+interface PropagationResult {
+  propagatedIds: number[];
+  propagatedCount: number;
+  skippedCount: number;
+}
+
+async function propagateExerciseChangeAcrossWeeks(
+  originalExerciseId: number,
+  exerciseName: string,
+  trainingSystemId: number,
+  applyFn: (siblingId: number) => Promise<{ applied: boolean; detail: string }>
+): Promise<PropagationResult> {
+  try {
+    // 1. Resolve the source exercise's session and week
+    const [sourceEx] = await db
+      .select({
+        sessionId: sessionExercises.trainingSessionId,
+      })
+      .from(sessionExercises)
+      .where(eq(sessionExercises.id, originalExerciseId))
+      .limit(1);
+
+    if (!sourceEx) return { propagatedIds: [], propagatedCount: 0, skippedCount: 0 };
+
+    // 2. Get source session label
+    const [sourceSession] = await db
+      .select({ label: trainingSessions.label, weekId: trainingSessions.trainingWeekId })
+      .from(trainingSessions)
+      .where(eq(trainingSessions.id, sourceEx.sessionId))
+      .limit(1);
+
+    if (!sourceSession) return { propagatedIds: [], propagatedCount: 0, skippedCount: 0 };
+
+    // 3. Get source week's weekNumber to only propagate to future weeks
+    const [sourceWeek] = await db
+      .select({ weekNumber: trainingWeeks.weekNumber, phaseId: trainingWeeks.trainingPhaseId })
+      .from(trainingWeeks)
+      .where(eq(trainingWeeks.id, sourceSession.weekId))
+      .limit(1);
+
+    if (!sourceWeek) return { propagatedIds: [], propagatedCount: 0, skippedCount: 0 };
+
+    // 4. Find all phases in this training system
+    const phases = await db
+      .select({ id: trainingPhases.id })
+      .from(trainingPhases)
+      .where(eq(trainingPhases.trainingSystemId, trainingSystemId));
+
+    if (phases.length === 0) return { propagatedIds: [], propagatedCount: 0, skippedCount: 0 };
+
+    const phaseIds = phases.map((p) => p.id);
+
+    // 5. Find all upcoming/current weeks with a higher weekNumber (future weeks)
+    const futureWeeks = await db
+      .select({ id: trainingWeeks.id, weekNumber: trainingWeeks.weekNumber, status: trainingWeeks.status })
+      .from(trainingWeeks)
+      .where(
+        and(
+          inArray(trainingWeeks.trainingPhaseId, phaseIds),
+          ne(trainingWeeks.id, sourceSession.weekId)
+        )
+      );
+
+    // Only propagate to upcoming or current weeks (not completed)
+    const eligibleWeekIds = futureWeeks
+      .filter((w) => w.status !== "completed" && w.weekNumber > sourceWeek.weekNumber)
+      .map((w) => w.id);
+
+    if (eligibleWeekIds.length === 0) return { propagatedIds: [], propagatedCount: 0, skippedCount: 0 };
+
+    // 6. Find all sessions in those weeks with the same label as the source session
+    const targetSessions = await db
+      .select({ id: trainingSessions.id, label: trainingSessions.label })
+      .from(trainingSessions)
+      .where(
+        and(
+          inArray(trainingSessions.trainingWeekId, eligibleWeekIds),
+          eq(trainingSessions.label, sourceSession.label)
+        )
+      );
+
+    if (targetSessions.length === 0) return { propagatedIds: [], propagatedCount: 0, skippedCount: 0 };
+
+    const targetSessionIds = targetSessions.map((s) => s.id);
+
+    // 7. Find all exercise rows with the same name in those sessions (excluding original)
+    const siblingExercises = await db
+      .select({ id: sessionExercises.id })
+      .from(sessionExercises)
+      .where(
+        and(
+          inArray(sessionExercises.trainingSessionId, targetSessionIds),
+          eq(sessionExercises.name, exerciseName),
+          ne(sessionExercises.id, originalExerciseId)
+        )
+      );
+
+    if (siblingExercises.length === 0) return { propagatedIds: [], propagatedCount: 0, skippedCount: 0 };
+
+    // 8. Apply the change to each sibling
+    const propagatedIds: number[] = [];
+    let propagatedCount = 0;
+    let skippedCount = 0;
+
+    for (const sibling of siblingExercises) {
+      const result = await applyFn(sibling.id);
+      if (result.applied) {
+        propagatedIds.push(sibling.id);
+        propagatedCount++;
+      } else {
+        skippedCount++;
+      }
+    }
+
+    return { propagatedIds, propagatedCount, skippedCount };
+  } catch (err) {
+    logger.error({ err, originalExerciseId, exerciseName, trainingSystemId }, "[EditEngine] Family propagation threw — skipping propagation");
+    return { propagatedIds: [], propagatedCount: 0, skippedCount: 0 };
+  }
+}
+
 // ─── Main Entry Point ────────────────────────────────────────────────────────
 
 export interface ChangeTarget {
@@ -433,7 +572,7 @@ export interface EditResult {
   identityPatches: PatchedIdentityResult[];
 }
 
-export async function applyEditPlan(plan: EditPlan, intentFamily?: string): Promise<EditResult> {
+export async function applyEditPlan(plan: EditPlan, intentFamily?: string, trainingSystemId?: number): Promise<EditResult> {
   // Phase 4: Capture state BEFORE applying changes
   const beforeSnapshot = await captureBeforeSnapshot(plan);
 
@@ -450,6 +589,73 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string): Prom
   // Collect IDs for exercises inserted via add_exercise so they appear in changedIds
   const newExerciseIds = results.flatMap((r) => (r.newId ? [r.newId] : []));
   const changedIds = extractChangedIds(plan, newExerciseIds);
+
+  // ── Family Propagation ────────────────────────────────────────────────────
+  // For exercise-level replace or update changes, propagate to all sibling
+  // occurrences of the same exercise name in upcoming/current weeks of the same
+  // training system. This keeps the program consistent after a targeted change.
+  let totalPropagated = 0;
+  if (trainingSystemId) {
+    for (let i = 0; i < plan.changes.length; i++) {
+      const change = plan.changes[i];
+      const thisResult = results[i];
+      if (!thisResult.applied) continue;
+
+      if (change.type === "replace_exercise") {
+        // Get the original name from the before snapshot
+        const before = beforeSnapshot.exercises[String(change.id)];
+        const originalName = before?.name as string | undefined;
+        if (originalName && change.replacement?.name) {
+          const replacementName = change.replacement.name;
+          const propagation = await propagateExerciseChangeAcrossWeeks(
+            change.id,
+            originalName,
+            trainingSystemId,
+            async (siblingId) => {
+              return applyChange({
+                ...change,
+                id: siblingId,
+                replacement: change.replacement,
+              });
+            }
+          );
+          if (propagation.propagatedCount > 0) {
+            changedIds.exercises.push(...propagation.propagatedIds);
+            totalPropagated += propagation.propagatedCount;
+            logger.info(
+              { originalName, replacementName, propagatedCount: propagation.propagatedCount, trainingSystemId },
+              "[EditEngine] Propagated exercise replacement to sibling weeks"
+            );
+          }
+        }
+      } else if (change.type === "update_exercise") {
+        // Get exercise name from before snapshot or from the DB
+        const before = beforeSnapshot.exercises[String(change.id)];
+        const exerciseName = before?.name as string | undefined;
+        if (exerciseName) {
+          const propagation = await propagateExerciseChangeAcrossWeeks(
+            change.id,
+            exerciseName,
+            trainingSystemId,
+            async (siblingId) => {
+              return applyChange({
+                ...change,
+                id: siblingId,
+              });
+            }
+          );
+          if (propagation.propagatedCount > 0) {
+            changedIds.exercises.push(...propagation.propagatedIds);
+            totalPropagated += propagation.propagatedCount;
+            logger.info(
+              { exerciseName, propagatedCount: propagation.propagatedCount, trainingSystemId },
+              "[EditEngine] Propagated exercise update to sibling weeks"
+            );
+          }
+        }
+      }
+    }
+  }
 
   // ── Session Identity Sync (post-mutation guard) ────────────────────────────
   // If the AI's EditPlan made structural changes for an identity-changing
@@ -543,11 +749,12 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string): Prom
     }
   }
 
-  // ── Task 8: Augment changeSummary with identity update notes ─────────────
+  // ── Augment changeSummary with identity update notes and propagation note ─
   const identitySuffix = buildIdentityUpdateSummary(identityPatches);
-  const finalChangeSummary = identityPatches.length > 0
-    ? (plan.changeSummary + identitySuffix).trim()
-    : plan.changeSummary;
+  const propagationSuffix = totalPropagated > 0
+    ? ` Applied to ${totalPropagated} additional week${totalPropagated !== 1 ? "s" : ""} across the program.`
+    : "";
+  const finalChangeSummary = (plan.changeSummary + identitySuffix + propagationSuffix).trim();
 
   return {
     appliedCount,
