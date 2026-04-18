@@ -33,7 +33,8 @@ import {
   type TransformRequest,
 } from "./split-transform";
 import { retrieveRelevantKnowledge } from "./knowledge-retrieval";
-import { buildArchitectureBrief, validateProgramArchitecture, extractSportFromRequest, getLastSlotSelection, enforceVariationMandateOnProgram } from "./program-architecture-engine";
+import { buildArchitectureBrief, validateProgramArchitecture, extractSportFromRequest, getLastSlotSelection, enforceVariationMandateOnProgram, computeWeeklyArchitecture } from "./program-architecture-engine";
+import type { WeeklyArchitecture, SessionArchitecture, MovementPattern as ArchMovementPattern } from "./program-architecture-engine";
 import { buildConditioningContext, isConditioningGoal } from "./conditioning-engine";
 import { buildPowerSpeedContext, isPowerRequest, isSpeedRequest } from "./power-speed-engine";
 import { buildSportContext, mapSportToProfile, detectSeasonContext } from "./sport-profile-engine";
@@ -63,6 +64,15 @@ export interface AIResponse {
   changeSummary?: string[];
 }
 
+export interface AIOverrideAudit {
+  usedHardcodedSession: boolean;
+  sessionIdentitySource: "architecture" | "fallback";
+  blockOrderSource: "architecture" | "ai";
+  variationSeed: number;
+  archSessionCount: number;
+  sport: string | null;
+}
+
 export interface ProgramStructure {
   programName: string;
   description: string;
@@ -71,6 +81,7 @@ export interface ProgramStructure {
   whatChanged?: string;
   whyChanged?: string;
   days: ProgramDay[];
+  _architectureAudit?: AIOverrideAudit;
 }
 
 export interface ProgramDay {
@@ -3262,7 +3273,41 @@ function buildIntelligentProgram(profile: UserProfile): ProgramStructure {
   // Generate a fresh random seed per build so Day 1 session shape varies across program generations.
   // This ensures different users (and the same user rebuilding) see structurally distinct Day 1s.
   const variationSeed = Math.random();
-  const days = buildDays(goal, experience, equipment, injuryFlags, userExclusions, spec, profile, variationSeed);
+
+  // ─── Architecture Engine (SOLE source of truth for session identity) ─────────
+  // computeWeeklyArchitecture returns a WeeklyArchitecture with one SessionArchitecture
+  // per training day. Each session carries: identity (display name), intent (description),
+  // primaryPattern, emphasizedPatterns, neuralDemand, cnsFlow.
+  // The day builders MUST use these — no hardcoded session names are permitted to override.
+  const sport = profile.sportFocus ?? null;
+  const blockArchetype = profile.blockArchetype ?? undefined;
+  let arch: WeeklyArchitecture | undefined;
+  try {
+    arch = computeWeeklyArchitecture(
+      profile.daysPerWeek ?? 3,
+      sport,
+      goal,
+      variationSeed,
+      blockArchetype,
+    );
+    console.log("[AIOverrideAudit] Architecture engine returned", arch.sessions.length, "sessions for sport:", sport, "seed:", variationSeed.toFixed(4));
+  } catch (err) {
+    console.warn("[AIOverrideAudit] computeWeeklyArchitecture failed — falling back to hardcoded names:", err);
+    arch = undefined;
+  }
+
+  const days = buildDays(goal, experience, equipment, injuryFlags, userExclusions, spec, profile, variationSeed, arch);
+
+  const audit: AIOverrideAudit = {
+    usedHardcodedSession: !arch,
+    sessionIdentitySource: arch ? "architecture" : "fallback",
+    blockOrderSource: arch ? "architecture" : "ai",
+    variationSeed,
+    archSessionCount: arch?.sessions?.length ?? 0,
+    sport,
+  };
+
+  console.log("[AIOverrideAudit] Final audit:", JSON.stringify(audit));
 
   return {
     programName: buildProgramName(profile),
@@ -3270,6 +3315,7 @@ function buildIntelligentProgram(profile: UserProfile): ProgramStructure {
     progressionStrategy: `${spec.progressionModel}. Rate: ${spec.progressionRate}. ${spec.deloadFrequency} deload.`,
     splitType: spec.splitType,
     days,
+    _architectureAudit: audit,
   };
 }
 
@@ -3385,6 +3431,34 @@ function buildConstraintAwareConfirmation(
 // Base filter — all ExerciseFilter fields except patterns (added per-call)
 type BaseFilter = Omit<ExerciseFilter, "patterns">;
 
+// ─── Architecture → Exercise Pattern Mapper ───────────────────────────────────
+// Converts the architecture engine's high-level movement patterns (upper_push,
+// upper_pull, power, trunk, locomotion, etc.) to the exercise library's
+// classification patterns (push_horizontal, pull_vertical, power_explosive, core).
+function mapArchPatternToExercisePattern(archPattern: ArchMovementPattern): MovementPattern {
+  switch (archPattern) {
+    case "upper_push": return "push_horizontal";
+    case "upper_pull": return "pull_vertical";
+    case "power": return "power_explosive";
+    case "trunk": return "core";
+    case "unilateral_lower": return "squat";
+    case "lateral": return "conditioning";
+    case "rotational": return "push_horizontal";
+    case "locomotion": return "conditioning";
+    case "squat": return "squat";
+    case "hinge": return "hinge";
+    default: return "squat";
+  }
+}
+
+// Determine if an arch session is primarily a lower or upper body session
+function archSessionToSessionType(archSession: SessionArchitecture): "lower" | "upper" | "full" {
+  const p = archSession.primaryPattern;
+  if (p === "upper_push" || p === "upper_pull" || p === "rotational") return "upper";
+  if (p === "squat" || p === "hinge" || p === "unilateral_lower" || p === "power" || p === "lateral" || p === "locomotion") return "lower";
+  return "full";
+}
+
 function buildDays(
   goal: GoalType,
   experience: ReturnType<typeof normalizeExperience>,
@@ -3394,6 +3468,7 @@ function buildDays(
   spec: ReturnType<typeof buildTrainingSpec>,
   profile: UserProfile,
   variationSeed = 0,
+  arch?: WeeklyArchitecture,
 ): ProgramDay[] {
   const days = profile.daysPerWeek;
   const baseFilter = {
@@ -3405,8 +3480,8 @@ function buildDays(
     preferStressLevel: injuryFlags.length > 0 ? ("low" as const) : ("any" as const),
   };
 
-  if (days <= 3) return buildFullBodyDays(goal, experience, spec, baseFilter, days, profile, variationSeed);
-  if (days === 4) return buildUpperLowerDays(goal, experience, spec, baseFilter, profile, variationSeed);
+  if (days <= 3) return buildFullBodyDays(goal, experience, spec, baseFilter, days, profile, variationSeed, arch);
+  if (days === 4) return buildUpperLowerDays(goal, experience, spec, baseFilter, profile, variationSeed, arch);
   return buildPPLDays(goal, experience, spec, baseFilter, days);
 }
 
@@ -3973,6 +4048,7 @@ function buildFullBodyDays(
   numDays: number,
   profile: UserProfile,
   variationSeed = 0,
+  arch?: WeeklyArchitecture,
 ): ProgramDay[] {
   const sport = profile.sportFocus ?? null;
   const isAthletic = goal === "athletic_performance" || !!sport;
@@ -4054,12 +4130,28 @@ function buildFullBodyDays(
     const trunk = buildTrunkBlock(goal, sport, usedNames, idx);
     exercises.push(trunk);
 
+    // Architecture engine is the source of truth for session identity.
+    // Override the dayConfig name/focus with the arch session's identity/intent when available.
+    const archSession = arch?.sessions?.[idx];
+    const sessionName = archSession?.identity ?? cfg.name;
+    const sessionFocus = archSession?.intent ?? cfg.focus;
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[AIOverrideAudit:FullBody]", JSON.stringify({
+        dayNumber: idx + 1,
+        sessionIdentitySource: archSession ? "architecture" : "fallback",
+        name: sessionName,
+        archPattern: archSession?.primaryPattern ?? null,
+        cfgPattern: cfg.primaryPattern,
+      }));
+    }
+
     return {
       dayNumber: idx + 1,
-      name: cfg.name,
-      focus: cfg.focus,
+      name: sessionName,
+      focus: sessionFocus,
       exercises,
-      notes: cfg.notes,
+      notes: archSession?.intent ?? cfg.notes,
     };
   });
 }
@@ -4071,6 +4163,7 @@ function buildUpperLowerDays(
   baseFilter: BaseFilter,
   profile: UserProfile,
   variationSeed = 0,
+  arch?: WeeklyArchitecture,
 ): ProgramDay[] {
   const sport = profile.sportFocus ?? null;
   const isSoccer = !!sport && (sport.toLowerCase().includes("soccer") || sport.toLowerCase().includes("football"));
@@ -4248,12 +4341,27 @@ function buildUpperLowerDays(
     const trunk = buildTrunkBlock(goal, sport, usedNames, dayIdx);
     exercises.push(trunk);
 
+    // Architecture engine is the source of truth for session identity.
+    // Use arch session identity/intent; fall back to template names only if arch is absent.
+    const archSession = arch?.sessions?.find((s) => s.dayNumber === template.dayNumber) ?? arch?.sessions?.[dayIdx];
+    const sessionName = archSession?.identity ?? template.name;
+    const sessionFocus = archSession?.intent ?? template.focus;
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[AIOverrideAudit:UpperLower]", JSON.stringify({
+        dayNumber: template.dayNumber,
+        sessionIdentitySource: archSession ? "architecture" : "fallback",
+        name: sessionName,
+        archPattern: archSession?.primaryPattern ?? null,
+      }));
+    }
+
     return {
       dayNumber: template.dayNumber,
-      name: template.name,
-      focus: template.focus,
+      name: sessionName,
+      focus: sessionFocus,
       exercises,
-      notes: template.notes,
+      notes: archSession?.intent ?? template.notes,
     };
   });
 }

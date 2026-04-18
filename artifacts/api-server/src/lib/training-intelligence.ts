@@ -48,6 +48,7 @@ export interface UserProfile {
   seasonContext?: SeasonContext | null;
   gameFrequencyPerWeek?: number | null;
   practiceFrequencyPerWeek?: number | null;
+  blockArchetype?: string | null;
 }
 
 // Normalized goal categories
