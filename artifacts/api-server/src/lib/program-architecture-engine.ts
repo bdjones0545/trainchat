@@ -2987,7 +2987,8 @@ function buildWeeklyExerciseVariationSection(
       `Power / Explosive:`,
       `  D1: ${sel.lower_power}  |  D2: ${sel.lower_power_d2}  |  D3: ${sel.lower_power_d3}  |  D4: ${sel.lower_power_d4}`,
       `  Intent: ${role === "INTENSIFY" ? "MAXIMUM intent — 3 reps/set, full 3 min rest, peak RFD" : role === "DELOAD" ? "Sub-maximal — 3 × 3 at 50–60% effort, position focus only" : role === "BUILD" ? "Progressive intent — push output beyond Week 1, full reset between reps" : "Establish intent — teach the movement, moderate output"}`,
-      `Bilateral Squat: ${sel.bilateral_squat_strength}`,
+      `Bilateral Squat — primary squat day (D1): ${sel.bilateral_squat_strength}`,
+      `Bilateral Squat — secondary squat day (D2/D4): ${sel.bilateral_squat_strength_d2}`,
       `Bilateral Hinge: ${sel.bilateral_hinge_strength}`,
       `Unilateral Lower (squat days): ${sel.unilateral_lower}`,
       `Unilateral Lower (hinge days): ${sel.unilateral_lower_alt}`,
@@ -3019,6 +3020,10 @@ function buildWeeklyExerciseVariationSection(
     `3. If the same exercise appears across two weeks, its INTENT and REP SCHEME must differ visibly.`,
     `4. Prep duration changes by week role: Intensify = 5–6 min (brief); Deload = 10 min (restorative).`,
     `5. Session grammar can contract in Week 3 (fewer blocks) and simplify in Week 4.`,
+    `6. WITHIN-WEEK SQUAT VARIETY — MANDATORY: When the program has two squat days in the same week,`,
+    `   the PRIMARY squat day MUST use "Bilateral Squat D1" and the SECONDARY squat day MUST use`,
+    `   "Bilateral Squat D2/D4". These are DIFFERENT exercises — never repeat the same squat exercise`,
+    `   on two different days of the same week. This is one of the most visible quality signals.`,
     ``,
     `### WEEK ROLE SESSION IDENTITY ASSIGNMENTS`,
     weeklyPlans.map((plan) =>
@@ -3170,17 +3175,51 @@ export function buildArchitectureBrief(
   _lastSlotSelection = slotSelection;
 
   // ── Per-week slot selections (Weeks 2–4) ─────────────────────────────────
-  // Each week uses its correct weekRole so the exercise pool reflects the actual
-  // training phase:  intensify → heavier pool,  deload → submaximal pool.
+  // Each week uses its correct weekRole AND a matching programContext phase so
+  // both deriveBlockIntent (via blockContext) and currentPhaseFit (via programContext)
+  // correctly reflect the actual training week — not always "establish".
   // registerSelections=false so the overuse registry only records Week 1.
   const blockTypeStr = String(enrichedMonthlyPlan.blockType);
+
+  const programContextW2 = buildProgramContextProfile({
+    archetypeId: blockSelection.archetypeId,
+    splitId: blockSelection.splitId,
+    constraints: userConstraints,
+    currentPhase: "build",
+    noveltyPressure: estimatedNoveltyPressure,
+    variationSeed: (blockSelection.variationSeed + 0.25) % 1,
+    generationId: auditId,
+    agentControlDirectives,
+  });
+
+  const programContextW3 = buildProgramContextProfile({
+    archetypeId: blockSelection.archetypeId,
+    splitId: blockSelection.splitId,
+    constraints: userConstraints,
+    currentPhase: "intensify",
+    noveltyPressure: estimatedNoveltyPressure,
+    variationSeed: (blockSelection.variationSeed + 0.50) % 1,
+    generationId: auditId,
+    agentControlDirectives,
+  });
+
+  const programContextW4 = buildProgramContextProfile({
+    archetypeId: blockSelection.archetypeId,
+    splitId: blockSelection.splitId,
+    constraints: userConstraints,
+    currentPhase: "deload",
+    noveltyPressure: estimatedNoveltyPressure,
+    variationSeed: (blockSelection.variationSeed + 0.75) % 1,
+    generationId: auditId,
+    agentControlDirectives,
+  });
 
   const slotSelectionW2 = selectSlotExercises(
     (splitVariationSeed + 0.25) % 1, sport, goal,
     weeklyPlans[1].overallNeuralDemand,
     equipmentLevel, false,
     { blockType: blockTypeStr, weekRole: "build" },
-    programContext, 0, false,
+    programContextW2, 0, false,
   );
 
   const slotSelectionW3 = selectSlotExercises(
@@ -3188,7 +3227,7 @@ export function buildArchitectureBrief(
     weeklyPlans[2].overallNeuralDemand,
     equipmentLevel, false,
     { blockType: blockTypeStr, weekRole: "intensify" },
-    programContext, 0, false,
+    programContextW3, 0, false,
   );
 
   const slotSelectionW4 = selectSlotExercises(
@@ -3196,15 +3235,15 @@ export function buildArchitectureBrief(
     "low",
     equipmentLevel, true,
     { blockType: blockTypeStr, weekRole: "deload" },
-    programContext, 0, false,
+    programContextW4, 0, false,
   );
 
   if (process.env.NODE_ENV !== "production") {
     console.log("[WeeklyVariationAudit]", JSON.stringify({
-      week1: { role: "establish", lower_power: slotSelection.lower_power, squat: slotSelection.bilateral_squat_strength, hinge: slotSelection.bilateral_hinge_strength, unilateral: slotSelection.unilateral_lower },
-      week2: { role: "build",     lower_power: slotSelectionW2.lower_power, squat: slotSelectionW2.bilateral_squat_strength, hinge: slotSelectionW2.bilateral_hinge_strength, unilateral: slotSelectionW2.unilateral_lower },
-      week3: { role: "intensify", lower_power: slotSelectionW3.lower_power, squat: slotSelectionW3.bilateral_squat_strength, hinge: slotSelectionW3.bilateral_hinge_strength, unilateral: slotSelectionW3.unilateral_lower },
-      week4: { role: "deload",    lower_power: slotSelectionW4.lower_power, squat: slotSelectionW4.bilateral_squat_strength, hinge: slotSelectionW4.bilateral_hinge_strength, unilateral: slotSelectionW4.unilateral_lower },
+      week1: { role: "establish", lower_power: slotSelection.lower_power, squat_d1: slotSelection.bilateral_squat_strength, squat_d2: slotSelection.bilateral_squat_strength_d2, hinge: slotSelection.bilateral_hinge_strength, unilateral: slotSelection.unilateral_lower },
+      week2: { role: "build",     lower_power: slotSelectionW2.lower_power, squat_d1: slotSelectionW2.bilateral_squat_strength, squat_d2: slotSelectionW2.bilateral_squat_strength_d2, hinge: slotSelectionW2.bilateral_hinge_strength, unilateral: slotSelectionW2.unilateral_lower },
+      week3: { role: "intensify", lower_power: slotSelectionW3.lower_power, squat_d1: slotSelectionW3.bilateral_squat_strength, squat_d2: slotSelectionW3.bilateral_squat_strength_d2, hinge: slotSelectionW3.bilateral_hinge_strength, unilateral: slotSelectionW3.unilateral_lower },
+      week4: { role: "deload",    lower_power: slotSelectionW4.lower_power, squat_d1: slotSelectionW4.bilateral_squat_strength, squat_d2: slotSelectionW4.bilateral_squat_strength_d2, hinge: slotSelectionW4.bilateral_hinge_strength, unilateral: slotSelectionW4.unilateral_lower },
     }));
   }
 

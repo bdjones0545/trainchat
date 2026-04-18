@@ -117,6 +117,7 @@ export interface SlotExerciseSelection {
   lower_power_d3: string;  // day 3 power — different from d1 + d2
   lower_power_d4: string;  // day 4 power — different from d1 + d2 + d3
   bilateral_squat_strength: string;
+  bilateral_squat_strength_d2: string;  // second squat day — always different from bilateral_squat_strength
   bilateral_hinge_strength: string;
   unilateral_lower: string;
   unilateral_lower_alt: string;
@@ -430,6 +431,13 @@ const ANCHOR_EXTRA_PENALTY: Record<string, number> = {
   "Pallof Press": 2.5,           // most frequently selected anti-rotation default
   "Dead Bug": 2.0,               // dominates anti-extension when no sport context
   "Weighted Pull-Up": 1.0,       // upper pull default
+
+  // ── De-facto repeat winners (not original anchors, but emerging defaults) ──
+  // These exercises score high due to archetype fit but are not marked isDefaultAnchor,
+  // so they receive no suppression. Add explicit penalty to force rotation.
+  "Zercher Squat": 2.0,          // wins bilateral_squat_strength slot by default when Back Squat is penalized
+  "Hatfield Squat": 1.0,         // secondary winner in the squat slot under strength archetypes
+  "Safety Bar Squat": 0.5,       // surfaces frequently as Back Squat alternative
 };
 
 // ─── Per-candidate seed utilities ─────────────────────────────────────────────
@@ -2078,6 +2086,9 @@ export function selectSlotExercises(
   const lower_power_d3             = pick(lowerPowerPool,               "lower_power_d3",            ["speed", "power", "elastic"],            1.10);
   const lower_power_d4             = pick(lowerPowerPool,               "lower_power_d4",            ["elastic", "speed", "power"],            1.15);
   const bilateral_squat_strength   = pick(bilateralSquatPool,           "bilateral_squat_strength",  ["strength", "hypertrophy", "power"],      1.3);
+  // Second squat day: same pool, but alreadySelected prevents exact repeat — guarantees within-week variety
+  // Different prime multiplier shifts the tiebreaker so the runner-up from d1 scoring wins here.
+  const bilateral_squat_strength_d2 = pick(bilateralSquatPool,          "bilateral_squat_strength_d2", ["hypertrophy", "strength", "power"],   1.35);
   const bilateral_hinge_strength   = pick(bilateralHingePool,           "bilateral_hinge_strength",  ["strength", "hypertrophy"],               1.7);
   const unilateral_lower           = pick(UNILATERAL_LOWER_SQUAT_POOL,  "unilateral_lower",          ["stability", "strength"],                 2.1);
   const unilateral_lower_alt       = pick(UNILATERAL_LOWER_HINGE_POOL,  "unilateral_lower_alt",      ["stability", "hypertrophy"],              2.5);
@@ -2101,6 +2112,7 @@ export function selectSlotExercises(
     lower_power_d3,
     lower_power_d4,
     bilateral_squat_strength,
+    bilateral_squat_strength_d2,
     bilateral_hinge_strength,
     unilateral_lower,
     unilateral_lower_alt,
@@ -2123,8 +2135,8 @@ export function selectSlotExercises(
   // must NOT register to avoid polluting the registry with 4x entries per build.
   if (registerSelections) {
     registerBuildSelections({
-      lower_power, bilateral_squat_strength, bilateral_hinge_strength,
-      unilateral_lower, trunk_anti_rotation, trunk_anti_extension,
+      lower_power, bilateral_squat_strength, bilateral_squat_strength_d2,
+      bilateral_hinge_strength, unilateral_lower, trunk_anti_rotation, trunk_anti_extension,
     });
   }
 
