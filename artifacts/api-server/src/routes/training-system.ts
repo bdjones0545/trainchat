@@ -8,6 +8,7 @@ import {
   getFullTrainingSystem,
   getTodaySession,
   getCurrentWeek,
+  getWeeksList,
   getBlockSummary,
   initializeTrainingSystem,
   createTrainingSystemFromProgram,
@@ -83,16 +84,31 @@ router.get("/training-system/today", requireAuth, async (req, res): Promise<void
 });
 
 // ─── GET /training-system/week ────────────────────────────────────────────────
-// Returns the current week with all sessions and exercises
+// Returns the current week (or a specific week by ?weekNumber=N) with all sessions and exercises
 router.get("/training-system/week", requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = req.session.userId!;
-    const week = await getCurrentWeek(userId);
+    const weekNumberParam = req.query.weekNumber;
+    const weekNumber = typeof weekNumberParam === "string" ? parseInt(weekNumberParam, 10) || undefined : undefined;
+    const week = await getCurrentWeek(userId, weekNumber);
 
     res.json(week ?? null);
   } catch (err) {
     console.error("[training-system] GET /week error", err);
     res.status(500).json({ error: "Failed to load current week" });
+  }
+});
+
+// ─── GET /training-system/weeks ───────────────────────────────────────────────
+// Returns list of all weeks in the current phase with status, labels, session counts
+router.get("/training-system/weeks", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const userId = req.session.userId!;
+    const weeksList = await getWeeksList(userId);
+    res.json(weeksList ?? null);
+  } catch (err) {
+    console.error("[training-system] GET /weeks error", err);
+    res.status(500).json({ error: "Failed to load weeks list" });
   }
 });
 

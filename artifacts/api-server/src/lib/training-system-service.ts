@@ -860,7 +860,7 @@ export async function getTodaySession(userId: number) {
   return { ...todaySession, exercises, currentWeek, currentPhase };
 }
 
-export async function getCurrentWeek(userId: number) {
+export async function getCurrentWeek(userId: number, weekNumber?: number) {
   const system = await getActiveTrainingSystem(userId);
   if (!system || !system.currentPhaseId) return null;
 
@@ -871,17 +871,28 @@ export async function getCurrentWeek(userId: number) {
 
   if (!currentPhase) return null;
 
-  const [currentWeek] = await db
-    .select()
-    .from(trainingWeeks)
-    .where(and(eq(trainingWeeks.trainingPhaseId, currentPhase.id), eq(trainingWeeks.status, "current")));
+  let targetWeek;
+  if (weekNumber != null) {
+    const allWeeks = await db
+      .select()
+      .from(trainingWeeks)
+      .where(eq(trainingWeeks.trainingPhaseId, currentPhase.id))
+      .orderBy(trainingWeeks.orderIndex);
+    targetWeek = allWeeks.find((w) => w.weekNumber === weekNumber) ?? allWeeks[0];
+  } else {
+    const [currentWeek] = await db
+      .select()
+      .from(trainingWeeks)
+      .where(and(eq(trainingWeeks.trainingPhaseId, currentPhase.id), eq(trainingWeeks.status, "current")));
+    targetWeek = currentWeek;
+  }
 
-  if (!currentWeek) return null;
+  if (!targetWeek) return null;
 
   const sessions = await db
     .select()
     .from(trainingSessions)
-    .where(eq(trainingSessions.trainingWeekId, currentWeek.id))
+    .where(eq(trainingSessions.trainingWeekId, targetWeek.id))
     .orderBy(trainingSessions.orderIndex);
 
   const sessionsWithExercises = await Promise.all(
@@ -895,7 +906,59 @@ export async function getCurrentWeek(userId: number) {
     })
   );
 
-  return { ...currentWeek, sessions: sessionsWithExercises, phase: currentPhase };
+  return { ...targetWeek, sessions: sessionsWithExercises, phase: currentPhase };
+}
+
+export async function getWeeksList(userId: number) {
+  const system = await getActiveTrainingSystem(userId);
+  if (!system || !system.currentPhaseId) return null;
+
+  const [currentPhase] = await db
+    .select()
+    .from(trainingPhases)
+    .where(and(eq(trainingPhases.id, system.currentPhaseId), eq(trainingPhases.status, "current")));
+
+  if (!currentPhase) return null;
+
+  const allWeeks = await db
+    .select()
+    .from(trainingWeeks)
+    .where(eq(trainingWeeks.trainingPhaseId, currentPhase.id))
+    .orderBy(trainingWeeks.orderIndex);
+
+  const weeksWithSessionCounts = await Promise.all(
+    allWeeks.map(async (week) => {
+      const sessions = await db
+        .select()
+        .from(trainingSessions)
+        .where(eq(trainingSessions.trainingWeekId, week.id))
+        .orderBy(trainingSessions.orderIndex);
+      const trainingSessions_ = sessions.filter((s) => !(s as any).isRestDay);
+      return {
+        id: week.id,
+        weekNumber: week.weekNumber,
+        label: (week as any).label ?? `Week ${week.weekNumber}`,
+        focus: (week as any).focus ?? null,
+        volumeLevel: (week as any).volumeLevel ?? "moderate",
+        status: week.status,
+        totalSessions: trainingSessions_.length,
+        totalSessionsIncludingRest: sessions.length,
+      };
+    })
+  );
+
+  const currentWeek = allWeeks.find((w) => w.status === "current");
+
+  return {
+    phase: {
+      id: currentPhase.id,
+      name: currentPhase.name,
+      goal: currentPhase.goal,
+      weekCount: currentPhase.weekCount ?? allWeeks.length,
+    },
+    currentWeekNumber: currentWeek?.weekNumber ?? 1,
+    weeks: weeksWithSessionCounts,
+  };
 }
 
 export async function getBlockSummary(userId: number) {

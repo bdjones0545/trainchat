@@ -1,0 +1,213 @@
+CRITICAL AUDIT — DOES THE PROGRAM GENERATION SYSTEM ACTUALLY BUILD WEEKS 2–4?
+
+CONTEXT:
+We now have a visible week/block UI and are improving progression UX.
+
+Before we rely on that interface, we need to verify that the generation engine is truly creating a full 4-week progression system — not just a real Week 1 with placeholder or duplicated future weeks.
+
+We need to confirm:
+- Weeks 2, 3, and 4 are actually generated
+- they are persisted correctly
+- they differ meaningfully from Week 1
+- block/week context affects them
+- the UI is reading real generated future weeks, not inferred placeholders
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Audit whether TrainChat generates and persists a true multi-week progression across all 4 weeks of a block.
+
+==================================================
+TASK 1 — TRACE FULL PROGRAM GENERATION ACROSS ALL 4 WEEKS
+==================================================
+
+For a fresh build, log:
+
+[MultiWeekBuildAudit] {
+  trainingSystemId,
+  blockType,
+  totalWeeksGenerated,
+  weekNumbers,
+  sessionsPerWeek,
+  totalSessionsGenerated
+}
+
+We need to prove the build pipeline creates all weeks, not just Week 1.
+
+==================================================
+TASK 2 — VERIFY DB PERSISTENCE FOR WEEKS 2–4
+==================================================
+
+Audit the DB after generation.
+
+Confirm:
+- training_weeks contains Week 1, Week 2, Week 3, Week 4
+- each week has linked sessions
+- each session has linked exercises
+- future weeks are not empty shells
+
+Print:
+
+[WeekPersistenceAudit] {
+  weekNumber,
+  weekExists,
+  sessionCount,
+  exerciseCount,
+  blockRole,
+  persisted: boolean
+}
+
+FAIL if:
+- only Week 1 has full session/exercise data
+- Weeks 2–4 exist only as metadata without real content
+
+==================================================
+TASK 3 — VERIFY WEEK DIFFERENTIATION
+==================================================
+
+Compare Week 1, Week 2, Week 3, Week 4.
+
+For each week, log:
+- weekRole
+- session identities
+- session intents
+- rep/rest/loading profile
+- neural demand profile if available
+
+We need to know whether Weeks 2–4 are meaningfully different.
+
+FAIL if:
+- Weeks 2–4 are copies of Week 1 with renamed headers
+- session identities stay the same across all weeks
+- loading profile does not shift by week role
+
+==================================================
+TASK 4 — VERIFY WEEK ROLE INFLUENCE
+==================================================
+
+Confirm the weekly planner is actually influencing output:
+
+Expected:
+- Week 1 = Establish
+- Week 2 = Build
+- Week 3 = Intensify
+- Week 4 = Deload
+
+Audit whether those roles show up in:
+- session structure
+- loading language
+- exercise selection bias
+- session density / fatigue profile
+
+FAIL if:
+- weekRole exists only in metadata
+- weekRole does not change real sessions
+
+==================================================
+TASK 5 — CHECK FUTURE WEEK UI SOURCE OF TRUTH
+==================================================
+
+Audit what the UI is reading when the user switches to Week 2, Week 3, or Week 4.
+
+We need to know:
+- Is the UI reading persisted sessions for those weeks?
+- Or is it inferring future weeks from Week 1 or generic placeholders?
+
+Print:
+
+[FutureWeekUISourceAudit] {
+  selectedWeek,
+  source: "persisted_week_data" | "derived_placeholder" | "copied_from_week1",
+  sessionCount,
+  exerciseCount
+}
+
+FAIL if:
+- future weeks are not sourced from real generated data
+
+==================================================
+TASK 6 — CHECK SPORT + BLOCK CONTEXT ACROSS FUTURE WEEKS
+==================================================
+
+For at least one sport program and one general strength program, confirm Weeks 2–4 retain:
+- sport context
+- block archetype
+- weekly role
+- session identity coherence
+
+FAIL if:
+- future weeks lose sport specificity
+- future weeks become generic or repetitive
+
+==================================================
+TASK 7 — VALIDATE WITH A SIMPLE EXAMPLE
+==================================================
+
+Run one fresh build:
+“Build a 3 day soccer program”
+
+Then compare:
+- Week 1 Day 1
+- Week 2 Day 1
+- Week 3 Day 1
+- Week 4 Day 1
+
+We want to see:
+- progression
+- different emphasis
+- different loading logic
+- different coaching intent
+- not just the same session repeated
+
+==================================================
+TASK 8 — IDENTIFY THE TRUE STATE OF FUTURE WEEKS
+==================================================
+
+Return one of these conclusions:
+
+A. Full real 4-week generation is working
+B. Weeks 2–4 are generated but too similar
+C. Weeks 2–4 are only partially generated
+D. Weeks 2–4 are placeholders / UI-only
+E. Future weeks are persisted incorrectly
+
+==================================================
+TASK 9 — APPLY FIXES IF NEEDED
+==================================================
+
+If future weeks are not fully real:
+- fix generation to build all 4 weeks completely before save
+
+If future weeks are too similar:
+- strengthen weekly role differentiation
+- increase session identity / loading divergence across weeks
+
+If UI is reading placeholders:
+- switch it to persisted future week data
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. whether all 4 weeks are truly generated
+2. whether all 4 weeks are fully persisted
+3. whether Weeks 2–4 differ meaningfully from Week 1
+4. what the UI is actually reading for future weeks
+5. exact fixes applied if needed
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat must generate a true multi-week progression system.
+
+Weeks 2–4 must be:
+- real
+- persisted
+- viewable
+- structurally meaningful
+- different from Week 1
+
+The user should not be looking at placeholders.

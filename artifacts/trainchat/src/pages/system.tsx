@@ -26,6 +26,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
   PenLine,
   SlidersHorizontal,
   History,
@@ -85,8 +86,14 @@ async function fetchSubscription() {
 async function fetchBlockSummary() {
   return customFetch<any>("/api/training-system/block");
 }
-async function fetchCurrentWeek() {
-  return customFetch<any>("/api/training-system/week");
+async function fetchCurrentWeek(weekNumber?: number) {
+  const url = weekNumber != null
+    ? `/api/training-system/week?weekNumber=${weekNumber}`
+    : "/api/training-system/week";
+  return customFetch<any>(url);
+}
+async function fetchWeeksList() {
+  return customFetch<any>("/api/training-system/weeks");
 }
 async function fetchToday() {
   return customFetch<any>("/api/training-system/today");
@@ -593,21 +600,67 @@ interface WeekViewProps {
   onUpgrade?: () => void;
 }
 
+const WEEK_PHASE_NAMES: Record<number, string> = {
+  1: "Establish",
+  2: "Build",
+  3: "Intensify",
+  4: "Deload",
+};
+
+const WEEK_PHASE_DESCRIPTIONS: Record<number, string> = {
+  1: "Establish baseline loads and movement quality",
+  2: "Increase volume and training density",
+  3: "Intensify force output and top-end loading",
+  4: "Reduce fatigue and consolidate adaptation",
+};
+
 function WeekView({ highlightedIds, onEditExercise, onEditSession, onEditWeek, isPremium = false, onUpgrade }: WeekViewProps) {
   const [expandedCards, setExpandedCards] = useState<Record<number, boolean>>({});
+  const [selectedWeekNumber, setSelectedWeekNumber] = useState<number | null>(null);
+  const [showRefineActions, setShowRefineActions] = useState(false);
+  const [refineActiveChip, setRefineActiveChip] = useState<string | null>(null);
+
+  const queryClient = useQueryClient();
+
+  const { data: weeksList, isLoading: weeksListLoading } = useQuery({
+    queryKey: ["training-system-weeks"],
+    queryFn: fetchWeeksList,
+    retry: false,
+  });
+
+  const currentWeekNumber = weeksList?.currentWeekNumber ?? 1;
+  const activeWeekNumber = selectedWeekNumber ?? currentWeekNumber;
+
+  const { data: week, isLoading: weekLoading } = useQuery({
+    queryKey: ["training-system-week", activeWeekNumber],
+    queryFn: () => fetchCurrentWeek(activeWeekNumber),
+    retry: false,
+    enabled: !weeksListLoading,
+  });
 
   function toggleCard(sessionId: number) {
     setExpandedCards((prev) => ({ ...prev, [sessionId]: !prev[sessionId] }));
   }
 
-  const { data: week, isLoading, error } = useQuery({
-    queryKey: ["training-system-week"],
-    queryFn: fetchCurrentWeek,
-    retry: false,
+  const refineWeekMutation = useMutation({
+    mutationFn: ({ req, chip }: { req: string; chip: string }) => {
+      setRefineActiveChip(chip);
+      return submitQuickEdit(req, { type: "week", id: week?.id ?? 0, label: week?.label ?? `Week ${activeWeekNumber}`, parentLabel: week?.phase?.name });
+    },
+    onSuccess: (data) => {
+      setRefineActiveChip(null);
+      setShowRefineActions(false);
+      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-weeks"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
+    },
+    onError: () => setRefineActiveChip(null),
   });
 
-  if (isLoading) return <ViewSkeleton />;
-  if (error || !week) {
+  const isLoading = weeksListLoading || weekLoading;
+
+  if (isLoading && !weeksList) return <ViewSkeleton />;
+  if (!weeksList && !week) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center px-4">
         <Calendar className="w-12 h-12 text-muted-foreground/40 mb-4" />
@@ -616,203 +669,408 @@ function WeekView({ highlightedIds, onEditExercise, onEditSession, onEditWeek, i
     );
   }
 
+  const totalWeeks = weeksList?.phase?.weekCount ?? weeksList?.weeks?.length ?? 4;
+  const phaseName = weeksList?.phase?.name ?? week?.phase?.name ?? "Current Block";
+  const weeksArr = weeksList?.weeks ?? [];
+
   const volumeColors: Record<string, string> = {
     low: "text-blue-400 bg-blue-400/10 border-blue-400/20",
     moderate: "text-green-400 bg-green-400/10 border-green-400/20",
     high: "text-orange-400 bg-orange-400/10 border-orange-400/20",
     deload: "text-purple-400 bg-purple-400/10 border-purple-400/20",
   };
-  const volumeColor = volumeColors[week.volumeLevel] ?? volumeColors.moderate;
+
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const todayDow = new Date().getDay();
-  const weekHighlight = highlightedIds.weeks.has(week.id) ? "ring-2 ring-green-400/50 ring-offset-1 ring-offset-background" : "";
+
+  const weekStatus = week?.status;
+  const isCompletedWeek = weekStatus === "completed";
+  const isUpcomingWeek = weekStatus === "upcoming";
+  const isCurrentWeek = weekStatus === "current" || activeWeekNumber === currentWeekNumber;
+
+  const trainingSessions = week?.sessions?.filter((s: any) => !s.isRestDay) ?? [];
+  const totalSessions = trainingSessions.length;
+  const weekHighlight = week && highlightedIds.weeks.has(week.id) ? "ring-2 ring-green-400/50 ring-offset-1 ring-offset-background" : "";
+
+  const weekPhaseLabel = WEEK_PHASE_NAMES[activeWeekNumber] ?? null;
+  const weekPhaseDescription = WEEK_PHASE_DESCRIPTIONS[activeWeekNumber] ?? null;
+
+  const REFINE_CHIPS = [
+    { label: "More explosive", req: `Make Week ${activeWeekNumber} more explosive and power-focused` },
+    { label: "Reduce fatigue", req: `Reduce overall fatigue load for Week ${activeWeekNumber}` },
+    { label: "Add conditioning", req: `Add more conditioning work to Week ${activeWeekNumber}` },
+    { label: "Shorten sessions", req: `Shorten all sessions in Week ${activeWeekNumber}` },
+  ];
 
   return (
-    <div className="space-y-5">
-      {/* Block intelligence — compact in week view */}
+    <div className="space-y-4">
+      {/* Block intelligence — compact */}
       <BlockStatusCard compact />
 
-      {/* Week summary card */}
-      <div className={`rounded-2xl bg-gradient-to-br from-card to-muted/30 border border-border p-5 transition-all duration-500 ${weekHighlight}`}>
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-              {week.phase?.name ?? "Current Block"}
-            </p>
-            <h2 className="text-lg font-bold text-foreground">{week.label ?? `Week ${week.weekNumber}`}</h2>
-            {week.focus && <p className="text-sm text-muted-foreground mt-1">{week.focus}</p>}
-            {highlightedIds.weeks.has(week.id) && (
-              <span className="inline-flex items-center gap-1 mt-2 text-[10px] font-bold uppercase tracking-wider text-green-400 bg-green-400/10 px-2 py-0.5 rounded-full border border-green-400/20">
-                <CheckCircle2 className="w-3 h-3" /> Updated
-              </span>
-            )}
-          </div>
-          <div className="flex flex-col items-end gap-2">
-            <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${volumeColor}`}>
-              {week.volumeLevel}
-            </span>
-            <button
-              onClick={() => onEditWeek(week)}
-              className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5 hover:text-foreground"
-            >
-              <SlidersHorizontal className="w-3 h-3" />
-              Modify week
-            </button>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 bg-background/60 rounded-lg px-3 py-1.5 border border-border">
-            <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-            <span className="text-xs font-medium text-foreground">Week {week.weekNumber} of {week.phase?.weekCount ?? 4}</span>
-          </div>
-          {week.sessions?.length > 0 && (
-            <div className="flex items-center gap-1.5 bg-background/60 rounded-lg px-3 py-1.5 border border-border">
-              <Dumbbell className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-xs font-medium text-foreground">{week.sessions.filter((s: any) => !s.isRestDay).length} sessions</span>
-            </div>
-          )}
-        </div>
+      {/* ── Hierarchy breadcrumb ── */}
+      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60 font-medium px-1">
+        <span className="text-muted-foreground/80">{phaseName}</span>
+        <ChevronRight className="w-3 h-3 flex-shrink-0" />
+        <span className={isCurrentWeek ? "text-primary font-semibold" : "text-muted-foreground/80"}>
+          Week {activeWeekNumber}
+        </span>
+        <ChevronRight className="w-3 h-3 flex-shrink-0" />
+        <span>{totalSessions} Sessions</span>
       </div>
 
-      {/* Session cards */}
-      <div className="space-y-3">
-        {(() => {
-          let trainingSessionCount = 0;
-          return week.sessions?.map((session: any, idx: number) => {
-          const isRestDay = session.isRestDay;
-          if (!isRestDay) trainingSessionCount++;
-          const isLocked = !isPremium && !isRestDay && trainingSessionCount > 1;
-          const isToday = session.dayOfWeek === todayDow;
-          const sessionHighlight = highlightedIds.sessions.has(session.id)
-            ? "ring-2 ring-primary/50 ring-offset-1 ring-offset-background"
-            : "";
+      {/* ── Week selector ── */}
+      {weeksArr.length > 0 && (
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setSelectedWeekNumber(Math.max(1, activeWeekNumber - 1))}
+            disabled={activeWeekNumber <= 1}
+            className="w-8 h-8 rounded-lg border border-border bg-card flex items-center justify-center text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-all disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
 
-          if (isLocked) {
-            return (
-              <div
-                key={session.id}
-                className="rounded-xl border border-border/30 bg-card/50 overflow-hidden opacity-50"
-              >
-                <div className="px-4 py-3.5 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-                      <Lock className="w-4 h-4 text-muted-foreground/40" />
-                    </div>
-                    <div className="min-w-0">
-                      <span className="font-semibold text-sm text-muted-foreground/70 truncate block">{session.label}</span>
-                      {session.emphasis && <p className="text-xs text-muted-foreground/50 truncate mt-0.5">{session.emphasis}</p>}
-                    </div>
-                  </div>
-                  <Lock className="w-3.5 h-3.5 text-muted-foreground/30 flex-shrink-0" />
-                </div>
-              </div>
-            );
-          }
+          <div className="flex-1 flex gap-1.5 overflow-x-auto scrollbar-none">
+            {weeksArr.map((w: any) => {
+              const isActive = w.weekNumber === activeWeekNumber;
+              const isCurrent = w.weekNumber === currentWeekNumber;
+              const isCompleted = w.status === "completed";
+              return (
+                <button
+                  key={w.weekNumber}
+                  onClick={() => setSelectedWeekNumber(w.weekNumber)}
+                  className={`flex-1 min-w-0 py-2 px-2 rounded-xl border text-[11px] font-semibold transition-all duration-150 whitespace-nowrap relative ${
+                    isActive
+                      ? "bg-primary text-primary-foreground border-primary shadow-sm shadow-primary/20"
+                      : isCompleted
+                      ? "bg-green-500/8 border-green-500/20 text-green-400/80 hover:bg-green-500/12"
+                      : isCurrent
+                      ? "bg-primary/10 border-primary/30 text-primary/80 hover:bg-primary/15"
+                      : "bg-card border-border text-muted-foreground/60 hover:bg-muted/40 hover:text-muted-foreground"
+                  }`}
+                >
+                  <span className="block truncate">W{w.weekNumber}</span>
+                  {isCompleted && !isActive && (
+                    <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-green-400" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
 
-          return (
-            <div
-              key={session.id}
-              className={`rounded-xl border overflow-hidden transition-all duration-500 ${isToday ? "border-primary/40 bg-primary/5 shadow-sm shadow-primary/10" : "border-border bg-card"} ${sessionHighlight}`}
-            >
-              <div className="px-4 py-3.5 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className={`w-9 h-9 rounded-lg flex flex-col items-center justify-center flex-shrink-0 ${isToday ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-                    <span className="text-[9px] font-bold uppercase leading-none">
-                      {session.dayOfWeek != null ? dayNames[session.dayOfWeek] : `D${idx + 1}`}
+          <button
+            onClick={() => setSelectedWeekNumber(Math.min(totalWeeks, activeWeekNumber + 1))}
+            disabled={activeWeekNumber >= totalWeeks}
+            className="w-8 h-8 rounded-lg border border-border bg-card flex items-center justify-center text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-all disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* ── Week loading skeleton ── */}
+      {weekLoading && <ViewSkeleton />}
+
+      {!weekLoading && week && (
+        <>
+          {/* ── Week status header ── */}
+          <div className={`rounded-2xl border p-5 transition-all duration-500 ${
+            isCompletedWeek
+              ? "bg-gradient-to-br from-green-500/8 via-green-500/4 to-transparent border-green-500/20"
+              : isCurrentWeek
+              ? "bg-gradient-to-br from-card to-muted/30 border-border"
+              : "bg-gradient-to-br from-card/80 to-muted/20 border-border/50"
+          } ${weekHighlight}`}>
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div className="flex-1 min-w-0">
+                {/* Status pill */}
+                <div className="flex items-center gap-2 mb-1.5">
+                  {isCurrentWeek && !isCompletedWeek && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
+                      Active
                     </span>
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-sm text-foreground truncate">{session.label}</span>
-                      {isToday && (
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20 flex-shrink-0">Today</span>
-                      )}
-                      {highlightedIds.sessions.has(session.id) && (
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-green-400 bg-green-400/10 px-2 py-0.5 rounded-full border border-green-400/20 flex-shrink-0">Updated</span>
-                      )}
-                    </div>
-                    {session.emphasis && <p className="text-xs text-muted-foreground truncate mt-0.5">{session.emphasis}</p>}
-                  </div>
+                  )}
+                  {isCompletedWeek && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-green-400 bg-green-400/10 px-2 py-0.5 rounded-full border border-green-400/20 flex items-center gap-1">
+                      <CheckCircle2 className="w-2.5 h-2.5" /> Complete
+                    </span>
+                  )}
+                  {isUpcomingWeek && !isCurrentWeek && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-full border border-border">
+                      Upcoming
+                    </span>
+                  )}
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {session.exercises?.length > 0 && <span className="text-xs text-muted-foreground">{session.exercises.length} ex</span>}
+
+                {/* Week title + phase name */}
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <h2 className="text-lg font-bold text-foreground leading-tight">
+                    Week {activeWeekNumber} of {totalWeeks}
+                  </h2>
+                  {weekPhaseLabel && (
+                    <span className="text-sm font-semibold text-muted-foreground">— {weekPhaseLabel}</span>
+                  )}
+                </div>
+
+                {/* Week description */}
+                {weekPhaseDescription && (
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{weekPhaseDescription}</p>
+                )}
+                {!weekPhaseDescription && week.focus && (
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{week.focus}</p>
+                )}
+
+                {highlightedIds.weeks.has(week.id) && (
+                  <span className="inline-flex items-center gap-1 mt-2 text-[10px] font-bold uppercase tracking-wider text-green-400 bg-green-400/10 px-2 py-0.5 rounded-full border border-green-400/20">
+                    <CheckCircle2 className="w-3 h-3" /> Updated
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                {week.volumeLevel && (
+                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${volumeColors[week.volumeLevel] ?? volumeColors.moderate}`}>
+                    {week.volumeLevel}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Session progress */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-1.5 bg-background/60 rounded-lg px-3 py-1.5 border border-border">
+                <Dumbbell className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-xs font-medium text-foreground">{totalSessions} sessions</span>
+              </div>
+              <div className="flex items-center gap-1.5 bg-background/60 rounded-lg px-3 py-1.5 border border-border">
+                <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-xs font-medium text-foreground">Week {activeWeekNumber} of {totalWeeks}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Week Complete Banner ── */}
+          {isCompletedWeek && activeWeekNumber < totalWeeks && (
+            <div className="rounded-2xl border border-green-500/25 bg-gradient-to-br from-green-500/8 to-transparent p-5">
+              <div className="flex items-start gap-4">
+                <div className="w-10 h-10 rounded-xl bg-green-500/15 border border-green-500/25 flex items-center justify-center flex-shrink-0">
+                  <CheckCircle2 className="w-5 h-5 text-green-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-bold text-foreground mb-0.5">
+                    Week {activeWeekNumber} Complete
+                  </h3>
+                  <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
+                    {weekPhaseDescription ?? "Great work — you've finished this week's training."}
+                    {" "}Next up: Week {activeWeekNumber + 1}
+                    {WEEK_PHASE_NAMES[activeWeekNumber + 1] ? ` — ${WEEK_PHASE_NAMES[activeWeekNumber + 1]} Phase` : ""}.
+                  </p>
                   <button
-                    onClick={() => onEditSession(session, week.label ?? `Week ${week.weekNumber}`)}
-                    className="w-8 h-8 rounded-lg bg-muted/50 border border-border flex items-center justify-center hover:bg-primary/10 hover:border-primary/30 hover:text-primary text-muted-foreground transition-all duration-150"
-                    title="Adjust this session with AI"
+                    onClick={() => setSelectedWeekNumber(activeWeekNumber + 1)}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all"
                   >
-                    <PenLine className="w-3.5 h-3.5" />
+                    <ChevronRight className="w-3.5 h-3.5" />
+                    Start Week {activeWeekNumber + 1}
                   </button>
                 </div>
               </div>
-              {session.exercises?.length > 0 && (
-                <div className="border-t border-border px-4 pb-4 pt-3">
-                  <div className="space-y-2">
-                    {(expandedCards[session.id] ? session.exercises : session.exercises.slice(0, 3)).map((ex: any, exIdx: number) => (
-                      <div key={ex.id} className={`flex items-center gap-3 rounded-md px-1 py-0.5 transition-all duration-500 ${highlightedIds.exercises.has(ex.id) ? "bg-primary/5 ring-1 ring-primary/30" : ""}`}>
-                        <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground flex-shrink-0">{exIdx + 1}</div>
-                        <span className="text-xs text-foreground/80 flex-1 truncate">{ex.name}</span>
-                        <span className="text-xs text-muted-foreground flex-shrink-0">{ex.sets && ex.reps ? `${ex.sets}×${ex.reps}` : ex.reps ?? ""}</span>
-                        {highlightedIds.exercises.has(ex.id) && (
-                          <span className="text-[9px] font-bold text-primary">✓</span>
-                        )}
+            </div>
+          )}
+
+          {/* ── Refine This Week ── */}
+          <div className="rounded-xl border border-border bg-card overflow-hidden">
+            <button
+              onClick={() => setShowRefineActions((v) => !v)}
+              className="w-full flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-muted/30 transition-colors"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
+                  <Sparkles className="w-3.5 h-3.5 text-primary" />
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-semibold text-foreground">Refine This Week</p>
+                  <p className="text-[10px] text-muted-foreground">Adjust Week {activeWeekNumber} with AI</p>
+                </div>
+              </div>
+              {showRefineActions
+                ? <ChevronUp className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                : <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              }
+            </button>
+
+            {showRefineActions && (
+              <div className="border-t border-border px-4 py-3.5 space-y-3">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {REFINE_CHIPS.map(({ label, req }) => (
+                    <button
+                      key={label}
+                      onClick={() => refineWeekMutation.mutate({ req, chip: label })}
+                      disabled={refineWeekMutation.isPending}
+                      className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-all duration-150 ${
+                        refineActiveChip === label
+                          ? "bg-primary/15 border-primary/40 text-primary"
+                          : "bg-muted/50 border-border text-muted-foreground hover:bg-primary/8 hover:border-primary/30 hover:text-foreground"
+                      } disabled:opacity-50`}
+                    >
+                      {refineActiveChip === label
+                        ? <RotateCcw className="w-3 h-3 animate-spin" />
+                        : <Zap className="w-3 h-3" />
+                      }
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => { setShowRefineActions(false); onEditWeek(week); }}
+                  className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-primary/70 hover:text-primary transition-colors"
+                >
+                  <PenLine className="w-3 h-3" />
+                  Custom instruction
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* ── Session cards ── */}
+          <div className="space-y-3">
+            {(() => {
+              let trainingSessionCount = 0;
+              return week.sessions?.map((session: any, idx: number) => {
+                const isRestDay = session.isRestDay;
+                if (!isRestDay) trainingSessionCount++;
+                const isLocked = !isPremium && !isRestDay && trainingSessionCount > 1;
+                const isToday = isCurrentWeek && session.dayOfWeek === todayDow;
+                const sessionHighlight = highlightedIds.sessions.has(session.id)
+                  ? "ring-2 ring-primary/50 ring-offset-1 ring-offset-background"
+                  : "";
+
+                if (isLocked) {
+                  return (
+                    <div
+                      key={session.id}
+                      className="rounded-xl border border-border/30 bg-card/50 overflow-hidden opacity-50"
+                    >
+                      <div className="px-4 py-3.5 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                            <Lock className="w-4 h-4 text-muted-foreground/40" />
+                          </div>
+                          <div className="min-w-0">
+                            <span className="font-semibold text-sm text-muted-foreground/70 truncate block">{session.label}</span>
+                            {session.emphasis && <p className="text-xs text-muted-foreground/50 truncate mt-0.5">{session.emphasis}</p>}
+                          </div>
+                        </div>
+                        <Lock className="w-3.5 h-3.5 text-muted-foreground/30 flex-shrink-0" />
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={session.id}
+                    className={`rounded-xl border overflow-hidden transition-all duration-500 ${
+                      isToday
+                        ? "border-primary/40 bg-primary/5 shadow-sm shadow-primary/10"
+                        : isUpcomingWeek
+                        ? "border-border/50 bg-card/50"
+                        : "border-border bg-card"
+                    } ${sessionHighlight}`}
+                  >
+                    <div className="px-4 py-3.5 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`w-9 h-9 rounded-lg flex flex-col items-center justify-center flex-shrink-0 ${isToday ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                          <span className="text-[9px] font-bold uppercase leading-none">
+                            {session.dayOfWeek != null ? dayNames[session.dayOfWeek] : `D${idx + 1}`}
+                          </span>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`font-semibold text-sm truncate ${isUpcomingWeek ? "text-foreground/70" : "text-foreground"}`}>{session.label}</span>
+                            {isToday && (
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20 flex-shrink-0">Today</span>
+                            )}
+                            {highlightedIds.sessions.has(session.id) && (
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-green-400 bg-green-400/10 px-2 py-0.5 rounded-full border border-green-400/20 flex-shrink-0">Updated</span>
+                            )}
+                          </div>
+                          {session.emphasis && <p className={`text-xs truncate mt-0.5 ${isUpcomingWeek ? "text-muted-foreground/60" : "text-muted-foreground"}`}>{session.emphasis}</p>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {session.exercises?.length > 0 && <span className="text-xs text-muted-foreground">{session.exercises.length} ex</span>}
                         <button
-                          onClick={() => onEditExercise(ex, session.label)}
-                          className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-colors flex-shrink-0"
-                          title={`Edit ${ex.name}`}
+                          onClick={() => onEditSession(session, week.label ?? `Week ${activeWeekNumber}`)}
+                          className="w-8 h-8 rounded-lg bg-muted/50 border border-border flex items-center justify-center hover:bg-primary/10 hover:border-primary/30 hover:text-primary text-muted-foreground transition-all duration-150"
+                          title="Adjust this session with AI"
                         >
-                          <PenLine className="w-3 h-3" />
+                          <PenLine className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                    ))}
-                    {session.exercises.length > 3 && (
-                      <button
-                        onClick={() => toggleCard(session.id)}
-                        className="flex items-center gap-1.5 pl-8 pt-1 text-xs text-primary/70 hover:text-primary transition-colors"
-                      >
-                        {expandedCards[session.id] ? (
-                          <>
-                            <ChevronUp className="w-3 h-3" />
-                            <span>Show less</span>
-                          </>
-                        ) : (
-                          <>
-                            <ChevronDown className="w-3 h-3" />
-                            <span>+{session.exercises.length - 3} more exercises</span>
-                          </>
-                        )}
-                      </button>
+                    </div>
+                    {session.exercises?.length > 0 && (
+                      <div className="border-t border-border px-4 pb-4 pt-3">
+                        <div className="space-y-2">
+                          {(expandedCards[session.id] ? session.exercises : session.exercises.slice(0, 3)).map((ex: any, exIdx: number) => (
+                            <div key={ex.id} className={`flex items-center gap-3 rounded-md px-1 py-0.5 transition-all duration-500 ${highlightedIds.exercises.has(ex.id) ? "bg-primary/5 ring-1 ring-primary/30" : ""}`}>
+                              <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground flex-shrink-0">{exIdx + 1}</div>
+                              <span className={`text-xs flex-1 truncate ${isUpcomingWeek ? "text-foreground/60" : "text-foreground/80"}`}>{ex.name}</span>
+                              <span className="text-xs text-muted-foreground flex-shrink-0">{ex.sets && ex.reps ? `${ex.sets}×${ex.reps}` : ex.reps ?? ""}</span>
+                              {highlightedIds.exercises.has(ex.id) && (
+                                <span className="text-[9px] font-bold text-primary">✓</span>
+                              )}
+                              <button
+                                onClick={() => onEditExercise(ex, session.label)}
+                                className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-colors flex-shrink-0"
+                                title={`Edit ${ex.name}`}
+                              >
+                                <PenLine className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                          {session.exercises.length > 3 && (
+                            <button
+                              onClick={() => toggleCard(session.id)}
+                              className="flex items-center gap-1.5 pl-8 pt-1 text-xs text-primary/70 hover:text-primary transition-colors"
+                            >
+                              {expandedCards[session.id] ? (
+                                <><ChevronUp className="w-3 h-3" /><span>Show less</span></>
+                              ) : (
+                                <><ChevronDown className="w-3 h-3" /><span>+{session.exercises.length - 3} more exercises</span></>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     )}
                   </div>
-                </div>
+                );
+              });
+            })()}
+          </div>
+
+          {/* ── Upgrade CTA for non-premium ── */}
+          {!isPremium && totalSessions > 1 && (
+            <div className="rounded-xl border border-primary/20 bg-card p-5 text-center">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-3 mx-auto">
+                <Lock className="w-4 h-4 text-primary" />
+              </div>
+              <h4 className="text-sm font-bold text-foreground mb-1">
+                Unlock the rest of your training week
+              </h4>
+              <p className="text-[11px] text-muted-foreground mb-4 leading-relaxed">
+                See all training days, block progression, and live adaptations.
+              </p>
+              {onUpgrade && (
+                <button
+                  onClick={onUpgrade}
+                  className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-primary text-primary-foreground text-[12px] font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all"
+                >
+                  <Zap className="w-3.5 h-3.5" /> Unlock Full Program
+                </button>
               )}
             </div>
-          );
-          });
-        })()}
-      </div>
-
-      {/* Upgrade CTA for non-premium after locked sessions */}
-      {!isPremium && week.sessions?.filter((s: any) => !s.isRestDay).length > 1 && (
-        <div className="rounded-xl border border-primary/20 bg-card p-5 text-center">
-          <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-3 mx-auto">
-            <Lock className="w-4 h-4 text-primary" />
-          </div>
-          <h4 className="text-sm font-bold text-foreground mb-1">
-            Unlock the rest of your training week
-          </h4>
-          <p className="text-[11px] text-muted-foreground mb-4 leading-relaxed">
-            See all training days, block progression, and live adaptations.
-          </p>
-          {onUpgrade && (
-            <button
-              onClick={onUpgrade}
-              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-primary text-primary-foreground text-[12px] font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all"
-            >
-              <Zap className="w-3.5 h-3.5" /> Unlock Full Program
-            </button>
           )}
-        </div>
+        </>
       )}
     </div>
   );
