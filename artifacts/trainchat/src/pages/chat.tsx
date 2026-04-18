@@ -197,6 +197,20 @@ export default function Chat() {
    */
   const [isNewBuildSession, setIsNewBuildSession] = useState(false);
 
+  /**
+   * Optimistic user message — set immediately when the user submits so the
+   * message appears in the transcript before the server responds. Cleared once
+   * the real messages refetch arrives (messages.length increases).
+   */
+  const [optimisticUserMsg, setOptimisticUserMsg] = useState<string | null>(null);
+  /**
+   * Hard timeout ref for stuck thinking state. If stream.isActive is true for
+   * longer than THINKING_TIMEOUT_MS without resolving, we surface a retry state.
+   */
+  const thinkingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const THINKING_TIMEOUT_MS = 90_000;
+  const [thinkingStuck, setThinkingStuck] = useState(false);
+
   // Startup state: fail-safe lets the agent render even if auth hangs
   const [forceReady, setForceReady] = useState(false);
   // Calibration nudge guard: one-shot, never auto-triggers twice
@@ -467,6 +481,88 @@ export default function Chat() {
     }
   }, [latestProgram, calibrationScore]);
 
+  // ── Optimistic user message cleanup ─────────────────────────────────────────
+  // Strategy 1: once real messages arrive after a submit (messages.length grows
+  // compared to what it was at submit time), clear the optimistic placeholder.
+  // Strategy 2: if the stream resolves but messages don't grow in 2s, clear anyway.
+  const preSubmitMessagesLengthRef = useRef(0);
+  const optimisticClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Reset the baseline whenever conversation changes (prevents stale comparison
+  // if user switches from a longer conversation to a shorter one).
+  useEffect(() => {
+    preSubmitMessagesLengthRef.current = messages.length;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConvoId]);
+
+  useEffect(() => {
+    if (messages.length > preSubmitMessagesLengthRef.current && optimisticUserMsg) {
+      console.log("[ChatSendAudit] optimisticMsgCleared — real messages arrived", {
+        messageCountAfter: messages.length,
+      });
+      if (optimisticClearTimerRef.current) clearTimeout(optimisticClearTimerRef.current);
+      setOptimisticUserMsg(null);
+    }
+  }, [messages.length, optimisticUserMsg]);
+
+  // Strategy 2: safety-net — if the stream finishes but DB refetch is slow,
+  // ensure the optimistic message eventually clears.
+  useEffect(() => {
+    if (!stream.isActive && optimisticUserMsg) {
+      optimisticClearTimerRef.current = setTimeout(() => {
+        console.log("[ChatSendAudit] optimisticMsgCleared — safety-net timeout");
+        setOptimisticUserMsg(null);
+        preSubmitMessagesLengthRef.current = messages.length;
+      }, 2000);
+      return () => {
+        if (optimisticClearTimerRef.current) clearTimeout(optimisticClearTimerRef.current);
+      };
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stream.isActive, optimisticUserMsg]);
+
+  // ── Stuck thinking timeout — hard safety net ─────────────────────────────────
+  // If stream.isActive stays true for THINKING_TIMEOUT_MS without resolving,
+  // surface a retry prompt so the user is never permanently frozen.
+  useEffect(() => {
+    if (stream.isActive) {
+      setThinkingStuck(false);
+      if (thinkingTimeoutRef.current) clearTimeout(thinkingTimeoutRef.current);
+      thinkingTimeoutRef.current = setTimeout(() => {
+        console.warn("[ThinkingStateAudit] thinkingStuck — timeout exceeded", {
+          stage: stream.state.buildStage,
+          timeoutMs: THINKING_TIMEOUT_MS,
+        });
+        setThinkingStuck(true);
+      }, THINKING_TIMEOUT_MS);
+    } else {
+      if (thinkingTimeoutRef.current) {
+        clearTimeout(thinkingTimeoutRef.current);
+        thinkingTimeoutRef.current = null;
+        console.log("[ThinkingStateAudit] clearedThinking — stream resolved");
+      }
+      setThinkingStuck(false);
+    }
+    return () => {
+      if (thinkingTimeoutRef.current) clearTimeout(thinkingTimeoutRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stream.isActive]);
+
+  // ── Transcript / thinking state audit (DEV only) ─────────────────────────────
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const hasActiveSubmission = optimisticUserMsg !== null || stream.isActive;
+    console.log("[TranscriptRenderAudit]", {
+      messagesVisible: messages.length > 0,
+      emptyStateVisible: messages.length === 0 && !hasActiveSubmission,
+      thinkingCardVisible: stream.isActive,
+      optimisticMsgVisible: optimisticUserMsg !== null,
+      streamPhase: stream.state.phase,
+      buildStage: stream.state.buildStage,
+    });
+  }, [messages.length, optimisticUserMsg, stream.isActive, stream.state.phase, stream.state.buildStage]);
+
   // ── Paywall trigger watcher ─────────────────────────────────────────────────
   // Watches stream.state.paywallTriggered to show the correct conversion modal.
   // This useEffect is required to avoid stale closure issues: handleSend captures
@@ -705,6 +801,18 @@ export default function Chat() {
       inputRef.current.style.height = "auto";
     }
 
+    // ── Optimistic user message insertion ────────────────────────────────────
+    // Show the user's message in the transcript immediately — before the server
+    // responds. The real DB message appears after query invalidation; at that
+    // point the optimistic placeholder is cleared by the cleanup effect above.
+    const msgCountBeforeSend = messages.length;
+    preSubmitMessagesLengthRef.current = msgCountBeforeSend;
+    console.log("[ChatSendAudit] userMessageInserted", {
+      messageCountBefore: msgCountBeforeSend,
+      optimisticText: content.slice(0, 60),
+    });
+    setOptimisticUserMsg(content);
+
     // Reset intentional-scroll tracking so send always anchors chat to the bottom.
     userScrolledUpRef.current = false;
     // Immediately scroll to the bottom sentinel so the user message is visible.
@@ -729,10 +837,17 @@ export default function Chat() {
       // Paywall and error display is handled by the useEffect that watches
       // stream.state.paywallTriggered — reading stream.state here would see
       // a stale closure snapshot from before the async send completed.
+      // Clear optimistic message so chat is not stuck showing it on failure.
+      setOptimisticUserMsg(null);
+      console.log("[ChatSendAudit] streamFailed — optimisticMsgCleared");
       return;
     }
 
     // Stream completed — process result.
+    console.log("[ThinkingStateAudit] finalResponseCommitted", {
+      outcomeType: result.outcomeType,
+      assistantMsgId: result.assistantMessage?.id,
+    });
     // Signal the messages effect that a new message just arrived via streaming.
     // If that message contains program structuredData it will be registered as
     // the session draft (sessionDraftMsgIdRef) so the sidebar can display it.
@@ -745,6 +860,9 @@ export default function Chat() {
 
     queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(resolvedConvoId) });
     queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+    console.log("[ChatSendAudit] queriesInvalidated — messages will refetch", {
+      messageCountBefore: messages.length,
+    });
 
     if (result.planInfo?.messagesRemaining !== undefined) {
       setMessagesUsed(messagesUsed + 1);
@@ -1733,8 +1851,8 @@ export default function Chat() {
               <div className="flex justify-center items-center h-32">
                 <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
               </div>
-            ) : messages.length === 0 ? (
-              /* ─── Empty state ─── */
+            ) : messages.length === 0 && !optimisticUserMsg && !stream.isActive ? (
+              /* ─── Empty state — only shown when no messages AND no active submission ─── */
               <div className="flex flex-col items-center justify-center h-full py-8 px-4 text-center animate-in fade-in slide-in-from-bottom-2 duration-500">
                 {/* System core — TrainChat logo with living glow field */}
                 <div className="relative mb-5 flex items-center justify-center" style={{ width: 88, height: 88 }}>
@@ -1841,7 +1959,24 @@ export default function Chat() {
                     }}
                   />
                 ))}
-                {stream.isActive && (
+
+                {/* ── Optimistic user bubble ──────────────────────────────────
+                    Rendered immediately after submit so the user always sees
+                    their message in the transcript — even before the server
+                    responds. Cleared once real DB messages arrive. */}
+                {optimisticUserMsg && (
+                  <div className="flex justify-end mb-4 animate-in fade-in duration-150">
+                    <div className="max-w-[80%] px-4 py-3 rounded-2xl rounded-br-sm bg-primary text-primary-foreground text-sm leading-relaxed whitespace-pre-wrap break-words">
+                      {optimisticUserMsg}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Agent thinking card ─────────────────────────────────────
+                    Renders as an in-progress assistant message inside the
+                    transcript — never replaces or hides the user's message.
+                    Cleared automatically when stream.isActive becomes false. */}
+                {stream.isActive && !thinkingStuck && (
                   <AgentThinking
                     acknowledgment={stream.state.acknowledgment || undefined}
                     buildStage={stream.state.buildStage}
@@ -1849,6 +1984,32 @@ export default function Chat() {
                     stageHistory={stream.state.stageHistory}
                     actionType={stream.state.actionType}
                   />
+                )}
+
+                {/* ── Stuck thinking fallback ─────────────────────────────────
+                    Shown after THINKING_TIMEOUT_MS if the stream hasn't resolved.
+                    Gives the user a clear retry path instead of an infinite spinner. */}
+                {thinkingStuck && (
+                  <div className="flex items-start gap-3 mb-4 animate-in fade-in duration-300">
+                    <div className="flex-shrink-0 w-7 h-7 rounded-full bg-card border border-border flex items-center justify-center mt-0.5">
+                      <div className="w-2 h-2 rounded-full bg-muted-foreground/40" />
+                    </div>
+                    <div className="bg-card border border-border/60 rounded-2xl rounded-tl-sm px-4 py-3 max-w-[270px]">
+                      <p className="text-[12px] text-muted-foreground leading-snug mb-2">
+                        Still working… something may have stalled.
+                      </p>
+                      <button
+                        onClick={() => {
+                          stream.reset();
+                          setThinkingStuck(false);
+                          setOptimisticUserMsg(null);
+                        }}
+                        className="text-[11px] font-semibold text-primary hover:text-primary/80 transition-colors"
+                      >
+                        Retry →
+                      </button>
+                    </div>
+                  </div>
                 )}
 
                 {/* Calibration nudge — shown at most once per session after a program
