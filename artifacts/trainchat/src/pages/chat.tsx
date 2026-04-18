@@ -401,6 +401,15 @@ export default function Chat() {
       programSource,
       messagesCount: messages.length,
     });
+
+    // ── Top status strip audit ─────────────────────────────────────────────
+    console.log("[TopStatusStripAudit]", {
+      activeSystemId: activeSystem?.id ?? null,
+      latestProgramMessageId: latestProgram?.messageId ?? null,
+      sessionDraftMsgId: sessionDraftMsgIdRef.current,
+      resolvedSource: programSource,
+      resolvedLabel: resolvedProgram?.programName ?? null,
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasActiveSystem, activeSystem?.id, dbSystemProgram, latestProgram, isNewBuildSession, messages.length]);
 
@@ -1773,17 +1782,17 @@ export default function Chat() {
                   Describe your goal, constraints, or sport — I'll build it live.
                 </p>
 
-                {/* System status strip */}
+                {/* System status strip — derives exclusively from resolveProgramState output */}
                 <div className="flex items-center gap-2 mb-6 px-3.5 py-2 rounded-full bg-card border border-border/60">
-                  {hasActiveSystem ? (
+                  {displayProgramSource === "live" ? (
                     <>
                       <div className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
                       <span className="text-[11px] text-muted-foreground">
-                        <span className="text-foreground font-medium">Active system: {activeSystem?.name ?? "Your Program"}</span>
+                        <span className="text-foreground font-medium">Active system: {displayProgram?.programName ?? "Your Program"}</span>
                         {" · "}Ready to refine or rebuild
                       </span>
                     </>
-                  ) : latestProgram ? (
+                  ) : displayProgramSource === "draft" ? (
                     <>
                       <div className="w-1.5 h-1.5 rounded-full bg-primary/60 flex-shrink-0" />
                       <span className="text-[11px] text-muted-foreground">
@@ -1795,7 +1804,7 @@ export default function Chat() {
                     <>
                       <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30 flex-shrink-0" />
                       <span className="text-[11px] text-muted-foreground">
-                        No active system yet · Start building to generate your first program
+                        No active system yet · Start building to generate your next program
                       </span>
                     </>
                   )}
