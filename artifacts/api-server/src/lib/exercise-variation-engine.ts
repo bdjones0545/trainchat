@@ -169,6 +169,10 @@ export interface SlotDebugInfo {
   chosen: string;
   contextSport: string | null;
   contextIntent: string[];
+  softmaxRank?: number;
+  topKWindow?: number;
+  softmaxNeedle?: number;
+  softmaxTemperature?: number;
 }
 
 // ─── Overuse Registry ─────────────────────────────────────────────────────────
@@ -380,6 +384,31 @@ const ANCHOR_EXTRA_PENALTY: Record<string, number> = {
   "Weighted Pull-Up": 1.0,       // upper pull default
 };
 
+// ─── Per-candidate seed utilities ─────────────────────────────────────────────
+//
+// The old seedTiebreaker used (seed * slotPrime * constant) which produces the
+// SAME scalar for every candidate in a slot — a no-op for ranking.
+// These functions mix the candidate name (or slot name) into the hash so each
+// candidate gets a genuinely unique tiebreaker value.
+
+/** Deterministic [0, 1) hash unique per (seed, candidateName, slotPrime). */
+function candidateHash(seed: number, candidateName: string, slotPrimeMultiplier: number): number {
+  let h = ((Math.floor(seed * 10_000_000)) ^ Math.floor(slotPrimeMultiplier * 1000)) >>> 0;
+  for (let i = 0; i < candidateName.length; i++) {
+    h = ((h * 31) + candidateName.charCodeAt(i)) >>> 0;
+  }
+  return (h % 100000) / 100000;
+}
+
+/** Deterministic [0, 1) needle for the softmax draw — unique per (seed, slotName, primeMultiplier). */
+function slotSeedNeedle(seed: number, slotName: string, primeMultiplier: number): number {
+  let h = (Math.floor(seed * 13_000_000) ^ Math.floor(primeMultiplier * 997)) >>> 0;
+  for (let i = 0; i < slotName.length; i++) {
+    h = ((h * 37) + slotName.charCodeAt(i)) >>> 0;
+  }
+  return (h % 100000) / 100000;
+}
+
 function scoreCandidate(
   meta: ExerciseMeta,
   ctx: ScoreContext,
@@ -445,8 +474,11 @@ function scoreCandidate(
   // see a different "first explosive" or "primary squat" across generations.
   const slotRepeatPenalty = getSlotRepeatPenalty(ctx.slotName, meta.name);
 
-  // ── Seed tiebreaker (0–1.5) ───────────────────────────────────────────────
-  const seedTiebreaker = (((ctx.seed * slotPrimeMultiplier * 2654435761) % 1) + 1) % 1 * 1.5;
+  // ── Seed tiebreaker (0–1.5, per-candidate) ────────────────────────────────
+  // Previous formula: (seed * slotPrime * constant) — produces the SAME value
+  // for every candidate in the slot (no-op tiebreaker). Fixed: mix meta.name
+  // so each candidate gets a unique hash-derived float in [0, 1.5).
+  const seedTiebreaker = candidateHash(ctx.seed, meta.name, slotPrimeMultiplier) * 1.5;
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ── Block Variation Engine extended scoring dimensions ─────────────────────
@@ -773,13 +805,58 @@ function scoreCandidate(
   };
 }
 
+// ─── Top-K softmax constants ──────────────────────────────────────────────────
+//
+// Instead of always picking scored[0], we score all candidates, take the top
+// CANDIDATE_WINDOW, and do a temperature-scaled softmax draw using a
+// slot-specific seed needle. This means:
+//
+//   • High-scoring candidates still win most of the time (temperature controls this)
+//   • Rank-2 through rank-5 candidates get meaningful chances when scores are close
+//   • Different seed values → different draws from the SAME top-K pool → natural
+//     build-over-build variation without sacrificing coaching correctness
+//   • Overuse/contrast penalties now control who enters the top-K (the real gate)
+//     rather than having to overcome a first-rank margin that may never happen
+//
+// Temperature interpretation (noveltyPressure ∈ [0, 1]):
+//   noveltyPressure=0 → temperature=1.5 → rank-1 is ~7× more likely than rank-1+3pts-lower
+//   noveltyPressure=1 → temperature=3.5 → same gap → ~2.4× — competitive field
+
+const CANDIDATE_WINDOW = 10;
+const SOFTMAX_TEMP_BASE = 1.5;
+const SOFTMAX_TEMP_NOVELTY_SCALE = 2.0;
+
 function ranked(pool: ExerciseMeta[], ctx: ScoreContext, primeMultiplier: number): { chosen: string; debugInfo: SlotDebugInfo } {
   const scored = pool.map((m) => scoreCandidate(m, ctx, primeMultiplier));
   scored.sort((a, b) => b.score - a.score);
 
+  // ── Top-K softmax selection ────────────────────────────────────────────────
+  const topK = scored.slice(0, Math.min(CANDIDATE_WINDOW, scored.length));
+  const temperature = SOFTMAX_TEMP_BASE + (ctx.noveltyPressure ?? 0) * SOFTMAX_TEMP_NOVELTY_SCALE;
+
+  // Numerically stable softmax: shift by the minimum score in the window
+  const minScore = topK[topK.length - 1]?.score ?? 0;
+  const weights = topK.map((c) => Math.exp((c.score - minScore) / temperature));
+  const totalWeight = weights.reduce((a, b) => a + b, 0);
+
+  // Seed needle: unique per (seed × slotName × primeMultiplier) so each slot
+  // in the same build draws at a different position in [0, totalWeight)
+  const needle = slotSeedNeedle(ctx.seed, ctx.slotName, primeMultiplier) * totalWeight;
+
+  let chosen = topK[0]?.name ?? pool[0]?.name ?? "Back Squat";
+  let softmaxRank = 0;
+  let cumulative = 0;
+  for (let i = 0; i < topK.length; i++) {
+    cumulative += weights[i];
+    if (needle <= cumulative) {
+      chosen = topK[i].name;
+      softmaxRank = i;
+      break;
+    }
+  }
+
+  const chosenScore = scored.find((c) => c.name === chosen) ?? scored[0] ?? null;
   const top3 = scored.slice(0, 3);
-  const chosen = scored[0]?.name ?? pool[0]?.name ?? "Back Squat";
-  const chosenScore = scored[0] ?? null;
 
   const debugInfo: SlotDebugInfo = {
     slot: ctx.slotName,
@@ -788,6 +865,10 @@ function ranked(pool: ExerciseMeta[], ctx: ScoreContext, primeMultiplier: number
     chosen,
     contextSport: ctx.sport,
     contextIntent: ctx.sessionIntent,
+    softmaxRank,
+    topKWindow: topK.length,
+    softmaxNeedle: Number(needle.toFixed(4)),
+    softmaxTemperature: Number(temperature.toFixed(2)),
   };
 
   if (process.env.NODE_ENV !== "production") {
@@ -796,6 +877,9 @@ function ranked(pool: ExerciseMeta[], ctx: ScoreContext, primeMultiplier: number
       slot: ctx.slotName,
       sport: ctx.sport,
       poolSize: pool.length,
+      topKWindow: topK.length,
+      softmaxRank,
+      softmaxTemperature: Number(temperature.toFixed(2)),
       top5: scored.slice(0, 5).map((c) => ({
         name: c.name,
         score: Number(c.score.toFixed(2)),
