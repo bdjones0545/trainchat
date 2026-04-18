@@ -5,6 +5,7 @@
 // This is a pure function module — no side effects, no DB calls, no AI calls.
 
 import { logger } from "./logger";
+import { getBestSportResolution } from "./sport-language-normalizer";
 
 // ─── Extracted Constraints ────────────────────────────────────────────────────
 //
@@ -428,6 +429,40 @@ export function detectSeasonContext(lower: string): SeasonContext | null {
 
 // ─── Sport Detection ──────────────────────────────────────────────────────────
 
+// Maps the normalizer's canonical sport IDs → the legacy sport IDs this system uses.
+// Legacy IDs are preserved to avoid breaking downstream prompt/profile code.
+const NORMALIZER_TO_LEGACY_SPORT: Record<string, string> = {
+  football: "american_football",
+  flag_football: "american_football",
+  soccer: "soccer",
+  basketball: "basketball",
+  baseball: "baseball",
+  baseball_pitcher: "baseball",
+  softball: "baseball",
+  hockey: "hockey",
+  rugby: "rugby",
+  lacrosse: "lacrosse",
+  volleyball: "volleyball",
+  tennis: "tennis",
+  padel: "tennis",
+  pickleball: "pickleball",
+  badminton: "badminton",
+  squash: "squash",
+  bowling: "bowling",
+  wrestling: "combat_sports",
+  boxing: "combat_sports",
+  mma: "combat_sports",
+  cricket: "cricket",
+  cricket_bowler: "cricket",
+  cricket_batter: "cricket",
+  cricket_wicketkeeper: "cricket",
+  golf: "golf",
+  swimming: "swimming",
+  track: "track",
+  rowing: "rowing",
+  cycling: "cycling",
+};
+
 export function detectSport(lower: string): string | null {
   // American football must be checked before generic "football" to avoid ambiguity
   if (/\b(american football|nfl|gridiron|quarterback|wide receiver|running back|linebacker|tight end|offensive line|defensive back|cornerback|safety|halfback|fullback)\b/.test(lower)) return "american_football";
@@ -437,18 +472,35 @@ export function detectSport(lower: string): string | null {
   // Generic "football" in isolation defaults to American football (most common
   // meaning in the primary US user context — separate from soccer/futbol)
   if (/\bfootball\b/.test(lower)) return "american_football";
-  if (/\b(basketball|hoops|court)\b/.test(lower)) return "basketball";
-  if (/\b(baseball|softball|pitcher|batter)\b/.test(lower)) return "baseball";
+  if (/\b(basketball|hoops|court|baller|hooper)\b/.test(lower)) return "basketball";
+  if (/\b(baseball|softball|pitcher|batter|ballplayer)\b/.test(lower)) return "baseball";
   if (/\b(tennis|racket|racquet)\b/.test(lower)) return "tennis";
-  if (/\b(swimming|swim|pool)\b/.test(lower)) return "swimming";
-  if (/\b(track|sprint|sprinting|running|runner)\b/.test(lower)) return "track";
+  if (/\b(swimming|swim|pool|swimmer)\b/.test(lower)) return "swimming";
+  if (/\b(track|sprint|sprinting|running|runner|sprinter)\b/.test(lower)) return "track";
   if (/\b(hockey|ice hockey|field hockey)\b/.test(lower)) return "hockey";
-  if (/\b(golf)\b/.test(lower)) return "golf";
-  if (/\b(mma|jiu.?jitsu|bjj|wrestling|judo|boxing|martial arts|combat)\b/.test(lower)) return "combat_sports";
+  if (/\b(golf|golfer)\b/.test(lower)) return "golf";
+  if (/\b(mma|jiu.?jitsu|bjj|wrestling|wrestler|judo|boxing|boxer|martial arts|combat|fighter)\b/.test(lower)) return "combat_sports";
   if (/\b(volleyball|beach volleyball)\b/.test(lower)) return "volleyball";
-  if (/\b(lacrosse)\b/.test(lower)) return "lacrosse";
-  if (/\b(rowing|crew)\b/.test(lower)) return "rowing";
+  if (/\b(lacrosse|laxer|lax)\b/.test(lower)) return "lacrosse";
+  if (/\b(rowing|crew|rower)\b/.test(lower)) return "rowing";
   if (/\b(cycling|biking|cyclist)\b/.test(lower)) return "cycling";
+  if (/\b(rugby|rugger)\b/.test(lower)) return "rugby";
+  if (/\b(cricket|cricketer)\b/.test(lower)) return "cricket";
+  if (/\b(pickleball|pickle)\b/.test(lower)) return "pickleball";
+  if (/\b(badminton)\b/.test(lower)) return "badminton";
+
+  // Fallback: use the sport language normalizer to catch player-identity words
+  // (e.g. "I'm a golfer", "I play lacrosse", role words like "setter", "bowler")
+  // that the regex patterns above don't cover.
+  try {
+    const resolved = getBestSportResolution(lower);
+    if (resolved?.canonicalSportId) {
+      return NORMALIZER_TO_LEGACY_SPORT[resolved.canonicalSportId] ?? resolved.canonicalSportId;
+    }
+  } catch {
+    // Never let normalizer errors bubble into intent extraction
+  }
+
   return null;
 }
 
