@@ -1,0 +1,105 @@
+CRITICAL FIX — REMOVE HARDCODED AI SESSION OVERRIDE
+
+We identified the root cause of repeated Day 1 programs.
+
+FINDING:
+Session identity "Lower Force Production + Acceleration Support" is hardcoded in ai.ts and bypasses the architecture engine.
+
+This is overriding:
+- block archetype logic
+- session grammar variation
+- sport-specific structure
+- variationSeed outputs
+
+==================================================
+TASK 1 — REMOVE HARDCODED SESSION IDENTITY
+==================================================
+
+Locate all instances in ai.ts where session identity or session name is hardcoded.
+
+Example:
+"Lower Force Production + Acceleration Support"
+
+Remove these completely.
+
+Replace with:
+sessionIdentity = architecture.sessionIdentity
+
+==================================================
+TASK 2 — REMOVE HARDCODED SESSION STRUCTURE
+==================================================
+
+Audit ai.ts for any:
+- default session templates
+- fallback CNS flows
+- predefined exercise sequences
+- "if missing → use standard session"
+
+Delete or replace them so AI does NOT generate structure independently.
+
+==================================================
+TASK 3 — FORCE ARCHITECTURE ENGINE AS SOURCE OF TRUTH
+==================================================
+
+Ensure AI receives:
+- session identity
+- block archetype
+- block order
+- session roles
+- exercise slot outputs
+
+AI should ONLY:
+- describe
+- format
+- explain
+
+NOT:
+- decide structure
+- choose session type
+- override architecture
+
+==================================================
+TASK 4 — ADD AUDIT LOG
+==================================================
+
+Add:
+
+[AIOverrideAudit] {
+  usedHardcodedSession: boolean,
+  sessionIdentitySource: "architecture" | "fallback",
+  blockOrderSource: "architecture" | "ai"
+}
+
+We need to confirm AI is no longer overriding structure.
+
+==================================================
+TASK 5 — VALIDATION
+==================================================
+
+Run 3 identical builds:
+- soccer
+- strength
+- football
+
+Check Day 1:
+
+SUCCESS:
+- no repeated session identity
+- structure differs across builds
+- architecture changes visible in output
+
+FAIL:
+- same session name appears
+- same structure appears
+- AI fallback still active
+
+==================================================
+FINAL STANDARD
+==================================================
+
+The architecture engine must fully control:
+- session identity
+- structure
+- variation
+
+The AI layer must not override it at any point.

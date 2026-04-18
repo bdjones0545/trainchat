@@ -3259,7 +3259,10 @@ function buildIntelligentProgram(profile: UserProfile): ProgramStructure {
     preferStressLevel: injuryFlags.length > 0 ? ("low" as const) : ("any" as const),
   };
 
-  const days = buildDays(goal, experience, equipment, injuryFlags, userExclusions, spec, profile);
+  // Generate a fresh random seed per build so Day 1 session shape varies across program generations.
+  // This ensures different users (and the same user rebuilding) see structurally distinct Day 1s.
+  const variationSeed = Math.random();
+  const days = buildDays(goal, experience, equipment, injuryFlags, userExclusions, spec, profile, variationSeed);
 
   return {
     programName: buildProgramName(profile),
@@ -3389,7 +3392,8 @@ function buildDays(
   injuryFlags: ReturnType<typeof detectInjuryFlags>,
   userExclusions: string[],
   spec: ReturnType<typeof buildTrainingSpec>,
-  profile: UserProfile
+  profile: UserProfile,
+  variationSeed = 0,
 ): ProgramDay[] {
   const days = profile.daysPerWeek;
   const baseFilter = {
@@ -3401,8 +3405,8 @@ function buildDays(
     preferStressLevel: injuryFlags.length > 0 ? ("low" as const) : ("any" as const),
   };
 
-  if (days <= 3) return buildFullBodyDays(goal, experience, spec, baseFilter, days, profile);
-  if (days === 4) return buildUpperLowerDays(goal, experience, spec, baseFilter, profile);
+  if (days <= 3) return buildFullBodyDays(goal, experience, spec, baseFilter, days, profile, variationSeed);
+  if (days === 4) return buildUpperLowerDays(goal, experience, spec, baseFilter, profile, variationSeed);
   return buildPPLDays(goal, experience, spec, baseFilter, days);
 }
 
@@ -3793,39 +3797,96 @@ function buildTrunkBlock(goal: GoalType, sport: string | null, usedNames: Set<st
 function buildAthleteFullBodyDayConfigs(
   sport: string | null,
   numDays: number,
-  spec: ReturnType<typeof buildTrainingSpec>
+  spec: ReturnType<typeof buildTrainingSpec>,
+  variationSeed = 0,
 ): Array<{ name: string; focus: string; notes: string; primaryPattern: "squat" | "hinge"; secondaryPattern: MovementPattern }> {
   const isSoccer = !!sport && (sport.toLowerCase().includes("soccer") || sport.toLowerCase().includes("football"));
 
   if (isSoccer) {
-    const all = [
+    // Three structural Day 1 variants — rotated by variationSeed so each build differs
+    const soccerVariantA = [
       {
         name: "Lower Force Production + Acceleration Support",
         focus: "Bilateral squat strength, horizontal power output, and single-leg positional control to build the force that drives sprint and acceleration mechanics.",
-        notes: "This session prioritizes lower-body force production through bilateral squat strength and single-leg positional control. The trunk work reinforces stiffness through the hips under fatigue — directly transferable to acceleration and change-of-direction mechanics.",
+        notes: "This session prioritizes lower-body force production through bilateral squat strength and single-leg positional control. Trunk work reinforces stiffness through the hips under fatigue — directly transferable to acceleration and change-of-direction mechanics.",
         primaryPattern: "squat" as const,
         secondaryPattern: "pull_vertical" as MovementPattern,
       },
       {
         name: "Upper Strength + Posterior Chain",
         focus: "Horizontal press/pull balance, hip hinge force development, and trunk integrity to support athletic posture and force transfer.",
-        notes: "This session develops structural balance — pressing and pulling in equal measure — while the hinge work builds the hip extension strength critical to sprint mechanics. The trunk work at the end supports force transfer between upper and lower body.",
+        notes: "This session develops structural balance — pressing and pulling in equal measure — while the hinge work builds the hip extension strength critical to sprint mechanics. Trunk work at the end supports force transfer between upper and lower body.",
         primaryPattern: "hinge" as const,
         secondaryPattern: "push_horizontal" as MovementPattern,
       },
       {
         name: "Full Body Power + Positional Strength",
         focus: "Lateral power output, compound strength integration, and frontal-plane unilateral control for complete athletic integration.",
-        notes: "This session integrates power, strength, and positional control across the full kinetic chain. The lateral power emphasis develops change-of-direction capacity that transfers directly to field performance. Unilateral work and trunk loading build the single-leg resilience soccer demands.",
+        notes: "This session integrates power, strength, and positional control across the full kinetic chain. Lateral power emphasis develops change-of-direction capacity that transfers directly to field performance.",
         primaryPattern: "squat" as const,
         secondaryPattern: "pull_horizontal" as MovementPattern,
       },
     ];
-    return all.slice(0, numDays);
+
+    // Variant B: Posterior chain / hamstring resilience anchors Day 1
+    const soccerVariantB = [
+      {
+        name: "Posterior Chain Anchor + Hamstring Resilience",
+        focus: "Hip hinge force production, hamstring eccentric loading, and adductor resilience — the most important injury prevention qualities for soccer athletes.",
+        notes: "This session leads with posterior chain tissue quality — hip thrust, Nordic curl emphasis, and single-leg RDL. Adductor work closes the session. Injury prevention IS the performance training here.",
+        primaryPattern: "hinge" as const,
+        secondaryPattern: "pull_vertical" as MovementPattern,
+      },
+      {
+        name: "Lower Force Production + Acceleration Support",
+        focus: "Bilateral squat strength, horizontal power output, and single-leg positional control to build the force that drives sprint and acceleration mechanics.",
+        notes: "Bilateral squat strength anchors this session. Single-leg positional control and trunk stiffness support sprint and change-of-direction demands.",
+        primaryPattern: "squat" as const,
+        secondaryPattern: "pull_horizontal" as MovementPattern,
+      },
+      {
+        name: "Upper Structural Strength + Full Body Integration",
+        focus: "Press/pull balance for structural health, rotational trunk, and full-body integration to close the week.",
+        notes: "Upper structural balance prevents injury and supports heading duels. Rotational trunk work and full-body integration close the week.",
+        primaryPattern: "hinge" as const,
+        secondaryPattern: "push_horizontal" as MovementPattern,
+      },
+    ];
+
+    // Variant C: Upper structural strength leads Day 1
+    const soccerVariantC = [
+      {
+        name: "Upper Structural Strength + Rotational Power",
+        focus: "Press/pull balance, rotational trunk development, and single-leg posterior chain to open the week differently — structural health drives sprint posture.",
+        notes: "Upper structural strength leads this week — pressing and pulling balance for aerial duel capacity and shoulder health. Rotational trunk work develops the core stiffness that transfers to sprint posture and contact resilience.",
+        primaryPattern: "hinge" as const,
+        secondaryPattern: "push_horizontal" as MovementPattern,
+      },
+      {
+        name: "Lower Force Production + Acceleration Support",
+        focus: "Bilateral squat strength, horizontal power output, and single-leg positional control to build sprint force production.",
+        notes: "Bilateral squat strength anchors Day 2. The trunk and single-leg work supports acceleration and change-of-direction demands.",
+        primaryPattern: "squat" as const,
+        secondaryPattern: "pull_vertical" as MovementPattern,
+      },
+      {
+        name: "Full Body Power + Posterior Chain Resilience",
+        focus: "Power output, posterior chain tissue care, and full-body integration to close the week.",
+        notes: "Power output comes first when the CNS is rested. Posterior chain tissue work and full-body integration close the week with resilience and conditioning.",
+        primaryPattern: "squat" as const,
+        secondaryPattern: "pull_horizontal" as MovementPattern,
+      },
+    ];
+
+    const pool = variationSeed >= 0.67 ? soccerVariantC
+      : variationSeed >= 0.33 ? soccerVariantB
+      : soccerVariantA;
+
+    return pool.slice(0, numDays);
   }
 
-  // General athletic (non-sport-specific)
-  const all = [
+  // General athletic (non-sport-specific) — three Day 1 variants
+  const athleticVariantA = [
     {
       name: "Lower Body Force Production + Trunk Stiffness",
       focus: "Bilateral squat strength, horizontal power output, and anti-rotation trunk work.",
@@ -3836,19 +3897,72 @@ function buildAthleteFullBodyDayConfigs(
     {
       name: "Upper Strength + Structural Balance",
       focus: "Pressing and pulling strength, posterior chain support, and shoulder integrity.",
-      notes: "This session develops structural balance — equal push and pull emphasis — alongside posterior chain work that supports athletic posture and trunk-to-limb force transfer.",
+      notes: "Structural balance — equal push and pull emphasis — alongside posterior chain work that supports athletic posture and trunk-to-limb force transfer.",
       primaryPattern: "hinge" as const,
       secondaryPattern: "push_horizontal" as MovementPattern,
     },
     {
       name: "Full Body Power + Integration",
       focus: "Power output, compound strength integration, and unilateral positional work.",
-      notes: "This session integrates the full chain — power output when the CNS is fresh, followed by compound strength and unilateral control. The goal is complete athletic integration, not single-muscle fatigue.",
+      notes: "Power output when the CNS is fresh, followed by compound strength and unilateral control. Complete athletic integration, not single-muscle fatigue.",
       primaryPattern: "squat" as const,
       secondaryPattern: "pull_horizontal" as MovementPattern,
     },
   ];
-  return all.slice(0, numDays);
+
+  const athleticVariantB = [
+    {
+      name: "Posterior Chain + Unilateral Force Production",
+      focus: "Hip hinge force development, single-leg positional control, and anti-rotation trunk — the athletic foundation from the ground up.",
+      notes: "This session leads with posterior chain primary work — hinge strength and hip extension power — then single-leg positional control. Trunk stiffness under residual fatigue closes the session.",
+      primaryPattern: "hinge" as const,
+      secondaryPattern: "pull_vertical" as MovementPattern,
+    },
+    {
+      name: "Upper Structural Strength + Power",
+      focus: "Pressing and pulling balance, rotational upper power, and structural shoulder health.",
+      notes: "Upper structural strength leads with equal push and pull volume. Rotational upper power follows — med ball or landmine — to develop the force transfer the full kinetic chain demands.",
+      primaryPattern: "squat" as const,
+      secondaryPattern: "push_horizontal" as MovementPattern,
+    },
+    {
+      name: "Full Body Power + Bilateral Lower Strength",
+      focus: "Explosive power output, bilateral squat strength, and full-body integration to close the week.",
+      notes: "Power output when fresh, bilateral squat strength as the anchor, and full-body integration to close. This session builds the force foundation that underpins all athletic outputs.",
+      primaryPattern: "squat" as const,
+      secondaryPattern: "pull_horizontal" as MovementPattern,
+    },
+  ];
+
+  const athleticVariantC = [
+    {
+      name: "Full Body Power + Lower Anchor",
+      focus: "Explosive power expression leads the week — jumps or medball first — then bilateral strength as the compound anchor.",
+      notes: "Power output leads when the CNS is at its weekly freshest. Bilateral squat strength follows as the week's compound anchor. Single-leg positional control and trunk stiffness close the session.",
+      primaryPattern: "squat" as const,
+      secondaryPattern: "pull_horizontal" as MovementPattern,
+    },
+    {
+      name: "Upper Structural Strength + Posterior Chain",
+      focus: "Pressing and pulling balance, posterior chain support, and trunk integrity for force transfer.",
+      notes: "Upper structural balance — equal push and pull — alongside posterior chain work that supports athletic posture. Trunk bracing closes the session.",
+      primaryPattern: "hinge" as const,
+      secondaryPattern: "push_horizontal" as MovementPattern,
+    },
+    {
+      name: "Unilateral Lower + Trunk Stiffness Integration",
+      focus: "Single-leg force production, anti-rotation and anti-extension trunk, and structural resilience to close the week.",
+      notes: "Single-leg positional control and loading closes the week — unilateral strength and asymmetry management paired with trunk stiffness work. Structural resilience session.",
+      primaryPattern: "hinge" as const,
+      secondaryPattern: "pull_vertical" as MovementPattern,
+    },
+  ];
+
+  const pool = variationSeed >= 0.67 ? athleticVariantC
+    : variationSeed >= 0.33 ? athleticVariantB
+    : athleticVariantA;
+
+  return pool.slice(0, numDays);
 }
 
 function buildFullBodyDays(
@@ -3857,14 +3971,15 @@ function buildFullBodyDays(
   spec: ReturnType<typeof buildTrainingSpec>,
   baseFilter: BaseFilter,
   numDays: number,
-  profile: UserProfile
+  profile: UserProfile,
+  variationSeed = 0,
 ): ProgramDay[] {
   const sport = profile.sportFocus ?? null;
   const isAthletic = goal === "athletic_performance" || !!sport;
 
   // Get day configs with session identity and neural demand variation
   const dayConfigs = isAthletic
-    ? buildAthleteFullBodyDayConfigs(sport, numDays, spec)
+    ? buildAthleteFullBodyDayConfigs(sport, numDays, spec, variationSeed)
     : [
         {
           name: "Full Body Strength — Squat Focus",
@@ -3954,26 +4069,57 @@ function buildUpperLowerDays(
   experience: ReturnType<typeof normalizeExperience>,
   spec: ReturnType<typeof buildTrainingSpec>,
   baseFilter: BaseFilter,
-  profile: UserProfile
+  profile: UserProfile,
+  variationSeed = 0,
 ): ProgramDay[] {
   const sport = profile.sportFocus ?? null;
   const isSoccer = !!sport && (sport.toLowerCase().includes("soccer") || sport.toLowerCase().includes("football"));
   const isAthletic = goal === "athletic_performance" || !!sport;
 
+  // Athletic Day 1 variants — rotated by variationSeed to prevent every build
+  // opening with the exact same "Lower Force Production + Acceleration Support" name/focus.
+  const athleticDay1 = !isAthletic
+    ? {
+        dayNumber: 1,
+        name: "Lower A — Squat Focus",
+        focus: "Quad-dominant squat pattern, primary strength, posterior chain support.",
+        sessionType: "lower" as const,
+        primaryPatterns: ["squat"] as const,
+        secondaryPatterns: ["hinge", "pull_vertical"] as const,
+        notes: spec.splitRationale,
+      }
+    : variationSeed >= 0.67
+    ? {
+        dayNumber: 1,
+        name: "Posterior Chain Anchor + Lower Power",
+        focus: "Hinge-dominant force production leads the week — hip thrust and deadlift patterns with post-PAP jump expression and single-leg resilience.",
+        sessionType: "lower" as const,
+        primaryPatterns: ["hinge"] as const,
+        secondaryPatterns: ["squat", "pull_vertical"] as const,
+        notes: "This session anchors the week with posterior chain priority — hip extension force production via hinge patterns. Power expression follows after potentiation. Single-leg work and trunk stiffness close the session.",
+      }
+    : variationSeed >= 0.33
+    ? {
+        dayNumber: 1,
+        name: "Unilateral Lower + Reactive Power",
+        focus: "Single-leg force production and positional control lead the day — unilateral loading paired with reactive jump output and anti-rotation trunk.",
+        sessionType: "lower" as const,
+        primaryPatterns: ["squat"] as const,
+        secondaryPatterns: ["hinge", "pull_vertical"] as const,
+        notes: "This session leads with unilateral lower-body loading — single-leg positional control and asymmetry management — paired with reactive power output. Bilateral bilateral strength follows as the compound anchor.",
+      }
+    : {
+        dayNumber: 1,
+        name: "Lower Force Production + Acceleration Support",
+        focus: "Bilateral squat strength, horizontal power, and single-leg positional control.",
+        sessionType: "lower" as const,
+        primaryPatterns: ["squat"] as const,
+        secondaryPatterns: ["hinge", "pull_vertical"] as const,
+        notes: "This session builds lower-body force production through bilateral squat strength and single-leg positional control. Trunk work reinforces stiffness under fatigue — directly transferable to sprint and change-of-direction mechanics.",
+      };
+
   const dayTemplates = [
-    {
-      dayNumber: 1,
-      name: isAthletic ? "Lower Force Production + Acceleration Support" : "Lower A — Squat Focus",
-      focus: isAthletic
-        ? "Bilateral squat strength, horizontal power, and single-leg positional control."
-        : "Quad-dominant squat pattern, primary strength, posterior chain support.",
-      sessionType: "lower" as const,
-      primaryPatterns: ["squat"] as const,
-      secondaryPatterns: ["hinge", "pull_vertical"] as const,
-      notes: isAthletic
-        ? "This session builds lower-body force production through bilateral squat strength and single-leg positional control. Trunk work reinforces stiffness under fatigue — directly transferable to sprint and change-of-direction mechanics."
-        : spec.splitRationale,
-    },
+    athleticDay1,
     {
       dayNumber: 2,
       name: isAthletic ? "Upper Strength + Structural Balance" : "Upper A — Press Focus",
