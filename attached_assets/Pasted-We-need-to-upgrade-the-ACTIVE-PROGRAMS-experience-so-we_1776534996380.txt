@@ -1,0 +1,260 @@
+We need to upgrade the ACTIVE PROGRAMS experience so week progression is visible, controllable, and aligned with the block → week → session architecture already built.
+
+CONTEXT:
+Right now the user can view:
+- Today
+- This Week
+- Block
+- History
+
+But the current UX has a major gap:
+
+1. There is no clear way to see other weeks in the current 4-week block
+2. There is no obvious week progression state when all sessions in the current week are completed
+3. There is no way to preview or refine future weeks
+4. The backend already understands weeks and blocks, but the UI does not fully expose that intelligence
+
+We want to preserve the premium, minimal TrainChat look.
+Do NOT clutter the interface.
+Do NOT turn this into a coach dashboard.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make the user feel:
+- they are progressing through a real 4-week system
+- they can view other weeks
+- they can refine a specific week
+- the app knows when a week is complete and what comes next
+
+==================================================
+TASK 1 — ADD WEEK NAVIGATION TO “THIS WEEK”
+==================================================
+
+Inside the “This Week” tab, add a compact week selector.
+
+Requirements:
+- must work well on mobile
+- must feel premium and minimal
+- must not consume too much vertical space
+
+Recommended UI:
+- a horizontal selector or compact segmented control:
+  Week 1 | Week 2 | Week 3 | Week 4
+OR
+- a compact “Week 1 of 4” control with previous/next navigation
+
+Behavior:
+- user can switch between weeks manually
+- current week is highlighted
+- future weeks are visible, not hidden
+
+==================================================
+TASK 2 — SHOW CURRENT WEEK PROGRESSION STATE
+==================================================
+
+At the top of the “This Week” screen, show:
+
+- current week number
+- week role / phase name
+- optional progress count
+
+Examples:
+- Week 1 of 4 — Establish
+- Week 2 of 4 — Build
+- Week 3 of 4 — Intensify
+- Week 4 of 4 — Deload
+
+Also show:
+- number of sessions completed / total sessions in that week
+
+Example:
+2 of 3 sessions completed
+
+Keep it minimal and elegant.
+
+==================================================
+TASK 3 — WEEK COMPLETION LOGIC
+==================================================
+
+When all sessions in the current week are logged as complete:
+
+- mark the week as complete
+- surface a clean completion state
+- make the next week feel available
+
+Preferred UX:
+Show a compact banner / card:
+
+Week 1 Complete ✅
+You established your baseline.
+Next: Week 2 — Build Phase
+
+Button:
+[Start Week 2]
+
+Rules:
+- do NOT auto-advance silently with no feedback
+- do NOT trap the user in the old week
+- user should understand that a transition happened
+
+==================================================
+TASK 4 — ALLOW MANUAL WEEK SWITCHING
+==================================================
+
+Users must be able to:
+- view completed weeks
+- view the current active week
+- preview upcoming weeks
+
+Upcoming weeks can be shown normally or with subtle “upcoming” treatment, but they must be accessible.
+
+Do NOT lock future weeks behind completion.
+We want visibility and buy-in.
+
+==================================================
+TASK 5 — ADD “REFINE THIS WEEK” ACTION
+==================================================
+
+Inside the selected week view, add a premium, context-aware action:
+
+“Refine This Week”
+
+This should connect to the existing hierarchical refine engine and route as week_scope.
+
+Suggested quick actions:
+- Make this week more explosive
+- Reduce fatigue this week
+- Add more conditioning
+- Shorten all sessions this week
+
+The action should clearly target the currently selected week, not the whole block and not a single session unless explicitly chosen.
+
+==================================================
+TASK 6 — KEEP BLOCK → WEEK → SESSION HIERARCHY VISIBLE
+==================================================
+
+The “This Week” screen should make the hierarchy legible:
+
+Block
+↓
+Week
+↓
+Sessions
+
+At the top of the screen, ensure the user can understand:
+- what block they are in
+- which week they are looking at
+- what the intent of that week is
+
+This should be subtle, not bulky.
+
+==================================================
+TASK 7 — UI COPY / MICROCOPY
+==================================================
+
+Use premium, system-aware copy.
+
+Examples:
+- Week 1 of 4 — Establish
+- Foundation Strength Block
+- 2 of 3 sessions completed
+- Week Complete
+- Start Week 2
+- Refine This Week
+
+Avoid:
+- clunky dashboard language
+- overly technical admin-style phrasing
+
+==================================================
+TASK 8 — MOBILE-FIRST DESIGN
+==================================================
+
+Everything must look clean on iPhone-sized screens.
+
+Requirements:
+- no clutter
+- no heavy tables
+- no giant dashboards
+- selector must be thumb-friendly
+- cards must remain readable
+- progression UI must feel native to the current design
+
+==================================================
+TASK 9 — KEEP THE CURRENT VISUAL SYSTEM
+==================================================
+
+Match the existing TrainChat design:
+- dark premium UI
+- subtle gradients
+- restrained glows
+- clean card hierarchy
+- minimal but intelligent
+
+Do NOT introduce:
+- loud charts
+- bright progress bars unless subtle
+- coach-software style complexity
+
+==================================================
+TASK 10 — BEHAVIOR RULES
+==================================================
+
+Implement clean logic for:
+
+1. currentWeek selection
+- defaults to the active week
+
+2. manual switching
+- changing week updates the visible session list
+
+3. completion state
+- if all sessions in a week are logged, mark the week complete
+
+4. next week progression
+- allow the user to move into the next week with a clear call-to-action
+
+5. historical viewing
+- completed weeks remain viewable
+
+==================================================
+TASK 11 — OPTIONAL NICE-TO-HAVE
+==================================================
+
+If it fits cleanly, add a subtle phase summary line for the selected week:
+
+Examples:
+- Establish baseline loads and movement quality
+- Increase volume and training density
+- Intensify force output and top-end loading
+- Reduce fatigue and consolidate adaptation
+
+This should be short and elegant.
+
+==================================================
+TASK 12 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. what UI elements were added
+2. how week switching works
+3. how week completion is determined
+4. how the next-week progression is surfaced
+5. how “Refine This Week” was wired
+6. any state/data changes required
+
+==================================================
+FINAL STANDARD
+==================================================
+
+The user should no longer feel like they are only seeing isolated sessions.
+
+They should feel like:
+- they are inside a real 4-week progression system
+- they can move across weeks
+- they can refine a specific week
+- the app knows when a week is complete and what comes next
+
+The experience should feel premium, intelligent, and simple.
