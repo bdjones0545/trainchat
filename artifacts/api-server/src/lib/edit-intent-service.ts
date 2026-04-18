@@ -2010,10 +2010,97 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
     const label = targetContext.label ?? "this block";
 
     if (lower.match(/power|explosive|speed|athletic/)) {
+      // ── BLOCK-LEVEL POWER/EXPLOSIVE TRANSFORMATION ──────────────────────────
+      // For each session in the phase:
+      //   1. Add explosive movement if none exists
+      //   2. Primary lifts → 3-5 reps, 3-1-X-0 tempo, 2-3 min rest
+      //   3. Accessories at 12+ reps → pulled to 8-10 (conflict with CNS recovery)
+      //   4. Update session emphasis
+      //   5. Update phase emphasis + goal
+      const blockPowerChanges: EditChange[] = [];
+
+      const targetPhase = (system.phases ?? []).find((p: any) => p.id === phaseId);
+      const allPowerSessions: any[] = [];
+      for (const week of targetPhase?.weeks ?? []) {
+        for (const session of week.sessions ?? []) allPowerSessions.push(session);
+      }
+      const seenPowerIds = new Set<number>();
+      const uniquePowerSessions = allPowerSessions.filter((s: any) => {
+        if (seenPowerIds.has(s.id)) return false;
+        seenPowerIds.add(s.id);
+        return true;
+      });
+
+      for (const session of uniquePowerSessions) {
+        const exercises: any[] = session.exercises ?? [];
+        const hasExplosive = exercises.some((ex: any) =>
+          /\b(box|broad)\s+jump|jump\s+squat|power\s+clean|power\s+snatch|med\s+ball|medicine\s+ball|bound|plyometric/i.test(ex.name)
+        );
+        if (!hasExplosive) {
+          const hasLower = exercises.some((ex: any) =>
+            /squat|deadlift|lunge|leg\s+press|hip\s+thrust|romanian|rdl|hamstring|glute/i.test(ex.name)
+          );
+          const isUpper = exercises.some((ex: any) =>
+            /bench|press|row|pull|chin|dip|shoulder|chest/i.test(ex.name)
+          );
+          const explosiveName = hasLower ? "Box Jump" : isUpper ? "Med Ball Slam" : "Box Jump";
+          blockPowerChanges.push({
+            type: "add_exercise",
+            id: 0,
+            sessionId: session.id,
+            exercise: {
+              name: explosiveName,
+              category: "explosive",
+              sets: 4,
+              reps: "5",
+              rest: "2-3 min",
+              tempo: "X10X",
+              notes: "Max intent every rep — full reset between sets. 60-70% load, explosive concentric.",
+            },
+            reason: "Block power refocus — explosive movement addition",
+          });
+        }
+        for (const ex of exercises.filter((e: any) => e.category === "primary")) {
+          const repsStr: string = ex.reps ?? "";
+          const rangeMatch = repsStr.match(/(\d+)-(\d+)/);
+          const singleMatch = repsStr.match(/^(\d+)$/);
+          const currentMax = rangeMatch ? parseInt(rangeMatch[2]) : (singleMatch ? parseInt(singleMatch[1]) : 99);
+          const repUpdates: Record<string, unknown> = { tempo: "3-1-X-0", rest: "2-3 min", notes: "Power block: 3-sec eccentric, explosive concentric. 70-80% of max — bar speed is priority." };
+          if (currentMax > 5) repUpdates.reps = "3-5";
+          else if (currentMax === 5) repUpdates.reps = "2-4";
+          blockPowerChanges.push({ type: "update_exercise", id: ex.id, updates: repUpdates, reason: "Block power refocus — primary lift to power range" });
+        }
+        for (const ex of exercises.filter((e: any) => e.category === "accessory")) {
+          const repsStr: string = ex.reps ?? "";
+          const rangeMatch = repsStr.match(/(\d+)-(\d+)/);
+          const singleMatch = repsStr.match(/^(\d+)$/);
+          const currentMin = rangeMatch ? parseInt(rangeMatch[1]) : (singleMatch ? parseInt(singleMatch[1]) : 0);
+          if (currentMin >= 12) {
+            blockPowerChanges.push({ type: "update_exercise", id: ex.id, updates: { reps: "8-10", rest: "90s", notes: "Reduced from hypertrophy range — preserving power focus and CNS freshness." }, reason: "Block power refocus — trimming high-rep accessories" });
+          }
+        }
+        blockPowerChanges.push({ type: "update_session", id: session.id, updates: { emphasis: "Power and force expression — explosive output prioritized", coachingNotes: "Power session: open with explosive work. Primaries at 70-80% with bar speed focus. Full recovery between sets." }, reason: "Block power refocus — session emphasis" });
+      }
+
+      blockPowerChanges.push({ type: "update_phase", id: phaseId, updates: { emphasis: "Power and explosive development — bar speed, neural output, dynamic effort emphasis", goal: "Develop explosive strength and power output across primary patterns" }, reason: "Block power refocus — phase emphasis" });
+
+      const powerStructural = blockPowerChanges.filter(c =>
+        c.type === "add_exercise" ||
+        (c.type === "update_exercise" && c.updates && Object.keys(c.updates).some(k => ["sets", "reps", "tempo", "rest"].includes(k)))
+      ).length;
+
+      if (powerStructural >= 1) {
+        return {
+          intent: "refocus_block_power",
+          scope: "block",
+          changeSummary: `${label} restructured for explosive output across all sessions — explosive movements added, primary lifts shifted to 3-5 rep power range with 3-1-X-0 tempo and 2-3 min rest, conflicting high-rep accessories reduced.`,
+          changes: blockPowerChanges,
+        };
+      }
       return {
         intent: "refocus_block_power",
         scope: "block",
-        changeSummary: `${label} refocused toward power and explosive development. Primary movements will emphasize bar speed and neural output over mechanical hypertrophy.`,
+        changeSummary: `${label} refocused toward power and explosive development.`,
         changes: [{ type: "update_phase", id: phaseId, updates: { emphasis: "Power and explosive development — bar speed, neural output, dynamic effort emphasis", goal: "Develop explosive strength and power output across primary patterns" }, reason: "Power emphasis refocus" }],
       };
     }
@@ -2158,6 +2245,164 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
         scope: "block",
         changeSummary: `${label} reoriented toward field-sport and athletic performance. Strength work serves power and speed transfer rather than peak force production alone.`,
         changes: [{ type: "update_phase", id: phaseId, updates: { emphasis: "Field-sport athletic development — strength, speed, and movement quality integrated", goal: "Develop athletic performance qualities transferable to sport" }, reason: "Athletic/field-sport refocus" }],
+      };
+    }
+
+    if (lower.match(/endurance|aerobic|cardio|metabolic|work.capacity|stamina|conditioning/)) {
+      // ── BLOCK-LEVEL ENDURANCE/CONDITIONING TRANSFORMATION ─────────────────
+      // For each session in the phase:
+      //   1. Add conditioning finisher if no conditioning work exists
+      //   2. Tighten rest on primaries → 90s, push reps to 8-12 if below
+      //   3. Push accessories to endurance rep zone (12-15, 60s rest)
+      //   4. Update session emphasis
+      //   5. Update phase emphasis + goal
+      const blockEndChanges: EditChange[] = [];
+
+      const targetPhaseEnd = (system.phases ?? []).find((p: any) => p.id === phaseId);
+      const allEndSessions: any[] = [];
+      for (const week of targetPhaseEnd?.weeks ?? []) {
+        for (const session of week.sessions ?? []) allEndSessions.push(session);
+      }
+      const seenEndIds = new Set<number>();
+      const uniqueEndSessions = allEndSessions.filter((s: any) => {
+        if (seenEndIds.has(s.id)) return false;
+        seenEndIds.add(s.id);
+        return true;
+      });
+
+      for (const session of uniqueEndSessions) {
+        const exercises: any[] = session.exercises ?? [];
+        const hasConditioning = exercises.some((ex: any) =>
+          /\b(bike|row|sled|conditioning|cardio|run|sprint|interval|treadmill|assault|hiit|circuit|rower)\b/i.test(ex.name)
+        );
+        if (!hasConditioning) {
+          const hasLower = exercises.some((ex: any) =>
+            /squat|deadlift|lunge|leg|hip|glute|hamstring/i.test(ex.name)
+          );
+          const finisherName = hasLower ? "Rowing Machine Intervals" : "Assault Bike Intervals";
+          blockEndChanges.push({
+            type: "add_exercise",
+            id: 0,
+            sessionId: session.id,
+            exercise: {
+              name: finisherName,
+              category: "conditioning",
+              sets: 8,
+              reps: "30s on / 30s off",
+              rest: "30s",
+              notes: "Endurance finisher. Target 75-80% max HR. Controlled, sustainable effort.",
+            },
+            reason: "Block endurance refocus — conditioning finisher",
+          });
+        }
+        for (const ex of exercises.filter((e: any) => e.category === "primary")) {
+          const repsStr: string = ex.reps ?? "";
+          const rangeMatch = repsStr.match(/(\d+)-(\d+)/);
+          const singleMatch = repsStr.match(/^(\d+)$/);
+          const currentMin = rangeMatch ? parseInt(rangeMatch[1]) : (singleMatch ? parseInt(singleMatch[1]) : 0);
+          const endUpdates: Record<string, unknown> = { rest: "90s", notes: "Endurance focus: moderate load (60-70% of max), controlled pace, 90s rest to build work capacity." };
+          if (currentMin < 8) endUpdates.reps = "8-12";
+          blockEndChanges.push({ type: "update_exercise", id: ex.id, updates: endUpdates, reason: "Block endurance refocus — primary lift rest and rep density" });
+        }
+        for (const ex of exercises.filter((e: any) => e.category === "accessory")) {
+          const repsStr: string = ex.reps ?? "";
+          const rangeMatch = repsStr.match(/(\d+)-(\d+)/);
+          const singleMatch = repsStr.match(/^(\d+)$/);
+          const currentMax = rangeMatch ? parseInt(rangeMatch[2]) : (singleMatch ? parseInt(singleMatch[1]) : 0);
+          if (currentMax < 12) {
+            blockEndChanges.push({ type: "update_exercise", id: ex.id, updates: { reps: "12-15", rest: "60s", notes: "Pushed to endurance rep zone — tight rest, sustainable effort." }, reason: "Block endurance refocus — accessory rep range" });
+          }
+        }
+        blockEndChanges.push({ type: "update_session", id: session.id, updates: { emphasis: "Endurance and work capacity — metabolic density, sustained output", coachingNotes: "Endurance session: tighter rest, higher reps, conditioning finisher to close. Quality reps with minimal recovery between sets." }, reason: "Block endurance refocus — session emphasis" });
+      }
+
+      blockEndChanges.push({ type: "update_phase", id: phaseId, updates: { emphasis: "Endurance and work capacity — aerobic base, metabolic density, sustained output", goal: "Build aerobic capacity and work capacity through sustained moderate-intensity training" }, reason: "Block endurance refocus — phase emphasis" });
+
+      const endStructural = blockEndChanges.filter(c =>
+        c.type === "add_exercise" ||
+        (c.type === "update_exercise" && c.updates && Object.keys(c.updates).some(k => ["sets", "reps", "rest"].includes(k)))
+      ).length;
+
+      if (endStructural >= 1) {
+        return {
+          intent: "refocus_block_endurance",
+          scope: "block",
+          changeSummary: `${label} restructured for endurance and work capacity across all sessions — conditioning finishers added, primary lifts adjusted to 8-12 reps at 90s rest, accessories pushed to 12-15 rep zone. Metabolic density is the primary training driver.`,
+          changes: blockEndChanges,
+        };
+      }
+      return {
+        intent: "refocus_block_endurance",
+        scope: "block",
+        changeSummary: `${label} shifted toward endurance and aerobic capacity development.`,
+        changes: [{ type: "update_phase", id: phaseId, updates: { emphasis: "Endurance and work capacity — aerobic base, metabolic density, sustained output", goal: "Build aerobic capacity and work capacity through sustained moderate-intensity training" }, reason: "Endurance emphasis refocus" }],
+      };
+    }
+
+    if (lower.match(/strength|stronger|max.strength|force.production|low.rep/)) {
+      // ── BLOCK-LEVEL STRENGTH TRANSFORMATION ──────────────────────────────
+      // For each session in the phase:
+      //   1. Primary lifts → 3-6 reps, 2-4 min rest (max strength zone)
+      //   2. Accessories → 6-10 reps, 2 min rest (complementary strength work)
+      //   3. Update session emphasis
+      //   4. Update phase emphasis + goal
+      const blockStrengthChanges: EditChange[] = [];
+
+      const targetPhaseStr = (system.phases ?? []).find((p: any) => p.id === phaseId);
+      const allStrSessions: any[] = [];
+      for (const week of targetPhaseStr?.weeks ?? []) {
+        for (const session of week.sessions ?? []) allStrSessions.push(session);
+      }
+      const seenStrIds = new Set<number>();
+      const uniqueStrSessions = allStrSessions.filter((s: any) => {
+        if (seenStrIds.has(s.id)) return false;
+        seenStrIds.add(s.id);
+        return true;
+      });
+
+      for (const session of uniqueStrSessions) {
+        const exercises: any[] = session.exercises ?? [];
+        for (const ex of exercises.filter((e: any) => e.category === "primary")) {
+          const repsStr: string = ex.reps ?? "";
+          const rangeMatch = repsStr.match(/(\d+)-(\d+)/);
+          const singleMatch = repsStr.match(/^(\d+)$/);
+          const currentMax = rangeMatch ? parseInt(rangeMatch[2]) : (singleMatch ? parseInt(singleMatch[1]) : 0);
+          if (currentMax > 6) {
+            blockStrengthChanges.push({ type: "update_exercise", id: ex.id, updates: { reps: "3-6", rest: "2-4 min", notes: "Max strength zone: 80-90% of 1RM. Full recovery between sets. Aim for 1-2 RIR on top sets." }, reason: "Block strength refocus — primary lift to max strength range" });
+          }
+        }
+        for (const ex of exercises.filter((e: any) => e.category === "accessory")) {
+          const repsStr: string = ex.reps ?? "";
+          const rangeMatch = repsStr.match(/(\d+)-(\d+)/);
+          const singleMatch = repsStr.match(/^(\d+)$/);
+          const currentMin = rangeMatch ? parseInt(rangeMatch[1]) : (singleMatch ? parseInt(singleMatch[1]) : 0);
+          if (currentMin > 10) {
+            blockStrengthChanges.push({ type: "update_exercise", id: ex.id, updates: { reps: "6-10", rest: "2 min", notes: "Strength-support zone: moderate load, controlled reps. Serves the primary lifts." }, reason: "Block strength refocus — accessory to strength support range" });
+          }
+        }
+        blockStrengthChanges.push({ type: "update_session", id: session.id, updates: { emphasis: "Max strength — peak force production, neural drive, 1-2 RIR on primaries", coachingNotes: "Strength session: heavy primary work at 80-90% of max. Full recovery between sets. Technical execution is non-negotiable at these loads." }, reason: "Block strength refocus — session emphasis" });
+      }
+
+      blockStrengthChanges.push({ type: "update_phase", id: phaseId, updates: { emphasis: "Max strength development — peak force production, progressive overload, technical excellence", goal: "Maximize peak force output on primary compound movements through structured progressive overload" }, reason: "Block strength refocus — phase emphasis" });
+
+      const strStructural = blockStrengthChanges.filter(c =>
+        c.type === "add_exercise" ||
+        (c.type === "update_exercise" && c.updates && Object.keys(c.updates).some(k => ["sets", "reps", "rest"].includes(k)))
+      ).length;
+
+      if (strStructural >= 1) {
+        return {
+          intent: "refocus_block_strength",
+          scope: "block",
+          changeSummary: `${label} restructured for max strength across all sessions — primary lifts shifted to 3-6 rep zone at 2-4 min rest (80-90% of 1RM), accessories pulled to 6-10 rep strength-support range. Peak force production is the training driver.`,
+          changes: blockStrengthChanges,
+        };
+      }
+      return {
+        intent: "refocus_block_strength",
+        scope: "block",
+        changeSummary: `${label} shifted toward max strength development.`,
+        changes: [{ type: "update_phase", id: phaseId, updates: { emphasis: "Max strength development — peak force production, progressive overload, technical excellence", goal: "Maximize peak force output on primary compound movements" }, reason: "Strength emphasis refocus" }],
       };
     }
   }
@@ -2559,7 +2804,7 @@ export function classifyEditRequest(
   // which now produces real structural changes across all sessions in the phase.
   // Routing to DETERMINISTIC here prevents a wasted LLM call for these common commands.
   if (targetContext?.type === "phase") {
-    const KNOWN_INTENT_PHASE = /\b(hypertrophy|muscle.building|muscle.growth|muscle.mass|bodybuilding|bigger|size|power|explosive|speed|athletic|performance|field|sport)\b/i;
+    const KNOWN_INTENT_PHASE = /\b(hypertrophy|muscle.building|muscle.growth|muscle.mass|bodybuilding|bigger|size|power|explosive|speed|athletic|performance|field|sport|endurance|aerobic|cardio|metabolic|work.capacity|stamina|conditioning|strength|stronger|max.strength)\b/i;
     if (KNOWN_INTENT_PHASE.test(lower)) {
       logger.info(
         { lower: lower.slice(0, 100), targetType: targetContext.type },
