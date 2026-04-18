@@ -1062,6 +1062,24 @@ export default function Chat() {
     }
   }
 
+  // ── Auto-save: when the AI finishes streaming a new program, save it immediately ──
+  // This covers the first-build case (new users) where the server has not yet
+  // persisted anything. For existing users, the server already calls
+  // upsertTrainingSystemFromProgram, so this effect will find isSaved=true and
+  // skip. The prevBuildingRef tracks the streaming→idle transition so we only
+  // fire once per stream completion.
+  const autoSaveBuildingRef = useRef(false);
+  useEffect(() => {
+    const nowBuilding = buildingState.isBuilding;
+    if (autoSaveBuildingRef.current && !nowBuilding) {
+      if (latestProgram && !isSaved && !isSaving && activeConvoId) {
+        handleSaveProgram();
+      }
+    }
+    autoSaveBuildingRef.current = nowBuilding;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildingState.isBuilding]);
+
   async function handleSwitchProgram(systemId: number) {
     if (isSwitchingProgram) return;
     setIsSwitchingProgram(true);
