@@ -32,6 +32,13 @@ import {
   buildIdentityUpdateSummary,
   type PatchedIdentityResult,
 } from "./session-identity-sync";
+import {
+  buildPropagationPlan,
+  commitPropagationPlan,
+  getPropagationSummary,
+  stampUserModification,
+  type PropagationSummary,
+} from "./propagation-engine";
 
 // ─── Allowed field allowlists (safety guard) ─────────────────────────────────
 
@@ -636,6 +643,8 @@ export interface EditResult {
   verification: MutationVerificationResult;
   /** Sessions whose label/emphasis were auto-patched by the identity sync guard */
   identityPatches: PatchedIdentityResult[];
+  /** Structured propagation summary — how many future weeks were updated and why */
+  propagationSummary?: PropagationSummary;
 }
 
 export async function applyEditPlan(plan: EditPlan, intentFamily?: string, trainingSystemId?: number): Promise<EditResult> {
@@ -659,73 +668,105 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string, train
   // ── Family Propagation ────────────────────────────────────────────────────
   // For exercise-level replace or update changes, propagate to all sibling
   // occurrences of the same exercise name in upcoming/current weeks of the same
-  // training system. This keeps the program consistent after a targeted change.
+  // training system. Uses the propagation engine for smart, safety-gated, delta-
+  // preserving propagation rather than blind copy-forward.
   let totalPropagated = 0;
+  let aggregatePropagationSummary: PropagationSummary | undefined;
+
   if (trainingSystemId) {
     for (let i = 0; i < plan.changes.length; i++) {
       const change = plan.changes[i];
       const thisResult = results[i];
       if (!thisResult.applied) continue;
+      if (change.type !== "replace_exercise" && change.type !== "update_exercise") continue;
 
-      // Smart gate: only propagate structural / program-wide changes
-      if (!shouldPropagateChange(plan.intent, change)) {
-        logger.info(
-          { intent: plan.intent, changeType: change.type, changeId: change.id },
-          "[EditEngine] Propagation skipped — change is local/minor"
-        );
+      // Stamp user modification provenance on the directly edited exercise.
+      // This prevents future propagation from treating this as an unmodified sibling.
+      stampUserModification(change.id).catch(() => {});
+
+      // Derive before/after state for this exercise
+      const exerciseBefore = (beforeSnapshot.exercises[String(change.id)] ?? {}) as Record<string, any>;
+      let exerciseAfter: Record<string, any>;
+      let exerciseName: string;
+      let fieldsChanged: string[];
+
+      if (change.type === "replace_exercise" && change.replacement) {
+        exerciseAfter = { ...exerciseBefore, ...change.replacement };
+        exerciseName = (exerciseBefore.name as string) ?? "";
+        fieldsChanged = ["name"];
+      } else if (change.type === "update_exercise" && change.updates) {
+        exerciseAfter = { ...exerciseBefore, ...change.updates };
+        exerciseName = (exerciseBefore.name as string) ?? "";
+        fieldsChanged = Object.keys(change.updates).filter((k) => !k.startsWith("__prescription_"));
+      } else {
         continue;
       }
 
-      if (change.type === "replace_exercise") {
-        const before = beforeSnapshot.exercises[String(change.id)];
-        const originalName = before?.name as string | undefined;
-        if (originalName && change.replacement?.name) {
-          const replacementName = change.replacement.name;
-          const propagation = await propagateExerciseChangeAcrossWeeks(
-            change.id,
-            originalName,
-            trainingSystemId,
-            async (siblingId) => {
-              return applyChange({
-                ...change,
-                id: siblingId,
-                replacement: change.replacement,
-              });
-            }
-          );
-          if (propagation.propagatedCount > 0) {
-            changedIds.exercises.push(...propagation.propagatedIds);
-            totalPropagated += propagation.propagatedCount;
-            logger.info(
-              { originalName, replacementName, propagatedCount: propagation.propagatedCount, trainingSystemId },
-              "[EditEngine] Propagated exercise replacement to sibling weeks"
-            );
-          }
-        }
-      } else if (change.type === "update_exercise") {
-        const before = beforeSnapshot.exercises[String(change.id)];
-        const exerciseName = before?.name as string | undefined;
-        if (exerciseName) {
-          const propagation = await propagateExerciseChangeAcrossWeeks(
-            change.id,
-            exerciseName,
-            trainingSystemId,
-            async (siblingId) => {
-              return applyChange({
-                ...change,
-                id: siblingId,
-              });
-            }
-          );
-          if (propagation.propagatedCount > 0) {
-            changedIds.exercises.push(...propagation.propagatedIds);
-            totalPropagated += propagation.propagatedCount;
-            logger.info(
-              { exerciseName, propagatedCount: propagation.propagatedCount, trainingSystemId },
-              "[EditEngine] Propagated exercise update to sibling weeks"
-            );
-          }
-        }
+      if (!exerciseName) continue;
+
+      // Get source session label + week number via a single join query
+      const [sourceCtx] = await db
+        .select({
+          sessionLabel: trainingSessions.label,
+          weekNumber: trainingWeeks.weekNumber,
+        })
+        .from(sessionExercises)
+        .innerJoin(trainingSessions, eq(sessionExercises.trainingSessionId, trainingSessions.id))
+        .innerJoin(trainingWeeks, eq(trainingSessions.trainingWeekId, trainingWeeks.id))
+        .where(eq(sessionExercises.id, change.id))
+        .limit(1);
+
+      if (!sourceCtx) continue;
+
+      // Build the propagation plan (dry run — no mutations yet)
+      const propPlan = await buildPropagationPlan({
+        sourceExerciseId: change.id,
+        sourceWeekNumber: sourceCtx.weekNumber,
+        sourceSessionLabel: sourceCtx.sessionLabel,
+        exerciseName,
+        trainingSystemId,
+        exerciseBefore,
+        exerciseAfter,
+        planIntent: plan.intent,
+        fieldsChanged,
+      });
+
+      if (propPlan.mode === "none") {
+        logger.info({ intent: plan.intent, exerciseName }, "[EditEngine] Propagation mode=none — local only");
+        continue;
+      }
+
+      if (propPlan.mode === "prompt_user") {
+        logger.info({ exerciseName }, "[EditEngine] Propagation requires user confirmation — skipping auto-apply");
+        aggregatePropagationSummary = getPropagationSummary(propPlan, {
+          planId: propPlan.planId, appliedIds: [], appliedCount: 0, skippedCount: 0, auditEntryCount: 0,
+        });
+        continue;
+      }
+
+      if (propPlan.summary.applyCount === 0) {
+        const summary = getPropagationSummary(propPlan, {
+          planId: propPlan.planId, appliedIds: [], appliedCount: 0, skippedCount: propPlan.targets.length, auditEntryCount: 0,
+        });
+        logger.info({ planId: propPlan.planId, exerciseName, skipCount: propPlan.summary.skipCount }, "[EditEngine] Propagation plan: nothing safe to apply");
+        if (!aggregatePropagationSummary) aggregatePropagationSummary = summary;
+        continue;
+      }
+
+      // Commit the plan — applies changes, stamps metadata, writes audit log
+      const commit = await commitPropagationPlan(propPlan, trainingSystemId, undefined, "user");
+
+      changedIds.exercises.push(...commit.appliedIds);
+      totalPropagated += commit.appliedCount;
+
+      const summary = getPropagationSummary(propPlan, commit);
+      logger.info(
+        { planId: propPlan.planId, mode: propPlan.mode, appliedCount: commit.appliedCount, skippedCount: commit.skippedCount, exerciseName },
+        "[EditEngine] Propagation committed"
+      );
+
+      if (!aggregatePropagationSummary || summary.status !== "local_only") {
+        aggregatePropagationSummary = summary;
       }
     }
   }
@@ -824,9 +865,12 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string, train
 
   // ── Augment changeSummary with identity update notes and propagation note ─
   const identitySuffix = buildIdentityUpdateSummary(identityPatches);
-  const propagationSuffix = totalPropagated > 0
-    ? ` Applied to ${totalPropagated} additional week${totalPropagated !== 1 ? "s" : ""} across the program.`
-    : "";
+  let propagationSuffix = "";
+  if (aggregatePropagationSummary && aggregatePropagationSummary.status !== "local_only") {
+    propagationSuffix = ` ${aggregatePropagationSummary.message}`;
+  } else if (totalPropagated > 0) {
+    propagationSuffix = ` Applied to ${totalPropagated} additional week${totalPropagated !== 1 ? "s" : ""} across the program.`;
+  }
   const finalChangeSummary = (plan.changeSummary + identitySuffix + propagationSuffix).trim();
 
   return {
@@ -840,5 +884,6 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string, train
     changeTargets,
     verification,
     identityPatches,
+    propagationSummary: aggregatePropagationSummary,
   };
 }

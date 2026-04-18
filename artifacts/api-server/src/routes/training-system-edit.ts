@@ -56,6 +56,8 @@ async function postEditAckToChat(
 
     if (!recentConvo) return;
 
+    // Build the chat message content from the changeSummary, which already
+    // includes the propagation note (e.g. "Applied to 3 matching future weeks.").
     const summary = editResult.changeSummary;
     const base = summary.endsWith(".") ? summary : `${summary}.`;
 
@@ -67,6 +69,7 @@ async function postEditAckToChat(
       changeLogId,
       verificationStatus: editResult.verification.status,
       source: "programs_page",
+      propagationSummary: editResult.propagationSummary ?? null,
     });
 
     await db.insert(messagesTable).values({
@@ -82,7 +85,12 @@ async function postEditAckToChat(
       .where(eq(conversationsTable.id, recentConvo.id));
 
     logger.info(
-      { userId, conversationId: recentConvo.id, changeSummary: editResult.changeSummary },
+      {
+        userId,
+        conversationId: recentConvo.id,
+        changeSummary: editResult.changeSummary,
+        propagationStatus: editResult.propagationSummary?.status ?? "none",
+      },
       "[SystemEdit] Posted programs-page edit acknowledgment to chat"
     );
   } catch (err) {
@@ -271,6 +279,7 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       changedIds: editResult.changedIds,
       changeTargets: editResult.changeTargets,
       changeLogId,
+      propagationSummary: editResult.propagationSummary ?? null,
       updatedData: { today, week, block },
     });
   } catch (err) {

@@ -283,3 +283,47 @@ export const insertSystemChangeLogSchema = createInsertSchema(
 ).omit({ id: true, createdAt: true });
 export type InsertSystemChangeLog = z.infer<typeof insertSystemChangeLogSchema>;
 export type SystemChangeLog = typeof systemChangeLog.$inferSelect;
+
+// ─── Propagation Events — audit log for cross-week propagation ────────────────
+// One record per target exercise that was considered during a propagation plan.
+// Stores both applied and skipped decisions so the full reasoning is auditable.
+
+export const propagationEvents = pgTable("propagation_events", {
+  id: serial("id").primaryKey(),
+
+  planId: text("plan_id").notNull(),
+
+  trainingSystemId: integer("training_system_id")
+    .notNull()
+    .references(() => trainingSystems.id, { onDelete: "cascade" }),
+
+  changeLogId: integer("change_log_id"),
+
+  sourceWeekNumber: integer("source_week_number").notNull(),
+  sourceExerciseId: integer("source_exercise_id").notNull(),
+
+  targetWeekNumber: integer("target_week_number").notNull(),
+  targetExerciseId: integer("target_exercise_id").notNull(),
+
+  propagationMode: text("propagation_mode").notNull(),
+
+  action: text("action", { enum: ["apply", "skip"] }).notNull(),
+
+  safetyScore: integer("safety_score").notNull().default(0),
+
+  changedFields: jsonb("changed_fields"),
+
+  skippedReason: text("skipped_reason"),
+
+  initiatedBy: text("initiated_by").notNull().default("user"),
+
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const insertPropagationEventSchema = createInsertSchema(
+  propagationEvents
+).omit({ id: true, createdAt: true });
+export type InsertPropagationEvent = z.infer<typeof insertPropagationEventSchema>;
+export type PropagationEvent = typeof propagationEvents.$inferSelect;

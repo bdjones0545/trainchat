@@ -1,0 +1,432 @@
+Build a SAFE LATER-WEEK ADJUSTMENT SYSTEM for TrainChat so the app can intelligently decide when an edit made to one exercise instance should also affect later matching weeks — without corrupting progression, deleting user-specific tuning, or flattening block intent.
+
+GOAL
+We already have:
+- a shouldPropagateChange gate
+- local vs propagating edit classification
+- chat acknowledgment after program edits
+
+Now add a second layer:
+A “later weeks adjustment system” that can safely apply compatible edits to future matching exercise instances only when it is structurally appropriate.
+
+CORE PRINCIPLE
+Do NOT treat later-week propagation as a blind copy-forward.
+Treat it as a controlled transformation across matching future instances.
+
+The system must preserve:
+- block progression
+- week-specific overload
+- week-specific deload/taper intent
+- local user customizations already made in future weeks
+- exercise family logic
+- slot/day identity
+
+==================================================
+PHASE 1 — DEFINE SAFE PROPAGATION MODES
+==================================================
+
+Create a new concept:
+
+type PropagationMode =
+  | "none"
+  | "exact_copy"
+  | "relative_adjustment"
+  | "structural_swap"
+  | "prompt_user"
+
+Definitions:
+- none:
+  no future application
+- exact_copy:
+  copy same value forward exactly
+  use only for safe metadata-like changes
+- relative_adjustment:
+  preserve later-week progression shape while applying the same directional change
+  example: week 1 sets 3→4, week 2 was 4, week 3 was 5, then future weeks become 5 and 6 if safe
+- structural_swap:
+  replace matching exercise identity in later weeks while preserving week-specific dosage targets where possible
+- prompt_user:
+  system detects ambiguity or high risk and asks before applying
+
+Add a new function:
+
+function determinePropagationMode(input: {
+  actionType: string
+  fieldsChanged: string[]
+  reason?: string
+  beforeExercise: any
+  afterExercise: any
+}): PropagationMode
+
+Rules:
+- replace_exercise -> structural_swap
+- swap_exercise -> structural_swap
+- easier_variation / harder_variation / injury_modification / joint_friendly_modification / add_explosive_emphasis -> structural_swap
+- exercise_note -> none
+- increase_sets / reduce_sets -> relative_adjustment, but only if future weeks are structurally aligned
+- change_rep_range -> prompt_user by default unless change is small and still inside same stimulus band
+- notes-only update -> none
+- simple metadata that does not affect training dose -> exact_copy only if explicitly marked safe
+
+==================================================
+PHASE 2 — MATCH ONLY ELIGIBLE FUTURE INSTANCES
+==================================================
+
+Create:
+
+function findEligibleFutureMatches(input: {
+  program: Program
+  editedWeekIndex: number
+  editedDayId: string
+  editedExerciseId: string
+  editedExercise: any
+}): FutureMatch[]
+
+A future instance is eligible ONLY if all are true:
+1. It occurs after the edited week
+2. It belongs to the same program lineage
+3. It matches the same slot or canonical role
+4. It matches the same day identity or compatible day template
+5. It is same exercise OR same canonical family anchor, depending on propagation mode
+6. It has not been manually locked
+7. It has not been materially customized already
+8. It is not in a protected week type:
+   - deload
+   - taper
+   - testing
+   - rehab override
+   unless the propagation action explicitly supports it
+
+Add helper fields if missing:
+- slotId
+- canonicalExerciseId
+- exerciseFamily
+- progressionPhaseTag
+- isUserModified
+- isLocked
+- weekType
+- lineageGroupId
+
+Do NOT match future exercises by display name alone.
+
+==================================================
+PHASE 3 — ADD A SAFETY SCORING LAYER
+==================================================
+
+Create:
+
+type PropagationSafetyResult = {
+  safe: boolean
+  score: number
+  reasons: string[]
+  warnings: string[]
+}
+
+function assessPropagationSafety(input: {
+  sourceWeek: Week
+  targetWeek: Week
+  sourceExerciseBefore: any
+  sourceExerciseAfter: any
+  targetExercise: any
+  propagationMode: PropagationMode
+}): PropagationSafetyResult
+
+Score factors:
++ same slotId
++ same canonical family role
++ same progression phase
++ similar exercise intent
++ target not user-modified
++ target not locked
++ target not in protected week
+
+Penalties:
+- target week is deload/taper/testing
+- target already manually modified
+- rep/set progression would be flattened
+- exercise family mismatch
+- fatigue cost would spike sharply
+- neural demand would conflict with week intent
+- target already diverged meaningfully from source lineage
+
+Hard stops:
+- locked target
+- rehab-only target mismatch
+- incompatible slot/day identity
+- protected week with structural change
+- target already replaced by user with a different canonical path
+
+Require a minimum threshold before applying automatic future changes.
+If below threshold, do not apply automatically.
+
+==================================================
+PHASE 4 — PRESERVE PROGRESSION SHAPE
+==================================================
+
+This is critical.
+
+When propagating to later weeks, preserve the progression pattern instead of overwriting blindly.
+
+Create:
+
+function applyRelativeAdjustment(input: {
+  sourceBefore: any
+  sourceAfter: any
+  targetExercise: any
+}): any
+
+Examples:
+- If source sets changed from 3 to 4, delta = +1
+  then future matching week with 5 sets becomes 6, not 4
+- If source reps changed from 4-6 to 5-7, apply same directional shift only if target remains inside same training intent band
+- If source rest changed slightly, apply only if rest is not explicitly phase-programmed
+- If exercise identity changes, preserve target week dosage targets where possible:
+  example:
+  barbell split squat -> front-foot elevated split squat
+  keep week-specific set/rep intent unless unsafe
+
+Add guardrails:
+- do not exceed configured max sets
+- do not exceed configured fatigue ceiling
+- do not convert a power week into a hypertrophy week unintentionally
+- do not erase deload reductions
+- do not duplicate a user override already present in target week
+
+==================================================
+PHASE 5 — PROTECT FUTURE USER CUSTOMIZATIONS
+==================================================
+
+Introduce a modification provenance system.
+
+Every exercise instance should track:
+- createdBy: "system" | "agent" | "user"
+- modifiedBy
+- lastModifiedAt
+- modificationType
+- modificationScope
+- customizations: string[]
+- propagationSource?: { weekIndex: number; exerciseId: string; eventId: string }
+
+Create:
+
+function isMateriallyCustomized(exercise: any): boolean
+
+Return true if:
+- exercise identity changed previously by user
+- set/rep/rest scheme was manually adjusted beyond threshold
+- notes include explicit user override markers
+- exercise marked locked
+- a different variation path was chosen later by user
+
+If materially customized = true:
+- skip auto propagation
+- log skipped reason
+- optionally surface in ack:
+  “2 later weeks were updated; 1 customized week was left unchanged.”
+
+==================================================
+PHASE 6 — DRY RUN BEFORE APPLY
+==================================================
+
+Before any propagation, generate a dry-run plan.
+
+Create:
+
+type PropagationPlan = {
+  mode: PropagationMode
+  source: {...}
+  targets: Array<{
+    weekIndex: number
+    dayId: string
+    exerciseId: string
+    action: "apply" | "skip"
+    reason: string
+    beforeSnapshot: any
+    afterSnapshot: any
+    safetyScore: number
+  }>
+  summary: {
+    applyCount: number
+    skipCount: number
+    protectedCount: number
+    customizedCount: number
+  }
+}
+
+Create:
+
+function buildPropagationPlan(...): PropagationPlan
+
+Rules:
+- no mutation during plan generation
+- serialize before/after snapshots for auditing
+- if plan contains risky items, either skip them or downgrade to prompt_user
+
+Only after plan validation should the system commit changes.
+
+==================================================
+PHASE 7 — COMMIT WITH TRANSACTION + AUDIT LOG
+==================================================
+
+Implement:
+
+async function commitPropagationPlan(plan: PropagationPlan): Promise<CommitResult>
+
+Requirements:
+- apply all target changes in one transaction if supported
+- if partial failure occurs, rollback if possible
+- write audit log entries for every target
+- stamp propagation metadata on changed future instances
+- emit system event after successful commit
+
+Audit log fields:
+- eventId
+- sourceWeek
+- sourceExerciseId
+- targetWeek
+- targetExerciseId
+- propagationMode
+- safetyScore
+- changedFields
+- skippedReason
+- initiatedBy
+
+==================================================
+PHASE 8 — USER-FACING SAFETY BEHAVIOR
+==================================================
+
+When an edit is made, return a structured propagation summary.
+
+Examples:
+- “Applied locally only.”
+- “Applied to 3 matching future weeks.”
+- “Applied to 2 future weeks; skipped 1 protected deload week.”
+- “Later weeks were not changed because those exercises were already customized.”
+- “This adjustment changes training intent. Future propagation requires confirmation.”
+
+Create a structured response payload:
+
+type PropagationSummary = {
+  status: "local_only" | "propagated" | "partial" | "confirmation_required"
+  message: string
+  appliedWeeks: number[]
+  skippedWeeks: Array<{ weekIndex: number; reason: string }>
+  mode: PropagationMode
+}
+
+This summary should feed:
+- active programs page acknowledgment
+- main chat acknowledgment
+- future explainability panels
+
+==================================================
+PHASE 9 — SAFE RULES FOR SPECIFIC EDIT TYPES
+==================================================
+
+Implement these default policies:
+
+1. replace_exercise / swap_exercise
+- use structural_swap
+- propagate only to future matches with same slot/day identity
+- preserve target week dosage if possible
+- skip protected/customized/locked weeks
+
+2. easier_variation / harder_variation / injury_modification / joint_friendly_modification
+- structural_swap
+- propagate only within same exercise family path
+- preserve progression intent
+- never override a later week that was already customized into a different path
+
+3. increase_sets / reduce_sets
+- relative_adjustment
+- only propagate if future weeks are same progression lane
+- do not flatten deload/taper weeks
+- respect max/min bounds
+
+4. change_rep_range
+- default to prompt_user unless change remains within same stimulus band
+- if auto-applied, use relative intent-preserving adjustment only
+
+5. exercise_note / notes-only changes
+- local only
+
+==================================================
+PHASE 10 — ADD STIMULUS BAND PROTECTION
+==================================================
+
+Create a helper:
+
+type StimulusBand = "power" | "strength" | "hypertrophy" | "endurance" | "mixed"
+
+function inferStimulusBand(exercise: any): StimulusBand
+
+Use reps, intent tags, rest, tempo, and phase context.
+
+Rule:
+If a proposed propagation would move a future week into a different stimulus band unintentionally, do not auto-apply.
+Instead:
+- skip, or
+- require confirmation
+
+Examples:
+- 3-5 reps to 10-12 reps = likely band shift
+- 4-6 reps to 5-7 reps = maybe safe if still strength
+
+==================================================
+PHASE 11 — ADD TESTS
+==================================================
+
+Write tests for:
+
+1. Notes-only edit stays local
+2. Replace exercise propagates to eligible future weeks
+3. Replace exercise skips deload week
+4. Set increase uses relative adjustment, not exact overwrite
+5. Future customized week is skipped
+6. Locked week is skipped
+7. Rep range crossing stimulus band requires confirmation
+8. Structural swap preserves target week progression dosage
+9. Dry run produces correct apply/skip summary
+10. Chat acknowledgment includes accurate propagation summary
+
+==================================================
+PHASE 12 — DO NOT BREAK CURRENT UX
+==================================================
+
+Requirements:
+- current edit flow must remain fast
+- propagation planning should be lightweight
+- postEditAckToChat remains fire-and-forget
+- if propagation fails, local edit should still succeed unless transaction semantics require otherwise
+- log errors clearly
+- do not silently mutate weeks without recording why
+
+==================================================
+IMPLEMENTATION NOTES
+==================================================
+
+Important:
+- Prefer canonical IDs, slot IDs, lineage IDs, and family tags over string matching
+- Never propagate by exercise label alone
+- Preserve later-week overload shape whenever possible
+- Protected weeks should be respected by default
+- User customizations always beat automation
+- Every propagated change must be explainable after the fact
+
+DELIVERABLES
+1. determinePropagationMode()
+2. findEligibleFutureMatches()
+3. assessPropagationSafety()
+4. applyRelativeAdjustment()
+5. isMateriallyCustomized()
+6. buildPropagationPlan()
+7. commitPropagationPlan()
+8. structured PropagationSummary response
+9. tests for all major safety cases
+
+When finished, show:
+- exact files created or edited
+- propagation decision rules
+- one example dry-run output
+- one example partial propagation summary
+- any assumptions made
