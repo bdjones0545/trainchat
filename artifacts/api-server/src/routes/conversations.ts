@@ -47,6 +47,10 @@ import { buildExecutionPlan, type ExecutionPlan } from "../lib/execution-planner
 import { resolveAgentSettingsContext, type CoachBehaviorSettings, type AgentSettingsContext } from "../lib/agent-settings-resolver";
 import { resolveRefinementScope } from "../lib/refinement-scope-resolver";
 import { applyHierarchicalRefinement } from "../lib/hierarchical-refine-engine";
+import {
+  processSessionScopeImpact,
+  processHierarchicalImpact,
+} from "../lib/refinement-impact-engine";
 
 const router: IRouter = Router();
 
@@ -1268,9 +1272,23 @@ Keep it helpful and intelligent, never promotional.`;
           scopeResolution: directScopeResolution,
         });
 
-        const hierarchicalContent = hierarchicalResult.applied
-          ? `Done — ${hierarchicalResult.changeSummary}`
-          : `I wasn't able to apply that change. ${hierarchicalResult.changeSummary}`;
+        let hierarchicalContent: string;
+        if (hierarchicalResult.applied) {
+          const allWeeks = directFullSystem?.phases.flatMap((p) => p.weeks) ?? [];
+          const currentWeekNumber = allWeeks.slice(-1)[0]?.weekNumber ?? 1;
+          const hierarchicalImpact = await processHierarchicalImpact({
+            userMessage: parsed.data.content,
+            scopeResolution: directScopeResolution,
+            changeSummary: hierarchicalResult.changeSummary,
+            sessionCount: hierarchicalResult.sessionCount,
+            exerciseCount: hierarchicalResult.exerciseCount,
+            fullSystem: directFullSystem ?? { phases: [] },
+            currentWeekNumber,
+          });
+          hierarchicalContent = hierarchicalImpact.coachResponse;
+        } else {
+          hierarchicalContent = `I wasn't able to apply that change. ${hierarchicalResult.changeSummary}`;
+        }
 
         const [hierarchicalMsg] = await db.insert(messagesTable).values({
           conversationId: params.data.id,
@@ -1443,7 +1461,22 @@ Keep it helpful and intelligent, never promotional.`;
       });
 
       // ── 6. Coaching response + persist message ─────────────────────────────
-      const coachingContent = buildVibeEditCoachingResponse(directEditResult);
+      const vibeBaseResponse = buildVibeEditCoachingResponse(directEditResult);
+      const directAllWeeks = directFullSystem?.phases.flatMap((p) => p.weeks) ?? [];
+      const directCurrentWeek = directAllWeeks.slice(-1)[0]?.weekNumber ?? 1;
+      const directTargetNames = directEditResult.changeTargets
+        .flatMap((t) => [t.originalExercise, t.newExercise])
+        .filter((n): n is string => !!n);
+      const directImpact = await processSessionScopeImpact({
+        userMessage: parsed.data.content,
+        scopeResolution: directScopeResolution,
+        editPlan: directEditPlan,
+        immediateChangeSummary: vibeBaseResponse,
+        fullSystem: directFullSystem ?? { phases: [] },
+        currentWeekNumber: directCurrentWeek,
+        targetExerciseNames: directTargetNames,
+      });
+      const coachingContent = directImpact.coachResponse;
 
       const systemEditData = {
         _type: "system_edit" as const,
@@ -2678,9 +2711,23 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           scopeResolution: streamScopeResolution,
         });
 
-        const streamHierarchicalContent = streamHierarchicalResult.applied
-          ? `Done — ${streamHierarchicalResult.changeSummary}`
-          : `I wasn't able to apply that change. ${streamHierarchicalResult.changeSummary}`;
+        let streamHierarchicalContent: string;
+        if (streamHierarchicalResult.applied) {
+          const streamAllWeeks = streamFullSystem?.phases.flatMap((p) => p.weeks) ?? [];
+          const streamCurrentWeek = streamAllWeeks.slice(-1)[0]?.weekNumber ?? 1;
+          const streamHierarchicalImpact = await processHierarchicalImpact({
+            userMessage: parsed.data.content,
+            scopeResolution: streamScopeResolution,
+            changeSummary: streamHierarchicalResult.changeSummary,
+            sessionCount: streamHierarchicalResult.sessionCount,
+            exerciseCount: streamHierarchicalResult.exerciseCount,
+            fullSystem: streamFullSystem ?? { phases: [] },
+            currentWeekNumber: streamCurrentWeek,
+          });
+          streamHierarchicalContent = streamHierarchicalImpact.coachResponse;
+        } else {
+          streamHierarchicalContent = `I wasn't able to apply that change. ${streamHierarchicalResult.changeSummary}`;
+        }
 
         const [streamHierarchicalMsg] = await db.insert(messagesTable).values({
           conversationId: params.data.id,
@@ -2849,7 +2896,22 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       });
 
       // ── 6. Coaching response + persist message ─────────────────────────────
-      const coachingContent = buildVibeEditCoachingResponse(streamEditResult);
+      const streamVibeBaseResponse = buildVibeEditCoachingResponse(streamEditResult);
+      const streamAllWeeks = streamFullSystem?.phases.flatMap((p) => p.weeks) ?? [];
+      const streamCurrentWeek = streamAllWeeks.slice(-1)[0]?.weekNumber ?? 1;
+      const streamTargetNames = streamEditResult.changeTargets
+        .flatMap((t) => [t.originalExercise, t.newExercise])
+        .filter((n): n is string => !!n);
+      const streamImpact = await processSessionScopeImpact({
+        userMessage: parsed.data.content,
+        scopeResolution: streamScopeResolution,
+        editPlan: streamEditPlan,
+        immediateChangeSummary: streamVibeBaseResponse,
+        fullSystem: streamFullSystem ?? { phases: [] },
+        currentWeekNumber: streamCurrentWeek,
+        targetExerciseNames: streamTargetNames,
+      });
+      const coachingContent = streamImpact.coachResponse;
 
       const systemEditData = {
         _type: "system_edit" as const,
