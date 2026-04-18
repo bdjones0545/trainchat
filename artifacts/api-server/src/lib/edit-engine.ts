@@ -424,6 +424,72 @@ async function captureAfterSnapshot(changedIds: ChangedIds): Promise<SystemSnaps
 // "Same session slot" is determined by matching the session label — this ensures
 // we don't propagate a change on "Lower Power" exercises into an "Upper Strength"
 // session that happens to contain the same exercise name.
+//
+// NOT every change warrants propagation. The gate below ensures only structural,
+// program-wide changes (swaps, regressions, progressions, injury modifications)
+// propagate. One-off tweaks (note edits, single set adjustments) stay local.
+
+/**
+ * Determines whether a specific change within a plan should propagate to sibling
+ * exercise instances in future weeks.
+ *
+ * Gate rules:
+ *  - replace_exercise → ALWAYS propagate (exercise itself changed)
+ *  - update_exercise, notes-only → NEVER propagate (personal cue)
+ *  - update_exercise, sets INCREMENT/DECREMENT → NEVER propagate (one-off volume)
+ *  - update_exercise with intent matching progression/injury family → propagate
+ *  - update_exercise with intent matching one-off tweaks → don't propagate
+ *  - all other update_exercise → don't propagate (default safe)
+ */
+function shouldPropagateChange(planIntent: string, change: EditChange): boolean {
+  if (change.type === "replace_exercise") {
+    return true;
+  }
+
+  if (change.type !== "update_exercise") {
+    return false;
+  }
+
+  const updates = change.updates ?? {};
+  const updateKeys = Object.keys(updates).filter((k) => !k.startsWith("__prescription_"));
+
+  // Notes-only → personal cue, stays local
+  if (updateKeys.length === 1 && updateKeys[0] === "notes") {
+    return false;
+  }
+
+  // Sets INCREMENT/DECREMENT → one-off volume adjustment, stays local
+  if (
+    updateKeys.length === 1 &&
+    updateKeys[0] === "sets" &&
+    (updates.sets === "INCREMENT" || updates.sets === "DECREMENT")
+  ) {
+    return false;
+  }
+
+  const propagatableIntents = new Set([
+    "easier_variation",
+    "harder_variation",
+    "injury_modification",
+    "joint_friendly_modification",
+    "add_explosive_emphasis",
+    "shoulder_modification",
+    "swap_exercise",
+    "exercise_swap",
+  ]);
+
+  const localOnlyIntents = new Set([
+    "increase_sets",
+    "reduce_sets",
+    "exercise_note",
+    "change_rep_range",
+  ]);
+
+  if (localOnlyIntents.has(planIntent)) return false;
+  if (propagatableIntents.has(planIntent)) return true;
+
+  return false;
+}
 
 interface PropagationResult {
   propagatedIds: number[];
@@ -601,8 +667,16 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string, train
       const thisResult = results[i];
       if (!thisResult.applied) continue;
 
+      // Smart gate: only propagate structural / program-wide changes
+      if (!shouldPropagateChange(plan.intent, change)) {
+        logger.info(
+          { intent: plan.intent, changeType: change.type, changeId: change.id },
+          "[EditEngine] Propagation skipped — change is local/minor"
+        );
+        continue;
+      }
+
       if (change.type === "replace_exercise") {
-        // Get the original name from the before snapshot
         const before = beforeSnapshot.exercises[String(change.id)];
         const originalName = before?.name as string | undefined;
         if (originalName && change.replacement?.name) {
@@ -629,7 +703,6 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string, train
           }
         }
       } else if (change.type === "update_exercise") {
-        // Get exercise name from before snapshot or from the DB
         const before = beforeSnapshot.exercises[String(change.id)];
         const exerciseName = before?.name as string | undefined;
         if (exerciseName) {

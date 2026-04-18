@@ -17,7 +17,7 @@
 import { Router, type IRouter } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { interpretEditRequest } from "../lib/edit-intent-service";
-import { applyEditPlan } from "../lib/edit-engine";
+import { applyEditPlan, type EditResult } from "../lib/edit-engine";
 import { createChangeLogEntry } from "../lib/change-log-service";
 import { buildAdaptationContext } from "../lib/adaptation";
 import { listMemories, syncMemoriesFromData, extractMemoriesFromMessage } from "../lib/memory";
@@ -30,8 +30,65 @@ import {
   getBlockSummary,
 } from "../lib/training-system-service";
 import { trackLearningEvent } from "../lib/globalLearningService";
+import { db, conversationsTable, messagesTable } from "@workspace/db";
+import { eq, desc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { logger } from "../lib/logger";
+
+/**
+ * Posts an acknowledgment message to the user's most recent conversation so they
+ * see what changed when they return to chat. Fire-and-forget — never blocks the
+ * edit response.
+ */
+async function postEditAckToChat(
+  userId: number,
+  editResult: EditResult,
+  systemId: number,
+  changeLogId: number | undefined,
+): Promise<void> {
+  try {
+    const [recentConvo] = await db
+      .select({ id: conversationsTable.id })
+      .from(conversationsTable)
+      .where(eq(conversationsTable.userId, userId))
+      .orderBy(desc(conversationsTable.updatedAt))
+      .limit(1);
+
+    if (!recentConvo) return;
+
+    const summary = editResult.changeSummary;
+    const base = summary.endsWith(".") ? summary : `${summary}.`;
+
+    const structuredData = JSON.stringify({
+      _type: "system_edit",
+      changeSummary: editResult.changeSummary,
+      changedIds: editResult.changedIds,
+      systemId,
+      changeLogId,
+      verificationStatus: editResult.verification.status,
+      source: "programs_page",
+    });
+
+    await db.insert(messagesTable).values({
+      conversationId: recentConvo.id,
+      role: "assistant",
+      content: base,
+      structuredData,
+    });
+
+    await db
+      .update(conversationsTable)
+      .set({ updatedAt: new Date() })
+      .where(eq(conversationsTable.id, recentConvo.id));
+
+    logger.info(
+      { userId, conversationId: recentConvo.id, changeSummary: editResult.changeSummary },
+      "[SystemEdit] Posted programs-page edit acknowledgment to chat"
+    );
+  } catch (err) {
+    logger.warn({ err, userId }, "[SystemEdit] Failed to post edit ack to chat (non-fatal)");
+  }
+}
 
 const router: IRouter = Router();
 
@@ -187,7 +244,11 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       },
     });
 
-    // 6. Sync coach memories from the edit — same path as the conversation pipeline.
+    // 6. Echo the change to the user's most recent chat conversation so they see
+    //    what was updated when they return to chat. Fire-and-forget.
+    postEditAckToChat(userId, editResult, activeSystem.id, changeLogId).catch(() => {});
+
+    // 7. Sync coach memories from the edit — same path as the conversation pipeline.
     //    Fire-and-forget: never block the response on memory operations.
     syncMemoriesFromData(userId).catch(() => {});
     if (userRequest.length > 10) {
