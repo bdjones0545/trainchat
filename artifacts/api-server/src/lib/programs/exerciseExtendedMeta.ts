@@ -91,30 +91,37 @@ export const EXERCISE_EXTENDED_META: Record<string, ExerciseExtendedMeta> = {
   "Good Morning":                      { family: "heavy_bilateral_hinge", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "high" },
   "Dumbbell Romanian Deadlift":        { family: "heavy_bilateral_hinge", equivalenceCluster: "rdl-pattern",      complexity: "simple",   velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
   "Kettlebell Deadlift":               { family: "heavy_bilateral_hinge", complexity: "simple",   velocityIntent: "slow_grind",  stabilityDemand: "low" },
-  "Barbell Hip Thrust":                { family: "heavy_bilateral_hinge", complexity: "simple",   velocityIntent: "slow_grind",  stabilityDemand: "low" },
-  "Hip Thrust (barbell)":              { family: "heavy_bilateral_hinge", complexity: "simple",   velocityIntent: "moderate",    stabilityDemand: "low" },
+  // hip-thrust-pattern cluster bridges bilateral and unilateral hip thrust —
+  // same cross-family saturation logic as rdl-pattern.
+  "Barbell Hip Thrust":                { family: "heavy_bilateral_hinge", equivalenceCluster: "hip-thrust-pattern", complexity: "simple",   velocityIntent: "slow_grind",  stabilityDemand: "low" },
+  "Hip Thrust (barbell)":              { family: "heavy_bilateral_hinge", equivalenceCluster: "hip-thrust-pattern", complexity: "simple",   velocityIntent: "moderate",    stabilityDemand: "low" },
 
   // ── Unilateral Squat ──────────────────────────────────────────────────
-  "Bulgarian Split Squat":             { family: "unilateral_squat", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "high" },
-  "Rear-Foot Elevated Split Squat (RFESS)": { family: "unilateral_squat", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "high" },
-  "Lateral Step-Up":                   { family: "unilateral_squat", complexity: "moderate", velocityIntent: "moderate",    stabilityDemand: "high" },
-  "Single-Leg Squat to Box":           { family: "unilateral_squat", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "high" },
-  "Reverse Lunge":                     { family: "unilateral_squat", complexity: "simple",   velocityIntent: "moderate",    stabilityDemand: "moderate" },
-  "Lateral Lunge":                     { family: "unilateral_squat", complexity: "simple",   velocityIntent: "moderate",    stabilityDemand: "moderate" },
-  "Walking Lunge (weighted)":          { family: "unilateral_squat", complexity: "simple",   velocityIntent: "moderate",    stabilityDemand: "moderate" },
-  "Cossack Squat":                     { family: "unilateral_squat", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "high" },
-  "Deficit Reverse Lunge":             { family: "unilateral_squat", complexity: "moderate", velocityIntent: "moderate",    stabilityDemand: "high" },
-  "Step-Up with Knee Drive":           { family: "unilateral_squat", complexity: "simple",   velocityIntent: "moderate",    stabilityDemand: "moderate" },
-  "Pistol Squat":                      { family: "unilateral_squat", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
-  "Box Step-Up":                       { family: "unilateral_squat", complexity: "simple",   velocityIntent: "moderate",    stabilityDemand: "moderate" },
+  // Three sub-clusters by movement archetype:
+  //   split-squat-pattern: rear-foot-elevated / true split squat positions
+  //   lunge-pattern:       traveling or fixed lunge with frontal knee flexion
+  //   step-up-pattern:     concentric-led ascending step movements
+  // Cluster-alternative bonus promotes rotation between archetypes build-over-build.
+  "Bulgarian Split Squat":             { family: "unilateral_squat", equivalenceCluster: "split-squat-pattern", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "high" },
+  "Rear-Foot Elevated Split Squat (RFESS)": { family: "unilateral_squat", equivalenceCluster: "split-squat-pattern", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "high" },
+  "Single-Leg Squat to Box":           { family: "unilateral_squat", equivalenceCluster: "split-squat-pattern", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "high" },
+  "Pistol Squat":                      { family: "unilateral_squat", equivalenceCluster: "split-squat-pattern", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
+  "Reverse Lunge":                     { family: "unilateral_squat", equivalenceCluster: "lunge-pattern",       complexity: "simple",   velocityIntent: "moderate",    stabilityDemand: "moderate" },
+  "Lateral Lunge":                     { family: "unilateral_squat", equivalenceCluster: "lunge-pattern",       complexity: "simple",   velocityIntent: "moderate",    stabilityDemand: "moderate" },
+  "Walking Lunge (weighted)":          { family: "unilateral_squat", equivalenceCluster: "lunge-pattern",       complexity: "simple",   velocityIntent: "moderate",    stabilityDemand: "moderate" },
+  "Deficit Reverse Lunge":             { family: "unilateral_squat", equivalenceCluster: "lunge-pattern",       complexity: "moderate", velocityIntent: "moderate",    stabilityDemand: "high" },
+  "Cossack Squat":                     { family: "unilateral_squat", equivalenceCluster: "lunge-pattern",       complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "high" },
+  "Lateral Step-Up":                   { family: "unilateral_squat", equivalenceCluster: "step-up-pattern",     complexity: "moderate", velocityIntent: "moderate",    stabilityDemand: "high" },
+  "Step-Up with Knee Drive":           { family: "unilateral_squat", equivalenceCluster: "step-up-pattern",     complexity: "simple",   velocityIntent: "moderate",    stabilityDemand: "moderate" },
+  "Box Step-Up":                       { family: "unilateral_squat", equivalenceCluster: "step-up-pattern",     complexity: "simple",   velocityIntent: "moderate",    stabilityDemand: "moderate" },
 
   // ── Unilateral Hinge ──────────────────────────────────────────────────
   // rdl-pattern cluster shared with bilateral RDL variants — so if
   // Romanian Deadlift is already selected in the bilateral hinge slot,
   // SLRDL and Kickstand RDL receive a movementClusterPenalty in the same
   // build call, steering the unilateral slot toward more distinct patterns.
-  "Single-Leg Romanian Deadlift":      { family: "unilateral_hinge", equivalenceCluster: "rdl-pattern",      complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "high" },
-  "Single-Leg Hip Thrust":             { family: "unilateral_hinge", complexity: "simple",   velocityIntent: "moderate",    stabilityDemand: "moderate" },
+  "Single-Leg Romanian Deadlift":      { family: "unilateral_hinge", equivalenceCluster: "rdl-pattern",          complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "high" },
+  "Single-Leg Hip Thrust":             { family: "unilateral_hinge", equivalenceCluster: "hip-thrust-pattern",   complexity: "simple",   velocityIntent: "moderate",    stabilityDemand: "moderate" },
   "Single-Leg Deadlift (KB)":          { family: "unilateral_hinge", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "high" },
   "Kickstand RDL":                     { family: "unilateral_hinge", equivalenceCluster: "rdl-pattern",      complexity: "simple",   velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
   "Single-Leg Good Morning":           { family: "unilateral_hinge", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "high" },
@@ -162,26 +169,33 @@ export const EXERCISE_EXTENDED_META: Record<string, ExerciseExtendedMeta> = {
   "Overhead Med Ball Throw":           { family: "ballistic", complexity: "simple",   velocityIntent: "explosive",  stabilityDemand: "low" },
 
   // ── Upper Horizontal Push ─────────────────────────────────────────────
-  "Barbell Bench Press":               { family: "upper_horizontal_push", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "low" },
-  "DB Bench Press":                    { family: "upper_horizontal_push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "moderate" },
-  "Incline Barbell Press":             { family: "upper_horizontal_push", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "low" },
-  "Incline DB Press":                  { family: "upper_horizontal_push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "moderate" },
-  "Close-Grip Bench":                  { family: "upper_horizontal_push", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "low" },
-  "Push-Up (weighted)":                { family: "upper_horizontal_push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "moderate" },
-  "Dumbbell Floor Press":              { family: "upper_horizontal_push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
-  "Machine Chest Press":               { family: "upper_horizontal_push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
-  "Cable Fly":                         { family: "upper_horizontal_push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
-  "Bench Press":                       { family: "upper_horizontal_push", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "low" },
-  "Dumbbell Press (flat)":             { family: "upper_horizontal_push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "moderate" },
+  // horizontal-push cluster: rotation bonus drives build-to-build variation
+  // (Bench Press one block, Incline DB Press the next, etc.)
+  "Barbell Bench Press":               { family: "upper_horizontal_push", equivalenceCluster: "horizontal-push", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "low" },
+  "DB Bench Press":                    { family: "upper_horizontal_push", equivalenceCluster: "horizontal-push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "moderate" },
+  "Incline Barbell Press":             { family: "upper_horizontal_push", equivalenceCluster: "horizontal-push", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "low" },
+  "Incline DB Press":                  { family: "upper_horizontal_push", equivalenceCluster: "horizontal-push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "moderate" },
+  "Close-Grip Bench":                  { family: "upper_horizontal_push", equivalenceCluster: "horizontal-push", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "low" },
+  "Push-Up (weighted)":                { family: "upper_horizontal_push", equivalenceCluster: "horizontal-push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "moderate" },
+  "Dumbbell Floor Press":              { family: "upper_horizontal_push", equivalenceCluster: "horizontal-push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
+  "Machine Chest Press":               { family: "upper_horizontal_push", equivalenceCluster: "horizontal-push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
+  "Cable Fly":                         { family: "upper_horizontal_push", equivalenceCluster: "horizontal-push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
+  "Bench Press":                       { family: "upper_horizontal_push", equivalenceCluster: "horizontal-push", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "low" },
+  "Dumbbell Press (flat)":             { family: "upper_horizontal_push", equivalenceCluster: "horizontal-push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "moderate" },
 
   // ── Upper Vertical Push ───────────────────────────────────────────────
-  "Overhead Press (barbell)":          { family: "upper_vertical_push", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "high" },
-  "Dumbbell Overhead Press":           { family: "upper_vertical_push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "high" },
-  "Landmine Press":                    { family: "upper_vertical_push", complexity: "moderate", velocityIntent: "moderate",   stabilityDemand: "high" },
-  "Seated DB Press":                   { family: "upper_vertical_push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
-  "Arnold Press":                      { family: "upper_vertical_push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "high" },
-  "Z-Press":                           { family: "upper_vertical_push", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "high" },
-  "Push Press (barbell)":              { family: "upper_vertical_push", complexity: "moderate", velocityIntent: "ballistic",  stabilityDemand: "moderate" },
+  // vertical-push cluster: same rotation-bonus logic for OHP variants.
+  // Push Press (barbell) is also here — it is physically an OHP with a leg
+  // drive assist; it belongs in this family. The "Push Press" entry in the
+  // plyometric section is a naming inconsistency and should not be confused
+  // with this — they are tagged separately by familiy intent.
+  "Overhead Press (barbell)":          { family: "upper_vertical_push", equivalenceCluster: "vertical-push", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "high" },
+  "Dumbbell Overhead Press":           { family: "upper_vertical_push", equivalenceCluster: "vertical-push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "high" },
+  "Landmine Press":                    { family: "upper_vertical_push", equivalenceCluster: "vertical-push", complexity: "moderate", velocityIntent: "moderate",   stabilityDemand: "high" },
+  "Seated DB Press":                   { family: "upper_vertical_push", equivalenceCluster: "vertical-push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
+  "Arnold Press":                      { family: "upper_vertical_push", equivalenceCluster: "vertical-push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "high" },
+  "Z-Press":                           { family: "upper_vertical_push", equivalenceCluster: "vertical-push", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "high" },
+  "Push Press (barbell)":              { family: "upper_vertical_push", equivalenceCluster: "vertical-push", complexity: "moderate", velocityIntent: "ballistic",  stabilityDemand: "moderate" },
 
   // ── Upper Horizontal Pull ─────────────────────────────────────────────
   // equivalenceCluster: "horizontal-pull" — all are movement-equivalent for
