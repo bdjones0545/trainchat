@@ -2009,6 +2009,17 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
     const phaseId = targetContext.id;
     const label = targetContext.label ?? "this block";
 
+    // Derives a new block name by swapping the style keyword in the existing name.
+    // e.g. "Foundation Strength Block" + "Hypertrophy" → "Foundation Hypertrophy Block"
+    // Falls back to "<Focus> Block" if the existing name has no recognizable style word.
+    function deriveBlockName(existingName: string, newFocusWord: string): string {
+      const styled = existingName.replace(
+        /\b(strength|power|hypertrophy|endurance|conditioning|athletic|speed|explosive|aerobic)\b/gi,
+        newFocusWord
+      );
+      return styled !== existingName ? styled : `${newFocusWord} Block`;
+    }
+
     if (lower.match(/power|explosive|speed|athletic/)) {
       // ── BLOCK-LEVEL POWER/EXPLOSIVE TRANSFORMATION ──────────────────────────
       // For each session in the phase:
@@ -2082,7 +2093,7 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
         blockPowerChanges.push({ type: "update_session", id: session.id, updates: { emphasis: "Power and force expression — explosive output prioritized", coachingNotes: "Power session: open with explosive work. Primaries at 70-80% with bar speed focus. Full recovery between sets." }, reason: "Block power refocus — session emphasis" });
       }
 
-      blockPowerChanges.push({ type: "update_phase", id: phaseId, updates: { emphasis: "Power and explosive development — bar speed, neural output, dynamic effort emphasis", goal: "Develop explosive strength and power output across primary patterns" }, reason: "Block power refocus — phase emphasis" });
+      blockPowerChanges.push({ type: "update_phase", id: phaseId, updates: { name: deriveBlockName(label, "Power"), emphasis: "Power and explosive development — bar speed, neural output, dynamic effort emphasis", goal: "Develop explosive strength and power output across primary patterns" }, reason: "Block power refocus — phase emphasis" });
 
       const powerStructural = blockPowerChanges.filter(c =>
         c.type === "add_exercise" ||
@@ -2101,7 +2112,7 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
         intent: "refocus_block_power",
         scope: "block",
         changeSummary: `${label} refocused toward power and explosive development.`,
-        changes: [{ type: "update_phase", id: phaseId, updates: { emphasis: "Power and explosive development — bar speed, neural output, dynamic effort emphasis", goal: "Develop explosive strength and power output across primary patterns" }, reason: "Power emphasis refocus" }],
+        changes: [{ type: "update_phase", id: phaseId, updates: { name: deriveBlockName(label, "Power"), emphasis: "Power and explosive development — bar speed, neural output, dynamic effort emphasis", goal: "Develop explosive strength and power output across primary patterns" }, reason: "Power emphasis refocus" }],
       };
     }
 
@@ -2209,6 +2220,7 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
         type: "update_phase",
         id: phaseId,
         updates: {
+          name: deriveBlockName(label, "Hypertrophy"),
           emphasis: "Hypertrophy — mechanical tension and metabolic stress primary drivers",
           goal: "Maximize muscle development through progressive volume and mechanical load",
         },
@@ -2235,7 +2247,7 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
         intent: "refocus_block_hypertrophy",
         scope: "block",
         changeSummary: `${label} shifted toward hypertrophy emphasis. Mechanical tension and metabolic stress are the primary training drivers for this block.`,
-        changes: [{ type: "update_phase", id: phaseId, updates: { emphasis: "Hypertrophy — mechanical tension and metabolic stress primary drivers", goal: "Maximize muscle development through progressive volume and mechanical load" }, reason: "Hypertrophy emphasis refocus" }],
+        changes: [{ type: "update_phase", id: phaseId, updates: { name: deriveBlockName(label, "Hypertrophy"), emphasis: "Hypertrophy — mechanical tension and metabolic stress primary drivers", goal: "Maximize muscle development through progressive volume and mechanical load" }, reason: "Hypertrophy emphasis refocus" }],
       };
     }
 
@@ -2244,7 +2256,7 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
         intent: "refocus_block_athletic",
         scope: "block",
         changeSummary: `${label} reoriented toward field-sport and athletic performance. Strength work serves power and speed transfer rather than peak force production alone.`,
-        changes: [{ type: "update_phase", id: phaseId, updates: { emphasis: "Field-sport athletic development — strength, speed, and movement quality integrated", goal: "Develop athletic performance qualities transferable to sport" }, reason: "Athletic/field-sport refocus" }],
+        changes: [{ type: "update_phase", id: phaseId, updates: { name: deriveBlockName(label, "Athletic"), emphasis: "Field-sport athletic development — strength, speed, and movement quality integrated", goal: "Develop athletic performance qualities transferable to sport" }, reason: "Athletic/field-sport refocus" }],
       };
     }
 
@@ -2316,7 +2328,7 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
         blockEndChanges.push({ type: "update_session", id: session.id, updates: { emphasis: "Endurance and work capacity — metabolic density, sustained output", coachingNotes: "Endurance session: tighter rest, higher reps, conditioning finisher to close. Quality reps with minimal recovery between sets." }, reason: "Block endurance refocus — session emphasis" });
       }
 
-      blockEndChanges.push({ type: "update_phase", id: phaseId, updates: { emphasis: "Endurance and work capacity — aerobic base, metabolic density, sustained output", goal: "Build aerobic capacity and work capacity through sustained moderate-intensity training" }, reason: "Block endurance refocus — phase emphasis" });
+      blockEndChanges.push({ type: "update_phase", id: phaseId, updates: { name: deriveBlockName(label, "Endurance"), emphasis: "Endurance and work capacity — aerobic base, metabolic density, sustained output", goal: "Build aerobic capacity and work capacity through sustained moderate-intensity training" }, reason: "Block endurance refocus — phase emphasis" });
 
       const endStructural = blockEndChanges.filter(c =>
         c.type === "add_exercise" ||
@@ -2335,7 +2347,7 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
         intent: "refocus_block_endurance",
         scope: "block",
         changeSummary: `${label} shifted toward endurance and aerobic capacity development.`,
-        changes: [{ type: "update_phase", id: phaseId, updates: { emphasis: "Endurance and work capacity — aerobic base, metabolic density, sustained output", goal: "Build aerobic capacity and work capacity through sustained moderate-intensity training" }, reason: "Endurance emphasis refocus" }],
+        changes: [{ type: "update_phase", id: phaseId, updates: { name: deriveBlockName(label, "Endurance"), emphasis: "Endurance and work capacity — aerobic base, metabolic density, sustained output", goal: "Build aerobic capacity and work capacity through sustained moderate-intensity training" }, reason: "Endurance emphasis refocus" }],
       };
     }
 
@@ -2383,7 +2395,7 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
         blockStrengthChanges.push({ type: "update_session", id: session.id, updates: { emphasis: "Max strength — peak force production, neural drive, 1-2 RIR on primaries", coachingNotes: "Strength session: heavy primary work at 80-90% of max. Full recovery between sets. Technical execution is non-negotiable at these loads." }, reason: "Block strength refocus — session emphasis" });
       }
 
-      blockStrengthChanges.push({ type: "update_phase", id: phaseId, updates: { emphasis: "Max strength development — peak force production, progressive overload, technical excellence", goal: "Maximize peak force output on primary compound movements through structured progressive overload" }, reason: "Block strength refocus — phase emphasis" });
+      blockStrengthChanges.push({ type: "update_phase", id: phaseId, updates: { name: deriveBlockName(label, "Strength"), emphasis: "Max strength development — peak force production, progressive overload, technical excellence", goal: "Maximize peak force output on primary compound movements through structured progressive overload" }, reason: "Block strength refocus — phase emphasis" });
 
       const strStructural = blockStrengthChanges.filter(c =>
         c.type === "add_exercise" ||
@@ -2402,7 +2414,7 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
         intent: "refocus_block_strength",
         scope: "block",
         changeSummary: `${label} shifted toward max strength development.`,
-        changes: [{ type: "update_phase", id: phaseId, updates: { emphasis: "Max strength development — peak force production, progressive overload, technical excellence", goal: "Maximize peak force output on primary compound movements" }, reason: "Strength emphasis refocus" }],
+        changes: [{ type: "update_phase", id: phaseId, updates: { name: deriveBlockName(label, "Strength"), emphasis: "Max strength development — peak force production, progressive overload, technical excellence", goal: "Maximize peak force output on primary compound movements" }, reason: "Strength emphasis refocus" }],
       };
     }
   }
