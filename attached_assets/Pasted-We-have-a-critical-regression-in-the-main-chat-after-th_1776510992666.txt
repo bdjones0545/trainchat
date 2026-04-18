@@ -1,0 +1,217 @@
+We have a critical regression in the main chat after the new Replit-style thinking/build UI was added.
+
+BUG:
+When the user submits a build request:
+- the user’s input does NOT appear in the main chat transcript
+- the agent only shows the thinking/building state
+- the thinking state remains visible for a very long time
+- chat appears stuck in "thinking"
+- the normal user → assistant message flow is broken
+
+Observed behavior:
+- build stage pill updates (e.g. "Assigning sessions & exercises...")
+- timer continues counting upward
+- but the submitted user message is missing from the chat
+- and the assistant never visibly resolves back into normal chat flow
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Restore the normal chat contract while keeping the premium thinking/build experience.
+
+Correct behavior must be:
+
+1. user sends a message
+2. user message appears in chat immediately
+3. assistant thinking/build card appears as the in-progress assistant response
+4. thinking card updates in place during build
+5. final assistant response resolves normally into the chat
+6. thinking state clears cleanly
+
+==================================================
+TASK 1 — TRACE SEND FLOW END TO END
+==================================================
+
+Audit the full path from:
+- input submit
+- handleSend
+- optimistic user message insertion
+- build/thinking state activation
+- SSE/non-streaming response handling
+- final message commit
+- thinking state cleanup
+
+We need to identify exactly where the user message stops being rendered.
+
+==================================================
+TASK 2 — RESTORE OPTIMISTIC USER MESSAGE INSERTION
+==================================================
+
+When the user submits input:
+- immediately append the user message to the visible chat transcript
+- do NOT wait for build completion
+- do NOT let the thinking state replace the user message layer
+
+The user must always see what they just sent.
+
+==================================================
+TASK 3 — THINKING CARD MUST BE AN IN-PROGRESS ASSISTANT MESSAGE, NOT A FULL CHAT REPLACEMENT
+==================================================
+
+The Replit-style thinking/build UI should render as:
+- an assistant-side in-progress message/card
+
+It must NOT replace or hide:
+- existing messages
+- the just-submitted user message
+- the surrounding chat transcript
+
+Audit render conditions for:
+- messages list
+- empty-state UI
+- thinking state
+- agent status bar
+
+We likely have an overly aggressive conditional rendering bug.
+
+==================================================
+TASK 4 — FIX STUCK THINKING STATE
+==================================================
+
+The thinking state must clear when:
+- final assistant message is committed
+- SSE finishes
+- non-streaming request resolves
+- request errors out
+- request is cancelled
+
+Add a hard cleanup path so the UI cannot stay stuck in build mode forever.
+
+==================================================
+TASK 5 — VERIFY SSE / STREAMING COMPLETION HANDOFF
+==================================================
+
+Audit the streaming path carefully.
+
+Possible issue:
+- BuildStage events are arriving
+- but final assistant message never commits
+- or completion handler never flips isBuilding = false
+
+Make sure:
+- stage events update the in-progress assistant card
+- final content replaces/resolves that card
+- timer stops
+- thinking state unmounts
+
+==================================================
+TASK 6 — SEPARATE EMPTY STATE FROM ACTIVE CHAT STATE
+==================================================
+
+The large “Build your training system” empty-state UI should ONLY render when:
+- there are no chat messages
+- and no in-progress user submission exists
+
+Once the user submits a message:
+- empty state should disappear
+- normal transcript should take over
+- thinking card should live inside the transcript, not above the empty state
+
+This appears to be one of the regressions.
+
+==================================================
+TASK 7 — ADD DEFENSIVE TIMEOUT / FAILURE STATE
+==================================================
+
+If thinking/build state exceeds a reasonable threshold without completion:
+- show a clean fallback error/retry state
+- do NOT keep counting forever with no resolution
+
+Example:
+"Still working… something may have stalled. Retry?"
+
+==================================================
+TASK 8 — DEV LOGGING
+==================================================
+
+Add logs:
+
+[ChatSendAudit]
+- userMessageInserted
+- messageCountBefore
+- messageCountAfter
+
+[ThinkingStateAudit]
+- enteredThinking
+- currentStage
+- stageUpdated
+- finalResponseCommitted
+- clearedThinking
+
+[TranscriptRenderAudit]
+- messagesVisible
+- emptyStateVisible
+- thinkingCardVisible
+
+We need to prove the transcript and thinking state are being rendered correctly.
+
+==================================================
+TASK 9 — QA TEST CASES
+==================================================
+
+Test all of these:
+
+1. Fresh chat → submit build request
+Expected:
+- user message appears immediately
+- thinking card appears as assistant in-progress state
+- final result resolves normally
+
+2. Streaming build
+Expected:
+- stage updates occur
+- user message remains visible
+- no stuck state
+
+3. Non-streaming build
+Expected:
+- same behavior
+
+4. Request failure
+Expected:
+- thinking state clears
+- error shown cleanly
+- chat not frozen
+
+5. Delete prior program / fresh state
+Expected:
+- empty state only before user submits
+- normal transcript after submission
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. exact root cause
+2. whether optimistic user message insertion broke
+3. whether empty-state render conditions were wrong
+4. whether thinking UI replaced transcript incorrectly
+5. what was changed
+6. before/after behavior
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat must keep the Replit-style thinking experience WITHOUT breaking the normal chat transcript.
+
+The user must always see:
+- their submitted message
+- the assistant thinking in place
+- the final assistant response
+
+No stuck thinking screen.
+No missing user input.
+No chat replacement bug.
