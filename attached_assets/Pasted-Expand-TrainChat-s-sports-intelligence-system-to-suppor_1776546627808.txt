@@ -1,0 +1,208 @@
+Expand TrainChat’s sports intelligence system to support many more sports such as pickleball, cricket, flag football, bowling, padel, badminton, squash, golf, lacrosse, rugby, volleyball, baseball, softball, wrestling, boxing, MMA, and others.
+
+GOAL
+Do NOT implement these as flat sport labels only.
+Implement them as structured sport profiles that can influence exercise ranking, slot selection, programming logic, and future agent reasoning.
+
+CORE PRINCIPLE
+A sport should be represented by its movement and performance demands, not just by name.
+
+PHASE 1 — CREATE A SPORT PROFILE REGISTRY
+
+Create a new file:
+- sport-profiles.ts
+
+Define:
+
+type DemandScore = 0 | 1 | 2 | 3
+
+type SportProfile = {
+  id: string
+  displayName: string
+  category: "field" | "court" | "bat_and_ball" | "precision" | "combat" | "other"
+  positions?: string[]
+  demandProfile: {
+    acceleration: DemandScore
+    maxVelocity: DemandScore
+    lateralMovement: DemandScore
+    changeOfDirection: DemandScore
+    deceleration: DemandScore
+    elasticReactivity: DemandScore
+    rotation: DemandScore
+    antiRotation: DemandScore
+    overheadDemand: DemandScore
+    unilateralControl: DemandScore
+    gripForearmDemand: DemandScore
+    aerobicDemand: DemandScore
+    repeatSprintDemand: DemandScore
+  }
+  injuryBias: {
+    ankleFoot: DemandScore
+    knee: DemandScore
+    hamstring: DemandScore
+    groinHip: DemandScore
+    shoulderElbow: DemandScore
+    lowBack: DemandScore
+    wristHand: DemandScore
+  }
+  programmingBias: {
+    prioritizeQualities: string[]
+    deEmphasizeQualities: string[]
+  }
+}
+
+Export a SPORT_PROFILES registry with strong initial profiles for:
+- pickleball
+- cricket
+- flag_football
+- bowling
+- padel
+- badminton
+- squash
+- golf
+- lacrosse
+- rugby
+- volleyball
+- baseball
+- softball
+- wrestling
+- boxing
+- mma
+
+Also support role-based subprofiles where appropriate:
+- cricket_bowler
+- cricket_batter
+- cricket_wicketkeeper
+- baseball_pitcher
+- baseball_position_player
+- volleyball_setter
+- volleyball_hitter
+- volleyball_libero
+
+PHASE 2 — DEFINE EXERCISE QUALITY TAGS
+
+Audit exercise metadata and expand it beyond sportTags only.
+
+Every exercise should be able to store:
+- movementQualities: string[]
+- jointDemands: string[]
+- energySystemTags: string[]
+- transferTags: string[]
+- sportTags: string[]
+
+Examples of movementQualities:
+- acceleration
+- max_velocity
+- lateral_decel
+- cod
+- elastic_stiffness
+- rotation_power
+- anti_rotation
+- overhead_stability
+- unilateral_balance
+- grip_endurance
+- trunk_stiffness
+- reactive_footwork
+
+Examples of jointDemands:
+- ankle_stiffness
+- knee_dominant
+- hip_dominant
+- shoulder_stability
+- elbow_load
+- wrist_forearm
+- lumbar_control
+
+Do not remove existing metadata. Extend it safely.
+
+PHASE 3 — BUILD SPORT FIT SCORING
+
+Create a helper:
+- scoreSportFit.ts
+
+Implement:
+
+function scoreSportFit(input: {
+  sportProfile: SportProfile
+  exercise: ExerciseMetadata
+}): {
+  total: number
+  breakdown: Record<string, number>
+}
+
+Rules:
+- Score based on match between exercise qualities and sport demandProfile
+- Reward exercises that support priority qualities
+- Penalize poor fit if exercise conflicts with sport demands
+- Allow role-based profiles to override base sport profile
+- Keep scoring interpretable and capped
+
+PHASE 4 — CONNECT SPORT PROFILES TO RANKING
+
+Update the candidate ranking pipeline so sport fit is no longer just a string tag match.
+
+Use:
+- demandProfile
+- programmingBias.prioritizeQualities
+- programmingBias.deEmphasizeQualities
+- injuryBias when relevant
+
+Examples:
+- pickleball should favor lateral movement, deceleration, elastic reactivity, anti-rotation, shoulder resilience, and reactive footwork
+- bowling should favor unilateral control, trunk rotation, anti-rotation, forearm/grip demand, deceleration control, and repeated asymmetry resilience
+- flag football should favor acceleration, max velocity, COD, deceleration, hamstring resilience, reactive speed, and unilateral lower body work
+- cricket bowler should strongly weight rotation, deceleration, shoulder/elbow resilience, trunk stiffness, and unilateral control
+
+PHASE 5 — ADD SPORT SELECTION SUPPORT
+
+Ensure the user model can store:
+- primarySport
+- secondarySports[]
+- positionOrRole (optional)
+
+Support selection of new sports in configuration/intake without breaking existing users.
+If a sport is missing for an older user, fall back gracefully.
+
+PHASE 6 — ADD SAFE FALLBACK BEHAVIOR
+
+If a sport profile exists but exercise metadata is incomplete:
+- degrade gracefully
+- use family tags, intent tags, and neural/fatigue metadata as fallback
+- do not crash ranking
+- log missing metadata for future enrichment
+
+PHASE 7 — EXPLAINABILITY
+
+Add a small explanation hook so the system can later say things like:
+- “This exercise ranked higher because it supports pickleball-specific lateral deceleration and trunk control.”
+- “This option was boosted for flag football because it fits acceleration and COD demands.”
+
+Implement a reusable explanation object in the scoring output.
+
+PHASE 8 — TESTS
+
+Add tests for:
+1. pickleball profile returns higher score for lateral/reactive exercises than pure bilateral slow lifts
+2. bowling profile boosts rotational + unilateral control exercises
+3. flag football profile boosts acceleration/COD/sprint-resilience exercises
+4. cricket bowler profile differs from cricket batter profile
+5. missing metadata falls back safely
+6. older users without a sport profile do not break
+
+PHASE 9 — KEEP THE SYSTEM CLEAN
+
+Requirements:
+- Do not hardcode sport logic throughout the app
+- Centralize sport intelligence in sport-profiles.ts and scoreSportFit.ts
+- Make it easy to add future sports without editing ranking logic everywhere
+- Prefer structured qualities over manual one-off exceptions
+- Preserve existing behavior for current supported sports unless improved by the new system
+
+DELIVERABLES
+When complete, show:
+1. exact files created or edited
+2. all newly added sports
+3. one example profile for pickleball
+4. one example profile for bowling
+5. one example sport-fit scoring breakdown
+6. any assumptions made
