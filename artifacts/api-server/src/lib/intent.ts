@@ -134,10 +134,17 @@ export function extractConstraints(message: string): ExtractedConstraints {
   // ── Age extraction ────────────────────────────────────────────────────────
   let userAge: number | null = null;
   const agePatterns = [
-    /\bi(?:'m| am)\s+(\d{2})\s*(?:year[s]?\s*old|y\.?o\.?|years?)\b/i,
-    /\b(\d{2})\s*(?:year[s]?\s*old|y\.?o\.?)\b/i,
+    // "I am 65 years old", "I'm 65", "I am a 65-year-old"
+    /\bi(?:'m| am)\s+(?:a\s+)?(\d{2})\s*(?:year[s]?\s*old|y\.?o\.?|years?)?\b(?!\s*(?:days?|weeks?|months?|sets?|reps?|pounds?|kg|lbs?|%|minutes?|hours?|second|sec))/i,
+    // "65 year old", "65-year-old", "65yo", "65 y.o."
+    /\b(\d{2})\s*[-]?\s*(?:year[s]?\s*old|y\.?o\.?)\b/i,
+    // "65-year-old" with hyphens (e.g. "a 42-year-old baseball player")
+    /\b(\d{2})\s*-\s*year[s]?[\s-]?old\b/i,
+    // "age 65", "aged 65"
     /\bage[d]?\s+(\d{2})\b/i,
-    /\b(\d{2})\s*(?:year[s]?)-?old\b/i,
+    // "female, 58" / "male, 58" / "woman, 58" — gender prefix + bare age
+    /\b(?:female|male|woman|man|girl|boy)\s*,\s*(\d{2})\b(?!\s*(?:days?|weeks?|months?|sets?|reps?|pounds?|kg|lbs?|%|minutes?|hours?))/i,
+    // "in my 60s", "in her 50s"
     /\bin\s+(?:my|her|his)\s+(50s|60s|70s|80s)\b/i,
   ];
   for (const pat of agePatterns) {
@@ -250,7 +257,7 @@ export function buildConstraintContract(
   if (constraints.primaryGoal) {
     parts.push(`- primaryGoal = ${constraints.primaryGoal} → The program goal MUST be ${constraints.primaryGoal}. Do NOT substitute hypertrophy, fat_loss, or any other goal unless this was explicitly stated.`);
   }
-  if (constraints.sportFocus) {
+  if (constraints.sportFocus && !constraints.isOlderAdult) {
     parts.push(`- sportFocus = ${constraints.sportFocus} → Program MUST be biased for ${constraints.sportFocus} athletic performance. Apply sport-specific programming principles.`);
   }
   if (constraints.sessionDuration !== null) {
@@ -266,16 +273,28 @@ export function buildConstraintContract(
     parts.push(`- limitations = "${constraints.limitations}" → Avoid exercises conflicting with this limitation.`);
   }
   if (constraints.isOlderAdult && constraints.userAge !== null) {
-    parts.push(`- userAge = ${constraints.userAge} → THIS IS A ${constraints.userAge}-YEAR-OLD USER. OLDER ADULT PROGRAMMING FRAMEWORK APPLIES. THIS IS NON-NEGOTIABLE:`);
-    parts.push(`  • DO NOT include box jumps, broad jumps, power cleans, hang cleans, or any plyometric/Olympic lifting movements`);
-    parts.push(`  • Use MODERATE rep ranges: 8–12 for primary compound lifts, 12–15 for accessory work`);
-    parts.push(`  • Maximum 2–3 sets per exercise`);
-    parts.push(`  • Prioritize joint-friendly exercises: goblet squat > back squat, hip thrust > conventional deadlift, dumbbell press > heavy barbell press`);
-    parts.push(`  • Session structure: Prep (mobility/activation) → Primary Strength → Secondary → Accessory/Unilateral → Trunk`);
-    parts.push(`  • The B block (power/explosive) is REMOVED from this program — do not include it`);
-    parts.push(`  • Program name and description must be appropriate for a ${constraints.userAge}-year-old — not an "intermediate strength program" or "performance program"`);
+    const ageBracket = constraints.userAge >= 70 ? "70+" : constraints.userAge >= 60 ? "60-69" : "50-59";
+    parts.push(`- userAge = ${constraints.userAge} (age bracket: ${ageBracket}) → AGE-AWARE PROGRAMMING IS THE HIGHEST-PRIORITY CONSTRAINT. ALL other constraints are filtered through this lens. This is NON-NEGOTIABLE and cannot be overridden by sport context or goal context:`);
+    parts.push(`  • PROHIBITED: Box jumps, broad jumps, depth jumps, power cleans, hang cleans, snatches, any plyometric landing, any Olympic lifting movement`);
+    parts.push(`  • PROHIBITED: Conventional barbell deadlift at 1–6 reps (high spinal load under max force)`);
+    parts.push(`  • PROHIBITED: Unscaled pull-ups as a primary movement (use lat pulldown or assisted pull-up)`);
+    parts.push(`  • PROHIBITED: Bulgarian split squat under heavy load without bilateral support option`);
+    parts.push(`  • REQUIRED: Rep ranges 8–12 for primary compounds, 12–15 for accessories (never aggressive 1–6 loading)`);
+    parts.push(`  • REQUIRED: Sets capped at 2–4 per exercise with full recovery between sets`);
+    parts.push(`  • REQUIRED: Joint-friendly substitutions — goblet squat or trap bar deadlift over conventional barbell patterns`);
+    parts.push(`  • REQUIRED: Every session opens with a structured movement prep block (mobility, activation, tissue prep)`);
+    parts.push(`  • REQUIRED: Program name and coach notes acknowledge the age context — not generic "athletic performance" framing`);
+    if (constraints.sportFocus) {
+      parts.push(`\n  AGE + SPORT INTEGRATION for ${constraints.sportFocus}: Sport athleticism IS included but expressed through age-appropriate movements:`);
+      parts.push(`  • Rotational power → Cable chop/lift, med ball wall pass, rotational band press — NOT rotational plyometrics`);
+      parts.push(`  • Lateral movement → Lateral step-up, lateral band walk, lateral split squat — NOT lateral bounds or box hops`);
+      parts.push(`  • Explosive intent → Sled push (light), med ball scoop toss, power step-up — NOT box jumps or jump squats`);
+      parts.push(`  • Court/field speed → Controlled direction-change drills, balance reach, single-leg stability — NOT reactive jump patterns`);
+      parts.push(`  • Keep the sport's movement identity (lateral quickness, rotation, deceleration) but via controlled, low-impact loading`);
+    }
   } else if (constraints.userAge !== null) {
-    parts.push(`- userAge = ${constraints.userAge} → User is ${constraints.userAge} years old. Adjust exercise selection and intensity accordingly.`);
+    const mildBias = constraints.userAge >= 45;
+    parts.push(`- userAge = ${constraints.userAge} → User is ${constraints.userAge} years old.${mildBias ? " Apply mild joint-friendly bias: prefer moderate rep ranges (6–12), include warm-up/prep, avoid aggressive max-strength loading unless experience warrants it." : " No special age restrictions apply."}`);
   }
   if (constraints.seasonContext) {
     const seasonLabels: Record<string, string> = {
@@ -302,7 +321,17 @@ export function buildConstraintContract(
     parts.push(`☑ programName and description reflect "${constraints.primaryGoal}" — NOT a different goal`);
   }
   if (constraints.sportFocus) {
-    parts.push(`☑ programName or description references "${constraints.sportFocus}" or sport support`);
+    if (constraints.isOlderAdult) {
+      parts.push(`☑ programName or description references BOTH "${constraints.sportFocus}" sport support AND age-aware/joint-friendly design`);
+      parts.push(`☑ NO explosive plyometrics, NO high-impact landings, NO max-strength barbell patterns (barbell deadlift 1–6 reps, etc.)`);
+    } else {
+      parts.push(`☑ programName or description references "${constraints.sportFocus}" or sport support`);
+    }
+  }
+  if (constraints.isOlderAdult) {
+    parts.push(`☑ ZERO prohibited exercises: no box jumps, no power cleans, no conventional barbell deadlift at 1–6 reps, no unscaled pull-ups as primary, no heavy Bulgarian split squat`);
+    parts.push(`☑ Rep ranges are 8–12 for compounds, 12–15 for accessories — NOT aggressive 1–6 loading`);
+    parts.push(`☑ Coach notes acknowledge the user's age and explain the age-aware programming rationale`);
   }
   if (constraints.seasonContext) {
     parts.push(`☑ programName or description includes the season phase (off-season, pre-season, in-season, etc.)`);
@@ -313,8 +342,11 @@ export function buildConstraintContract(
 
   parts.push(`\n**BUILD CONTRACT RESPONSE FORMAT:**`);
   parts.push(`STEP 1: Output the complete JSON program block.`);
-  parts.push(`STEP 2: Confirm what was built in 1-2 lines. Include sport + season phase if both known. Example:`);
-  if (constraints.sportFocus && constraints.seasonContext && constraints.daysPerWeek) {
+  parts.push(`STEP 2: Confirm what was built in 2–3 lines. Be specific about AGE-AWARE design if applicable. Example:`);
+  if (constraints.isOlderAdult && constraints.sportFocus && constraints.daysPerWeek) {
+    parts.push(`"Built a ${constraints.daysPerWeek}-day ${constraints.sportFocus} performance program with age-aware joint-friendly design for a ${constraints.userAge}-year-old. I biased the plan toward low-impact power, lateral stability, and recoverable strength — keeping the sport athleticism but through safe, sustainable movements. Check the Program tab."`);
+    parts.push(`After the program, ask ONE smart follow-up: "Since you're ${constraints.userAge}, I kept this joint-friendly and low-impact by default. ${!constraints.equipment ? `Do you have full gym access, or should I scale this to dumbbells, bands, and bodyweight?` : `Want me to adjust anything — volume, intensity, or specific exercises?`}"`);
+  } else if (constraints.sportFocus && constraints.seasonContext && constraints.daysPerWeek) {
     const seasonLabels: Record<string, string> = {
       off_season: "off-season",
       pre_season: "pre-season",
@@ -328,15 +360,17 @@ export function buildConstraintContract(
   } else if (constraints.daysPerWeek && constraints.primaryGoal) {
     parts.push(`"Built a ${constraints.daysPerWeek}-day ${constraints.primaryGoal} program. Check the Program tab."`);
   }
-  parts.push(`STEP 3: Ask exactly ONE refinement question about something not yet stated. Priority order:`);
-  if (constraints.sportFocus && !constraints.seasonContext) {
-    parts.push(`→ Season context is missing for a sport athlete — ask: "Are you in-season, off-season, or pre-season right now? I'll adjust the volume and intensity to match."`);
-  } else if (!constraints.equipment) {
-    parts.push(`→ Example: "Do you have full gym access, or should I adjust for limited equipment?"`);
-  } else if (!constraints.sessionDuration) {
-    parts.push(`→ Example: "How long are your sessions — 45 minutes or closer to an hour?"`);
-  } else {
-    parts.push(`→ Example: "Want me to adjust anything — volume, split structure, or exercise selection?"`);
+  if (!(constraints.isOlderAdult && constraints.sportFocus)) {
+    parts.push(`STEP 3: Ask exactly ONE refinement question about something not yet stated. Priority order:`);
+    if (constraints.sportFocus && !constraints.seasonContext) {
+      parts.push(`→ Season context is missing for a sport athlete — ask: "Are you in-season, off-season, or pre-season right now? I'll adjust the volume and intensity to match."`);
+    } else if (!constraints.equipment) {
+      parts.push(`→ Example: "Do you have full gym access, or should I adjust for limited equipment?"`);
+    } else if (!constraints.sessionDuration) {
+      parts.push(`→ Example: "How long are your sessions — 45 minutes or closer to an hour?"`);
+    } else {
+      parts.push(`→ Example: "Want me to adjust anything — volume, split structure, or exercise selection?"`);
+    }
   }
   parts.push(`\nCRITICAL: Do NOT ask multiple questions. Do NOT ask about equipment AND experience AND days all at once. ONE question only.`);
   parts.push(`NEVER describe the wrong program. If you built a strength program, say strength — not hypertrophy.`);

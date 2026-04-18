@@ -3068,7 +3068,9 @@ export function buildArchitectureBrief(
     if (process.env.NODE_ENV !== "production") {
       console.log("[BuildAudit:Architecture]", JSON.stringify({
         path: "special_population",
-        spProfile: spProfile.population,
+        spProfile: spProfile.primaryTag,
+        spSport: spProfile.sportContext,
+        spAge: spProfile.ageFlag,
         seed: Number(seed.toFixed(4)),
         daysPerWeek, sport, goal,
         spBlockType: spMonthlyPlan.blockType,

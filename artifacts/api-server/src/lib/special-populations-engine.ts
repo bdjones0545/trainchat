@@ -32,6 +32,7 @@ export interface SpecialPopulationProfile {
   primaryTag: SpecialPopTag;
   painFlags: string[];      // e.g. ["knee", "back", "shoulder"]
   ageFlag: number | null;   // extracted age if mentioned
+  sportContext: string | null; // sport detected in the user request (e.g. "pickleball", "golf")
   isConservative: boolean;  // true → prioritize safety even more heavily
   detectedFrom: string;     // summary of what triggered detection
 }
@@ -70,6 +71,36 @@ const PRENATAL_POSTPARTUM_PATTERNS = [
   /\b(prenatal|postnatal|postpartum|pregnancy|pregnant|new mom|new mother|after giving birth|after (having|my) baby|pelvic floor|diastasis)\b/i,
 ];
 
+// Detects sport from the user message text (lowercase).
+// Matches sport names and common derivatives (golfer, tennis player, pickleball player, etc.)
+function detectSportFromText(text: string): string | null {
+  const sportPatterns: Array<[RegExp, string]> = [
+    [/\bpickleball\b/, "pickleball"],
+    [/\bgolf(?:er|ers)?\b/, "golf"],
+    [/\btennis\b/, "tennis"],
+    [/\bpadel\b/, "padel"],
+    [/\bbadminton\b/, "badminton"],
+    [/\bsquash\b/, "squash"],
+    [/\bbasketball\b/, "basketball"],
+    [/\bsoccer\b|\bfootball\b/, "soccer"],
+    [/\bbaseball\b/, "baseball"],
+    [/\bsoftball\b/, "softball"],
+    [/\bhockey\b/, "hockey"],
+    [/\blacrosse\b/, "lacrosse"],
+    [/\bvolleyball\b/, "volleyball"],
+    [/\bswimm?ing\b|\bswimmer\b/, "swimming"],
+    [/\brunn?ing\b|\brunner\b/, "running"],
+    [/\bcycling\b|\bbiking\b|\bcyclist\b|\bbiker\b/, "cycling"],
+    [/\bwrestling\b|\bwrestler\b/, "wrestling"],
+    [/\bboxing\b|\bboxer\b/, "boxing"],
+    [/\bmma\b|mixed martial/, "mma"],
+  ];
+  for (const [pattern, sport] of sportPatterns) {
+    if (pattern.test(text)) return sport;
+  }
+  return null;
+}
+
 export function detectSpecialPopulation(
   userMessage: string,
   goal: string | null,
@@ -81,18 +112,39 @@ export function detectSpecialPopulation(
   let ageFlag: number | null = null;
   const detectedReasons: string[] = [];
 
-  // Age extraction — handles "65 year old", "65-year-old", "age 65", "aged 65"
-  const ageMatch = text.match(/\b(\d{2})[\s-]*(?:year|yr)s?[\s-]?old\b|\bage[d]?\s*(\d{2})\b|\bfor\s+a\s+(\d{2})[\s-]/i);
-  if (ageMatch) {
-    const age = parseInt(ageMatch[1] ?? ageMatch[2] ?? ageMatch[3], 10);
-    if (age >= 60) {
-      ageFlag = age;
-      if (!tags.includes("older_adult")) tags.push("older_adult");
-      detectedReasons.push(`age ${age} detected`);
+  // Age extraction — expanded patterns cover common phrasing variants:
+  // "65 year old", "65-year-old", "age 65", "aged 65", "I am 65", "I'm 65", "65yo", "72yo"
+  const agePatterns = [
+    // "65 year old", "65-year-old", "65yo", "65 y.o."
+    /\b(\d{2})\s*[-]?\s*(?:year[s]?\s*old|y\.?o\.?)\b/i,
+    // "65-year-old" with hyphens
+    /\b(\d{2})\s*-\s*year[s]?[\s-]?old\b/i,
+    // "age 65", "aged 65"
+    /\bage[d]?\s*(\d{2})\b/i,
+    // "I am 65", "I'm 65", "I am a 65"
+    /\bi(?:'m| am)\s+(?:a\s+)?(\d{2})\b/i,
+    // "for a 65-" (e.g. "program for a 65-year-old")
+    /\bfor\s+a\s+(\d{2})[\s-]/i,
+  ];
+  for (const pat of agePatterns) {
+    const m = text.match(pat);
+    if (m) {
+      const parsed = parseInt(m[1], 10);
+      if (parsed >= 50 && parsed <= 100) {
+        ageFlag = parsed;
+        if (parsed >= 60 && !tags.includes("older_adult")) {
+          tags.push("older_adult");
+          detectedReasons.push(`age ${parsed} detected`);
+        }
+        break;
+      }
     }
   }
 
-  // Older adult detection
+  // Detect sport for sport+age integration
+  const sportContext = detectSportFromText(text);
+
+  // Older adult detection via keyword patterns (catches "senior", "60+", "retired", etc.)
   if (OLDER_ADULT_PATTERNS.some(p => p.test(text))) {
     if (!tags.includes("older_adult")) tags.push("older_adult");
     detectedReasons.push("older adult keywords");
@@ -156,6 +208,7 @@ export function detectSpecialPopulation(
     primaryTag,
     painFlags,
     ageFlag,
+    sportContext,
     isConservative,
     detectedFrom: detectedReasons.join("; "),
   };
@@ -717,6 +770,63 @@ export function buildSpecialPopSessionTemplates(
 
 // ─── Variation Mandate for Special Populations ───────────────────────────────
 
+// Builds sport-specific section for older adults that preserves athletic identity
+// within the safety envelope.
+function buildSportAgeIntegrationSection(sport: string, profile: SpecialPopulationProfile): string {
+  const age = profile.ageFlag ?? 65;
+  const sportLabel = sport.charAt(0).toUpperCase() + sport.slice(1);
+
+  // Shared safe power alternatives
+  const safePowerAlts = "Med Ball Scoop Toss / Med Ball Wall Pass / Sled Push (light) / Power Step-Up";
+
+  // Sport-specific lateral/rotational alternatives
+  const sportSpecificSections: Record<string, string> = {
+    pickleball: `### PICKLEBALL-SPECIFIC MOVEMENT TARGETS (AGE ${age} — LOW-IMPACT FORMS ONLY)
+- Rotational power: Cable chop, cable lift, med ball rotational wall pass, landmine rotation — NOT rotational plyometrics
+- Lateral quickness: Lateral step-up, lateral band walk, lateral split squat, lateral shuffle (controlled) — NOT lateral bounds
+- Court deceleration: Reverse lunge (controlled), lateral step-down, single-leg balance reach — NOT reactive jump stops
+- Overhead reach / stroke power: Landmine press, cable shoulder press, dumbbell incline press — NOT heavy overhead barbell press
+- Anti-rotation for paddle: Pallof press, half-kneeling cable anti-rotation, suitcase carry
+- Quick feet (low amplitude): Light agility ladder footwork (no jumping), mini-band walk, balance reach in all directions`,
+
+    golf: `### GOLF-SPECIFIC MOVEMENT TARGETS (AGE ${age} — LOW-IMPACT FORMS ONLY)
+- Rotational power: Cable chop/lift, med ball rotational wall pass, landmine rotation — NOT rotational jumps
+- Hip dissociation: Hip 90/90 transitions, half-kneeling hip flexor stretch, lateral lunge — controlled
+- Balance and proprioception: Single-leg stance, single-leg balance reach, bosu balance work
+- Thoracic mobility: Thoracic rotation drills, foam roller extension, open books — EVERY session
+- Anti-sway core: Pallof press, suitcase carry, half-kneeling chop — NOT heavy loaded flexion
+- Lower body drive: Hip thrust, trap bar deadlift (moderate), goblet squat — NOT heavy conventional deadlift`,
+
+    tennis: `### TENNIS-SPECIFIC MOVEMENT TARGETS (AGE ${age} — LOW-IMPACT FORMS ONLY)
+- Rotational power: Cable chop, landmine rotation, med ball wall pass — NOT rotational plyometrics
+- Lateral change of direction: Lateral step-up, lateral band walk, lateral split squat — NOT lateral bounds
+- Deceleration: Reverse lunge (controlled), lateral step-down — NOT reactive jump stops
+- Overhead reach: Landmine press, cable shoulder press — NOT heavy overhead barbell press
+- Anti-rotation: Pallof press, suitcase carry`,
+
+    default: `### SPORT-SPECIFIC MOVEMENT TARGETS (AGE ${age} — LOW-IMPACT FORMS ONLY)
+- Power: ${safePowerAlts} — NOT plyometric jumps or Olympic lifts
+- Lateral movement: Lateral step-up, lateral band walk, controlled split squat — NOT lateral bounds
+- Rotational strength: Cable chop/lift, med ball wall pass — NOT rotational plyometrics
+- Balance: Single-leg balance reach, single-leg hip bridge — included every session`,
+  };
+
+  const section = sportSpecificSections[sport] ?? sportSpecificSections.default;
+
+  return `
+## AGE + SPORT INTEGRATION — ${sportLabel.toUpperCase()} PERFORMANCE FOR A ${age}-YEAR-OLD
+
+This program preserves the athletic identity of ${sportLabel} while filtering all exercises through an age-aware safety lens.
+The sport athleticism IS expressed — but through controlled, low-impact, joint-friendly movement.
+
+${section}
+
+### WHAT THIS MEANS FOR EXERCISE SELECTION
+- Keep the MOVEMENT INTENT (rotational power, lateral quickness, explosive capacity)
+- Change the EXPRESSION (cable and med ball instead of plyometrics; step-up instead of box jump; trap bar instead of barbell deadlift)
+- The program should FEEL performance-oriented — it is NOT rehab. It is age-aware athletic development.`;
+}
+
 export function buildSpecialPopVariationMandate(
   sel: SlotExerciseSelection,
   profile: SpecialPopulationProfile,
@@ -728,82 +838,97 @@ export function buildSpecialPopVariationMandate(
     : profile.primaryTag === "low_impact" ? "Low-Impact General"
     : "Beginner";
 
+  const isOlderAdultWithSport = profile.primaryTag === "older_adult" && !!profile.sportContext;
+  const ageLabel = profile.ageFlag ? `${profile.ageFlag}-YEAR-OLD ` : "";
+
   const painNote = profile.painFlags.length > 0
     ? `\nPain flags detected: ${profile.painFlags.join(", ")} — avoid loading these joints beyond symptom-free range.`
     : "";
 
   const conservativeNote = profile.isConservative
-    ? `\nCONSERVATIVE MODE ACTIVE: ${profile.isConservative ? "This is a high-caution profile (post-rehab, prenatal, 70+, or multi-site pain). Load conservatively. Err on the side of less." : ""}`
+    ? `\nCONSERVATIVE MODE ACTIVE: This is a high-caution profile (post-rehab, prenatal, 70+, or multi-site pain). Load conservatively. Err on the side of less.`
     : "";
 
-  return `## SPECIAL POPULATION PROGRAM — ${popType.toUpperCase()}
+  const sportIntegration = isOlderAdultWithSport
+    ? buildSportAgeIntegrationSection(profile.sportContext!, profile)
+    : "";
+
+  const programFraming = isOlderAdultWithSport
+    ? `This is an age-aware SPORT PERFORMANCE program — not generic rehab, not a generic older adult program.\nIt preserves ${profile.sportContext} athleticism while applying strict age-appropriate safety filters.\nDo NOT use:`
+    : `This is NOT an athlete program. Do NOT use:`;
+
+  return `## SPECIAL POPULATION PROGRAM — ${ageLabel}${popType.toUpperCase()}${profile.sportContext ? ` / ${profile.sportContext.toUpperCase()} PERFORMANCE` : ""}
 ${conservativeNote}${painNote}
 
-This is NOT an athlete program. Do NOT use:
-- Explosive or plyometric exercises
-- Maximal intent language ("force production", "bar speed", "acceleration")
-- High-impact exercises
-- Complex multi-joint Olympic movements
-- Athlete-centric session framing
+${programFraming}
+- Explosive plyometric exercises (box jumps, broad jumps, depth jumps, jump squats)
+- Maximal-effort Olympic lifting (power clean, hang clean, snatch)
+- High-impact landing movements
+- Conventional barbell deadlift at 1–6 reps under high axial load
+- Unscaled pull-ups as a primary movement (use lat pulldown or assisted pull-up)
+- Bulgarian split squat under heavy load (use supported split squat or step-up)
+${isOlderAdultWithSport ? "" : "- Maximal intent language (\"force production\", \"bar speed\", \"acceleration\")\n- Athlete-centric session framing"}
+${sportIntegration}
 
 ### LOCKED EXERCISE SELECTIONS — USE THESE EXACTLY
 
-- Movement Primer: ${sel.lower_power}
-- Bilateral Squat (safe): ${sel.bilateral_squat_strength}
-- Bilateral Hinge (controlled): ${sel.bilateral_hinge_strength}
+- Movement Primer / Activation: ${sel.lower_power}
+- Bilateral Squat (safe, joint-friendly): ${sel.bilateral_squat_strength}
+- Bilateral Hinge (controlled, posterior chain): ${sel.bilateral_hinge_strength}
 - Unilateral Lower (squat pattern): ${sel.unilateral_lower}
 - Unilateral Lower (hinge pattern): ${sel.unilateral_lower_alt}
 - Anti-Rotation Core: ${sel.trunk_anti_rotation}
 - Anti-Extension Core: ${sel.trunk_anti_extension}
 - Upper Push: ${sel.upper_push_primary}
-- Upper Push Support: ${sel.upper_push_secondary}
-- Upper Pull: ${sel.upper_pull_primary}
+- Upper Push Support / Shoulder Care: ${sel.upper_push_secondary}
+- Upper Pull Primary: ${sel.upper_pull_primary}
 - Upper Pull Support: ${sel.upper_pull_secondary}
-- Capacity Finisher: ${sel.conditioning_finisher}
+- Capacity / Conditioning Finisher: ${sel.conditioning_finisher}
 
 ### PROHIBITED SUBSTITUTIONS
 
-Do NOT substitute:
-- Back Squat (too high spinal load) → use ${sel.bilateral_squat_strength}
-- Barbell Conventional Deadlift (too high spinal load unless post-rehab cleared) → use ${sel.bilateral_hinge_strength}
-- Box Jump / Broad Jump / Depth Jump (plyometric — prohibited) → use ${sel.lower_power}
-- Bulgarian Split Squat under heavy load → use ${sel.unilateral_lower}
-- Any Olympic lift (too complex) → use ${sel.lower_power}
+Do NOT use these exercises — they violate the age/safety parameters:
+- Back Squat (high spinal load) → use ${sel.bilateral_squat_strength}
+- Barbell Conventional Deadlift heavy/low-rep (high spinal load) → use ${sel.bilateral_hinge_strength}
+- Box Jump / Broad Jump / Depth Jump (high-impact plyometric) → use ${sel.lower_power}
+- Unscaled Pull-Up as primary (high demand, poor scalability) → use ${sel.upper_pull_primary}
+- Bulgarian Split Squat under load (high balance demand + knee stress) → use ${sel.unilateral_lower}
+- Power Clean / Hang Clean / Snatch (Olympic lift complexity) → use ${sel.lower_power}
 
 ### COACHING LANGUAGE STANDARDS
 
-Use this framing in descriptions:
+${isOlderAdultWithSport ? `Use performance-oriented but age-aware language:
+- "Controlled explosiveness" or "low-impact power" (not just "power")
+- "Sport-ready strength" (keep the athletic framing)
+- "Lateral control" not "lateral speed"
+- "Rotational strength" not "rotational explosiveness"
+- "Leave 3+ reps in reserve" — training quality over grinding` : `Use joint-friendly framing in descriptions:
 - "Controlled pace" not "bar speed"
 - "Comfortable range of motion" not "full depth"
 - "Symptom-free" not "to failure"
 - "Movement quality" not "force output"
-- "Progressive tolerance" not "maximal load"
-- "Leave 3+ reps in reserve" — never grind
+- "Leave 3+ reps in reserve" — never grind`}
 
 ### LOAD AND REP STANDARDS
 
 - Sets: 2–4 (start at 2, build over weeks)
-- Reps: 8–15 (higher rep range for joint tolerance)
+- Reps: 8–15 for most exercises (8–12 compounds, 12–15 accessories)
 - Load: 5–6 RPE maximum (leave 4+ reps in reserve)
 - Tempo: 2–3 sec controlled descent, pause, controlled return
 - Progression: Add 1 rep before adding load. Add load only when all reps are clean.
 
-### PROGRESSION PHILOSOPHY
-
-Week 1–2: Master technique, build spatial awareness
-Week 3–4: Add 1 rep per set if clean
-Week 5–6: Consider adding 2.5–5% load if ALL reps are symptom-free
-Never add load if form has degraded or any discomfort appears
-
 ### VALIDATION CHECKLIST
 
-- [ ] All selected exercises are from the locked list above
 - [ ] No explosive/plyometric exercises appear as primary movements
-- [ ] Session identities use population-appropriate language (not athlete framing)
-- [ ] Reps are in the 8–15 range with 5–6 RPE cap
+- [ ] No conventional barbell deadlift at 1–6 reps
+- [ ] No unscaled pull-ups as primary movement
+- [ ] No Bulgarian split squat under heavy load
+- [ ] Reps are in the 8–15 range (8–12 for compounds) — NOT 1–6 loading
+- [ ] Session identities are appropriate${isOlderAdultWithSport ? " (performance-oriented but age-aware)" : " (not generic athlete framing)"}
 - [ ] Every session includes trunk/core work
 - [ ] Upper sessions include shoulder care (face pull, band pull-apart, or external rotation)
-- [ ] Conditioning finisher is low-impact (bike, walk, rower — NOT sprints)
+- [ ] Conditioning finisher is low-impact (bike, walk, rower, light sled — NOT sprints or jump rope)
+${profile.sportContext ? `- [ ] Sport-specific movements (${profile.sportContext}) are included in age-appropriate forms` : ""}
 - [ ] Pain flags (${profile.painFlags.join(", ") || "none"}) are respected in exercise selection`;
 }
 
@@ -871,6 +996,14 @@ export function buildSpecialPopArchitectureBrief(
   const progression = buildProgressionModel(profile);
   const populationOverlay = buildPopulationOverlay(profile);
 
+  const sportHeader = profile.sportContext
+    ? ` / ${profile.sportContext.toUpperCase()} PERFORMANCE`
+    : "";
+  const ageHeader = profile.ageFlag ? ` (AGE ${profile.ageFlag})` : "";
+  const goalLabel = goal ?? (profile.sportContext
+    ? `Age-aware ${profile.sportContext} performance`
+    : "General strength and resilience");
+
   const weeklyRhythm = sessions
     .map(s => `Day ${s.dayNumber}: ${s.identity}`)
     .join(" → ");
@@ -880,10 +1013,10 @@ export function buildSpecialPopArchitectureBrief(
     return `### Day ${s.dayNumber}: ${s.identity}\nIntent: ${s.intent}\nDemand: ${s.neuralDemand.toUpperCase()}\n${flowLines}${s.sportNotes ? `\nNote: ${s.sportNotes}` : ""}`;
   }).join("\n\n");
 
-  return `## SPECIAL POPULATION PROGRAM ARCHITECTURE — ${profile.primaryTag.toUpperCase().replace("_", " ")}
+  return `## SPECIAL POPULATION PROGRAM ARCHITECTURE — ${profile.primaryTag.toUpperCase().replace(/_/g, " ")}${ageHeader}${sportHeader}
 Detection: ${profile.detectedFrom}
-Days/week: ${daysPerWeek} | Goal: ${goal ?? "General strength and resilience"}
-
+Days/week: ${daysPerWeek} | Goal: ${goalLabel}
+${profile.sportContext ? `Sport context: ${profile.sportContext} — athleticism preserved through age-appropriate movements\n` : ""}
 ### WEEKLY RHYTHM
 ${weeklyRhythm}
 
@@ -892,10 +1025,11 @@ ${sessionLines}
 
 ### RECOVERY RULES
 - Minimum 48 hours between lower-body sessions
-- Minimum 48 hours between upper-body sessions  
+- Minimum 48 hours between upper-body sessions
 - No back-to-back high-demand days
 - Never train to failure — leave 3+ reps in reserve at all times
 - Stop immediately if pain (not soreness) occurs during any exercise
+${profile.ageFlag ? `- Age ${profile.ageFlag}: prioritize quality of movement over quantity of load` : ""}
 ${populationOverlay}
 
 ${mandate}
