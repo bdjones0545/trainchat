@@ -113,6 +113,9 @@ export interface ScoreContext {
 
 export interface SlotExerciseSelection {
   lower_power: string;
+  lower_power_d2: string;  // day 2 power — always different from lower_power
+  lower_power_d3: string;  // day 3 power — different from d1 + d2
+  lower_power_d4: string;  // day 4 power — different from d1 + d2 + d3
   bilateral_squat_strength: string;
   bilateral_hinge_strength: string;
   unilateral_lower: string;
@@ -1186,6 +1189,24 @@ const LOWER_POWER_POOL: ExerciseMeta[] = [
   { name: "Seated Box Jump", sportTags: [], intentTags: ["power", "strength"], neuralDemand: "high", fatigueCost: "moderate" },
   { name: "Triple Bound", sportTags: ["track", "sprint", "soccer", "football"], intentTags: ["power", "elastic", "speed"], neuralDemand: "high", fatigueCost: "high" },
   { name: "Skater Bound", sportTags: ["hockey", "soccer", "basketball"], intentTags: ["power", "elastic", "stability"], neuralDemand: "high", fatigueCost: "moderate" },
+  // ── Expanded pool — horizontal acceleration ───────────────────────────────
+  { name: "Power Skip (for distance)", sportTags: ["soccer", "track", "football", "lacrosse"], intentTags: ["power", "speed", "elastic"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Snap-Down to Broad Jump", sportTags: ["soccer", "football", "track", "rugby"], intentTags: ["power", "elastic", "speed"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Acceleration Bound (3-step)", sportTags: ["soccer", "track", "football", "lacrosse"], intentTags: ["power", "speed", "elastic"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Standing Long Jump", sportTags: ["soccer", "football", "track"], intentTags: ["power", "speed"], neuralDemand: "high", fatigueCost: "low" },
+  { name: "Single-Leg Broad Jump", sportTags: ["soccer", "basketball", "lacrosse", "track"], intentTags: ["power", "stability", "elastic"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Approach Broad Jump (3-step)", sportTags: ["soccer", "football", "track", "sprint"], intentTags: ["power", "speed", "elastic"], neuralDemand: "high", fatigueCost: "moderate" },
+  // ── Expanded pool — vertical projection ───────────────────────────────────
+  { name: "Countermovement Jump (max height)", sportTags: ["basketball", "volleyball", "football"], intentTags: ["power", "elastic"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Depth Drop to Box Jump", sportTags: ["basketball", "volleyball", "track"], intentTags: ["power", "elastic"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Reactive Box Jump (step off to jump)", sportTags: ["basketball", "volleyball", "football"], intentTags: ["power", "elastic", "speed"], neuralDemand: "high", fatigueCost: "moderate" },
+  // ── Expanded pool — lateral/COD ────────────────────────────────────────────
+  { name: "Reactive Lateral Bound (stop and go)", sportTags: ["hockey", "soccer", "basketball", "lacrosse"], intentTags: ["power", "elastic", "stability"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Lateral Box Jump", sportTags: ["hockey", "soccer", "basketball"], intentTags: ["power", "elastic"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Split-Stance Reactive Bound", sportTags: ["soccer", "lacrosse", "basketball", "hockey"], intentTags: ["power", "elastic", "stability"], neuralDemand: "high", fatigueCost: "moderate" },
+  // ── Expanded pool — reactive stiffness ────────────────────────────────────
+  { name: "Fast Hurdle Hop (bilateral continuous, 6 hurdles)", sportTags: ["track", "soccer", "basketball", "football"], intentTags: ["elastic", "speed", "power"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Reactive Pogo to Bound (2 pogos then launch)", sportTags: ["track", "soccer", "basketball"], intentTags: ["elastic", "power", "speed"], neuralDemand: "high", fatigueCost: "moderate" },
 ];
 
 const LOWER_POWER_POOL_SUBMAXIMAL: ExerciseMeta[] = [
@@ -1193,6 +1214,91 @@ const LOWER_POWER_POOL_SUBMAXIMAL: ExerciseMeta[] = [
   { name: "Broad Jump (approach, stick landing)", sportTags: [], intentTags: ["power", "stability"], neuralDemand: "moderate", fatigueCost: "low" },
   { name: "Vertical Jump (reset between reps)", sportTags: [], intentTags: ["power"], neuralDemand: "moderate", fatigueCost: "low" },
   { name: "Medicine Ball Slam (explosive, low reactive demand)", sportTags: [], intentTags: ["power", "endurance"], neuralDemand: "moderate", fatigueCost: "low" },
+  { name: "Low Box Jump (12-inch, soft landing focus)", sportTags: [], intentTags: ["power", "stability"], neuralDemand: "low", fatigueCost: "low" },
+  { name: "Lateral Bound (controlled, stick and pause)", sportTags: [], intentTags: ["power", "stability"], neuralDemand: "moderate", fatigueCost: "low" },
+  { name: "Standing Long Jump (3-second hold at landing)", sportTags: [], intentTags: ["power", "stability"], neuralDemand: "moderate", fatigueCost: "low" },
+  { name: "Step-Up Jump (low-impact, alternating)", sportTags: [], intentTags: ["power", "stability"], neuralDemand: "low", fatigueCost: "low" },
+];
+
+// ── Week-Role Biased Power Pools ──────────────────────────────────────────────
+// Establish: simpler, teachable expressions — build movement competency first
+const LOWER_POWER_POOL_ESTABLISH: ExerciseMeta[] = [
+  { name: "Box Jump", sportTags: ["soccer", "basketball", "football", "rugby", "lacrosse", "volleyball", "hockey", "track"], intentTags: ["power", "speed"], neuralDemand: "high", fatigueCost: "moderate", isDefaultAnchor: true },
+  { name: "Broad Jump", sportTags: ["soccer", "football", "rugby", "lacrosse", "track", "sprint"], intentTags: ["power", "speed", "elastic"], neuralDemand: "high", fatigueCost: "moderate", isDefaultAnchor: true },
+  { name: "Standing Long Jump", sportTags: ["soccer", "football", "track"], intentTags: ["power", "speed"], neuralDemand: "high", fatigueCost: "low" },
+  { name: "Lateral Bound", sportTags: ["hockey", "soccer", "basketball", "lacrosse"], intentTags: ["power", "elastic", "speed"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Vertical Jump (countermovement)", sportTags: ["basketball", "volleyball", "football"], intentTags: ["power", "elastic"], neuralDemand: "high", fatigueCost: "low" },
+  { name: "Power Skip (for distance)", sportTags: ["soccer", "track", "football", "lacrosse"], intentTags: ["power", "speed", "elastic"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Single-Leg Box Jump", sportTags: ["basketball", "soccer", "lacrosse"], intentTags: ["power", "stability"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Pogo Jump", sportTags: ["track", "soccer", "basketball"], intentTags: ["elastic"], neuralDemand: "moderate", fatigueCost: "low" },
+  { name: "Ankle Hop (series)", sportTags: ["track", "soccer", "basketball"], intentTags: ["elastic", "speed"], neuralDemand: "moderate", fatigueCost: "low" },
+];
+
+// Intensify: sharper, more aggressive, higher-intent versions
+const LOWER_POWER_POOL_INTENSIFY: ExerciseMeta[] = [
+  { name: "Depth Jump", sportTags: ["basketball", "volleyball", "track", "football"], intentTags: ["power", "elastic"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Trap Bar Jump (loaded)", sportTags: ["football", "rugby", "hockey"], intentTags: ["power", "strength"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Triple Bound", sportTags: ["track", "sprint", "soccer", "football"], intentTags: ["power", "elastic", "speed"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Depth Drop to Box Jump", sportTags: ["basketball", "volleyball", "track"], intentTags: ["power", "elastic"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Reactive Broad Jump (stick landing)", sportTags: ["soccer", "football", "lacrosse", "rugby"], intentTags: ["power", "elastic", "stability"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Approach Broad Jump (3-step)", sportTags: ["soccer", "football", "track", "sprint"], intentTags: ["power", "speed", "elastic"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Acceleration Bound (3-step)", sportTags: ["soccer", "track", "football", "lacrosse"], intentTags: ["power", "speed", "elastic"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Snap-Down to Broad Jump", sportTags: ["soccer", "football", "track", "rugby"], intentTags: ["power", "elastic", "speed"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Reactive Lateral Bound (stop and go)", sportTags: ["hockey", "soccer", "basketball", "lacrosse"], intentTags: ["power", "elastic", "stability"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Fast Hurdle Hop (bilateral continuous, 6 hurdles)", sportTags: ["track", "soccer", "basketball", "football"], intentTags: ["elastic", "speed", "power"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Reactive Box Jump (step off to jump)", sportTags: ["basketball", "volleyball", "football"], intentTags: ["power", "elastic", "speed"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Reactive Pogo to Bound (2 pogos then launch)", sportTags: ["track", "soccer", "basketball"], intentTags: ["elastic", "power", "speed"], neuralDemand: "high", fatigueCost: "moderate" },
+];
+
+// ── Power Expression Families — maps expression type to a focused pool ────────
+// Used when session identity or sport calls for a specific power expression family
+
+const HORIZONTAL_ACCELERATION_POWER_POOL: ExerciseMeta[] = [
+  { name: "Broad Jump", sportTags: ["soccer", "football", "track", "sprint", "lacrosse"], intentTags: ["power", "speed", "elastic"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Power Skip (for distance)", sportTags: ["soccer", "track", "football", "lacrosse"], intentTags: ["power", "speed", "elastic"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Snap-Down to Broad Jump", sportTags: ["soccer", "football", "track", "rugby"], intentTags: ["power", "elastic", "speed"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Acceleration Bound (3-step)", sportTags: ["soccer", "track", "football", "lacrosse"], intentTags: ["power", "speed", "elastic"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Standing Long Jump", sportTags: ["soccer", "football", "track"], intentTags: ["power", "speed"], neuralDemand: "high", fatigueCost: "low" },
+  { name: "Triple Bound", sportTags: ["track", "sprint", "soccer", "football"], intentTags: ["power", "elastic", "speed"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Approach Broad Jump (3-step)", sportTags: ["soccer", "football", "track", "sprint"], intentTags: ["power", "speed", "elastic"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Single-Leg Broad Jump", sportTags: ["soccer", "basketball", "lacrosse", "track"], intentTags: ["power", "stability", "elastic"], neuralDemand: "high", fatigueCost: "moderate" },
+];
+
+const VERTICAL_PROJECTION_POWER_POOL: ExerciseMeta[] = [
+  { name: "Box Jump", sportTags: ["basketball", "volleyball", "football", "soccer"], intentTags: ["power", "speed"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Countermovement Jump (max height)", sportTags: ["basketball", "volleyball", "football"], intentTags: ["power", "elastic"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Approach Jump to Box", sportTags: ["basketball", "volleyball", "football"], intentTags: ["power", "speed"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Depth Jump", sportTags: ["basketball", "volleyball", "track", "football"], intentTags: ["power", "elastic"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Depth Drop to Box Jump", sportTags: ["basketball", "volleyball", "track"], intentTags: ["power", "elastic"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Reactive Box Jump (step off to jump)", sportTags: ["basketball", "volleyball", "football"], intentTags: ["power", "elastic", "speed"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Single-Leg Box Jump", sportTags: ["basketball", "soccer", "lacrosse"], intentTags: ["power", "stability"], neuralDemand: "high", fatigueCost: "moderate" },
+];
+
+const LATERAL_COD_POWER_POOL: ExerciseMeta[] = [
+  { name: "Lateral Bound", sportTags: ["hockey", "soccer", "basketball", "lacrosse"], intentTags: ["power", "elastic", "speed"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Skater Bound", sportTags: ["hockey", "soccer", "basketball"], intentTags: ["power", "elastic", "stability"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Reactive Lateral Bound (stop and go)", sportTags: ["hockey", "soccer", "basketball", "lacrosse"], intentTags: ["power", "elastic", "stability"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Lateral Box Jump", sportTags: ["hockey", "soccer", "basketball"], intentTags: ["power", "elastic"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Split-Stance Reactive Bound", sportTags: ["soccer", "lacrosse", "basketball", "hockey"], intentTags: ["power", "elastic", "stability"], neuralDemand: "high", fatigueCost: "moderate" },
+];
+
+const REACTIVE_STIFFNESS_POWER_POOL: ExerciseMeta[] = [
+  { name: "Ankle Hop (series)", sportTags: ["track", "soccer", "basketball"], intentTags: ["elastic", "speed"], neuralDemand: "moderate", fatigueCost: "low" },
+  { name: "Pogo Jump", sportTags: ["track", "soccer", "basketball"], intentTags: ["elastic"], neuralDemand: "moderate", fatigueCost: "low" },
+  { name: "Hurdle Bounce (continuous)", sportTags: ["track", "soccer", "football"], intentTags: ["elastic", "speed"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Fast Hurdle Hop (bilateral continuous, 6 hurdles)", sportTags: ["track", "soccer", "basketball", "football"], intentTags: ["elastic", "speed", "power"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Reactive Pogo to Bound (2 pogos then launch)", sportTags: ["track", "soccer", "basketball"], intentTags: ["elastic", "power", "speed"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Single-Leg Ankle Hop", sportTags: ["track", "basketball"], intentTags: ["elastic", "stability"], neuralDemand: "moderate", fatigueCost: "low" },
+  { name: "Drop Jump (sub-maximal contact time focus)", sportTags: ["track", "basketball", "volleyball"], intentTags: ["elastic", "speed"], neuralDemand: "high", fatigueCost: "moderate" },
+];
+
+const CONTRAST_LOADED_POWER_POOL: ExerciseMeta[] = [
+  { name: "Trap Bar Jump (loaded)", sportTags: ["football", "rugby", "hockey"], intentTags: ["power", "strength"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Jump Squat (barbell, 30% 1RM)", sportTags: ["football", "rugby", "track"], intentTags: ["power", "speed", "strength"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Banded Jump Squat", sportTags: ["football", "rugby", "hockey", "soccer"], intentTags: ["power", "elastic"], neuralDemand: "high", fatigueCost: "moderate" },
+  { name: "Hex Bar Jump (loaded)", sportTags: ["football", "rugby", "hockey"], intentTags: ["power", "strength"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Depth Jump", sportTags: ["basketball", "volleyball", "track", "football"], intentTags: ["power", "elastic"], neuralDemand: "high", fatigueCost: "high" },
+  { name: "Seated Box Jump", sportTags: [], intentTags: ["power", "strength"], neuralDemand: "high", fatigueCost: "moderate" },
 ];
 
 // ── Bilateral Squat ───────────────────────────────────────────────────────────
@@ -1453,10 +1559,323 @@ const POSITIONAL_SUPPORT_POOL: ExerciseMeta[] = [
   { name: "Y-T-W (face-pull variation)", sportTags: ["swimming", "baseball", "tennis"], intentTags: ["stability", "mobility"], neuralDemand: "low", fatigueCost: "low" },
 ];
 
+// ─── Prep Family Definitions ──────────────────────────────────────────────────
+//
+// Each family has expressions per week role.
+// Selection is driven by session patterns, sport, blockArchetype, weekRole, and dayNumber.
+// Two or three distinct descriptions per slot ensure within-week prep variety.
+//
+
+type PrepWeekRole = "establish" | "build" | "intensify" | "deload";
+
+interface PrepFamily {
+  id: string;
+  label: string;
+  /** Which session patterns trigger this family (first match wins). */
+  primaryPatterns: string[];
+  /** Sport tags that make this family more likely (partial match). */
+  sportAffinity: string[];
+  expressions: Record<PrepWeekRole, string[]>;
+}
+
+const PREP_FAMILIES: PrepFamily[] = [
+  {
+    id: "sprint_mechanics",
+    label: "Sprint Mechanics Prep",
+    primaryPatterns: ["locomotion", "speed"],
+    sportAffinity: ["soccer", "football", "track", "sprint", "lacrosse"],
+    expressions: {
+      establish: [
+        "Sprint mechanics prep (10 min): jog 3 min → A-skip 2 × 20m (tall posture, pawing action) → high knees 2 × 20m → 3 × build-up strides at 70%, 80%, 85%. TEACH the positions before loading speed.",
+        "Acceleration prep (10 min): jog 3 min → A-skip 2 × 15m → B-skip 2 × 15m → high knees 2 × 20m → 2 × 30m build-up at 70%, 80%. Focus on triple extension and forward lean.",
+        "Sprint drill prep (10 min): light jog → ankling drill 2 × 20m → A-skip 2 × 20m → fall-and-sprint drill × 3. Positional awareness before speed.",
+      ],
+      build: [
+        "Sprint prep (8 min): jog 2 min → A-skip 2 × 20m → B-skip 2 × 15m → 3 × build-up strides at 75%, 85%, 90%. CNS awakening before primary speed work.",
+        "Acceleration drill series (8 min): A-skip 2 × 20m → power skip × 3 × 15m → 3 × 30m build-ups at 75%, 85%, 92%. Drive mechanics before the session primary.",
+        "Sprint mechanics warm-up (8 min): ankling × 20m → A-skip × 20m → split-stance acceleration × 3 → 2 × build-up strides at 80%, 90%.",
+      ],
+      intensify: [
+        "Sprint CNS primer (6 min): A-skip 2 × 20m → 2 × 30m build-up strides at 90%, 95%. BRIEF. CNS must be fresh. No volume — activation only.",
+        "Speed activation (5 min): A-skip × 15m → 3 × fall-and-drive at 90%+ intent. Brief and sharp — do NOT fatigue before primary sprint work.",
+        "Acceleration primer (6 min): 2 × power skip 15m → 2 × build-up strides at 90%, 95%. Quality over quantity.",
+      ],
+      deload: [
+        "Easy sprint mechanics prep (10 min): jog 5 min → A-skip 2 × 15m at 60% effort → 2 × 20m build-ups at 60%, 70%. No sprint demands — movement quality only.",
+        "Light locomotion prep (10 min): jog 5 min → walking A-skip × 20m → slow ankling × 20m → 2 × easy strides at 65%. Tissue care, not CNS activation.",
+        "Restorative sprint prep (10 min): jog → hip circles while jogging → A-skip slow × 2 × 15m. Zero intensity. Skill pattern only.",
+      ],
+    },
+  },
+  {
+    id: "elastic_ankle_stiffness",
+    label: "Elastic / Ankle Stiffness Prep",
+    primaryPatterns: ["lateral", "power"],
+    sportAffinity: ["soccer", "basketball", "track", "volleyball", "lacrosse"],
+    expressions: {
+      establish: [
+        "Elastic ankle prep (10 min): slow calf raise × 15 → ankle circles × 10 each → pogo hops 2 × 10 (sub-max, teaching quiet contact) → ankle hop series 2 × 15. Goal: introduce foot stiffness concept.",
+        "Ankle stiffness primer (10 min): single-leg calf raise × 12 each → ankle dorsiflexion hold 3 × 5 sec → pogo hop 2 × 10 → bilateral ankle hop 2 × 12. Focus: minimal ground contact time.",
+        "Foot and ankle prep (10 min): toe spread + calf raise × 15 → ankle CAR × 6 each → pogo series 2 × 8 → low hurdle step-over × 3 each leg. Build elastic reflex from ground up.",
+      ],
+      build: [
+        "Elastic prep (8 min): ankle mobility → single-leg pogo hops 2 × 8 each → hurdle step-over × 3 → fast ankle hops 2 × 12. Goal: minimize contact time at moderate intensity.",
+        "Stiffness primer (8 min): ankle circles → bilateral ankle hop 2 × 10 → single-leg ankle hop 2 × 6 each. Goal: teach elastic loading before power block.",
+        "Reactive ankle prep (8 min): calf raise × 10 → pogo hops 2 × 10 → hurdle bounce series 2 × 6. Building stiffness progression toward the session's power intent.",
+      ],
+      intensify: [
+        "CNS ankle primer (5 min): rapid ankle hops 2 × 8 → single-leg quick hop × 5 each. BRIEF — CNS must be fresh for maximum reactive output.",
+        "Elastic activation (6 min): pogo hops 2 × 6 (max stiffness, minimum ground time) → ankle pop to acceleration × 3. CNS prime only — no fatigue accumulation.",
+        "Stiffness activation (5 min): fast ankle hops 2 × 8 → 2 × hurdle bounce reactive. Brief, sharp, maximal intent on every contact.",
+      ],
+      deload: [
+        "Light ankle/calf prep (10 min): calf raises (slow eccentric 4-count) × 15 → ankle circles → sub-max pogo hops 2 × 8 at 40% effort. Tissue quality only, zero reactive demand.",
+        "Restorative foot prep (10 min): toe spreads × 10 → slow calf raise and lower × 12 → ankle CARs × 5 each → gentle pogo × 6. Recovery focus — no impact loading.",
+        "Easy elastic prep (10 min): ankle mobility work + slow calf raises + light ankle hops 2 × 8. Very low amplitude, no maximal effort.",
+      ],
+    },
+  },
+  {
+    id: "hip_posterior_chain",
+    label: "Hip / Posterior Chain Prep",
+    primaryPatterns: ["hinge"],
+    sportAffinity: ["soccer", "football", "track", "rugby", "lacrosse"],
+    expressions: {
+      establish: [
+        "Hip and posterior chain prep (10 min): hip CARs 5 each direction → 90/90 hip stretch 3 × 30 sec each → hamstring walkout × 6 → single-leg hip bridge × 10 each. Thorough tissue preparation before hinge loading.",
+        "Posterior chain activation (10 min): piriformis stretch 2 × 30 sec → hip CARs × 5 → good-morning walkout × 6 → glute bridge march × 10. Educating the posterior chain before the session.",
+        "Hip hinge prep (10 min): 90/90 hip mobility 2 × 30 sec each → hip CARs × 5 each → couch stretch 30 sec each → banded glute bridge × 12. Building awareness of hip position before loading.",
+      ],
+      build: [
+        "Hip prep (8 min): hip CARs × 4 each → couch stretch 30 sec each → single-leg hip bridge × 10 each → deadlift walkout × 5. Targeted posterior chain readiness.",
+        "Posterior prep (8 min): hamstring mobilization (standing) × 8 → hip CARs × 4 → banded clamshell × 12 each → RDL walkout × 5. Progressively loading the hinge pattern.",
+        "Hip hinge activation (8 min): half-kneeling hip flexor stretch × 30 sec each → hip CAR × 4 → single-leg RDL (bodyweight) × 5 each. Sport-specific posterior chain priming.",
+      ],
+      intensify: [
+        "Brief hip activation (6 min): hip CARs × 3 each direction → 3 × single-leg bridge hold 3 sec. Quality focus — CNS must be fresh for heavy hinge loading.",
+        "Hip primer (5 min): quick hip CAR × 3 → glute bridge × 8 → bodyweight RDL × 4 each. Brief and targeted — do not pre-fatigue the posterior chain.",
+        "Posterior chain primer (6 min): couch stretch 20 sec each → hip CAR × 3 → single-leg deadlift (bodyweight, 3 reps each). Efficient neural readiness.",
+      ],
+      deload: [
+        "Restorative hip prep (10 min): deep 90/90 hold 2 × 45 sec each → hip circles × 8 → supine piriformis stretch 30 sec → light glute bridge × 10. Parasympathetic, slow, joint health focus.",
+        "Light hip mobility (10 min): pigeon pose variation 45 sec each → hip CARs × 4 slow → very light glute bridge × 8. Recovery priority — no loading.",
+        "Gentle posterior chain prep (10 min): 90/90 breathing + hip release 3 × 5 breaths → supine hip stretch → slow hip CARs × 4. Tissue quality only.",
+      ],
+    },
+  },
+  {
+    id: "landing_deceleration",
+    label: "Landing / Deceleration Prep",
+    primaryPatterns: ["squat"],
+    sportAffinity: ["basketball", "volleyball", "soccer", "lacrosse", "football"],
+    expressions: {
+      establish: [
+        "Landing mechanics prep (8 min): snap-down drill × 3 (teaching absorption — hips back, soft knee, foot flat) → stick landing × 5 (3-second hold) → depth drop (no jump, just land and hold) × 3. TEACH the positions before loading them.",
+        "Deceleration prep (8 min): snap-down × 3 → 5-3-1 decel drill (5m sprint, stop) × 4 → stick landing from step-off × 5. Build the landing pattern from simple to sport-specific.",
+        "Bilateral landing prep (8 min): squat-depth holds × 5 at landing position → forward step landing × 5 each → depth drop to stick × 3. Reinforcing landing mechanics before power.",
+      ],
+      build: [
+        "Landing prep (7 min): snap-down drill × 3 → lateral decel from 5m sprint × 3 each → double-leg stick landing × 5. Moving toward reactive landing mechanics.",
+        "Decel prep (7 min): depth drop × 3 → lateral step to stick × 4 each → 5m sprint to broad jump with stick landing × 3. Progressively loading the deceleration demand.",
+        "Reactive landing prep (7 min): snap-down × 3 → bilateral drop land × 3 → single-leg stick landing × 3 each. Building deceleration capacity toward the session's explosive work.",
+      ],
+      intensify: [
+        "Landing primer (5 min): depth drop × 3 + stick landing × 3. Brief, sharp — prime the deceleration pattern before high-intensity reactive work.",
+        "Decel CNS prime (5 min): snap-down to stick × 3 → lateral cut to hold × 2 each. Quality only — do NOT pre-fatigue landing mechanics.",
+        "Reactive landing activation (6 min): step-off to bilateral stick landing × 3 → single-leg stick × 2 each. Brief preparation for maximal reactive output.",
+      ],
+      deload: [
+        "Slow landing practice (8 min): controlled step-off and soft landing × 5, slow → squat-depth deceleration hold × 5 at 30% speed. No reactive demand — movement rehearsal only.",
+        "Easy landing mechanics (8 min): slow-motion snap-down × 3 → low-amplitude step landing × 4 each. Very low impact, focus on feel and position.",
+        "Restorative movement prep (10 min): slow deceleration walks × 4 each direction + squat hold × 3 at bottom. Zero CNS demand.",
+      ],
+    },
+  },
+  {
+    id: "trunk_posture",
+    label: "Trunk / Posture Prep",
+    primaryPatterns: ["trunk", "rotational"],
+    sportAffinity: [],
+    expressions: {
+      establish: [
+        "Trunk and posture prep (10 min): foam roller thoracic extension (10 reps) → cat-cow × 10 → dead bug × 8 each → 90/90 breathing × 5 breaths each side. Full reset of rib cage position before loading.",
+        "Thoracic mobility prep (10 min): thoracic rotation (quadruped) × 8 each → rib cage expansion breathing × 5 → dead bug × 6 each → half-kneeling Pallof hold × 5 each. Posture and bracing education.",
+        "Core posture prep (10 min): thoracic opener on foam roller × 10 → side-lying thoracic rotation × 8 each → hollow body practice × 3 × 5 sec → 90/90 breathing. Build trunk integrity from scratch.",
+      ],
+      build: [
+        "Trunk activation (8 min): thoracic rotation × 6 each → 90/90 breathing × 4 → dead bug × 6 each → half-kneeling Pallof hold 3 sec × 5 each. Targeted trunk readiness for the session.",
+        "Posture prep (8 min): cat-cow × 8 → thoracic extension on roller × 6 → brace drill × 5 (breath in, brace, hold 3 sec) → dead bug × 6. Building trunk stiffness.",
+        "Core activation (8 min): rib cage breathing 4 × 5 breaths → dead bug × 5 each → plank with breathing 3 × 10 sec. Establishes intra-abdominal pressure before loading.",
+      ],
+      intensify: [
+        "Trunk primer (5 min): brace drill × 5 (360-degree pressure) → dead bug × 4 each. Brief and targeted — no fatigue before heavy trunk demands.",
+        "Posture activation (5 min): thoracic extension × 5 → 90/90 breathing × 3 → brace hold × 3. Quick reset of rib cage and spinal position.",
+        "Core primer (6 min): thoracic extension on roller × 4 → brace drill × 4 → hollow body hold 3 × 5 sec. Short, direct trunk prep.",
+      ],
+      deload: [
+        "Restorative trunk prep (10 min): full thoracic foam roller work 2 × 10 → 90/90 breathing 4 × 5 breaths → supine dead bug (very easy) × 5 each. Parasympathetic priority.",
+        "Thoracic mobility recovery (10 min): cat-cow × 10 slow → thoracic rotation × 8 slow each → diaphragmatic breathing practice × 5 min. Full tissue care, no compression.",
+        "Posture restoration (10 min): rib cage mobility + 90/90 breathing + supine thoracic extension. Zero intensity, full recovery.",
+      ],
+    },
+  },
+  {
+    id: "upper_structural",
+    label: "Upper Structural Prep",
+    primaryPatterns: ["upper_push", "upper_pull"],
+    sportAffinity: [],
+    expressions: {
+      establish: [
+        "Upper structural prep (10 min): wall slides × 12 (scapular upward rotation) → band pull-apart × 15 → shoulder CARs × 3 each direction → Y/T/W × 8 each. Full scapulothoracic and shoulder health protocol.",
+        "Scapular and shoulder prep (10 min): thoracic extension on roller × 8 → wall slides × 12 → face pull × 12 → shoulder CAR × 3 each. Teaching scapular mechanics before pressing or pulling.",
+        "Upper mobility prep (10 min): pec stretch + thoracic opener × 30 sec → wall slides × 10 → band pull-apart × 15 → side-lying shoulder ER × 10 each. Building shoulder integrity from scratch.",
+      ],
+      build: [
+        "Upper prep (8 min): wall slides × 10 → band pull-apart × 12 → face pull × 12 → shoulder CAR × 3 each. Targeted scapular activation before the primary push or pull.",
+        "Scapular activation (8 min): thoracic rotation × 6 each → wall slides × 10 → band pull-apart × 12 → 5 reps of the session's primary movement at 30% (rehearsal). Sport-specific readiness.",
+        "Shoulder prep (8 min): thoracic extension × 6 → wall slides × 10 → Y/T/W × 6 → banded external rotation × 12 each. Scapulothoracic integrity before loading.",
+      ],
+      intensify: [
+        "Scapular primer (5 min): band pull-apart × 10 → shoulder CAR × 2 each. Brief — do not pre-fatigue the scapular stabilizers.",
+        "Upper activation (5 min): wall slides × 8 → face pull × 10. Quick scapular engagement — CNS must be ready for heavy pressing or pulling.",
+        "Shoulder CNS prime (6 min): band pull-apart × 10 → Y/T/W × 5 → banded ER × 8 each. Short and targeted.",
+      ],
+      deload: [
+        "Restorative shoulder prep (10 min): pec stretch 2 × 30 sec → wall slides × 12 slow → shoulder CARs × 4 slow each direction → band pull-apart × 15 easy. Tissue quality and range — no loading.",
+        "Upper mobility recovery (10 min): thoracic opener on roller × 8 → side-lying thoracic rotation × 8 each → slow face pull × 12 → shoulder hang (bar) 3 × 15 sec. Full shoulder restoration.",
+        "Scapular care (10 min): band pull-apart × 15 easy + shoulder CARs × 4 each + side-lying ER × 10 each. Recovery priority.",
+      ],
+    },
+  },
+];
+
+// ─── Prep Selection Logic ─────────────────────────────────────────────────────
+
+/** Deterministically pick one item from an array using a fractional index. */
+function pickFromArray<T>(arr: T[], idx: number): T {
+  return arr[Math.abs(Math.floor(idx)) % arr.length];
+}
+
+/**
+ * Select a prep family description based on session context.
+ * Returns a specific, varied prep description string.
+ * Uses dayNumber + seed for within-week variety and weekRole for between-week variety.
+ */
+export function selectPrepDescription(params: {
+  patterns: string[];
+  blockArchetype?: string;
+  weekRole?: string;
+  sport: string | null;
+  dayNumber: number;
+  seed: number;
+}): string {
+  const { patterns, blockArchetype, weekRole, sport, dayNumber, seed } = params;
+  const sportLc = sport?.toLowerCase() ?? "";
+  const role = (weekRole ?? "establish") as PrepWeekRole;
+
+  // ── Block-archetype-driven overrides first ───────────────────────────────
+  if (blockArchetype === "REBUILD_DELOAD") {
+    const isLower = patterns.some(p => ["squat", "hinge", "unilateral_lower"].includes(p));
+    const isUpper = patterns.some(p => ["upper_push", "upper_pull"].includes(p));
+    const options = isLower
+      ? [
+          "Deload lower prep (10 min): light hip circles × 10 each direction → slow hip CARs × 4 → banded clamshell × 10 → easy cat-cow × 8. Tissue quality, not CNS activation. No approach to mechanical limits.",
+          "Light lower mobility (10 min): 90/90 hip stretch 30 sec each → slow ankle CARs × 6 each → easy glute bridge × 10. Recovery priority — nothing taxing.",
+          "Gentle lower prep (10 min): supine hip circles × 8 → couch stretch 30 sec each → slow hip hinge (bodyweight) × 6. Move through ranges without loading.",
+        ]
+      : isUpper
+        ? [
+            "Deload upper prep (10 min): pec stretch 30 sec each → slow wall slides × 12 → gentle band pull-apart × 15 easy. Shoulder care and thoracic mobility only.",
+            "Light upper mobility (10 min): thoracic foam roller extension × 8 → shoulder CARs × 3 each slow → side-lying ER × 8 each. Recovery focus — no loading.",
+            "Restorative upper prep (10 min): slow wall slides × 10 → thoracic rotation × 6 each → gentle face pull band × 12. Tissue quality only.",
+          ]
+        : [
+            "Deload prep (8 min): light dynamic mobility — hip circles, arm swings, inchworm × 3. Tissue quality only. No CNS demands.",
+            "Gentle full-body prep (10 min): easy jog 3 min → slow leg swings × 10 each → arm circles → light inchworm × 3. Recovery, not activation.",
+            "Light dynamic warm-up (10 min): jog 4 min → walking hip circles → arm swings. Zero intensity.",
+          ];
+    const idx = (seed * 17.3 + dayNumber * 3.1) % options.length;
+    return pickFromArray(options, idx);
+  }
+
+  if (blockArchetype === "INTENSIFICATION_STRENGTH") {
+    const isLower = patterns.some(p => ["squat", "hinge", "unilateral_lower"].includes(p));
+    const isHinge = patterns.includes("hinge") && !patterns.includes("squat");
+    const options = isLower
+      ? isHinge
+        ? [
+            "Intensification hinge prep (6 min): hip CARs × 4 each → single-leg bridge × 6 each → brief hamstring mobilization. Quality over duration — CNS must be fresh for heavy hinge loading.",
+            "Posterior chain primer (6 min): 90/90 hip stretch 20 sec each → hip CARs × 3 → banded glute bridge × 8. Brief and targeted — do not pre-fatigue the hinge.",
+            "Hip activation (5 min): hip CAR × 3 each → single-leg RDL (bodyweight) × 3 each. Minimal. CNS fresh for maximal loading.",
+          ]
+        : [
+            "Intensification squat prep (6 min): hip CARs × 4 → ankle dorsiflexion mobilization × 8 → goblet squat hold 3 × 5 sec. Quality over duration. CNS must be fresh.",
+            "Lower CNS primer (6 min): hip circles × 8 → glute activation (bridge) × 8 → slow goblet squat × 3. Brief and targeted — no fatigue before heavy squat.",
+            "Bilateral squat primer (5 min): hip CAR × 3 → ankle dorsiflexion hold × 5 → air squat × 4 slow. Minimal prep — CNS must be fully fresh.",
+          ]
+      : [
+          "Intensification upper prep (6 min): thoracic extension × 5 → wall slides × 8 → band pull-apart × 10. Brief. CNS must be ready for heavy pressing.",
+          "Upper CNS primer (5 min): shoulder CAR × 2 each → band pull-apart × 10 → 3 reps of primary press at 30%. Do not pre-fatigue.",
+          "Scapular primer (6 min): wall slides × 8 → face pull × 10. Short and targeted — CNS fresh for maximal loading.",
+        ];
+    const idx = (seed * 19.7 + dayNumber * 2.9) % options.length;
+    return pickFromArray(options, idx);
+  }
+
+  if (blockArchetype === "POWER_ELASTIC_CONVERSION") {
+    const options = [
+      "Reactive power prep (10 min): ankle mobility 2 min → pogo hop series 2 × 10 (sub-max, teaching stiffness) → 2 × 3 approach jumps to box (sub-max, position focus). Activating the stretch-shortening cycle before elastic output.",
+      "Elastic activation prep (10 min): slow calf raise × 12 → ankle CARs × 6 each → pogo hops 2 × 8 sub-max → hurdle step-over × 3 each → 2 × approach jump sub-max. Teaching the rebound reflex.",
+      "SSC prep (10 min): ankle circles → fast ankle hops 2 × 8 → bilateral pogo 2 × 6 → 2 × snap-down to sub-max bound. Awakening the elastic system before full reactive output.",
+      "Power primer (8 min): ankle stiffness series → pogo hops 2 × 8 → sub-max horizontal jump × 3. Elastic system awakened — do NOT pre-fatigue before primary reactive block.",
+    ];
+    const idx = (seed * 13.1 + dayNumber * 5.7) % options.length;
+    return pickFromArray(options, idx);
+  }
+
+  // ── Standard session prep — pick family by pattern + sport + day ─────────
+
+  // Score each family
+  const familyScores: Array<{ family: PrepFamily; score: number }> = PREP_FAMILIES.map((family) => {
+    let score = 0;
+    // Pattern match
+    if (patterns.some(p => family.primaryPatterns.includes(p))) score += 4;
+    // Sport affinity
+    if (family.sportAffinity.some(tag => sportLc.includes(tag))) score += 2;
+    // Day-number seeding: stir scores by (dayNumber * seed) to spread families across the week
+    score += ((dayNumber * seed * 7.3) % 1) * 1.5;
+    return { family, score };
+  });
+
+  familyScores.sort((a, b) => b.score - a.score);
+
+  // Top family wins, but alternate between top-2 using dayNumber parity for within-week variety
+  const useSecond = familyScores.length > 1 && (dayNumber % 2 === 0) && familyScores[0].score - familyScores[1].score < 2;
+  const chosenFamily = useSecond ? familyScores[1].family : familyScores[0].family;
+
+  const expressions = chosenFamily.expressions[role] ?? chosenFamily.expressions.establish;
+  const idx = (seed * 11.3 + dayNumber * 4.1) % expressions.length;
+  return pickFromArray(expressions, idx);
+}
+
 // ─── Sport-Specific Pool Selection ────────────────────────────────────────────
 
-function getLowerPowerPool(sport: string | null, neuralDemand: "high" | "moderate" | "low"): ExerciseMeta[] {
-  if (neuralDemand === "low") return LOWER_POWER_POOL_SUBMAXIMAL;
+function getLowerPowerPool(sport: string | null, neuralDemand: "high" | "moderate" | "low", weekRole?: string): ExerciseMeta[] {
+  if (neuralDemand === "low" || weekRole === "deload") return LOWER_POWER_POOL_SUBMAXIMAL;
+  if (weekRole === "intensify") {
+    const s = sport?.toLowerCase() ?? "";
+    if (s.includes("swim") || s.includes("row")) return LOWER_POWER_POOL_INTENSIFY.filter(e => !e.name.toLowerCase().includes("trap bar"));
+    if (s.includes("golf") || s.includes("baseball") || s.includes("softball")) return ROTATIONAL_POWER_POOL;
+    if (s.includes("hockey") || s.includes("soccer") || s.includes("lacrosse") || s.includes("basketball")) {
+      return [...LOWER_POWER_POOL_INTENSIFY, ...LATERAL_COD_POWER_POOL];
+    }
+    return LOWER_POWER_POOL_INTENSIFY;
+  }
+  if (weekRole === "establish") {
+    const s = sport?.toLowerCase() ?? "";
+    if (s.includes("golf") || s.includes("baseball") || s.includes("softball")) return ROTATIONAL_POWER_POOL;
+    return LOWER_POWER_POOL_ESTABLISH;
+  }
   const s = sport?.toLowerCase() ?? "";
   // Swimming/rowing: lower power is still needed but not jump-heavy
   if (s.includes("swim") || s.includes("row")) {
@@ -1465,6 +1884,18 @@ function getLowerPowerPool(sport: string | null, neuralDemand: "high" | "moderat
   // Golf/baseball/softball: rotational power is the primary power modality
   if (s.includes("golf") || s.includes("baseball") || s.includes("softball")) {
     return ROTATIONAL_POWER_POOL;
+  }
+  // Soccer/lacrosse: prefer horizontal acceleration and lateral power
+  if (s.includes("soccer") || s.includes("lacrosse")) {
+    return [...HORIZONTAL_ACCELERATION_POWER_POOL, ...LATERAL_COD_POWER_POOL];
+  }
+  // Basketball/volleyball: prefer vertical projection
+  if (s.includes("basketball") || s.includes("volleyball")) {
+    return VERTICAL_PROJECTION_POWER_POOL;
+  }
+  // Hockey: prefer lateral/COD power
+  if (s.includes("hockey")) {
+    return [...LATERAL_COD_POWER_POOL, ...HORIZONTAL_ACCELERATION_POWER_POOL];
   }
   return LOWER_POWER_POOL;
 }
@@ -1633,12 +2064,18 @@ export function selectSlotExercises(
     return chosen;
   }
 
-  const lowerPowerPool = getLowerPowerPool(sport, neuralDemand);
+  const weekRole = blockContext?.weekRole;
+  const lowerPowerPool = getLowerPowerPool(sport, neuralDemand, weekRole);
   const bilateralSquatPool = getBilateralSquatPool(sport, goal);
   const bilateralHingePool = getBilateralHingePool(sport, goal, lowFatigue);
   const upperPushPool = getUpperPushPool(sport);
 
   const lower_power                = pick(lowerPowerPool,               "lower_power",               ["power", "speed", "elastic"],            1.0);
+  // Per-session power variety: d2/d3/d4 use the same pool but alreadySelected prevents repeats
+  // We use different prime multipliers so the scorer's tiebreaker lands on different candidates
+  const lower_power_d2             = pick(lowerPowerPool,               "lower_power_d2",            ["power", "elastic", "speed"],            1.05);
+  const lower_power_d3             = pick(lowerPowerPool,               "lower_power_d3",            ["speed", "power", "elastic"],            1.10);
+  const lower_power_d4             = pick(lowerPowerPool,               "lower_power_d4",            ["elastic", "speed", "power"],            1.15);
   const bilateral_squat_strength   = pick(bilateralSquatPool,           "bilateral_squat_strength",  ["strength", "hypertrophy", "power"],      1.3);
   const bilateral_hinge_strength   = pick(bilateralHingePool,           "bilateral_hinge_strength",  ["strength", "hypertrophy"],               1.7);
   const unilateral_lower           = pick(UNILATERAL_LOWER_SQUAT_POOL,  "unilateral_lower",          ["stability", "strength"],                 2.1);
@@ -1659,6 +2096,9 @@ export function selectSlotExercises(
 
   const sel: SlotExerciseSelection = {
     lower_power,
+    lower_power_d2,
+    lower_power_d3,
+    lower_power_d4,
     bilateral_squat_strength,
     bilateral_hinge_strength,
     unilateral_lower,
@@ -1688,11 +2128,36 @@ export function selectSlotExercises(
 
 // ─── Description Builders ─────────────────────────────────────────────────────
 
-export function buildLowerPowerDescription(sel: SlotExerciseSelection, neuralDemand: "high" | "moderate" | "low"): string {
-  if (neuralDemand === "low") {
-    return `Power primer (sub-maximal): ${sel.lower_power} (3 × 3, technique focus — not max effort today)`;
+export function buildLowerPowerDescription(
+  sel: SlotExerciseSelection,
+  neuralDemand: "high" | "moderate" | "low",
+  overrideExercise?: string,
+  weekRole?: string,
+): string {
+  const exercise = overrideExercise ?? sel.lower_power;
+  if (neuralDemand === "low" || weekRole === "deload") {
+    return `Power primer (sub-maximal): ${exercise} — 3 × 3, technique and position focus, not max effort today`;
   }
-  return `Vertical/horizontal power: ${sel.lower_power} (3–5 sets × 3–5 reps — maximum intent, full reset between reps)`;
+  if (weekRole === "establish") {
+    return `Power — Establish: ${exercise} (3–4 sets × 4–5 reps — teach the movement, moderate intent, position over maximal output)`;
+  }
+  if (weekRole === "intensify") {
+    return `Power — Intensify: ${exercise} (3–4 sets × 3 reps — MAXIMUM intent, full 2–3 min rest, no fatigue accumulation)`;
+  }
+  return `Vertical/horizontal power: ${exercise} (3–5 sets × 3–5 reps — maximum intent, full reset between reps)`;
+}
+
+/**
+ * Get the day-specific power exercise from the selection.
+ * dayNumber is 1-based. Falls back to lower_power for any day > 4.
+ */
+export function getDayPowerExercise(sel: SlotExerciseSelection, dayNumber: number): string {
+  switch (dayNumber) {
+    case 2: return sel.lower_power_d2;
+    case 3: return sel.lower_power_d3;
+    case 4: return sel.lower_power_d4;
+    default: return sel.lower_power;
+  }
 }
 
 export function buildSquatPrimaryDescription(sel: SlotExerciseSelection): string {
@@ -1828,7 +2293,7 @@ function describeIntensificationBlockOrder(sel: SlotExerciseSelection): string {
     ``,
     `LOWER DAYS (SQUAT-ANCHOR):`,
     `  1. Neural prep (6–8 min) — hip CARs, thoracic extension, glute activation`,
-    `  2. CNS PRIMER: ${sel.lower_power} — 2–3 sets × 3 sub-maximal reps. NOT a power development block. Primes neural drive. Full rest.`,
+    `  2. CNS PRIMER: [DAY-SPECIFIC — D1=${sel.lower_power} | D2=${sel.lower_power_d2} | D3=${sel.lower_power_d3}] — 2–3 × 3 reps. NOT a full power block. Primes neural drive. Full rest.`,
     `  3. PRIMARY COMPOUND: ${sel.bilateral_squat_strength} — 4–5 × 2–4 @ 83–92%. Maximum load. Controlled eccentric, explosive concentric. THIS IS THE SESSION.`,
     `  4. SECONDARY: ${sel.bilateral_hinge_strength} — 3 × 5–6 @ 75–80%. Posterior chain complement. NOT a second primary.`,
     `  5. TRUNK CLOSE: ${sel.trunk_anti_rotation} + ${sel.trunk_anti_extension} — 2–3 sets only. Brief. Session close.`,
@@ -1836,7 +2301,7 @@ function describeIntensificationBlockOrder(sel: SlotExerciseSelection): string {
     ``,
     `LOWER DAYS (HINGE-ANCHOR):`,
     `  1. Neural prep (6–8 min)`,
-    `  2. CNS PRIMER: ${sel.lower_power} — 2–3 sets × 3 sub-maximal reps. Primes the pull pattern.`,
+    `  2. CNS PRIMER: [DAY-SPECIFIC — D1=${sel.lower_power} | D2=${sel.lower_power_d2} | D3=${sel.lower_power_d3}] — 2–3 × 3 reps. Primes the pull pattern.`,
     `  3. PRIMARY COMPOUND: ${sel.bilateral_hinge_strength} — 4 × 2–4 @ 83–90%. Deliberate reset between reps. Maximum posterior chain engagement.`,
     `  4. SECONDARY: ${sel.unilateral_lower_alt} — 3 × 5–6 per side. Posterior chain integrity, not a volume block.`,
     `  5. TRUNK CLOSE: ${sel.trunk_anti_rotation} + ${sel.trunk_anti_extension} — 2–3 sets only.`,
@@ -1861,7 +2326,7 @@ function describePowerElasticBlockOrder(sel: SlotExerciseSelection): string {
     ``,
     `LOWER DAYS (ALL):`,
     `  1. Reactive prep — ankle mobility → pogo series (2 × 10 sub-max) → 2 × 3 approach jumps. Activates SSC.`,
-    `  2. ELASTIC/REACTIVE BLOCK (PRIMARY OUTPUT): ${sel.elastic_power} — minimum contact time, maximum stiffness. THEN ${sel.lower_power} — maximum velocity expression. 3–4 sets × 4–5 reps each. FULL REST between every set (2–3 min). *** THIS IS THE SESSION'S MAIN TRAINING GOAL. ***`,
+    `  2. ELASTIC/REACTIVE BLOCK (PRIMARY OUTPUT): ${sel.elastic_power} — minimum contact time, maximum stiffness. THEN [DAY-SPECIFIC POWER — D1=${sel.lower_power} | D2=${sel.lower_power_d2} | D3=${sel.lower_power_d3}] — maximum velocity expression. 3–4 sets × 4–5 reps each. FULL REST (2–3 min). *** MAIN TRAINING GOAL. ***`,
     `  3. CONTRAST COMPOUND: ${sel.bilateral_squat_strength} or ${sel.bilateral_hinge_strength} — 65–78% load, VELOCITY INTENT on every concentric. This lift potentiates the reactive work above. 4 × 3–5 reps. Bar speed is the intent.`,
     `  4. TRUNK CLOSE: ${sel.trunk_anti_rotation} — 2 sets. Anti-rotation. Brief close.`,
     `  *** NO UNILATERAL BLOCK. NO SECONDARY BILATERAL COMPOUND. Elastic output + one contrast compound + brief trunk. ***`,
@@ -1885,16 +2350,16 @@ function describeAccumulationBlockOrder(sel: SlotExerciseSelection): string {
     ``,
     `LOWER DAYS (SQUAT-ANCHOR):`,
     `  1. Lower-body neural prep — hip CARs, glute activation, ankle stiffness series`,
-    `  2. POWER: ${sel.lower_power} — 3–4 × 4–5, maximal intent, full reset between reps`,
+    `  2. POWER: [DAY-SPECIFIC — D1=${sel.lower_power} | D2=${sel.lower_power_d2} | D3=${sel.lower_power_d3} | D4=${sel.lower_power_d4}] — 3–4 × 4–5, maximal intent, full reset between reps. EACH SESSION USES A DIFFERENT MOVEMENT.`,
     `  3. PRIMARY: ${sel.bilateral_squat_strength} — 4 × 6–10 (volume accumulation, controlled tempo, full depth)`,
     `  4. SECONDARY HINGE: ${sel.bilateral_hinge_strength} — 3 × 8–10 (posterior chain complement)`,
     `  5. UNILATERAL: ${sel.unilateral_lower} — 3 × 8–10 per side (positional control + asymmetry exposure)`,
     `  6. TRUNK: ${sel.trunk_anti_extension} + ${sel.trunk_anti_rotation} — 2–3 sets each`,
-    `  7. CONDITIONING FINISHER: ${sel.conditioning_finisher} — 3–4 sets, high effort sustainable pace. THIS IS NOT REST. It is the density and metabolic accumulation stimulus that closes this block.`,
+    `  7. CONDITIONING FINISHER: ${sel.conditioning_finisher} — 3–4 sets, high effort sustainable pace. THIS IS NOT REST. Metabolic accumulation stimulus.`,
     ``,
     `LOWER DAYS (HINGE-ANCHOR):`,
     `  1. Lower-body neural prep`,
-    `  2. POWER: ${sel.lower_power} — 3–4 × 4–5`,
+    `  2. POWER: [DAY-SPECIFIC — see D1/D2/D3/D4 assignment above] — 3–4 × 4–5. Different movement each session.`,
     `  3. PRIMARY: ${sel.bilateral_hinge_strength} — 4 × 6–10`,
     `  4. SECONDARY SQUAT: ${sel.bilateral_squat_strength} — 3 × 6–8`,
     `  5. UNILATERAL: ${sel.unilateral_lower_alt} — 3 × 8–10 per side`,
@@ -1932,31 +2397,31 @@ export function buildVariationMandate(
   if (blockArchetype === "INTENSIFICATION_STRENGTH") {
     blockOrderSection = describeIntensificationBlockOrder(sel);
     validationChecklist = [
-      `- [ ] ${sel.lower_power} is used as the CNS primer (NOT a full power block)`,
+      `- [ ] Day 1 power CNS primer: ${sel.lower_power} | Day 2: ${sel.lower_power_d2} | Day 3: ${sel.lower_power_d3}`,
       `- [ ] ${sel.bilateral_squat_strength} is used as the bilateral squat primary at 83–92%`,
       `- [ ] ${sel.bilateral_hinge_strength} is used as the bilateral hinge primary at 83–90%`,
       `- [ ] NO unilateral block on lower days — load density replaces volume`,
       `- [ ] ${sel.trunk_anti_rotation} is used for anti-rotation trunk close`,
       `- [ ] ${sel.upper_pull_primary} is used as the upper pull primary`,
       `- [ ] Sessions are TIGHT: 4–5 blocks maximum on lower days`,
-      `- [ ] Power exercise differs across all sessions`,
+      `- [ ] Power exercise is DIFFERENT across every lower session`,
     ];
   } else if (blockArchetype === "POWER_ELASTIC_CONVERSION") {
     blockOrderSection = describePowerElasticBlockOrder(sel);
     validationChecklist = [
       `- [ ] ${sel.elastic_power} appears as the FIRST training block (after prep) on lower days`,
-      `- [ ] ${sel.lower_power} follows elastic work as second reactive block`,
+      `- [ ] Day 1 reactive power: ${sel.lower_power} | Day 2: ${sel.lower_power_d2} | Day 3: ${sel.lower_power_d3}`,
       `- [ ] ${sel.bilateral_squat_strength} or ${sel.bilateral_hinge_strength} is used as CONTRAST VEHICLE at 65–78%`,
       `- [ ] NO unilateral block on lower days`,
       `- [ ] NO secondary bilateral compound on lower days`,
       `- [ ] ${sel.trunk_anti_rotation} is a brief trunk close (2 sets only)`,
       `- [ ] Sessions are SHORT: elastic + contrast + trunk = 4 blocks total`,
-      `- [ ] Power exercise differs across all sessions`,
+      `- [ ] Power exercise is DIFFERENT across every lower session`,
     ];
   } else if (blockArchetype === "FOUNDATION_ACCUMULATION" || blockArchetype === "WORK_CAPACITY_BLOCK") {
     blockOrderSection = describeAccumulationBlockOrder(sel);
     validationChecklist = [
-      `- [ ] ${sel.lower_power} is used as the power/explosive slot`,
+      `- [ ] Day 1 power: ${sel.lower_power} | Day 2: ${sel.lower_power_d2} | Day 3: ${sel.lower_power_d3} | Day 4: ${sel.lower_power_d4}`,
       `- [ ] ${sel.bilateral_squat_strength} is used as the bilateral squat primary`,
       `- [ ] ${sel.bilateral_hinge_strength} is used as the bilateral hinge primary`,
       `- [ ] ${sel.unilateral_lower} is used for unilateral lower on squat-primary days`,
@@ -1964,7 +2429,7 @@ export function buildVariationMandate(
       `- [ ] ${sel.trunk_anti_rotation} is used for anti-rotation trunk work`,
       `- [ ] ${sel.upper_pull_primary} is used as the upper pull primary`,
       `- [ ] No two sessions share the same primary lift`,
-      `- [ ] Power exercise differs across all sessions`,
+      `- [ ] Power exercise is DIFFERENT in every lower session`,
     ];
   } else {
     // Default: use generic variant A/B/C/D (unchanged from original)
@@ -1973,14 +2438,14 @@ export function buildVariationMandate(
     const variantLabel = blockVariant === "squat_first" ? "A" : blockVariant === "hinge_first" ? "B" : blockVariant === "power_extended" ? "C" : "D";
     blockOrderSection = `### SESSION BLOCK ORDER — VARIANT ${variantLabel}\n\n${blockDescription}`;
     validationChecklist = [
-      `- [ ] ${sel.lower_power} is used as the power/explosive slot`,
+      `- [ ] Day 1 power: ${sel.lower_power} | Day 2: ${sel.lower_power_d2} | Day 3: ${sel.lower_power_d3}`,
       `- [ ] ${sel.bilateral_squat_strength} is used as the bilateral squat primary`,
       `- [ ] ${sel.bilateral_hinge_strength} is used as the bilateral hinge primary`,
       `- [ ] ${sel.unilateral_lower} is used for unilateral lower on squat-primary days`,
       `- [ ] ${sel.trunk_anti_rotation} is used for anti-rotation trunk work`,
       `- [ ] ${sel.upper_pull_primary} is used as the upper pull primary`,
       `- [ ] No two sessions share the same primary lift`,
-      `- [ ] Power exercise differs across all sessions`,
+      `- [ ] Power exercise is DIFFERENT in every lower session`,
       `- [ ] Block order follows Variant ${variantLabel} template`,
     ];
   }
@@ -1997,7 +2462,10 @@ export function buildVariationMandate(
     ``,
     `### LOCKED EXERCISES — USE THESE EXACTLY`,
     ``,
-    `- Power / Explosive: ${sel.lower_power}`,
+    `- Power / Explosive — Day 1: ${sel.lower_power}`,
+    `- Power / Explosive — Day 2: ${sel.lower_power_d2}`,
+    `- Power / Explosive — Day 3: ${sel.lower_power_d3}`,
+    `- Power / Explosive — Day 4: ${sel.lower_power_d4}`,
     `- Elastic / Reactive: ${sel.elastic_power}`,
     `- Bilateral Squat Primary: ${sel.bilateral_squat_strength}`,
     `- Bilateral Hinge Primary: ${sel.bilateral_hinge_strength}`,
@@ -2016,8 +2484,7 @@ export function buildVariationMandate(
     ``,
     `Do NOT use these unless they appear above as the locked selection:`,
     `- PROHIBITED as squat primary: Back Squat → use ${sel.bilateral_squat_strength}`,
-    `- PROHIBITED as power exercise: Box Jump → use ${sel.lower_power}`,
-    `- PROHIBITED as power exercise: Broad Jump → use ${sel.lower_power}`,
+    `- PROHIBITED as sole power exercise: Box Jump or Broad Jump every session → use the per-day power selection above`,
     `- PROHIBITED as hinge primary: Conventional Deadlift → use ${sel.bilateral_hinge_strength}`,
     `- PROHIBITED as unilateral primary: Bulgarian Split Squat → use ${sel.unilateral_lower}`,
     `- PROHIBITED as sole trunk exercise: Pallof Press → use ${sel.trunk_anti_rotation}`,
@@ -2029,8 +2496,10 @@ export function buildVariationMandate(
     ``,
     `1. No exercise appears as a PRIMARY lift in more than one session.`,
     `2. If the same slot must appear on two days: Day 1 uses strength sets; Day 3 uses speed/technique sets at 65–75%.`,
-    `3. Power choices MUST differ across sessions. Day 1 = ${sel.lower_power}; other days use a different power modality.`,
+    `3. Power choices ARE LOCKED PER DAY — use exactly the day-specific power exercise listed above for each session day.`,
+    `   Day 1 lower sessions → ${sel.lower_power} | Day 2 lower sessions → ${sel.lower_power_d2} | Day 3 → ${sel.lower_power_d3} | Day 4 → ${sel.lower_power_d4}`,
     `4. At least 3 DIFFERENT trunk exercises must appear across the full week — not the same one every session.`,
+    `5. Prep blocks are already varied by the Architecture Engine — do NOT override them with generic warm-up language.`,
     ``,
     `### FINAL VALIDATION CHECKLIST`,
     ``,

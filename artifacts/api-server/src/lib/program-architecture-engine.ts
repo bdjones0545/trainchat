@@ -24,6 +24,8 @@ import {
   buildUpperPushDescription,
   buildUpperPullDescription,
   buildRotationalPowerDescription,
+  selectPrepDescription,
+  getDayPowerExercise,
   type SlotExerciseSelection,
   type BlockSelectionContext,
 } from "./exercise-variation-engine";
@@ -3267,20 +3269,82 @@ export function buildArchitectureBrief(
     goal?.toLowerCase().includes("work capacity")
   );
 
-  // Post-process CNS flow blocks: replace generic "choose from X, Y, Z" descriptions
-  // with pre-selected specific exercises from the variation engine.
-  // Only replaces descriptions that contain " or " (indicating options were listed).
-  function overlayBlockWithSlot(block: CNSBlock, patterns: MovementPattern[], nd: NeuralDemand): CNSBlock {
-    const isGeneric = block.description.includes(" or ") || block.description.includes("variation");
-    if (!isGeneric) return block;
+  // Post-process CNS flow blocks: replace generic descriptions and always inject
+  // specific exercises from the variation engine. Prep blocks are ALWAYS replaced
+  // with family-aware, week-role-driven, day-varied descriptions.
+  function overlayBlockWithSlot(
+    block: CNSBlock,
+    patterns: MovementPattern[],
+    nd: NeuralDemand,
+    dayNumber: number,
+  ): CNSBlock {
     const isHingeDay = patterns.includes("hinge") && !patterns.includes("squat");
 
-    if (block.role === "power" && (patterns.includes("squat") || patterns.includes("hinge") || patterns.includes("unilateral_lower"))) {
-      return { ...block, description: buildLowerPowerDescription(slotSelection, nd) };
+    // ── PREP — always replace with dynamic prep family selection ───────────
+    if (block.role === "prep") {
+      const prepDesc = selectPrepDescription({
+        patterns,
+        blockArchetype: blockSelection.archetypeId,
+        weekRole: activeWeekPlan.role,
+        sport,
+        dayNumber,
+        seed: splitVariationSeed,
+      });
+
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[PrepAudit]", JSON.stringify({
+          weekNumber: 1,
+          dayNumber,
+          sessionIdentity: arch.sessions.find(s => s.dayNumber === dayNumber)?.identity ?? "unknown",
+          blockArchetype: blockSelection.archetypeId,
+          weekRole: activeWeekPlan.role,
+          prepDescription: prepDesc.substring(0, 80) + "...",
+        }));
+      }
+
+      return { ...block, description: prepDesc };
     }
-    if (block.role === "power" && patterns.includes("rotational")) {
-      return { ...block, description: buildRotationalPowerDescription(slotSelection) };
+
+    // ── POWER — use day-specific exercise to prevent same exercise every session ─
+    if (block.role === "power") {
+      const dayExercise = getDayPowerExercise(slotSelection, dayNumber);
+      const weekRole = activeWeekPlan.role;
+
+      if (patterns.includes("rotational") && !patterns.some(p => ["squat", "hinge", "unilateral_lower"].includes(p))) {
+        return { ...block, description: buildRotationalPowerDescription(slotSelection) };
+      }
+      if (patterns.some(p => ["squat", "hinge", "unilateral_lower"].includes(p))) {
+        // Check if description is already a specific CNS primer (INTENSIFICATION or POWER_ELASTIC archetypes)
+        // — those have specific intent text that should be preserved but exercise swapped
+        const isPotentiationPrimer = block.description.includes("CNS POTENTIATION") || block.description.includes("ELASTIC/REACTIVE BLOCK");
+        if (isPotentiationPrimer) {
+          // Replace the specific exercise name in the existing description with the day exercise
+          const updatedDesc = block.description.replace(slotSelection.lower_power, dayExercise);
+          if (process.env.NODE_ENV !== "production") {
+            console.log("[PowerAudit]", JSON.stringify({ dayNumber, weekRole, dayExercise, lower_power: slotSelection.lower_power }));
+          }
+          return { ...block, description: updatedDesc };
+        }
+        const desc = buildLowerPowerDescription(slotSelection, nd, dayExercise, weekRole);
+        if (process.env.NODE_ENV !== "production") {
+          console.log("[PowerAudit]", JSON.stringify({
+            dayNumber,
+            weekRole,
+            selectedExercise: dayExercise,
+            powerIntent: weekRole === "intensify" ? "MAXIMUM intent" : weekRole === "establish" ? "teach movement" : "maximum intent",
+          }));
+        }
+        return { ...block, description: desc };
+      }
+      // Upper/mixed power block
+      if (!block.description.includes(" or ") && !block.description.includes("variation")) return block;
+      return { ...block, description: `Med ball power: ${slotSelection.rotational_power} or chest throw (3–4 sets × 3–5 reps)` };
     }
+
+    // ── All other blocks — only replace generic descriptions ──────────────
+    const isGeneric = block.description.includes(" or ") || block.description.includes("variation");
+    if (!isGeneric) return block;
+
     if (block.role === "primary" && patterns.includes("squat")) {
       return { ...block, description: buildSquatPrimaryDescription(slotSelection) };
     }
@@ -3312,7 +3376,7 @@ export function buildArchitectureBrief(
   }
 
   const sessionLines = arch.sessions.map((s) => {
-    const processedFlow = s.cnsFlow.map((b) => overlayBlockWithSlot(b, s.emphasizedPatterns, s.neuralDemand));
+    const processedFlow = s.cnsFlow.map((b) => overlayBlockWithSlot(b, s.emphasizedPatterns, s.neuralDemand, s.dayNumber));
     const flowRoles = processedFlow.map((b) => `[${b.role.toUpperCase()}] ${b.description}`).join("\n    ");
     const sportLine = s.sportNotes ? `\n  SPORT OVERLAY: ${s.sportNotes}` : "";
 
