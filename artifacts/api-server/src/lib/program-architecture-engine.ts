@@ -3203,39 +3203,25 @@ export function buildArchitectureBrief(
   // ── Program Variance Audit ────────────────────────────────────────────────
   // Build the extended fingerprint AFTER exercises are selected so we have
   // the full picture: block + split + slot exercises + day themes + family counts.
-  let extendedFingerprint: ReturnType<typeof buildExtendedFingerprint>;
-  try {
-    extendedFingerprint = buildExtendedFingerprint({
-      generationId: auditId,
-      blockArchetype: blockSelection.archetypeId,
-      currentPhase: "establish",
-      progressionStyle: blockSelection.archetype.progressionStyle,
-      neuralDemandProfile: blockSelection.archetype.neuralDemandProfile,
-      fatigueProfile: blockSelection.archetype.fatigueProfile,
-      splitArchitecture: blockSelection.splitId,
-      weeklyRhythm: blockSelection.split.weeklyRhythmDescription,
-      daysPerWeek,
-      dayTemplates: blockSelection.split.dayTemplates,
-      slotSelections: slotSelection as unknown as Record<string, string>,
-      variationTags: blockSelection.archetype.variationTags,
-    });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.warn("[ArchBriefDiag] buildExtendedFingerprint threw:", msg, (e instanceof Error ? e.stack : ""));
-    throw e;
-  }
+  const extendedFingerprint = buildExtendedFingerprint({
+    generationId: auditId,
+    blockArchetype: blockSelection.archetypeId,
+    currentPhase: "establish",
+    progressionStyle: blockSelection.archetype.progressionStyle,
+    neuralDemandProfile: blockSelection.archetype.neuralDemandProfile,
+    fatigueProfile: blockSelection.archetype.fatigueProfile,
+    splitArchitecture: blockSelection.splitId,
+    weeklyRhythm: blockSelection.split.weeklyRhythmDescription,
+    daysPerWeek,
+    dayTemplates: blockSelection.split.dayTemplates,
+    slotSelections: slotSelection as unknown as Record<string, unknown>,
+    variationTags: blockSelection.archetype.variationTags,
+  });
 
   // Run the variance audit against recent program history.
   // Logs [ProgramVarianceAudit], [ProgramVarianceAuditWarning] in DEV.
   // Returns the audit result including rerollRecommended flag.
-  let varianceAuditResult: ReturnType<typeof runProgramVarianceAudit>;
-  try {
-    varianceAuditResult = runProgramVarianceAudit(extendedFingerprint);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.warn("[ArchBriefDiag] runProgramVarianceAudit threw:", msg, (e instanceof Error ? e.stack : ""));
-    throw e;
-  }
+  const varianceAuditResult = runProgramVarianceAudit(extendedFingerprint);
 
   // If variance is too low and we haven't already attempted a re-selection:
   // log the reroll recommendation. The next generation will pick up the
@@ -3249,26 +3235,13 @@ export function buildArchitectureBrief(
   // Emits [PerceivedVarianceAudit], [PerceivedVarianceAuditWarning], [PerceivedVarianceAuditReroll].
   // The per-slot contrast penalties (injected during scoring) already address
   // the root cause on the next build — this audit tells us if they're working.
-  try {
-    runPerceivedVarianceAudit(
-      auditId,
-      slotSelection,
-      blockSelection.split.dayTemplates,
-    );
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.warn("[ArchBriefDiag] runPerceivedVarianceAudit threw:", msg, (e instanceof Error ? e.stack : ""));
-    throw e;
-  }
+  runPerceivedVarianceAudit(
+    auditId,
+    slotSelection,
+    blockSelection.split.dayTemplates,
+  );
 
-  let arch: ReturnType<typeof computeWeeklyArchitecture>;
-  try {
-    arch = computeWeeklyArchitecture(daysPerWeek, sport, goal, splitVariationSeed, blockSelection.archetypeId);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.warn("[ArchBriefDiag] computeWeeklyArchitecture threw:", msg, (e instanceof Error ? e.stack : ""));
-    throw e;
-  }
+  const arch = computeWeeklyArchitecture(daysPerWeek, sport, goal, splitVariationSeed, blockSelection.archetypeId);
   const isHockey = sport?.toLowerCase().includes("hockey") ?? false;
   const isFootball = !!(sport && /\bfootball\b/i.test(sport) && !/soccer/.test(sport.toLowerCase()));
   const isBasketball = !!(sport && /basketball/i.test(sport));

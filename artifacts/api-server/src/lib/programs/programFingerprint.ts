@@ -169,10 +169,11 @@ function buildFamilyDistribution(allFamilies: string[]): FamilyDistribution {
  * Build a deterministic string key from the ordered slot-to-exercise mapping.
  * Two programs with the same slot assignments produce the same key.
  */
-function buildSlotOrderKey(slots: Record<string, string>): string {
+function buildSlotOrderKey(slots: Record<string, unknown>): string {
   const ordered = Object.entries(slots)
+    .filter(([, ex]) => typeof ex === "string")
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([slot, ex]) => `${slot}:${ex.replace(/\s+/g, "_").toLowerCase()}`);
+    .map(([slot, ex]) => `${slot}:${(ex as string).replace(/\s+/g, "_").toLowerCase()}`);
   return ordered.join("|");
 }
 
@@ -195,7 +196,7 @@ export interface BuildExtendedFingerprintParams {
     neuralDemand: "high" | "moderate" | "low";
     elasticExposure: boolean;
   }>;
-  slotSelections: Record<string, string>;
+  slotSelections: Record<string, unknown>;
   variationTags: string[];
 }
 
