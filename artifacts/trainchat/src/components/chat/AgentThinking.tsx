@@ -1,22 +1,152 @@
-import { useEffect, useState } from "react";
-import { Dumbbell, Check } from "lucide-react";
-import type { BuildStage } from "@/hooks/useStreamMessage";
-import { getMilestoneStages } from "@/hooks/useStreamMessage";
-
 /**
- * AgentThinking — Multi-step agent execution display.
+ * AgentThinking — Premium in-place build progress card.
  *
- * Each build or update shows progressive message bubbles:
- *   1. Acknowledgment bubble (instant, from server)
- *   2. Committed milestone bubbles (locked in as each stage completes)
- *   3. Active milestone bubble (animated dots while running)
+ * Design goals:
+ *  - Single card that updates in-place (not multiple bubbles)
+ *  - TrainChat logo as the visual core with subtle glow pulse
+ *  - Full step list visible upfront: completed ✓ | active ● | pending ○
+ *  - Fast builds: card still feels smooth even if only 1–2 steps show
+ *  - Mobile-first, compact, no layout jumps
  *
- * Which stages appear as milestone bubbles is determined by actionType:
- *   PROGRAM_GENERATION  → planning, applying, validating, saving  (full build)
- *   STRUCTURAL_REBUILD  → planning, applying, saving              (medium)
- *   DIRECT_MUTATION     → applying, saving                        (fast)
- *   SESSION_ADJUSTMENT  → applying, saving                        (fast)
+ * Steps are derived from the REAL pipeline stages — no fake delays,
+ * no invented stages. Every step maps to an actual server BuildStage.
  */
+
+import type { BuildStage } from "@/hooks/useStreamMessage";
+import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
+
+// ─── Step sequences (tied to real BuildStage pipeline) ────────────────────────
+//
+// Each action type maps to a curated subset of stages with premium microcopy.
+// "loading" is intentionally omitted — it's a server-internal transition that
+// would look like a duplicate of "understanding" to the user.
+
+interface BuildStep {
+  stage: BuildStage;
+  label: string;
+}
+
+const STEP_SEQUENCES: Record<string, BuildStep[]> = {
+  PROGRAM_GENERATION: [
+    { stage: "understanding", label: "Reading your goal" },
+    { stage: "classifying",   label: "Selecting block type" },
+    { stage: "planning",      label: "Mapping weekly structure" },
+    { stage: "applying",      label: "Assigning sessions & exercises" },
+    { stage: "validating",    label: "Validating your system" },
+    { stage: "saving",        label: "Finalizing your program" },
+  ],
+  STRUCTURAL_REBUILD: [
+    { stage: "understanding", label: "Reading your request" },
+    { stage: "planning",      label: "Restructuring your split" },
+    { stage: "applying",      label: "Rebuilding your program" },
+    { stage: "saving",        label: "Saving your program" },
+  ],
+  DIRECT_MUTATION: [
+    { stage: "applying", label: "Applying the change" },
+    { stage: "saving",   label: "Saving your program" },
+  ],
+  SESSION_ADJUSTMENT: [
+    { stage: "applying", label: "Applying modifications" },
+    { stage: "saving",   label: "Saving your program" },
+  ],
+};
+
+const DEFAULT_STEPS: BuildStep[] = [
+  { stage: "understanding", label: "Reading your request" },
+  { stage: "applying",      label: "Applying changes" },
+  { stage: "saving",        label: "Saving your program" },
+];
+
+// Numeric priority for each BuildStage — used for completed/active/pending math
+const STAGE_ORDER: Record<BuildStage, number> = {
+  understanding: 1,
+  loading:       1.5, // between understanding and classifying
+  classifying:   2,
+  planning:      3,
+  applying:      4,
+  validating:    5,
+  saving:        6,
+  complete:      7,
+};
+
+// ─── Card title per action type ───────────────────────────────────────────────
+
+function getCardTitle(actionType?: string): string {
+  switch (actionType) {
+    case "PROGRAM_GENERATION": return "Building your system";
+    case "STRUCTURAL_REBUILD":  return "Rebuilding your program";
+    case "DIRECT_MUTATION":     return "Applying your change";
+    case "SESSION_ADJUSTMENT":  return "Modifying your session";
+    default:                    return "Working on it";
+  }
+}
+
+// ─── Step status logic ────────────────────────────────────────────────────────
+
+type StepStatus = "completed" | "active" | "pending";
+
+function getStepStatus(
+  stepIndex: number,
+  steps: BuildStep[],
+  currentStage: BuildStage | null,
+): StepStatus {
+  // Before first stage event — show first step as active (stream just started)
+  if (!currentStage) {
+    return stepIndex === 0 ? "active" : "pending";
+  }
+
+  const step = steps[stepIndex];
+  const nextStep = steps[stepIndex + 1];
+
+  const currentOrder = STAGE_ORDER[currentStage];
+  const stepOrder    = STAGE_ORDER[step.stage];
+  const nextOrder    = nextStep ? STAGE_ORDER[nextStep.stage] : 8; // past complete
+
+  if (currentOrder >= nextOrder) return "completed";
+  if (currentOrder >= stepOrder) return "active";
+  return "pending";
+}
+
+// ─── Step row ─────────────────────────────────────────────────────────────────
+
+function StepRow({ label, status }: { label: string; status: StepStatus }) {
+  if (status === "completed") {
+    return (
+      <div className="flex items-center gap-2.5 animate-in fade-in duration-200">
+        <div className="w-3.5 h-3.5 rounded-full bg-primary/12 border border-primary/25 flex items-center justify-center flex-shrink-0">
+          <svg viewBox="0 0 10 10" className="w-2 h-2 text-primary/60" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="1.5,5 4,7.5 8.5,2.5" />
+          </svg>
+        </div>
+        <span className="text-[11px] text-muted-foreground/50 leading-snug">{label}</span>
+      </div>
+    );
+  }
+
+  if (status === "active") {
+    return (
+      <div className="flex items-center gap-2.5 animate-in fade-in duration-150">
+        <div
+          className="w-3.5 h-3.5 rounded-full bg-primary/20 border border-primary/50 flex items-center justify-center flex-shrink-0"
+          style={{ animation: "ping-soft 1.6s ease-in-out infinite" }}
+        >
+          <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+        </div>
+        <span className="text-[11px] text-primary font-medium leading-snug">{label}</span>
+      </div>
+    );
+  }
+
+  // pending
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className="w-3.5 h-3.5 rounded-full border border-border/30 flex-shrink-0" />
+      <span className="text-[11px] text-muted-foreground/30 leading-snug">{label}</span>
+    </div>
+  );
+}
+
+// ─── Props ────────────────────────────────────────────────────────────────────
 
 interface Props {
   acknowledgment?: string;
@@ -26,65 +156,94 @@ interface Props {
   actionType?: string;
 }
 
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export default function AgentThinking({
   acknowledgment,
   buildStage,
-  stageLabel,
-  stageHistory,
   actionType,
 }: Props) {
-  const [dotCount, setDotCount] = useState(1);
-
-  useEffect(() => {
-    const id = setInterval(() => setDotCount((d) => (d % 3) + 1), 420);
-    return () => clearInterval(id);
-  }, []);
-
-  const dots = ".".repeat(dotCount);
-
-  const milestones = getMilestoneStages(actionType);
-  const isActiveMilestone = buildStage !== null && milestones.has(buildStage);
+  const steps = STEP_SEQUENCES[actionType ?? ""] ?? DEFAULT_STEPS;
+  const title = getCardTitle(actionType);
+  const isActiveStage = buildStage !== null && buildStage !== "complete";
 
   return (
     <div className="flex items-start gap-3 mb-4">
-      <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mt-0.5">
-        <Dumbbell className="w-3.5 h-3.5 text-primary" />
+      <style>{`
+        @keyframes ping-soft {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb, 99 102 241) / 0); }
+          50%       { box-shadow: 0 0 0 3px rgba(var(--primary-rgb, 99 102 241) / 0.18); }
+        }
+        @keyframes logo-breathe {
+          0%, 100% { opacity: 0.75; filter: brightness(1); }
+          50%       { opacity: 1;    filter: brightness(1.15); }
+        }
+        @keyframes card-glow-pulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb, 99 102 241) / 0); }
+          50%       { box-shadow: 0 0 12px 0 rgba(var(--primary-rgb, 99 102 241) / 0.09); }
+        }
+      `}</style>
+
+      {/* Agent avatar */}
+      <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/8 border border-primary/15 flex items-center justify-center mt-0.5 flex-col overflow-hidden">
+        <img
+          src={trainChatLogo}
+          alt=""
+          className="w-4 h-4 object-contain"
+          style={{
+            animation: isActiveStage ? "logo-breathe 2s ease-in-out infinite" : undefined,
+          }}
+        />
       </div>
 
-      <div className="flex flex-col gap-2 max-w-xs">
-        {acknowledgment && (
-          <div className="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-2.5 animate-in fade-in slide-in-from-bottom-1 duration-200">
-            <p className="text-sm text-foreground leading-relaxed">{acknowledgment}</p>
+      {/* Single in-place card */}
+      <div
+        className="bg-card border border-border/80 rounded-2xl rounded-tl-sm overflow-hidden max-w-[270px] w-full"
+        style={{
+          animation: isActiveStage ? "card-glow-pulse 2.4s ease-in-out infinite" : undefined,
+          borderColor: isActiveStage ? "rgba(var(--primary-rgb, 99 102 241) / 0.22)" : undefined,
+        }}
+      >
+        {/* Card header */}
+        <div className="px-4 pt-3 pb-2.5 flex items-start gap-2.5">
+          {/* Logo with ambient glow */}
+          <div className="relative flex-shrink-0 mt-0.5">
+            {isActiveStage && (
+              <div
+                className="absolute inset-0 rounded-full bg-primary/20 blur-[4px]"
+                style={{ animation: "logo-breathe 1.8s ease-in-out infinite" }}
+              />
+            )}
+            <img
+              src={trainChatLogo}
+              alt=""
+              className="relative w-4 h-4 object-contain"
+            />
           </div>
-        )}
 
-        {stageHistory.map((label, i) => (
-          <div
-            key={i}
-            className="bg-card border border-border/50 rounded-2xl rounded-tl-sm px-4 py-2 animate-in fade-in slide-in-from-bottom-1 duration-200"
-          >
-            <div className="flex items-center gap-2">
-              <Check className="w-3 h-3 text-primary/60 flex-shrink-0" />
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                {label.replace(/…$/, "")}
+          <div className="min-w-0">
+            <p className="text-[12px] font-semibold text-foreground leading-none">{title}</p>
+            {acknowledgment && (
+              <p className="text-[10px] text-muted-foreground mt-1 leading-snug line-clamp-2">
+                {acknowledgment}
               </p>
-            </div>
+            )}
           </div>
-        ))}
+        </div>
 
-        {isActiveMilestone && stageLabel && (
-          <div className="bg-card border border-border/60 rounded-2xl rounded-tl-sm px-4 py-2.5 animate-in fade-in slide-in-from-bottom-1 duration-200">
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              {stageLabel.replace(/…$/, "")}{dots}
-            </p>
-          </div>
-        )}
+        {/* Separator */}
+        <div className="mx-4 border-t border-border/40 mb-2.5" />
 
-        {!isActiveMilestone && !stageHistory.length && !acknowledgment && (
-          <div className="bg-card border border-border/60 rounded-2xl rounded-tl-sm px-4 py-2.5">
-            <p className="text-xs text-muted-foreground">{dots}</p>
-          </div>
-        )}
+        {/* Step list */}
+        <div className="px-4 pb-3.5 space-y-2.5">
+          {steps.map((step, i) => (
+            <StepRow
+              key={step.stage}
+              label={step.label}
+              status={getStepStatus(i, steps, buildStage)}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );

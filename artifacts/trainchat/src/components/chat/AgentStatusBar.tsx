@@ -9,29 +9,36 @@ function getStageLabel(stage: BuildStage | null, actionType?: string): string {
 
   const isModify =
     actionType === "DIRECT_MUTATION" || actionType === "SESSION_ADJUSTMENT";
-  const isRebuild = actionType === "STRUCTURAL_REBUILD";
+  const isRebuild  = actionType === "STRUCTURAL_REBUILD";
+  const isGenerate = actionType === "PROGRAM_GENERATION";
 
   switch (stage) {
     case "understanding":
-      return "Understanding your request…";
+      return isGenerate ? "Reading your goal…" : "Reading your request…";
     case "loading":
       return "Loading your current program…";
     case "classifying":
-      return "Classifying your request…";
+      return isGenerate
+        ? "Selecting block type…"
+        : isModify
+        ? "Identifying what to change…"
+        : "Mapping what needs to change…";
     case "planning":
       return isModify
         ? "Planning your modifications…"
         : isRebuild
-        ? "Redesigning your training structure…"
-        : "Structuring your training split…";
+        ? "Restructuring your split…"
+        : "Mapping weekly structure…";
     case "applying":
       return isModify
-        ? "Applying updates…"
-        : "Selecting and placing exercises…";
+        ? "Applying the change…"
+        : isRebuild
+        ? "Rebuilding your program…"
+        : "Assigning sessions & exercises…";
     case "validating":
       return "Validating your training structure…";
     case "saving":
-      return "Saving your program…";
+      return "Finalizing your program…";
     case "complete":
       return "Done";
     default:

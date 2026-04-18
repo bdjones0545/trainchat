@@ -6,6 +6,7 @@ import {
   Calendar, Clock, RotateCcw, GitBranch, Activity, Layers,
   AlertCircle, RefreshCw, Send,
 } from "lucide-react";
+import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 import { customFetch } from "@workspace/api-client-react";
 import type { ProgramStructure } from "./ChatOutput";
 import BlockStatusCard from "@/components/training/BlockStatusCard";
@@ -246,10 +247,32 @@ function DaySkeleton({ dayNum, showExercises, delayMs, shimmer }: {
   );
 }
 
+// ─── Stage → sidebar status label ────────────────────────────────────────────
+
+const SIDEBAR_STAGE_LABELS: Partial<Record<BuildStage, string>> = {
+  understanding: "Reading your goal",
+  loading:       "Setting up your build",
+  classifying:   "Selecting block type",
+  planning:      "Mapping weekly structure",
+  applying:      "Assigning sessions & exercises",
+  validating:    "Validating your system",
+  saving:        "Finalizing your program",
+};
+
+function getSidebarLabel(stage: BuildStage | null, actionType?: string): string {
+  if (!stage) return "Initializing…";
+  if (actionType === "DIRECT_MUTATION" || actionType === "SESSION_ADJUSTMENT") {
+    if (stage === "applying") return "Applying the change";
+    if (stage === "saving") return "Saving your program";
+  }
+  return SIDEBAR_STAGE_LABELS[stage] ?? "Working…";
+}
+
 // ─── Full skeleton build state (new program) ───────────────────────────────────
 
-function BuildingFromScratch({ stage }: { stage: BuildStage | null }) {
+function BuildingFromScratch({ stage, actionType }: { stage: BuildStage | null; actionType?: string }) {
   const phase = getBuildPhase(stage);
+  const statusLabel = getSidebarLabel(stage, actionType);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -258,34 +281,51 @@ function BuildingFromScratch({ stage }: { stage: BuildStage | null }) {
           from { opacity: 0; transform: translateY(6px); }
           to   { opacity: 1; transform: translateY(0); }
         }
+        @keyframes sidebar-logo-breathe {
+          0%, 100% { opacity: 0.7; filter: brightness(1); }
+          50%       { opacity: 1;   filter: brightness(1.2); }
+        }
       `}</style>
 
-      {/* Panel header — mirrors the real header */}
-      <div className="p-4 border-b border-border flex-shrink-0">
-        <div className="flex items-center gap-1.5 mb-2">
-          <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" style={{ animationDuration: "1s" }} />
-          <span className="text-[9px] font-bold text-primary uppercase tracking-[0.12em]">Building Program</span>
+      {/* Panel header — premium build state */}
+      <div className="p-4 border-b border-border flex-shrink-0 bg-primary/3">
+        {/* Status indicator row */}
+        <div className="flex items-center gap-2 mb-3">
+          <div className="relative flex-shrink-0">
+            <div
+              className="absolute inset-0 rounded-full bg-primary/25 blur-[3px]"
+              style={{ animation: "sidebar-logo-breathe 1.8s ease-in-out infinite" }}
+            />
+            <img
+              src={trainChatLogo}
+              alt=""
+              className="relative w-4 h-4 object-contain"
+              style={{ animation: "sidebar-logo-breathe 2s ease-in-out infinite" }}
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-1 h-1 rounded-full bg-primary animate-pulse" style={{ animationDuration: "1s" }} />
+            <span className="text-[9px] font-bold text-primary uppercase tracking-[0.12em]">Building your system</span>
+          </div>
         </div>
 
-        {phase === "init" ? (
-          <div className="space-y-2 mt-1">
-            <div className="h-3.5 bg-primary/12 rounded-full animate-pulse w-44" />
-            <div className="h-2.5 bg-muted/25 rounded-full animate-pulse w-28" />
-          </div>
-        ) : (
-          <div className="space-y-1.5 mt-1">
-            <div className="h-3.5 bg-primary/20 rounded-full w-44" />
-            <div className="h-2.5 bg-muted/35 rounded-full w-24" />
-          </div>
-        )}
+        {/* Current stage label */}
+        <div className="px-2.5 py-1.5 bg-primary/8 border border-primary/15 rounded-lg">
+          <p className="text-[11px] text-primary/80 font-medium leading-snug">{statusLabel}</p>
+        </div>
       </div>
 
-      {/* Body */}
+      {/* Skeleton body */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {phase === "init" ? (
-          <div className="flex flex-col items-center justify-center h-28 gap-2.5">
-            <Loader2 className="w-4 h-4 animate-spin text-primary/40" />
-            <span className="text-[10px] text-muted-foreground">Initializing your program…</span>
+          <div className="space-y-2">
+            {[1, 2, 3].map((n) => (
+              <div
+                key={n}
+                className="bg-card border border-border/40 rounded-xl h-12 animate-pulse"
+                style={{ animationDelay: `${n * 80}ms` }}
+              />
+            ))}
           </div>
         ) : (
           [1, 2, 3, 4].map((n) => (
@@ -300,14 +340,14 @@ function BuildingFromScratch({ stage }: { stage: BuildStage | null }) {
         )}
       </div>
 
-      {/* Save confirmation strip */}
+      {/* Save strip */}
       {phase === "save" && (
         <div
           className="flex-shrink-0 border-t border-green-500/20 bg-green-500/5 px-4 py-2.5 flex items-center justify-center gap-2"
           style={{ animation: "fadeSlideIn 0.2s ease both" }}
         >
           <CheckCircle className="w-3.5 h-3.5 text-green-400 animate-pulse" style={{ animationDuration: "1.2s" }} />
-          <span className="text-[11px] font-semibold text-green-400">Saving your program…</span>
+          <span className="text-[11px] font-semibold text-green-400">Finalizing your program…</span>
         </div>
       )}
     </div>
@@ -316,10 +356,11 @@ function BuildingFromScratch({ stage }: { stage: BuildStage | null }) {
 
 // ─── Updating overlay (existing program being modified) ────────────────────────
 
-function UpdatingBadge({ phase }: { phase: BuildPhase }) {
+function UpdatingBadge({ phase, stage, actionType }: { phase: BuildPhase; stage: BuildStage | null; actionType?: string }) {
+  const label = getSidebarLabel(stage, actionType);
   return (
     <div
-      className="absolute top-3 right-3 z-10 flex items-center gap-1.5 bg-card/90 border border-primary/25 backdrop-blur-sm rounded-full px-2.5 py-1"
+      className="absolute top-3 right-3 z-10 flex items-center gap-1.5 bg-card/92 border border-primary/20 backdrop-blur-sm rounded-full px-2.5 py-1"
       style={{ animation: "fadeSlideIn 0.2s ease both" }}
     >
       {phase === "save" ? (
@@ -329,8 +370,8 @@ function UpdatingBadge({ phase }: { phase: BuildPhase }) {
         </>
       ) : (
         <>
-          <Loader2 className="w-3 h-3 animate-spin text-primary" />
-          <span className="text-[10px] font-semibold text-primary">Updating…</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse flex-shrink-0" />
+          <span className="text-[10px] font-semibold text-primary max-w-[140px] truncate">{label}</span>
         </>
       )}
     </div>
@@ -341,19 +382,25 @@ function UpdatingBadge({ phase }: { phase: BuildPhase }) {
 
 function EmptyProgramState({ buildingState }: { buildingState?: BuildingState }) {
   const isBuilding = !!buildingState?.isBuilding;
+  const stageLabelText = isBuilding
+    ? getSidebarLabel(buildingState?.stage ?? null, buildingState?.actionType)
+    : null;
 
   const bullets = [
-    "Builds instantly in real time",
-    "Adapts as you refine",
-    "Tracks every change",
+    "Builds in real time as you describe your goal",
+    "Adapts instantly when you refine it",
+    "Every change is tracked with a full history",
   ];
 
   return (
     <div className="flex flex-col h-full overflow-y-auto p-5">
       {/* Header */}
       <div className="flex items-center gap-2 mb-3">
-        <div className="w-7 h-7 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
-          <Dumbbell className="w-3.5 h-3.5 text-primary/60" />
+        <div className="relative w-7 h-7 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0 overflow-hidden">
+          {isBuilding && (
+            <div className="absolute inset-0 bg-primary/10 animate-pulse rounded-xl" style={{ animationDuration: "1.6s" }} />
+          )}
+          <img src={trainChatLogo} alt="" className="relative w-4 h-4 object-contain" />
         </div>
         <div>
           <p className="text-[11px] font-bold text-foreground tracking-wide">Live System</p>
@@ -367,46 +414,46 @@ function EmptyProgramState({ buildingState }: { buildingState?: BuildingState })
       {/* Status line */}
       <div
         className={[
-          "flex items-center gap-2 mb-4 px-2.5 py-1.5 rounded-lg border transition-all duration-300",
+          "flex items-center gap-2.5 mb-4 px-3 py-2 rounded-lg border transition-all duration-300",
           isBuilding
-            ? "bg-primary/10 border-primary/30 shadow-[0_0_8px_rgba(var(--primary-rgb),0.15)]"
+            ? "bg-primary/8 border-primary/25"
             : "bg-muted/30 border-border/30",
         ].join(" ")}
       >
         <span
           className={[
             "w-1.5 h-1.5 rounded-full flex-shrink-0",
-            isBuilding
-              ? "bg-primary animate-pulse"
-              : "bg-emerald-400/80",
+            isBuilding ? "bg-primary animate-pulse" : "bg-emerald-400/80",
           ].join(" ")}
         />
-        <div>
+        <div className="min-w-0">
           <p
             className={[
               "text-[11px] font-semibold leading-none",
               isBuilding ? "text-primary" : "text-foreground/80",
             ].join(" ")}
           >
-            {isBuilding ? "Building..." : "Ready to build"}
+            {isBuilding ? "Building your system" : "Ready to build"}
           </p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">
-            {isBuilding
-              ? "System updating in real time"
+          <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+            {isBuilding && stageLabelText
+              ? stageLabelText
               : "Describe your goal to generate your program"}
           </p>
         </div>
       </div>
 
-      {/* Bullets */}
-      <div className="space-y-2">
-        {bullets.map((text, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <span className="w-1 h-1 rounded-full bg-primary/40 flex-shrink-0" />
-            <p className="text-[10px] text-muted-foreground">{text}</p>
-          </div>
-        ))}
-      </div>
+      {/* Bullets — hidden while building to reduce noise */}
+      {!isBuilding && (
+        <div className="space-y-2">
+          {bullets.map((text, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="w-1 h-1 rounded-full bg-primary/40 flex-shrink-0" />
+              <p className="text-[10px] text-muted-foreground">{text}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -798,7 +845,9 @@ function ProgramTab({
           100%   { opacity: 0; }
         }
       `}</style>
-      {isUpdating && updatePhase && <UpdatingBadge phase={updatePhase} />}
+      {isUpdating && updatePhase && (
+        <UpdatingBadge phase={updatePhase} stage={buildingState!.stage} actionType={buildingState?.actionType} />
+      )}
 
       {/* Stream preview banner — shown while AI is modifying the program */}
       {isUpdating && (
@@ -1921,7 +1970,7 @@ export default function LiveProgramPanel({
 
   // New-program skeleton: show full build animation when no program exists yet
   if (buildingState?.isBuilding && !program) {
-    return <BuildingFromScratch stage={buildingState.stage} />;
+    return <BuildingFromScratch stage={buildingState.stage} actionType={buildingState.actionType} />;
   }
 
   const tabs: { id: Tab; label: string; subtitle: string; icon: React.ElementType }[] = [

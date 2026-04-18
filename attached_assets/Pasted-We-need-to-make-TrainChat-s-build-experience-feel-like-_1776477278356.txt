@@ -1,0 +1,184 @@
+We need to make TrainChat’s build experience feel like Replit Agent when thinking.
+
+OBJECTIVE:
+When the user requests a new program build or major refinement, the UI should not just “load.”
+It should feel like the agent is actively thinking and constructing the result in real time.
+
+We want:
+- premium
+- intelligent
+- step-based
+- reactive
+- minimal, not noisy
+
+Do NOT add fake delays.
+Do NOT use a generic spinner-only approach.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Create a live “thinking/building” experience that updates in place while the program is being generated.
+
+It should feel like:
+- the agent is reasoning
+- the system is constructing the program
+- the user can follow the progress
+
+==================================================
+TASK 1 — CREATE A BUILDING / THINKING STATE COMPONENT
+==================================================
+
+Create a reusable component for the agent build state, for example:
+- AgentThinkingState
+or
+- BuildingSystemState
+
+It should render as a compact, premium status card/message.
+
+==================================================
+TASK 2 — SHOW STEP-BASED BUILD PROGRESS
+==================================================
+
+Use real or near-real program-generation stages such as:
+
+1. Reading your goal
+2. Selecting block type
+3. Mapping weekly structure
+4. Assigning session roles
+5. Selecting exercises
+6. Finalizing your system
+
+Render these as a vertical list.
+
+Behavior:
+- current step is highlighted / animated
+- completed steps get a checkmark
+- future steps are muted
+
+==================================================
+TASK 3 — UPDATE IN PLACE
+==================================================
+
+Do NOT create a separate chat message for every step.
+
+Instead:
+- render one assistant “thinking/building” message
+- update that same message/card as progress changes
+- replace it with the final assistant response when complete
+
+This should feel like Replit Agent’s evolving thinking state.
+
+==================================================
+TASK 4 — CONNECT TO REAL PROGRAM PIPELINE
+==================================================
+
+Map the build UI to the actual hierarchy where possible:
+
+- monthly block selection
+- weekly block generation
+- session role assignment
+- exercise selection
+- reconciliation/finalization
+
+If exact backend milestones are not yet exposed, create a clean staged progress model that reflects the real build order.
+
+Do not invent random steps unrelated to the actual architecture.
+
+==================================================
+TASK 5 — RIGHT SIDEBAR INTEGRATION
+==================================================
+
+When a build starts, the right sidebar / Live System panel should switch from:
+- Ready to build
+
+to:
+- Building your system...
+
+And optionally show a smaller status line such as:
+- Block selected
+- Week mapped
+- Sessions assigned
+
+When build completes:
+- sidebar switches to active/live state
+
+==================================================
+TASK 6 — TRAINCHAT LOGO AS SYSTEM CORE
+==================================================
+
+Use the TrainChat logo as the visual core of the thinking state.
+
+Add subtle premium motion:
+- soft glow
+- pulse
+- slight reactive intensity during active step updates
+
+Do NOT make it distracting or cartoonish.
+
+==================================================
+TASK 7 — KEEP IT FAST
+==================================================
+
+Do NOT artificially slow builds down.
+
+If builds are fast:
+- the sequence should still feel smooth
+- users may only see 1–3 quick state updates before completion
+
+If builds are slower:
+- all steps should animate naturally
+
+==================================================
+TASK 8 — MICROCOPY
+==================================================
+
+Use confident, system-like copy.
+
+Examples:
+- Building your system
+- Selecting block type
+- Mapping weekly structure
+- Assigning session roles
+- Finalizing your program
+
+Avoid:
+- generic “loading...”
+- overly technical dev language
+- cheesy copy
+
+==================================================
+TASK 9 — MOBILE-FIRST UX
+==================================================
+
+Ensure the thinking/building state looks excellent on iPhone/mobile Safari:
+- compact
+- readable
+- not too tall
+- no layout jumpiness
+- smooth transition into final built result
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. component(s) created
+2. how progress steps are determined
+3. how the in-place updating works
+4. how right sidebar state is integrated
+5. what animations/micro-interactions were added
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat should feel like it is actively thinking and constructing the user’s system in real time, similar to Replit Agent.
+
+The experience should feel:
+- intelligent
+- premium
+- alive
+- trustworthy
+
+Not like a generic loading spinner.
