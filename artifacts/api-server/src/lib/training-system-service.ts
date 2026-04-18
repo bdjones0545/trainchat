@@ -1127,6 +1127,72 @@ export async function initializeTrainingSystem(userId: number): Promise<typeof t
   return system;
 }
 
+// ─── Week Progression Engine for chat-saved programs ──────────────────────────
+//
+// When a chat-generated program is saved to the DB across 4 weeks, we apply a
+// real progressive-overload arc so Weeks 2-4 are meaningfully different from W1.
+//
+// Week 1 — Establish  : -1 set (intro volume), technical focus notes
+// Week 2 — Build      : baseline sets, load-increase directive
+// Week 3 — Intensify  : +1 set on primary lifts, peak loading notes
+// Week 4 — Deload     : -2 sets, 60% exercise count, recovery focus
+//
+// This mirrors how the initializeTrainingSystem (auto-gen) path works, applying
+// scaleForWeek logic to keep the user's AI-chosen exercises while giving each
+// week a genuinely different prescription.
+
+function applyWeekProgressionToExercises(
+  exercises: ChatProgramExercise[],
+  weekNumber: number,
+  isDeload: boolean
+): ChatProgramExercise[] {
+  // Week 4 (Deload): reduce volume and exercise count
+  if (isDeload) {
+    return exercises
+      .slice(0, Math.max(Math.ceil(exercises.length * 0.6), 2))
+      .map((ex) => ({
+        ...ex,
+        sets: typeof ex.sets === "number" ? Math.max(2, ex.sets - 2) : ex.sets,
+        notes: "Deload week — reduce load by 30-40%. Move well and flush fatigue. Protect CNS for the next block.",
+        intent: ex.intent,
+      }));
+  }
+
+  type WeekProfile = { primarySetMod: number; accessorySetMod: number; intentNote: string };
+  const weekProfiles: Record<number, WeekProfile> = {
+    1: {
+      primarySetMod: -1,
+      accessorySetMod: -1,
+      intentNote: "Establish baseline loads and movement quality. Prioritise technique over load — find your working weights for this block.",
+    },
+    2: {
+      primarySetMod: 0,
+      accessorySetMod: 0,
+      intentNote: "Build phase — increase load 5-10% from Week 1. Push working sets with controlled effort. 2-3 RIR on primaries.",
+    },
+    3: {
+      primarySetMod: 1,
+      accessorySetMod: 0,
+      intentNote: "Intensify — heaviest week of the block. Work to 1-2 RIR on top sets. This is your peak loading week.",
+    },
+  };
+
+  const profile = weekProfiles[weekNumber] ?? weekProfiles[2];
+
+  return exercises.map((ex) => {
+    const classification = (ex.classification ?? "").toLowerCase();
+    const isPrimary =
+      classification.includes("primary") ||
+      classification.includes("explosive") ||
+      classification.includes("power") ||
+      classification.includes("main");
+    const setMod = isPrimary ? profile.primarySetMod : profile.accessorySetMod;
+    const scaledSets = typeof ex.sets === "number" ? Math.max(2, ex.sets + setMod) : ex.sets;
+
+    return { ...ex, sets: scaledSets, notes: profile.intentNote };
+  });
+}
+
 // ─── Shared types for chat-generated program ──────────────────────────────────
 
 export interface ChatProgramExercise {
@@ -1384,13 +1450,11 @@ export async function createTrainingSystemFromProgram(
         orderIndex: dayIdx,
       }).returning();
 
-      // For deload weeks, use a reduced subset of exercises
-      const rawExercises = isDeload
-        ? day.exercises.slice(0, Math.max(Math.ceil(day.exercises.length * 0.6), 2))
-        : day.exercises;
+      // Apply week progression: scales sets, volume, and coaching notes per week role
+      const progressedExercises = applyWeekProgressionToExercises(day.exercises, weekNumber, isDeload);
 
       // Classify then sort into proper training-flow order
-      const classifiedExercises = rawExercises.map((ex) => ({
+      const classifiedExercises = progressedExercises.map((ex) => ({
         ...ex,
         category: mapClassificationToCategory(ex.classification),
       }));
@@ -1418,10 +1482,15 @@ export async function createTrainingSystemFromProgram(
 
   if (process.env.NODE_ENV !== "production") {
     const day1 = program.days[0];
-    console.log("[BuildAudit:DBSave]", JSON.stringify({
+    console.log("[MultiWeekBuildAudit]", JSON.stringify({
       newSystemId: system.id,
       programName: system.name,
-      totalDays: program.days.length,
+      source: "createTrainingSystemFromProgram",
+      totalWeeksGenerated: 4,
+      weekNumbers: [1, 2, 3, 4],
+      sessionsPerWeek: program.days.length,
+      totalSessionsGenerated: 4 * program.days.length,
+      weekProgressionApplied: true,
       day1Name: day1?.name ?? null,
       day1Exercises: (day1?.exercises ?? []).map((e) => e.name),
     }));
@@ -1559,12 +1628,11 @@ export async function upsertTrainingSystemFromProgram(
         orderIndex: dayIdx,
       }).returning();
 
-      const rawExercises = isDeload
-        ? day.exercises.slice(0, Math.max(Math.ceil(day.exercises.length * 0.6), 2))
-        : day.exercises;
+      // Apply week progression: scales sets, volume, and coaching notes per week role
+      const progressedExercises = applyWeekProgressionToExercises(day.exercises, weekNumber, isDeload);
 
       // Classify then sort into proper training-flow order
-      const classifiedExercises = rawExercises.map((ex) => ({
+      const classifiedExercises = progressedExercises.map((ex) => ({
         ...ex,
         category: mapClassificationToCategory(ex.classification),
       }));
@@ -1586,6 +1654,19 @@ export async function upsertTrainingSystemFromProgram(
         });
       }
     }
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[MultiWeekBuildAudit]", JSON.stringify({
+      existingSystemId: existingSystem.id,
+      programName: program.programName,
+      source: "upsertTrainingSystemFromProgram",
+      totalWeeksGenerated: 4,
+      weekNumbers: [1, 2, 3, 4],
+      sessionsPerWeek: program.days.length,
+      totalSessionsGenerated: 4 * program.days.length,
+      weekProgressionApplied: true,
+    }));
   }
 
   logger.info(
