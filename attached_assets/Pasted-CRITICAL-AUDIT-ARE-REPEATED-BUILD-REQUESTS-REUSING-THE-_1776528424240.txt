@@ -1,0 +1,182 @@
+CRITICAL AUDIT — ARE REPEATED “BUILD” REQUESTS REUSING THE USER’S FIRST PROGRAM?
+
+CONTEXT:
+Repeated requests like:
+“Build a 3 day soccer program”
+still produce the same result.
+
+Important clue:
+- the FIRST build takes longer
+- later builds are much faster
+
+This suggests the system may not be doing a true fresh generation on repeated builds.
+It may be anchoring on the user’s first generated program and reusing it as the base.
+
+We need to determine whether repeated “build” requests are:
+A. true fresh builds
+or
+B. being routed into mutation/update mode against the existing active program
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Find out whether the system is reusing the user’s existing program state on repeated build requests instead of generating from scratch.
+
+==================================================
+TASK 1 — TRACE REQUEST ROUTING FOR A REPEATED BUILD
+==================================================
+
+For the prompt:
+"Build a 3 day soccer program"
+
+log the exact execution path on:
+- first request
+- second request
+- third request
+
+Add:
+
+[FreshBuildAudit] {
+  requestText,
+  isBuildIntent,
+  resolvedIntentFamily,
+  enteredFreshBuildPath: boolean,
+  enteredMutationPath: boolean,
+  activeSystemId,
+  latestProgramMessageId,
+  sessionDraftMsgId,
+  sourceProgramUsed: boolean,
+  sourceProgramId,
+  reusedArchitecture: boolean
+}
+
+We need to know whether repeated builds are truly fresh.
+
+==================================================
+TASK 2 — CHECK WHETHER ACTIVE PROGRAM IS BEING USED AS INPUT
+==================================================
+
+Audit whether the existing activeSystem / latestProgram / session draft is being fed into repeated build requests.
+
+Questions:
+- Is the current active program being loaded as context for the new build?
+- Is the system interpreting “build” as “modify current program” when an active system exists?
+- Is there any fallback that says “if program exists, update it”?
+
+FAIL if:
+- repeated build requests are anchored to the current active program
+
+==================================================
+TASK 3 — CHECK INTENT CLASSIFICATION
+==================================================
+
+Audit whether:
+“Build a 3 day soccer program”
+
+is classified as:
+- fresh build
+OR
+- mutation / apply change / refinement
+
+The assistant response:
+“I processed your request and applied the change.”
+suggests mutation language may be firing.
+
+We need to confirm whether the intent classifier is misrouting build requests when a program already exists.
+
+==================================================
+TASK 4 — CHECK WHETHER ARCHITECTURE IS REGENERATED EACH TIME
+==================================================
+
+For first / second / third identical build requests, log:
+
+- variationSeed
+- monthlyBlockType
+- session identities
+- architecture session count
+- architecture source
+
+Question:
+Is computeWeeklyArchitecture actually being rerun each time?
+Or is previous architecture being reused?
+
+FAIL if:
+- repeated builds reuse the same architecture object or same source program
+
+==================================================
+TASK 5 — CHECK BUILD PERFORMANCE DIFFERENCE
+==================================================
+
+Measure timing for:
+- first build
+- second build
+- third build
+
+Break down:
+- intent resolution
+- architecture generation
+- exercise selection
+- final save
+
+If later builds are much faster, identify exactly which stage is being skipped or shortened.
+
+==================================================
+TASK 6 — IDENTIFY TRUE STATE ANCHOR
+==================================================
+
+Find the exact state object causing repeated builds to anchor:
+- activeSystem
+- latestProgram
+- sessionDraft
+- conversation history
+- cached architecture
+- mutation engine
+
+Return the exact variable / source.
+
+==================================================
+TASK 7 — APPLY TARGETED FIX
+==================================================
+
+If repeated build requests are being routed into mutation mode:
+- force explicit “build” intents to bypass mutation/update flow
+- start from a clean generation state
+- ignore active program structure unless the user explicitly says “modify” or “adjust”
+
+If source program state is leaking into build:
+- clear or isolate it for fresh build requests
+- ensure new build path does not inherit previous architecture/session structure by default
+
+==================================================
+TASK 8 — VALIDATION
+==================================================
+
+After the fix, run the same prompt 3 times:
+“Build a 3 day soccer program”
+
+Expected:
+- each request enters fresh build path
+- architecture regenerates each time
+- no prior program is used as the base unless explicitly requested
+- response language reflects new build, not mutation
+
+==================================================
+TASK 9 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. whether repeated builds were fresh or mutation-based
+2. whether activeSystem/latestProgram was being reused
+3. what state object was anchoring the build
+4. exact fix applied
+5. before/after timing comparison
+6. before/after routing comparison
+
+==================================================
+FINAL STANDARD
+==================================================
+
+When a user asks to build a new program, the system must generate from scratch.
+
+Existing active programs should not be silently reused as the base unless the user explicitly asks to refine or modify them.
