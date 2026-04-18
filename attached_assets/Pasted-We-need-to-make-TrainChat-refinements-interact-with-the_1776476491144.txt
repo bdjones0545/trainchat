@@ -1,0 +1,178 @@
+We need to make TrainChat refinements interact with the BLOCK HIERARCHY, not just the session layer.
+
+OBJECTIVE:
+TrainChat now generates programs hierarchically:
+- monthly block
+- weekly block
+- session/day
+- exercises
+
+But refinements still behave too locally.
+
+We need a refinement system that can target:
+1. session scope
+2. weekly-block scope
+3. monthly-block scope
+
+and cascade changes correctly downward.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+When the user requests a change, the system should determine whether the request affects:
+- one session
+- the current week
+- the full block/phase
+
+Then mutate the correct layer and regenerate downstream layers accordingly.
+
+==================================================
+TASK 1 — CREATE REFINEMENT SCOPE RESOLVER
+==================================================
+
+Create a resolver module, e.g.:
+refinement-scope-resolver.ts
+
+It should classify requests into:
+- session_scope
+- week_scope
+- block_scope
+
+Use:
+- explicit language
+- current UI/program context
+- current selected day if available
+
+Examples:
+- "make day 1 harder" → session_scope
+- "this week is too fatiguing" → week_scope
+- "make this phase more explosive" → block_scope
+
+==================================================
+TASK 2 — DEFINE CASCADE RULES
+==================================================
+
+Implement these rules:
+
+If session_scope:
+- mutate only the selected session/day
+
+If week_scope:
+- mutate weekly block emphasis / stress rules
+- recompute affected session roles within that week
+- regenerate affected sessions
+
+If block_scope:
+- mutate monthly block type / adaptation target / progression philosophy
+- recompute weekly blocks
+- recompute session roles
+- regenerate affected sessions
+
+==================================================
+TASK 3 — BUILD WEEK-LEVEL MUTATION LOGIC
+==================================================
+
+Create a week-level mutation path that can change:
+- weekly emphasis
+- fatigue profile
+- volume/intensity bias
+- session role distribution
+
+Examples:
+- more explosive week
+- lower fatigue week
+- more endurance this week
+- shorter sessions this week
+
+==================================================
+TASK 4 — BUILD BLOCK-LEVEL MUTATION LOGIC
+==================================================
+
+Create a block-level mutation path that can change:
+- block type
+- primary adaptation target
+- secondary adaptation target
+- progression philosophy
+
+Examples:
+- shift block toward power
+- shift block toward hypertrophy
+- move into re-entry/resilience
+- make this phase more athletic
+
+==================================================
+TASK 5 — REGENERATE DOWNSTREAM LAYERS
+==================================================
+
+When higher-level mutations occur:
+
+block change:
+- regenerate weeks
+- regenerate session roles
+- regenerate sessions
+- reconcile labels
+
+week change:
+- regenerate session roles for that week
+- regenerate sessions for that week
+- reconcile labels
+
+session change:
+- mutate session only
+
+==================================================
+TASK 6 — KEEP USER EXPERIENCE CLEAR
+==================================================
+
+Surface what changed:
+
+Examples:
+- Block updated: Strength Block → Power Conversion Block
+- Week updated: Week 2 now emphasizes lower fatigue and work capacity
+- Session updated: Day 1 now emphasizes explosive lower-body output
+
+==================================================
+TASK 7 — ADD AUDIT LOGGING
+==================================================
+
+Add logs:
+[RefinementScope]
+[WeekMutation]
+[BlockMutation]
+[CascadeRegeneration]
+
+==================================================
+TASK 8 — TEST CASES
+==================================================
+
+Test:
+1. "make day 1 harder" → session only
+2. "this week is too fatiguing" → week-level change
+3. "make this phase more explosive" → block-level change
+4. "I’m coming back from pain, make this a re-entry block" → block-level special population shift
+5. confirm downstream sessions update correctly
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+Return:
+1. resolver added
+2. week mutation path added
+3. block mutation path added
+4. cascade rules implemented
+5. before/after examples of hierarchy-aware refinements
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat refinements should no longer be flat.
+
+They must understand and modify:
+- the session
+- the week
+- or the block
+
+so generation and refinement operate on the same hierarchical architecture.

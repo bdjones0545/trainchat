@@ -41,6 +41,8 @@ import {
 import { normalizeToIntentFamily } from "../lib/intent-family-engine";
 import { buildExecutionPlan, type ExecutionPlan } from "../lib/execution-planner";
 import { resolveAgentSettingsContext, type CoachBehaviorSettings, type AgentSettingsContext } from "../lib/agent-settings-resolver";
+import { resolveRefinementScope } from "../lib/refinement-scope-resolver";
+import { applyHierarchicalRefinement } from "../lib/hierarchical-refine-engine";
 
 const router: IRouter = Router();
 
@@ -1221,6 +1223,62 @@ Keep it helpful and intelligent, never promotional.`;
           planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
           intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
           systemEdit: { applied: false },
+        });
+        return;
+      }
+
+      // ── 1.5 Hierarchical scope check — week or block scope bypasses session edit pipeline ─
+      const directScopeResolution = resolveRefinementScope(parsed.data.content);
+      if (directScopeResolution.scope !== "session_scope") {
+        logger.info(
+          { scope: directScopeResolution.scope, systemId: resolvedSystem.id },
+          "[HierarchicalRefine] Routing to hierarchical engine"
+        );
+        const hierarchicalResult = await applyHierarchicalRefinement({
+          systemId: resolvedSystem.id,
+          userId,
+          userMessage: parsed.data.content,
+          scopeResolution: directScopeResolution,
+        });
+
+        const hierarchicalContent = hierarchicalResult.applied
+          ? `Done — ${hierarchicalResult.changeSummary}`
+          : `I wasn't able to apply that change. ${hierarchicalResult.changeSummary}`;
+
+        const [hierarchicalMsg] = await db.insert(messagesTable).values({
+          conversationId: params.data.id,
+          role: "assistant",
+          content: hierarchicalContent,
+          structuredData: hierarchicalResult.applied
+            ? JSON.stringify({ _type: "system_edit", changeSummary: hierarchicalResult.changeSummary, systemId: resolvedSystem.id })
+            : null,
+        }).returning();
+        await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+          stripeStorage.incrementMessageCount(userId).catch(() => {});
+        }
+        if (hierarchicalResult.applied) {
+          createChangeLogEntry({
+            userId,
+            trainingSystemId: resolvedSystem.id,
+            source: "ai_edit",
+            intent: `${directScopeResolution.scope}_refinement`,
+            scope: directScopeResolution.scope === "block_scope" ? "block" : "week",
+            changeSummary: hierarchicalResult.changeSummary,
+            requestText: parsed.data.content.slice(0, 300),
+            appliedCount: hierarchicalResult.exerciseCount,
+            skippedCount: 0,
+            versionOverrides: directScopeResolution.scope === "block_scope" ? { isMajorVersion: true } : undefined,
+          }).catch(() => {});
+        }
+        res.json({
+          userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
+          assistantMessage: { id: hierarchicalMsg.id, conversationId: hierarchicalMsg.conversationId, role: hierarchicalMsg.role, content: hierarchicalMsg.content, createdAt: hierarchicalMsg.createdAt.toISOString(), structuredData: hierarchicalMsg.structuredData ?? null },
+          planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+          intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: directScopeResolution.scope },
+          systemEdit: hierarchicalResult.applied
+            ? { applied: true, changeSummary: hierarchicalResult.changeSummary, systemId: resolvedSystem.id }
+            : { applied: false },
         });
         return;
       }
@@ -2553,6 +2611,65 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: errMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure" }),
           systemEdit: { applied: false },
         });
+        return;
+      }
+
+      // ── 1.5 Hierarchical scope check — week or block scope bypasses session edit pipeline ─
+      const streamScopeResolution = resolveRefinementScope(parsed.data.content);
+      if (streamScopeResolution.scope !== "session_scope") {
+        logger.info(
+          { scope: streamScopeResolution.scope, systemId: resolvedSystem.id },
+          "[HierarchicalRefine:stream] Routing to hierarchical engine"
+        );
+        emit(buildStageEvent("applying", intentResult.type, execPlan.action));
+        const streamHierarchicalResult = await applyHierarchicalRefinement({
+          systemId: resolvedSystem.id,
+          userId,
+          userMessage: parsed.data.content,
+          scopeResolution: streamScopeResolution,
+        });
+
+        const streamHierarchicalContent = streamHierarchicalResult.applied
+          ? `Done — ${streamHierarchicalResult.changeSummary}`
+          : `I wasn't able to apply that change. ${streamHierarchicalResult.changeSummary}`;
+
+        const [streamHierarchicalMsg] = await db.insert(messagesTable).values({
+          conversationId: params.data.id,
+          role: "assistant",
+          content: streamHierarchicalContent,
+          structuredData: streamHierarchicalResult.applied
+            ? JSON.stringify({ _type: "system_edit", changeSummary: streamHierarchicalResult.changeSummary, systemId: resolvedSystem.id })
+            : null,
+        }).returning();
+        await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+          stripeStorage.incrementMessageCount(userId).catch(() => {});
+        }
+        if (streamHierarchicalResult.applied) {
+          createChangeLogEntry({
+            userId,
+            trainingSystemId: resolvedSystem.id,
+            source: "ai_edit",
+            intent: `${streamScopeResolution.scope}_refinement`,
+            scope: streamScopeResolution.scope === "block_scope" ? "block" : "week",
+            changeSummary: streamHierarchicalResult.changeSummary,
+            requestText: parsed.data.content.slice(0, 300),
+            appliedCount: streamHierarchicalResult.exerciseCount,
+            skippedCount: 0,
+            versionOverrides: streamScopeResolution.scope === "block_scope" ? { isMajorVersion: true } : undefined,
+          }).catch(() => {});
+        }
+        done(buildCompleteEvent({
+          userMsg: userMessage,
+          assistantMsg: streamHierarchicalMsg,
+          planInfoVal: planInfo,
+          intentResultVal: intentResult,
+          systemSavedVal: streamHierarchicalResult.applied,
+          outcomeTypeVal: streamHierarchicalResult.applied ? "mutation_applied" : "true_failure",
+          systemEditVal: streamHierarchicalResult.applied
+            ? { applied: true }
+            : { applied: false },
+        }));
         return;
       }
 

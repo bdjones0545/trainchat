@@ -466,6 +466,31 @@ export function buildMonthlyBlockPlan(
 }
 
 /**
+ * Builds a MonthlyBlockPlan directly from a known block type (bypasses selection logic).
+ * Used by the hierarchical refine engine when the user explicitly requests a block shift.
+ */
+export function buildMonthlyBlockPlanForType(
+  blockType: MonthlyBlockType | SpecialPopBlockType,
+  sport: string | null,
+  goal: string | null,
+): MonthlyBlockPlan {
+  const isSpecial = blockType in SPECIAL_POP_BLOCKS;
+  const baseDefinition = isSpecial
+    ? SPECIAL_POP_BLOCKS[blockType as SpecialPopBlockType]
+    : STANDARD_BLOCKS[blockType as MonthlyBlockType];
+
+  const sportGoalBias = buildSportGoalBias(blockType, sport, goal);
+  const weekProgressionArc = buildWeekProgressionArc(blockType, sport);
+
+  return {
+    blockType,
+    ...baseDefinition,
+    sportGoalBias,
+    weekProgressionArc,
+  };
+}
+
+/**
  * Returns a concise block context string suitable for injection into AI prompts.
  */
 export function buildMonthlyBlockContext(plan: MonthlyBlockPlan): string {
