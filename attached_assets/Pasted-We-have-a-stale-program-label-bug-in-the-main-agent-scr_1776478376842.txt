@@ -1,0 +1,138 @@
+We have a stale program label bug in the main agent screen.
+
+BUG:
+After deleting a previous program or starting a new builder session, the UI still shows the old program name in the status strip, e.g.:
+
+"Active system: Strength Program — 4-Day · Ready to refine or rebuild"
+
+even though that program was deleted or the user has started fresh.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Fix the top status strip so it always reflects the true current program state and never shows a stale previous program name.
+
+==================================================
+TASK 1 — TRACE THE STATUS STRIP SOURCE
+==================================================
+
+Audit the exact source of the status line under the agent header.
+
+Find where this text is coming from:
+- activeSystem
+- displayProgram
+- latestProgram
+- local component state
+- cached derived label
+- separate resolver
+
+We need the exact variable/path responsible for showing the stale program name.
+
+==================================================
+TASK 2 — FORCE SINGLE SOURCE OF TRUTH
+==================================================
+
+The status strip must use the SAME resolveProgramState(...) logic as the rest of the program UI.
+
+Do NOT allow separate fallback logic.
+
+Valid states:
+
+1. live
+- show active system name
+
+2. draft
+- show draft program name / draft label
+
+3. none
+- show neutral empty-state text like:
+  "No active system yet · Start building to generate your next program"
+
+==================================================
+TASK 3 — CLEAR STALE STATE ON DELETE / NEW SESSION
+==================================================
+
+When:
+- active program is deleted
+- a new builder session starts
+- activeSystem becomes null
+- sessionDraftMsgId is cleared
+- latestProgram is cleared
+
+the top status strip must immediately rerender to the "none" state.
+
+No stale label should survive in local state.
+
+==================================================
+TASK 4 — REMOVE ANY CUSTOM LABEL CACHE
+==================================================
+
+If the status strip stores:
+- previous program name
+- previous program summary
+- old derived label in local component state
+
+remove that pattern.
+
+It must derive from live state each render, not from remembered UI state.
+
+==================================================
+TASK 5 — QA CASES
+==================================================
+
+Test all of these:
+
+1. Active program exists
+Expected:
+- strip shows active program name
+
+2. Delete active program
+Expected:
+- strip immediately switches to no active system text
+
+3. Start new builder session with no draft yet
+Expected:
+- no old program name remains
+
+4. Draft program exists
+Expected:
+- strip shows draft state, not old active state
+
+5. Reload app after delete
+Expected:
+- no stale program name returns
+
+==================================================
+TASK 6 — DEV LOGGING
+==================================================
+
+Add a development log for the strip:
+
+[TopStatusStripAudit] {
+  activeSystemId,
+  latestProgramMessageId,
+  sessionDraftMsgId,
+  resolvedSource: "live" | "draft" | "none",
+  resolvedLabel
+}
+
+This should make stale label issues obvious.
+
+==================================================
+TASK 7 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. exact stale source identified
+2. whether the strip was bypassing resolveProgramState
+3. what was changed
+4. before/after behavior for delete and new session flows
+
+==================================================
+FINAL STANDARD
+==================================================
+
+The status strip must never show a previous program name once the active system/draft is gone.
+
+It must always reflect the same resolved program state as the rest of the app.
