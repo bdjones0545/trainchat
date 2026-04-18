@@ -2250,7 +2250,21 @@ export async function generateAIResponse(
         );
       }
     } catch (archErr) {
-      logger.warn({ archErr }, "[ArchitectureEngine] Failed to build brief — continuing without it");
+      const errMsg = archErr instanceof Error ? archErr.message : String(archErr);
+      const errStack = archErr instanceof Error ? archErr.stack : undefined;
+      logger.warn({ archErrMessage: errMsg, archErrStack: errStack }, "[ArchitectureEngine] Failed to build brief — continuing without it");
+      // Even when buildArchitectureBrief throws, _lastSlotSelection may have been
+      // set before the throw (it is assigned at line ~3085, before the return path).
+      // Capturing it here ensures enforceVariationMandateOnProgram still fires so
+      // the AI's default exercises are replaced with the correct locked selections.
+      lockedExerciseSelections = getLastSlotSelection();
+      if (process.env.NODE_ENV !== "production" && lockedExerciseSelections) {
+        console.log("[ArchitectureEngine] Recovered slot selections from partial brief — enforcement will still run", {
+          lower_power: lockedExerciseSelections.lower_power,
+          bilateral_squat: lockedExerciseSelections.bilateral_squat_strength,
+          bilateral_hinge: lockedExerciseSelections.bilateral_hinge_strength,
+        });
+      }
     }
   }
 
