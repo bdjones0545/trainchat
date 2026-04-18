@@ -50,6 +50,16 @@ export interface ChangeTarget {
   exerciseId: number;
 }
 
+interface BlockMetadata {
+  blockType?: string;
+  blockDisplayName?: string;
+  missionStatement?: string;
+  weekProgressionArc?: string;
+  primaryAdaptation?: string;
+  volumeProfile?: string;
+  intensityProfile?: string;
+}
+
 interface Props {
   program: ProgramStructure | null;
   buildingState?: BuildingState;
@@ -86,6 +96,8 @@ interface Props {
    *  "none"  — no program to display
    */
   programSource?: "live" | "draft" | "none";
+  /** Block phase metadata from the hierarchical planning system */
+  blockMetadata?: BlockMetadata | null;
 }
 
 type Tab = "program" | "changes" | "history" | "forecast";
@@ -424,6 +436,59 @@ const EXERCISE_ACTIONS: { label: string; buildMessage: (name: string) => string 
   { label: "Harder", buildMessage: (n) => `Make ${n} harder` },
 ];
 
+const BLOCK_TYPE_COLORS: Record<string, { bg: string; border: string; text: string; dot: string }> = {
+  power_conversion:     { bg: "bg-orange-500/8",  border: "border-orange-500/20", text: "text-orange-400",  dot: "bg-orange-400" },
+  hypertrophy_support:  { bg: "bg-violet-500/8",  border: "border-violet-500/20", text: "text-violet-400",  dot: "bg-violet-400" },
+  strength_emphasis:    { bg: "bg-blue-500/8",    border: "border-blue-500/20",   text: "text-blue-400",    dot: "bg-blue-400"   },
+  work_capacity:        { bg: "bg-green-500/8",   border: "border-green-500/20",  text: "text-green-400",   dot: "bg-green-400"  },
+  re_entry_resilience:  { bg: "bg-amber-500/8",   border: "border-amber-500/20",  text: "text-amber-400",   dot: "bg-amber-400"  },
+};
+
+function BlockPhaseBanner({ blockMetadata }: { blockMetadata: BlockMetadata }) {
+  const { blockType, blockDisplayName, missionStatement, primaryAdaptation, volumeProfile, intensityProfile } = blockMetadata;
+  if (!blockDisplayName && !blockType) return null;
+  const colors = (blockType && BLOCK_TYPE_COLORS[blockType]) ?? {
+    bg: "bg-primary/6", border: "border-primary/15", text: "text-primary", dot: "bg-primary",
+  };
+  return (
+    <div className={`mx-4 mt-3 mb-1 rounded-xl border px-3 py-2.5 ${colors.bg} ${colors.border}`}>
+      <div className="flex items-center gap-2 mb-1">
+        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${colors.dot}`} />
+        <span className={`text-[9px] font-bold uppercase tracking-[0.14em] ${colors.text}`}>
+          {blockDisplayName ?? blockType ?? "Training Block"}
+        </span>
+        {primaryAdaptation && (
+          <span className="ml-auto text-[9px] text-muted-foreground/60 font-medium truncate">
+            {primaryAdaptation}
+          </span>
+        )}
+      </div>
+      {missionStatement && (
+        <p
+          className="text-[10px] text-foreground/70 leading-relaxed mb-1.5"
+          style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } as React.CSSProperties}
+        >
+          {missionStatement}
+        </p>
+      )}
+      {(volumeProfile || intensityProfile) && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {volumeProfile && (
+            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md bg-black/10 text-[9px] font-medium ${colors.text}`}>
+              Vol: {volumeProfile}
+            </span>
+          )}
+          {intensityProfile && (
+            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md bg-black/10 text-[9px] font-medium ${colors.text}`}>
+              Int: {intensityProfile}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProgramTab({
   program,
   programSource = "none",
@@ -443,6 +508,7 @@ function ProgramTab({
   lastChangeSummary,
   onSendMessage,
   onClose,
+  blockMetadata,
 }: Omit<Props, "hasActiveSystem">) {
   const queryClient = useQueryClient();
   const [expandedDay, setExpandedDay] = useState<number | null>(0);
@@ -1013,6 +1079,11 @@ function ProgramTab({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Block Phase Banner */}
+      {blockMetadata && (blockMetadata.blockDisplayName || blockMetadata.blockType) && (
+        <BlockPhaseBanner blockMetadata={blockMetadata} />
       )}
 
       {/* Days */}
@@ -1822,6 +1893,7 @@ export default function LiveProgramPanel({
   pendingChangeHint,
   lastChangeSummary,
   programSource = "none" as const,
+  blockMetadata,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("program");
   const [hasUnseenChange, setHasUnseenChange] = useState(false);
@@ -1942,6 +2014,7 @@ export default function LiveProgramPanel({
             newChangeSignal={newChangeSignal}
             pendingChangeHint={pendingChangeHint}
             lastChangeSummary={lastChangeSummary}
+            blockMetadata={blockMetadata}
           />
         )}
         {activeTab === "changes" && (

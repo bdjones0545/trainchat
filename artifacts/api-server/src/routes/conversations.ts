@@ -4,6 +4,7 @@ import { eq, desc, count } from "drizzle-orm";
 import { CreateConversationBody, GetConversationParams, DeleteConversationParams, ListMessagesParams, SendMessageBody, SendMessageParams } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
 import { generateAIResponse, type ProgramStructure, validateProgramAgainstConstraints } from "../lib/ai";
+import { getLastMonthlyPlan } from "../lib/program-architecture-engine";
 import { classifyIntent, logIntentSummary, extractConstraints, type IntentResult, type ExtractedConstraints } from "../lib/intent";
 import {
   type ResponseMode,
@@ -1746,6 +1747,20 @@ Keep it helpful and intelligent, never promotional.`;
 
   if (structuredData && Array.isArray(structuredData.days) && structuredData.days.length > 0) {
     try {
+      // Attach block metadata from the most recent architecture brief build (side-effect)
+      const lastPlan = getLastMonthlyPlan();
+      if (lastPlan) {
+        (structuredData as any).blockMetadata = {
+          blockType: String(lastPlan.blockType),
+          blockDisplayName: lastPlan.displayName,
+          missionStatement: lastPlan.missionStatement,
+          weekProgressionArc: lastPlan.weekProgressionArc,
+          primaryAdaptation: lastPlan.primaryAdaptation,
+          volumeProfile: lastPlan.volumeProfile,
+          intensityProfile: lastPlan.intensityProfile,
+        };
+      }
+
       const isNewProgramBuild =
         intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM";
       let savedSystem: { id: number; [key: string]: any };
@@ -2968,6 +2983,20 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
   if (structuredData && Array.isArray(structuredData.days) && structuredData.days.length > 0) {
     try {
+      // Attach block metadata from the most recent architecture brief build (side-effect)
+      const lastPlanSSE = getLastMonthlyPlan();
+      if (lastPlanSSE) {
+        (structuredData as any).blockMetadata = {
+          blockType: String(lastPlanSSE.blockType),
+          blockDisplayName: lastPlanSSE.displayName,
+          missionStatement: lastPlanSSE.missionStatement,
+          weekProgressionArc: lastPlanSSE.weekProgressionArc,
+          primaryAdaptation: lastPlanSSE.primaryAdaptation,
+          volumeProfile: lastPlanSSE.volumeProfile,
+          intensityProfile: lastPlanSSE.intensityProfile,
+        };
+      }
+
       const isNewProgramBuildSSE =
         intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM";
       let savedSystem: { id: number; [key: string]: any };

@@ -1451,6 +1451,7 @@ export default function Chat() {
               : undefined
           }
           lastChangeSummary={lastChangeSummary ?? undefined}
+          blockMetadata={(activeSystem as any)?.metadata ?? undefined}
         />
       </div>
     </div>
@@ -2059,6 +2060,7 @@ export default function Chat() {
                   newChangeSignal={newChangeSignal}
                   newProgramSignal={newProgramSignal}
                   changeTargets={changeTargets}
+                  blockMetadata={(activeSystem as any)?.metadata ?? undefined}
                 />
               </div>
             </div>

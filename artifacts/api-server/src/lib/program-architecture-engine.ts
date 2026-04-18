@@ -2168,6 +2168,7 @@ export function computeWeeklyArchitecture(
 
 /** Stores the slot selections from the most recent buildArchitectureBrief call (non-SP path). */
 let _lastSlotSelection: SlotExerciseSelection | null = null;
+let _lastMonthlyPlan: MonthlyBlockPlan | null = null;
 
 export function buildArchitectureBrief(
   daysPerWeek: number | null,
@@ -2180,9 +2181,9 @@ export function buildArchitectureBrief(
 
   const seed = variationSeed ?? Math.random();
 
-  // Always reset _lastSlotSelection before any path — this ensures stale selections
-  // from a prior build never leak into the post-generation enforcer for SP builds.
+  // Always reset side-effect state before any path — stale data from prior builds must never leak.
   _lastSlotSelection = null;
+  _lastMonthlyPlan = null;
 
   // ── Special Population Detection — route BEFORE any athlete logic ──────────
   // If the user request matches an older adult, beginner, post-rehab, pain-sensitive,
@@ -2204,6 +2205,9 @@ export function buildArchitectureBrief(
         lockedSelections: null,
       }));
     }
+    // Persist SP monthly plan for downstream storage
+    _lastMonthlyPlan = spMonthlyPlan;
+
     // Inject the SP monthly block context into the brief
     const spMonthlyCtx = buildMonthlyBlockContext(spMonthlyPlan);
     const spWeeklyCtx = buildWeeklyBlockContext(spWeeklyPlans, 1);
@@ -2233,6 +2237,7 @@ export function buildArchitectureBrief(
     reqLc.includes("just starting") || reqLc.includes("new to") ? "beginner" : null;
 
   const monthlyPlan = buildMonthlyBlockPlan(goal, sport, experienceHint, seed, false);
+  _lastMonthlyPlan = monthlyPlan;
 
   // ── Hierarchical Planning — Layer 2: Weekly Block ──────────────────────────
   const weeklyPlans = buildWeeklyBlockPlans(monthlyPlan, daysPerWeek, sport, seed);
@@ -2718,6 +2723,10 @@ export function validateProgramArchitecture(
 /** Returns the slot selections computed during the last buildArchitectureBrief call. */
 export function getLastSlotSelection(): SlotExerciseSelection | null {
   return _lastSlotSelection;
+}
+
+export function getLastMonthlyPlan(): MonthlyBlockPlan | null {
+  return _lastMonthlyPlan;
 }
 
 /**

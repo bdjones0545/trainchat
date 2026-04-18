@@ -1,0 +1,132 @@
+We need to surface MONTHLY BLOCK + WEEKLY BLOCK context in the UI without cluttering the experience.
+
+OBJECTIVE:
+TrainChat now generates programs using a hierarchy:
+- Monthly block
+- Weekly block
+- Session/day generation
+- Exercise selection
+
+But users currently may not feel that hierarchy in the UI.
+
+We need to expose:
+- monthly block identity
+- current week role
+- current week number
+
+in a clean, premium, minimal way.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make users feel:
+- this program has a phase
+- this week has a purpose
+- the system is progressing
+
+without turning the UI into a complicated coach dashboard.
+
+==================================================
+TASK 1 — ACTIVE PROGRAM HEADER
+==================================================
+
+In the Active Program view, under the program title, add a compact hierarchy line:
+
+Examples:
+- Strength Block · Week 2 of 4 · Build
+- Power Conversion Block · Week 3 of 4 · Intensify
+- Re-Entry Block · Week 1 of 4 · Establish
+
+Below that, add a small helper sentence:
+- Higher volume and progressive overload this week.
+- Peak force and lower-rep loading this week.
+- Reduced fatigue and recovery emphasis this week.
+
+Keep it subtle and premium.
+
+==================================================
+TASK 2 — RIGHT SIDEBAR / LIVE SYSTEM
+==================================================
+
+When an active program exists, show a compact current-phase line in the right sidebar:
+
+- Strength Block · Week 2 Build
+
+Do not over-explain.
+This should replace generic static copy when a live program is active.
+
+==================================================
+TASK 3 — DAY CARD CONTEXT
+==================================================
+
+Optionally add a very small muted context line or chip to day/session cards when useful:
+
+Examples:
+- Build week emphasis
+- Intensify week
+- Deload week — reduced fatigue
+
+Do NOT clutter every card if it feels repetitive.
+Use only where it adds clarity.
+
+==================================================
+TASK 4 — DATA FLOW
+==================================================
+
+Audit that the UI has access to:
+- monthly block type
+- week number
+- weekly block role
+- helper description if available
+
+If not already exposed in the transformed program object, add them cleanly.
+
+==================================================
+TASK 5 — MOBILE-FIRST DESIGN
+==================================================
+
+The new hierarchy UI must:
+- fit cleanly on iPhone width
+- not push important content too far down
+- remain readable
+- avoid dashboard overload
+
+Prefer:
+- one-line labels
+- small chips
+- subtle helper text
+
+==================================================
+TASK 6 — DO NOT OVERBUILD
+==================================================
+
+Do NOT add:
+- giant timelines
+- 4-week charts
+- complicated periodization dashboards
+- repeated large labels on every section
+
+We want elegant context, not clutter.
+
+==================================================
+TASK 7 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. where monthly/weekly block info is shown
+2. what UI elements were added
+3. what data fields had to be exposed
+4. any helper copy used
+5. how clutter was avoided
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat should make users feel that their program has:
+- a phase
+- a current week role
+- a progression arc
+
+The UI should communicate this quietly and elegantly.

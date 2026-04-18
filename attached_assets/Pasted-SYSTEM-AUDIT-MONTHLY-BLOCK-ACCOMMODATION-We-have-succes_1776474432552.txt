@@ -1,0 +1,274 @@
+SYSTEM AUDIT — MONTHLY BLOCK ACCOMMODATION
+
+We have successfully implemented hierarchical generation:
+
+Monthly Block → Weekly Block → Session → Exercise → Reconciliation
+
+Now we must audit whether the APPLICATION actually accommodates and expresses the monthly block layer.
+
+This is not just a backend audit.
+This is a FULL SYSTEM AUDIT including:
+- data flow
+- UI exposure
+- behavioral consistency
+- refinement interaction
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Verify that monthly blocks:
+1. influence generation
+2. persist through the system
+3. are visible or inferable to the user
+4. affect behavior (not just metadata)
+
+If not, identify gaps and fix them.
+
+==================================================
+SECTION 1 — DATA FLOW AUDIT
+==================================================
+
+Confirm that MonthlyBlockPlan is:
+
+- created once per build
+- attached to the training system (DB or in-memory)
+- passed into weekly-block-planner
+- passed into session generation
+- passed into exercise-variation-engine
+- available during reconciliation
+
+Add log:
+
+[BuildAudit:MonthlyBlock] {
+  blockType,
+  primaryTarget,
+  secondaryTarget,
+  progressionModel,
+  sportContext
+}
+
+FAIL if:
+- monthly block is lost after generation
+- not accessible downstream
+- recreated inconsistently
+
+==================================================
+SECTION 2 — WEEKLY INHERITANCE AUDIT
+==================================================
+
+Confirm each WeeklyBlockPlan:
+
+- references its parent MonthlyBlockPlan
+- inherits:
+  - adaptation target
+  - progression philosophy
+  - intensity/volume bias
+
+Check:
+
+Week 1–4 should NOT be identical across block types.
+
+Example:
+- accumulation vs intensification must produce different weekly patterns
+
+FAIL if:
+- weekly plans are identical regardless of monthly block
+
+==================================================
+SECTION 3 — SESSION ROLE CONSISTENCY
+==================================================
+
+Confirm session roles reflect BOTH:
+
+- weekly role
+- monthly block intent
+
+Example:
+If blockType = power_conversion:
+
+Sessions should include:
+- elastic / speed emphasis
+- lower fatigue high velocity work
+
+If blockType = hypertrophy_support:
+
+Sessions should include:
+- higher volume
+- moderate loads
+- density bias
+
+FAIL if:
+- session roles look identical across block types
+
+==================================================
+SECTION 4 — EXERCISE SELECTION ALIGNMENT
+==================================================
+
+Confirm variation engine uses:
+
+BlockSelectionContext:
+- blockType
+- weekRole
+
+Check:
+- accumulation → higher reps / volume
+- intensification → lower reps / higher load
+- power_conversion → explosive / elastic bias
+- deload → low fatigue selections
+
+FAIL if:
+- exercise profiles do not change across block types
+
+==================================================
+SECTION 5 — RECONCILIATION ALIGNMENT
+==================================================
+
+Confirm Block Reconciliation:
+
+- receives blockType + weekRole
+- constrains output labels within correct family
+
+Example:
+- power block should not produce hypertrophy-style labels
+- re-entry block should not produce high-force labels
+
+FAIL if:
+- reconciled labels ignore monthly block intent
+
+==================================================
+SECTION 6 — UI EXPRESSION AUDIT (CRITICAL)
+==================================================
+
+This is the most important section.
+
+Check whether the USER can perceive the monthly block.
+
+Currently the UI shows:
+- daily sessions
+- weekly structure
+
+We must determine:
+
+Is the monthly block:
+- visible?
+- implied?
+- completely hidden?
+
+--------------------------------------------------
+Check:
+--------------------------------------------------
+
+1. Right sidebar (Live System)
+- Does it reflect block type?
+- Does it show progression phase?
+
+2. Active Program view
+- Is there any reference to:
+  - block type
+  - current week (1–4)
+  - progression phase?
+
+3. Session labels
+- Do they feel consistent with block type?
+
+FAIL if:
+- user cannot tell the difference between:
+  accumulation vs intensification vs power block
+
+==================================================
+SECTION 7 — BEHAVIORAL IMPACT AUDIT
+==================================================
+
+Run same prompt 3–5 times:
+
+"Build a 3-day strength program"
+
+Verify:
+- different block types selected
+- visible program differences
+- different weekly rhythms
+- different session roles
+
+FAIL if:
+- programs still feel identical
+
+==================================================
+SECTION 8 — REFINEMENT COMPATIBILITY
+==================================================
+
+Test refinements:
+
+- "make this more explosive"
+- "make this easier"
+- "increase endurance"
+
+Check:
+
+Does refinement:
+- respect monthly block?
+OR
+- override it intelligently?
+
+FAIL if:
+- refinement breaks block logic completely
+OR
+- refinement does nothing because block is too rigid
+
+==================================================
+SECTION 9 — STORAGE & PERSISTENCE
+==================================================
+
+Confirm:
+
+MonthlyBlockPlan is:
+- stored with training_system
+- retrievable later
+- tied to saved programs
+
+FAIL if:
+- reloading program loses block context
+
+==================================================
+SECTION 10 — FINAL VERDICT
+==================================================
+
+Classify system:
+
+LEVEL 1 — Hidden
+Monthly blocks exist but are not expressed
+
+LEVEL 2 — Weak
+Monthly blocks influence backend but not user perception
+
+LEVEL 3 — Strong
+Monthly blocks influence both behavior AND visible structure
+
+LEVEL 4 — Elite
+Monthly blocks are:
+- felt
+- visible
+- influence refinements
+- differentiate programs clearly
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+Return:
+
+1. audit results for each section
+2. pass/fail per section
+3. specific gaps found
+4. recommended fixes
+5. final classification (Level 1–4)
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat should not just use monthly blocks internally.
+
+The system should make users feel:
+
+"This program has a purpose, a phase, and a progression — not just workouts."

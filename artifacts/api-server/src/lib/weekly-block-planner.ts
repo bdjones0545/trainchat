@@ -328,6 +328,171 @@ function buildWeeklyEmphasis(
   }
 }
 
+// ─── Block-Type Session Role Overlays ────────────────────────────────────────
+// Override generic session role names with block-type-specific language.
+// A power_conversion block should not say "Pattern Establishment" — it should say
+// "Power Introduction". A hypertrophy block should not say "Progressive Load" — it
+// should say "Volume Accumulation". This makes the session intent legible to the AI
+// and ultimately to the user.
+
+interface SessionRoleOverride {
+  sessionRole: string;
+  emphasis: string;
+  loadingNotes: string;
+}
+
+const BLOCK_SESSION_ROLE_OVERLAYS: Partial<Record<
+  MonthlyBlockType | SpecialPopBlockType,
+  Partial<Record<WeekRole, SessionRoleOverride[]>>
+>> = {
+  power_conversion: {
+    establish: [
+      { sessionRole: "Power Introduction", emphasis: "Learn contrast pair structure — sub-maximal strength with explosive primer", loadingNotes: "60–70% loads on strength work. Explosive primer first (3 × 3 jumps or throws). No grinding." },
+      { sessionRole: "Force-Velocity Baseline", emphasis: "Establish power output baseline — measure jump height, sprint time, or bar speed", loadingNotes: "Quality over quantity. Every explosive rep must be max intent. 2–3 min rest between power sets." },
+      { sessionRole: "Athletic Strength Foundation", emphasis: "Build the strength base that contrast training will amplify — force production base", loadingNotes: "75–80% loads. Technique priority — power block needs clean bilateral patterns to contrast from." },
+      { sessionRole: "Reactive Strength Introduction", emphasis: "Introduce plyometric sequencing — landing mechanics, reactive rebound, short contact", loadingNotes: "Low plyometric volume (2 × 5 per movement). Emphasize ground contact quality — not height." },
+      { sessionRole: "Rotational Power Primer", emphasis: "Med ball work and rotational power patterns — introduce explosive hip and trunk patterns", loadingNotes: "Overhead throws, rotational slams, lateral med ball tosses. Low sets, max intent." },
+    ],
+    build: [
+      { sessionRole: "Contrast Pair Session", emphasis: "Heavy strength set immediately followed by explosive equivalent — PAP activation", loadingNotes: "80–85% strength load → immediate explosive. 3–5 min full rest between pairs. Maximum output on explosive." },
+      { sessionRole: "Plyometric Volume Build", emphasis: "Increase plyometric volume — more jumps, bounds, throws with maintained quality", loadingNotes: "Add sets vs Week 1. Quality non-negotiable. If landing mechanics degrade, stop the set." },
+      { sessionRole: "Strength-Power Complex", emphasis: "Heavy compound lift + ballistic equivalent — full contrast protocol", loadingNotes: "Work up to 83–87% top set. Follow with 3 × 3 explosive equivalent. Full CNS recovery between pairs." },
+      { sessionRole: "Speed-Strength Work", emphasis: "Velocity-based loading — fast bar speed at moderate loads (60–70% intent-speed)", loadingNotes: "Move every rep as fast as possible. Bar speed > bar load. This develops the force-velocity curve." },
+      { sessionRole: "Power Endurance Circuit", emphasis: "Multiple explosive movements in sequence — power output under fatigue", loadingNotes: "Short rest (60–90 sec). Power endurance — not maximum power. Maintain form across all reps." },
+    ],
+    intensify: [
+      { sessionRole: "Peak Contrast Expression", emphasis: "Heaviest loads paired with maximum explosive output — peak rate of force development", loadingNotes: "90%+ strength loads in contrast. Max intent on every explosive rep. 4–5 min rest between pairs." },
+      { sessionRole: "Maximum Power Output", emphasis: "Absolute power peak — highest jumps, fastest throws, greatest bar velocity", loadingNotes: "Reduce volume by 30%. Every rep is maximum effort. This is the performance peak of the block." },
+      { sessionRole: "Competitive Speed-Strength", emphasis: "Sport-transfer power expression — the gym session that mirrors athletic demand", loadingNotes: "Full effort. High-velocity work at game-relevant movement patterns." },
+      { sessionRole: "Neural Peak Expression", emphasis: "CNS at peak — heavy loading + explosive finisher, full recovery between efforts", loadingNotes: "Longest rest periods of the block. Quality at maximum. This session demands full recovery." },
+    ],
+    deload: [
+      { sessionRole: "Power Preservation", emphasis: "Maintain explosive patterns with 40–50% volume reduction — do not detrain power", loadingNotes: "3 × 3 jumps/throws max. 65–70% strength loads. The goal is CNS recovery, not training effect." },
+      { sessionRole: "Movement Quality Reset", emphasis: "Technique refinement — fix any compensations that appeared during intensify week", loadingNotes: "Light loads. Slow down — emphasize position and intent, not speed or weight." },
+    ],
+  },
+
+  hypertrophy_support: {
+    establish: [
+      { sessionRole: "Volume Baseline", emphasis: "Learn positions for muscle growth — feel the muscle working, establish mind-muscle connection", loadingNotes: "3 sets × 12–15 reps. RPE 6–7. Feel the muscle — not just move the weight." },
+      { sessionRole: "Pump Day Foundation", emphasis: "Introduce metabolic stress — higher rep accessory work, blood flow to target muscles", loadingNotes: "Moderate loads, 10–15 reps, short rest (60–75 sec). Pump is the signal — not intensity." },
+      { sessionRole: "Structural Balance Session", emphasis: "Full range of motion priority — establish movement quality for full stretch hypertrophy", loadingNotes: "Slow eccentrics (3–4 count). Full ROM non-negotiable. Load is secondary." },
+      { sessionRole: "Muscle Group Priority", emphasis: "Focus on a priority muscle group — multi-angle attack to establish volume tolerance", loadingNotes: "3 exercises for priority area. 3 × 10–15 each. Rest 90 sec. Leave 2 reps in reserve." },
+      { sessionRole: "Movement Integration Pump", emphasis: "Full-body pump — multiple patterns at moderate intensity for overall stimulus", loadingNotes: "Circuit-friendly. Higher reps, shorter rest. Metabolic stress across all major groups." },
+    ],
+    build: [
+      { sessionRole: "Volume Accumulation", emphasis: "Add sets vs Week 1 — progressive volume overload is the primary driver", loadingNotes: "4 working sets. If all reps achieved last week, add 2.5–5% load. Double progression model." },
+      { sessionRole: "Density Pump", emphasis: "Same work volume in less time — density increases metabolic stress and hypertrophy signal", loadingNotes: "Reduce rest by 15–20%. Maintain load quality — do not sacrifice weight for pace." },
+      { sessionRole: "Muscle Peak Stimulus", emphasis: "Heaviest loads of the hypertrophy range (6–8 reps) — tension-driven hypertrophy", loadingNotes: "RPE 8–8.5. Work up to top sets at 6–8 reps. Back-off sets maintain volume stimulus." },
+      { sessionRole: "Full Pump Session", emphasis: "Volume peak — maximum metabolic stress session across all target muscles", loadingNotes: "4–5 sets. Short rest. Pump is maximal. This session drives muscle swelling and growth signal." },
+      { sessionRole: "Isolation Intensity", emphasis: "Isolation movements at intensity — single-joint exercises at near-failure reps", loadingNotes: "3–4 × 10–15 to near failure. Leave 1–2 reps in reserve. Quality contraction every rep." },
+    ],
+    intensify: [
+      { sessionRole: "Peak Volume Stimulus", emphasis: "4–5 working sets at peak hypertrophy loads — maximum muscle growth signal of the block", loadingNotes: "RPE 8–9. Near-failure on final set. Longest rest periods of the block to support load quality." },
+      { sessionRole: "Mechanical Tension Peak", emphasis: "Heaviest loads in full range of motion — maximum mechanical tension hypertrophy", loadingNotes: "6–8 rep top sets. Controlled eccentric. Full stretch at bottom. This is the tension peak." },
+      { sessionRole: "Metabolic Stress Peak", emphasis: "Maximum pump — highest density session, shortest rest, highest rep counts", loadingNotes: "3–4 × 12–20. 45–60 sec rest. Occlusion-style pump. Volume is the goal, not load." },
+      { sessionRole: "Priority Muscle Peak", emphasis: "Final priority muscle stimulation before deload — maximum volume for target area", loadingNotes: "Extra sets on priority area. Near-failure. This is the last heavy stimulus before recovery." },
+    ],
+    deload: [
+      { sessionRole: "Pump Maintenance", emphasis: "Maintain muscle stimulus without adding fatigue — light pump, no failure", loadingNotes: "2–3 sets × 12–15. RPE ≤5. Blood flow and nutrient delivery — not training stimulus." },
+      { sessionRole: "Movement Quality Reset", emphasis: "Full range of motion at light loads — reinforce positions for next block", loadingNotes: "Light loads. Slow eccentrics. This session should feel restorative." },
+    ],
+  },
+
+  strength_emphasis: {
+    establish: [
+      { sessionRole: "Technical Foundation", emphasis: "Learn the heavy patterns at submaximal loads — position, bracing, and bar path", loadingNotes: "80% loads. Technique is the output — not load. Record every session for next week's baseline." },
+      { sessionRole: "Strength Volume Base", emphasis: "Working sets across the primary lifts — build volume tolerance at heavy loads", loadingNotes: "4 × 5 at 78–82%. Clean reps across all sets. No grinding. Baseline for Week 2 progression." },
+      { sessionRole: "Back-Off Volume", emphasis: "Heavy top set followed by back-off sets — intensity + volume combination", loadingNotes: "Work to RPE 8 top set. Drop 10–12% for 3 × 5 back-off. Full recovery between heavy sets." },
+      { sessionRole: "Structural Support Day", emphasis: "Accessory work to support the primary lifts — target weakness points", loadingNotes: "Moderate loads. Accessory movements serve the primary lifts. Don't exhaust CNS for support work." },
+    ],
+    build: [
+      { sessionRole: "Heavy Working Sets", emphasis: "Progress loads from Week 1 — heavier working sets across primary patterns", loadingNotes: "Add 2.5–5% vs Week 1. RPE 8. Complete all prescribed sets. This is the overload week." },
+      { sessionRole: "Top Set Focus", emphasis: "Work to a heavy top set — single or triple at RPE 8.5–9, then back-off volume", loadingNotes: "Work up methodically. 1–3 heavy top sets. Back-off volume at 85% of top set. Log everything." },
+      { sessionRole: "Strength Density", emphasis: "More total heavy volume — extra back-off sets, more reps at working weight", loadingNotes: "Add 1 set to primary compound. Maintain load. Density drives strength adaptations over time." },
+      { sessionRole: "Complementary Strength Day", emphasis: "Second heavy day of the week — reinforce primary pattern from a different angle", loadingNotes: "Different variation of primary pattern (pause, deficit, close grip). 78–83% loads." },
+    ],
+    intensify: [
+      { sessionRole: "Peak Strength Expression", emphasis: "Heaviest loads of the block — work up to true top sets at RPE 9–9.5", loadingNotes: "This is the peak. 1–3 reps at near-max. Full rest (4–5 min). No accessory work to protect CNS." },
+      { sessionRole: "Max Effort Day", emphasis: "Maximum strength expression — competition-style loading, no holding back", loadingNotes: "RPE 9.5. Warm-up well. This session is the culmination of the block. Go heavy." },
+      { sessionRole: "Technical Max", emphasis: "Top sets with perfect technique — validate that technique holds under peak load", loadingNotes: "If technique breaks at this load, back off. A clean technical max is worth more than a grinding PR." },
+      { sessionRole: "Heavy Complementary Day", emphasis: "Heavy variation on the secondary pattern — maintain strength base across all patterns", loadingNotes: "RPE 8.5. Different primary lift than Day 1. Both primary patterns reach peak this week." },
+    ],
+    deload: [
+      { sessionRole: "Technical Deload", emphasis: "Movement quality at light loads — reinforce technique before next block", loadingNotes: "60–65% loads. 3 × 5 max. Perfect reps. No weight increase this week." },
+      { sessionRole: "Active Recovery Strength", emphasis: "Blood flow and joint health — maintain motor patterns without neural demand", loadingNotes: "50–60% loads. Feel good. Leave the gym more energized than when you entered." },
+    ],
+  },
+
+  work_capacity: {
+    establish: [
+      { sessionRole: "Conditioning Baseline", emphasis: "Establish work:rest ratios and session density baseline — find sustainable pace", loadingNotes: "Zone 2–3 effort. Complete all work. Record times for Week 2 density comparison." },
+      { sessionRole: "Interval Foundation", emphasis: "Structured interval introduction — named work duration and rest duration", loadingNotes: "State energy system: aerobic base / lactate threshold / VO2max. Every rep has work and rest times." },
+      { sessionRole: "Strength Conditioning", emphasis: "Compound strength work at conditioning-appropriate loads — strength base for work capacity", loadingNotes: "Moderate loads. 3 × 8–12. This maintains strength while building conditioning base." },
+      { sessionRole: "Aerobic Base Development", emphasis: "Sub-threshold sustained work — build the aerobic engine that powers all higher intensities", loadingNotes: "Zone 2 steady state or structured interval at moderate intensity. RPE 5–6. Long duration." },
+    ],
+    build: [
+      { sessionRole: "Density Progression", emphasis: "Same work volume in less time — improve efficiency and aerobic capacity", loadingNotes: "Reduce rest by 15–20% from Week 1. Maintain quality — do not sacrifice intensity for pace." },
+      { sessionRole: "Lactate Threshold Work", emphasis: "Sustained high-intensity intervals — push the threshold, build race-pace endurance", loadingNotes: "Work at RPE 7–8. Named intervals: 3 × 5 min at threshold, 2 min rest. Log all times." },
+      { sessionRole: "Circuit Conditioning", emphasis: "Multi-exercise conditioning circuit — sustained work output across compound movements", loadingNotes: "4–6 stations. 40–50 sec work / 15–20 sec transition. 3–4 rounds. Record total completion time." },
+      { sessionRole: "VO2max Intervals", emphasis: "Short, high-intensity intervals — push maximum oxygen uptake capacity", loadingNotes: "30 sec max effort / 90 sec rest × 8–10. Full effort. This builds the aerobic ceiling." },
+    ],
+    intensify: [
+      { sessionRole: "Peak Conditioning Output", emphasis: "Maximum sustainable work output — highest density session of the block", loadingNotes: "Compressed rest periods. All-out effort. This is the fitness test — can you maintain quality under fatigue?" },
+      { sessionRole: "Race-Pace Simulation", emphasis: "Competition-level conditioning demands — sport-specific or goal-specific intensity", loadingNotes: "Specific work to the goal (5K pace, sport conditioning, fight rounds). Maximal sustainable intensity." },
+      { sessionRole: "Anaerobic Capacity Peak", emphasis: "Peak anaerobic work — highest intensity intervals with incomplete recovery", loadingNotes: "Maximum effort. Incomplete rest. Build tolerance to high-intensity fatigue states." },
+    ],
+    deload: [
+      { sessionRole: "Active Recovery Conditioning", emphasis: "Light aerobic work — flush fatigue, maintain aerobic fitness, promote recovery", loadingNotes: "Zone 2 only. 20–30 min easy. No intervals. Active recovery, not training." },
+      { sessionRole: "Movement Quality Day", emphasis: "Technique and mobility focus — no conditioning demands, pure recovery", loadingNotes: "Yoga flow, mobility work, light movement. Recovery is the goal." },
+    ],
+  },
+
+  re_entry_resilience: {
+    establish: [
+      { sessionRole: "Movement Confidence", emphasis: "Reestablish movement patterns at very low load — confidence and tissue preparation", loadingNotes: "RPE 5 maximum. Bodyweight or very light load. Leave feeling good, not fatigued." },
+      { sessionRole: "Tissue Preparation", emphasis: "Warm tissue to training demands — gentle loading to reinforce movement quality", loadingNotes: "Isometric before dynamic. Bilateral before unilateral. 2 × 10–15 per movement." },
+      { sessionRole: "Work Capacity Assessment", emphasis: "Understand current work tolerance — set the floor for progressive loading", loadingNotes: "Conservative loads. Record all sets/reps. This establishes the baseline for Week 2." },
+    ],
+    build: [
+      { sessionRole: "Progressive Load Day", emphasis: "Small load increase from Week 1 — confidence at slightly higher demands", loadingNotes: "RPE 6–7 max. Small weight increase where Week 1 felt easy. Conservative progression." },
+      { sessionRole: "Volume Tolerance Build", emphasis: "Add one set to primary movements — assess recovery between sessions", loadingNotes: "Additional set on primary lifts. Maintain quality. Recovery is still the primary constraint." },
+      { sessionRole: "Movement Repertoire Day", emphasis: "Expand the exercise variety — introduce additional movement patterns at low load", loadingNotes: "New movements at RPE 5–6. Learn the movement — not test the limit." },
+    ],
+    intensify: [
+      { sessionRole: "Challenge Day", emphasis: "Moderate challenge — assess true capacity after 2 weeks of foundation work", loadingNotes: "RPE 7–7.5 ceiling. First real test of readiness. Note any discomfort for coach review." },
+      { sessionRole: "Full Session Competency", emphasis: "Complete full session template at moderate loads — prove session tolerance", loadingNotes: "All exercises in the template. Moderate effort. Success is completing all sets with good form." },
+    ],
+    deload: [
+      { sessionRole: "Consolidation Day", emphasis: "Solidify gains — submaximal practice of all learned patterns at reduced volume", loadingNotes: "60% volume. RPE 5. Movement quality only. Prepare for next block entry." },
+      { sessionRole: "Readiness Assessment", emphasis: "Light activity to assess recovery and readiness for the next block", loadingNotes: "Easy movement. How does the body feel? This informs the next block selection." },
+    ],
+  },
+};
+
+/** Apply block-type-specific session role language where defined. */
+function applyBlockTypeOverlay(
+  template: SessionRoleTemplate,
+  blockType: MonthlyBlockType | SpecialPopBlockType,
+  role: WeekRole,
+  dayIndex: number,
+): SessionRoleTemplate {
+  const blockOverlays = BLOCK_SESSION_ROLE_OVERLAYS[blockType];
+  if (!blockOverlays) return template;
+  const weekRoleOverlays = blockOverlays[role];
+  if (!weekRoleOverlays || weekRoleOverlays.length === 0) return template;
+
+  const override = weekRoleOverlays[dayIndex % weekRoleOverlays.length];
+  if (!override) return template;
+
+  return {
+    ...template,
+    sessionRole: override.sessionRole,
+    emphasis: override.emphasis,
+    loadingNotes: override.loadingNotes,
+  };
+}
+
 function assignSessionRoles(
   role: WeekRole,
   daysPerWeek: number,
@@ -380,9 +545,10 @@ function assignSessionRoles(
       continue;
     }
 
+    const overlaidTemplate = applyBlockTypeOverlay(template, blockType, role, i);
     roles.push({
       dayIndex: i,
-      ...template,
+      ...overlaidTemplate,
     });
   }
 

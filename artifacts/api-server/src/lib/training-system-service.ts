@@ -1084,12 +1084,24 @@ export interface ChatProgramDay {
   notes?: string;
 }
 
+export interface BlockMetadata {
+  blockType: string;
+  blockDisplayName: string;
+  missionStatement: string;
+  weekProgressionArc: string;
+  primaryAdaptation: string;
+  volumeProfile: "high" | "moderate" | "low";
+  intensityProfile: "high" | "moderate" | "low";
+}
+
 export interface ChatProgram {
   programName: string;
   description?: string;
   progressionStrategy?: string;
   splitType?: string;
   days: ChatProgramDay[];
+  /** Block metadata from the monthly planner — attached server-side before DB save */
+  blockMetadata?: BlockMetadata | null;
 }
 
 // Maps the AI's exercise classification string to the DB category enum.
@@ -1230,7 +1242,19 @@ export async function createTrainingSystemFromProgram(
     equipmentAccess: "As configured in your program",
     constraints: null,
     status: "active",
-    metadata: { source: "chat", progressionStrategy: program.progressionStrategy ?? null } as any,
+    metadata: {
+      source: "chat",
+      progressionStrategy: program.progressionStrategy ?? null,
+      ...(program.blockMetadata ? {
+        blockType: program.blockMetadata.blockType,
+        blockDisplayName: program.blockMetadata.blockDisplayName,
+        missionStatement: program.blockMetadata.missionStatement,
+        weekProgressionArc: program.blockMetadata.weekProgressionArc,
+        primaryAdaptation: program.blockMetadata.primaryAdaptation,
+        volumeProfile: program.blockMetadata.volumeProfile,
+        intensityProfile: program.blockMetadata.intensityProfile,
+      } : {}),
+    } as any,
   }).returning();
 
   logger.info({ systemId: system.id }, "[TrainingSystem] system created");
@@ -1388,7 +1412,19 @@ export async function upsertTrainingSystemFromProgram(
       overarchingGoal: program.description ?? program.programName,
       trainingStyle: program.splitType ?? phaseConfig.phaseName,
       weeklyFrequency: daysPerWeek,
-      metadata: { source: "chat_edit", progressionStrategy: program.progressionStrategy ?? null } as any,
+      metadata: {
+        source: "chat_edit",
+        progressionStrategy: program.progressionStrategy ?? null,
+        ...(program.blockMetadata ? {
+          blockType: program.blockMetadata.blockType,
+          blockDisplayName: program.blockMetadata.blockDisplayName,
+          missionStatement: program.blockMetadata.missionStatement,
+          weekProgressionArc: program.blockMetadata.weekProgressionArc,
+          primaryAdaptation: program.blockMetadata.primaryAdaptation,
+          volumeProfile: program.blockMetadata.volumeProfile,
+          intensityProfile: program.blockMetadata.intensityProfile,
+        } : {}),
+      } as any,
     })
     .where(eq(trainingSystems.id, existingSystem.id));
 
