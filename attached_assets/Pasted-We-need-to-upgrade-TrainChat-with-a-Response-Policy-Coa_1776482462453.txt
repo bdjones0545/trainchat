@@ -1,0 +1,321 @@
+We need to upgrade TrainChat with a Response Policy + Coach Behavior System that sits on top of the existing language system.
+
+This is NOT just about understanding user language better. It is about deciding:
+- when to create a new program
+- when to modify an existing one
+- when to adjust only today’s training
+- when to answer conversationally without regenerating
+- when to explain reasoning
+- how to respond in a human, coach-like way
+- how verbose to be
+- how to preserve continuity so the agent feels like a real coach instead of a command parser
+
+GOAL
+Make the agent decide the right action and respond like a human coach.
+
+CORE PROBLEM
+Even with a stronger language system, the agent can still feel robotic if it does not know:
+1. what kind of action the user actually wants
+2. whether it should generate or just respond
+3. how to phrase the response naturally
+
+Right now we need a behavior layer that turns interpreted language into:
+- the right system action
+- the right scope of change
+- the right response style
+
+PRIMARY OBJECTIVES
+
+1. Add a Response Policy Engine
+2. Add action-type classification for user messages
+3. Determine when to create vs modify vs respond only
+4. Determine response tone / style / verbosity
+5. Make the agent feel human and coach-like
+6. Preserve context and continuity from the current program and thread
+7. Add DEV audits so we can inspect why the agent chose to act or respond a certain way
+
+RESPONSE POLICY ENGINE
+
+Create a new decision layer that runs after the language system has produced its structured intent.
+
+Possible action types should include at minimum:
+- CREATE_PROGRAM
+- MODIFY_PROGRAM
+- MODIFY_BLOCK
+- MODIFY_DAY
+- ADJUST_TODAY
+- SWAP_EXERCISE
+- EXPLAIN_REASONING
+- ANSWER_QUESTION
+- CHECK_IN_RESPONSE
+- COACH_CONVERSATION
+- PROGRESS_PROGRAM
+- REGRESS_PROGRAM
+- DELOAD_PROGRAM
+- CLARIFY_SOFTLY
+- NO_PROGRAM_CHANGE
+
+Each incoming user message should map to:
+- actionType
+- changeScope
+- responseMode
+- confidence
+- preserveTargets
+- programMutationNeeded (true/false)
+- explanationNeeded (true/false)
+
+DECISION RULES
+
+The system must determine whether the user intends to:
+1. create something new
+2. modify something existing
+3. adjust only the current session/day
+4. ask a question
+5. reflect conversationally
+6. ask for rationale
+7. express fatigue / pain / readiness that should change training
+8. give soft preference feedback that should affect future programming
+
+Examples:
+
+“Build me a 4-day strength program”
+→ CREATE_PROGRAM
+
+“Keep the same vibe but change the lower days”
+→ MODIFY_PROGRAM or MODIFY_BLOCK
+
+“I’m smoked today”
+→ ADJUST_TODAY
+
+“Why is this day built this way?”
+→ EXPLAIN_REASONING
+
+“No barbell this week”
+→ MODIFY_PROGRAM with equipment constraint
+
+“This looks good”
+→ COACH_CONVERSATION or NO_PROGRAM_CHANGE
+
+“I liked the last one except day 2”
+→ MODIFY_DAY or MODIFY_PROGRAM with preserve instructions
+
+“How would this help my speed?”
+→ ANSWER_QUESTION or EXPLAIN_REASONING
+
+RESPONSE MODES
+
+Create response modes such as:
+- COACH_CONCISE
+- COACH_CONFIRM_AND_ACT
+- COACH_EXPLANATORY
+- COACH_ANALYTICAL
+- COACH_MOTIVATIONAL
+- COACH_CONVERSATIONAL
+- COACH_LIGHT_CLARIFY
+
+Default preference should be:
+- act confidently when likely intent is clear
+- avoid unnecessary clarification
+- avoid robotic repetition
+- keep responses grounded and coach-like
+
+HUMAN / COACH VOICE RULES
+
+The agent should sound like:
+- a smart coach
+- calm and competent
+- conversational, not robotic
+- not overly corporate
+- not fake-hype
+- not generic AI assistant
+
+The response layer should do all of the following:
+
+1. Natural acknowledgment
+Bad:
+“Constraint received. Updating program.”
+Good:
+“Got it — I’ll keep the structure and make this easier on your knees.”
+
+2. Light mirroring of user language
+If the user says:
+- more pop
+- less grindy
+- same vibe
+- smoked today
+the agent can lightly mirror that phrasing while translating it into smart programming behavior.
+
+3. Avoid overexplaining by default
+Most of the time, the best response is short and confident.
+
+4. Preserve context
+Examples:
+- “You liked the med-ball work, so I’m keeping that in.”
+- “I’ll leave upper body alone and clean up the lower days.”
+- “Since you said you’re smoked today, I’m adjusting the session instead of rebuilding the whole plan.”
+
+5. Differentiate action from explanation
+If the user wants action, act.
+If the user wants understanding, explain.
+If the user is just talking, respond like a human coach.
+
+CHANGE SCOPE SYSTEM
+
+The system should classify the requested scope of change:
+- FULL_PROGRAM
+- CURRENT_BLOCK
+- SINGLE_WEEK
+- SINGLE_DAY
+- SINGLE_SLOT
+- SINGLE_EXERCISE
+- NO_CHANGE
+
+This is critical so the agent does not over-regenerate.
+Example:
+“I’m smoked today”
+should not trigger full-program rebuild by default.
+It should usually trigger:
+- SINGLE_DAY
+- ADJUST_TODAY
+
+CONTEXT / MEMORY INTEGRATION
+
+Use current available app state to inform behavior:
+- current active program
+- current block identity
+- current training mode
+- prior preserved preferences
+- recent user likes/dislikes
+- today’s session context if available
+
+Examples:
+“keep the same vibe”
+should reference the current active program, not generic assumptions.
+
+“fix the lower days”
+should preserve upper structure when possible.
+
+“smoked today”
+should adapt today first, not rewrite the month unless broader fatigue signals exist.
+
+RESPONSE TEMPLATING RULES
+
+Do NOT use repetitive canned templates.
+Instead, create flexible response-building rules that combine:
+- acknowledgment
+- brief interpretation
+- action statement
+- optional reason
+
+Examples of good patterns:
+
+A. Confirm and act
+“Got it — I’ll keep the overall structure and make the lower days more explosive with less grind.”
+
+B. Explain briefly
+“Because this block is built around force production, I kept the main lower lift more stable and pushed the explosive work around it.”
+
+C. Adapt to state
+“Since you’re smoked today, I’m adjusting the session instead of forcing the full workload.”
+
+D. Preserve + modify
+“I’ll leave the upper body as-is and clean up the lower half.”
+
+E. Conversational coach reply
+“Yeah, that makes sense. We can keep the feel of the plan and just sharpen the parts that are dragging.”
+
+STYLE / VERBOSITY CONTROL
+
+Add response-length logic so the agent can vary between:
+- short confirm-and-act
+- medium coach explanation
+- longer analytical explanation
+
+Use user intent to choose:
+- if user gives a direct instruction → short / medium
+- if user asks why → medium / longer
+- if user is reflecting emotionally / conversationally → human conversational
+- if user is uncertain / vague → short soft clarification or best grounded interpretation
+
+DEV AUDIT SYSTEM
+
+Add DEV-only logs:
+- [ResponsePolicyAudit]
+- [ResponsePolicyAuditWarning]
+
+For every interpreted user message, log:
+- rawUserMessage
+- structuredIntentSummary
+- chosenActionType
+- chosenChangeScope
+- chosenResponseMode
+- programMutationNeeded
+- explanationNeeded
+- confidence
+- preserveTargets
+- contextUsed
+- finalResponseStrategy
+
+Add concise grep-friendly lines like:
+[ResponsePolicyAudit] action=MODIFY_PROGRAM scope=FULL_PROGRAM mode=COACH_CONFIRM_AND_ACT mutation=true confidence=0.84
+
+Warnings:
+[ResponsePolicyAuditWarning] low-confidence action triggered full-program rebuild
+[ResponsePolicyAuditWarning] user likely requested day adjustment but full rebuild was selected
+[ResponsePolicyAuditWarning] preserve instruction detected but no preserve target used
+[ResponsePolicyAuditWarning] conversational input incorrectly routed to generation path
+
+TEST HARNESS
+
+Create a DEV-only response behavior harness with example messages such as:
+- build me a 4-day strength program
+- keep the same vibe but fix the lower days
+- I’m smoked today
+- no barbell this week
+- why did you choose this exercise
+- this looks good
+- same idea, just more pop
+- keep upper body and make the lower days easier on my knees
+- I liked the last one except day 2
+- make it more athletic
+- actually never mind, make it shorter
+- I want to train but not get crushed
+
+For each example, print:
+- structured intent
+- chosen action
+- chosen scope
+- chosen response mode
+- whether program mutation occurs
+- example response draft
+
+SUCCESS CRITERIA
+
+This upgrade is successful if:
+1. The agent correctly distinguishes between create / modify / adjust / explain / converse
+2. The agent does not over-generate when a lighter response would be better
+3. The agent responds in a way that feels coach-like and human
+4. The agent preserves continuity from the current context
+5. The agent handles vague but common coaching language gracefully
+6. The response behavior is auditable in DEV
+7. Existing working generation behavior is preserved and improved, not broken
+
+DELIVERABLES
+
+1. Add Response Policy Engine
+2. Add action type and change scope classification
+3. Add coach-style response mode selection
+4. Add human/coach response-building rules
+5. Add DEV response policy audits and warnings
+6. Add response behavior test harness
+7. Print a concise summary of changed files and why
+8. Print at least 10 example response-policy outputs across different user message types
+
+IMPORTANT IMPLEMENTATION RULES
+
+- This is a system upgrade, not a shallow prompt tweak
+- Keep the language system, response policy, and generation engine as separate layers
+- Prefer typed decision objects
+- Avoid giant if/else trees
+- Avoid repetitive canned language
+- The system should feel like a human coach making decisions, not a chatbot reacting mechanically

@@ -6,6 +6,8 @@ import { requireAuth } from "../middlewares/auth";
 import { generateAIResponse, type ProgramStructure, validateProgramAgainstConstraints } from "../lib/ai";
 import { getLastMonthlyPlan } from "../lib/program-architecture-engine";
 import { classifyIntent, logIntentSummary, extractConstraints, type IntentResult, type ExtractedConstraints } from "../lib/intent";
+import { extractAgentIntentProfile } from "../lib/language-system";
+import { auditLanguageInterpretation } from "../lib/language-audit";
 import {
   type ResponseMode,
   formatShortCircuitResponse,
@@ -622,6 +624,16 @@ Keep it helpful and intelligent, never promotional.`;
   }
 
   logIntentSummary(parsed.data.content, intentResult, hasAnyProgram);
+
+  // ── Language System — audit classification with AgentIntentProfile ─────────
+  // Runs the broad English coaching language interpretation layer and emits a
+  // structured audit log. Non-fatal — errors do not block the conversation flow.
+  try {
+    const langProfile = extractAgentIntentProfile(parsed.data.content, hasAnyProgram);
+    auditLanguageInterpretation(langProfile);
+  } catch (langErr) {
+    // Intentionally silent — language audit is observability-only
+  }
 
   // ── EXECUTION PLANNER — Central single-brain routing decision ─────────────
   // Converts message + program state + pending clarification into one plan.

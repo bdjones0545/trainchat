@@ -11,6 +11,8 @@
  */
 
 import { logger } from "./logger";
+import { extractAgentIntentProfile, buildAgentIntentProfilePromptSection } from "./language-system";
+import { auditLanguageInterpretation } from "./language-audit";
 import { buildSwapContext, getProgressions, findExerciseByName, getSwapCandidates } from "./exercise-service";
 import { resolveHarderEasierFallback } from "./harder-easier-fallback";
 import { runIntentFamilyPipeline, logIntentFamilyDebug, type IntentFamilyPipelineResult } from "./intent-family-engine";
@@ -295,7 +297,8 @@ function buildEditSystemPrompt(
   adaptationContext?: string,
   decisionMemoryContext?: string,
   exerciseSwapContext?: string,
-  intentFamilyDirective?: string
+  intentFamilyDirective?: string,
+  languageSystemSection?: string
 ): string {
   let targetFocus = "";
   if (targetContext) {
@@ -329,6 +332,10 @@ function buildEditSystemPrompt(
     ? `\n${intentFamilyDirective}\n`
     : "";
 
+  const langSection = languageSystemSection
+    ? `\n${languageSystemSection}\n`
+    : "";
+
   return `You are an elite performance architect editing a user's structured training system. You program according to NSCA strength & conditioning principles.
 
 You know this athlete. You have worked with them before and remember the decisions you've made together.
@@ -336,7 +343,7 @@ You know this athlete. You have worked with them before and remember the decisio
 You will receive:
 1. The user's current structured training system (with IDs for every entity)
 2. A natural language modification request
-${targetFocus}${swapSection}${intentFamilySection}
+${targetFocus}${swapSection}${intentFamilySection}${langSection}
 Your job is to produce a structured JSON edit plan.
 
 RULES:
@@ -639,12 +646,13 @@ async function interpretWithAI(
   adaptationContext?: string,
   decisionMemoryContext?: string,
   exerciseSwapContext?: string,
-  intentFamilyDirective?: string
+  intentFamilyDirective?: string,
+  languageSystemSection?: string
 ): Promise<EditPlan | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
-  const systemPrompt = buildEditSystemPrompt(systemContext, targetContext, adaptationContext, decisionMemoryContext, exerciseSwapContext, intentFamilyDirective);
+  const systemPrompt = buildEditSystemPrompt(systemContext, targetContext, adaptationContext, decisionMemoryContext, exerciseSwapContext, intentFamilyDirective, languageSystemSection);
 
   try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -2767,6 +2775,19 @@ export async function interpretEditRequest(
     logger.warn({ err }, "[IntentFamilyEngine] Pipeline failed — proceeding without directive");
   }
 
+  // ── Language System — AgentIntentProfile for edit flow ───────────────────
+  // Runs before the OpenAI call so the profile section can be injected into the
+  // edit system prompt. Errors are non-fatal — the edit flow continues without it.
+  let editLanguageSystemSection: string | undefined;
+  try {
+    const editProfile = extractAgentIntentProfile(userRequest, true);
+    auditLanguageInterpretation(editProfile);
+    const profileSection = buildAgentIntentProfilePromptSection(editProfile);
+    if (profileSection) editLanguageSystemSection = profileSection;
+  } catch (langErr) {
+    logger.warn({ langErr }, "[LanguageSystem][Edit] Profile extraction failed — continuing without it");
+  }
+
   // ── Step 4: Call OpenAI ───────────────────────────────────────────────────
   logger.info(
     { request: userRequest.slice(0, 100), hasTargetContext: !!targetContext, targetType: targetContext?.type, escalatedFrom: classification.route === "DETERMINISTIC" ? "deterministic" : undefined, intentFamily: intentFamilyPipelineResult?.familyResult.family },
@@ -2780,7 +2801,8 @@ export async function interpretEditRequest(
     adaptationContext,
     decisionMemoryContext,
     exerciseSwapContext,
-    intentFamilyDirective
+    intentFamilyDirective,
+    editLanguageSystemSection
   );
 
   if (aiPlan && Array.isArray(aiPlan.changes) && aiPlan.changes.length > 0) {

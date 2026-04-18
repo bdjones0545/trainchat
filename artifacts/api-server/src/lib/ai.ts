@@ -45,6 +45,8 @@ import { buildReturnFromInjuryContext, getReturnFromInjuryClarification, validat
 import { resolveRoutingDecision, getResolvedSport, getResolvedSeason, type RoutingDecision } from "./message-router";
 import { validateProgrammingQuality, buildQualityRetryPrompt, type ProgrammingValidationInput } from "./program-quality-validator";
 import { type AgentSettingsContext, buildBehaviorInstructions, buildProfileFillContext } from "./agent-settings-resolver";
+import { extractAgentIntentProfile, buildAgentIntentProfilePromptSection } from "./language-system";
+import { auditLanguageInterpretation } from "./language-audit";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -2108,6 +2110,33 @@ export async function generateAIResponse(
     }
   }
 
+  // ── Language System — AgentIntentProfile extraction ──────────────────────
+  // Runs the broad English coaching language interpretation layer.
+  // Produces a rich structured profile from the user's message that supplements
+  // ExtractedConstraints and IntentFamilyResult with:
+  //   - Style preferences (less grindy, more pop, cleaner, etc.)
+  //   - Preservation instructions (keep the vibe, keep upper days, etc.)
+  //   - Recovery state (smoked, cooked, flat, fresh, etc.)
+  //   - Programming directives translated from natural language intent
+  //   - Ambiguity and contradiction flags
+  //
+  // The profile is injected into the prompt as an AGENT INTENT PROFILE section.
+  // It does NOT replace existing constraint/intent/family logic — it adds depth.
+  let agentIntentProfileSection: string | null = null;
+  try {
+    const agentIntentProfile = extractAgentIntentProfile(
+      userMessage,
+      hasActiveProgram ?? (currentProgram != null)
+    );
+    auditLanguageInterpretation(agentIntentProfile);
+    const profileSection = buildAgentIntentProfilePromptSection(agentIntentProfile);
+    if (profileSection) {
+      agentIntentProfileSection = profileSection;
+    }
+  } catch (langErr) {
+    logger.warn({ langErr }, "[LanguageSystem] Profile extraction failed — continuing without it");
+  }
+
   // Build response mode formatting prompt — always injected last so it takes priority.
   // IMPORTANT: Build this even when actionDecision is null (GUIDANCE, REBUILD paths).
   // When actionDecision is absent, derive a synthetic ActionType from the response mode
@@ -2214,7 +2243,7 @@ export async function generateAIResponse(
   const uiContextSection = buildUIContextSection(uiContext);
   // behaviorInstructions placed FIRST (highest priority for style/behavior rules)
   // profileFillContext placed BEFORE constraint contract (prompt-level constraints override profile)
-  const extras = [behaviorInstructions, profileFillContext, adaptationContext, memoryContext, sessionSportOverride, insightHint, conversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, architectureBriefText, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection]
+  const extras = [behaviorInstructions, profileFillContext, adaptationContext, memoryContext, sessionSportOverride, insightHint, conversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, agentIntentProfileSection, architectureBriefText, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection]
     .filter(Boolean)
     .join("\n\n");
   const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;
