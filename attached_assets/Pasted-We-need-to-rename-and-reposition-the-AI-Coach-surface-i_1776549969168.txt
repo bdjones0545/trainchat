@@ -1,0 +1,138 @@
+We need to rename and reposition the “AI Coach” surface inside Active Programs so it is clearly an AGENT surface, not a chatbot/coach surface.
+
+CONTEXT:
+The current sheet says “AI Coach,” but that is the wrong product framing.
+
+This surface is not just giving advice.
+It is connected to the actual refinement / mutation engine and should act as the user’s command layer for modifying:
+- today’s session
+- this week
+- the full block
+
+We want this to feel like:
+- a live agent
+- a system operator
+- a vibe-coding layer for the training system
+
+NOT:
+- a generic AI coach
+- a passive advice chatbot
+- a fake quick-actions menu
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Rename and redesign the surface so it is clearly the AGENT layer connected to the real system.
+
+==================================================
+TASK 1 — RENAME “AI COACH” TO “AGENT”
+==================================================
+
+Replace all visible UI references in this surface from:
+- AI Coach
+
+to:
+- Agent
+
+This includes:
+- sheet title
+- aria labels if relevant
+- component labels if shown to users
+- any supporting microcopy
+
+==================================================
+TASK 2 — UPDATE MICROCOPY TO MATCH AGENT BEHAVIOR
+==================================================
+
+Replace passive coaching copy with system-command copy.
+
+Remove copy like:
+- “Your AI coach is ready to adapt your plan”
+
+Replace with copy like:
+- “Command your system in plain language”
+- “Tell the agent what to change”
+- “Update today, this week, or the full block”
+- “The agent will adapt your training system”
+
+Keep it premium, minimal, and product-consistent.
+
+==================================================
+TASK 3 — MAKE THIS FEEL LIKE THE CENTRAL COMMAND LAYER
+==================================================
+
+The sheet should feel like an Agent command center.
+
+Structure it as:
+- Title: Agent
+- Subtext: command-oriented
+- Scope selector: Today / This Week / This Block
+- Quick actions: command-style actions
+- Free-text input: primary path
+
+The overall feel should be:
+- live
+- capable
+- system-aware
+- not chatty
+- not gimmicky
+
+==================================================
+TASK 4 — CONNECT ALL QUICK ACTIONS TO THE REAL AGENT PIPELINE
+==================================================
+
+Every quick action must map into the same real refinement / mutation engine that powers free-text commands.
+
+No dummy buttons.
+No disconnected UI.
+
+Button taps should:
+1. generate a structured agent request
+2. send it through the real pipeline
+3. post the command + acknowledgment in main chat
+4. refresh the affected session/week/block
+
+==================================================
+TASK 5 — UPGRADE THE INPUT TO FEEL LIKE VIBE CODING
+==================================================
+
+The bottom input should feel like the primary interaction.
+
+Use placeholder copy like:
+- “Tell the agent what to change…”
+- “e.g. make today more explosive”
+- “e.g. reduce fatigue this week”
+- “e.g. shift this block toward recovery”
+
+This should feel like command input, not chatbot prompt input.
+
+==================================================
+TASK 6 — KEEP VISUAL STYLE PREMIUM
+==================================================
+
+Do NOT redesign the entire visual language.
+Stay consistent with TrainChat:
+- dark premium UI
+- minimal layout
+- subtle glow
+- intelligent spacing
+- mobile-first
+
+This is a framing and interaction upgrade, not a loud visual overhaul.
+
+==================================================
+TASK 7 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. what user-facing labels were changed
+2. what microcopy was updated
+3. how the quick actions now connect to the real agent pipeline
+4. how the input now reflects agent-style interaction
+
+==================================================
+FINAL STANDARD
+==================================================
+
+This surface should feel like the user is commanding a live Agent that can actually change their system — not chatting with an “AI coach.”
