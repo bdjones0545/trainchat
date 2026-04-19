@@ -90,6 +90,7 @@ export interface EditResult {
   updatedData: { today: any; week: any; block: any };
   changeLogId?: number;
   diff?: EditDiff;
+  chatConversationId?: number | null;
 }
 
 export interface DirectionOption {

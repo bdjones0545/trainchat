@@ -267,7 +267,7 @@ export default function Chat() {
   const { data: messages = [], isLoading: messagesLoading } = useListMessages(
     activeConvoId!,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    { query: { enabled: !!activeConvoId } as any }
+    { query: { enabled: !!activeConvoId, refetchInterval: 15000, refetchOnMount: "always" } as any }
   );
   const { data: memories = [], isLoading: memoriesLoading } = useListMemories({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

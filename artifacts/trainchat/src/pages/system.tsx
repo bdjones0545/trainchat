@@ -56,7 +56,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useGetMe } from "@workspace/api-client-react";
 import { useLogout } from "@workspace/api-client-react";
-import { customFetch } from "@workspace/api-client-react";
+import { customFetch, getListMessagesQueryKey } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import { clearAuthState } from "@/lib/routing";
 import { useFocusMode } from "@/hooks/useFocusMode";
@@ -3839,6 +3839,12 @@ export default function SystemPage() {
     queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
     queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
     queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
+
+    // 4b. Invalidate the chat conversation that received the edit acknowledgment
+    //     so it loads immediately when the user switches back to Coach.
+    if (result.chatConversationId) {
+      queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(result.chatConversationId) });
+    }
 
     // 5. Switch to most relevant tab
     const scope = result.scope;

@@ -107,7 +107,7 @@ async function postEditAckToChat(
   systemId: number,
   changeLogId: number | undefined,
   diff?: EditDiff,
-): Promise<void> {
+): Promise<number | null> {
   try {
     const [recentConvo] = await db
       .select({ id: conversationsTable.id })
@@ -116,7 +116,7 @@ async function postEditAckToChat(
       .orderBy(desc(conversationsTable.updatedAt))
       .limit(1);
 
-    if (!recentConvo) return;
+    if (!recentConvo) return null;
 
     const summary = editResult.changeSummary;
     const base = summary.endsWith(".") ? summary : `${summary}.`;
@@ -171,8 +171,10 @@ async function postEditAckToChat(
       },
       "[SystemEdit] Posted programs-page edit acknowledgment to chat"
     );
+    return recentConvo.id;
   } catch (err) {
     logger.warn({ err, userId }, "[SystemEdit] Failed to post edit ack to chat (non-fatal)");
+    return null;
   }
 }
 
@@ -356,18 +358,16 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
     // 6. Compute structured diff from before/after snapshots
     const diff = computeSnapshotDiff(editResult.beforeSnapshot, editResult.afterSnapshot);
 
-    // 7. Echo the change to the user's most recent chat conversation. Fire-and-forget.
-    postEditAckToChat(userId, editResult, activeSystem.id, changeLogId, diff).catch(() => {});
-
-    // 7. Sync coach memories from the edit — same path as the conversation pipeline.
-    //    Fire-and-forget: never block the response on memory operations.
+    // Sync memories fire-and-forget — never block the response on memory ops.
     syncMemoriesFromData(userId).catch(() => {});
     if (userRequest.length > 10) {
       extractMemoriesFromMessage(userId, userRequest).catch(() => {});
     }
 
-    // 7. Reload affected data to return fresh state
-    const [today, week, block] = await Promise.all([
+    // Echo the change to the user's most recent chat conversation AND reload
+    // affected data in parallel so neither blocks the other.
+    const [chatConversationId, today, week, block] = await Promise.all([
+      postEditAckToChat(userId, editResult, activeSystem.id, changeLogId, diff).catch(() => null),
       getTodaySession(userId).catch(() => null),
       getCurrentWeek(userId).catch(() => null),
       getBlockSummary(userId).catch(() => null),
@@ -384,6 +384,7 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       changeLogId,
       diff,
       propagationSummary: editResult.propagationSummary ?? null,
+      chatConversationId: chatConversationId ?? null,
       updatedData: { today, week, block },
     });
   } catch (err) {
