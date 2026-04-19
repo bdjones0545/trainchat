@@ -625,8 +625,8 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditC
               onClick={onLogSession}
               className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground px-4 py-2.5 text-xs font-bold hover:bg-primary/90 active:scale-[0.98] transition-all"
             >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              Log Session
+              <div className="w-1.5 h-1.5 rounded-full bg-primary-foreground/80 animate-pulse flex-shrink-0" />
+              Resume Session
             </button>
           ) : (
             <button
@@ -3482,12 +3482,34 @@ export default function SystemPage() {
   const [showReadinessCheckIn, setShowReadinessCheckIn] = useState(false);
   const [showSessionFeedback, setShowSessionFeedback] = useState(false);
   const [feedbackSessionLabel, setFeedbackSessionLabel] = useState<string | undefined>(undefined);
-  const [sessionLoggedToday, setSessionLoggedToday] = useState(false);
-  const [sessionInProgress, setSessionInProgress] = useState(false);
+  // ── Real session lifecycle — server-backed active session ─────────────────
+  interface ActiveSessionData {
+    id?: number;
+    status: "not_started" | "in_progress" | "completed";
+    startedAt?: string;
+    completedAt?: string;
+  }
 
-  // ── Unified start-session handler: sets UI state + posts to backend pipeline ─
-  function handleStartSession() {
-    setSessionInProgress(true);
+  const { data: activeSessionData, refetch: refetchActiveSession } = useQuery<ActiveSessionData>({
+    queryKey: ["active-session"],
+    queryFn: () => customFetch<ActiveSessionData>("/api/active-session"),
+    enabled: !!activeSystem,
+    staleTime: 0,
+  });
+
+  const serverSessionStatus = activeSessionData?.status ?? "not_started";
+  const sessionLoggedToday = serverSessionStatus === "completed";
+  const sessionInProgress = serverSessionStatus === "in_progress";
+
+  // ── Unified start-session handler: persists to backend ───────────────────
+  async function handleStartSession() {
+    try {
+      await customFetch("/api/active-session/start", { method: "POST" });
+      refetchActiveSession();
+      queryClient.invalidateQueries({ queryKey: ["active-session"] });
+    } catch {
+      // Non-fatal — UI still usable
+    }
     // Fire-and-forget: backend posts session-start ack to chat
     customFetch("/api/training-system/session-start", { method: "POST" }).catch(() => {});
   }
@@ -4180,7 +4202,7 @@ export default function SystemPage() {
               Check In
             </button>
           )}
-          {/* Primary session CTA — state-driven */}
+          {/* Primary session CTA — state-driven: not_started → in_progress → completed */}
           {sessionLoggedToday ? (
             <div className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-green-500/10 border border-green-500/20 px-4 py-2.5">
               <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
@@ -4191,8 +4213,8 @@ export default function SystemPage() {
               onClick={() => { setFeedbackSessionLabel(undefined); setShowSessionFeedback(true); }}
               className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground px-4 py-2.5 text-xs font-bold hover:bg-primary/90 active:scale-[0.98] transition-all"
             >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              Log Session
+              <div className="w-1.5 h-1.5 rounded-full bg-primary-foreground/80 animate-pulse flex-shrink-0" />
+              Resume / Log Session
             </button>
           ) : (
             <button
@@ -4377,9 +4399,10 @@ export default function SystemPage() {
           sessionLabel={feedbackSessionLabel}
           onClose={() => setShowSessionFeedback(false)}
           onSubmitted={() => {
-            setSessionLoggedToday(true);
-            setSessionInProgress(false);
-            // Invalidate all training system queries — session log updates load recommendations
+            // Mark session as completed on the server, then refresh all related queries
+            customFetch("/api/active-session/complete", { method: "POST" })
+              .then(() => queryClient.invalidateQueries({ queryKey: ["active-session"] }))
+              .catch(() => {});
             queryClient.invalidateQueries({ queryKey: ["insights"] });
             queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
             queryClient.invalidateQueries({ queryKey: ["training-system-week"] });

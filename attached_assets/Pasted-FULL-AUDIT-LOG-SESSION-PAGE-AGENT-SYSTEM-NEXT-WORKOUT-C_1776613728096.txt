@@ -1,0 +1,220 @@
+FULL AUDIT — LOG SESSION PAGE → AGENT → SYSTEM → NEXT WORKOUT
+
+CONTEXT:
+The Log Session page now captures:
+- completion status
+- duration
+- difficulty
+- pain/discomfort
+- post-session feeling
+- enjoyment
+- optional notes
+
+This should not behave like a passive feedback form.
+It should be one of the strongest signals into the training engine.
+
+We need to audit exactly how submitting this page:
+1. connects to the agent
+2. updates the training system
+3. influences the next workout / next sessions / current block
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Verify and fix the full pipeline so Log Session acts as a real adaptive input into the program.
+
+==================================================
+TASK 1 — TRACE SUBMISSION END TO END
+==================================================
+
+For one real submission, log the full path:
+
+[LogSessionAudit] {
+  rawFormPayload,
+  normalizedPayload,
+  dbWriteTarget,
+  changeLogCreated,
+  agentMemoryUpdated,
+  adaptationTriggered,
+  chatAcknowledgmentPosted,
+  uiRefreshTriggered
+}
+
+We need to see exactly where the form goes after Submit Feedback is pressed.
+
+==================================================
+TASK 2 — VERIFY DATABASE PERSISTENCE
+==================================================
+
+Confirm all fields are stored correctly:
+- completed / partial / skipped
+- session duration
+- difficulty
+- pain/discomfort
+- post-session feeling
+- enjoyment
+- optional notes
+
+Return:
+- where each field is stored
+- whether it is session-level, day-level, or user-memory-level
+
+==================================================
+TASK 3 — VERIFY AGENT MEMORY UPDATE
+==================================================
+
+Audit whether submission updates:
+training_systems.metadata.agentMemory
+or equivalent memory layer
+
+Expected memory examples:
+- fatigue / recovery signal
+- pain signal
+- enjoyment / adherence signal
+- difficulty tolerance
+- completion consistency
+
+If not currently stored, add a structured mapping.
+
+==================================================
+TASK 4 — VERIFY MAIN CHAT ACKNOWLEDGMENT
+==================================================
+
+After submit, the agent should post a useful acknowledgment into main chat.
+
+Bad example:
+- "Feedback submitted"
+
+Good example:
+- "Got it — session was completed, effort felt hard, and no pain was reported. I’ll keep the block progressing but watch fatigue heading into the next workout."
+
+Audit whether this happens now.
+If not, add it.
+
+==================================================
+TASK 5 — VERIFY NEXT-WORKOUT INFLUENCE
+==================================================
+
+This is the most important part.
+
+Audit whether the submission influences:
+- the next scheduled workout
+- the rest of the week
+- the current block bias
+- exercise substitutions if pain was reported
+
+Expected examples:
+
+CASE A:
+Completed + right level + no pain + energized
+→ keep progression on track or slightly advance
+
+CASE B:
+Completed + too hard + tired/drained
+→ reduce next session fatigue / soften progression
+
+CASE C:
+Pain reported
+→ flag movement family, add monitoring note, reduce risky patterns in next sessions
+
+CASE D:
+Skipped / partial
+→ agent adapts with recovery logic or reduced progression pressure
+
+==================================================
+TASK 6 — MAP EACH FIELD TO SYSTEM BEHAVIOR
+==================================================
+
+Create explicit logic for how each field affects the system.
+
+Examples:
+
+completion:
+- skipped → recovery bias / progression hold
+- partial → partial load carryover / conservative next step
+- completed → progression eligible
+
+difficulty:
+- too easy → raise challenge
+- right level → hold progression
+- too hard → reduce load or density
+
+pain:
+- mild/moderate/significant/severe
+→ trigger pain-aware refinements and movement-family protection
+
+post-session feeling:
+- drained / tired → reduce next-session stress
+- good / energized → maintain or slightly progress
+
+enjoyment:
+- low enjoyment repeatedly → bias toward more preferred training style or exercise variation
+
+notes:
+- NLP parse pain location, exercise mentions, substitution requests, constraints
+
+==================================================
+TASK 7 — AUDIT NLP ON OPTIONAL NOTES
+==================================================
+
+The optional notes field is extremely valuable.
+
+Audit whether notes are parsed for:
+- pain location
+- exercise problems
+- equipment issues
+- time constraints
+- substitution requests
+- performance comments
+
+If not, route notes through the same language understanding layer used elsewhere in the system.
+
+==================================================
+TASK 8 — CHECK IF THIS CREATES REAL ADAPTATION OR JUST STORES DATA
+==================================================
+
+We need an honest answer:
+- Is the system currently just collecting feedback?
+OR
+- Is it truly adapting the next workout/week?
+
+If it is only storing data, implement actual adaptation logic.
+
+==================================================
+TASK 9 — UI FEEDBACK AFTER SUBMIT
+==================================================
+
+After submission:
+- confirm success clearly
+- optionally show a short “what the agent will do next” message
+- refresh the Today / This Week / Block views if adaptation occurs
+
+Example:
+"Logged. The next workout will stay on plan, but I’ve softened fatigue slightly based on how hard this felt."
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. where the form currently writes
+2. whether agent memory is updated
+3. whether main chat gets an acknowledgment
+4. whether the next workout is currently influenced
+5. how each form field maps to adaptation
+6. what gaps were fixed
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Submitting Log Session should do more than save feedback.
+
+It should:
+- update memory
+- inform the agent
+- influence the next workout
+- influence the week/block when appropriate
+- post a useful acknowledgment to main chat
+- keep the training system adaptive and alive

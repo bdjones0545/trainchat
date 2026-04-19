@@ -604,12 +604,71 @@ function ProgramTab({
     sendRefinement(msg, "refine-input", { interactionType: "freeform_refine" });
   }
 
-  // ── Session mode ─────────────────────────────────────────────────────────
-  type SessionMode = "idle" | "active" | "completed";
-  const [sessionMode, setSessionMode] = useState<SessionMode>("idle");
+  // ── Active session state (server-backed) ─────────────────────────────────
+
+  type ServerSessionStatus = "not_started" | "in_progress" | "completed";
+  interface ActiveSessionData {
+    id?: number;
+    status: ServerSessionStatus;
+    startedAt?: string;
+    completedAt?: string;
+    savedProgramId?: number;
+    dayNumber?: number;
+  }
+
+  const { data: activeSessionData, refetch: refetchActiveSession } = useQuery<ActiveSessionData>({
+    queryKey: ["active-session"],
+    queryFn: () => customFetch<ActiveSessionData>("/api/active-session"),
+    enabled: !!isPremium && !!isSaved,
+    staleTime: 0,
+  });
+
+  const serverStatus: ServerSessionStatus = activeSessionData?.status ?? "not_started";
+
+  // Local mode for this browser visit: controls inline exercise logging UI
+  type LocalMode = "idle" | "active" | "completed";
+  const [localMode, setLocalMode] = useState<LocalMode>("idle");
   const [sessionLogs, setSessionLogs] = useState<Map<string, SetLog[]>>(new Map());
   const [sessionCompleting, setSessionCompleting] = useState(false);
   const [sessionResult, setSessionResult] = useState<{ progressions: string[] } | null>(null);
+
+  // Derived 4-state mode for the session banner UI
+  type SessionMode = "idle" | "resume" | "active" | "completed";
+  function getSessionMode(): SessionMode {
+    if (localMode === "completed" || serverStatus === "completed") return "completed";
+    if (localMode === "active") return "active";
+    if (serverStatus === "in_progress") return "resume";
+    return "idle";
+  }
+  const sessionMode = getSessionMode();
+
+  const startSessionMutation = useMutation({
+    mutationFn: (data: { savedProgramId?: number; dayNumber?: number }) =>
+      customFetch<ActiveSessionData>("/api/active-session/start", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      setLocalMode("active");
+      queryClient.invalidateQueries({ queryKey: ["active-session"] });
+    },
+  });
+
+  function handleStartOrResume() {
+    const dayNum = expandedDay !== null
+      ? (program?.days[expandedDay]?.dayNumber ?? expandedDay + 1)
+      : undefined;
+
+    if (serverStatus === "not_started") {
+      startSessionMutation.mutate({
+        savedProgramId: savedProgramId ?? undefined,
+        dayNumber: dayNum,
+      });
+    } else {
+      // Already in_progress on the server — just transition local mode
+      setLocalMode("active");
+    }
+  }
 
   function handleSetsChange(exerciseName: string, sets: SetLog[]) {
     setSessionLogs((prev) => {
@@ -639,9 +698,19 @@ function ProgramTab({
         }),
       });
       setSessionResult(result);
-      setSessionMode("completed");
+      setLocalMode("completed");
+
+      // Persist completed status to server
+      customFetch("/api/active-session/complete", { method: "POST" })
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ["active-session"] });
+        })
+        .catch(() => {});
+
       setTimeout(() => refetchTargets(), 600);
       queryClient.invalidateQueries({ queryKey: ["training-system-history", "changes"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
     } catch {
       setSessionCompleting(false);
     } finally {
@@ -650,9 +719,10 @@ function ProgramTab({
   }
 
   function resetSession() {
-    setSessionMode("idle");
+    setLocalMode("idle");
     setSessionLogs(new Map());
     setSessionResult(null);
+    refetchActiveSession();
   }
 
   // ── Progression targets ───────────────────────────────────────────────────
@@ -760,13 +830,19 @@ function ProgramTab({
     }
   }, [program]);
 
-  // Reset session when user switches to a different day
+  // Reset local session mode when user switches to a different day
+  // Server status is preserved — the CTA will correctly show "Resume Session"
   const prevExpandedDay = useRef<number | null>(null);
   useEffect(() => {
     if (expandedDay !== prevExpandedDay.current) {
       prevExpandedDay.current = expandedDay;
-      if (sessionMode !== "idle") resetSession();
+      if (localMode !== "idle") {
+        setLocalMode("idle");
+        setSessionLogs(new Map());
+        setSessionResult(null);
+      }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expandedDay]);
 
   // Pin expanded day to today's session on initial program load and after each new build.
@@ -1285,15 +1361,29 @@ function ProgramTab({
 
                   {isExpanded && (
                     <div className="border-t border-border divide-y divide-border/50">
-                      {/* Session banner — Start / Active / Completed */}
+                      {/* Session banner — Start / Resume / Active / Completed */}
                       {isPremium && isSaved && (
                         <div className="px-3 py-2.5">
                           {sessionMode === "idle" && (
                             <button
-                              onClick={() => setSessionMode("active")}
-                              className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-green-500/30 text-green-400 text-[11px] font-semibold hover:bg-green-500/10 transition-all duration-150"
+                              onClick={handleStartOrResume}
+                              disabled={startSessionMutation.isPending}
+                              className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-green-500/30 text-green-400 text-[11px] font-semibold hover:bg-green-500/10 transition-all duration-150 disabled:opacity-60"
                             >
-                              <PlayCircle className="w-3.5 h-3.5" /> Start Session
+                              {startSessionMutation.isPending ? (
+                                <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Starting…</>
+                              ) : (
+                                <><PlayCircle className="w-3.5 h-3.5" /> Start Session</>
+                              )}
+                            </button>
+                          )}
+                          {sessionMode === "resume" && (
+                            <button
+                              onClick={handleStartOrResume}
+                              className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-amber-500/40 bg-amber-500/8 text-amber-400 text-[11px] font-semibold hover:bg-amber-500/15 transition-all duration-150"
+                            >
+                              <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
+                              Resume Session
                             </button>
                           )}
                           {sessionMode === "active" && (
@@ -1310,7 +1400,7 @@ function ProgramTab({
                                 {sessionCompleting ? (
                                   <><Loader2 className="w-3 h-3 animate-spin" /> Saving…</>
                                 ) : (
-                                  <><CheckCircle className="w-3 h-3" /> Complete Session</>
+                                  <><CheckCircle className="w-3 h-3" /> Log Session</>
                                 )}
                               </button>
                             </div>
@@ -1320,12 +1410,6 @@ function ProgramTab({
                               <div className="flex items-center gap-2">
                                 <CheckCircle className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
                                 <span className="text-[11px] font-semibold text-green-400">Session logged!</span>
-                                <button
-                                  onClick={resetSession}
-                                  className="ml-auto text-[9px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-                                >
-                                  Reset
-                                </button>
                               </div>
                               {sessionResult && sessionResult.progressions.length > 0 && (
                                 <div className="space-y-1">

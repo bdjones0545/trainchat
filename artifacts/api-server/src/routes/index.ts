@@ -25,6 +25,7 @@ import predictionsRouter from "./predictions";
 import blockIntelligenceRouter from "./block-intelligence";
 import debugRouter from "./debug";
 import supportRouter from "./support";
+import activeSessionRouter from "./active-session";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -64,5 +65,6 @@ router.use(predictionsRouter);
 router.use(blockIntelligenceRouter);
 router.use(debugRouter);
 router.use(supportRouter);
+router.use(activeSessionRouter);
 
 export default router;
