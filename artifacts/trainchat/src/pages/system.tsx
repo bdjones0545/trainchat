@@ -51,6 +51,7 @@ import {
   UserPlus,
   Trash2,
   AlertTriangle,
+  Moon,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useGetMe } from "@workspace/api-client-react";
@@ -553,11 +554,53 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditC
   }, [today]);
 
   if (isLoading) return <ViewSkeleton />;
-  if (error || !today) {
+  if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center px-4">
         <Activity className="w-12 h-12 text-muted-foreground/40 mb-4" />
-        <p className="text-muted-foreground text-sm">No session data available for today.</p>
+        <p className="text-muted-foreground text-sm">Couldn't load today's session. Try refreshing.</p>
+      </div>
+    );
+  }
+  if (!today) {
+    const dayOfWeekLabel = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date().getDay()];
+    return (
+      <div className="space-y-4">
+        <div className="rounded-2xl bg-gradient-to-br from-muted/40 via-muted/20 to-transparent border border-border p-6 text-center">
+          <div className="w-14 h-14 rounded-full bg-muted/60 border border-border flex items-center justify-center mx-auto mb-4">
+            <Moon className="w-7 h-7 text-muted-foreground/60" />
+          </div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">{dayOfWeekLabel}</p>
+          <h2 className="text-xl font-bold text-foreground mb-2">Rest Day</h2>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            No training scheduled today. Rest is part of the plan — your body adapts and gets stronger during recovery.
+          </p>
+        </div>
+        <div className="rounded-xl bg-card border border-border p-4 space-y-3">
+          <p className="text-xs font-bold text-foreground uppercase tracking-wider">Recovery Priorities</p>
+          <ul className="space-y-2.5">
+            {[
+              "Stay well hydrated throughout the day",
+              "Aim for 7–9 hours of sleep tonight",
+              "Light walking or stretching is fine if you feel the urge to move",
+              "Eat enough protein to support muscle repair",
+            ].map((tip, i) => (
+              <li key={i} className="flex items-start gap-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary/50 mt-1.5 flex-shrink-0" />
+                <span className="text-sm text-muted-foreground leading-relaxed">{tip}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        {!checkedInToday && onCheckIn && (
+          <button
+            onClick={onCheckIn}
+            className="w-full flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-all"
+          >
+            <Activity className="w-4 h-4" />
+            Log a readiness check-in
+          </button>
+        )}
       </div>
     );
   }

@@ -315,7 +315,25 @@ async function checkAndAutoAdvanceWeek(userId: number): Promise<void> {
       );
 
     const activeSessionCount = weekLogs.filter((l) => l.sessionStatus !== "skipped").length;
-    if (activeSessionCount < weeklyFrequency) return;
+    if (activeSessionCount < weeklyFrequency) {
+      // Rolling 7-day fallback: handles users who started mid-week (e.g. Wednesday onboarding)
+      // where the calendar Mon–Sun window may never fill up for that first partial week.
+      const sevenDaysAgo = new Date(now);
+      sevenDaysAgo.setDate(now.getDate() - 6);
+      sevenDaysAgo.setHours(0, 0, 0, 0);
+      const rollingLogs = await db
+        .select({ id: sessionLogsTable.id, sessionStatus: sessionLogsTable.sessionStatus })
+        .from(sessionLogsTable)
+        .where(
+          and(
+            eq(sessionLogsTable.userId, userId),
+            gte(sessionLogsTable.completedAt, sevenDaysAgo),
+            lt(sessionLogsTable.completedAt, nextMonday)
+          )
+        );
+      const rollingCount = rollingLogs.filter((l) => l.sessionStatus !== "skipped").length;
+      if (rollingCount < weeklyFrequency) return;
+    }
 
     // Check: is the current training week already completed? (Avoid double-advance)
     const currentWeekRows = await db

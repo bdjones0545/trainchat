@@ -6,8 +6,9 @@ import {
   trainingSessions,
   sessionExercises,
   userProfilesTable,
+  sessionLogsTable,
 } from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, gte } from "drizzle-orm";
 import type { UserProfile } from "@workspace/db";
 import {
   selectSessionExercises,
@@ -1528,6 +1529,38 @@ export async function generateContinuationPhase(
   const experience = profile ? normalizeExperience(profile.experienceLevel ?? "intermediate") : "intermediate";
   const injuryFlags = detectInjuryFlags(profile?.injuries ?? null);
 
+  // Read last 30 days of session logs to carry performance signals into the new block
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const recentLogs = await db
+    .select({
+      sessionStatus: sessionLogsTable.sessionStatus,
+      difficultyScore: sessionLogsTable.difficultyScore,
+      painScore: sessionLogsTable.painScore,
+    })
+    .from(sessionLogsTable)
+    .where(and(eq(sessionLogsTable.userId, userId), gte(sessionLogsTable.completedAt, thirtyDaysAgo)));
+
+  const completedLogs = recentLogs.filter(
+    (f) => f.sessionStatus === "completed" || f.sessionStatus === "partial"
+  );
+  const avgDifficulty =
+    completedLogs.length > 0
+      ? completedLogs.reduce((s, f) => s + (f.difficultyScore ?? 3), 0) / completedLogs.length
+      : 3;
+  const painFreq =
+    completedLogs.length > 0
+      ? completedLogs.filter((f) => (f.painScore ?? 0) >= 3).length / completedLogs.length
+      : 0;
+  const adherenceRate =
+    recentLogs.length > 0 ? completedLogs.length / recentLogs.length : 1;
+
+  const adaptationNotes: string[] = [];
+  if (avgDifficulty >= 4.2) adaptationNotes.push("Prior block consistently rated hard — first week loads held conservative before progressing.");
+  else if (avgDifficulty <= 2.3 && completedLogs.length >= 3) adaptationNotes.push("Prior block consistently felt easy — applying progressive challenge increase from the start.");
+  if (painFreq >= 0.35) adaptationNotes.push("Recurring discomfort flagged across prior block — movement selection kept conservative and injury-aware.");
+  if (adherenceRate < 0.65 && recentLogs.length >= 3) adaptationNotes.push("Adherence was below 65% last block — sessions kept concise to prioritize consistency over volume.");
+
   const coachGoal: CoachGoalType = goal === "athletic" ? "athletic_performance" : (goal as CoachGoalType);
   const coachEquipment: CoachEquipmentLevel =
     equipment === "dumbbells" ? "dumbbells_only" :
@@ -1545,7 +1578,10 @@ export async function generateContinuationPhase(
     weekCount: 4,
     orderIndex: blockChainIndex,
     status: "current",
-    notes: options.adjustments?.length ? `Coach adjustments: ${options.adjustments.join(", ")}` : null,
+    notes: [
+      options.adjustments?.length ? `Coach adjustments: ${options.adjustments.join(", ")}` : null,
+      adaptationNotes.length > 0 ? adaptationNotes.join(" ") : null,
+    ].filter(Boolean).join(" ") || null,
     metadata: {
       blockType: nextBlockType,
       blockDisplayName: nextBlockConfig.phaseName,
@@ -1553,6 +1589,12 @@ export async function generateContinuationPhase(
       blockChainIndex,
       adjustments: options.adjustments ?? [],
       continuationMode: options.mode,
+      adaptationSignals: {
+        avgDifficulty: Math.round(avgDifficulty * 10) / 10,
+        painFrequency: Math.round(painFreq * 100),
+        adherenceRate: Math.round(adherenceRate * 100),
+        sessionCount: recentLogs.length,
+      },
     },
   }).returning();
 

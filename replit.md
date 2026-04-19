@@ -116,6 +116,29 @@ The user interface features a dark theme with electric blue accents and the Inte
 - **DEFAULT EXECUTION LAYER**: Resolves natural-language references to concrete database entity IDs before AI processing to reduce over-clarification.
 - **Modularity**: Services are designed as distinct modules with clear extension points.
 
+## Full System Audit — April 2026
+
+### 10-Category Production Audit Results
+
+| Category | Status | Notes |
+|---|---|---|
+| Program Generation Quality | ✅ Confirmed | 4-week blocks, progressive overload, coach-select exercises, category ordering, deload W4 |
+| Constraint Handling | ✅ Confirmed | Equipment normalization, injury detection, experience levels all wired |
+| Sport/Age/Equipment Intelligence | ✅ Confirmed | Sport profiles, equipment normalizer, session type routing all active |
+| Agent Command System | ✅ Confirmed | Structured intents bypass NLP, AgentPanel scoped commands, VibeBar free-text routing |
+| Session Lifecycle | ✅ Confirmed | `active_sessions` state machine: `not_started→in_progress→completed`; `onSubmitted` calls `/api/active-session/complete` |
+| Adaptation After Logging | ✅ Confirmed | Chat ack with coaching language, pain areas written to memory, readiness/feedback trend injected into AI context |
+| Week Advancement | ✅ Fixed | Calendar week Mon–Sun logic confirmed working; added rolling 7-day fallback for mid-week starters |
+| 4-Week Block Continuation | ✅ Fixed | Block chain (FOUNDATION→INTENSIFICATION→POWER→REBUILD) confirmed; added session feedback signals carried into new block notes |
+| UI/UX Clarity | ✅ Fixed | Replaced generic "No session data" error with proper Rest Day card (icon, recovery tips, check-in CTA) |
+| Data Integrity | ✅ Fixed | Added active_sessions cleanup when user deletes their only program to prevent stale "Resume Session" state |
+
+### Fixes Applied
+1. **Rest Day Card** (`system.tsx`): Split `error` from `!today` states; null response (rest day) now shows a proper Rest Day card with day name, Moon icon, 4 recovery priorities, and a check-in CTA.
+2. **Block continuation carries adaptation signals** (`training-system-service.ts`): `generateContinuationPhase` now reads last 30 days of session logs, computes average difficulty, pain frequency, and adherence rate, and injects plain-English coaching notes + structured `adaptationSignals` JSON into the new phase metadata.
+3. **Rolling 7-day week advancement fallback** (`session-logs.ts`): `checkAndAutoAdvanceWeek` now falls back to a rolling 7-day window if the calendar Mon–Sun count doesn't reach `weeklyFrequency` — prevents mid-week starters from being stuck in the same training week indefinitely.
+4. **Orphaned active session cleanup on program delete** (`training-system.ts`): When a user deletes their only/active program (no fallback program), today's `active_sessions` record is cleaned up to prevent stale "Resume Session" UI state.
+
 ## External Dependencies
 
 - **OpenAI**: Provides core AI capabilities, specifically using the GPT-4o model.

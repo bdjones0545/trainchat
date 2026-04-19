@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
-import { trainingSystems, conversationsTable, savedProgramsTable } from "@workspace/db";
+import { trainingSystems, conversationsTable, savedProgramsTable, activeSessionsTable } from "@workspace/db";
 import { eq, and, desc, ne } from "drizzle-orm";
 import {
   getActiveTrainingSystem,
@@ -489,6 +489,20 @@ router.delete("/training-system/:id", requireAuth, async (req, res): Promise<voi
       savedProgramsDeleted,
       referenceCount: 1,
     }, "[DeleteCascadeAudit]");
+
+    // If deleting the active program, clean up today's active session record so the UI
+    // doesn't show a stale "Resume Session" state after the program switch.
+    if (wasActive && newActiveSystemId === null) {
+      const today = new Date().toISOString().slice(0, 10);
+      await db
+        .delete(activeSessionsTable)
+        .where(
+          and(
+            eq(activeSessionsTable.userId, userId),
+            eq(activeSessionsTable.sessionDate, today)
+          )
+        );
+    }
 
     // Hard delete — cascade removes phases → weeks → sessions → exercises → change logs
     await db.delete(trainingSystems).where(eq(trainingSystems.id, id));
