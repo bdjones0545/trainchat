@@ -1,0 +1,160 @@
+CRITICAL FIX — START SESSION / LOG SESSION NEED A REAL SESSION LIFECYCLE
+
+PROBLEM:
+Right now when the user taps "Start Session", the UI immediately changes to "Log Session".
+If the user leaves and comes back, it resets back to "Start Session".
+
+This means Start Session is only a temporary UI toggle and there is no persistent in-progress session state.
+
+We need a true session lifecycle.
+
+==================================================
+GOAL
+==================================================
+
+Implement durable session state with 3 statuses:
+
+- not_started
+- in_progress
+- completed
+
+And make the Today UI reflect those states correctly.
+
+==================================================
+TASK 1 — ADD REAL SESSION STATUS
+==================================================
+
+For today's session, persist a real status field:
+
+session_status:
+- not_started
+- in_progress
+- completed
+
+Also persist:
+- started_at
+- completed_at
+
+If a session log table or completion table already exists, extend it safely.
+If another state model already exists, reuse it instead of duplicating.
+
+==================================================
+TASK 2 — START SESSION MUST PERSIST
+==================================================
+
+When user taps "Start Session":
+
+- set session_status = in_progress
+- save started_at timestamp
+- persist immediately to backend / DB
+- invalidate relevant queries
+
+DO NOT switch directly to "Log Session"
+
+==================================================
+TASK 3 — UI STATE MAPPING
+==================================================
+
+Update Today tab CTA logic:
+
+If session_status = not_started
+→ show "Start Session"
+
+If session_status = in_progress
+→ show "Resume Session"
+
+If session_status = completed
+→ show "Session Logged" or disable log CTA appropriately
+
+Do this for:
+- hero card CTA
+- sticky bottom action bar
+
+Both places must stay in sync.
+
+==================================================
+TASK 4 — RESUME BEHAVIOR
+==================================================
+
+If the user starts a session, leaves the page, and returns later:
+
+- fetch persisted session_status
+- if in_progress, show "Resume Session"
+- do NOT revert to "Start Session"
+
+This state must survive:
+- tab switches
+- leaving Active Programs
+- app refresh / revisit
+
+==================================================
+TASK 5 — LOG SESSION ONLY WHEN ACTUALLY FINISHING
+==================================================
+
+"Log Session" should only appear when appropriate.
+
+Preferred logic:
+- if in_progress, primary CTA = Resume Session
+- once workout is actually completed (or user explicitly chooses to finish), show Log Session flow
+
+At minimum:
+- Start Session should never immediately become Log Session just because it was tapped
+
+==================================================
+TASK 6 — OPTIONAL COMPLETION TRIGGER
+==================================================
+
+If exercise completion tracking exists:
+- once all exercises are marked complete, surface:
+  "Finish session?"
+  [Log Session] [Add Notes] [Keep Open]
+
+If exercise tracking does not exist yet:
+- keep Resume Session until user explicitly logs completion
+
+==================================================
+TASK 7 — CHAT / AGENT INTEGRATION
+==================================================
+
+When session is started:
+- optionally post a lightweight agent acknowledgment or internal state update if appropriate
+
+When session is completed:
+- log it through the real pipeline
+- update system / adaptation state
+- post completion acknowledgment to main chat if that already exists in the current design
+
+Do not create fake chat noise, but keep system state coherent.
+
+==================================================
+TASK 8 — QUERY INVALIDATION
+==================================================
+
+After start/resume/log actions, invalidate:
+- training-system-today
+- training-system-week
+- training-system-history
+- any session status query used by Today UI
+
+No stale CTA state allowed.
+
+==================================================
+TASK 9 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. where session_status is stored
+2. how Start Session now persists in_progress
+3. how Resume Session is restored after leaving and returning
+4. how/when Log Session appears now
+5. what queries were invalidated/refreshed
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Tapping Start Session should begin a real session, not just rename a button.
+
+The lifecycle must be:
+
+Start Session → Resume Session → Log Session → Session Logged
