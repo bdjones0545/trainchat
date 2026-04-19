@@ -1,0 +1,233 @@
+CRITICAL FIX — ACTIVE / SAVED PROGRAMS CRASHING AFTER FOCUS-SYSTEM INTEGRATION
+
+CONTEXT:
+After adding focus-aware program state (Strength / Speed / Mobility), clicking Active Programs or Saved Programs from the left sidebar can crash the app with:
+
+"Cannot access 'activeSystem' before initialization"
+
+This is a focus-aware state initialization / rendering bug.
+
+The app used to assume one generic active system.
+Now it must safely handle:
+- currentFocus loading
+- active program lookup by focus
+- no program existing for a focus
+- async fetch timing
+
+Right now some parts of the UI are still reading `activeSystem` too early or assuming it always exists.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Fix all crashes caused by reading `activeSystem` before it is initialized, and make Active Programs / Saved Programs fully safe under the new focus-aware architecture.
+
+==================================================
+TASK 1 — FIND ALL `activeSystem` READS
+==================================================
+
+Audit every place where `activeSystem` is referenced in:
+- Active Programs
+- Saved Programs
+- left sidebar navigation
+- related hooks / selectors / context providers
+- right sidebar if relevant
+
+Return:
+- every file where `activeSystem` is used
+- which reads are unsafe
+- which places still assume one global active system
+
+==================================================
+TASK 2 — REPLACE SINGLE ACTIVE SYSTEM ASSUMPTION
+==================================================
+
+Wherever the code currently assumes one generic active system, replace it with focus-aware lookup.
+
+Use a safe pattern like:
+
+const activeSystem = activeProgramByFocus?.[currentFocus] ?? null
+
+or equivalent via memoized selector.
+
+Do NOT access:
+- activeSystem.id
+- activeSystem.sessions
+- activeSystem.trainingSystemId
+until null safety is established.
+
+==================================================
+TASK 3 — SAFE DEFAULT STATE FOR FOCUS PROGRAMS
+==================================================
+
+If activeProgramByFocus is initialized as null/undefined, fix it.
+
+Use a safe default shape like:
+
+{
+  strength: null,
+  speed: null,
+  mobility: null
+}
+
+This prevents undefined lookups on first render.
+
+==================================================
+TASK 4 — ADD RENDER GUARDS BEFORE USING PROGRAM DATA
+==================================================
+
+In Active Programs and Saved Programs views, add defensive rendering.
+
+Expected logic:
+- if currentFocus is not ready → loading state
+- if focus program map is not ready → loading state
+- if there is no active program for current focus → focus-specific empty state
+- only render full program UI when activeSystem exists
+
+This must prevent the screen from trying to read properties on null/undefined.
+
+==================================================
+TASK 5 — FIX LEFT SIDEBAR NAVIGATION
+==================================================
+
+The left sidebar should not navigate using `activeSystem.id` unless a valid program exists for the current focus.
+
+When clicking:
+- Active Programs
+- Saved Programs
+
+it must:
+1. read currentFocus safely
+2. check for an existing active/saved program for that focus
+3. route safely
+
+If no program exists for the selected focus:
+- open the Active Programs / Saved Programs page in empty-state mode
+- do NOT crash
+- do NOT try to route to a missing program ID
+
+==================================================
+TASK 6 — USE MEMOIZED FOCUS SELECTOR
+==================================================
+
+Create a safe focus-aware selector / memo if needed, for example:
+
+getActiveSystemForFocus(currentFocus, activeProgramByFocus)
+
+This should be the single shared way to retrieve the current active system.
+
+Do NOT duplicate fragile lookup logic in multiple components.
+
+==================================================
+TASK 7 — ADD ERROR-RESISTANT EMPTY STATES
+==================================================
+
+If user has:
+- no Strength program
+- no Speed program
+- no Mobility program
+
+then Active Programs / Saved Programs must show focus-specific empty states like:
+
+- No Strength program yet
+- No Speed program yet
+- No Mobility program yet
+
+Each with the correct CTA:
+- Build Strength Program
+- Build Speed Program
+- Build Mobility Program
+
+This is now the correct behavior instead of crashing.
+
+==================================================
+TASK 8 — ADD ERROR BOUNDARY / SAFE FALLBACK
+==================================================
+
+Wrap the affected program views in an Error Boundary or equivalent safe fallback if not already done.
+
+If something still goes wrong:
+- show a clean retry state
+- do not leave the user on a broken screen
+
+==================================================
+TASK 9 — AUDIT ASYNC TIMING
+==================================================
+
+Confirm the order of:
+1. currentFocus initialization
+2. activeProgramByFocus load
+3. selected program fetch
+4. page render
+
+Fix race conditions so the page never renders dependent UI before state is ready.
+
+==================================================
+TASK 10 — ADD AUDIT LOGGING
+==================================================
+
+Add logs like:
+
+[FocusProgramInitAudit] {
+  currentFocus,
+  activeProgramByFocusReady,
+  activeSystemResolved,
+  activeSystemId,
+  emptyStateShown
+}
+
+[FocusSidebarNavAudit] {
+  clickedItem: "active_programs" | "saved_programs",
+  currentFocus,
+  targetProgramFound,
+  safeRouteUsed
+}
+
+We need to verify the crash is truly gone.
+
+==================================================
+TASK 11 — VALIDATION
+==================================================
+
+Test all of these:
+
+1. Current focus = Strength, Strength program exists
+→ Active Programs opens correctly
+
+2. Current focus = Speed, no Speed program exists
+→ Active Programs opens empty-state safely
+
+3. Current focus = Mobility, no Mobility saved programs exist
+→ Saved Programs opens empty-state safely
+
+4. First render after refresh, before async data is ready
+→ no crash, loading state shown
+
+5. Switch focus, then open Active Programs / Saved Programs
+→ correct focus-aware program or empty state appears
+
+==================================================
+TASK 12 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. every unsafe activeSystem access that was fixed
+2. what focus-aware selector/guard was added
+3. how default state was changed
+4. how left sidebar routing was made safe
+5. confirmation that empty-state behavior now works by focus
+6. confirmation that the crash is gone
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Clicking Active Programs or Saved Programs from the left sidebar must never crash.
+
+The app must safely handle:
+- focus-aware program lookup
+- missing programs
+- async loading
+- empty states
+
+No code path should assume `activeSystem` exists before it is initialized.
