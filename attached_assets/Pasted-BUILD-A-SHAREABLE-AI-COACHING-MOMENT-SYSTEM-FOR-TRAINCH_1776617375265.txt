@@ -1,0 +1,328 @@
+BUILD A SHAREABLE AI COACHING MOMENT SYSTEM FOR TRAINCHAT
+
+CONTEXT:
+TrainChat’s core engine is now extremely strong:
+- adaptive 4-week programs
+- conversational agent control
+- predictive adaptation
+- memory dominance
+- real diff / undo / history
+- sport / age / equipment intelligence
+
+The next growth unlock is not more engine logic.
+It is making the intelligence visible and shareable.
+
+Right now, the product creates real “wow” moments, but users have no clean way to share them.
+We need a system that turns important agent/program events into beautiful, native-feeling share cards.
+
+This is NOT a generic social feed.
+This is a “share the moment” layer built around the most compelling AI coaching outputs.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Create a shareable AI coaching moment system that lets users instantly share the most impressive parts of TrainChat:
+
+- AI-adjusted workout moments
+- block completion moments
+- new program moments
+- adaptation moments
+- progress moments
+
+This should feel premium, mobile-first, and dead simple.
+
+==================================================
+TASK 1 — DEFINE THE SHAREABLE MOMENT TYPES
+==================================================
+
+Create a structured set of share moment types.
+
+Initial moment types:
+
+1. PROGRAM_GENERATED
+Example:
+"TrainChat built my 3-day golf program"
+
+2. AGENT_ADJUSTMENT
+Example:
+"I told TrainChat I was tired and it changed my workout"
+
+3. BLOCK_COMPLETE
+Example:
+"I completed my first 4-week block"
+
+4. NEXT_BLOCK_READY
+Example:
+"TrainChat generated my next phase automatically"
+
+5. SESSION_LOG_ADAPTATION
+Example:
+"My AI adjusted next week based on how today felt"
+
+6. PROGRESS_MILESTONE
+Example:
+"12 sessions completed"
+or
+"4-week adherence streak"
+
+Each moment type should have:
+- title
+- subtitle
+- optional agent quote
+- metric summary
+- visual style variant
+
+==================================================
+TASK 2 — CREATE SHARE CARD COMPONENTS
+==================================================
+
+Build reusable share card components for these moments.
+
+Requirements:
+- mobile-first
+- premium TrainChat styling
+- dark theme + strong visual hierarchy
+- visually screenshot-worthy
+- compact enough for stories/posts
+- readable in portrait format
+
+Card structure should include combinations of:
+- TrainChat logo / branding
+- user-safe headline
+- short system-generated summary
+- 1–3 meaningful metrics
+- optional “Agent said…” snippet
+- subtle footer branding
+
+Do NOT expose private/sensitive data automatically.
+
+==================================================
+TASK 3 — TRIGGER SHARE MOMENTS FROM REAL SYSTEM EVENTS
+==================================================
+
+The share layer must be connected to actual system events.
+
+Examples:
+
+After program build:
+- surface “Share your new program”
+
+After meaningful agent adjustment:
+- surface “Share this AI coaching moment”
+
+After block completion:
+- surface “Share block completion”
+
+After next block generated:
+- surface “Share next phase”
+
+After session log causes a meaningful adaptation:
+- surface “Share what changed”
+
+Do NOT generate share cards from fake/demo data.
+Use real event outputs and real diff/change summaries.
+
+==================================================
+TASK 4 — ADD “SHARE THIS MOMENT” CTA IN THE RIGHT PLACES
+==================================================
+
+Surface share CTAs only where they feel natural.
+
+Initial placements:
+
+1. After program generation success
+2. After major agent adjustment result
+3. After block completion card
+4. After next block continuation is created
+5. In progress / milestone areas when relevant
+
+The CTA should be subtle but obvious:
+- Share this moment
+- Share this program
+- Share this update
+
+Do NOT clutter the UI with share buttons everywhere.
+
+==================================================
+TASK 5 — GENERATE CLEAN SHAREABLE COPY
+==================================================
+
+Build short, high-signal copy for each moment type.
+
+Examples:
+
+PROGRAM_GENERATED:
+“TrainChat built my 3-day home gym strength program.”
+
+AGENT_ADJUSTMENT:
+“I told TrainChat to make this week more explosive and it rebuilt 3 sessions instantly.”
+
+SESSION_LOG_ADAPTATION:
+“I logged how my session felt and TrainChat adjusted my upcoming workouts automatically.”
+
+BLOCK_COMPLETE:
+“Finished my 4-week block. TrainChat already set up my next phase.”
+
+The copy should feel:
+- impressive
+- believable
+- simple
+- not hype-y
+- not overly technical
+
+==================================================
+TASK 6 — ADD SAFE DATA FILTERING
+==================================================
+
+Before generating share cards, ensure sensitive/private data is excluded by default.
+
+Do NOT include automatically:
+- pain details
+- private notes
+- age
+- injury specifics
+- bodyweight / measurements
+- internal debugging language
+
+Only include:
+- training type
+- high-level adaptation
+- block completion
+- count-based metrics
+- generic coaching insight
+
+==================================================
+TASK 7 — ADD EXPORT / SHARE ACTIONS
+==================================================
+
+Support the easiest initial share methods:
+
+1. Save as image
+2. Native share sheet on mobile if available
+3. Copy caption text
+
+This must be fast and low-friction.
+
+If native share is available, use it.
+Otherwise, provide clean fallback.
+
+==================================================
+TASK 8 — BUILD A “WOW MOMENT” SELECTOR
+==================================================
+
+Create logic that identifies when an event is actually worth surfacing for sharing.
+
+Not every action needs a share card.
+
+Good triggers:
+- major rebuild
+- meaningful diff
+- block completion
+- continuation block generation
+- milestone streaks
+- strong agent adjustment moments
+
+Bad triggers:
+- tiny silent adaptations
+- minor set changes
+- low-signal actions
+
+We want:
+quality > volume
+
+==================================================
+TASK 9 — ADD SHAREABLE AGENT QUOTE OPTION
+==================================================
+
+For some cards, optionally include a short “Agent quote” line using the real chat acknowledgment.
+
+Example:
+“Based on how your last sessions felt, I’m keeping intensity high but lowering fatigue this week.”
+
+This must be:
+- short
+- coach-like
+- plain language
+- not internal system jargon
+
+==================================================
+TASK 10 — BUILD INITIAL METRIC PACKS
+==================================================
+
+Add a small set of metrics that can appear on cards:
+
+Examples:
+- sessions completed
+- current block week
+- weekly adherence
+- sessions updated
+- exercises swapped
+- program type
+- training frequency
+
+Keep it minimal.
+No cluttered dashboards on the card.
+
+==================================================
+TASK 11 — DO NOT BUILD A FULL SOCIAL NETWORK
+==================================================
+
+Important:
+This is NOT a feed.
+This is NOT a community system.
+This is NOT in-app social networking.
+
+This is a lightweight growth layer:
+- screenshot-worthy moments
+- easy sharing
+- strong product storytelling
+
+==================================================
+TASK 12 — ADD AUDIT LOGGING
+==================================================
+
+Track:
+
+[ShareMomentAudit] {
+  momentType,
+  triggerSource,
+  dataSource,
+  shareCardGenerated,
+  shareActionUsed,
+  captionGenerated
+}
+
+We need to know which share moments are actually being generated and used.
+
+==================================================
+TASK 13 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. share moment types implemented
+2. share card components created
+3. where share CTAs appear
+4. how shareable copy is generated
+5. how sensitive data is filtered
+6. what export/share actions are supported
+7. how “wow moments” are selected
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat should now be able to turn its best AI coaching moments into clean, premium, shareable assets.
+
+The result should make users want to say:
+“Look what my AI coach just did.”
+
+This should feel like:
+- product storytelling
+- organic growth enablement
+- premium AI fitness differentiation
+
+NOT:
+- a generic social feature
+- a noisy share button everywhere
+- a fake marketing layer
