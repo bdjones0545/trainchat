@@ -15,6 +15,10 @@ import {
 import { runBlockEvaluationAndLog } from "./block-intelligence";
 import { syncMemoriesFromData, upsertMemory } from "../lib/memory";
 import { advanceToNextWeek, generateContinuationPhase } from "../lib/training-system-service";
+import { buildBlockProjection, applyBlockProjectionToFutureWeeks } from "../lib/block-projection";
+import { applyNextSessionAdjustment } from "../lib/next-session-intelligence";
+import { updateStructuredMemoryFromLog } from "../lib/memory-dominance";
+import { logger } from "../lib/logger";
 
 // ─── Pain area label map ───────────────────────────────────────────────────────
 
@@ -76,35 +80,35 @@ async function postSessionAckToChat(
 
     if (sessionStatus === "skipped") {
       content =
-        "Got it — session skipped. Rest counts as part of the plan. If skipping becomes a pattern I can simplify your schedule or reduce training frequency to make it more executable.";
+        "Session skipped — that's okay, it happens. The plan is still there when you're ready. If skipping becomes a pattern, tell me and I can simplify the schedule or drop the frequency so it's more realistic to stick to.";
     } else if (significantPain && hasPainAreas) {
-      content = `Got it — session logged. Significant pain flagged in your ${areaText}. I've recorded this and will avoid aggressive loading on that movement pattern in your upcoming sessions. If it continues, let me know and I can modify the exercise selection directly.`;
+      content = `Logged — but that level of discomfort in your ${areaText} is worth paying attention to. I've flagged it and will keep the loading conservative on that pattern in your upcoming sessions. If it's still there next session, let me know and I'll swap the movement entirely.`;
     } else if (significantPain) {
       content =
-        "Got it — session logged. Significant discomfort was flagged. I've noted this and will keep loading conservative in your next session. If a specific area is causing the issue, mention it so I can adjust the movement selection.";
+        "Logged — significant discomfort flagged. I've noted it and I'm going to be conservative with loading in your next session. If you can tell me where it was coming from, I can adjust the specific movements rather than just pulling back across the board.";
     } else if (tooHard && drained) {
-      content = `Got it — session was tough and you're feeling drained. I've noted the overload signal. The next session will stay on plan structurally, but I'll hold progression and watch fatigue heading in. If this pattern continues across sessions I'll pull back volume slightly.`;
+      content = `Tough one today — and it sounds like you felt it afterward. I'm not going to push the load higher next session. Your body's telling you something, and the smart move right now is to hold where you are until you feel more recovered. The fitness is still building even when it doesn't feel like it.`;
     } else if (tooHard) {
-      content = `Got it — session felt hard. Noted${areaText ? ` along with discomfort in your ${areaText}` : ""}. I'll hold the current load rather than progressing until difficulty normalizes.`;
+      content = `Hard session — noted${areaText ? `, along with some discomfort in your ${areaText}` : ""}. I'll hold the current load rather than stepping it up until things settle. Forcing progression when it's already difficult usually just adds accumulated fatigue.`;
     } else if (moderatePain && hasPainAreas) {
-      content = `Got it — session logged with moderate discomfort in your ${areaText}. I've flagged this area. I'll keep an eye on loading patterns that stress it and can substitute movements if it comes up again.`;
+      content = `Logged — moderate discomfort in your ${areaText}. I've flagged that area and I'll monitor the loading patterns that put stress on it. If it comes up again, mention it and I'll swap to a less aggravating movement.`;
     } else if (tooEasy && energized) {
-      content = "Good session — it felt easy and your energy is high. That's a clear progression signal. I'll bump up the challenge slightly next session — a small load or volume increment to match where your body actually is right now.";
+      content = "You had clearly more in the tank today than the session asked for. That's a useful signal — I'll bump the challenge up a touch next time. A small increment now keeps you progressing rather than just going through the motions.";
     } else if (lowEnjoyment) {
-      content = `Got it — session logged. Noted low enjoyment this time. If this continues across sessions I'll look at bringing in more exercise variety or adjusting the session format to keep it engaging.${notes?.trim() ? ` Notes: "${notes.trim().slice(0, 120)}"` : ""}`;
+      content = `Logged — but I noticed low enjoyment this time. If that keeps coming up I'll look at adjusting the exercise mix or the session format. Training you don't want to do doesn't last long.${notes?.trim() ? ` Notes: "${notes.trim().slice(0, 120)}"` : ""}`;
     } else if (drained) {
-      content = "Got it — session logged. Energy is low after this one. I'll keep the next session from pushing harder than today — hold the current load and monitor recovery before applying any progression.";
+      content = "Logged — energy was low after this one. I'm not stepping the load up next session. Let recovery do its job first, then we build.";
     } else {
       const diffNote =
         difficulty == null ? ""
-        : difficulty <= 2 ? " It felt within your capacity."
-        : difficulty === 3 ? " It hit the target zone."
+        : difficulty <= 2 ? " It felt comfortable — well within your range."
+        : difficulty === 3 ? " It hit the right zone."
         : " It was appropriately challenging.";
       const painNote =
-        !anyPain ? " No pain reported."
-        : pain === 2 ? " Minor discomfort noted — nothing flagged."
+        !anyPain ? " No discomfort reported."
+        : pain === 2 ? " Minor discomfort — nothing to flag."
         : "";
-      content = `Got it — session logged as ${sessionStatus}.${diffNote}${painNote} Keep showing up consistently — that's what drives results.${notes?.trim() ? ` Notes: "${notes.trim().slice(0, 120)}"` : ""}`;
+      content = `Logged.${diffNote}${painNote} Consistent sessions like this are what compound into real results.${notes?.trim() ? ` Notes: "${notes.trim().slice(0, 120)}"` : ""}`;
     }
 
     const structuredData = JSON.stringify({
@@ -648,6 +652,44 @@ router.post("/session-logs", requireAuth, async (req: any, res): Promise<void> =
 
   // Auto-advance week if user has hit their weekly session target
   checkAndAutoAdvanceWeek(userId).catch(() => {});
+
+  // ── UPGRADE PIPELINE ─────────────────────────────────────────────────────
+  // Parts 3 + 2: Structured memory update — writes rolling metrics to user_memories
+  // and persists fatigue/adherence patterns as governing memory signals.
+  updateStructuredMemoryFromLog(userId, {
+    sessionStatus: data.sessionStatus,
+    difficultyScore: data.difficultyScore,
+    painScore: data.painScore,
+    energyScore: data.energyScore,
+    enjoymentScore: data.enjoymentScore,
+    painAreas: data.painAreas,
+  }).catch(() => {});
+
+  // Part 4: Next session intelligence — adjusts the upcoming session's
+  // coaching notes and sets based on last session signals.
+  applyNextSessionAdjustment(userId).catch(() => {});
+
+  // Part 1: Predictive block projection — modifies FUTURE week volume/intensity
+  // based on rolling performance trends (fires only when ≥4 sessions exist).
+  buildBlockProjection(userId)
+    .then(async (projection) => {
+      if (projection) {
+        await applyBlockProjectionToFutureWeeks(userId, projection);
+      }
+    })
+    .catch(() => {});
+
+  // Part 8: System upgrade telemetry check
+  logger.info(
+    {
+      userId,
+      predictiveAdaptation: true,
+      memoryDominance: true,
+      nextSessionAdjustment: true,
+      blockContinuationIntelligent: true,
+    },
+    "[SystemUpgradeCheck]"
+  );
 
   res.status(201).json({
     id: log.id,

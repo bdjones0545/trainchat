@@ -1,0 +1,233 @@
+FINAL SYSTEM UPGRADE — PREDICTIVE ADAPTATION + MEMORY DOMINANCE
+
+CONTEXT:
+The system is now fully functional:
+- Program generation
+- Session lifecycle
+- Logging + adaptation
+- Week advancement
+- Block continuation
+- Agent command system
+- UI/UX coherence
+
+Now we are implementing the final layer that separates this from all competitors:
+
+1) Predictive adaptation across the block
+2) Agent memory as the governing layer (not passive)
+
+==================================================
+PART 1 — PREDICTIVE BLOCK ADAPTATION
+==================================================
+
+Currently:
+- Adaptation happens AFTER sessions
+
+Upgrade to:
+- System anticipates future weeks
+
+Add a new function:
+
+buildBlockProjection(profile, recentLogs, currentBlock)
+
+This should:
+- Analyze last 7–14 sessions
+- Compute:
+  - avgDifficulty
+  - painTrend
+  - adherenceTrend
+  - fatigueTrend (derived from duration + difficulty + feeling)
+
+Then modify FUTURE weeks:
+
+IF avgDifficulty > 4 OR fatigueTrend high:
+  → reduce Week 2/3 intensity slightly
+  → delay intensification
+  → extend accumulation
+
+IF adherence < 70%:
+  → reduce weekly volume
+  → simplify sessions
+
+IF painTrend present:
+  → remove risky patterns from FUTURE weeks
+  → bias stability + control
+
+IF consistently easy:
+  → accelerate progression curve
+
+IMPORTANT:
+- This modifies the block STRUCTURE, not just exercises
+- Store projection in block metadata
+
+==================================================
+PART 2 — MEMORY DOMINANCE SYSTEM
+==================================================
+
+Upgrade agentMemory from passive → governing
+
+Create priority hierarchy:
+
+1. HARD CONSTRAINTS (injury, equipment)
+2. ACTIVE MEMORY SIGNALS (pain, fatigue, adherence)
+3. CURRENT BLOCK STRUCTURE
+4. ORIGINAL PROGRAM INTENT
+
+Modify all generation + edits to respect this order.
+
+Example:
+IF memory.pain.includes("knee"):
+  → override ANY squat/lunge intensity
+  → regardless of block phase
+
+IF fatigueTrend high:
+  → override intensity progression
+
+Memory must be able to OVERRIDE the system, not just influence it.
+
+==================================================
+PART 3 — SESSION LOG → MEMORY PIPELINE HARDENING
+==================================================
+
+Ensure every log updates memory in structured format:
+
+memory = {
+  painAreas: [],
+  fatigueScore: rollingAvg,
+  adherenceRate: rolling,
+  difficultyTrend: rolling,
+  enjoymentTrend: rolling,
+  last7Sessions: [...]
+}
+
+Add:
+updateAgentMemoryFromSessionLog(log)
+
+Then:
+- trigger light re-evaluation of:
+  → next session
+  → remaining week
+  → block projection
+
+==================================================
+PART 4 — NEXT SESSION INTELLIGENCE
+==================================================
+
+Right now next session is static unless edited.
+
+Upgrade:
+
+buildNextSessionAdjustment()
+
+Based on:
+- last session difficulty
+- fatigue
+- pain
+- completion
+
+Adjust:
+- sets
+- intensity intent
+- rest
+- exercise selection (if needed)
+
+Example:
+Hard + tired → reduce sets slightly
+Easy + energized → maintain or slightly progress
+Pain → substitute pattern
+
+==================================================
+PART 5 — INVISIBLE ADAPTATION (CRITICAL UX RULE)
+==================================================
+
+DO NOT spam the user with changes.
+
+Rules:
+- Small adjustments = silent
+- Medium adjustments = subtle note
+- Large adjustments = visible card + chat acknowledgment
+
+Create:
+getAdaptationVisibilityLevel(delta)
+
+==================================================
+PART 6 — BLOCK CONTINUATION INTELLIGENCE UPGRADE
+==================================================
+
+Current:
+- Uses last 30 days
+
+Upgrade:
+
+When generating next 4-week block:
+- Use:
+  - last block projection
+  - last block actual performance
+  - memory trends
+
+Then determine:
+- next block type:
+  → build / intensify / stabilize / recovery-biased
+
+Example:
+IF last block was hard + fatigue high:
+  → next block starts conservative
+
+IF adherence low:
+  → simplify structure
+
+IF strong performance:
+  → progress intensity
+
+==================================================
+PART 7 — AGENT LANGUAGE UPGRADE (ELITE LEVEL)
+==================================================
+
+Update chat responses:
+
+Instead of:
+"Adjusted due to difficulty"
+
+Say:
+"Based on how your last few sessions felt, I’m slightly pulling back volume this week so you can keep progressing without burning out."
+
+This should:
+- feel intelligent
+- feel personal
+- never expose system mechanics
+
+==================================================
+PART 8 — FINAL SYSTEM CHECK
+==================================================
+
+After implementation verify:
+
+- Memory overrides system when needed
+- Future weeks adjust dynamically
+- Next session adapts correctly
+- Block continuation reflects real performance
+- No UI spam
+- No broken flows
+
+Log:
+
+[SystemUpgradeCheck] {
+  predictiveAdaptation: true/false,
+  memoryDominance: true/false,
+  nextSessionAdjustment: true/false,
+  blockContinuationIntelligent: true/false
+}
+
+==================================================
+FINAL STANDARD
+==================================================
+
+At the end of this:
+
+TrainChat should feel like:
+- A real coach
+- That learns
+- Anticipates
+- Adjusts ahead of time
+- And evolves the system continuously
+
+NOT just reacts after the fact.

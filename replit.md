@@ -116,6 +116,45 @@ The user interface features a dark theme with electric blue accents and the Inte
 - **DEFAULT EXECUTION LAYER**: Resolves natural-language references to concrete database entity IDs before AI processing to reduce over-clarification.
 - **Modularity**: Services are designed as distinct modules with clear extension points.
 
+## FINAL SYSTEM UPGRADE — Predictive Adaptation + Memory Dominance (April 2026)
+
+### 8-Part Evolution Layer
+
+**New Files:**
+- `lib/block-projection.ts` — `buildBlockProjection()`: analyzes last 4-14 sessions, computes avgDifficulty/painFrequency/adherenceRate/fatigueTrend, projects `progressionCurve` (accelerate/maintain/delay_intensification/simplify), modifies FUTURE week `volumeLevel`/`focus`/`coachingNotes`/exercise `sets` via `applyBlockProjectionToFutureWeeks()`. Idempotent via `[proj]` marker. Also exports `getAdaptationVisibilityLevel()`.
+- `lib/next-session-intelligence.ts` — `buildNextSessionAdjustment()`: reads last 1-3 session logs, decision tree produces reduce/maintain/progress/none. `applyNextSessionAdjustment()` writes coaching note + adjusts sets/rest on next upcoming session. Idempotent via `[adj]` marker.
+- `lib/memory-dominance.ts` — `resolveMemoryConstraints()`: reads `user_memories` (pain_pattern/exercise_preference, confidence ≥4) → hard constraints + active signals from 21-day session log window → builds AI override directive injected BEFORE adaptive context. `updateStructuredMemoryFromLog()`: writes rolling session metrics to `user_memories` (adherence rate, avg difficulty, fatigue index) after every session log.
+
+**Modified Files:**
+- `routes/session-logs.ts` (pipeline): Added 4 new fire-and-forget steps after existing pipeline — `updateStructuredMemoryFromLog`, `applyNextSessionAdjustment`, `buildBlockProjection`→`applyBlockProjectionToFutureWeeks`, `[SystemUpgradeCheck]` telemetry log. Upgraded all `postSessionAckToChat` messages to natural, personal coaching language.
+- `lib/adaptation.ts`: `buildAdaptationContext` now resolves memory dominance constraints in parallel and prepends `memoryDominanceContext` to `promptContext` — memory override fires before readiness and performance blocks.
+- `lib/training-system-service.ts`: `generateContinuationPhase` upgraded — now reads `energyScore` to compute `fatigueTrend` composite; performance-aware `intelligentNextBlockType` selection can de-escalate the block chain (e.g., INTENSIFICATION→FOUNDATION) or restart at foundation when signals are severe, rather than blindly following the default progression order. Coaching notes now use natural language grounded in actual signals.
+
+**Session Log Pipeline (complete order):**
+1. Mirror to session_feedback
+2. Evaluate + build recap
+3. Write change log for significant flags
+4. `postSessionAckToChat` (upgraded coaching language)
+5. `updateSessionAgentMemory` (system metadata)
+6. `writePainAreasToMemory` (if pain ≥3)
+7. `syncMemoriesFromData` (full extraction)
+8. `checkAndAutoAdvanceWeek`
+9. `updateStructuredMemoryFromLog` ← NEW (rolling metrics → memory dominance)
+10. `applyNextSessionAdjustment` ← NEW (next session sets/notes)
+11. `buildBlockProjection` → `applyBlockProjectionToFutureWeeks` ← NEW (future week structure)
+12. `[SystemUpgradeCheck]` telemetry log ← NEW
+
+**Adaptation Visibility Levels:**
+- `silent` — no week modifications
+- `subtle` — 1 week modification
+- `visible` — 2+ weeks reduced (chat note added by block projection caller)
+
+**Memory Priority Hierarchy (governs AI):**
+1. HARD CONSTRAINTS — injury/equipment from long-term memory (confidence ≥4) → pattern-level override
+2. ACTIVE SIGNALS — pain/fatigue/adherence/difficulty from 21-day session window
+3. BLOCK STRUCTURE — current phase week configs
+4. ORIGINAL INTENT — user's stated goal
+
 ## Full System Audit — April 2026
 
 ### 10-Category Production Audit Results

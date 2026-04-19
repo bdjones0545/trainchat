@@ -15,6 +15,7 @@ import { db, readinessEntriesTable, sessionFeedbackTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { buildPerformanceAdaptationContext } from "./performance-adaptation-service";
 import type { PerformanceAdaptationSummary } from "./performance-adaptation-service";
+import { resolveMemoryConstraints } from "./memory-dominance";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -270,10 +271,11 @@ function scoreLabel(score: number, type: string): string {
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export async function buildAdaptationContext(userId: number): Promise<AdaptationContext> {
-  const [recentReadiness, recentFeedback, performanceAdaptation] = await Promise.all([
+  const [recentReadiness, recentFeedback, performanceAdaptation, memoryDominance] = await Promise.all([
     fetchRecentReadiness(userId, 7),
     fetchRecentFeedback(userId, 5),
     buildPerformanceAdaptationContext(userId, 14).catch(() => null),
+    resolveMemoryConstraints(userId).catch(() => null),
   ]);
 
   const latestReadiness = recentReadiness[0] ?? null;
@@ -286,10 +288,12 @@ export async function buildAdaptationContext(userId: number): Promise<Adaptation
     recentReadiness.length
   );
 
-  // Merge readiness context + performance adaptation context
-  // Performance block is only appended when there is enough data to be meaningful
+  // Memory dominance context comes FIRST — it overrides conflicting block prescriptions
+  const memoryDominanceBlock = memoryDominance?.memoryDominanceContext ?? "";
+
+  // Merge: memory override → readiness → performance adaptation
   const performanceBlock = performanceAdaptation?.promptBlock ?? "";
-  const promptContext = [readinessPrompt, performanceBlock]
+  const promptContext = [memoryDominanceBlock, readinessPrompt, performanceBlock]
     .filter(Boolean)
     .join("\n\n");
 

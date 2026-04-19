@@ -1519,8 +1519,6 @@ export async function generateContinuationPhase(
   const previousBlockType = (previousPhase.metadata as any)?.blockType
     ?? inferBlockTypeFromName(previousPhase.name);
   const recommendation = buildNextBlockRecommendation(previousBlockType);
-  const nextBlockType = options.blockTypeOverride
-    ?? (options.mode === "repeat" ? previousBlockType : recommendation.blockType);
 
   const [profile] = await db.select().from(userProfilesTable).where(eq(userProfilesTable.userId, userId));
   const goal = profile ? normalizeGoal(profile.trainingGoal) : "general_fitness";
@@ -1537,6 +1535,7 @@ export async function generateContinuationPhase(
       sessionStatus: sessionLogsTable.sessionStatus,
       difficultyScore: sessionLogsTable.difficultyScore,
       painScore: sessionLogsTable.painScore,
+      energyScore: sessionLogsTable.energyScore,
     })
     .from(sessionLogsTable)
     .where(and(eq(sessionLogsTable.userId, userId), gte(sessionLogsTable.completedAt, thirtyDaysAgo)));
@@ -1548,18 +1547,59 @@ export async function generateContinuationPhase(
     completedLogs.length > 0
       ? completedLogs.reduce((s, f) => s + (f.difficultyScore ?? 3), 0) / completedLogs.length
       : 3;
+  const avgEnergy =
+    completedLogs.length > 0
+      ? completedLogs.reduce((s, f) => s + (f.energyScore ?? 3), 0) / completedLogs.length
+      : 3;
   const painFreq =
     completedLogs.length > 0
       ? completedLogs.filter((f) => (f.painScore ?? 0) >= 3).length / completedLogs.length
       : 0;
   const adherenceRate =
     recentLogs.length > 0 ? completedLogs.length / recentLogs.length : 1;
+  const fatigueTrend = (avgDifficulty + (6 - avgEnergy)) / 2; // 1–5 composite
 
+  // ── Part 6: Performance-aware block type selection ────────────────────────
+  // Override the default chain recommendation when actual signals demand it.
+  // Priority: explicit override > performance-based signal > default chain.
+  const blockDeEscalateMap: Record<string, string> = {
+    INTENSIFICATION_STRENGTH: "FOUNDATION_ACCUMULATION",
+    POWER_ELASTIC_CONVERSION: "INTENSIFICATION_STRENGTH",
+    REBUILD_DELOAD: "FOUNDATION_ACCUMULATION",
+  };
+  let intelligentNextBlockType = options.blockTypeOverride
+    ?? (options.mode === "repeat" ? previousBlockType : recommendation.blockType);
+
+  if (!options.blockTypeOverride && options.mode !== "repeat" && completedLogs.length >= 3) {
+    if (adherenceRate < 0.55 || (avgDifficulty >= 4.5 && painFreq >= 0.35)) {
+      // Severe stress signals — restart at foundation level regardless of chain position
+      intelligentNextBlockType = "FOUNDATION_ACCUMULATION";
+    } else if (fatigueTrend >= 4.0 || painFreq >= 0.35 || (avgDifficulty >= 4.2 && adherenceRate < 0.75)) {
+      // Significant stress — de-escalate one block type rather than progressing
+      intelligentNextBlockType = blockDeEscalateMap[recommendation.blockType] ?? recommendation.blockType;
+    } else if (avgDifficulty <= 2.0 && adherenceRate >= 0.90 && fatigueTrend <= 2.5) {
+      // Strong performance — standard chain is fine (accelerate note added below)
+      intelligentNextBlockType = recommendation.blockType;
+    }
+  }
+  const nextBlockType = intelligentNextBlockType;
+
+  // Build coaching notes from actual performance signals
   const adaptationNotes: string[] = [];
-  if (avgDifficulty >= 4.2) adaptationNotes.push("Prior block consistently rated hard — first week loads held conservative before progressing.");
-  else if (avgDifficulty <= 2.3 && completedLogs.length >= 3) adaptationNotes.push("Prior block consistently felt easy — applying progressive challenge increase from the start.");
-  if (painFreq >= 0.35) adaptationNotes.push("Recurring discomfort flagged across prior block — movement selection kept conservative and injury-aware.");
-  if (adherenceRate < 0.65 && recentLogs.length >= 3) adaptationNotes.push("Adherence was below 65% last block — sessions kept concise to prioritize consistency over volume.");
+  if (avgDifficulty >= 4.2) {
+    adaptationNotes.push("Based on how your last block went — consistently hard — I'm starting this one at a conservative load before building. No point walking into a new block already in a hole.");
+  } else if (avgDifficulty <= 2.3 && completedLogs.length >= 3) {
+    adaptationNotes.push("Last block felt comfortable throughout — I'm starting this one with more challenge built in from the beginning.");
+  }
+  if (painFreq >= 0.35) {
+    adaptationNotes.push("Discomfort was flagged across a fair chunk of last block's sessions — exercise selection in this block is kept conservative and injury-aware.");
+  }
+  if (adherenceRate < 0.65 && recentLogs.length >= 3) {
+    adaptationNotes.push("Consistency took a hit last block. I've kept sessions in this block tighter — less volume, easier to execute when life gets in the way.");
+  }
+  if (fatigueTrend >= 4.0 && completedLogs.length >= 3) {
+    adaptationNotes.push("Fatigue was accumulating into the end of last block. First week here is intentionally easier — give the body time to reset before we build again.");
+  }
 
   const coachGoal: CoachGoalType = goal === "athletic" ? "athletic_performance" : (goal as CoachGoalType);
   const coachEquipment: CoachEquipmentLevel =
@@ -1593,7 +1633,9 @@ export async function generateContinuationPhase(
         avgDifficulty: Math.round(avgDifficulty * 10) / 10,
         painFrequency: Math.round(painFreq * 100),
         adherenceRate: Math.round(adherenceRate * 100),
+        fatigueTrend: Math.round(fatigueTrend * 10) / 10,
         sessionCount: recentLogs.length,
+        intelligentOverride: intelligentNextBlockType !== recommendation.blockType,
       },
     },
   }).returning();
