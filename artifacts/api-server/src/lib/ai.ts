@@ -2037,6 +2037,12 @@ export interface AIResponseOptions {
    * Defaults to "strength" when absent.
    */
   focusMode?: FocusMode | null;
+  /**
+   * The execution planner's resolved action — used to detect REBUILD_PROGRAM
+   * as a build intent when actionDecision is null (which is always the case
+   * for the rebuild path).
+   */
+  execPlanAction?: string | null;
 }
 
 // ─── Main entry point ────────────────────────────────────────────────────────
@@ -2067,6 +2073,7 @@ export async function generateAIResponse(
     agentSettings,
     responsePolicy,
     focusMode: rawFocusMode,
+    execPlanAction,
   } = options;
 
   const focusMode = resolveFocusMode(rawFocusMode ?? null);
@@ -2263,7 +2270,8 @@ export async function generateAIResponse(
   const isBuildIntent =
     intentResult?.type === "CREATE_PROGRAM" ||
     intentResult?.type === "START_NEW_PROGRAM" ||
-    actionDecision?.actionType === "STRUCTURAL_REBUILD";
+    actionDecision?.actionType === "STRUCTURAL_REBUILD" ||
+    execPlanAction === "REBUILD_PROGRAM";
 
   // ── Program Generation Path Audit ─────────────────────────────────────────
   // Logged at the start of every request so we can verify that all builds
@@ -2558,19 +2566,39 @@ export async function generateAIResponse(
   const callOpenAI = async (
     msgs: { role: "system" | "user" | "assistant"; content: string }[],
     maxTok: number,
+    attempt = 0,
   ): Promise<{ cleanContent: string; structuredData: ProgramStructure | null }> => {
-    const resp = await fetch(`${openAIBaseUrl}/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: "gpt-4o", messages: msgs, max_tokens: maxTok, temperature: 0.6 }),
-    });
-    if (!resp.ok) {
-      const errText = await resp.text();
-      throw new Error(`OpenAI API error ${resp.status}: ${errText}`);
+    const maxRetries = 2;
+    try {
+      const resp = await fetch(`${openAIBaseUrl}/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({ model: "gpt-4o", messages: msgs, max_tokens: maxTok, temperature: 0.6 }),
+      });
+      if (!resp.ok) {
+        const errText = await resp.text();
+        const is429 = resp.status === 429;
+        if (attempt < maxRetries && (is429 || resp.status >= 500)) {
+          const delayMs = is429 ? 5000 * (attempt + 1) : 1500 * (attempt + 1);
+          logger.warn({ attempt, status: resp.status, delayMs }, "[callOpenAI] Retrying after non-200 response");
+          await new Promise((res) => setTimeout(res, delayMs));
+          return callOpenAI(msgs, maxTok, attempt + 1);
+        }
+        throw new Error(`OpenAI API error ${resp.status}: ${errText}`);
+      }
+      const data = (await resp.json()) as { choices: { message: { content: string } }[] };
+      const rawContent = data.choices[0]?.message?.content ?? "I'm unable to respond right now.";
+      return extractStructuredData(rawContent);
+    } catch (fetchErr) {
+      const isNetworkError = fetchErr instanceof TypeError;
+      if (attempt < maxRetries && isNetworkError) {
+        const delayMs = 1500 * (attempt + 1);
+        logger.warn({ attempt, errMessage: fetchErr instanceof Error ? fetchErr.message : String(fetchErr), delayMs }, "[callOpenAI] Retrying after network error");
+        await new Promise((res) => setTimeout(res, delayMs));
+        return callOpenAI(msgs, maxTok, attempt + 1);
+      }
+      throw fetchErr;
     }
-    const data = (await resp.json()) as { choices: { message: { content: string } }[] };
-    const rawContent = data.choices[0]?.message?.content ?? "I'm unable to respond right now.";
-    return extractStructuredData(rawContent);
   };
 
   try {
@@ -3246,8 +3274,9 @@ Output the corrected program JSON and a brief calm confirmation.`;
 
     return { content: cleanContent, structuredData };
   } catch (error) {
+    const errMessage = error instanceof Error ? error.message : String(error);
     logger.error(
-      { error, focusMode, isBuildIntent },
+      { err: error, errMessage, focusMode, isBuildIntent },
       "[ProgramGenerationPathAudit] OpenAI API call failed"
     );
 
