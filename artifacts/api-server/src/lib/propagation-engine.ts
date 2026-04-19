@@ -822,7 +822,7 @@ export function getPropagationSummary(
   if (commit.appliedCount > 0) parts.push(`Applied to ${commit.appliedCount} future week${commit.appliedCount > 1 ? "s" : ""}`);
   const protectedSkips = skippedWeeks.filter((s) => s.reason.includes("protected") || s.reason.includes("deload"));
   const customizedSkips = skippedWeeks.filter((s) => s.reason.includes("customized"));
-  if (protectedSkips.length > 0) parts.push(`skipped ${protectedSkips.length} protected week${protectedSkips.length > 1 ? "s" : ""}`);
+  if (protectedSkips.length > 0) parts.push(`left ${protectedSkips.length} future week${protectedSkips.length > 1 ? "s" : ""} unchanged`);
   if (customizedSkips.length > 0) parts.push(`${customizedSkips.length} customized week${customizedSkips.length > 1 ? "s" : ""} left unchanged`);
 
   return {

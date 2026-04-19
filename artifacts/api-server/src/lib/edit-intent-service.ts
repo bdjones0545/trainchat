@@ -799,6 +799,25 @@ function resolveInjuryFlags(system: any): string[] {
   return [flags].flat().filter(Boolean) as string[];
 }
 
+// ─── Coaching Focus Label (user-facing translation) ──────────────────────────
+//
+// Translates internal movement-pattern identifiers into plain coaching language
+// for user-facing acknowledgment text only.
+// Internal logs, reasons, and engine traces should NOT use this function.
+
+function coachingFocusLabel(movementPattern?: string | null): string {
+  const p = (movementPattern ?? "").toLowerCase().replace(/ /g, "_");
+  if (p.includes("pull") || p.includes("row")) return "pulling focus";
+  if (p.includes("squat") || p.includes("lunge")) return "lower-body strength focus";
+  if (p.includes("hinge") || p.includes("deadlift")) return "posterior-chain focus";
+  if (p.includes("push") || p.includes("press")) return "pressing focus";
+  if (p.includes("jump") || p.includes("plyometric") || p.includes("power")) return "explosive emphasis";
+  if (p.includes("carry") || p.includes("stability")) return "stability focus";
+  if (p.includes("core") || p.includes("anti_rotation")) return "core focus";
+  if (p.includes("conditioning") || p.includes("cardio")) return "conditioning focus";
+  return "training focus";
+}
+
 // ─── Open-Ended Swap Auto-Selector ───────────────────────────────────────────
 //
 // When the user's swap intent is clear but the replacement is open-ended,
@@ -863,9 +882,8 @@ async function autoSelectOpenEndedSwap(opts: {
 
   // Build a human rationale for the change summary
   const patternLabel = selected.movementPattern?.replace(/_/g, " ") ?? "similar movement";
-  const rationale = selected.clusterId
-    ? `to preserve the same movement family`
-    : `to maintain the ${patternLabel} pattern`;
+  const focusLabel = coachingFocusLabel(selected.movementPattern);
+  const rationale = `to keep the same ${focusLabel}`;
 
   debugInfo.selectedSubstitute = selectedName;
   debugInfo.rankingReason = selected.clusterId ? "cluster_match" : "movement_pattern_fallback";
@@ -890,7 +908,7 @@ async function autoSelectOpenEndedSwap(opts: {
   return {
     intent: "swap_exercise",
     scope: "exercise",
-    changeSummary: `${exerciseName} replaced with ${selectedName} — chosen ${rationale}. Sets, reps, and rest carried over from the original slot.`,
+    changeSummary: `${exerciseName} replaced with ${selectedName} — chosen ${rationale}. Sets, reps, and rest stayed the same.`,
     changes: [
       {
         type: "replace_exercise",
@@ -1360,7 +1378,7 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
       return {
         intent: "swap_exercise",
         scope: "exercise",
-        changeSummary: `${label} has been swapped for ${swapTo}. Sets, reps, and rest prescription carried over from the original slot.`,
+        changeSummary: `${label} has been swapped for ${swapTo}. Sets, reps, and rest stayed the same.`,
         changes: [{
           type: "replace_exercise",
           id: exerciseId,
@@ -1401,7 +1419,7 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
       return {
         intent: "reduce_sets",
         scope: "exercise",
-        changeSummary: `Removed a set from ${label} to reduce local fatigue at this movement pattern.`,
+        changeSummary: `Removed a set from ${label} to reduce local fatigue.`,
         changes: [{ type: "update_exercise", id: exerciseId, updates: { sets: "DECREMENT" as any }, reason: "User requested set reduction" }],
       };
     }
