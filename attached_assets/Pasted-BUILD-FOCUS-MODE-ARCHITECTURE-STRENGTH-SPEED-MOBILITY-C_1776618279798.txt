@@ -1,0 +1,476 @@
+BUILD FOCUS MODE ARCHITECTURE — STRENGTH / SPEED / MOBILITY
+
+CONTEXT:
+TrainChat now has a strong, working Strength system:
+- program generation
+- 4-week blocks
+- agent command panel
+- refinements
+- predictive adaptation
+- memory dominance
+- session lifecycle
+- week/block continuation
+- sport / age / equipment intelligence
+
+We now want to expand into:
+1. Strength
+2. Speed / Footwork
+3. Mobility
+
+But we do NOT want one focus to contaminate the others.
+We need a clean architecture where all three focuses share the same product shell but use isolated programming engines.
+
+This must be the fastest, cleanest way to replicate the system:
+- shared infrastructure
+- separate training brains
+- visible UI mode changes
+- zero logic bleed between focuses
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Create a Focus Mode architecture with:
+
+- top-level mode tabs:
+  - Strength
+  - Speed / Footwork
+  - Mobility
+
+- subtle but clear UI color/background changes per mode
+
+- isolated programming engines per mode:
+  - separate block archetypes
+  - separate session grammar
+  - separate movement families
+  - separate adaptation rules
+  - separate continuation logic inputs
+
+while keeping:
+- one agent
+- one app shell
+- one persistence model
+- one command surface
+- one lifecycle framework
+
+==================================================
+PART 1 — FOCUS MODE SYSTEM STATE
+==================================================
+
+Create a global focus mode state for the main agent and program system.
+
+Add:
+- focusMode: "strength" | "speed" | "mobility"
+
+This state should be available to:
+- main agent
+- Active Programs page
+- Agent panel
+- program generation
+- refinement engine
+- continuation logic
+- session logging
+- memory system
+
+Persist focus mode appropriately so the app knows what system the user is currently working in.
+
+==================================================
+PART 2 — TOP TABS IN MAIN AGENT
+==================================================
+
+Add top-level tabs in the main agent UI:
+
+- Strength
+- Speed / Footwork
+- Mobility
+
+Requirements:
+- clean, premium, mobile-friendly
+- visible at the top of the main agent experience
+- switching tabs changes the active focus mode
+- visually clear but not loud
+
+When switching modes:
+- the selected mode becomes the active programming focus
+- examples / quick actions / microcopy adapt
+- the background or accent color shifts subtly
+
+==================================================
+PART 3 — MODE-SPECIFIC VISUAL IDENTITY
+==================================================
+
+Implement subtle UI differentiation by mode.
+
+Example direction:
+- Strength → neutral / strong / darker accent
+- Speed / Footwork → electric / energetic accent
+- Mobility → calmer / softer accent
+
+This should affect:
+- top tab active state
+- subtle background tint / gradient
+- chips / badges / active controls
+- maybe the Agent panel header treatment
+
+Do NOT redesign the whole app per mode.
+Keep the shell consistent.
+This is a state signal, not a theme overhaul.
+
+==================================================
+PART 4 — SHARED INFRASTRUCTURE VS ISOLATED ENGINES
+==================================================
+
+Architect the system with clear separation:
+
+SHARED ACROSS ALL MODES:
+- authentication
+- user profile
+- agent shell
+- main chat
+- Agent panel
+- diff / undo / history
+- session lifecycle
+- session logging UI
+- memory storage framework
+- persistence framework
+- week/block UI shell
+- program continuation framework
+- equipment / age / injury extraction
+- audit logging
+
+ISOLATED PER MODE:
+- exercise libraries / tags / families
+- block archetypes
+- weekly logic
+- session grammar
+- program generation rules
+- predictive adaptation heuristics
+- quick-command default mappings if needed
+- continuation selection rules
+- coaching language bias
+
+Make this separation explicit in code organization.
+
+==================================================
+PART 5 — CREATE MODE-SPECIFIC PROGRAMMING ENGINES
+==================================================
+
+Refactor the current Strength engine into a mode-specific engine.
+
+Then define placeholders / architecture for:
+- strength-engine
+- speed-engine
+- mobility-engine
+
+Each mode engine should expose a common interface, for example:
+
+generateProgram(...)
+refineProgram(...)
+adaptFromSessionLog(...)
+generateContinuationBlock(...)
+getSessionGrammar(...)
+getMovementFamilies(...)
+getBlockArchetypes(...)
+
+This allows the shell to remain stable while the underlying logic changes by focus.
+
+==================================================
+PART 6 — STRENGTH ENGINE
+==================================================
+
+Use the existing TrainChat strength system as the first focus engine.
+
+This should become the reference implementation.
+
+Move Strength-specific logic into the strength engine where appropriate:
+- strength block archetypes
+- strength movement families
+- strength exposure tracking
+- strength progression rules
+- strength adaptation behaviors
+
+Do NOT break current behavior.
+
+==================================================
+PART 7 — SPEED / FOOTWORK ENGINE ARCHITECTURE
+==================================================
+
+Create the structure for the Speed / Footwork engine.
+
+Do NOT fully build every speed feature yet unless straightforward.
+But define the correct architecture and placeholders.
+
+Speed / Footwork should be built around concepts like:
+- acceleration
+- max velocity
+- change of direction
+- elastic/reactive output
+- footwork / rhythm / timing
+- deceleration control
+- return-to-speed / tissue prep
+
+Create initial mode-specific constructs:
+- speed block archetypes
+- speed movement families
+- speed session grammar
+- speed adaptation hooks
+- speed quick command semantics
+
+This must NOT be “strength with more jumps.”
+It needs its own logic lane.
+
+==================================================
+PART 8 — MOBILITY ENGINE ARCHITECTURE
+==================================================
+
+Create the structure for the Mobility engine.
+
+Mobility should be built around:
+- restore range
+- positional control
+- joint prep
+- movement quality
+- end-range control
+- tissue tolerance
+- recovery / restoration flow
+- re-entry support
+
+Create initial mode-specific constructs:
+- mobility block archetypes
+- mobility movement families
+- mobility session grammar
+- mobility adaptation hooks
+- mobility quick command semantics
+
+This must NOT be “light strength.”
+It needs its own logic lane.
+
+==================================================
+PART 9 — PREVENT CROSS-CONTAMINATION
+==================================================
+
+This is critical.
+
+A focus mode must not accidentally affect another mode’s programming system.
+
+Examples:
+- a Strength block should not overwrite a Speed program
+- Mobility modifiers should not silently alter Strength block structure
+- Speed-specific adaptation rules should not run on Strength sessions
+
+Implement safeguards so that:
+- each focus has its own program chain / active context
+- each focus has its own block metadata
+- each focus has its own continuation state
+- memory can be shared selectively, but engine-specific interpretation is isolated
+
+Shared user facts:
+- age
+- injury
+- equipment
+- sport
+can be global
+
+But focus-specific programming state must remain isolated.
+
+==================================================
+PART 10 — AGENT BEHAVIOR BY MODE
+==================================================
+
+The same agent should adapt its behavior based on active focus mode.
+
+When focus = Strength:
+- examples, responses, and command interpretation bias toward lifting / strength / hypertrophy / power-strength logic
+
+When focus = Speed / Footwork:
+- bias toward speed, acceleration, footwork, reactivity, COD, decel, rhythm
+
+When focus = Mobility:
+- bias toward range, recovery, joint control, movement quality, restoration
+
+Important:
+This should still feel like one coherent TrainChat agent, not 3 unrelated bots.
+
+==================================================
+PART 11 — AGENT PANEL / QUICK ACTIONS BY MODE
+==================================================
+
+Update the Agent panel so quick commands adapt based on focus mode.
+
+Examples:
+
+STRENGTH:
+- More explosive
+- Less volume
+- Recovery focus
+- More hypertrophy
+- More intense
+
+SPEED / FOOTWORK:
+- More acceleration
+- More reactive
+- Reduce tendon load
+- More footwork
+- Recovery focus
+
+MOBILITY:
+- Open hips
+- Reduce stiffness
+- More recovery
+- Joint-friendly
+- Restore range
+
+All still route through the SAME real pipeline, but the commands shown and default intent mapping can vary by focus.
+
+==================================================
+PART 12 — PROGRAM / BLOCK / WEEK UI BY MODE
+==================================================
+
+Ensure the existing Active Programs UI shell supports mode context.
+
+At minimum:
+- block cards reflect mode
+- week/session labels can reflect mode-specific naming
+- the mode color/accent appears consistently
+- block continuation logic respects active mode
+
+Do NOT build 3 separate Active Programs UIs.
+Keep one shell that adapts by focus.
+
+==================================================
+PART 13 — MEMORY SYSTEM BY MODE
+==================================================
+
+Extend the memory system so it can support:
+- global memory
+- focus-specific memory
+
+Examples:
+Global:
+- knee pain
+- equipment constraints
+- age
+- sport
+
+Strength-specific:
+- explosive emphasis
+- volume bias
+- hypertrophy preference
+
+Speed-specific:
+- acceleration focus
+- decel sensitivity
+- tendon load concern
+
+Mobility-specific:
+- hips priority
+- shoulder range priority
+- recovery bias
+
+Store this cleanly so each engine can read the relevant memory without polluting the others.
+
+==================================================
+PART 14 — CONTINUATION LOGIC BY MODE
+==================================================
+
+Block continuation must become mode-aware.
+
+Strength continuation:
+- strength / hypertrophy / power-strength chain
+
+Speed continuation:
+- acceleration / reactive / COD / return-to-speed chain
+
+Mobility continuation:
+- restore / control / re-entry / maintenance chain
+
+Use the same continuation framework, but let the active mode engine determine:
+- next block archetype
+- progression direction
+- de-escalation logic
+- adaptation rules
+
+==================================================
+PART 15 — ROUTING + AUDIT LOGGING
+==================================================
+
+Add explicit logging so we can verify mode behavior.
+
+Examples:
+
+[FocusModeAudit] {
+  activeFocusMode,
+  route,
+  engineUsed,
+  uiModeApplied,
+  memoryNamespaceUsed,
+  blockTypeGenerated
+}
+
+[CrossContaminationAudit] {
+  focusMode,
+  attemptedReadFromWrongEngine,
+  blocked: true/false
+}
+
+We need to know if the correct engine is being used consistently.
+
+==================================================
+PART 16 — VALIDATION
+==================================================
+
+Validate at least these scenarios:
+
+1. Build a Strength program
+- uses strength engine
+- strength colors applied
+- strength quick actions shown
+
+2. Switch to Speed / Footwork
+- active mode changes
+- speed visuals appear
+- speed engine selected
+- strength state not overwritten
+
+3. Switch to Mobility
+- mobility visuals appear
+- mobility engine selected
+- strength/speed program state remains isolated
+
+4. Refinements from each mode
+- route through same pipeline
+- hit correct mode engine
+- do not mutate another mode’s system
+
+==================================================
+PART 17 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. focus mode state architecture
+2. shared infrastructure vs isolated engine design
+3. what UI/tab/color changes were added
+4. how mode engines are structured
+5. how cross-contamination is prevented
+6. how agent behavior changes by mode
+7. what is fully implemented now vs scaffolded for next phase
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat should now support three clean focus lanes:
+
+- Strength
+- Speed / Footwork
+- Mobility
+
+with:
+- one shared app shell
+- one shared agent shell
+- separate programming brains
+- separate continuation logic
+- separate adaptation logic
+- subtle but clear visual identity changes
+
+The user should feel like they are switching between training focuses inside one intelligent system — not using three different products, and not mixing one focus into another.
