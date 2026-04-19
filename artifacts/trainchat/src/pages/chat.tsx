@@ -47,13 +47,9 @@ import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_17752640
 import ShareMomentPrompt from "@/components/share/ShareMomentPrompt";
 import ShareMomentModal from "@/components/share/ShareMomentModal";
 import { buildShareMoment, type ShareMoment } from "@/types/share-moments";
-
-const SUGGESTION_CHIPS = [
-  { label: "Build a 4-day strength system", prompt: "Design a 4-day strength training system for me", highlight: true },
-  { label: "Work around pain or injury", prompt: "Help me train around an injury or pain", highlight: false },
-  { label: "Add speed & explosiveness", prompt: "I want to add speed, power, and athletic explosiveness to my program", highlight: false },
-  { label: "Build for a home gym", prompt: "Build a program using only home gym equipment", highlight: false },
-];
+import { useFocusMode } from "@/hooks/useFocusMode";
+import { getFocusModeConfig } from "@/lib/focusModeConfig";
+import type { FocusMode } from "@/lib/focusMode";
 
 async function fetchSubscription() {
   try {
@@ -144,6 +140,8 @@ async function postCheckout(priceId: string) {
 export default function Chat() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+
+  const { focusMode, setFocusMode } = useFocusMode();
 
   const [activeConvoId, setActiveConvoId] = useState<number | null>(null);
   const [inputText, setInputText] = useState("");
@@ -834,6 +832,8 @@ export default function Chat() {
       activeProgramName: isNewBuildSession ? null : ((activeSystem as any)?.programName ?? null),
       // Signal backend to use only this conversation's history for intent routing
       newBuildSession: isNewBuildSession || undefined,
+      // Active focus mode — routes to the correct programming engine on the backend
+      focusMode,
       // Extra context from panel actions (source, dayIndex, exerciseId, etc.)
       ...(extraContext ?? {}),
     };
@@ -1917,6 +1917,40 @@ export default function Chat() {
           </button>
 
 
+          {/* ── Focus Mode Tabs ────────────────────────────────────────────────
+              Top-level mode switcher. Clean, premium, minimal.
+              Switching tabs changes the active programming focus. ── */}
+          <div className="flex-shrink-0 flex items-center justify-center border-b border-border/60 bg-background/95 backdrop-blur-sm pt-1">
+            {([
+              { id: "strength" as FocusMode, label: "Strength" },
+              { id: "speed" as FocusMode, label: "Speed / Footwork" },
+              { id: "mobility" as FocusMode, label: "Mobility" },
+            ] as const).map((tab) => {
+              const isActive = focusMode === tab.id;
+              const cfg = getFocusModeConfig(tab.id);
+              const activeTabClass = cfg.theme.tabActiveClass;
+              const underlineClass = cfg.theme.tabUnderlineClass;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setFocusMode(tab.id)}
+                  className={`relative px-4 py-2.5 text-xs font-semibold tracking-wide transition-all duration-200 ${
+                    isActive
+                      ? activeTabClass
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {tab.label}
+                  {isActive && (
+                    <span
+                      className={`absolute bottom-0 left-0 right-0 h-[2px] rounded-full ${underlineClass}`}
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
           {/* Compact sticky context bar — shows when a program exists */}
           {displayProgram && (
             <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 border-b border-border bg-background/90 backdrop-blur-sm">
@@ -2002,10 +2036,10 @@ export default function Chat() {
                 </div>
 
                 <h2 className="text-base font-semibold text-foreground mb-1">
-                  Build your training system
+                  {getFocusModeConfig(focusMode).emptyStateHeadline}
                 </h2>
                 <p className="text-sm text-muted-foreground max-w-xs leading-relaxed mb-4">
-                  Describe your goal, constraints, or sport — I'll build it live.
+                  {getFocusModeConfig(focusMode).emptyStateSubline}
                 </p>
 
                 {/* System status strip — derives exclusively from resolveProgramState output */}
@@ -2036,15 +2070,15 @@ export default function Chat() {
                   )}
                 </div>
 
-                {/* Quick action chips */}
+                {/* Quick action chips — mode-specific */}
                 <div className="flex flex-wrap justify-center gap-2 w-full max-w-sm">
-                  {SUGGESTION_CHIPS.map((chip) => (
+                  {getFocusModeConfig(focusMode).suggestionChips.map((chip) => (
                     <button
                       key={chip.label}
                       onClick={() => { triggerCorePulse(); handleSend(chip.prompt); }}
                       className={`px-3.5 py-2 text-xs font-medium rounded-full active:scale-95 transition-all duration-150 ${
                         chip.highlight
-                          ? "text-primary border border-primary/50 bg-primary/10 hover:bg-primary/20 hover:border-primary/70 hover:shadow-sm"
+                          ? getFocusModeConfig(focusMode).theme.chipHighlightClass + " hover:shadow-sm"
                           : "text-foreground bg-card border border-border hover:border-primary/40 hover:text-primary hover:bg-primary/5 hover:shadow-sm"
                       }`}
                     >

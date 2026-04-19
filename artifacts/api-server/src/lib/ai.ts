@@ -51,6 +51,9 @@ import { extractAgentIntentProfile, buildAgentIntentProfilePromptSection } from 
 import { auditLanguageInterpretation } from "./language-audit";
 import { type ResponsePolicy, buildResponsePolicyPromptSection } from "./response-policy-engine";
 import { detectAndBuildDirectives } from "./programs/agentControlDirectives";
+import { buildFocusModePromptContext, getFocusModeAdaptationHeuristics } from "./focus-engines/focus-mode-router";
+import { resolveFocusMode, logFocusModeAudit } from "./focus-mode-audit";
+import type { FocusMode } from "./focus-engines/engine-interface";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -2019,6 +2022,12 @@ export interface AIResponseOptions {
    * how to phrase the response, and what to preserve. Produced by the Response Policy Engine.
    */
   responsePolicy?: ResponsePolicy | null;
+  /**
+   * Active focus mode — controls which engine is used for programming context.
+   * Injected from the frontend via uiContext.focusMode.
+   * Defaults to "strength" when absent.
+   */
+  focusMode?: FocusMode | null;
 }
 
 // ─── Main entry point ────────────────────────────────────────────────────────
@@ -2048,7 +2057,10 @@ export async function generateAIResponse(
     hasActiveProgram,
     agentSettings,
     responsePolicy,
+    focusMode: rawFocusMode,
   } = options;
+
+  const focusMode = resolveFocusMode(rawFocusMode ?? null);
 
   // ── Agent settings: behavior instructions + profile fill defaults ──────────
   // Injected into the system prompt on every request when settings are present.
@@ -2343,7 +2355,22 @@ export async function generateAIResponse(
     ? buildResponsePolicyPromptSection(responsePolicy)
     : null;
 
-  const extras = [behaviorInstructions, profileFillContext, adaptationContext, memoryContext, sessionSportOverride, insightHint, conversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, agentIntentProfileSection, responsePolicySection, architectureBriefText, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection]
+  // ── Focus Mode Context ─────────────────────────────────────────────────────
+  // Builds mode-specific prompt context from the active focus engine.
+  // Injected early in the extras to establish the agent's programming bias.
+  const focusModeContext = buildFocusModePromptContext(focusMode, userMessage);
+  const focusModeAdaptationContext = getFocusModeAdaptationHeuristics(focusMode);
+
+  // Audit the focus mode usage
+  logFocusModeAudit({
+    activeFocusMode: focusMode,
+    route: "generateAIResponse",
+    engineUsed: focusMode,
+    uiModeApplied: true,
+    memoryNamespaceUsed: focusMode,
+  });
+
+  const extras = [focusModeContext, focusModeAdaptationContext, behaviorInstructions, profileFillContext, adaptationContext, memoryContext, sessionSportOverride, insightHint, conversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, agentIntentProfileSection, responsePolicySection, architectureBriefText, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection]
     .filter(Boolean)
     .join("\n\n");
   const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;

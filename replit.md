@@ -210,6 +210,51 @@ Cards never expose: pain specifics, bodyweight, age, private notes, injury detai
 ### Package Added
 - `html-to-image` (artifacts/trainchat) — for PNG export of share cards
 
+## Focus Mode Architecture (Strength / Speed / Mobility)
+
+TrainChat supports three isolated training focus lanes through a clean Focus Mode architecture. One shared app shell, one agent, separate programming brains.
+
+### Focus Modes
+- **Strength** — lifting, hypertrophy, power-strength, structural development
+- **Speed / Footwork** — acceleration, max velocity, COD, elastic/reactive output, footwork/rhythm
+- **Mobility** — range restoration, positional control, joint prep, end-range strength, restoration
+
+### What is Shared
+Authentication, user profile, agent shell, main chat, Agent Panel, diff/undo/history, session lifecycle, session logging UI, memory storage framework, persistence framework, week/block UI shell, program continuation framework, equipment/age/injury extraction, audit logging.
+
+### What is Isolated Per Mode
+Exercise libraries/tags/families, block archetypes, weekly logic, session grammar, program generation rules, predictive adaptation heuristics, quick command default mappings, continuation selection rules, coaching language bias.
+
+### Frontend Files
+- `artifacts/trainchat/src/lib/focusMode.ts` — FocusMode type + localStorage persistence
+- `artifacts/trainchat/src/hooks/useFocusMode.ts` — React hook for global focus mode state
+- `artifacts/trainchat/src/lib/focusModeConfig.ts` — per-mode visual identity, chips, empty-state copy, quick actions
+- `artifacts/trainchat/src/pages/chat.tsx` — focus mode tabs at top of center column, mode-specific chips, passes `focusMode` in every chatUIContext to backend
+
+### Backend Files
+- `artifacts/api-server/src/lib/focus-engines/engine-interface.ts` — shared interface all engines must implement
+- `artifacts/api-server/src/lib/focus-engines/strength-engine.ts` — reference implementation (block archetypes, movement families, session grammar, continuation rules, prompt context)
+- `artifacts/api-server/src/lib/focus-engines/speed-engine.ts` — speed/footwork engine architecture
+- `artifacts/api-server/src/lib/focus-engines/mobility-engine.ts` — mobility engine architecture
+- `artifacts/api-server/src/lib/focus-engines/focus-mode-router.ts` — routes to correct engine, validates memory namespace isolation, prevents cross-contamination
+- `artifacts/api-server/src/lib/focus-mode-audit.ts` — structured audit logging (`[FocusModeAudit]`, `[CrossContaminationAudit]`)
+
+### Integration Points
+- `artifacts/api-server/src/lib/ai.ts` — `AIResponseOptions.focusMode`, focus engine context injected early in system prompt
+- `artifacts/api-server/src/routes/conversations.ts` — extracts `uiContext.focusMode` from both SSE and non-SSE routes, passes to `generateAIResponse`
+
+### Visual Identity
+Each mode has its own tab active color and underline:
+- Strength → primary blue (app default)
+- Speed / Footwork → sky blue (`text-sky-500`, `bg-sky-500`)
+- Mobility → emerald green (`text-emerald-600`, `bg-emerald-500`)
+
+### Cross-Contamination Prevention
+- `focus-mode-router.ts` validates memory namespace per mode
+- Each engine exposes its own `getMemoryNamespace()` → `strength | speed | mobility`
+- `validateMemoryNamespace()` logs `[CrossContaminationAudit]` and blocks wrong-namespace reads
+- Each mode has its own block archetypes, continuation chain, adaptation rules, and session grammar — no shared mutable state between modes
+
 ## External Dependencies
 
 - **OpenAI**: Provides core AI capabilities, specifically using the GPT-4o model.

@@ -51,6 +51,8 @@ import {
   processSessionScopeImpact,
   processHierarchicalImpact,
 } from "../lib/refinement-impact-engine";
+import { resolveFocusMode } from "../lib/focus-mode-audit";
+import { logFocusModeAudit } from "../lib/focus-mode-audit";
 
 const router: IRouter = Router();
 
@@ -627,6 +629,7 @@ Keep it helpful and intelligent, never promotional.`;
   // which would bias ambiguous first messages toward EDIT instead of CREATE.
   const nonStreamUiCtx = (req.body as any)?.uiContext ?? null;
   const isFreshBuildSession = nonStreamUiCtx?.newBuildSession === true;
+  const nonStreamFocusMode = resolveFocusMode(nonStreamUiCtx?.focusMode ?? null);
 
   // Load both conversation history program AND DB system in parallel.
   // This is critical for cross-conversation continuity: if the user opens a new
@@ -1766,6 +1769,7 @@ Keep it helpful and intelligent, never promotional.`;
       hasActiveProgram: !!currentProgram || hasActiveSystem,
       agentSettings,
       responsePolicy: resolvedResponsePolicy,
+      focusMode: nonStreamFocusMode,
     }
   );
 
@@ -2095,6 +2099,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   // When true: scope intent classification to conversation history only (ignore DB active system)
   // and strip old program name from the AI system prompt uiContext section.
   const isFreshBuildSession = streamUIContext?.newBuildSession === true;
+  const streamFocusMode = resolveFocusMode(streamUIContext?.focusMode ?? null);
 
   // ── Agent Settings — resolve behavior + training defaults for this request ──
   const streamRawCoachSettings = (req.body as any)?.coachSettings as Partial<CoachBehaviorSettings> | undefined;
@@ -3137,6 +3142,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       hasActiveProgram: !!currentProgram || hasActiveSystem,
       agentSettings,
       responsePolicy: resolvedResponsePolicy,
+      focusMode: streamFocusMode,
     }
   );
 
