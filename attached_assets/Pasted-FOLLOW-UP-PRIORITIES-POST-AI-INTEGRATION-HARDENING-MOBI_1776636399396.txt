@@ -1,0 +1,221 @@
+FOLLOW-UP PRIORITIES — POST-AI INTEGRATION HARDENING (MOBILITY PARITY, TOKEN STABILITY, QUALITY CONTROL, FRONTEND ERROR UX)
+
+CONTEXT:
+The full AI integration audit confirms the system is operating correctly with:
+- structured prompt assembly (21 sections)
+- focus-mode engines (Strength / Speed / Mobility)
+- OpenAI integration via callOpenAI
+- validation pipeline (constraint → quality → special considerations → injury)
+- retry logic
+- deterministic guardrails
+
+However, four high-impact follow-up priorities were identified:
+
+1. Mobility engine lacks post-generation enforcement parity with Speed
+2. Speed builds may hit token ceilings on complex requests
+3. Quality validator is non-blocking and can allow weak outputs
+4. Frontend error handling for recoverable failures needs improvement
+
+We will address all four areas.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Harden the AI pipeline so all focus modes are equally robust, outputs are stable under load, quality is more consistent, and user-facing failures are handled cleanly.
+
+==================================================
+PART 1 — MOBILITY ENGINE PARITY WITH SPEED
+==================================================
+
+Goal: Mobility must match Speed in post-generation enforcement.
+
+TASKS:
+
+1. Add mobility bleed detection
+Create:
+validateMobilityOutputForBleed(output)
+
+Checks:
+- presence of strength-only session labels (push day, pull day, hypertrophy, etc.)
+- presence of strength-dominant exercise names
+- presence of non-mobility intent language
+
+2. Add mobility repair layer
+Create:
+repairMobilityOutput(output)
+
+Fixes:
+- session naming → mobility-native equivalents (Flow Session, Joint Prep, End-Range Control, etc.)
+- missing tempo / control cues
+- missing rest → derive from mobility defaults
+- enforce focusMode = "mobility"
+
+3. Add mobility failure classifier
+Create:
+classifyMobilityGenerationFailure()
+
+Types:
+- prompt_failure
+- parse_failure
+- validation_failure
+- bleed_failure
+- structure_failure
+
+4. Add mobility response contract (if not strict enough)
+Ensure JSON structure is enforced similarly to Speed.
+
+5. Add logs:
+[MobilityOpenAIAudit]
+[MobilityBleedAudit]
+
+==================================================
+PART 2 — SPEED TOKEN BUDGET HARDENING
+==================================================
+
+Goal: Prevent truncation of structured JSON responses.
+
+TASKS:
+
+1. Audit token usage for:
+- 3-day speed builds
+- 5-day speed builds
+- with full memory injection
+- with sport-specific context
+
+2. Identify largest contributors:
+- architectureBriefText
+- memoryContext
+- duplicated instruction sections
+
+3. Reduce prompt size by:
+- removing redundant wording
+- compressing repeated constraints
+- shortening example lists
+- trimming memory injection to top N most relevant items
+
+4. Add truncation detection:
+Before parsing:
+- verify JSON closes properly
+- detect missing closing braces or incomplete arrays
+
+If truncation detected:
+- classify as structure_failure
+- retry once with reduced prompt size (compact mode)
+
+==================================================
+PART 3 — QUALITY VALIDATOR ENHANCEMENT
+==================================================
+
+Goal: Improve output quality without reducing availability.
+
+TASKS:
+
+1. Add quality scoring system
+Create:
+scoreProgramQuality(output)
+
+Score dimensions:
+- progression logic
+- volume balance
+- exercise diversity
+- session coherence
+- goal alignment
+
+2. Log score:
+[QualityAudit] {
+  score,
+  threshold,
+  retryTriggered
+}
+
+3. Add conditional second repair pass
+If:
+- score < threshold (e.g. 6/10)
+- AND retry has not yet been used
+
+Then:
+- run buildQualityRetryPrompt again (one extra pass)
+
+4. Do NOT hard-block low quality outputs
+Maintain availability-first design, but reduce weak outputs.
+
+==================================================
+PART 4 — FRONTEND ERROR UX IMPROVEMENT
+==================================================
+
+Goal: Make recoverable errors clear and actionable.
+
+TASKS:
+
+1. Standardize recoverable error types:
+- generation_failed_retryable
+- constraint_violation
+- parse_failure
+- structure_failure
+
+2. Improve user-facing messages:
+
+Instead of:
+"generation engine temporarily unavailable"
+
+Use:
+"I couldn’t complete that build cleanly. Trying again…"
+
+or:
+"I need to retry that build — give me a second."
+
+3. Add auto-retry indicator in UI:
+- show “Retrying…” state if retry is in progress
+- only show failure after all retries exhausted
+
+4. Add fallback UX action:
+- “Retry build” button
+- preserve user input context
+
+==================================================
+PART 5 — VALIDATION TESTS
+==================================================
+
+Run:
+
+1. Mobility build (general, joint-specific, recovery)
+→ confirm no strength bleed
+→ confirm repair layer works
+
+2. Speed 5-day program with full memory
+→ confirm no truncation
+→ confirm JSON integrity
+
+3. Force low-quality output
+→ confirm quality scoring + repair pass triggers
+
+4. Simulate API failure (429, network)
+→ confirm retries
+→ confirm frontend messaging
+
+==================================================
+PART 6 — OUTPUT REQUIRED
+==================================================
+
+Return:
+
+1. mobility validation + repair system implementation details
+2. speed token usage before/after optimization
+3. quality scoring system and thresholds
+4. updated frontend error flows
+5. validation results across all scenarios
+
+==================================================
+FINAL STANDARD
+==================================================
+
+All focus modes must now be equally hardened.
+
+The system must:
+- prevent cross-focus contamination
+- handle large builds without truncation
+- improve weak outputs without blocking users
+- communicate clearly when retries or failures occur
+
+AI should now operate reliably under real-world usage conditions, not just ideal prompts.

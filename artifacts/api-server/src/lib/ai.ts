@@ -45,7 +45,7 @@ import { buildMobilityContext } from "./mobility-engine";
 import { buildSpecialConsiderationsContext, getSpecialConsiderationsClarification, validateSpecialConsiderationsOutput } from "./special-considerations-engine";
 import { buildReturnFromInjuryContext, getReturnFromInjuryClarification, validateReturnFromInjuryOutput } from "./return-from-injury-engine";
 import { resolveRoutingDecision, getResolvedSport, getResolvedSeason, type RoutingDecision } from "./message-router";
-import { validateProgrammingQuality, buildQualityRetryPrompt, type ProgrammingValidationInput } from "./program-quality-validator";
+import { validateProgrammingQuality, buildQualityRetryPrompt, scoreProgramQuality, buildQualityScoringRetryPrompt, type ProgrammingValidationInput, type ProgramQualityScore } from "./program-quality-validator";
 import { type AgentSettingsContext, buildBehaviorInstructions, buildProfileFillContext } from "./agent-settings-resolver";
 import { extractAgentIntentProfile, buildAgentIntentProfilePromptSection } from "./language-system";
 import { auditLanguageInterpretation } from "./language-audit";
@@ -60,7 +60,14 @@ import {
   classifySpeedGenerationFailure,
   type SpeedBleedAuditResult,
 } from "./focus-engines/speed-engine";
-import { buildMobilityArchitectureBrief } from "./focus-engines/mobility-engine";
+import {
+  buildMobilityArchitectureBrief,
+  buildMobilityResponseContract,
+  validateMobilityOutputForBleed,
+  repairMobilityOutput,
+  classifyMobilityGenerationFailure,
+  type MobilityBleedAuditResult,
+} from "./focus-engines/mobility-engine";
 import { resolveFocusMode, logFocusModeAudit } from "./focus-mode-audit";
 import type { FocusMode } from "./focus-engines/engine-interface";
 
@@ -1592,14 +1599,51 @@ function buildRoutingHint(routing: RoutingDecision, _userMessage: string): strin
 function extractStructuredData(content: string): {
   cleanContent: string;
   structuredData: ProgramStructure | null;
+  truncated?: boolean;
 } {
+  // ── Truncation detection ──────────────────────────────────────────────────
+  // If the content has an opening ```json but no closing ```, the response
+  // was cut off mid-generation. Detect and flag before attempting to parse.
+  const hasOpenTag = /```json\n/.test(content);
+  const hasCloseTag = /\n```/.test(content);
+  if (hasOpenTag && !hasCloseTag) {
+    logger.warn("[TruncationDetected] Response has opening ```json block but no closing ``` — response was likely truncated by token limit");
+    return { cleanContent: content, structuredData: null, truncated: true };
+  }
+
   const jsonMatch = content.match(/```json\n([\s\S]*?)\n```/);
   if (!jsonMatch) {
     return { cleanContent: content, structuredData: null };
   }
 
+  // ── JSON completeness check — brace/bracket balance heuristic ────────────
+  // Even with a closing tag, the JSON body may be cut short inside a string or array.
+  const rawJson = jsonMatch[1];
+  const trimmedJson = rawJson.trimEnd();
+  if (!trimmedJson.endsWith("}") && !trimmedJson.endsWith("]")) {
+    logger.warn(
+      { lastChars: trimmedJson.slice(-20) },
+      "[TruncationDetected] JSON block found but body does not close cleanly — possible mid-JSON truncation"
+    );
+    return { cleanContent: content, structuredData: null, truncated: true };
+  }
+
+  // ── Brace depth validation ────────────────────────────────────────────────
+  let depth = 0;
+  for (const ch of rawJson) {
+    if (ch === "{" || ch === "[") depth++;
+    else if (ch === "}" || ch === "]") depth--;
+  }
+  if (depth !== 0) {
+    logger.warn(
+      { unbalancedDepth: depth },
+      "[TruncationDetected] JSON brace/bracket depth is non-zero — structure is incomplete (truncated)"
+    );
+    return { cleanContent: content, structuredData: null, truncated: true };
+  }
+
   try {
-    const structuredData = JSON.parse(jsonMatch[1]) as ProgramStructure;
+    const structuredData = JSON.parse(rawJson) as ProgramStructure;
     const cleanContent = content.replace(/```json\n[\s\S]*?\n```/, "").trim();
     return { cleanContent, structuredData };
   } catch {
@@ -2464,12 +2508,25 @@ export async function generateAIResponse(
 
     try {
       architectureBriefText = buildMobilityArchitectureBrief(days, goal, userMessage);
+      const sessionCount = days ?? 3;
+      const mobilityResponseContract = buildMobilityResponseContract(sessionCount);
+      architectureBriefText = architectureBriefText
+        ? `${architectureBriefText}\n\n${mobilityResponseContract}`
+        : mobilityResponseContract;
 
-      if (architectureBriefText) {
-        logger.info(
-          { days, goal, intentType: intentResult?.type },
-          "[MobilityArchitectureEngine] Mobility architecture brief injected into prompt"
-        );
+      logger.info(
+        { days: sessionCount, goal, intentType: intentResult?.type, briefLength: architectureBriefText.length },
+        "[MobilityArchitectureEngine] Mobility architecture brief + response contract injected into prompt"
+      );
+
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[MobilityOpenAIAudit]", JSON.stringify({
+          phase: "brief-built",
+          mobilityArchitectureBuilt: true,
+          contractInjected: true,
+          briefLength: architectureBriefText.length,
+          days: sessionCount,
+        }));
       }
     } catch (archErr) {
       const errMsg = archErr instanceof Error ? archErr.message : String(archErr);
@@ -2612,11 +2669,11 @@ export async function generateAIResponse(
     // Speed program builds get a higher token budget (3600) because multi-day sprint programs
     // with full exercise prescriptions, rest periods, and coaching notes require more output.
     const maxTokens = actionDecision?.recommendedMaxTokens
-      ?? (focusMode === "speed" && isBuildIntent ? 3600
+      ?? ((focusMode === "speed" || focusMode === "mobility") && isBuildIntent ? 3600
         : editContext !== null || intentResult?.type === "ADJUST_FOR_PAIN" || intentResult?.type === "ADJUST_FOR_READINESS" ? 4000
         : 2800);
 
-    // Log that the OpenAI request is being sent (speed path gets dedicated logging)
+    // Log that the OpenAI request is being sent (speed and mobility paths get dedicated logging)
     if (isBuildIntent && focusMode === "speed" && process.env.NODE_ENV !== "production") {
       console.log("[SpeedOpenAIAudit]", JSON.stringify({
         phase: "openai-request-sent",
@@ -2625,12 +2682,78 @@ export async function generateAIResponse(
         systemPromptLength: systemPrompt.length,
       }));
     }
+    if (isBuildIntent && focusMode === "mobility" && process.env.NODE_ENV !== "production") {
+      console.log("[MobilityOpenAIAudit]", JSON.stringify({
+        phase: "openai-request-sent",
+        openAIRequestSent: true,
+        maxTokens,
+        systemPromptLength: systemPrompt.length,
+      }));
+    }
 
-    let { cleanContent, structuredData } = await callOpenAI(baseMessages, maxTokens);
+    let { cleanContent, structuredData, truncated } = await callOpenAI(baseMessages, maxTokens);
+
+    // ── Truncation recovery — one retry with a compact token budget ───────
+    // If the initial build response was detected as truncated (missing closing
+    // braces, unbalanced JSON depth, or no closing code fence), retry once with
+    // a reduced token ceiling. Reducing maxTokens forces OpenAI to be more
+    // concise and avoid hitting its own context boundaries.
+    if (isBuildIntent && truncated === true && structuredData === null) {
+      const truncationRetryBudget = Math.floor(maxTokens * 0.85);
+      logger.warn(
+        { originalBudget: maxTokens, retryBudget: truncationRetryBudget },
+        "[TruncationRetry] Truncated build output detected — retrying with compact token budget"
+      );
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[TruncationRetry]", JSON.stringify({
+          truncated: true,
+          originalBudget: maxTokens,
+          retryBudget: truncationRetryBudget,
+          retrying: true,
+        }));
+      }
+      try {
+        const retryResult = await callOpenAI(baseMessages, truncationRetryBudget);
+        if (retryResult.structuredData) {
+          cleanContent = retryResult.cleanContent;
+          structuredData = retryResult.structuredData;
+          truncated = retryResult.truncated;
+          logger.info("[TruncationRetry] Compact retry succeeded — structured data recovered");
+          if (process.env.NODE_ENV !== "production") {
+            console.log("[TruncationRetry]", JSON.stringify({ retrySucceeded: true }));
+          }
+        } else {
+          logger.warn("[TruncationRetry] Compact retry also failed — returning null structuredData");
+          if (process.env.NODE_ENV !== "production") {
+            console.log("[TruncationRetry]", JSON.stringify({
+              retrySucceeded: false,
+              stillTruncated: retryResult.truncated ?? false,
+            }));
+          }
+        }
+      } catch (truncationRetryErr) {
+        logger.warn({ truncationRetryErr }, "[TruncationRetry] Compact retry threw — returning original failure");
+      }
+    }
 
     // Log the response for speed builds
     if (isBuildIntent && focusMode === "speed" && process.env.NODE_ENV !== "production") {
       console.log("[SpeedOpenAIAudit]", JSON.stringify({
+        phase: "openai-response-received",
+        responseReceived: true,
+        parseSucceeded: structuredData !== null,
+        programStructureBuilt: structuredData !== null,
+        programName: structuredData?.programName ?? null,
+        dayCount: structuredData?.days?.length ?? 0,
+        day1Name: structuredData?.days?.[0]?.name ?? null,
+        day1ExerciseCount: structuredData?.days?.[0]?.exercises?.length ?? 0,
+        failurePoint: structuredData === null ? "parse_failure" : null,
+      }));
+    }
+
+    // Log the response for mobility builds
+    if (isBuildIntent && focusMode === "mobility" && process.env.NODE_ENV !== "production") {
+      console.log("[MobilityOpenAIAudit]", JSON.stringify({
         phase: "openai-response-received",
         responseReceived: true,
         parseSucceeded: structuredData !== null,
@@ -2656,6 +2779,22 @@ export async function generateAIResponse(
       logger.warn(
         { failureType: failureClass.type, failureDescription: failureClass.description },
         "[SpeedOpenAIAudit] Speed build — OpenAI did not return a valid JSON block (parse failure)"
+      );
+    }
+
+    // For mobility builds where OpenAI failed to produce a JSON block, classify and log
+    if (isBuildIntent && focusMode === "mobility" && structuredData === null) {
+      const failureClass = classifyMobilityGenerationFailure({
+        openAICallSucceeded: true,
+        rawContentAvailable: cleanContent.length > 0,
+        parsedJsonAvailable: false,
+        hasDays: false,
+        bleedDetected: false,
+        structureComplete: false,
+      });
+      logger.warn(
+        { failureType: failureClass.type, failureDescription: failureClass.description },
+        "[MobilityOpenAIAudit] Mobility build — OpenAI did not return a valid JSON block (parse failure)"
       );
     }
 
@@ -2797,8 +2936,10 @@ Regenerate the complete program now with exactly ${extractedConstraints.daysPerW
       };
 
       const qualityResult = validateProgrammingQuality(qualityInput);
+      let qualityBinaryRetryUsed = false;
 
       if (qualityResult.status === "fail" && qualityResult.retryRecommended) {
+        qualityBinaryRetryUsed = true;
         logger.warn(
           {
             failedChecks: qualityResult.failedChecks,
@@ -2863,6 +3004,93 @@ Regenerate the complete program now with exactly ${extractedConstraints.daysPerW
           { passedChecks: qualityResult.passedChecks },
           "[QualityValidator] Quality validation passed cleanly",
         );
+      }
+
+      // ── Dimensional Quality Scoring — second repair pass if needed ──────
+      // Runs after the binary pass/fail check. If the binary validator did NOT
+      // already trigger a retry, and the dimensional score is below threshold (6/10),
+      // run one targeted repair pass targeting the weakest dimensions.
+      if (structuredData && !qualityBinaryRetryUsed) {
+        const scoringInput = qualityInput.generatedProgram ?? structuredData;
+        let scoreResult: ProgramQualityScore;
+        try {
+          scoreResult = scoreProgramQuality(
+            scoringInput as ProgrammingValidationInput["generatedProgram"],
+            cleanContent,
+            routingDecision,
+          );
+
+          logger.info(
+            {
+              score: scoreResult.score,
+              threshold: scoreResult.threshold,
+              retryRecommended: scoreResult.retryRecommended,
+              dimensions: scoreResult.dimensions.map(d => ({ [d.dimension]: d.score })),
+            },
+            "[QualityAudit] Dimensional program quality scored",
+          );
+
+          if (process.env.NODE_ENV !== "production") {
+            console.log("[QualityAudit]", JSON.stringify({
+              score: scoreResult.score,
+              threshold: scoreResult.threshold,
+              retryTriggered: scoreResult.retryRecommended,
+              dimensions: scoreResult.dimensions,
+            }));
+          }
+
+          if (scoreResult.retryRecommended) {
+            const scoringRetryPrompt = buildQualityScoringRetryPrompt(scoreResult);
+            const scoringRetryMessages = [
+              ...baseMessages,
+              { role: "assistant" as const, content: cleanContent },
+              { role: "user" as const, content: scoringRetryPrompt },
+            ];
+
+            try {
+              const scoringRetryResult = await callOpenAI(scoringRetryMessages, maxTokens);
+              if (scoringRetryResult.structuredData) {
+                const postRetryScore = scoreProgramQuality(
+                  scoringRetryResult.structuredData as ProgrammingValidationInput["generatedProgram"],
+                  scoringRetryResult.cleanContent,
+                  routingDecision,
+                );
+
+                logger.info(
+                  {
+                    originalScore: scoreResult.score,
+                    retryScore: postRetryScore.score,
+                    improved: postRetryScore.score > scoreResult.score,
+                  },
+                  "[QualityAudit] Quality scoring retry complete",
+                );
+
+                // Accept the retry output if it scores higher or equals threshold
+                if (postRetryScore.score >= postRetryScore.threshold || postRetryScore.score > scoreResult.score) {
+                  cleanContent = scoringRetryResult.cleanContent;
+                  structuredData = scoringRetryResult.structuredData;
+
+                  if (process.env.NODE_ENV !== "production") {
+                    console.log("[QualityAudit]", JSON.stringify({
+                      retryAccepted: true,
+                      originalScore: scoreResult.score,
+                      retryScore: postRetryScore.score,
+                    }));
+                  }
+                } else {
+                  logger.warn(
+                    { retryScore: postRetryScore.score, originalScore: scoreResult.score },
+                    "[QualityAudit] Quality scoring retry did not improve score — keeping original",
+                  );
+                }
+              }
+            } catch (scoringRetryError) {
+              logger.warn({ scoringRetryError }, "[QualityAudit] Quality scoring retry call failed — returning original output");
+            }
+          }
+        } catch (scoringError) {
+          logger.warn({ scoringError }, "[QualityAudit] Dimensional quality scoring threw — skipping");
+        }
       }
     }
 
@@ -3226,6 +3454,110 @@ Output the corrected program JSON and a brief calm confirmation.`;
         // ── Stamp focusMode on clean/repaired output ─────────────────────────
         if (structuredData && !(structuredData as { focusMode?: string }).focusMode) {
           (structuredData as { focusMode?: string }).focusMode = "speed";
+        }
+      }
+
+      // ── Mobility-specific: full bleed validation + repair pass ────────────
+      // Mirrors the speed bleed validation — scans all session names and exercises
+      // for strength contamination. Attempts to repair before rejecting.
+      if (focusMode === "mobility") {
+        const mobilityBleedResult: MobilityBleedAuditResult = validateMobilityOutputForBleed(
+          structuredData as unknown as Parameters<typeof validateMobilityOutputForBleed>[0]
+        );
+
+        if (mobilityBleedResult.strengthTermsDetected) {
+          logger.warn(
+            {
+              bleedingSessionNames: mobilityBleedResult.bleedingSessionNames,
+              bleedingExerciseNames: mobilityBleedResult.bleedingExerciseNames,
+            },
+            "[MobilityBleedAudit] Strength contamination detected in mobility output — attempting repair"
+          );
+
+          if (process.env.NODE_ENV !== "production") {
+            console.log("[MobilityBleedAudit]", JSON.stringify({
+              strengthTermsDetected: true,
+              bleedingSessionNames: mobilityBleedResult.bleedingSessionNames,
+              bleedingExerciseNames: mobilityBleedResult.bleedingExerciseNames,
+              repairApplied: false,
+              rejected: false,
+            }));
+          }
+
+          const { repaired, repairsApplied } = repairMobilityOutput(
+            structuredData as unknown as Parameters<typeof repairMobilityOutput>[0],
+            mobilityBleedResult,
+          );
+          const postRepairBleed = validateMobilityOutputForBleed(
+            repaired as unknown as Parameters<typeof validateMobilityOutputForBleed>[0]
+          );
+
+          if (!postRepairBleed.strengthTermsDetected) {
+            structuredData = repaired as typeof structuredData;
+            mobilityBleedResult.repairApplied = true;
+
+            logger.info(
+              { repairsApplied, repairCount: repairsApplied.length },
+              "[MobilityBleedAudit] Repair succeeded — strength bleed removed, proceeding with repaired program"
+            );
+
+            if (process.env.NODE_ENV !== "production") {
+              console.log("[MobilityBleedAudit]", JSON.stringify({
+                strengthTermsDetected: true,
+                repairApplied: true,
+                repairsApplied,
+                rejected: false,
+              }));
+            }
+          } else {
+            mobilityBleedResult.rejected = true;
+            const failureClass = classifyMobilityGenerationFailure({
+              openAICallSucceeded: true,
+              rawContentAvailable: true,
+              parsedJsonAvailable: true,
+              hasDays: true,
+              bleedDetected: true,
+              structureComplete: false,
+            });
+
+            logger.error(
+              {
+                bleedingSessionNames: postRepairBleed.bleedingSessionNames,
+                bleedingExerciseNames: postRepairBleed.bleedingExerciseNames,
+                failureType: failureClass.type,
+              },
+              "[MobilityBleedAudit] Repair failed — strength contamination persists — REJECTING mobility output"
+            );
+
+            if (process.env.NODE_ENV !== "production") {
+              console.log("[MobilityBleedAudit]", JSON.stringify({
+                strengthTermsDetected: true,
+                repairApplied: true,
+                repairFailed: true,
+                rejected: true,
+                failureType: failureClass.type,
+                remainingBleedSessionNames: postRepairBleed.bleedingSessionNames,
+              }));
+            }
+
+            return {
+              content: `The mobility program build came back with strength-flavored sessions that couldn't be repaired. Want to try again? I'll rebuild it with correct mobility structure, joint-specific sequencing, and no strength bleed.`,
+              structuredData: null,
+            };
+          }
+        } else {
+          if (process.env.NODE_ENV !== "production") {
+            console.log("[MobilityBleedAudit]", JSON.stringify({
+              strengthTermsDetected: false,
+              repairApplied: false,
+              rejected: false,
+            }));
+          }
+        }
+
+        // ── Stamp focusMode on clean/repaired mobility output ─────────────────
+        if (structuredData && !(structuredData as { focusMode?: string }).focusMode) {
+          (structuredData as { focusMode?: string }).focusMode = "mobility";
         }
       }
 

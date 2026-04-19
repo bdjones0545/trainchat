@@ -752,6 +752,388 @@ Dynamic Flow: World's Greatest Stretch, Inchworm to Squat, Spiderman Flow, Hip 9
 Recovery: Supine Figure-4 Hold, Supine Spinal Twist, Child's Pose, Supported Hip Flexor Hold, Legs Up the Wall`.trim();
 }
 
+// ─── Mobility Response Contract ───────────────────────────────────────────────
+
+/**
+ * Builds an explicit JSON response contract for mobility programs.
+ * Injected into the system prompt so OpenAI knows the exact output structure.
+ * Eliminates parse failures from ambiguous or strength-flavored responses.
+ */
+export function buildMobilityResponseContract(sessionCount: number): string {
+  const exampleDays = Array.from({ length: Math.min(sessionCount, 2) }, (_, i) => {
+    const dayNames = [
+      "Day 1 — Hip Mobility (Passive Range)",
+      "Day 2 — End-Range Control (PAILs/RAILs)",
+      "Day 3 — Movement Quality + Integrated Flow",
+      "Day 4 — Hip + Shoulder Deep Focus",
+      "Day 5 — Stiffness Reduction + Dynamic Flow",
+    ];
+    return `    {
+      "name": "${dayNames[i] ?? `Day ${i + 1} — Mobility Training`}",
+      "exercises": [
+        {
+          "name": "Hip CARs",
+          "sets": 1,
+          "reps": "3 slow controlled reps each direction",
+          "rest": "15-30s",
+          "notes": "Diagnostic — note sticking points, map active vs passive range gap"
+        },
+        {
+          "name": "90/90 Hip Stretch",
+          "sets": 1,
+          "reps": "60 seconds each side",
+          "rest": "15s",
+          "notes": "Bias internal rotation side if stiffer — exhale to deepen on each breath"
+        },
+        {
+          "name": "Couch Stretch",
+          "sets": 1,
+          "reps": "60 seconds each side",
+          "rest": "15s",
+          "notes": "Hip flexor / anterior capsule — posterior pelvic tilt to deepen range"
+        }
+      ]
+    }`;
+  }).join(",\n");
+
+  return `## MOBILITY PROGRAM — MANDATORY JSON RESPONSE CONTRACT
+
+You MUST output the mobility program as a JSON code block in EXACTLY this format.
+No prose. No markdown outside the JSON block. Output the JSON block first, then a 1–2 sentence confirmation.
+
+\`\`\`json
+{
+  "programName": "Hip Mobility & Range Restoration",
+  "programSummary": "Brief description of the mobility focus, primary joint targets, and progression intent for this program",
+  "focusMode": "mobility",
+  "days": [
+${exampleDays}
+  ]
+}
+\`\`\`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SESSION NAME RULES — NON-NEGOTIABLE:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Day names MUST use mobility-native language. Approved formats:
+  ✓ "Day 1 — Hip Mobility (Passive Range)"
+  ✓ "Day 2 — End-Range Control (PAILs/RAILs)"
+  ✓ "Day 3 — Movement Quality + Integrated Flow"
+  ✓ "Day 4 — Thoracic Spine + Shoulder Release"
+  ✓ "Day 5 — Stiffness Reduction + Dynamic Flow"
+  ✓ "Day 1 — Recovery Flow (Parasympathetic Reset)"
+  ✓ "Day 2 — Ankle Mobility (Dorsiflexion Focus)"
+
+STRICTLY PROHIBITED session names (causes automatic rejection):
+  ✗ Lower Strength
+  ✗ Upper Push / Upper Pull
+  ✗ Hypertrophy Day
+  ✗ Push Day / Pull Day
+  ✗ Leg Day
+  ✗ Back & Biceps
+  ✗ Chest & Triceps
+  ✗ Squat Day / Bench Day / Deadlift Day
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXERCISE FIELD FORMAT RULES:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Passive holds: reps = "X seconds each side" or "X seconds"
+- CARs: reps = "X slow controlled reps each direction"
+- PAILs/RAILs: reps = "X seconds at Y% contraction (20% effort Week 1-2)"
+- Flows: reps = "X minutes continuous flow" or "X transitions each side"
+- Breathing: reps = "X deep breaths" or "X rounds"
+- Rest MUST be included for every exercise (use "15-30s" for holds, "continuous" for flows)
+- notes MUST include a coaching cue specific to the mobility goal
+- NEVER write "X reps" for a mobility hold — time is the primary variable
+- programName MUST reference mobility (e.g., "Hip Mobility", "Thoracic + Shoulder Release")
+- programSummary MUST describe mobility qualities (not "strength and conditioning")`;
+}
+
+// ─── Mobility Output Bleed Validator ──────────────────────────────────────────
+
+const STRENGTH_BLEED_SESSION_PATTERNS_MOBILITY = /\b(lower strength|upper push|upper pull|push day|pull day|hypertrophy|leg day|back.bicep|chest.tricep|upper body strength|lower body strength|strength.day|compound strength|strength.focus|power.lifting|powerlifting|bench.day|squat.day|deadlift.day)\b/i;
+
+const STRENGTH_BLEED_EXERCISE_PATTERNS_MOBILITY = /\b(barbell back squat|conventional deadlift|flat bench press|incline bench press|military press|barbell overhead press|barbell row|weighted pull.up|barbell hip thrust|power clean|hang clean|barbell curl|tricep pushdown)\b/i;
+
+const MOBILITY_PROHIBITED_LANGUAGE_PATTERNS = /\b(sets? of \d+ reps?|hypertrophy|max.effort|1rm|training max|percentage of max)\b/i;
+
+export interface MobilityBleedAuditResult {
+  strengthTermsDetected: boolean;
+  bleedingSessionNames: string[];
+  bleedingExerciseNames: string[];
+  prohibitedLanguageFound: boolean;
+  repairApplied: boolean;
+  rejected: boolean;
+}
+
+/**
+ * Validates mobility program output for strength contamination.
+ * Checks session names, exercise names, and rep field language.
+ */
+export function validateMobilityOutputForBleed(
+  structuredData: {
+    programName?: string;
+    days?: Array<{ name?: string; exercises?: Array<{ name: string; reps?: string; notes?: string }> }>;
+  },
+): MobilityBleedAuditResult {
+  const bleedingSessionNames: string[] = [];
+  const bleedingExerciseNames: string[] = [];
+  let prohibitedLanguageFound = false;
+
+  if (structuredData.days) {
+    for (const day of structuredData.days) {
+      if (day.name && STRENGTH_BLEED_SESSION_PATTERNS_MOBILITY.test(day.name)) {
+        bleedingSessionNames.push(day.name);
+      }
+      if (day.exercises) {
+        for (const ex of day.exercises) {
+          if (ex.name && STRENGTH_BLEED_EXERCISE_PATTERNS_MOBILITY.test(ex.name)) {
+            bleedingExerciseNames.push(ex.name);
+          }
+          if (ex.reps && MOBILITY_PROHIBITED_LANGUAGE_PATTERNS.test(ex.reps)) {
+            prohibitedLanguageFound = true;
+          }
+        }
+      }
+    }
+  }
+
+  const strengthTermsDetected = bleedingSessionNames.length > 0 || bleedingExerciseNames.length > 0;
+
+  return {
+    strengthTermsDetected,
+    bleedingSessionNames,
+    bleedingExerciseNames,
+    prohibitedLanguageFound,
+    repairApplied: false,
+    rejected: false,
+  };
+}
+
+// ─── Mobility Output Repair Layer ─────────────────────────────────────────────
+
+type RepairableMobilityProgram = {
+  programName?: string;
+  programSummary?: string;
+  focusMode?: string;
+  days?: Array<{
+    name?: string;
+    exercises?: Array<{
+      name: string;
+      sets?: number;
+      reps?: string;
+      rest?: string;
+      notes?: string;
+    }>;
+  }>;
+};
+
+const MOBILITY_SESSION_NAME_MAP: Record<string, string> = {
+  "lower strength": "Hip Mobility + End-Range Control",
+  "upper push": "Shoulder Mobility + Thoracic Release",
+  "upper pull": "Thoracic Spine + Shoulder Flow",
+  "push day": "Hip Mobility (Passive Range)",
+  "pull day": "Thoracic Mobility + Breathing Integration",
+  "hypertrophy": "End-Range Control (PAILs/RAILs)",
+  "leg day": "Lower Body Mobility Flow",
+  "lower body strength": "Hip + Ankle Mobility",
+  "upper body strength": "Shoulder + Thoracic Release",
+  "strength day": "Full-Body Mobility — Range Restoration",
+  "bench day": "Shoulder Mobility + Pec Release",
+  "squat day": "Hip + Ankle Mobility Flow",
+  "deadlift day": "Posterior Chain Mobility",
+};
+
+const MOBILITY_DEFAULT_REST_BY_EXERCISE_TYPE: Record<string, string> = {
+  cars: "15-30s",
+  pails: "30s",
+  rails: "30s",
+  hold: "15-30s",
+  stretch: "15s",
+  flow: "continuous",
+  breathing: "30s",
+  foam: "15s",
+  roll: "15s",
+  hang: "60s",
+  press: "30s",
+  squat: "30s",
+  curl: "30s",
+  bird: "15s",
+  dead: "15s",
+  plank: "30s",
+};
+
+/**
+ * Repairs a mobility output that is "close but imperfect":
+ * - Replaces strength-flavored session names with mobility-native names
+ * - Fills missing rest fields from mobility defaults
+ * - Repairs weak/generic program titles
+ * - Stamps focusMode = "mobility"
+ * - Stamps programSummary if missing or strength-flavored
+ *
+ * Repair preserves real exercise content — only fixes labeling and metadata.
+ */
+export function repairMobilityOutput(
+  program: RepairableMobilityProgram,
+  bleedResult: MobilityBleedAuditResult,
+): { repaired: RepairableMobilityProgram; repairsApplied: string[] } {
+  const repaired: RepairableMobilityProgram = JSON.parse(JSON.stringify(program)) as RepairableMobilityProgram;
+  const repairsApplied: string[] = [];
+
+  // ── 1. Stamp focusMode ──────────────────────────────────────────────────────
+  if (!repaired.focusMode || repaired.focusMode !== "mobility") {
+    repaired.focusMode = "mobility";
+    repairsApplied.push("stamped_focusMode=mobility");
+  }
+
+  // ── 2. Repair weak/generic program title ───────────────────────────────────
+  if (!repaired.programName || /strength|hypertrophy|muscle|lifting|powerlifting/i.test(repaired.programName)) {
+    repaired.programName = "Mobility — Range Restoration & Positional Control";
+    repairsApplied.push("repaired_programName");
+  }
+
+  // ── 3. Repair missing or strength-flavored program summary ─────────────────
+  if (!repaired.programSummary || /strength|hypertrophy|muscle|lifting/i.test(repaired.programSummary)) {
+    repaired.programSummary = "Progressive mobility program — passive range restoration, CARs, PAILs/RAILs end-range control, and breathing-integrated joint preparation built on tissue-length and positional control principles.";
+    repairsApplied.push("repaired_programSummary");
+  }
+
+  // ── 4. Repair strength-contaminated session names ──────────────────────────
+  if (repaired.days) {
+    const mobilitySessionNames = [
+      "Day 1 — Hip Mobility (Passive Range)",
+      "Day 2 — End-Range Control (PAILs/RAILs)",
+      "Day 3 — Movement Quality + Integrated Flow",
+      "Day 4 — Hip + Shoulder Deep Focus",
+      "Day 5 — Stiffness Reduction + Dynamic Flow",
+    ];
+
+    repaired.days = repaired.days.map((day, idx) => {
+      if (!day.name) {
+        const repairName = mobilitySessionNames[idx] ?? `Day ${idx + 1} — Mobility Training`;
+        repairsApplied.push(`repaired_missing_session_name[day${idx + 1}]`);
+        return { ...day, name: repairName };
+      }
+      const lowerName = day.name.toLowerCase();
+      let repairedName: string | undefined;
+      for (const [pattern, replacement] of Object.entries(MOBILITY_SESSION_NAME_MAP)) {
+        if (lowerName.includes(pattern)) {
+          repairedName = replacement;
+          break;
+        }
+      }
+      if (repairedName) {
+        repairsApplied.push(`repaired_session_name[day${idx + 1}]: "${day.name}" → "${repairedName}"`);
+        return { ...day, name: repairedName };
+      }
+      return day;
+    });
+  }
+
+  // ── 5. Fill missing rest fields from mobility defaults ─────────────────────
+  if (repaired.days) {
+    for (let d = 0; d < repaired.days.length; d++) {
+      const day = repaired.days[d];
+      if (day.exercises) {
+        for (let e = 0; e < day.exercises.length; e++) {
+          const ex = day.exercises[e];
+          if (!ex.rest || ex.rest === "" || ex.rest === "—") {
+            const lowerName = ex.name.toLowerCase();
+            let defaultRest = "15-30s";
+            for (const [keyword, rest] of Object.entries(MOBILITY_DEFAULT_REST_BY_EXERCISE_TYPE)) {
+              if (lowerName.includes(keyword)) {
+                defaultRest = rest;
+                break;
+              }
+            }
+            repaired.days[d].exercises![e] = { ...ex, rest: defaultRest };
+            repairsApplied.push(`filled_rest[day${d + 1},${ex.name}]=${defaultRest}`);
+          }
+        }
+      }
+    }
+  }
+
+  return { repaired, repairsApplied };
+}
+
+// ─── Mobility Generation Failure Classifier ───────────────────────────────────
+
+export type MobilityFailureType =
+  | "prompt_failure"
+  | "parse_failure"
+  | "validation_failure"
+  | "bleed_failure"
+  | "structure_failure"
+  | "unknown_failure";
+
+export interface MobilityFailureClassification {
+  type: MobilityFailureType;
+  description: string;
+  retryable: boolean;
+}
+
+/**
+ * Classifies the root cause of a mobility generation failure.
+ * Used for targeted diagnostics and retry strategy.
+ */
+export function classifyMobilityGenerationFailure(context: {
+  openAICallSucceeded: boolean;
+  rawContentAvailable: boolean;
+  parsedJsonAvailable: boolean;
+  hasDays: boolean;
+  bleedDetected: boolean;
+  structureComplete: boolean;
+}): MobilityFailureClassification {
+  if (!context.openAICallSucceeded) {
+    return {
+      type: "prompt_failure",
+      description: "OpenAI API call failed — network, timeout, or rate limit error",
+      retryable: true,
+    };
+  }
+  if (!context.rawContentAvailable) {
+    return {
+      type: "prompt_failure",
+      description: "OpenAI returned empty content",
+      retryable: true,
+    };
+  }
+  if (!context.parsedJsonAvailable) {
+    return {
+      type: "parse_failure",
+      description: "OpenAI did not output a valid JSON block — mobility response contract was ignored",
+      retryable: true,
+    };
+  }
+  if (!context.hasDays) {
+    return {
+      type: "validation_failure",
+      description: "JSON parsed but mobility program has no days array — incomplete structure",
+      retryable: true,
+    };
+  }
+  if (context.bleedDetected) {
+    return {
+      type: "bleed_failure",
+      description: "Mobility program contains strength-contaminated session names or exercises",
+      retryable: true,
+    };
+  }
+  if (!context.structureComplete) {
+    return {
+      type: "structure_failure",
+      description: "Mobility program structure is incomplete — missing required fields",
+      retryable: true,
+    };
+  }
+  return {
+    type: "unknown_failure",
+    description: "Mobility generation failed for an unclassified reason",
+    retryable: true,
+  };
+}
+
 // ─── Engine Export ────────────────────────────────────────────────────────────
 
 export const mobilityEngine: FocusEngineInterface = {

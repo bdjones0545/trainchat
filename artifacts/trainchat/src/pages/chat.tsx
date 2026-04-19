@@ -177,7 +177,9 @@ export default function Chat() {
   const [isUndoing, setIsUndoing] = useState(false);
   const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [operationError, setOperationError] = useState<string | null>(null);
+  const [operationErrorRetryable, setOperationErrorRetryable] = useState(false);
   const operationErrorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSentInputRef = useRef<string>("");
   const [newChangeSignal, setNewChangeSignal] = useState(0);
   const [newProgramSignal, setNewProgramSignal] = useState(0);
   const [changeTargets, setChangeTargets] = useState<Array<{
@@ -805,6 +807,7 @@ export default function Chat() {
       }
     }
 
+    lastSentInputRef.current = content;
     setInputText("");
     if (inputRef.current) {
       inputRef.current.style.height = "auto";
@@ -893,14 +896,24 @@ export default function Chat() {
       const mutationApplied = nonOpenAIPath || result.mutationApplied === true;
       if (!mutationApplied) {
         if (operationErrorTimeoutRef.current) clearTimeout(operationErrorTimeoutRef.current);
-        let msg = "Something went wrong while applying that change. Your program has not been modified.";
+        let msg = "That build didn't come back cleanly. Hit retry to try again — I'll rebuild it fresh.";
+        let retryable = true;
         if (result.editFailure?.reason === "verification_failed") {
-          msg = "That change was processed but couldn't be confirmed in your program. Try again with more specifics.";
+          msg = "That edit was processed but couldn't be confirmed. Retry with the same request or rephrase it.";
+          retryable = true;
         } else if (result.saveFailure) {
-          msg = "Your program couldn't be saved due to a system error. Please try again.";
+          msg = "Your program was built but couldn't be saved — a system error interrupted it. Please try again.";
+          retryable = true;
+        } else if (result.editFailure) {
+          msg = "I couldn't apply that change cleanly. Your program hasn't been modified — retry or rephrase.";
+          retryable = true;
         }
         setOperationError(msg);
-        operationErrorTimeoutRef.current = setTimeout(() => setOperationError(null), 7000);
+        setOperationErrorRetryable(retryable);
+        operationErrorTimeoutRef.current = setTimeout(() => {
+          setOperationError(null);
+          setOperationErrorRetryable(false);
+        }, 8000);
       }
     }
 
@@ -2263,14 +2276,33 @@ export default function Chat() {
             </div>
           )}
 
-          {/* Operation error banner — honest failures for edit/save/undo */}
+          {/* Operation error banner — honest failures for build/edit/save */}
           {operationError && (
             <div className="flex-shrink-0 px-4 py-2 flex justify-center">
-              <div className="flex items-center gap-2 px-3 py-2 bg-destructive/10 border border-destructive/30 rounded-full shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-200">
-                <span className="text-[11px] text-destructive font-medium">{operationError}</span>
+              <div className="flex items-center gap-2 px-3 py-2 bg-destructive/10 border border-destructive/30 rounded-xl shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-200 max-w-sm">
+                <span className="text-[11px] text-destructive font-medium flex-1">{operationError}</span>
+                {operationErrorRetryable && lastSentInputRef.current && (
+                  <button
+                    onClick={() => {
+                      const lastInput = lastSentInputRef.current;
+                      if (operationErrorTimeoutRef.current) clearTimeout(operationErrorTimeoutRef.current);
+                      setOperationError(null);
+                      setOperationErrorRetryable(false);
+                      if (lastInput) handleSend(lastInput);
+                    }}
+                    className="text-[11px] font-semibold text-destructive border border-destructive/40 rounded-full px-2 py-0.5 hover:bg-destructive/20 transition-colors whitespace-nowrap flex-shrink-0"
+                    aria-label="Retry"
+                  >
+                    Retry
+                  </button>
+                )}
                 <button
-                  onClick={() => setOperationError(null)}
-                  className="text-[11px] text-destructive/70 hover:text-destructive transition-colors ml-1"
+                  onClick={() => {
+                    if (operationErrorTimeoutRef.current) clearTimeout(operationErrorTimeoutRef.current);
+                    setOperationError(null);
+                    setOperationErrorRetryable(false);
+                  }}
+                  className="text-[11px] text-destructive/70 hover:text-destructive transition-colors flex-shrink-0"
                   aria-label="Dismiss"
                 >
                   ✕

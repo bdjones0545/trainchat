@@ -689,6 +689,185 @@ export function validateProgrammingQuality(
   return result;
 }
 
+// ─── Quality Scoring System ───────────────────────────────────────────────────
+// Dimensional quality score (0–10) that operates independently of the binary
+// pass/fail validator above. Designed to catch systematically weak outputs that
+// technically pass each check but collectively under-perform.
+//
+// 5 dimensions × 0–2 points each = 0–10 total.
+// Threshold: 6/10 — scores below trigger a targeted repair pass.
+
+export interface QualityDimensionScore {
+  dimension: string;
+  score: 0 | 1 | 2;
+  reason: string;
+}
+
+export interface ProgramQualityScore {
+  score: number;
+  threshold: number;
+  dimensions: QualityDimensionScore[];
+  retryRecommended: boolean;
+}
+
+export function scoreProgramQuality(
+  program: ProgrammingValidationInput["generatedProgram"],
+  cleanContent: string,
+  routing: RoutingDecision,
+): ProgramQualityScore {
+  const text = collectProgramText(program, cleanContent);
+  const dimensions: QualityDimensionScore[] = [];
+  const threshold = 6;
+
+  // ── Dimension 1: Progression Logic (0–2) ──────────────────────────────────
+  // Does the program indicate HOW to progress over time?
+  {
+    const strongProgressionSignals = [
+      /\b(progressive\s*overload|add\s*(weight|load)|increase\s*(load|weight|reps?))\b/i,
+      /\b(week\s*[1-4]|phase\s*[1-3]|deload|taper|wave\s*load)\b/i,
+      /\b(progression\s*(model|strategy|scheme)|double\s*progression|linear\s*progression)\b/i,
+    ];
+    const weakProgressionSignals = [
+      /\b(progress|build|advance|develop|improve)\b/i,
+      /\b(increase|add|more)\b/i,
+    ];
+    const strongCount = strongProgressionSignals.filter(p => p.test(text)).length;
+    const weakCount = weakProgressionSignals.filter(p => p.test(text)).length;
+
+    if (strongCount >= 2) {
+      dimensions.push({ dimension: "progression_logic", score: 2, reason: "Explicit progression model — overload mechanism, phase structure, or deload protocol present" });
+    } else if (strongCount >= 1 || weakCount >= 2) {
+      dimensions.push({ dimension: "progression_logic", score: 1, reason: "Some progression language — could be more explicit about the overload mechanism" });
+    } else {
+      dimensions.push({ dimension: "progression_logic", score: 0, reason: "No progression model detected — program lacks explicit overload mechanism or phase structure" });
+    }
+  }
+
+  // ── Dimension 2: Volume Balance (0–2) ──────────────────────────────────────
+  // Is volume distributed appropriately across the days?
+  {
+    const days = program.days;
+    if (days.length === 0) {
+      dimensions.push({ dimension: "volume_balance", score: 0, reason: "No days — cannot assess volume distribution" });
+    } else {
+      const exerciseCounts = days.map(d => d.exercises.length);
+      const maxEx = Math.max(...exerciseCounts);
+      const minEx = Math.min(...exerciseCounts);
+      const avgEx = exerciseCounts.reduce((a, b) => a + b, 0) / exerciseCounts.length;
+      const variance = maxEx - minEx;
+
+      if (avgEx >= 3 && avgEx <= 8 && variance <= 3) {
+        dimensions.push({ dimension: "volume_balance", score: 2, reason: `Volume well-distributed — avg ${avgEx.toFixed(1)} exercises/session, variance ${variance}` });
+      } else if (avgEx >= 2 && avgEx <= 10 && variance <= 5) {
+        dimensions.push({ dimension: "volume_balance", score: 1, reason: `Volume acceptable — avg ${avgEx.toFixed(1)} exercises/session, variance ${variance}` });
+      } else {
+        dimensions.push({ dimension: "volume_balance", score: 0, reason: `Volume imbalanced — avg ${avgEx.toFixed(1)} exercises/session, variance ${variance} (one session much heavier/lighter than others)` });
+      }
+    }
+  }
+
+  // ── Dimension 3: Exercise Diversity (0–2) ──────────────────────────────────
+  // Are exercises varied or repetitive across sessions?
+  {
+    const allExerciseNames = program.days.flatMap(d => d.exercises.map(e => e.name.toLowerCase()));
+    const uniqueNames = new Set(allExerciseNames);
+    const totalExercises = allExerciseNames.length;
+    const diversityRatio = totalExercises > 0 ? uniqueNames.size / totalExercises : 0;
+
+    if (diversityRatio >= 0.7 && uniqueNames.size >= 8) {
+      dimensions.push({ dimension: "exercise_diversity", score: 2, reason: `Good diversity — ${uniqueNames.size} unique exercises across ${totalExercises} total (${Math.round(diversityRatio * 100)}%)` });
+    } else if (diversityRatio >= 0.5 && uniqueNames.size >= 5) {
+      dimensions.push({ dimension: "exercise_diversity", score: 1, reason: `Moderate diversity — ${uniqueNames.size} unique exercises (${Math.round(diversityRatio * 100)}%) — some repetition` });
+    } else {
+      dimensions.push({ dimension: "exercise_diversity", score: 0, reason: `Low diversity — only ${uniqueNames.size} unique exercises (${Math.round(diversityRatio * 100)}%) — high repetition across sessions` });
+    }
+  }
+
+  // ── Dimension 4: Session Coherence (0–2) ──────────────────────────────────
+  // Do sessions have clear intent and proper structure?
+  {
+    const namedSessions = program.days.filter(d => d.name && d.name.trim().length > 3);
+    const sessionNameRatio = program.days.length > 0 ? namedSessions.length / program.days.length : 0;
+
+    const hasNotes = program.days.some(d => d.exercises.some(e => e.notes && e.notes.length > 10));
+    const hasRest = program.days.some(d => d.exercises.some(e => e.rest && e.rest.length > 0));
+    const hasFocus = program.days.some(d => d.focus && d.focus.length > 3);
+
+    const coherencePoints = (sessionNameRatio >= 0.8 ? 1 : 0) + (hasNotes ? 1 : 0) + (hasRest ? 1 : 0) + (hasFocus ? 1 : 0);
+
+    if (coherencePoints >= 3) {
+      dimensions.push({ dimension: "session_coherence", score: 2, reason: "Sessions have clear intent — named, focused, with exercise notes and rest periods" });
+    } else if (coherencePoints >= 2) {
+      dimensions.push({ dimension: "session_coherence", score: 1, reason: "Sessions partially coherent — could improve focus labeling, notes, or rest prescriptions" });
+    } else {
+      dimensions.push({ dimension: "session_coherence", score: 0, reason: "Sessions lack structure — missing names, focus labels, exercise notes, or rest periods" });
+    }
+  }
+
+  // ── Dimension 5: Goal Alignment (0–2) ──────────────────────────────────────
+  // Does the program visibly serve the user's goal / the dominant domain?
+  {
+    const { dominantDomain } = routing;
+
+    const domainSignalMap: Record<string, RegExp[]> = {
+      conditioning: [/\b(interval|tempo|aerobic|conditioning|work.rest|rsa)\b/i, /\b(cardio|modality|lactate|vo2)\b/i],
+      powerSpeed: [/\b(power|explosive|sprint|plyometric|jump|low.rep)\b/i, /\b(acceleration|velocity|contrast)\b/i],
+      sport: [/\b(sport|athletic|game|competition|field|court|on.ice|in.season)\b/i],
+      mobility: [/\b(mobility|range|stretch|cars|pails|rails|joint|capsule)\b/i, /\b(passive|active.control|end.range)\b/i],
+      periodization: [/\b(phase|block|accumulation|intensification|deload|wave)\b/i],
+      returnFromInjury: [/\b(conservative|graded|reintroduc|pain.free|re.entry)\b/i],
+      base: [/\b(strength|compound|progressive|linear)\b/i, /\b(squat|deadlift|bench|row|press)\b/i],
+    };
+
+    const patterns = domainSignalMap[dominantDomain] ?? domainSignalMap["base"];
+    const matchCount = patterns.filter(p => p.test(text)).length;
+
+    if (matchCount >= 2) {
+      dimensions.push({ dimension: "goal_alignment", score: 2, reason: `Strong goal alignment — multiple ${dominantDomain} signals confirmed in output` });
+    } else if (matchCount >= 1) {
+      dimensions.push({ dimension: "goal_alignment", score: 1, reason: `Partial goal alignment — some ${dominantDomain} signals present but output could be more specific` });
+    } else {
+      dimensions.push({ dimension: "goal_alignment", score: 0, reason: `Weak goal alignment — ${dominantDomain} was dominant domain but output lacks domain-specific signals` });
+    }
+  }
+
+  const score = dimensions.reduce((acc, d) => acc + d.score, 0);
+
+  return {
+    score,
+    threshold,
+    dimensions,
+    retryRecommended: score < threshold,
+  };
+}
+
+export function buildQualityScoringRetryPrompt(scoreResult: ProgramQualityScore): string {
+  const weakDimensions = scoreResult.dimensions.filter(d => d.score < 2);
+  const lines = [
+    "PROGRAM QUALITY SCORE BELOW THRESHOLD — TARGETED IMPROVEMENTS REQUIRED",
+    "",
+    `Quality score: ${scoreResult.score}/${scoreResult.threshold * 2} (threshold: ${scoreResult.threshold}).`,
+    "The program was generated but scored below the quality bar on the following dimensions.",
+    "Apply the targeted corrections below without regenerating from scratch.",
+    "",
+    "DIMENSIONS TO IMPROVE:",
+    ...weakDimensions.map(d => `• ${d.dimension.toUpperCase()} (${d.score}/2): ${d.reason}`),
+    "",
+    "TARGETED CORRECTIONS:",
+    ...weakDimensions.map(d => {
+      if (d.dimension === "progression_logic") return "- Add an explicit progression model: name how load/reps increase week over week (e.g., 'Add 2.5kg to primary lifts each week' or define a deload protocol).";
+      if (d.dimension === "volume_balance") return "- Rebalance volume: ensure each session has 4–7 exercises. Sessions should not vary by more than 3 exercises in count.";
+      if (d.dimension === "exercise_diversity") return "- Add exercise variety: replace repeated exercises with appropriate alternatives. Aim for 70%+ unique exercises across the program.";
+      if (d.dimension === "session_coherence") return "- Improve session structure: every day needs a descriptive name, a focus label, exercise notes (coaching cues), and rest periods for every exercise.";
+      if (d.dimension === "goal_alignment") return "- Strengthen goal alignment: the dominant domain must be visibly present — ensure domain-specific exercises, rep schemes, and language reflect the user's actual request.";
+      return `- Improve ${d.dimension}`;
+    }),
+    "",
+    "Output the complete corrected program as valid JSON. Preserve the structure, only improve the flagged dimensions.",
+  ];
+  return lines.join("\n");
+}
+
 // ─── Retry Prompt Builder ─────────────────────────────────────────────────────
 // Generates a targeted correction prompt for the AI retry pass.
 // Tells the model exactly what failed and what to fix — not a blind regeneration.
