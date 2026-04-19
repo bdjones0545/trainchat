@@ -1,0 +1,312 @@
+BUILD THE MOBILITY ENGINE BY REPLICATING THE WORKING STRENGTH ENGINE ARCHITECTURE
+
+CONTEXT:
+TrainChat now has:
+- a fully developed Strength engine (gold standard)
+- a fully developed Speed / Footwork engine (same system depth)
+
+We now need to build the third focus:
+👉 Mobility
+
+We do NOT want a lightweight recovery feature.
+We want a full Mobility system that behaves exactly like Strength and Speed in system quality.
+
+The only difference should be the programming brain:
+- mobility block archetypes
+- mobility movement families
+- mobility session grammar
+- mobility adaptation logic
+- mobility exercise library
+
+Everything else must remain identical.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Create a Mobility engine that matches Strength and Speed in:
+
+- system architecture
+- lifecycle
+- agent control
+- adaptation
+- persistence
+- UI integration
+- continuation logic
+
+==================================================
+PART 1 — REPLICATE CORE SYSTEM (NO REBUILDING)
+==================================================
+
+Mobility must plug into the SAME infrastructure as Strength/Speed:
+
+- generation pipeline
+- 4-week block model
+- weekly progression framework
+- refinement engine
+- predictive adaptation system
+- memory dominance system
+- session lifecycle (start → resume → log → complete)
+- session logging + adaptation
+- week advancement
+- continuation block generation
+- diff / undo / history
+- DB persistence
+- agent integration
+- Today / Week / Block UI
+
+DO NOT duplicate logic.
+DO NOT create a parallel system.
+
+Mobility must run through the same pipes.
+
+==================================================
+PART 2 — DEFINE MOBILITY BLOCK ARCHETYPES
+==================================================
+
+Create mobility-specific block archetypes.
+
+Required initial set:
+
+- restore_range
+- control_end_range
+- movement_quality_rebuild
+- joint_specific_focus (hips / shoulders / spine)
+- recovery_flow
+- re_entry_support
+- stiffness_reduction
+
+Each block must define:
+- mission
+- primary adaptation target
+- tissue focus
+- control vs range emphasis
+- progression philosophy
+- 4-week arc (establish → build → intensify → deload)
+- session tendencies
+- continuation rules
+
+==================================================
+PART 3 — DEFINE MOBILITY MOVEMENT FAMILIES
+==================================================
+
+Create mobility-specific movement families.
+
+Suggested required families:
+
+- hip_mobility
+- shoulder_mobility
+- thoracic_spine
+- ankle_mobility
+- trunk_control
+- end_range_strength
+- positional_control
+- breathing_integration
+- tissue_preparation
+- dynamic_mobility_flow
+- recovery_restoration
+
+These should function like strength movement families:
+- used in selection
+- used in variation
+- used in refinement
+- used in adaptation
+
+==================================================
+PART 4 — CREATE MOBILITY SESSION GRAMMAR
+==================================================
+
+Define a standard structure for mobility sessions.
+
+Required structure:
+
+- tissue prep / breathing
+- mobility activation (joint-specific)
+- positional work (end-range / control)
+- dynamic movement integration
+- recovery / downregulation
+
+Each session type should define:
+- flow (not just sets/reps)
+- time under tension
+- control emphasis
+- range acquisition
+- fatigue vs recovery intent
+
+IMPORTANT:
+Mobility sessions are NOT strength sessions with lighter loads.
+They are flow-based, control-based, and range-based.
+
+==================================================
+PART 5 — 4-WEEK MOBILITY PROGRESSION
+==================================================
+
+Use the same 4-week skeleton:
+
+Week 1 → Establish
+Week 2 → Build
+Week 3 → Intensify
+Week 4 → Deload
+
+But for mobility, progression should change:
+- range depth
+- time under tension
+- control difficulty
+- positional demand
+- complexity of movement transitions
+
+NOT just reps or sets.
+
+==================================================
+PART 6 — AUDIT CURRENT MOBILITY EXERCISE DATABASE
+==================================================
+
+Audit existing DB (~700+ exercises now):
+
+Return:
+- how many mobility-related exercises exist
+- which movement families are underrepresented
+- missing areas:
+  - hips
+  - shoulders
+  - spine
+  - ankles
+  - breathing
+  - recovery flows
+- missing regressions/progressions
+- tagging issues
+
+==================================================
+PART 7 — EXPAND MOBILITY EXERCISE LIBRARY
+==================================================
+
+Add missing mobility exercises including:
+
+- hip CARs / openers
+- 90/90 variations
+- couch stretch / hip flexor
+- adductor work
+- thoracic rotations
+- shoulder CARs / wall slides
+- ankle dorsiflexion drills
+- breathing drills
+- positional holds
+- dynamic flows
+- recovery sequences
+
+Each exercise must include:
+- movement family
+- joint focus
+- regression/progression
+- equipment needs
+- home compatibility
+- control vs range emphasis
+- fatigue cost (low/moderate)
+- suitability by week role
+
+==================================================
+PART 8 — SEED MOBILITY TO LIVE DATABASE
+==================================================
+
+After cleaning and tagging:
+
+- insert into live DB
+- avoid duplicates
+- maintain consistency with existing schema
+- log:
+  - inserted
+  - updated
+  - skipped
+
+==================================================
+PART 9 — REUSE ADAPTATION + MEMORY SYSTEM
+==================================================
+
+Mobility uses SAME system:
+
+Session logs → memory → adaptation → continuation
+
+Mobility-specific interpretations:
+
+- pain → increase joint-specific work
+- stiffness → increase range-focused work
+- fatigue → bias recovery flows
+- easy sessions → increase control difficulty or range
+
+Memory must OVERRIDE when needed.
+
+==================================================
+PART 10 — AGENT COMMANDS FOR MOBILITY
+==================================================
+
+Add mobility-specific commands:
+
+- open hips
+- reduce stiffness
+- more recovery
+- shoulder focus
+- improve mobility
+- reduce pain
+- more control
+- restore range
+
+All must route through the SAME pipeline.
+
+==================================================
+PART 11 — KEEP FOCUS ISOLATION CLEAN
+==================================================
+
+Ensure:
+- mobility programs do NOT affect strength/speed
+- separate block chains
+- separate adaptation paths
+- shared only:
+  - injuries
+  - equipment
+  - age
+
+==================================================
+PART 12 — VALIDATION
+==================================================
+
+Test:
+
+1. Generate a 4-week mobility program
+2. Confirm all 4 weeks exist and differ
+3. Confirm session flow structure is correct
+4. Confirm exercises come from mobility families
+5. Confirm refinements work
+6. Confirm session logging influences next sessions
+7. Confirm continuation logic works
+
+==================================================
+PART 13 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. what was replicated from strength
+2. mobility block archetypes created
+3. mobility movement families created
+4. DB audit findings
+5. exercises added
+6. whether live DB was seeded
+7. what is fully working vs scaffolded
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Mobility must feel like:
+- a full training system
+- not a recovery add-on
+- not a stretch list
+- not a downgraded strength plan
+
+It must be:
+- structured
+- progressive
+- adaptive
+- agent-driven
+- persistent
+
+Same level as Strength and Speed.
