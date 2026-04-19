@@ -1036,3 +1036,111 @@ ${mandate}
 
 ${progression}`;
 }
+
+// ─── Post-Generation Safety Filter ───────────────────────────────────────────
+// Runs AFTER the AI generates program JSON.
+// Guarantees that prohibited exercises never persist in the final saved program
+// for older adult users, regardless of AI output.
+// Uses minimal local interfaces to avoid circular import with ai.ts.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyProgram = Record<string, any>;
+
+// Exercises that must NEVER appear for older adults at any rep range.
+const ALWAYS_PROHIBITED_PATTERNS: Array<{ pattern: RegExp; replacement: string; repOverride?: string }> = [
+  { pattern: /\bbox[\s-]?jump/i,             replacement: "Box Step-Up (slow, controlled)",             repOverride: "8-10" },
+  { pattern: /\bbroad[\s-]?jump/i,           replacement: "Step-Up with Knee Drive",                    repOverride: "8-10" },
+  { pattern: /\bdepth[\s-]?jump/i,           replacement: "Step-Down (eccentric focus)",                repOverride: "8-10" },
+  { pattern: /\bjump[\s-]?squat/i,           replacement: "Goblet Squat (slow, controlled)",             repOverride: "10-12" },
+  { pattern: /\bplyometric/i,                replacement: "Box Step-Up (slow, controlled)",             repOverride: "8-10" },
+  { pattern: /\bpower[\s-]?clean/i,          replacement: "Trap Bar Deadlift (controlled)",             repOverride: "8-10" },
+  { pattern: /\bhang[\s-]?clean/i,           replacement: "Dumbbell Romanian Deadlift",                 repOverride: "10-12" },
+  { pattern: /\bhang[\s-]?snatch/i,          replacement: "Dumbbell Romanian Deadlift",                 repOverride: "10-12" },
+  { pattern: /\bpower[\s-]?snatch/i,         replacement: "Dumbbell Romanian Deadlift",                 repOverride: "10-12" },
+  // Isolated snatch — exclude "overhead snatch" only; avoid hitting "snatch grip" patterns
+  { pattern: /^snatch$/i,                    replacement: "Dumbbell Romanian Deadlift",                 repOverride: "10-12" },
+  { pattern: /\bbulgarian[\s-]?split[\s-]?squat/i, replacement: "Rear-Foot Elevated Split Squat (supported)", repOverride: "10-12 each side" },
+];
+
+// Exercises that must be replaced only when the rep range is in the 1–6 (high-load) zone.
+const HEAVY_LOAD_PATTERNS: Array<{ pattern: RegExp; replacement: string; repOverride: string }> = [
+  { pattern: /\bconventional[\s-]?(?:barbell[\s-]?)?deadlift/i, replacement: "Trap Bar Deadlift (controlled)",   repOverride: "8-10" },
+  { pattern: /\bbarbell[\s-]?deadlift/i,                         replacement: "Trap Bar Deadlift (controlled)",   repOverride: "8-10" },
+  { pattern: /\bbarbell[\s-]?(?:back[\s-]?)?squat/i,             replacement: "Goblet Squat",                     repOverride: "10-12" },
+  { pattern: /\bback[\s-]?squat/i,                               replacement: "Goblet Squat",                     repOverride: "10-12" },
+];
+
+// Pull-up patterns — replace ONLY if the exercise appears to be unscaled (no "assisted", "band", "lat pulldown" modifiers).
+const UNSCALED_PULLUP_PATTERN = /^(?:weighted\s+)?pull[\s-]?up(?:s)?$/i;
+
+/** Returns true if a rep string (e.g. "3-5", "4", "5-6") is in the 1–6 heavy-load zone. */
+function isHeavyRepRange(reps: string | undefined): boolean {
+  if (!reps) return false;
+  const m = reps.trim().match(/^(\d+)(?:\s*[-–]\s*(\d+))?/);
+  if (!m) return false;
+  const lo = parseInt(m[1], 10);
+  const hi = m[2] ? parseInt(m[2], 10) : lo;
+  return hi <= 6;
+}
+
+/**
+ * Scans a generated program for exercises prohibited for older adults and
+ * replaces them with safe alternatives. Adjusts rep ranges as needed.
+ * Returns a deep-copied sanitized program (original is not mutated).
+ *
+ * Safe to call on any program — if the user is NOT an older adult, returns the
+ * program unchanged.
+ */
+export function sanitizeOlderAdultProgram(
+  program: AnyProgram,
+  userMessage: string,
+): AnyProgram {
+  const profile = detectSpecialPopulation(userMessage, null);
+  if (!profile || !profile.tags.includes("older_adult")) {
+    return program; // Not an older adult — no changes needed
+  }
+
+  const substitutions: Array<{ original: string; replacement: string; reason: string }> = [];
+  const sanitized: AnyProgram = JSON.parse(JSON.stringify(program));
+
+  for (const day of (sanitized.days ?? []) as AnyProgram[]) {
+    for (const ex of (day.exercises ?? []) as AnyProgram[]) {
+      const name: string = ex.name ?? "";
+
+      // 1. Always-prohibited exercises
+      let replaced = false;
+      for (const rule of ALWAYS_PROHIBITED_PATTERNS) {
+        if (rule.pattern.test(name)) {
+          substitutions.push({ original: name, replacement: rule.replacement, reason: "always-prohibited for older adults" });
+          ex.name = rule.replacement;
+          if (rule.repOverride) ex.reps = rule.repOverride;
+          replaced = true;
+          break;
+        }
+      }
+      if (replaced) continue;
+
+      // 2. Heavy-load patterns — only replace if rep range is 1–6
+      for (const rule of HEAVY_LOAD_PATTERNS) {
+        if (rule.pattern.test(name) && isHeavyRepRange(ex.reps)) {
+          substitutions.push({ original: name, replacement: rule.replacement, reason: `heavy rep range (${ex.reps}) not safe for older adult` });
+          ex.name = rule.replacement;
+          ex.reps = rule.repOverride;
+          break;
+        }
+      }
+
+      // 3. Unscaled pull-ups
+      if (UNSCALED_PULLUP_PATTERN.test(name.trim())) {
+        substitutions.push({ original: name, replacement: "Lat Pulldown (controlled)", reason: "unscaled pull-up as primary" });
+        ex.name = "Lat Pulldown (controlled)";
+        if (!ex.reps || isHeavyRepRange(ex.reps)) ex.reps = "10-12";
+      }
+    }
+  }
+
+  if (substitutions.length > 0 && process.env.NODE_ENV !== "production") {
+    console.log("[OlderAdultSafetyFilter] Applied substitutions", JSON.stringify({ age: profile.ageFlag, substitutions }));
+  }
+
+  return sanitized;
+}

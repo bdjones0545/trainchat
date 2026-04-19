@@ -38,6 +38,7 @@ import type { WeeklyArchitecture, SessionArchitecture, MovementPattern as ArchMo
 import { buildConditioningContext, isConditioningGoal } from "./conditioning-engine";
 import { buildPowerSpeedContext, isPowerRequest, isSpeedRequest } from "./power-speed-engine";
 import { buildSportContext, mapSportToProfile, detectSeasonContext } from "./sport-profile-engine";
+import { sanitizeOlderAdultProgram } from "./special-populations-engine";
 import { buildPeriodizationContext, needsPeriodizationContext } from "./periodization-engine";
 import { buildReEntryContext, needsReEntryContext } from "./re-entry-engine";
 import { buildMobilityContext } from "./mobility-engine";
@@ -2359,6 +2360,15 @@ export async function generateAIResponse(
       ?? (editContext !== null || intentResult?.type === "ADJUST_FOR_PAIN" || intentResult?.type === "ADJUST_FOR_READINESS" ? 4000 : 2800);
 
     let { cleanContent, structuredData } = await callOpenAI(baseMessages, maxTokens);
+
+    // ── Post-generation safety filter — older adult exercise substitution ──
+    // Deterministically replaces any prohibited exercises (box jumps, heavy
+    // deadlifts, unscaled pull-ups, Bulgarian split squats, etc.) with safe
+    // age-appropriate alternatives. This is a hard code-layer guarantee that
+    // runs AFTER the AI generates the program, before it is saved.
+    if (structuredData && userMessage) {
+      structuredData = sanitizeOlderAdultProgram(structuredData as Record<string, unknown>, userMessage) as ProgramStructure;
+    }
 
     if (isBuildIntent && structuredData && process.env.NODE_ENV !== "production") {
       console.log("[BuildAudit:AIOutput]", JSON.stringify({

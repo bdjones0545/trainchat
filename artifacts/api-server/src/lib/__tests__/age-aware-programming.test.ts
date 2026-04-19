@@ -10,7 +10,7 @@
 
 import { describe, it, expect } from "vitest";
 import { extractConstraints } from "../intent";
-import { detectSpecialPopulation } from "../special-populations-engine";
+import { detectSpecialPopulation, sanitizeOlderAdultProgram } from "../special-populations-engine";
 
 // ─── Task 1: Age extraction from natural language ─────────────────────────────
 
@@ -178,6 +178,97 @@ describe("extractConstraints — isOlderAdult behavior", () => {
   it("sets isOlderAdult=false for age 28", () => {
     const c = extractConstraints("I am 28 years old football player");
     expect(c.isOlderAdult).toBe(false);
+  });
+});
+
+// ─── Task 3b: Post-generation safety filter ──────────────────────────────────
+
+function makeProgram(...dayExercises: Array<Array<{ name: string; reps?: string }>>): Record<string, unknown> {
+  return {
+    programName: "Test Program",
+    days: dayExercises.map((exs, i) => ({
+      dayNumber: i + 1,
+      name: `Day ${i + 1}`,
+      exercises: exs.map(e => ({ name: e.name, reps: e.reps ?? "8-10", sets: 3, rest: "90 sec" })),
+    })),
+  };
+}
+
+describe("sanitizeOlderAdultProgram — safety filter", () => {
+  const MSG_60 = "I am a 60 year old pickleball player give me a 3 day program";
+  const MSG_YOUNG = "I am 28 years old football player give me a program";
+
+  it("replaces Box Jump with Box Step-Up for older adult", () => {
+    const p = makeProgram([{ name: "Box Jump", reps: "3-4" }]);
+    const r = sanitizeOlderAdultProgram(p, MSG_60);
+    expect((r.days as any)[0].exercises[0].name).toBe("Box Step-Up (slow, controlled)");
+    expect((r.days as any)[0].exercises[0].reps).toBe("8-10");
+  });
+
+  it("replaces Pull-Up (unscaled) with Lat Pulldown for older adult", () => {
+    const p = makeProgram([{ name: "Pull-Up", reps: "8-10" }]);
+    const r = sanitizeOlderAdultProgram(p, MSG_60);
+    expect((r.days as any)[0].exercises[0].name).toBe("Lat Pulldown (controlled)");
+  });
+
+  it("does NOT replace Assisted Pull-Up for older adult", () => {
+    const p = makeProgram([{ name: "Assisted Pull-Up", reps: "10-12" }]);
+    const r = sanitizeOlderAdultProgram(p, MSG_60);
+    expect((r.days as any)[0].exercises[0].name).toBe("Assisted Pull-Up"); // unchanged
+  });
+
+  it("replaces Bulgarian Split Squat for older adult", () => {
+    const p = makeProgram([{ name: "Bulgarian Split Squat", reps: "8-10 each side" }]);
+    const r = sanitizeOlderAdultProgram(p, MSG_60);
+    expect((r.days as any)[0].exercises[0].name).toBe("Rear-Foot Elevated Split Squat (supported)");
+  });
+
+  it("replaces Power Clean for older adult", () => {
+    const p = makeProgram([{ name: "Power Clean", reps: "3-4" }]);
+    const r = sanitizeOlderAdultProgram(p, MSG_60);
+    expect((r.days as any)[0].exercises[0].name).toBe("Trap Bar Deadlift (controlled)");
+  });
+
+  it("replaces Conventional Deadlift at 1-6 reps for older adult", () => {
+    const p = makeProgram([{ name: "Conventional Deadlift", reps: "4-6" }]);
+    const r = sanitizeOlderAdultProgram(p, MSG_60);
+    expect((r.days as any)[0].exercises[0].name).toBe("Trap Bar Deadlift (controlled)");
+    expect((r.days as any)[0].exercises[0].reps).toBe("8-10");
+  });
+
+  it("does NOT replace Conventional Deadlift at 8-12 reps for older adult", () => {
+    const p = makeProgram([{ name: "Conventional Deadlift", reps: "8-12" }]);
+    const r = sanitizeOlderAdultProgram(p, MSG_60);
+    expect((r.days as any)[0].exercises[0].name).toBe("Conventional Deadlift"); // unchanged
+  });
+
+  it("does NOT replace any exercises for a 28-year-old", () => {
+    const p = makeProgram([{ name: "Box Jump", reps: "3-4" }, { name: "Power Clean", reps: "3-5" }]);
+    const r = sanitizeOlderAdultProgram(p, MSG_YOUNG);
+    expect((r.days as any)[0].exercises[0].name).toBe("Box Jump"); // unchanged
+    expect((r.days as any)[0].exercises[1].name).toBe("Power Clean"); // unchanged
+  });
+
+  it("does not mutate the original program", () => {
+    const p = makeProgram([{ name: "Box Jump", reps: "3-4" }]);
+    const original = JSON.stringify(p);
+    sanitizeOlderAdultProgram(p, MSG_60);
+    expect(JSON.stringify(p)).toBe(original); // unchanged
+  });
+
+  it("handles programs with multiple days and exercises", () => {
+    const p = makeProgram(
+      [{ name: "Box Jump", reps: "3-4" }, { name: "Trap Bar Deadlift", reps: "8-10" }],
+      [{ name: "Pull-Up", reps: "6-8" }, { name: "Lat Pulldown", reps: "10-12" }],
+      [{ name: "Bulgarian Split Squat", reps: "10-12" }, { name: "Step-Up", reps: "10-12" }],
+    );
+    const r = sanitizeOlderAdultProgram(p, MSG_60);
+    expect((r.days as any)[0].exercises[0].name).toBe("Box Step-Up (slow, controlled)");
+    expect((r.days as any)[0].exercises[1].name).toBe("Trap Bar Deadlift"); // unchanged (not in prohibited list)
+    expect((r.days as any)[1].exercises[0].name).toBe("Lat Pulldown (controlled)"); // Pull-Up → Lat Pulldown
+    expect((r.days as any)[1].exercises[1].name).toBe("Lat Pulldown"); // unchanged
+    expect((r.days as any)[2].exercises[0].name).toBe("Rear-Foot Elevated Split Squat (supported)"); // BSS → RFESS
+    expect((r.days as any)[2].exercises[1].name).toBe("Step-Up"); // unchanged
   });
 });
 
