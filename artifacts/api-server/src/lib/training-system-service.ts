@@ -1637,3 +1637,72 @@ export async function generateContinuationPhase(
   );
   return newPhase;
 }
+
+// ─── advanceToNextWeek ────────────────────────────────────────────────────────
+//
+// Marks the current training week as completed and advances to the next.
+// If the completed week was the final one (Week 4), marks the phase complete too.
+// Returns a descriptor of the transition so callers can post chat acknowledgments.
+
+export interface WeekAdvanceResult {
+  previousWeek: { id: number; weekNumber: number; label: string | null };
+  newWeek: { id: number; weekNumber: number; label: string | null; volumeLevel: string } | null;
+  blockCompleted: boolean;
+  completedPhaseName?: string;
+  completedPhaseId?: number;
+}
+
+export async function advanceToNextWeek(userId: number): Promise<WeekAdvanceResult | null> {
+  const system = await getActiveTrainingSystem(userId);
+  if (!system || !system.currentPhaseId) return null;
+
+  const [currentPhase] = await db
+    .select()
+    .from(trainingPhases)
+    .where(and(eq(trainingPhases.id, system.currentPhaseId), eq(trainingPhases.status, "current")));
+
+  if (!currentPhase) return null;
+
+  const allWeeks = await db
+    .select()
+    .from(trainingWeeks)
+    .where(eq(trainingWeeks.trainingPhaseId, currentPhase.id))
+    .orderBy(trainingWeeks.orderIndex);
+
+  const currentWeekIdx = allWeeks.findIndex((w) => w.status === "current");
+  if (currentWeekIdx === -1) return null;
+
+  const currentWeek = allWeeks[currentWeekIdx];
+  const nextWeek = allWeeks[currentWeekIdx + 1] ?? null;
+
+  // Mark current week complete
+  await db.update(trainingWeeks).set({ status: "completed" }).where(eq(trainingWeeks.id, currentWeek.id));
+
+  if (nextWeek) {
+    // Advance to next week
+    await db.update(trainingWeeks).set({ status: "current" }).where(eq(trainingWeeks.id, nextWeek.id));
+    logger.info(
+      { userId, fromWeek: currentWeek.weekNumber, toWeek: nextWeek.weekNumber },
+      "[TrainingSystem] advanceToNextWeek — week advanced"
+    );
+    return {
+      previousWeek: { id: currentWeek.id, weekNumber: currentWeek.weekNumber, label: currentWeek.label },
+      newWeek: { id: nextWeek.id, weekNumber: nextWeek.weekNumber, label: nextWeek.label, volumeLevel: nextWeek.volumeLevel },
+      blockCompleted: false,
+    };
+  } else {
+    // This was the final week — mark phase complete
+    await db.update(trainingPhases).set({ status: "completed" }).where(eq(trainingPhases.id, currentPhase.id));
+    logger.info(
+      { userId, phaseId: currentPhase.id, phaseName: currentPhase.name },
+      "[TrainingSystem] advanceToNextWeek — final week complete, block marked done"
+    );
+    return {
+      previousWeek: { id: currentWeek.id, weekNumber: currentWeek.weekNumber, label: currentWeek.label },
+      newWeek: null,
+      blockCompleted: true,
+      completedPhaseName: currentPhase.name,
+      completedPhaseId: currentPhase.id,
+    };
+  }
+}

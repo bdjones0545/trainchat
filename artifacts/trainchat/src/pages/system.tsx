@@ -158,6 +158,9 @@ async function continueBlockFn(options: { mode: "next" | "repeat"; adjustments?:
     body: JSON.stringify(options),
   });
 }
+async function advanceWeekFn() {
+  return customFetch<any>("/api/training-system/advance-week", { method: "POST" });
+}
 async function restoreChange(changeLogId: number) {
   return customFetch<any>(`/api/training-system/restore/${changeLogId}`, { method: "POST" });
 }
@@ -790,6 +793,18 @@ function WeekView({ highlightedIds, onEditExercise, onEditSession, onEditWeek, i
     onError: () => setRefineActiveChip(null),
   });
 
+  const advanceWeekMutation = useMutation({
+    mutationFn: advanceWeekFn,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-weeks"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-block-completion"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+    },
+  });
+
   const isLoading = weeksListLoading || weekLoading;
 
   if (isLoading && !weeksList) return <ViewSkeleton />;
@@ -1005,6 +1020,30 @@ function WeekView({ highlightedIds, onEditExercise, onEditSession, onEditWeek, i
                     Start Week {activeWeekNumber + 1}
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Complete This Week ── */}
+          {isCurrentWeek && !isCompletedWeek && activeWeekNumber < totalWeeks && (
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+              <div className="flex items-center justify-between gap-3 px-4 py-3.5">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-green-500/10 border border-green-500/20 flex items-center justify-center flex-shrink-0">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Finished Week {activeWeekNumber}?</p>
+                    <p className="text-[10px] text-muted-foreground">Mark complete and move to Week {activeWeekNumber + 1}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => advanceWeekMutation.mutate()}
+                  disabled={advanceWeekMutation.isPending}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/25 text-green-400 hover:bg-green-500/20 transition-all disabled:opacity-50"
+                >
+                  {advanceWeekMutation.isPending ? "Advancing…" : `Start Week ${activeWeekNumber + 1}`}
+                </button>
               </div>
             </div>
           )}
@@ -4406,9 +4445,18 @@ export default function SystemPage() {
             queryClient.invalidateQueries({ queryKey: ["insights"] });
             queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
             queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+            queryClient.invalidateQueries({ queryKey: ["training-system-weeks"] });
             queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
+            queryClient.invalidateQueries({ queryKey: ["training-system-block-completion"] });
             queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
             queryClient.invalidateQueries({ queryKey: ["agent-memory"] });
+            // Delayed re-invalidation: allows server-side auto-advance to complete first
+            setTimeout(() => {
+              queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+              queryClient.invalidateQueries({ queryKey: ["training-system-weeks"] });
+              queryClient.invalidateQueries({ queryKey: ["training-system-block-completion"] });
+              queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+            }, 2500);
           }}
         />
       )}

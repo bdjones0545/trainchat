@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, sessionLogsTable, sessionFeedbackTable, systemChangeLog, trainingSystems, exerciseLogsTable, sessionExercises, trainingSessions, trainingWeeks, trainingPhases, conversationsTable, messagesTable } from "@workspace/db";
-import { eq, desc, and, ilike } from "drizzle-orm";
+import { eq, desc, and, ilike, gte, lt } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { z } from "zod";
 import { evaluateWorkoutCompletion } from "../lib/workout-evaluation";
@@ -14,6 +14,7 @@ import {
 } from "../lib/progression";
 import { runBlockEvaluationAndLog } from "./block-intelligence";
 import { syncMemoriesFromData, upsertMemory } from "../lib/memory";
+import { advanceToNextWeek, generateContinuationPhase } from "../lib/training-system-service";
 
 // ─── Pain area label map ───────────────────────────────────────────────────────
 
@@ -271,6 +272,114 @@ async function writePainAreasToMemory(
   );
 }
 
+/**
+ * After a session is logged, check whether the user has completed their weekly target.
+ * Calendar week = Monday 00:00 → Sunday 23:59.
+ * If sessions logged this week (non-skipped) >= weeklyFrequency:
+ *   - advance the current training week to the next
+ *   - post a chat acknowledgment about the transition
+ *   - if block is complete, fire-and-forget auto-generate the continuation
+ */
+async function checkAndAutoAdvanceWeek(userId: number): Promise<void> {
+  try {
+    // Get active system and its weekly frequency
+    const [system] = await db
+      .select({ id: trainingSystems.id, weeklyFrequency: trainingSystems.weeklyFrequency })
+      .from(trainingSystems)
+      .where(eq(trainingSystems.userId, userId))
+      .limit(1);
+    if (!system) return;
+
+    const weeklyFrequency = system.weeklyFrequency ?? 3;
+
+    // Current calendar week: Monday 00:00 → next Monday 00:00
+    const now = new Date();
+    const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon...
+    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - daysFromMonday);
+    monday.setHours(0, 0, 0, 0);
+    const nextMonday = new Date(monday);
+    nextMonday.setDate(monday.getDate() + 7);
+
+    // Count non-skipped sessions this calendar week
+    const weekLogs = await db
+      .select({ id: sessionLogsTable.id, sessionStatus: sessionLogsTable.sessionStatus })
+      .from(sessionLogsTable)
+      .where(
+        and(
+          eq(sessionLogsTable.userId, userId),
+          gte(sessionLogsTable.completedAt, monday),
+          lt(sessionLogsTable.completedAt, nextMonday)
+        )
+      );
+
+    const activeSessionCount = weekLogs.filter((l) => l.sessionStatus !== "skipped").length;
+    if (activeSessionCount < weeklyFrequency) return;
+
+    // Check: is the current training week already completed? (Avoid double-advance)
+    const currentWeekRows = await db
+      .select({ id: trainingWeeks.id, status: trainingWeeks.status })
+      .from(trainingWeeks)
+      .where(eq(trainingWeeks.status, "current"))
+      .limit(1);
+
+    if (currentWeekRows.length === 0 || currentWeekRows[0].status === "completed") return;
+
+    // Advance to next week
+    const advance = await advanceToNextWeek(userId);
+    if (!advance) return;
+
+    // Post chat acknowledgment for the transition
+    const [recentConvo] = await db
+      .select({ id: conversationsTable.id })
+      .from(conversationsTable)
+      .where(eq(conversationsTable.userId, userId))
+      .orderBy(desc(conversationsTable.updatedAt))
+      .limit(1);
+
+    if (recentConvo) {
+      let ackContent: string;
+      if (advance.blockCompleted) {
+        const phaseName = advance.completedPhaseName ?? "this block";
+        ackContent = `Week ${advance.previousWeek.weekNumber} done — and that's all 4 weeks of ${phaseName} complete. Great work finishing this block. I'm building your next training phase now and it'll carry everything forward — your performance data, pain history, and adaptation signals all carry through.`;
+      } else {
+        const newW = advance.newWeek!;
+        const focusLabel =
+          newW.volumeLevel === "deload" ? "Deload Week"
+          : newW.volumeLevel === "high" ? "High Volume Week"
+          : newW.volumeLevel === "low" ? "Light Week"
+          : `Week ${newW.weekNumber}`;
+        const label = newW.label ? `${newW.label} (${focusLabel})` : focusLabel;
+        ackContent = `Week ${advance.previousWeek.weekNumber} complete — moving you into ${label}. Same structure, same exercises, stepped up appropriately based on your performance this week.`;
+      }
+
+      await db.insert(messagesTable).values({
+        conversationId: recentConvo.id,
+        role: "assistant",
+        content: ackContent,
+        structuredData: JSON.stringify({
+          _type: advance.blockCompleted ? "block_completed" : "week_advanced",
+          fromWeek: advance.previousWeek.weekNumber,
+          toWeek: advance.newWeek?.weekNumber ?? null,
+          blockCompleted: advance.blockCompleted,
+        }),
+      });
+      await db
+        .update(conversationsTable)
+        .set({ updatedAt: new Date() })
+        .where(eq(conversationsTable.id, recentConvo.id));
+    }
+
+    // If block completed, auto-generate the continuation phase
+    if (advance.blockCompleted) {
+      generateContinuationPhase(userId, { mode: "next" }).catch(() => {});
+    }
+  } catch {
+    // Non-fatal — session log already saved
+  }
+}
+
 const router: IRouter = Router();
 
 const CreateSessionLogBody = z.object({
@@ -518,6 +627,9 @@ router.post("/session-logs", requireAuth, async (req: any, res): Promise<void> =
 
   // Full memory sync — picks up adherence, volume, enjoyment, and pain patterns
   syncMemoriesFromData(userId).catch(() => {});
+
+  // Auto-advance week if user has hit their weekly session target
+  checkAndAutoAdvanceWeek(userId).catch(() => {});
 
   res.status(201).json({
     id: log.id,

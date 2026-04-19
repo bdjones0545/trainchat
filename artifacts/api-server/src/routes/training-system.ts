@@ -16,6 +16,7 @@ import {
   getBlockCompletionStatus,
   markBlockComplete,
   generateContinuationPhase,
+  advanceToNextWeek,
   type ChatProgram,
 } from "../lib/training-system-service";
 import {
@@ -498,6 +499,25 @@ router.delete("/training-system/:id", requireAuth, async (req, res): Promise<voi
   } catch (err) {
     logger.error({ err }, "[training-system] DELETE /:id error");
     res.status(500).json({ error: "Failed to delete training system" });
+  }
+});
+
+// ─── POST /training-system/advance-week ───────────────────────────────────────
+// Marks the current training week as completed and advances to the next week.
+// If the completed week was the final one, marks the block as complete.
+// Meant to be called both manually (from UI) and automatically (after session log).
+router.post("/training-system/advance-week", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const userId = req.session.userId!;
+    const result = await advanceToNextWeek(userId);
+    if (!result) {
+      res.status(404).json({ error: "No active training week to advance" });
+      return;
+    }
+    res.json(result);
+  } catch (err: any) {
+    logger.error({ err }, "[training-system] POST /advance-week error");
+    res.status(500).json({ error: err.message ?? "Failed to advance week" });
   }
 });
 
