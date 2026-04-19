@@ -1128,6 +1128,40 @@ const REPEAT_OPTIONS = [
   { id: "more_conditioning", label: "Add conditioning" },
 ];
 
+function ProgrammingLogicCard({ phase }: { phase: any }) {
+  const [expanded, setExpanded] = useState(false);
+  const bullets: string[] = [];
+  if (phase?.emphasis) bullets.push(phase.emphasis);
+  if (phase?.goal && phase.goal !== phase.emphasis) bullets.push(phase.goal);
+  if (phase?.notes) bullets.push(phase.notes);
+  if (bullets.length === 0) return null;
+
+  return (
+    <div className="border-t border-border px-4 py-3">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center justify-between w-full gap-2"
+      >
+        <div className="flex items-center gap-2">
+          <GitBranch className="w-3 h-3 text-muted-foreground" />
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Programming Logic</span>
+        </div>
+        {expanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+      </button>
+      {expanded && (
+        <ul className="mt-2.5 space-y-1.5">
+          {bullets.map((b, i) => (
+            <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground leading-relaxed">
+              <span className="w-1 h-1 rounded-full bg-primary/50 flex-shrink-0 mt-1.5" />
+              {b}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function BlockView({ highlightedIds, onEditPhase, onEditWeek }: BlockViewProps) {
   const queryClient = useQueryClient();
 
@@ -1195,6 +1229,14 @@ function BlockView({ highlightedIds, onEditPhase, onEditWeek }: BlockViewProps) 
     });
   }
 
+  const { data: blockMemory } = useQuery({
+    queryKey: ["agent-memory"],
+    queryFn: fetchAgentMemory,
+    retry: false,
+    staleTime: 60_000,
+  });
+  const agentMem = blockMemory?.agentMemory;
+
   if (isLoading) return <ViewSkeleton />;
   if (error || !block) {
     return (
@@ -1206,44 +1248,51 @@ function BlockView({ highlightedIds, onEditPhase, onEditWeek }: BlockViewProps) 
   }
 
   const { system, phases, currentPhase, currentWeekNumber } = block;
-  const phaseHighlight = currentPhase && highlightedIds.phases.has(currentPhase.id)
-    ? "ring-2 ring-purple-400/50 ring-offset-1 ring-offset-background"
-    : "";
 
+  // Derive active modifier chips from agent memory
+  const activeModifiers: Array<{ label: string; color: string }> = [
+    ...(agentMem?.activeEmphases ?? []).map((v) => ({
+      label: v,
+      color: "text-primary bg-primary/10 border-primary/20",
+    })),
+    ...(agentMem?.activeConstraints ?? []).map((v) => ({
+      label: v,
+      color: "text-amber-400 bg-amber-400/10 border-amber-400/20",
+    })),
+    ...(agentMem?.activeBiases ?? []).map((v) => ({
+      label: v,
+      color: "text-blue-400 bg-blue-400/10 border-blue-400/20",
+    })),
+  ];
   const isBlockComplete = completion?.isComplete === true;
   const completedPhaseName = completion?.completedPhase?.name ?? currentPhase?.name ?? "Your Block";
   const nextRec = completion?.nextRecommendation;
   const blockChainIndex = completion?.blockChainIndex ?? 0;
   const isContinuing = continueBlockMutation.isPending;
+  const blockPct = currentPhase ? Math.round(((currentWeekNumber - 1) / currentPhase.weekCount) * 100) : 0;
+  const hasFuturePhases = phases.some((p: any) => p.status === "future");
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
 
       {/* ── Block Complete Card ── (shown when block is finished) */}
       {isBlockComplete && nextRec && (
         <div className="rounded-2xl border border-green-500/30 bg-gradient-to-br from-green-500/8 via-green-500/3 to-transparent p-5 space-y-4">
-          {/* Header */}
           <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-green-500/15 border border-green-500/25 flex items-center justify-center flex-shrink-0">
-              <CheckCircle2 className="w-6 h-6 text-green-400" />
+            <div className="w-11 h-11 rounded-2xl bg-green-500/15 border border-green-500/25 flex items-center justify-center flex-shrink-0">
+              <CheckCircle2 className="w-5 h-5 text-green-400" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                <span className="text-[9px] font-bold uppercase tracking-widest text-green-400 bg-green-400/10 px-2 py-0.5 rounded-full border border-green-400/20">
-                  Block Complete
-                </span>
+                <span className="text-[9px] font-bold uppercase tracking-widest text-green-400 bg-green-400/10 px-2 py-0.5 rounded-full border border-green-400/20">Block Complete</span>
                 {blockChainIndex > 1 && (
-                  <span className="text-[9px] font-semibold text-muted-foreground/60">
-                    Block {blockChainIndex} of your progression
-                  </span>
+                  <span className="text-[9px] font-semibold text-muted-foreground/60">Block {blockChainIndex} of your progression</span>
                 )}
               </div>
               <h2 className="text-base font-bold text-foreground leading-tight">{completedPhaseName}</h2>
               <p className="text-xs text-muted-foreground mt-0.5">4-week block complete</p>
             </div>
           </div>
-
-          {/* What this block built */}
           {nextRec.whatBuilt?.length > 0 && (
             <div className="bg-background/50 rounded-xl border border-border p-4">
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2.5">What this block built</p>
@@ -1257,51 +1306,28 @@ function BlockView({ highlightedIds, onEditPhase, onEditWeek }: BlockViewProps) 
               </ul>
             </div>
           )}
-
-          {/* Next block recommendation */}
           <div className="bg-background/40 rounded-xl border border-primary/20 p-4">
             <p className="text-[10px] font-bold uppercase tracking-wider text-primary/70 mb-1">Next recommended phase</p>
             <p className="text-sm font-bold text-foreground mb-1">{nextRec.displayName}</p>
             <p className="text-xs text-muted-foreground leading-relaxed italic">"{nextRec.rationale}"</p>
           </div>
-
-          {/* Action buttons */}
           <div className="space-y-2.5">
-            <button
-              onClick={handleStartNextBlock}
-              disabled={isContinuing}
-              className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-bold hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-60"
-            >
-              {isContinuing ? (
-                <><RotateCcw className="w-4 h-4 animate-spin" />Building your next block...</>
-              ) : (
-                <><ChevronRight className="w-4 h-4" />Start Next Block</>
-              )}
+            <button onClick={handleStartNextBlock} disabled={isContinuing} className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-bold hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-60">
+              {isContinuing ? <><RotateCcw className="w-4 h-4 animate-spin" />Building your next block...</> : <><ChevronRight className="w-4 h-4" />Start Next Block</>}
             </button>
-
             <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => setShowModifySheet(true)}
-                disabled={isContinuing}
-                className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-card border border-border text-xs font-semibold text-foreground hover:bg-muted/40 hover:border-primary/30 active:scale-[0.98] transition-all disabled:opacity-40"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground" />
-                Modify Next Block
+              <button onClick={() => setShowModifySheet(true)} disabled={isContinuing} className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-card border border-border text-xs font-semibold text-foreground hover:bg-muted/40 hover:border-primary/30 active:scale-[0.98] transition-all disabled:opacity-40">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground" />Modify Next Block
               </button>
-              <button
-                onClick={() => setShowRepeatSheet(true)}
-                disabled={isContinuing}
-                className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-card border border-border text-xs font-semibold text-foreground hover:bg-muted/40 hover:border-primary/30 active:scale-[0.98] transition-all disabled:opacity-40"
-              >
-                <RotateCcw className="w-3.5 h-3.5 text-muted-foreground" />
-                Repeat With Changes
+              <button onClick={() => setShowRepeatSheet(true)} disabled={isContinuing} className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-card border border-border text-xs font-semibold text-foreground hover:bg-muted/40 hover:border-primary/30 active:scale-[0.98] transition-all disabled:opacity-40">
+                <RotateCcw className="w-3.5 h-3.5 text-muted-foreground" />Repeat With Changes
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Mark Complete (manual override) — shown if on week 4 but not yet complete ── */}
+      {/* ── Mark Complete prompt ── */}
       {!isBlockComplete && !completionLoading && currentPhase && currentWeekNumber === 4 && (
         <div className="rounded-xl border border-border bg-muted/20 p-4">
           <div className="flex items-center justify-between gap-3">
@@ -1309,133 +1335,162 @@ function BlockView({ highlightedIds, onEditPhase, onEditWeek }: BlockViewProps) 
               <p className="text-xs font-semibold text-foreground">Finished the block?</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">Mark it complete to unlock your next phase.</p>
             </div>
-            <button
-              onClick={() => markCompleteMutation.mutate()}
-              disabled={markCompleteMutation.isPending}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-card border border-border text-xs font-semibold text-foreground hover:bg-muted/40 transition-all disabled:opacity-50 flex-shrink-0"
-            >
-              {markCompleteMutation.isPending ? (
-                <RotateCcw className="w-3 h-3 animate-spin" />
-              ) : (
-                <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
-              )}
+            <button onClick={() => markCompleteMutation.mutate()} disabled={markCompleteMutation.isPending} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-card border border-border text-xs font-semibold text-foreground hover:bg-muted/40 transition-all disabled:opacity-50 flex-shrink-0">
+              {markCompleteMutation.isPending ? <RotateCcw className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />}
               Mark Complete
             </button>
           </div>
         </div>
       )}
 
-      {/* Block intelligence — full view in block tab */}
+      {/* ── Block Intelligence ── */}
       <BlockStatusCard />
 
-      {/* Coach memory insights — what your coach has learned about you */}
-      <CoachMemoryInsights />
-
-      {/* Current block hero */}
+      {/* ── Current Block Hero (redesigned) ── */}
       {currentPhase && !isBlockComplete && (
-        <div className={`rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/20 p-5 transition-all duration-500 ${phaseHighlight}`}>
-          <div className="flex items-start justify-between gap-3 mb-4">
+        <div className={`rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/20 p-4 transition-all duration-500 ${highlightedIds.phases.has(currentPhase.id) ? "ring-2 ring-purple-400/50 ring-offset-1 ring-offset-background" : ""}`}>
+          {/* Title row */}
+          <div className="flex items-start justify-between gap-3 mb-3">
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap mb-1">
-                <p className="text-xs font-semibold text-primary uppercase tracking-wider">Current Block</p>
+              <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                <p className="text-[10px] font-bold text-primary uppercase tracking-wider">Current Block</p>
                 {blockChainIndex > 0 && (
-                  <span className="text-[9px] font-semibold text-muted-foreground/50">
-                    · Block {blockChainIndex + 1} of your progression
-                  </span>
+                  <span className="text-[9px] font-medium text-muted-foreground/50">· Block {blockChainIndex + 1}</span>
                 )}
               </div>
               <h2 className="text-lg font-bold text-foreground leading-tight">{currentPhase.name}</h2>
-              {currentPhase.goal && <p className="text-sm text-muted-foreground mt-1">{currentPhase.goal}</p>}
               {highlightedIds.phases.has(currentPhase.id) && (
-                <span className="inline-flex items-center gap-1 mt-2 text-[10px] font-bold uppercase tracking-wider text-purple-400 bg-purple-400/10 px-2 py-0.5 rounded-full border border-purple-400/20">
+                <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold uppercase tracking-wider text-purple-400 bg-purple-400/10 px-2 py-0.5 rounded-full border border-purple-400/20">
                   <CheckCircle2 className="w-3 h-3" /> Updated
                 </span>
               )}
             </div>
-            <div className="flex flex-col items-end gap-2">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
-                <TrendingUp className="w-5 h-5 text-primary" />
+            <div className="flex flex-col items-end gap-2 flex-shrink-0">
+              <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+                <TrendingUp className="w-4 h-4 text-primary" />
               </div>
-              <button
-                onClick={() => onEditPhase(currentPhase)}
-                className="text-[11px] font-semibold text-primary flex items-center gap-1.5 hover:underline"
-              >
-                <SlidersHorizontal className="w-3 h-3" />
-                Refocus block
+              <button onClick={() => onEditPhase(currentPhase)} className="text-[11px] font-semibold text-primary flex items-center gap-1 hover:underline">
+                <SlidersHorizontal className="w-3 h-3" />Refocus
               </button>
             </div>
           </div>
 
-          {currentPhase.emphasis && (
-            <div className="bg-background/60 rounded-lg px-4 py-3 border border-border mb-4">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Emphasis</p>
-              <p className="text-sm text-foreground">{currentPhase.emphasis}</p>
-            </div>
-          )}
+          {/* Metadata chips */}
+          <div className="flex flex-wrap gap-1.5 mb-4">
+            {currentPhase.emphasis && (
+              <span className="flex items-center gap-1 text-[11px] font-semibold bg-primary/15 border border-primary/25 text-primary px-2.5 py-1 rounded-full">
+                <Zap className="w-3 h-3" />{currentPhase.emphasis}
+              </span>
+            )}
+            <span className="flex items-center gap-1 text-[11px] font-semibold bg-muted border border-border text-muted-foreground px-2.5 py-1 rounded-full">
+              <Calendar className="w-3 h-3" />Week {currentWeekNumber} / {currentPhase.weekCount}
+            </span>
+            {system.weeklyFrequency && (
+              <span className="flex items-center gap-1 text-[11px] font-semibold bg-muted border border-border text-muted-foreground px-2.5 py-1 rounded-full">
+                <Clock className="w-3 h-3" />{system.weeklyFrequency}×/wk
+              </span>
+            )}
+            {system.equipmentAccess && (
+              <span className="flex items-center gap-1 text-[11px] font-semibold bg-muted border border-border text-muted-foreground px-2.5 py-1 rounded-full capitalize">
+                <Dumbbell className="w-3 h-3" />{system.equipmentAccess}
+              </span>
+            )}
+          </div>
 
-          <div className="flex items-center gap-4 mb-3">
-            <div>
-              <p className="text-xs text-muted-foreground">Week</p>
-              <p className="text-lg font-bold text-foreground">
-                {currentWeekNumber} <span className="text-sm font-normal text-muted-foreground">of {currentPhase.weekCount}</span>
-              </p>
+          {/* Progress bar */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Block progress</span>
+              <span className="font-bold text-foreground">{blockPct}%</span>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Block Progress</p>
-              <p className="text-lg font-bold text-foreground">
-                {Math.round(((currentWeekNumber - 1) / currentPhase.weekCount) * 100)}%
-              </p>
+            <div className="h-2.5 bg-background/60 rounded-full overflow-hidden border border-border">
+              <div
+                className="h-full bg-primary rounded-full transition-all duration-700"
+                style={{ width: `${blockPct}%` }}
+              />
+            </div>
+            <div className="flex justify-between px-0.5">
+              {Array.from({ length: currentPhase.weekCount }, (_, i) => {
+                const wk = i + 1;
+                const isActive = wk === currentWeekNumber;
+                const isDone = wk < currentWeekNumber;
+                return (
+                  <span key={wk} className={`text-[9px] font-semibold transition-colors ${isActive ? "text-primary" : isDone ? "text-primary/40" : "text-muted-foreground/30"}`}>
+                    W{wk}
+                  </span>
+                );
+              })}
             </div>
           </div>
-          <div className="h-2 bg-background/60 rounded-full overflow-hidden border border-border">
-            <div
-              className="h-full bg-primary rounded-full transition-all duration-700"
-              style={{ width: `${Math.round(((currentWeekNumber - 1) / currentPhase.weekCount) * 100)}%` }}
-            />
+
+          {/* Phase goal */}
+          {currentPhase.goal && (
+            <div className="mt-3 bg-background/50 rounded-lg px-3 py-2 border border-border">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-0.5">Phase Goal</p>
+              <p className="text-xs text-foreground leading-relaxed">{currentPhase.goal}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Block Adjustments — active modifiers from agent memory ── */}
+      {activeModifiers.length > 0 && (
+        <div className="rounded-xl bg-card border border-border p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Activity className="w-3.5 h-3.5 text-muted-foreground" />
+            <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Active Modifiers</h3>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {activeModifiers.map((mod, i) => (
+              <span key={i} className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border ${mod.color}`}>
+                {mod.label}
+              </span>
+            ))}
           </div>
         </div>
       )}
 
-      {/* Program roadmap */}
+      {/* ── Progression Chain — timeline style ── */}
       <div className="rounded-xl bg-card border border-border overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-border bg-muted/30">
-          <h3 className="text-sm font-bold text-foreground">Progression Chain</h3>
+        <div className="px-4 py-3 border-b border-border bg-muted/30">
+          <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Progression Chain</h3>
         </div>
-        <div className="divide-y divide-border">
+        <div className="px-4 pt-4 pb-3">
           {phases.map((phase: any, idx: number) => {
             const isCurrent = phase.status === "current";
             const isCompleted = phase.status === "completed";
+            const isFuture = phase.status === "future";
             const phaseHL = highlightedIds.phases.has(phase.id);
-            const prevPhaseId = (phase.metadata as any)?.previousPhaseId;
-
             return (
-              <div key={phase.id} className={`px-5 py-4 transition-all duration-500 ${isCurrent ? "bg-primary/3" : ""} ${phaseHL ? "bg-purple-400/5" : ""}`}>
-                {prevPhaseId && idx > 0 && (
-                  <div className="flex items-center gap-2 mb-2 pl-4">
-                    <div className="w-px h-4 bg-border" />
-                    <ChevronRight className="w-3 h-3 text-muted-foreground/40 flex-shrink-0" />
-                    <span className="text-[10px] text-muted-foreground/50 font-medium">continues from previous</span>
-                  </div>
+              <div key={phase.id} className="relative">
+                {idx < phases.length - 1 && (
+                  <div className="absolute left-[13px] top-7 bottom-0 w-px bg-border z-0" />
                 )}
-                <div className="flex items-start gap-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5 border ${isCurrent ? "bg-primary text-primary-foreground border-primary" : isCompleted ? "bg-green-500/10 text-green-400 border-green-500/20" : "bg-muted text-muted-foreground border-border"}`}>
-                    {isCompleted ? "✓" : idx + 1}
+                <div className={`relative z-10 flex items-start gap-3 pb-4 transition-all duration-500`}>
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 border ${
+                    isCurrent ? "bg-primary text-primary-foreground border-primary shadow-md shadow-primary/20" :
+                    isCompleted ? "bg-green-500/15 text-green-400 border-green-500/30" :
+                    "bg-muted/60 text-muted-foreground/40 border-border"
+                  }`}>
+                    {isCompleted ? <CheckCircle2 className="w-3.5 h-3.5" /> : idx + 1}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                      <span className={`font-semibold text-sm ${isCurrent ? "text-foreground" : isCompleted ? "text-foreground/70" : "text-muted-foreground"}`}>{phase.name}</span>
-                      {isCurrent && <span className="text-[9px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">Active</span>}
-                      {isCompleted && <span className="text-[9px] font-bold uppercase tracking-wider text-green-400 bg-green-400/10 px-2 py-0.5 rounded-full border border-green-400/20">Done</span>}
-                      {phaseHL && <span className="text-[9px] font-bold uppercase tracking-wider text-purple-400 bg-purple-400/10 px-2 py-0.5 rounded-full border border-purple-400/20">Updated</span>}
+                  <div className="flex-1 min-w-0 pt-0.5">
+                    <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                      <span className={`text-sm font-semibold leading-tight ${
+                        isCurrent ? "text-foreground" :
+                        isCompleted ? "text-foreground/60" :
+                        "text-muted-foreground/40"
+                      }`}>{phase.name}</span>
+                      {isCurrent && <span className="text-[9px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-1.5 py-0.5 rounded-full border border-primary/20">Active</span>}
+                      {isCompleted && <span className="text-[9px] font-bold uppercase tracking-wider text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded-full border border-green-400/20">Done</span>}
+                      {phaseHL && <span className="text-[9px] font-bold uppercase tracking-wider text-purple-400 bg-purple-400/10 px-1.5 py-0.5 rounded-full border border-purple-400/20">Updated</span>}
                     </div>
-                    <p className="text-xs text-muted-foreground">{phase.weekCount} weeks — {phase.goal}</p>
+                    <p className={`text-[11px] leading-snug ${isCompleted || isFuture ? "text-muted-foreground/40" : "text-muted-foreground"}`}>
+                      {phase.weekCount}wk · {phase.goal}
+                    </p>
                   </div>
                   {isCurrent && (
-                    <button
-                      onClick={() => onEditPhase(phase)}
-                      className="w-7 h-7 rounded-lg bg-muted/50 border border-border flex items-center justify-center hover:bg-primary/10 hover:border-primary/30 hover:text-primary text-muted-foreground transition-all duration-150 flex-shrink-0 mt-0.5"
-                      title="Refocus this block"
-                    >
+                    <button onClick={() => onEditPhase(phase)} className="w-7 h-7 rounded-lg bg-muted/50 border border-border flex items-center justify-center hover:bg-primary/10 hover:border-primary/30 hover:text-primary text-muted-foreground transition-all duration-150 flex-shrink-0" title="Refocus this block">
                       <PenLine className="w-3 h-3" />
                     </button>
                   )}
@@ -1443,37 +1498,82 @@ function BlockView({ highlightedIds, onEditPhase, onEditWeek }: BlockViewProps) 
               </div>
             );
           })}
+
+          {/* Ghost "next block" — always shown when active (no future phases) */}
+          {!isBlockComplete && !hasFuturePhases && (
+            <div className="relative">
+              <div className="flex items-start gap-3 opacity-35">
+                <div className="w-7 h-7 rounded-full border border-dashed border-border flex items-center justify-center flex-shrink-0">
+                  <Plus className="w-3 h-3 text-muted-foreground" />
+                </div>
+                <div className="flex-1 pt-0.5">
+                  <p className="text-xs font-semibold text-muted-foreground">Next recommended block</p>
+                  <p className="text-[10px] text-muted-foreground/50">Unlocks when this block completes</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Next block label — shown when complete and recommendation exists */}
+          {isBlockComplete && nextRec && (
+            <div className="relative">
+              <div className="flex items-start gap-3">
+                <div className="w-7 h-7 rounded-full bg-primary/10 border border-dashed border-primary/40 flex items-center justify-center flex-shrink-0">
+                  <ChevronRight className="w-3.5 h-3.5 text-primary" />
+                </div>
+                <div className="flex-1 pt-0.5">
+                  <p className="text-xs font-semibold text-primary">Next: {nextRec.displayName}</p>
+                  <p className="text-[10px] text-muted-foreground italic leading-relaxed">{nextRec.rationale}</p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* System overview */}
-      <div className="rounded-xl bg-card border border-border p-5">
-        <h3 className="text-sm font-bold text-foreground mb-4">System Overview</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-muted/40 rounded-lg p-3">
-            <p className="text-xs text-muted-foreground mb-1">Overarching Goal</p>
-            <p className="text-sm font-semibold text-foreground">{system.overarchingGoal}</p>
-          </div>
-          <div className="bg-muted/40 rounded-lg p-3">
-            <p className="text-xs text-muted-foreground mb-1">Weekly Frequency</p>
-            <p className="text-sm font-semibold text-foreground">{system.weeklyFrequency} days / week</p>
-          </div>
-          <div className="bg-muted/40 rounded-lg p-3">
-            <p className="text-xs text-muted-foreground mb-1">Training Style</p>
-            <p className="text-sm font-semibold text-foreground capitalize">{system.trainingStyle}</p>
-          </div>
-          <div className="bg-muted/40 rounded-lg p-3">
-            <p className="text-xs text-muted-foreground mb-1">Equipment</p>
-            <p className="text-sm font-semibold text-foreground capitalize">{system.equipmentAccess}</p>
-          </div>
+      {/* ── System Overview — compact icon chips + programming logic ── */}
+      <div className="rounded-xl bg-card border border-border overflow-hidden">
+        <div className="px-4 py-3 border-b border-border bg-muted/30">
+          <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">System Overview</h3>
         </div>
+        <div className="p-3 grid grid-cols-2 gap-2">
+          {[
+            { Icon: Target,   label: "Goal",      value: system.overarchingGoal },
+            { Icon: Calendar, label: "Frequency", value: `${system.weeklyFrequency} days/week` },
+            { Icon: Layers,   label: "Style",     value: system.trainingStyle },
+            { Icon: Dumbbell, label: "Equipment", value: system.equipmentAccess },
+          ].map(({ Icon, label, value }) => (
+            <div key={label} className="bg-muted/40 rounded-xl p-3 flex items-start gap-2.5">
+              <div className="w-6 h-6 rounded-md bg-background border border-border flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Icon className="w-3 h-3 text-muted-foreground" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">{label}</p>
+                <p className="text-xs font-semibold text-foreground leading-snug mt-0.5 capitalize">{value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Programming Logic — expandable */}
+        {(currentPhase?.emphasis || currentPhase?.goal) && (
+          <ProgrammingLogicCard phase={currentPhase} />
+        )}
+
+        {/* Constraints */}
         {system.constraints && (
-          <div className="mt-3 bg-amber-500/5 border border-amber-500/15 rounded-lg p-3">
-            <p className="text-xs font-semibold text-amber-400 mb-1">Constraints / Notes</p>
+          <div className="border-t border-border px-4 py-3">
+            <div className="flex items-center gap-2 mb-1.5">
+              <AlertTriangle className="w-3 h-3 text-amber-400" />
+              <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Active Constraints</p>
+            </div>
             <p className="text-xs text-muted-foreground">{system.constraints}</p>
           </div>
         )}
       </div>
+
+      {/* ── Coach Memory Insights ── */}
+      <CoachMemoryInsights />
 
       {/* ── Modify Next Block Sheet ── */}
       {showModifySheet && (
