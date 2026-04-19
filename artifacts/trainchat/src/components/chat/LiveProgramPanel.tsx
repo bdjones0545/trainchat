@@ -101,12 +101,6 @@ interface Props {
   programSource?: "live" | "draft" | "none";
   /** Block phase metadata from the hierarchical planning system */
   blockMetadata?: BlockMetadata | null;
-  /**
-   * True when the agent is mid-conversation building a NEW program for a focus
-   * lane that already has an active program. The active program stays visible;
-   * this flag adds a banner so the user knows a draft is waiting for their reply.
-   */
-  draftInProgress?: boolean;
 }
 
 type Tab = "program" | "changes" | "history" | "forecast";
@@ -2224,7 +2218,6 @@ export default function LiveProgramPanel({
   lastChangeSummary,
   programSource = "none" as const,
   blockMetadata,
-  draftInProgress = false,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("program");
   const [hasUnseenChange, setHasUnseenChange] = useState(false);
@@ -2291,21 +2284,6 @@ export default function LiveProgramPanel({
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Draft-in-progress banner — shown when the agent is mid-conversation
-          building a new program but the existing active program is still live.
-          Tells the user clearly that a reply is needed and their program is safe. */}
-      {draftInProgress && (
-        <div className="flex items-start gap-2.5 px-3 py-2.5 bg-amber-500/8 border-b border-amber-500/20 flex-shrink-0">
-          <div className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0 mt-0.5 animate-pulse" style={{ animationDuration: "2s" }} />
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wide leading-none mb-0.5">New draft in progress</p>
-            <p className="text-[11px] text-muted-foreground leading-snug">
-              Reply in chat to finish the build. This program is still active.
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Training system created — transient success indicator */}
       {showBuildSuccess && (
         <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 border-b border-primary/20 flex-shrink-0">

@@ -342,19 +342,13 @@ export default function Chat() {
       ? transformSystemToProgram(activeSystem.name, activeSystem.overarchingGoal, weekData)
       : null;
 
-  // When isNewBuildSession is true AND an active DB system already exists for this
-  // focus lane, we are in "draft-in-progress" mode: the AI is mid-conversation
-  // gathering details for a NEW program but the old one is still active.
-  // We do NOT hide the existing program — we show it with a draft banner.
-  const isDraftInProgress = isNewBuildSession && hasActiveSystem;
-
   // Single authoritative resolver — the ONLY place display source/program are decided.
   // Never compute source or program inline elsewhere; always call resolveProgramState.
   //
-  // activeSystem is always provided when an active DB system exists, even during
-  // a new build session — the draft banner (not an empty panel) communicates the build state.
+  // activeSystem arg is the already-derived DB program, nulled out during a new build
+  // so the panel shows a clean slate while the AI is streaming a replacement.
   const { source: displayProgramSource, program: displayProgram } = resolveProgramState({
-    activeSystem: hasActiveSystem ? dbSystemProgram : null,
+    activeSystem: hasActiveSystem && !isNewBuildSession ? dbSystemProgram : null,
     latestProgram,
     sessionDraftMsgId: sessionDraftMsgIdRef.current,
   });
@@ -374,7 +368,7 @@ export default function Chat() {
     if (!import.meta.env.DEV) return;
 
     const { source: programSource, program: resolvedProgram } = resolveProgramState({
-      activeSystem: hasActiveSystem ? dbSystemProgram : null,
+      activeSystem: hasActiveSystem && !isNewBuildSession ? dbSystemProgram : null,
       latestProgram,
       sessionDraftMsgId: sessionDraftMsgIdRef.current,
     });
@@ -1466,9 +1460,9 @@ export default function Chat() {
           <div className="flex-1 min-w-0">
             <span className="text-foreground">Active Program</span>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isDraftInProgress ? "bg-amber-400 animate-pulse" : hasActiveSystem ? "bg-green-400" : "bg-muted-foreground/30"}`} />
+              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${hasActiveSystem ? "bg-green-400" : "bg-muted-foreground/30"}`} />
               <span className="text-[10px] text-muted-foreground/60 font-normal">
-                {isDraftInProgress ? "Draft building…" : hasActiveSystem ? "Live system" : "Ready"}
+                {hasActiveSystem ? "Live system" : "Ready"}
               </span>
             </div>
           </div>
@@ -1699,7 +1693,6 @@ export default function Chat() {
           }
           lastChangeSummary={lastChangeSummary ?? undefined}
           blockMetadata={(activeSystem as any)?.metadata ?? undefined}
-          draftInProgress={isDraftInProgress}
         />
       </div>
     </div>
@@ -2057,15 +2050,7 @@ export default function Chat() {
 
                 {/* System status strip — derives exclusively from resolveProgramState output */}
                 <div className="flex items-center gap-2 mb-6 px-3.5 py-2 rounded-full bg-card border border-border/60">
-                  {isDraftInProgress ? (
-                    <>
-                      <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
-                      <span className="text-[11px] text-muted-foreground">
-                        <span className="text-amber-400 font-medium">New draft in progress</span>
-                        {" · "}Reply in chat to finish · Current program still active
-                      </span>
-                    </>
-                  ) : displayProgramSource === "live" ? (
+                  {displayProgramSource === "live" ? (
                     <>
                       <div className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
                       <span className="text-[11px] text-muted-foreground">
@@ -2126,25 +2111,6 @@ export default function Chat() {
                     }}
                   />
                 ))}
-
-                {/* ── Draft-in-progress reply nudge ───────────────────────────
-                    Shown when the user has an existing active program AND the
-                    agent is mid-conversation building a NEW one but hasn't
-                    received enough info yet. Reminds the user to reply so the
-                    build can finish — and that their current program is safe. */}
-                {isDraftInProgress && !stream.isActive && !optimisticUserMsg && messages.length > 0 && (
-                  <div className="flex items-start gap-3 mb-5 animate-in fade-in duration-300">
-                    <div className="w-7 h-7 rounded-full bg-card border border-primary/30 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <div className="w-2 h-2 rounded-full bg-primary animate-pulse" style={{ animationDuration: "2s" }} />
-                    </div>
-                    <div className="max-w-[90%] px-4 py-3 rounded-2xl rounded-tl-sm bg-card border border-primary/20 text-foreground">
-                      <p className="text-[11px] font-semibold text-primary mb-1 uppercase tracking-wide">New draft in progress</p>
-                      <p className="text-sm text-muted-foreground leading-relaxed">
-                        Reply to finish building your new program. Your current active program is still available on the right.
-                      </p>
-                    </div>
-                  </div>
-                )}
 
                 {/* ── Optimistic user bubble ──────────────────────────────────
                     Rendered immediately after submit so the user always sees
@@ -2348,17 +2314,12 @@ export default function Chat() {
                     {calibrationScore > 0 ? `${calibrationScore}% Calibrated` : "Refine My Plan"}
                   </button>
                 </div>
-                {isDraftInProgress ? (
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                    <span className="text-[10px] text-amber-400/80 hidden sm:block">Draft in progress — reply to finish</span>
-                  </div>
-                ) : hasActiveSystem ? (
+                {hasActiveSystem && (
                   <div className="flex items-center gap-1.5">
                     <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
                     <span className="text-[10px] text-muted-foreground hidden sm:block">System active — edits go live instantly</span>
                   </div>
-                ) : null}
+                )}
               </div>
               <div className="relative flex items-end gap-2 bg-card border border-border rounded-2xl focus-within:border-primary/60 focus-within:ring-2 focus-within:ring-primary/15 focus-within:shadow-sm transition-all duration-200">
                 <textarea
@@ -2433,7 +2394,6 @@ export default function Chat() {
                   newProgramSignal={newProgramSignal}
                   changeTargets={changeTargets}
                   blockMetadata={(activeSystem as any)?.metadata ?? undefined}
-                  draftInProgress={isDraftInProgress}
                 />
               </div>
             </div>
