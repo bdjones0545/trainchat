@@ -1479,16 +1479,43 @@ function ProgramTab({
                               if (el) exerciseRefs.current.set(ex.name, el);
                               else exerciseRefs.current.delete(ex.name);
                             }}
-                            className="px-3 py-2.5"
+                            onClick={() => {
+                              const exData = buildLearnExerciseData(ex.name, {
+                                exerciseNotes: ex.notes,
+                                classification: (ex as Record<string, unknown>).classification as string | undefined,
+                                dayFocus: day.focus,
+                                programGoal: trainingGoal ?? undefined,
+                                context: {
+                                  dayIndex: idx,
+                                  dayTitle: day.name,
+                                  sessionIdentity: day.focus,
+                                  programTitle: program.programName,
+                                  goal: trainingGoal ?? undefined,
+                                },
+                              });
+                              handleOpenLearnExercise(exData, {
+                                dayIndex: idx,
+                                dayTitle: day.name,
+                                sessionIdentity: day.focus,
+                                programTitle: program.programName,
+                                goal: trainingGoal ?? undefined,
+                              });
+                            }}
+                            className="px-3 py-2.5 cursor-pointer rounded-lg hover:bg-accent/30 active:bg-accent/50 transition-colors duration-150 group"
                             style={rowAnim ? { animation: rowAnim } : undefined}
                           >
                             <div className="flex items-center gap-2 flex-wrap">
-                              <p
-                                className="text-[11px] font-medium text-foreground"
-                                style={isHighlighted ? { animation: "ex-name-fadein 0.4s ease forwards" } : undefined}
-                              >
-                                {ex.name}
-                              </p>
+                              <div className="flex flex-col min-w-0">
+                                <p
+                                  className="text-[11px] font-medium text-foreground"
+                                  style={isHighlighted ? { animation: "ex-name-fadein 0.4s ease forwards" } : undefined}
+                                >
+                                  {ex.name}
+                                </p>
+                                <p className="text-[9px] text-muted-foreground/40 group-hover:text-primary/60 transition-colors duration-150">
+                                  Tap to learn why + how
+                                </p>
+                              </div>
                               {isHighlighted && (
                                 <span
                                   className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex-shrink-0"
@@ -1559,20 +1586,21 @@ function ProgramTab({
                             )}
                             {/* Exercise action row — Swap / Easier / Harder */}
                             {onSendMessage && (
-                              <div className="flex flex-wrap gap-1.5 mt-2">
+                              <div className="flex flex-wrap gap-1.5 mt-2" onClick={(e) => e.stopPropagation()}>
                                 {EXERCISE_ACTIONS.map((action) => {
                                   const exActionKey = `ex-${idx}-${exIdx}-${action.label}`;
                                   const isLoading = pendingRefinement === exActionKey;
                                   return (
                                     <button
                                       key={action.label}
-                                      onClick={() =>
+                                      onClick={(e) => {
+                                        e.stopPropagation();
                                         sendRefinement(action.buildMessage(ex.name), exActionKey, {
                                           dayIndex: idx,
                                           exerciseId: ex.name,
                                           interactionType: "exercise_action",
-                                        })
-                                      }
+                                        });
+                                      }}
                                       disabled={!!buildingState?.isBuilding}
                                       className={`h-7 inline-flex items-center gap-1 px-2.5 rounded-full text-[10px] font-medium border transition-all duration-150 active:scale-95 select-none ${
                                         isLoading
@@ -1590,17 +1618,19 @@ function ProgramTab({
                               </div>
                             )}
                             {isPremium && isSaved && (
-                              <ExerciseLogInline
-                                exerciseName={ex.name}
-                                programId={savedProgramId}
-                                dayNumber={day.dayNumber}
-                                orderIndex={exIdx}
-                                prescribedSets={ex.sets > 0 ? ex.sets : 3}
-                                target={targetsMap.get(ex.name)}
-                                sessionActive={sessionMode === "active"}
-                                onLogged={handleExerciseLogged}
-                                onSetsChange={(sets) => handleSetsChange(ex.name, sets)}
-                              />
+                              <div onClick={(e) => e.stopPropagation()}>
+                                <ExerciseLogInline
+                                  exerciseName={ex.name}
+                                  programId={savedProgramId}
+                                  dayNumber={day.dayNumber}
+                                  orderIndex={exIdx}
+                                  prescribedSets={ex.sets > 0 ? ex.sets : 3}
+                                  target={targetsMap.get(ex.name)}
+                                  sessionActive={sessionMode === "active"}
+                                  onLogged={handleExerciseLogged}
+                                  onSetsChange={(sets) => handleSetsChange(ex.name, sets)}
+                                />
+                              </div>
                             )}
                           </div>
                         );
