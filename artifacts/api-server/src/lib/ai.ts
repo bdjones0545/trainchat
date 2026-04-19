@@ -2516,7 +2516,10 @@ export async function generateAIResponse(
     .filter(Boolean)
     .join("\n\n");
   const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY ?? process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  const openAIBaseUrl = process.env.OPENAI_API_KEY
+    ? "https://api.openai.com/v1"
+    : (process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? "https://api.openai.com/v1");
 
   const activeEditIntent = legacyEditIntent;
 
@@ -2556,7 +2559,7 @@ export async function generateAIResponse(
     msgs: { role: "system" | "user" | "assistant"; content: string }[],
     maxTok: number,
   ): Promise<{ cleanContent: string; structuredData: ProgramStructure | null }> => {
-    const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+    const resp = await fetch(`${openAIBaseUrl}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({ model: "gpt-4o", messages: msgs, max_tokens: maxTok, temperature: 0.6 }),
