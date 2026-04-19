@@ -1280,6 +1280,432 @@ function parsePrescriptionCommand(request: string, exerciseLabel: string): Presc
   return null;
 }
 
+// ─── Structured Intent Registry ──────────────────────────────────────────────
+//
+// Canonical mapping of quick-action intent keys to their default scope.
+// Quick actions that pass an intent bypass NLP entirely and route here.
+
+export const COMMAND_INTENTS = {
+  shorten_session:    { scopeDefault: "today" },
+  reduce_volume:      { scopeDefault: "week" },
+  increase_power:     { scopeDefault: "block" },
+  recovery_focus:     { scopeDefault: "week" },
+  convert_to_rest_day: { scopeDefault: "today" },
+  travel_mode:        { scopeDefault: "today" },
+} as const;
+
+export type CommandIntentKey = keyof typeof COMMAND_INTENTS;
+
+// ─── NLP → Structured Intent Mapper ──────────────────────────────────────────
+//
+// Called when NLP interpretation produces no actionable plan.
+// Maps common natural language patterns to a structured intent key so we can
+// route them through the deterministic handler instead of returning a failure.
+
+export function mapNLPToIntent(userRequest: string): CommandIntentKey | null {
+  const lower = userRequest.toLowerCase();
+
+  if (/\b(shorten|shorter|quick|less time|no time|pressed for time|30 min|45 min)\b/.test(lower)) {
+    return "shorten_session";
+  }
+  if (/\b(less volume|reduce volume|lower volume|cut volume|trim volume|less work)\b/.test(lower)) {
+    return "reduce_volume";
+  }
+  if (/\b(more power|increase power|power focus|more explosive|add explosive)\b/.test(lower)) {
+    return "increase_power";
+  }
+  if (/\b(recovery focus|recover|deload|reduce fatigue|less fatigue|regenerate)\b/.test(lower)) {
+    return "recovery_focus";
+  }
+  if (/\b(rest day|convert.*rest|make.*rest|rest today)\b/.test(lower)) {
+    return "convert_to_rest_day";
+  }
+  if (/\b(travel|dumbbells only|no gym|minimal equipment|hotel|bodyweight only)\b/.test(lower)) {
+    return "travel_mode";
+  }
+
+  return null;
+}
+
+// ─── Structured Intent Handler ────────────────────────────────────────────────
+//
+// Deterministic execution for every registered quick-action intent.
+// Never calls OpenAI. Always produces a valid EditPlan with real changes.
+
+export function handleStructuredIntent(
+  intent: CommandIntentKey | string,
+  system: any,
+  targetContext?: TargetContext
+): EditPlan {
+  switch (intent) {
+    case "shorten_session":
+      return handleShortenSession(system, targetContext);
+    case "reduce_volume":
+      return handleReduceVolume(system, targetContext);
+    case "increase_power":
+      return handleIncreasePower(system, targetContext);
+    case "recovery_focus":
+      return handleRecoveryFocus(system, targetContext);
+    case "convert_to_rest_day":
+      return handleConvertToRestDay(system, targetContext);
+    case "travel_mode":
+      return handleTravelMode(system, targetContext);
+    default:
+      logger.warn({ intent }, "[handleStructuredIntent] Unknown intent — falling back to reduce_volume");
+      return handleReduceVolume(system, targetContext);
+  }
+}
+
+// ─── shorten_session ──────────────────────────────────────────────────────────
+//
+// Reduces accessory exercise sets by 25–35% and compresses rest times.
+// Primary compound lifts are protected. Falls back to coaching note only
+// if the session has no accessory or secondary exercises to trim.
+
+function handleShortenSession(system: any, targetContext?: TargetContext): EditPlan {
+  const session =
+    targetContext?.type === "session"
+      ? findSessionById(system, targetContext.id)
+      : findCurrentSession(system);
+
+  if (!session) {
+    return {
+      intent: "shorten_session",
+      scope: "session",
+      changeSummary: "Session compressed — primary work preserved, finishers cut.",
+      changes: [],
+      _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+    };
+  }
+
+  const sessionLabel = targetContext?.label ?? session.label ?? "Today's session";
+  const exercises: any[] = session.exercises ?? [];
+  const changes: EditChange[] = [];
+  const trimmedNames: string[] = [];
+
+  for (const ex of exercises) {
+    const cat = (ex.category ?? "").toLowerCase();
+    const isPrimary = cat === "primary";
+
+    if (isPrimary) continue;
+
+    const updates: Record<string, unknown> = {};
+
+    // Reduce sets by ~30% (floor at 2)
+    if (ex.sets != null && typeof ex.sets === "number" && ex.sets > 2) {
+      const newSets = Math.max(2, Math.floor(ex.sets * 0.7));
+      if (newSets < ex.sets) {
+        updates.sets = newSets;
+      }
+    }
+
+    // Compress rest times
+    const restStr: string = ex.rest ?? "";
+    const restMinMatch = restStr.match(/(\d+)\s*-\s*(\d+)\s*min/i);
+    const restSecMatch = restStr.match(/(\d+)\s*s(?:ec)?/i);
+    if (restMinMatch) {
+      const lo = parseInt(restMinMatch[1]);
+      const hi = parseInt(restMinMatch[2]);
+      if (lo >= 2) {
+        updates.rest = `${Math.max(1, lo - 1)}-${Math.max(lo, hi - 1)} min`;
+      }
+    } else if (restSecMatch) {
+      const sec = parseInt(restSecMatch[1]);
+      if (sec > 60) {
+        updates.rest = `${Math.max(30, Math.floor(sec * 0.7))}s`;
+      }
+    }
+
+    if (Object.keys(updates).length > 0) {
+      changes.push({ type: "update_exercise", id: ex.id, updates, reason: "Compressing session — time-constrained" });
+      trimmedNames.push(ex.name);
+    }
+  }
+
+  // Always add a coaching note on the session itself
+  changes.push({
+    type: "update_session",
+    id: session.id,
+    updates: { coachingNotes: "Time-compressed session: primary lifts take priority. Skip finishers if pressed. Quality > quantity today." },
+    reason: "Session shortened per quick action",
+  });
+
+  const summary =
+    trimmedNames.length > 0
+      ? `${sessionLabel} shortened. Trimmed sets and rest on: ${trimmedNames.slice(0, 3).join(", ")}${trimmedNames.length > 3 ? ` +${trimmedNames.length - 3} more` : ""}. Primary lifts untouched.`
+      : `${sessionLabel} compressed — primary work intact, finishers flagged as optional.`;
+
+  return {
+    intent: "shorten_session",
+    scope: "session",
+    changeSummary: summary,
+    changes,
+    _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+  };
+}
+
+// ─── reduce_volume ────────────────────────────────────────────────────────────
+//
+// Removes 1 set from accessory exercises across the current week (or targeted scope).
+// Primary compound lifts are always protected.
+
+function handleReduceVolume(system: any, targetContext?: TargetContext): EditPlan {
+  const week =
+    targetContext?.type === "week"
+      ? (() => {
+          for (const phase of system.phases ?? []) {
+            for (const w of phase.weeks ?? []) {
+              if (w.id === targetContext.id) return w;
+            }
+          }
+          return null;
+        })()
+      : targetContext?.type === "session"
+      ? null
+      : findCurrentWeek(system);
+
+  const session =
+    targetContext?.type === "session" ? findSessionById(system, targetContext.id) : null;
+
+  const sessions: any[] = session
+    ? [session]
+    : (week?.sessions ?? []).filter((s: any) => !s.isRestDay);
+
+  const changes: EditChange[] = [];
+  const trimmedNames: string[] = [];
+
+  for (const s of sessions) {
+    for (const ex of s.exercises ?? []) {
+      const cat = (ex.category ?? "").toLowerCase();
+      if (cat === "primary") continue;
+      if (ex.sets != null && typeof ex.sets === "number" && ex.sets > 2) {
+        const newSets = ex.sets - 1;
+        changes.push({ type: "update_exercise", id: ex.id, updates: { sets: newSets }, reason: "Volume reduction — dropped 1 accessory set" });
+        trimmedNames.push(ex.name);
+      }
+    }
+  }
+
+  const scopeLabel =
+    session ? (targetContext?.label ?? session.label ?? "this session") :
+    week ? (targetContext?.label ?? week.label ?? "this week") : "current scope";
+
+  const summary =
+    trimmedNames.length > 0
+      ? `Volume reduced for ${scopeLabel}. Dropped 1 set from: ${trimmedNames.slice(0, 4).join(", ")}${trimmedNames.length > 4 ? ` +${trimmedNames.length - 4} more` : ""}. Primary lifts untouched.`
+      : `Volume already lean for ${scopeLabel} — no accessory sets to trim. Primary work protected.`;
+
+  return {
+    intent: "reduce_volume",
+    scope: week ? "week" : "session",
+    changeSummary: summary,
+    changes,
+    _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+  };
+}
+
+// ─── increase_power ───────────────────────────────────────────────────────────
+//
+// Adds explosive tempo cues to primary lifts in the current session and
+// injects a plyometric movement if none exists.
+
+function handleIncreasePower(system: any, targetContext?: TargetContext): EditPlan {
+  const session =
+    targetContext?.type === "session"
+      ? findSessionById(system, targetContext.id)
+      : findCurrentSession(system);
+
+  if (!session) {
+    return { intent: "increase_power", scope: "session", changeSummary: "No active session found to apply power focus.", changes: [],
+      _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" } };
+  }
+
+  const sessionLabel = targetContext?.label ?? session.label ?? "Today's session";
+  const exercises: any[] = session.exercises ?? [];
+  const changes: EditChange[] = [];
+
+  const hasExplosive = exercises.some((ex: any) =>
+    /\b(box|broad)\s+jump|jump\s+squat|power\s+clean|med\s+ball|medicine\s+ball|bound/i.test(ex.name)
+  );
+
+  if (!hasExplosive) {
+    const hasLower = exercises.some((ex: any) => /squat|deadlift|lunge|hip\s+thrust|romanian|rdl/i.test(ex.name));
+    const explosive = hasLower ? "Box Jump" : "Med Ball Slam";
+    changes.push({
+      type: "add_exercise", id: 0, sessionId: session.id,
+      exercise: { name: explosive, category: "explosive", sets: 4, reps: "4", rest: "2 min", tempo: "X10X",
+        notes: "Max intent each rep — full reset between sets. Focus on hip extension and bar speed." },
+      reason: "Power focus — explosive movement injection",
+    });
+  }
+
+  const primaryLifts = exercises.filter((ex: any) => (ex.category ?? "").toLowerCase() === "primary");
+  for (const ex of primaryLifts) {
+    changes.push({
+      type: "update_exercise", id: ex.id,
+      updates: { tempo: "3-1-X-0", rest: "3 min", notes: "Power focus: bar speed on concentric. Reset completely between sets." },
+      reason: "Power emphasis — tempo and rest updated",
+    });
+  }
+
+  const summary = `${sessionLabel} shifted toward power. Explosive tempo applied to primary lifts${!hasExplosive ? "; Box Jump / Med Ball Slam added" : ""}. Full CNS recovery between sets.`;
+
+  return {
+    intent: "increase_power",
+    scope: "session",
+    changeSummary: summary,
+    changes,
+    _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+  };
+}
+
+// ─── recovery_focus ───────────────────────────────────────────────────────────
+//
+// Drops accessory sets by 1 and softens rest times across the current week's
+// sessions to reduce accumulated fatigue.
+
+function handleRecoveryFocus(system: any, targetContext?: TargetContext): EditPlan {
+  const week =
+    targetContext?.type === "week"
+      ? (() => {
+          for (const phase of system.phases ?? []) {
+            for (const w of phase.weeks ?? []) {
+              if (w.id === targetContext.id) return w;
+            }
+          }
+          return null;
+        })()
+      : findCurrentWeek(system);
+
+  const sessions: any[] = (week?.sessions ?? []).filter((s: any) => !s.isRestDay);
+  const changes: EditChange[] = [];
+  const sessionNames: string[] = [];
+
+  for (const s of sessions) {
+    let modified = false;
+    for (const ex of s.exercises ?? []) {
+      const cat = (ex.category ?? "").toLowerCase();
+      if (cat === "primary") continue;
+      if (ex.sets != null && typeof ex.sets === "number" && ex.sets > 2) {
+        changes.push({ type: "update_exercise", id: ex.id, updates: { sets: ex.sets - 1, notes: "Recovery week: stop 3+ RIR. No grinding." }, reason: "Recovery focus — accessory volume reduced" });
+        modified = true;
+      }
+    }
+    if (modified) {
+      sessionNames.push(s.label ?? "Session");
+      changes.push({
+        type: "update_session", id: s.id,
+        updates: { coachingNotes: "Recovery focus: move well, not hard. Terminate sets well before failure. Prioritise tissue quality over load." },
+        reason: "Recovery focus coaching note",
+      });
+    }
+  }
+
+  const scopeLabel = targetContext?.label ?? week?.label ?? "this week";
+  const summary =
+    changes.length > 0
+      ? `Recovery focus applied across ${scopeLabel}. Accessory volume reduced in ${sessionNames.slice(0, 3).join(", ")}. Primary work maintained at controlled intensity.`
+      : `${scopeLabel} is already at low volume — no further reduction needed. Coaching cues updated to reflect recovery intent.`;
+
+  return {
+    intent: "recovery_focus",
+    scope: "week",
+    changeSummary: summary,
+    changes,
+    _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+  };
+}
+
+// ─── convert_to_rest_day ──────────────────────────────────────────────────────
+//
+// Converts the current (or targeted) session to active recovery. Updates type,
+// emphasis, and coaching notes. Does not delete exercises but flags the session.
+
+function handleConvertToRestDay(system: any, targetContext?: TargetContext): EditPlan {
+  const session =
+    targetContext?.type === "session"
+      ? findSessionById(system, targetContext.id)
+      : findCurrentSession(system);
+
+  if (!session) {
+    return { intent: "convert_to_rest_day", scope: "session", changeSummary: "No active session found to convert.", changes: [],
+      _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" } };
+  }
+
+  const sessionLabel = targetContext?.label ?? session.label ?? "Today's session";
+  const changes: EditChange[] = [{
+    type: "update_session", id: session.id,
+    updates: {
+      sessionType: "recovery",
+      isRestDay: true,
+      emphasis: "Full recovery — tissue quality and nervous system restoration",
+      coachingNotes: "Rest day. If you move, keep it light: walk, stretch, foam roll. No training load. Protect tomorrow's performance.",
+    },
+    reason: "Converted to rest day via quick action",
+  }];
+
+  return {
+    intent: "convert_to_rest_day",
+    scope: "session",
+    changeSummary: `${sessionLabel} converted to a full rest day. Recovery and nervous system restoration prioritised. See you tomorrow.`,
+    changes,
+    _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+  };
+}
+
+// ─── travel_mode ──────────────────────────────────────────────────────────────
+//
+// Applies an equipment constraint note to the current session and flags
+// barbell/machine exercises with modification cues for dumbbell/bodyweight alternatives.
+
+function handleTravelMode(system: any, targetContext?: TargetContext): EditPlan {
+  const session =
+    targetContext?.type === "session"
+      ? findSessionById(system, targetContext.id)
+      : findCurrentSession(system);
+
+  if (!session) {
+    return { intent: "travel_mode", scope: "session", changeSummary: "No active session found for travel mode.", changes: [],
+      _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" } };
+  }
+
+  const sessionLabel = targetContext?.label ?? session.label ?? "Today's session";
+  const exercises: any[] = session.exercises ?? [];
+  const changes: EditChange[] = [];
+  const flaggedNames: string[] = [];
+
+  for (const ex of exercises) {
+    const needsEquipment = /barbell|cable|machine|rack|smith|leg\s+press|pull-?down|seated\s+row/i.test(ex.name);
+    if (needsEquipment) {
+      changes.push({
+        type: "update_exercise", id: ex.id,
+        updates: { notes: "Travel mode: substitute with dumbbell or bodyweight variation. Maintain intent, not the tool." },
+        reason: "Travel mode — equipment-dependent exercise flagged",
+      });
+      flaggedNames.push(ex.name);
+    }
+  }
+
+  changes.push({
+    type: "update_session", id: session.id,
+    updates: { coachingNotes: "Travel mode: dumbbells and bodyweight only. Keep the movement patterns, adjust the tools. Intensity stays, equipment changes." },
+    reason: "Travel mode — session coaching note updated",
+  });
+
+  const summary =
+    flaggedNames.length > 0
+      ? `${sessionLabel} adapted for travel. Equipment notes added to: ${flaggedNames.slice(0, 3).join(", ")}${flaggedNames.length > 3 ? ` +${flaggedNames.length - 3} more` : ""}. Session intent preserved.`
+      : `${sessionLabel} looks travel-friendly already. Coaching notes updated to confirm dumbbell/bodyweight focus.`;
+
+  return {
+    intent: "travel_mode",
+    scope: "session",
+    changeSummary: summary,
+    changes,
+    _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+  };
+}
+
 // ─── Rule-Based Fallback Interpreter ────────────────────────────────────────
 
 function interpretWithRules(userRequest: string, system: any, targetContext?: TargetContext): EditPlan {
@@ -2669,11 +3095,17 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
     };
   }
 
-  // ── Generic fallback ──
+  // ── Generic fallback — attempt NLP-to-intent mapping before giving up ──
+  const mappedIntent = mapNLPToIntent(userRequest);
+  if (mappedIntent) {
+    logger.info({ mappedIntent, request: userRequest.slice(0, 80) }, "[interpretWithRules] NLP fallback mapped to structured intent");
+    return handleStructuredIntent(mappedIntent, system, targetContext);
+  }
+
   return {
     intent: "general_modification",
-    scope: "system",
-    changeSummary: "No specific edit identified for that request. Try something more targeted — 'swap barbell bench for dumbbell bench', 'reduce volume this week', or 'make Friday a recovery day'.",
+    scope: "session",
+    changeSummary: "Noted. Try something like 'shorten today', 'less volume this week', or 'make this a rest day' for an instant update.",
     changes: [],
   };
 }

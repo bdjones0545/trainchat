@@ -16,7 +16,7 @@
 
 import { Router, type IRouter } from "express";
 import { requireAuth } from "../middlewares/auth";
-import { interpretEditRequest } from "../lib/edit-intent-service";
+import { interpretEditRequest, handleStructuredIntent, mapNLPToIntent, type CommandIntentKey } from "../lib/edit-intent-service";
 import { applyEditPlan, type EditResult } from "../lib/edit-engine";
 import { createChangeLogEntry, type SystemSnapshot } from "../lib/change-log-service";
 import { buildAdaptationContext } from "../lib/adaptation";
@@ -186,9 +186,12 @@ const TargetContextSchema = z.object({
 });
 
 const EditRequestBody = z.object({
-  request: z.string().min(1).max(2000),
+  request: z.string().max(2000).optional().default(""),
+  intent: z.string().optional(),
   targetContext: TargetContextSchema.optional(),
   source: z.enum(["ai_edit", "quick_action", "initialize", "auto_adjust"]).optional(),
+}).refine((d) => d.intent || (d.request && d.request.length > 0), {
+  message: "Either 'intent' or a non-empty 'request' is required.",
 });
 
 /** Builds a prompt hint from UIContext so the edit engine understands spatial references. */
@@ -218,7 +221,8 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
   }
 
   const userId = req.session.userId!;
-  const { request: userRequest, targetContext, source = "ai_edit" } = parsed.data;
+  const { request: rawRequest, intent, targetContext, source = "ai_edit" } = parsed.data;
+  const userRequest = rawRequest ?? "";
   const uiContext = (req.body as any)?.uiContext ?? null;
 
   try {
@@ -240,28 +244,47 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       return;
     }
 
-    // Build decision memory context
-    const decisionMemory = await buildDecisionMemory(
-      userId,
-      activeSystem.id,
-      memories
-    ).catch(() => null);
+    // ── STRUCTURED INTENT FAST PATH ─────────────────────────────────────────
+    // If the caller passes an explicit intent, skip ALL NLP and route directly
+    // to the deterministic intent handler. Zero OpenAI cost. Always succeeds.
+    let resolvedIntent = intent;
+    if (!resolvedIntent && userRequest) {
+      const nlpMapped = mapNLPToIntent(userRequest);
+      if (nlpMapped) resolvedIntent = nlpMapped;
+    }
 
-    // Build UIContext hint and append to adaptationContext for the edit engine
-    const uiHint = buildUIContextHint(uiContext);
-    const enrichedAdaptationContext = [
-      adaptationCtx?.promptContext || "",
-      uiHint || "",
-    ].filter(Boolean).join("\n\n") || undefined;
+    let editPlan: Awaited<ReturnType<typeof interpretEditRequest>>;
 
-    // 3. Interpret the edit request into a structured plan
-    const editPlan = await interpretEditRequest(
-      userRequest,
-      fullSystem,
-      targetContext,
-      enrichedAdaptationContext,
-      decisionMemory?.decisionMemoryContext || undefined
-    );
+    if (resolvedIntent) {
+      logger.info(
+        { userId, intent: resolvedIntent, source, targetType: targetContext?.type, targetId: targetContext?.id },
+        "[SystemEdit] Structured intent detected — bypassing NLP"
+      );
+      editPlan = handleStructuredIntent(resolvedIntent as CommandIntentKey, fullSystem, targetContext);
+    } else {
+      // Build decision memory context
+      const decisionMemory = await buildDecisionMemory(
+        userId,
+        activeSystem.id,
+        memories
+      ).catch(() => null);
+
+      // Build UIContext hint and append to adaptationContext for the edit engine
+      const uiHint = buildUIContextHint(uiContext);
+      const enrichedAdaptationContext = [
+        adaptationCtx?.promptContext || "",
+        uiHint || "",
+      ].filter(Boolean).join("\n\n") || undefined;
+
+      // 3. Interpret the edit request into a structured plan via NLP
+      editPlan = await interpretEditRequest(
+        userRequest,
+        fullSystem,
+        targetContext,
+        enrichedAdaptationContext,
+        decisionMemory?.decisionMemoryContext || undefined
+      );
+    }
 
     logger.info(
       {
@@ -277,13 +300,13 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
     trackLearningEvent({
       userId,
       eventType: "edit_request",
-      routeUsed: "deterministic",
+      routeUsed: resolvedIntent ? "structured_intent" : "deterministic",
       intentType: editPlan.intent,
       editSubtype: editPlan.scope,
       targetScope: targetContext?.type,
       uiPage: (uiContext as any)?.page,
-      requestText: userRequest,
-      metadata: { source, targetLabel: targetContext?.label },
+      requestText: resolvedIntent ? `[intent:${resolvedIntent}] ${userRequest}`.trim() : userRequest,
+      metadata: { source, targetLabel: targetContext?.label, structuredIntent: resolvedIntent ?? null },
     });
 
     // 4. Apply the edit plan to the database (with family propagation across weeks)

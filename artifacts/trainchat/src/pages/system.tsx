@@ -102,19 +102,48 @@ async function fetchToday() {
 async function initializeSystem() {
   return customFetch<any>("/api/training-system/initialize", { method: "POST" });
 }
-async function submitGlobalEdit(request: string) {
+// ─── Command Intent Registry ──────────────────────────────────────────────────
+// Quick actions that have a structured intent bypass NLP on the server and
+// execute deterministic logic. Always produces a real diff.
+export const COMMAND_INTENTS = {
+  shorten_session:      { scopeDefault: "today" },
+  reduce_volume:        { scopeDefault: "week" },
+  increase_power:       { scopeDefault: "block" },
+  recovery_focus:       { scopeDefault: "week" },
+  convert_to_rest_day:  { scopeDefault: "today" },
+  travel_mode:          { scopeDefault: "today" },
+} as const;
+
+export type CommandIntentKey = keyof typeof COMMAND_INTENTS;
+
+interface StructuredEditPayload {
+  intent: CommandIntentKey;
+  scope?: string;
+  source?: string;
+}
+
+async function submitGlobalEdit(payload: string | StructuredEditPayload) {
+  const body =
+    typeof payload === "string"
+      ? { request: payload }
+      : { intent: payload.intent, request: "", source: payload.source ?? "quick_action" };
   return customFetch<EditResult>("/api/training-system/edit", {
     method: "POST",
-    body: JSON.stringify({ request }),
+    body: JSON.stringify(body),
   });
 }
+
 async function submitQuickEdit(
-  request: string,
+  payload: string | StructuredEditPayload,
   targetContext?: { type: string; id: number; label: string; parentLabel?: string }
 ) {
+  const body =
+    typeof payload === "string"
+      ? { request: payload, targetContext }
+      : { intent: payload.intent, request: "", source: payload.source ?? "quick_action", targetContext };
   return customFetch<EditResult>("/api/training-system/edit", {
     method: "POST",
-    body: JSON.stringify({ request, targetContext }),
+    body: JSON.stringify(body),
   });
 }
 async function fetchBlockCompletion() {
@@ -746,9 +775,10 @@ function WeekView({ highlightedIds, onEditExercise, onEditSession, onEditWeek, i
   }
 
   const refineWeekMutation = useMutation({
-    mutationFn: ({ req, chip }: { req: string; chip: string }) => {
+    mutationFn: ({ req, chip, intent }: { req?: string; chip: string; intent?: CommandIntentKey }) => {
       setRefineActiveChip(chip);
-      return submitQuickEdit(req, { type: "week", id: week?.id ?? 0, label: week?.label ?? `Week ${activeWeekNumber}`, parentLabel: week?.phase?.name });
+      const payload = intent ? { intent, scope: "week", source: "quick_action" } : (req ?? chip);
+      return submitQuickEdit(payload, { type: "week", id: week?.id ?? 0, label: week?.label ?? `Week ${activeWeekNumber}`, parentLabel: week?.phase?.name });
     },
     onSuccess: (data) => {
       setRefineActiveChip(null);
@@ -798,11 +828,11 @@ function WeekView({ highlightedIds, onEditExercise, onEditSession, onEditWeek, i
   const weekPhaseLabel = WEEK_PHASE_NAMES[activeWeekNumber] ?? null;
   const weekPhaseDescription = WEEK_PHASE_DESCRIPTIONS[activeWeekNumber] ?? null;
 
-  const REFINE_CHIPS = [
+  const REFINE_CHIPS: Array<{ label: string; req?: string; intent?: CommandIntentKey }> = [
     { label: "More explosive", req: `Make Week ${activeWeekNumber} more explosive and power-focused` },
-    { label: "Reduce fatigue", req: `Reduce overall fatigue load for Week ${activeWeekNumber}` },
+    { label: "Reduce fatigue", intent: "recovery_focus" },
     { label: "Add conditioning", req: `Add more conditioning work to Week ${activeWeekNumber}` },
-    { label: "Shorten sessions", req: `Shorten all sessions in Week ${activeWeekNumber}` },
+    { label: "Shorten sessions", intent: "shorten_session" },
   ];
 
   return (
@@ -1003,10 +1033,10 @@ function WeekView({ highlightedIds, onEditExercise, onEditSession, onEditWeek, i
             {showRefineActions && (
               <div className="border-t border-border px-4 py-3.5 space-y-3">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  {REFINE_CHIPS.map(({ label, req }) => (
+                  {REFINE_CHIPS.map(({ label, req, intent }) => (
                     <button
                       key={label}
-                      onClick={() => refineWeekMutation.mutate({ req, chip: label })}
+                      onClick={() => refineWeekMutation.mutate({ req, chip: label, intent })}
                       disabled={refineWeekMutation.isPending}
                       className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-all duration-150 ${
                         refineActiveChip === label
@@ -1811,17 +1841,22 @@ function RecentEditsBar({ edits }: { edits: EditRecord[] }) {
 
 type VibeState = "idle" | "submitting" | "result";
 
-const VIBE_CHIPS = [
+const VIBE_CHIPS: Array<{
+  label: string;
+  req?: string;
+  intent?: CommandIntentKey;
+  kind?: "chip";
+}> = [
   { label: "More intense", req: "Increase the overall intensity for this session" },
-  { label: "Less volume", req: "Reduce the total volume this week" },
-  { label: "Rest day", req: "Convert today into a full recovery day" },
-  { label: "Shorter session", req: "Shorten today's session — I'm pressed for time" },
-  { label: "Travel mode", req: "I only have dumbbells — adapt accordingly" },
+  { label: "Less volume", intent: "reduce_volume" },
+  { label: "Rest day", intent: "convert_to_rest_day" },
+  { label: "Shorter session", intent: "shorten_session" },
+  { label: "Travel mode", intent: "travel_mode" },
   { label: "More explosive", req: "Add explosive emphasis to today's training" },
 ];
 
 interface VibeMutation {
-  req: string;
+  payload: string | StructuredEditPayload;
   kind?: "chip" | "typed" | "refine";
 }
 
@@ -1838,7 +1873,7 @@ function VibeBar({ onEditComplete, onUndone }: VibeBarProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const editMutation = useMutation({
-    mutationFn: ({ req }: VibeMutation) => submitGlobalEdit(req),
+    mutationFn: ({ payload }: VibeMutation) => submitGlobalEdit(payload),
     onSuccess: (data) => {
       setLastResult(data);
       setVibeState("result");
@@ -1861,12 +1896,12 @@ function VibeBar({ onEditComplete, onUndone }: VibeBarProps) {
     onError: () => setVibeState("result"),
   });
 
-  function fire(req: string) {
+  function fire(payload: string | StructuredEditPayload) {
     if (editMutation.isPending || undoMutation.isPending) return;
     setInput("");
     setSubmitError(false);
     setVibeState("submitting");
-    editMutation.mutate({ req });
+    editMutation.mutate({ payload });
   }
 
   function handleSubmit() {
@@ -1897,10 +1932,10 @@ function VibeBar({ onEditComplete, onUndone }: VibeBarProps) {
 
         {/* Quick-fire chips */}
         <div className="flex gap-2 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
-          {VIBE_CHIPS.map(({ label, req }) => (
+          {VIBE_CHIPS.map(({ label, req, intent }) => (
             <button
               key={label}
-              onClick={() => fire(req)}
+              onClick={() => fire(intent ? { intent, source: "quick_action" } : (req ?? label))}
               disabled={isWorking}
               className="flex-shrink-0 text-[11px] font-semibold bg-muted/50 text-muted-foreground border border-border rounded-full px-3 py-1 hover:text-foreground hover:border-primary/40 hover:bg-primary/5 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
             >
@@ -2013,6 +2048,7 @@ const AGENT_SCOPE_LABELS: Record<AgentScope, string> = {
 interface AgentCommand {
   label: string;
   req: string;
+  intent?: CommandIntentKey;
   tier: CommandTier;
   followUps?: Array<{ label: string; req: string }>;
 }
@@ -2039,6 +2075,7 @@ const AGENT_COMMANDS: Record<AgentScope, AgentCommand[]> = {
     {
       label: "Less volume",
       req: "Reduce the volume in today's session",
+      intent: "reduce_volume" as CommandIntentKey,
       tier: "secondary",
       followUps: [
         { label: "Make tomorrow harder?", req: "Increase intensity in the next session to compensate" },
@@ -2047,16 +2084,19 @@ const AGENT_COMMANDS: Record<AgentScope, AgentCommand[]> = {
     {
       label: "Shorter",
       req: "Shorten today's session — I'm pressed for time",
+      intent: "shorten_session" as CommandIntentKey,
       tier: "secondary",
     },
     {
       label: "Travel mode",
       req: "I only have dumbbells — adapt today's session accordingly",
+      intent: "travel_mode" as CommandIntentKey,
       tier: "secondary",
     },
     {
       label: "Rest day",
       req: "Convert today into a full recovery day",
+      intent: "convert_to_rest_day" as CommandIntentKey,
       tier: "critical",
     },
   ],
@@ -2073,6 +2113,7 @@ const AGENT_COMMANDS: Record<AgentScope, AgentCommand[]> = {
     {
       label: "Recovery focus",
       req: "Shift this week toward recovery and reduce fatigue",
+      intent: "recovery_focus" as CommandIntentKey,
       tier: "primary",
       followUps: [
         { label: "Also reduce intensity?", req: "Reduce intensity across this week's sessions" },
@@ -2086,6 +2127,7 @@ const AGENT_COMMANDS: Record<AgentScope, AgentCommand[]> = {
     {
       label: "Less volume",
       req: "Reduce the total volume this week",
+      intent: "reduce_volume" as CommandIntentKey,
       tier: "secondary",
     },
     {
@@ -2099,6 +2141,7 @@ const AGENT_COMMANDS: Record<AgentScope, AgentCommand[]> = {
     {
       label: "Travel mode",
       req: "I only have dumbbells this week — adapt accordingly",
+      intent: "travel_mode" as CommandIntentKey,
       tier: "secondary",
     },
   ],
@@ -2106,6 +2149,7 @@ const AGENT_COMMANDS: Record<AgentScope, AgentCommand[]> = {
     {
       label: "More power",
       req: "Shift this block toward power development",
+      intent: "increase_power" as CommandIntentKey,
       tier: "primary",
       followUps: [
         { label: "Add field sport emphasis?", req: "Add field sport specificity on top of the power focus" },
@@ -2122,11 +2166,13 @@ const AGENT_COMMANDS: Record<AgentScope, AgentCommand[]> = {
     {
       label: "Recovery bias",
       req: "Shift this block toward recovery and regeneration",
+      intent: "recovery_focus" as CommandIntentKey,
       tier: "primary",
     },
     {
       label: "Less volume",
       req: "Reduce the overall volume across this block",
+      intent: "reduce_volume" as CommandIntentKey,
       tier: "secondary",
     },
     {
@@ -2381,8 +2427,11 @@ function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
   }
 
   const commandMutation = useMutation({
-    mutationFn: ({ req, scope }: { req: string; scope: AgentScope }) =>
-      submitQuickEdit(req, buildTargetContext(scope)),
+    mutationFn: ({ req, scope, intent }: { req: string; scope: AgentScope; intent?: CommandIntentKey }) =>
+      submitQuickEdit(
+        intent ? { intent, scope, source: "quick_action" } : req,
+        buildTargetContext(scope)
+      ),
     onSuccess: (data) => {
       setLastResult(data);
       setLastCommand(pendingCommand);
@@ -2431,7 +2480,11 @@ function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
     if (!pendingCommand) return;
     const strengthSuffix = selectedStrength === "moderate" ? "" : ` — ${selectedStrength} adjustment`;
     setPhase("thinking");
-    commandMutation.mutate({ req: pendingCommand.req + strengthSuffix, scope: selectedScope });
+    commandMutation.mutate({
+      req: pendingCommand.req + strengthSuffix,
+      scope: selectedScope,
+      intent: pendingCommand.intent,
+    });
   }
 
   function handleCancel() { setPendingCommand(null); setPhase("idle"); }
