@@ -1,0 +1,220 @@
+FULL LIFECYCLE AUDIT — POST-SUBMISSION ADVANCEMENT, WEEK TRANSITIONS, AND NEXT 4-WEEK BLOCK GENERATION
+
+CONTEXT:
+TrainChat now supports:
+- program generation
+- 4-week blocks
+- refinements
+- agent memory
+- log session feedback
+- active programs UI
+
+We now need to audit the full lifecycle of the system after submission and at the end of a full 4-week block.
+
+This is not just a UI question.
+We need to determine what the system actually does after:
+1. a session is submitted
+2. a week is completed
+3. all 4 weeks are completed
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Define and fix the true progression lifecycle so the training system advances intelligently over time.
+
+==================================================
+TASK 1 — AUDIT WHAT HAPPENS AFTER SESSION SUBMISSION
+==================================================
+
+When a user submits the Log Session form, trace the full lifecycle:
+
+[SessionAdvanceAudit] {
+  sessionId,
+  sessionMarkedComplete,
+  historyWritten,
+  agentMemoryUpdated,
+  nextSessionCalculated,
+  activeDayUpdated,
+  activeWeekUpdated,
+  uiRefreshed
+}
+
+We need to know:
+- does it only save feedback?
+- does it actually move the user forward?
+
+==================================================
+TASK 2 — DEFINE POST-SUBMISSION BEHAVIOR
+==================================================
+
+Best-practice target behavior:
+
+After successful session submission:
+- mark current session complete
+- write history
+- update agent memory
+- update adaptation signals
+- determine next upcoming session
+- surface next session in Today / This Week views
+- adjust next session if needed based on pain/difficulty/fatigue
+
+Audit whether this already exists.
+If not, implement it.
+
+==================================================
+TASK 3 — AUDIT WEEK COMPLETION LOGIC
+==================================================
+
+When all sessions in the current week are completed:
+
+Check whether the system:
+- marks the week complete
+- advances active week from W1 → W2, etc.
+- updates Today / This Week automatically
+- surfaces the new week role (Build / Intensify / Deload)
+
+Log:
+
+[WeekAdvanceAudit] {
+  previousWeek,
+  newWeek,
+  weekCompleted,
+  activeWeekAdvanced,
+  weekTransitionMessageShown
+}
+
+==================================================
+TASK 4 — DEFINE WEEK ADVANCEMENT BEHAVIOR
+==================================================
+
+Target behavior:
+
+When final session of a week is logged:
+- current week marked complete
+- next week becomes active automatically
+- UI updates to next week
+- optional banner / chat acknowledgment:
+  "Week 1 complete — moving into Build week"
+
+==================================================
+TASK 5 — AUDIT END-OF-BLOCK LOGIC
+==================================================
+
+When all 4 weeks are completed:
+
+Audit current behavior:
+- does the system stop?
+- does it loop?
+- does it keep showing Week 4 forever?
+- does it create a continuation block?
+- does it ask the user to generate a new one manually?
+
+Log:
+
+[BlockCompletionAudit] {
+  blockId,
+  blockCompleted,
+  allWeeksComplete,
+  nextBlockExists,
+  continuationTriggered,
+  manualInterventionRequired
+}
+
+==================================================
+TASK 6 — DEFINE CONTINUATION BLOCK STRATEGY
+==================================================
+
+Target behavior after 4-week completion:
+
+- mark current block complete
+- summarize block performance
+- generate the next 4-week continuation block automatically OR prompt for confirmation if needed
+- carry forward system memory
+
+The continuation block must inherit:
+- goal
+- sport
+- age / population constraints
+- equipment
+- pain history
+- completion/adherence history
+- difficulty trend
+- enjoyment/preferences
+- active emphases / biases
+- recent exercise exposure
+- prior block archetype and progression context
+
+This should feel like a continuation of the same system, not a random new program.
+
+==================================================
+TASK 7 — ADD BLOCK TRANSITION LOGIC
+==================================================
+
+When one 4-week block completes:
+- determine next recommended block archetype
+- create next 4-week block
+- set it as upcoming / active continuation
+- keep progression chain intact
+
+Examples:
+- Foundation Power Block → Intensification Strength
+- Re-entry / Recovery → Foundation Strength
+- Hypertrophy Support → Strength Emphasis
+
+Use real system state + block history to choose.
+
+==================================================
+TASK 8 — MAIN CHAT ACKNOWLEDGMENTS
+==================================================
+
+These lifecycle transitions should be visible in main chat when appropriate.
+
+Examples:
+
+After session submit:
+"Logged. I’m moving you to the next session and slightly reducing fatigue tomorrow based on today’s effort."
+
+After week completion:
+"Week 1 complete — next up is your Build week."
+
+After block completion:
+"You finished this block. I’m carrying your progress into the next 4-week phase."
+
+Do not make these noisy, but do make the system feel alive.
+
+==================================================
+TASK 9 — UI TRANSITIONS
+==================================================
+
+Audit and fix UI behavior so:
+- Today shows the next session after submission
+- This Week reflects completed vs upcoming sessions
+- Block tab reflects week/block completion
+- Progression Chain reflects completed block + next block
+
+No dead-end states allowed.
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. current behavior after session submission
+2. current behavior after week completion
+3. current behavior after 4-week completion
+4. whether the system currently advances automatically
+5. what continuation logic was added or needs to be added
+6. recommended final lifecycle model
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat must behave like a living training system:
+
+- session feedback advances the user forward
+- completed weeks roll into the next week
+- completed 4-week blocks lead into the next 4-week phase
+- memory and adaptation carry forward
+- no manual dead-end after block completion

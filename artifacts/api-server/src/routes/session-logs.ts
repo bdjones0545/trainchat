@@ -13,15 +13,41 @@ import {
   type ExerciseLogEntry,
 } from "../lib/progression";
 import { runBlockEvaluationAndLog } from "./block-intelligence";
-import { syncMemoriesFromData } from "../lib/memory";
+import { syncMemoriesFromData, upsertMemory } from "../lib/memory";
+
+// ─── Pain area label map ───────────────────────────────────────────────────────
+
+const PAIN_AREA_LABELS: Record<string, string> = {
+  knee: "knee",
+  lower_back: "lower back",
+  shoulder: "shoulder",
+  hip: "hip",
+  elbow: "elbow",
+  wrist: "wrist",
+  ankle: "ankle",
+  neck: "neck",
+  upper_back: "upper back",
+};
+
+function formatAreas(areas: string[]): string {
+  return areas.map((a) => PAIN_AREA_LABELS[a] ?? a).join(", ");
+}
 
 // ─── Pipeline helpers: chat ack + agent memory ────────────────────────────────
+
+interface SessionSignals {
+  difficulty?: number | null;
+  energy?: number | null;
+  pain?: number | null;
+  enjoyment?: number | null;
+  painAreas?: string[] | null;
+  notes?: string | null;
+}
 
 async function postSessionAckToChat(
   userId: number,
   sessionStatus: string,
-  scores: { difficulty?: number | null; energy?: number | null; pain?: number | null },
-  notes?: string | null
+  signals: SessionSignals
 ): Promise<void> {
   try {
     const [recentConvo] = await db
@@ -32,37 +58,68 @@ async function postSessionAckToChat(
       .limit(1);
     if (!recentConvo) return;
 
-    const diffLabel =
-      scores.difficulty == null ? null
-      : scores.difficulty <= 2 ? "felt easy"
-      : scores.difficulty >= 4 ? "was tough"
-      : "felt solid";
+    const { difficulty, energy, pain, enjoyment, painAreas, notes } = signals;
 
-    const painLabel =
-      scores.pain == null ? null
-      : scores.pain <= 1 ? "no pain reported"
-      : scores.pain === 2 ? "minor discomfort noted"
-      : scores.pain === 3 ? "moderate discomfort flagged"
-      : "significant pain flagged — I'll watch your load next session";
+    const hasPainAreas = painAreas && painAreas.length > 0;
+    const areaText = hasPainAreas ? formatAreas(painAreas!) : null;
+    const tooHard = (difficulty ?? 0) >= 4;
+    const tooEasy = (difficulty ?? 0) <= 2 && difficulty != null;
+    const drained = (energy ?? 3) <= 2 && energy != null;
+    const energized = (energy ?? 3) >= 4;
+    const significantPain = (pain ?? 0) >= 4;
+    const moderatePain = (pain ?? 0) === 3;
+    const anyPain = (pain ?? 0) >= 3;
+    const lowEnjoyment = (enjoyment ?? 3) <= 2 && enjoyment != null;
 
-    const parts: string[] = [`Session logged as ${sessionStatus}.`];
-    if (diffLabel) parts.push(`It ${diffLabel}`);
-    if (painLabel) parts.push(painLabel);
-    if (notes?.trim()) parts.push(notes.trim().slice(0, 80));
-    parts.push("Load recommendations for upcoming sessions have been updated.");
+    let content: string;
+
+    if (sessionStatus === "skipped") {
+      content =
+        "Got it — session skipped. Rest counts as part of the plan. If skipping becomes a pattern I can simplify your schedule or reduce training frequency to make it more executable.";
+    } else if (significantPain && hasPainAreas) {
+      content = `Got it — session logged. Significant pain flagged in your ${areaText}. I've recorded this and will avoid aggressive loading on that movement pattern in your upcoming sessions. If it continues, let me know and I can modify the exercise selection directly.`;
+    } else if (significantPain) {
+      content =
+        "Got it — session logged. Significant discomfort was flagged. I've noted this and will keep loading conservative in your next session. If a specific area is causing the issue, mention it so I can adjust the movement selection.";
+    } else if (tooHard && drained) {
+      content = `Got it — session was tough and you're feeling drained. I've noted the overload signal. The next session will stay on plan structurally, but I'll hold progression and watch fatigue heading in. If this pattern continues across sessions I'll pull back volume slightly.`;
+    } else if (tooHard) {
+      content = `Got it — session felt hard. Noted${areaText ? ` along with discomfort in your ${areaText}` : ""}. I'll hold the current load rather than progressing until difficulty normalizes.`;
+    } else if (moderatePain && hasPainAreas) {
+      content = `Got it — session logged with moderate discomfort in your ${areaText}. I've flagged this area. I'll keep an eye on loading patterns that stress it and can substitute movements if it comes up again.`;
+    } else if (tooEasy && energized) {
+      content = "Good session — it felt easy and your energy is high. That's a clear progression signal. I'll bump up the challenge slightly next session — a small load or volume increment to match where your body actually is right now.";
+    } else if (lowEnjoyment) {
+      content = `Got it — session logged. Noted low enjoyment this time. If this continues across sessions I'll look at bringing in more exercise variety or adjusting the session format to keep it engaging.${notes?.trim() ? ` Notes: "${notes.trim().slice(0, 120)}"` : ""}`;
+    } else if (drained) {
+      content = "Got it — session logged. Energy is low after this one. I'll keep the next session from pushing harder than today — hold the current load and monitor recovery before applying any progression.";
+    } else {
+      const diffNote =
+        difficulty == null ? ""
+        : difficulty <= 2 ? " It felt within your capacity."
+        : difficulty === 3 ? " It hit the target zone."
+        : " It was appropriately challenging.";
+      const painNote =
+        !anyPain ? " No pain reported."
+        : pain === 2 ? " Minor discomfort noted — nothing flagged."
+        : "";
+      content = `Got it — session logged as ${sessionStatus}.${diffNote}${painNote} Keep showing up consistently — that's what drives results.${notes?.trim() ? ` Notes: "${notes.trim().slice(0, 120)}"` : ""}`;
+    }
 
     const structuredData = JSON.stringify({
       _type: "session_logged",
       sessionStatus,
-      difficultyScore: scores.difficulty ?? null,
-      energyScore: scores.energy ?? null,
-      painScore: scores.pain ?? null,
+      difficultyScore: difficulty ?? null,
+      energyScore: energy ?? null,
+      painScore: pain ?? null,
+      enjoymentScore: enjoyment ?? null,
+      painAreas: hasPainAreas ? painAreas : null,
     });
 
     await db.insert(messagesTable).values({
       conversationId: recentConvo.id,
       role: "assistant",
-      content: parts.join(" — "),
+      content,
       structuredData,
     });
     await db
@@ -76,7 +133,15 @@ async function postSessionAckToChat(
 
 async function updateSessionAgentMemory(
   userId: number,
-  data: { sessionStatus: string; difficultyScore?: number | null; energyScore?: number | null; painScore?: number | null }
+  data: {
+    sessionStatus: string;
+    difficultyScore?: number | null;
+    energyScore?: number | null;
+    painScore?: number | null;
+    enjoymentScore?: number | null;
+    painAreas?: string[] | null;
+    notes?: string | null;
+  }
 ): Promise<void> {
   try {
     const [system] = await db
@@ -95,14 +160,62 @@ async function updateSessionAgentMemory(
       : data.difficultyScore >= 4 ? "above_target"
       : "on_target";
 
+    const fatigueSignal =
+      data.energyScore == null ? "unknown"
+      : data.energyScore <= 2 ? "high"
+      : data.energyScore >= 4 ? "low"
+      : "neutral";
+
+    const enjoymentSignal =
+      data.enjoymentScore == null ? "unknown"
+      : data.enjoymentScore <= 2 ? "low"
+      : data.enjoymentScore >= 4 ? "high"
+      : "neutral";
+
+    const painSignal =
+      data.painScore == null ? "unknown"
+      : data.painScore <= 1 ? "none"
+      : data.painScore === 2 ? "mild"
+      : data.painScore === 3 ? "moderate"
+      : "significant_or_severe";
+
+    // Derive next-session intent from combined signals
+    const tooHard = (data.difficultyScore ?? 0) >= 4;
+    const drained = (data.energyScore ?? 3) <= 2 && data.energyScore != null;
+    const tooEasy = (data.difficultyScore ?? 0) <= 2 && data.difficultyScore != null;
+    const energized = (data.energyScore ?? 0) >= 4;
+    const hasSeriousPain = (data.painScore ?? 0) >= 4;
+    const skipped = data.sessionStatus === "skipped";
+    const partial = data.sessionStatus === "partial";
+
+    let nextSessionIntent: string;
+    if (hasSeriousPain) {
+      nextSessionIntent = "pain_aware";
+    } else if (skipped || partial) {
+      nextSessionIntent = "hold_progression";
+    } else if (tooHard && drained) {
+      nextSessionIntent = "soften_load";
+    } else if (tooEasy && energized) {
+      nextSessionIntent = "progress";
+    } else {
+      nextSessionIntent = "continue_on_plan";
+    }
+
     const updatedMemory = {
       ...existingMemory,
       performance,
+      fatigueSignal,
+      enjoymentSignal,
+      painSignal,
+      nextSessionIntent,
       lastSessionPerformance: {
         status: data.sessionStatus,
         difficulty: data.difficultyScore ?? null,
         energy: data.energyScore ?? null,
         pain: data.painScore ?? null,
+        enjoyment: data.enjoymentScore ?? null,
+        painAreas: data.painAreas ?? null,
+        notes: data.notes ? data.notes.slice(0, 300) : null,
         loggedAt: new Date().toISOString(),
       },
     };
@@ -114,6 +227,48 @@ async function updateSessionAgentMemory(
   } catch {
     // Non-fatal
   }
+}
+
+/**
+ * When pain areas are reported (score >= 3), write them directly to user_memories
+ * so the AI coach knows about them in future sessions without needing to re-read logs.
+ */
+async function writePainAreasToMemory(
+  userId: number,
+  painScore: number,
+  painAreas: string[]
+): Promise<void> {
+  if (painScore < 3 || painAreas.length === 0) return;
+  const severity = painScore >= 5 ? "severe" : painScore >= 4 ? "significant" : "moderate";
+  const confidence: 1 | 2 | 3 | 4 | 5 = painScore >= 5 ? 5 : painScore >= 4 ? 4 : 3;
+  const MOVEMENT_FAMILIES: Record<string, string> = {
+    knee: "high knee-stress movements (deep squats, jump landings) — favor hip-dominant alternatives",
+    lower_back: "spinal loading under fatigue — prioritize hip hinge technique and core stability",
+    shoulder: "aggressive overhead pressing and loaded internal rotation",
+    hip: "deep hip flexion and high-rep hip-dominant exercises",
+    elbow: "heavy elbow-loaded pulling or pressing — use neutral grip where possible",
+    wrist: "heavy press movements with wrist extension — use neutral grip",
+    ankle: "plyometrics and aggressive ankle-loaded movements",
+    neck: "heavy axial loading and any exercise that causes neck strain",
+    upper_back: "high-volume rowing under fatigue — monitor scapular stability",
+  };
+  await Promise.all(
+    painAreas.map((area) => {
+      const areaLabel = PAIN_AREA_LABELS[area] ?? area;
+      const movementGuidance = MOVEMENT_FAMILIES[area];
+      const detail = movementGuidance
+        ? `User reported ${severity} pain in ${areaLabel} during a session. Avoid ${movementGuidance}.`
+        : `User reported ${severity} pain in ${areaLabel} during a session. Monitor loading on movements that stress this area.`;
+      return upsertMemory(userId, {
+        type: "pain_pattern",
+        subject: `${areaLabel} discomfort`,
+        sentiment: "negative",
+        confidence,
+        source: "feedback",
+        detail,
+      });
+    })
+  );
 }
 
 const router: IRouter = Router();
@@ -334,19 +489,35 @@ router.post("/session-logs", requireAuth, async (req: any, res): Promise<void> =
     }
   }
 
-  // ── Pipeline: chat ack + agent memory (fire-and-forget — never block response) ─
+  // ── Pipeline: chat ack + agent memory + memory sync (fire-and-forget) ───────
+  // All non-fatal — session log is already saved and recap returned.
+
   postSessionAckToChat(userId, data.sessionStatus, {
     difficulty: data.difficultyScore,
     energy: data.energyScore,
     pain: data.painScore,
-  }, data.notes).catch(() => {});
+    enjoyment: data.enjoymentScore,
+    painAreas: data.painAreas,
+    notes: data.notes,
+  }).catch(() => {});
 
   updateSessionAgentMemory(userId, {
     sessionStatus: data.sessionStatus,
     difficultyScore: data.difficultyScore,
     energyScore: data.energyScore,
     painScore: data.painScore,
+    enjoymentScore: data.enjoymentScore,
+    painAreas: data.painAreas,
+    notes: data.notes,
   }).catch(() => {});
+
+  // Write pain area memories directly so AI coach knows about them immediately
+  if (data.painScore != null && data.painScore >= 3 && data.painAreas && data.painAreas.length > 0) {
+    writePainAreasToMemory(userId, data.painScore, data.painAreas).catch(() => {});
+  }
+
+  // Full memory sync — picks up adherence, volume, enjoyment, and pain patterns
+  syncMemoriesFromData(userId).catch(() => {});
 
   res.status(201).json({
     id: log.id,

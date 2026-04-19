@@ -81,14 +81,14 @@ export function evaluateWorkoutCompletion(data: WorkoutCompletionData): SessionR
   // ── Skipped ──────────────────────────────────────────────────────────────
   if (sessionStatus === "skipped") {
     headline = "Session skipped — noted";
-    message = "No problem. Rest is part of the plan. If this becomes a pattern, I can simplify your schedule so it fits better.";
+    message = "Rest counts as part of the plan. I'm holding your current progression in place — nothing advances until you're back on track. If skipping becomes a pattern, I can simplify your schedule to make it more executable.";
     flags.push({ type: "skipped_session", detail: "Session was skipped" });
     return { headline, message, flags };
   }
 
   if (sessionStatus === "rescheduled") {
     headline = "Session rescheduled — noted";
-    message = "Got it. If you consistently need to shift sessions around, let me know and I can restructure your weekly layout.";
+    message = "Noted. If you consistently need to shift sessions around, let me know and I can restructure your weekly layout so the schedule fits how your week actually runs.";
     return { headline, message, flags };
   }
 
@@ -141,27 +141,27 @@ export function evaluateWorkoutCompletion(data: WorkoutCompletionData): SessionR
   const isPartial = sessionStatus === "partial";
 
   if (isPartial && flags.find((f) => f.type === "overload")) {
-    headline = "Session partially completed — may be slightly overloaded";
-    message = `Finishing part of this session still counts as solid work. The difficulty and energy data suggest this session may be slightly over your current capacity. I'll keep that in mind when programming your next block.`;
+    headline = "Partial session — load was high";
+    message = `The work you completed counts. The difficulty and energy data suggest this was over your current capacity. I'll hold progression next session and keep the load where it is until it starts feeling manageable.`;
   } else if (isPartial) {
     headline = "Partial session — noted";
-    message = `Completing the main work is what matters. If you're consistently leaving accessories unfinished, I can tighten the session to fit your available time better.`;
+    message = `The main work is what matters — accessories can be trimmed. If you're consistently running short on time, I can tighten the session structure to fit your window better. No change to progression for now.`;
   } else if (flags.find((f) => f.type === "pain_trigger") && hasPainAreas) {
     const areaText = formatPainAreas(painAreas!);
-    headline = `Pain noted in ${areaText}`;
-    message = `I've flagged ${areaText} discomfort from this session. If this comes up again, I can adjust the movement selection to reduce load on that area. Keep an eye on it this week.`;
+    headline = `Pain flagged — ${areaText}`;
+    message = `I've recorded the ${areaText} discomfort. I'll avoid aggressive loading on that movement pattern in your next session. If it shows up again, let me know and I can substitute exercises that take pressure off that area.`;
   } else if (flags.find((f) => f.type === "pain_trigger")) {
-    headline = "Discomfort noted during session";
-    message = `I've noted the pain response from this session. If it recurs, let me know and I can modify movements that may be contributing.`;
+    headline = "Discomfort flagged — monitoring";
+    message = `I've noted the pain signal. I'll keep the next session conservative on load — no progression step until this clears. If you know what area or movement caused it, mention it so I can adjust accordingly.`;
   } else if (flags.find((f) => f.type === "overload")) {
-    headline = "Session felt demanding — monitoring fatigue";
-    message = `High difficulty with low post-session energy is a signal worth watching. If this is a pattern over the next few sessions, I'll suggest pulling back on intensity or volume slightly.`;
+    headline = "Session was demanding — holding load";
+    message = `High difficulty with low energy post-session is an overload signal. I'll keep the same load next session rather than stepping up — let your body absorb this one before we progress.`;
   } else if (flags.find((f) => f.type === "progression_candidate")) {
-    headline = "Strong session — ready to progress";
-    message = `Sessions feeling easy with high post-session energy is a clear signal your body has adapted. Consider adding a small load increment or volume increase in your next session.`;
+    headline = "Strong session — ready to step up";
+    message = `Sessions feeling easy with high post-session energy is a clear signal to progress. I'll add a small load or volume increment next session to match where your body actually is.`;
   } else if (flags.find((f) => f.type === "low_enjoyment")) {
-    headline = "Session logged — noted low enjoyment";
-    message = `Thanks for the feedback. Consistent low enjoyment is worth addressing — it's easier to stay consistent when you enjoy the work. If you'd like to shake things up, we can look at exercise rotation.`;
+    headline = "Logged — low enjoyment noted";
+    message = `Noted. Consistent low enjoyment is worth addressing — it's harder to stay consistent when the work doesn't feel right. If this pattern continues, I can rotate exercises or adjust the session format to keep things engaging.`;
   } else {
     // Default positive complete
     const diffLabel = !difficultyScore
@@ -172,7 +172,7 @@ export function evaluateWorkoutCompletion(data: WorkoutCompletionData): SessionR
       ? " — right at the target zone"
       : " — appropriately challenging";
     headline = "Session complete";
-    message = `Session logged${diffLabel}. Keep showing up consistently and the results will follow.`;
+    message = `Logged${diffLabel}. Progression stays on track — keep showing up consistently.`;
   }
 
   return { headline, message, flags };
