@@ -53,6 +53,7 @@ import { type ResponsePolicy, buildResponsePolicyPromptSection } from "./respons
 import { detectAndBuildDirectives } from "./programs/agentControlDirectives";
 import { buildFocusModePromptContext, getFocusModeAdaptationHeuristics } from "./focus-engines/focus-mode-router";
 import { buildSpeedArchitectureBrief } from "./focus-engines/speed-engine";
+import { buildMobilityArchitectureBrief } from "./focus-engines/mobility-engine";
 import { resolveFocusMode, logFocusModeAudit } from "./focus-mode-audit";
 import type { FocusMode } from "./focus-engines/engine-interface";
 
@@ -2362,6 +2363,36 @@ export async function generateAIResponse(
     } catch (archErr) {
       const errMsg = archErr instanceof Error ? archErr.message : String(archErr);
       logger.warn({ archErrMessage: errMsg }, "[SpeedArchitectureEngine] Failed to build speed brief — continuing without it");
+    }
+  } else if (isBuildIntent && focusMode === "mobility") {
+    // ── Mobility Architecture Brief ────────────────────────────────────────
+    // Builds a prescriptive mobility-specific session skeleton so the AI does not
+    // fall back on the base system prompt's strength-centric session structures.
+    const metaDays = (intentResult?.metadata as { targetDays?: number | null } | undefined)?.targetDays ?? null;
+    const days = extractedConstraints?.daysPerWeek ?? metaDays ?? agentSettings?.training.daysPerWeek ?? null;
+    const goal = extractedConstraints?.primaryGoal ?? agentSettings?.training.goal ?? null;
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[MobilityBuildAudit:Input]", JSON.stringify({
+        intentType: intentResult?.type ?? actionDecision?.actionType,
+        userMessageSnippet: userMessage.slice(0, 120),
+        goal, days,
+        focusMode,
+      }));
+    }
+
+    try {
+      architectureBriefText = buildMobilityArchitectureBrief(days, goal, userMessage);
+
+      if (architectureBriefText) {
+        logger.info(
+          { days, goal, intentType: intentResult?.type },
+          "[MobilityArchitectureEngine] Mobility architecture brief injected into prompt"
+        );
+      }
+    } catch (archErr) {
+      const errMsg = archErr instanceof Error ? archErr.message : String(archErr);
+      logger.warn({ archErrMessage: errMsg }, "[MobilityArchitectureEngine] Failed to build mobility brief — continuing without it");
     }
   }
 

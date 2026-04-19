@@ -526,6 +526,232 @@ console.log("[MobilityParityCheck]", JSON.stringify({
   parity: _allSystemsReady ? "FULL_PARITY" : "INCOMPLETE",
 }));
 
+// ─── Mobility Architecture Brief ──────────────────────────────────────────────
+
+/**
+ * Builds a prescriptive architecture brief for mobility program builds.
+ * Mirrors the authority level of the strength `buildArchitectureBrief` so the AI
+ * does not fall back on the base prompt's strength-centric session structures.
+ *
+ * Injected into the system prompt as `architectureBriefText` when focusMode === "mobility".
+ */
+export function buildMobilityArchitectureBrief(
+  days: number | null,
+  goal: string | null,
+  userMessage: string,
+): string {
+  const sessionCount = days ?? 3;
+  const lower = userMessage.toLowerCase();
+
+  // ── Detect primary mobility sub-intent ───────────────────────────────────
+  const isHip = /hip|hips|groin|pigeon|90.90|couch.stretch|hip.flexor|adductor|frog/.test(lower);
+  const isShoulder = /shoulder|overhead|rotator|sleeper|wall.slide|pec|deltoid|capsule/.test(lower);
+  const isThoracic = /thoracic|t.spine|upper.back|rotation|rib|spine|spinal/.test(lower);
+  const isAnkle = /ankle|dorsiflexion|calf|squat.depth|foot|plantarflexion/.test(lower);
+  const isRecovery = /recover|restore|rest|deload|relax|parasympathetic/.test(lower);
+  const isControl = /control|stability|end.range|pails|rails|car|articular/.test(lower);
+  const isStiffness = /stiff|stiffness|tight|tightness|morning|locked.up/.test(lower);
+  const isPain = /pain|hurt|injury|return|comeback|re.entry|sensitive|achy/.test(lower);
+
+  const primaryFocus = isPain
+    ? "Re-entry Support (pain-aware)"
+    : isRecovery
+    ? "Recovery Flow"
+    : isControl
+    ? "End-Range Control"
+    : isStiffness
+    ? "Stiffness Reduction"
+    : isHip
+    ? "Hip Mobility"
+    : isShoulder
+    ? "Shoulder Mobility"
+    : isThoracic
+    ? "Thoracic Spine Mobility"
+    : isAnkle
+    ? "Ankle Mobility"
+    : "Full-Body Mobility — Range + Control";
+
+  // ── Day skeletons — cycle through mobility qualities across the week ──────
+  const allDaySkeletons: string[] = [];
+
+  // Day 1 — always anchored in tissue prep + primary passive range work
+  if (isHip) {
+    allDaySkeletons.push(`Day 1 — Hip Mobility (Passive Range):
+  Block A — Tissue Prep (10 min): Foam Roll Quads × 60s each, Lacrosse Ball Glute Release × 60s each, IT Band Foam Roll × 60s each
+  Block B — Breathing Reset (5 min): 90/90 Breathing Hold × 3 deep breaths, Crocodile Breathing × 6 breaths prone
+  Block C — Hip Passive Range (25 min):
+    Hip CARs × 3 slow full-circle reps each direction (diagnostic — note sticking points)
+    90/90 Hip Stretch × 60s each side (bias internal rotation side if stiffer)
+    Couch Stretch × 60s each side (hip flexor / quad bias)
+    Frog Stretch × 60–90s sustained hold
+    Adductor Rockback × 60s each side
+  Block D — Active Control (10 min): 90/90 Active Posterior Lift × 3×5 reps each side; Hip Airplane × 3×5 each
+  Block E — Close (5 min): Supine Spinal Twist × 60s each, Supine Figure-4 Hold × 60s each`);
+  } else if (isShoulder) {
+    allDaySkeletons.push(`Day 1 — Shoulder Mobility (T-Spine First):
+  Block A — Tissue Prep (10 min): Thoracic Extension Foam Roll × 60–90s (T4–T10), Lacrosse Ball Pec Minor × 60s each
+  Block B — Thoracic First (15 min): Cat-Cow × 10 slow reps; Thread the Needle × 60s each; Open Book Stretch × 60s each
+  Block C — Shoulder Passive Range (20 min):
+    Shoulder CARs × 3 slow full-circle reps each (diagnostic)
+    Sleeper Stretch × 60–90s each (posterior capsule)
+    Doorway Chest Stretch × 60s each (pec minor / anterior capsule)
+    Cross-Body Shoulder Stretch × 60s each
+    Overhead Lat Stretch × 60s each
+  Block D — Active Control (10 min): Wall Slides × 3×10 slow; Band Shoulder Distraction × 3×30s each
+  Block E — Close (5 min): Supine Breathing Reset × 5 deep breaths, Child's Pose × 60s`);
+  } else if (isThoracic) {
+    allDaySkeletons.push(`Day 1 — Thoracic Spine (Extension Before Rotation):
+  Block A — Tissue Prep (10 min): Thoracic Extension Foam Roll × 90s (T4–T10); T-Spine Extension on Ball × 60s
+  Block B — Breathing Anchor (5 min): Box Breathing 4-4-4-4 × 3 rounds; Rib Roll × 30s each side
+  Block C — Thoracic Extension (15 min): Cat-Cow × 10 slow reps; Thoracic CARs × 3 each direction; Thoracic Extension Foam Roll pass × 2
+  Block D — Thoracic Rotation (15 min): Open Book Stretch × 60s each; Thread the Needle × 60s each; Quadruped Thoracic Rotation × 60s each; Side-Lying T-Spine Rotation × 60s each
+  Block E — Integration (10 min): Shoulder CARs × 3 each (T-spine feeds shoulder range); World's Greatest Stretch × 3 each side`);
+  } else if (isAnkle) {
+    allDaySkeletons.push(`Day 1 — Ankle Mobility (Dorsiflexion Focus):
+  Block A — Tissue Prep (10 min): Calf Foam Roll × 60s each; Hamstring Foam Roll × 60s each
+  Block B — Breathing Reset (5 min): Diaphragmatic Breathing Drill × 5 breaths
+  Block C — Ankle Passive Range (25 min):
+    Ankle CARs × 3 slow full-circle reps each direction (diagnostic)
+    Wall Ankle Stretch × 60s each (dorsiflexion)
+    Banded Ankle Distraction × 60–90s each (joint capsule)
+    Calf Stretch Straight Knee × 60s each (gastrocnemius)
+    Calf Stretch Bent Knee × 60s each (soleus)
+    Heel Drop × 3×10 slow eccentric reps
+  Block D — Active Control (10 min): Ankle PAILs/RAILs × 2 rounds each side (20% contraction × 10s); Ankle Circles × 10 each direction
+  Block E — Integration (10 min): Deep Squat Hip Stretch × 60s (tests ankle + hip combined); Spiderman Stretch × 60s each`);
+  } else if (isRecovery || isPain) {
+    allDaySkeletons.push(`Day 1 — Recovery Flow (Parasympathetic Reset):
+  Block A — Breathing Anchor (10 min): Crocodile Breathing × 6 breaths; Box Breathing 4-4-4-4 × 3 rounds; 90/90 Breathing Hold × 3 breaths
+  Block B — Tissue Release (10 min): Foam Roll Quads × 60s each; Thoracic Extension Foam Roll × 60s; Lacrosse Ball Glute × 60s
+  Block C — Yin Holds (25 min):
+    Supine Figure-4 Hold × 2–3 min each side
+    Supported Hip Flexor Hold × 90s each
+    Child's Pose × 2 min
+    Supine Spinal Twist × 90s each
+    Legs Up the Wall × 3–5 min
+  Block D — Gentle Flow (10 min): World's Greatest Stretch × 3 each (slow); Cat-Cow × 10 slow; Hip 90/90 Transition Flow × 5 transitions
+  Block E — Exit (5 min): Supine Breathing Reset × 5 breaths; Progressive Relaxation`);
+  } else {
+    allDaySkeletons.push(`Day 1 — Full-Body Mobility (Passive Range):
+  Block A — Tissue Prep (10 min): Thoracic Extension Foam Roll × 60s; Foam Roll Quads × 60s each; Lacrosse Ball Glute × 60s each
+  Block B — Breathing Reset (5 min): 90/90 Breathing Hold × 3 breaths; Crocodile Breathing × 5 breaths
+  Block C — Joint-Specific Passive Range (25 min):
+    Hip CARs × 3 each (diagnostic) → 90/90 Stretch × 60s each → Couch Stretch × 60s each
+    Shoulder CARs × 3 each → Sleeper Stretch × 60s each → Wall Slides × 10 slow
+    Thoracic Extension Foam Roll → Cat-Cow × 10 → Thread the Needle × 60s each
+  Block D — Active Control (10 min): 90/90 Active Posterior Lift × 3×5 each; Bird Dog × 3×10 slow
+  Block E — Close (5 min): Supine Spinal Twist × 60s each; Child's Pose × 60s`);
+  }
+
+  // Day 2 — active control / PAILs-RAILs emphasis
+  allDaySkeletons.push(`Day 2 — End-Range Control (PAILs/RAILs + CARs):
+  Block A — Tissue Prep (8 min): Foam Roll primary limiting region × 60s; contract-relax sequence × 2
+  Block B — Breathing Reset (5 min): Box Breathing 4-4-4-4 × 3 rounds; exhale-deepen practice
+  Block C — CARs Diagnostic (10 min): Hip CARs × 3 each (slow, full range); Shoulder CARs × 3 each; Ankle CARs × 3 each
+    Note active vs passive range gap — this determines PAILs need
+  Block D — PAILs / RAILs Work (20 min):
+    Hip: 90/90 passive hold × 60s → PAILs 20% contraction × 10s → release → RAILs × 10s; repeat × 2 each side
+    Shoulder (if limited): Sleeper Stretch × 60s → Shoulder PAILs/RAILs × 10s each; repeat × 2 each
+    Ankle (if limited): Banded Distraction × 60s → Ankle PAILs/RAILs × 10s each; repeat × 2 each
+  Block E — End-Range Loading (10 min): Jefferson Curl × 3×5 slow; Passive Hang × 3×30s; Deep Squat Hold with Load × 3×30s
+  Block F — Recovery Close (7 min): Supine Figure-4 × 90s each; Supine Breathing Reset × 5 breaths`);
+
+  // Day 3 — movement quality + integrated flows
+  allDaySkeletons.push(`Day 3 — Movement Quality + Integrated Flow:
+  Block A — Tissue Prep (8 min): Foam Roll quads + thoracic; contract-relax hamstrings × 60s each
+  Block B — Breathing + Activation (7 min): Diaphragmatic Breathing × 5 breaths; Dead Bug × 3×8 slow; Bird Dog × 3×8 slow
+  Block C — Joint-Specific Isolation (15 min):
+    Primary limiting joint: full CARs × 3 + passive hold × 60s + PAILs × 10s (repeat twice)
+    Secondary limiting joint: CARs × 3 + passive hold × 60s
+  Block D — Integrated Mobility Flow (15 min):
+    World's Greatest Stretch × 5 each side (full slow sequence)
+    Spiderman Flow × 5 each side
+    Inchworm to Squat × 8 slow reps
+    Hip 90/90 Transition Flow × 5 full transitions
+  Block E — Recovery Close (10 min): Supine Spinal Twist × 90s each; Supported Hip Flexor Hold × 90s each; Child's Pose × 60s`);
+
+  // Day 4+ (if more sessions requested)
+  allDaySkeletons.push(`Day 4 — Hip + Shoulder Deep Focus:
+  Block A — Tissue Prep (10 min): Lacrosse Ball Glute × 60s each; Foam Roll Thoracic × 60s; Pec Minor Release × 60s each
+  Block B — Breathing Reset (5 min): 90/90 Breathing Hold × 3 breaths; Crocodile Breathing × 5
+  Block C — Hip Deep Focus (20 min):
+    Pigeon Stretch × 90s each; Frog Stretch × 90s; Adductor Rockback × 60s each
+    Hip PAILs/RAILs × 2 rounds each side at 30% contraction
+    Hip Airplane × 3×5 each (active IR/ER control)
+  Block D — Shoulder Deep Focus (15 min):
+    Open Book Stretch × 90s each; Banded Pass-Through × 3×10; Overhead Lat Stretch × 60s each
+    Shoulder PAILs/RAILs × 2 rounds each at 30% contraction
+  Block E — Integration (10 min): Active Hang × 3×30s; Deep Squat Hold × 60s; Supine Figure-4 × 60s each`);
+
+  allDaySkeletons.push(`Day 5 — Stiffness Reduction + Dynamic Flow:
+  Block A — Heat + Tissue (10 min): Foam Roll IT Band × 60s each; Hamstring Foam Roll × 60s each; Calf Foam Roll × 60s each
+  Block B — Contract-Relax Sequence (10 min): Hamstring contract-relax × 60s each; Quad contract-relax × 60s each
+  Block C — Dynamic Flow Sequence (15 min):
+    March to Spiderman × 8 each; World's Greatest Stretch × 5 each; Inchworm Walkout × 8; Animal Flow Ground × 5 min
+  Block D — Passive Yin Holds (15 min):
+    Couch Stretch × 90s each; 90/90 Stretch × 90s each; Sleeper Stretch × 90s each; Child's Pose × 90s
+  Block E — Recovery Exit (10 min): Supine Spinal Twist × 90s each; Legs Up the Wall × 3 min; Breathing Reset × 5 breaths`);
+
+  const dayPlans = allDaySkeletons.slice(0, sessionCount);
+
+  return `## MOBILITY ARCHITECTURE BRIEF — MANDATORY STRUCTURE
+
+ACTIVE FOCUS: ${primaryFocus}
+SESSION COUNT: ${sessionCount}-day mobility program
+PROGRAM GOAL: ${goal ?? "Mobility — range restoration and positional control"}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CRITICAL BUILD CONSTRAINTS — NON-NEGOTIABLE:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. THIS IS A MOBILITY PROGRAM — NOT light strength, NOT conditioning, NOT a stretch list.
+   PROHIBITED as session anchors: barbell lifts, bench press, pull-ups, squats with heavy load,
+   running, cardio, or any traditional strength/conditioning exercise.
+   End-range loading (Jefferson Curl, Passive Hang, Deep Squat Hold) is only used in a
+   supporting end-range control block — NEVER as the primary session anchor.
+
+2. EXERCISE LANGUAGE — use mobility-specific terms:
+   - Passive holds → "X seconds per side"
+   - CARs → "X slow controlled reps each direction"
+   - PAILs/RAILs → "X seconds at Y% contraction — 20% effort Week 1–2, 30% Week 3, 40% Week 4"
+   - Flows → "X minutes continuous flow" or "X transitions"
+   NEVER prescribe "sets of 10 reps" for mobility holds — time is the primary variable.
+
+3. PASSIVE BEFORE ACTIVE — the non-negotiable sequence:
+   Tissue prep → Passive holds → CARs → PAILs/RAILs → End-range loading → Integrated flows
+   Never train active control in a range not yet passively available.
+
+4. BREATHING IS A TOOL:
+   - Exhale to deepen passive holds (inhale = brace, exhale = release and sink deeper)
+   - Include a breathing anchor (90/90 Breathing Hold, Crocodile Breathing, or Box Breathing)
+     in every session — it is NOT optional
+
+5. JOINT PAIN PROTOCOL:
+   - Work within pain-free range ONLY
+   - Sharp/stabbing = stop immediately
+   - Dull ache at end-range = acceptable, reduce range if >3/10
+   - Never load into pain
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PRESCRIBED SESSION STRUCTURE — FILL EXACTLY THIS SKELETON:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${dayPlans.join("\n\n")}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+APPROVED EXERCISE VOCABULARY:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Hip: Hip CARs, 90/90 Stretch, 90/90 Active Posterior Lift, Couch Stretch, Frog Stretch, Pigeon Stretch, Adductor Rockback, Hip PAILs/RAILs, Hip Airplane, Deep Squat Hip Stretch, Spiderman Hip Stretch, Hip Flexor Kneeling Stretch
+Shoulder: Shoulder CARs, Wall Slides, Sleeper Stretch, Band Shoulder Distraction, Doorway Chest Stretch, Cross-Body Shoulder Stretch, Overhead Lat Stretch, Shoulder PAILs/RAILs, Banded Pass-Through, Pec Minor Stretch
+Thoracic: Thoracic Extension Foam Roll, Cat-Cow, Thread the Needle, Open Book Stretch, Quadruped Thoracic Rotation, Thoracic CARs, Thoracic CARs with Dowel, Side-Lying T-Spine Rotation, T-Spine Extension on Ball
+Ankle: Wall Ankle Stretch, Banded Ankle Distraction, Ankle CARs, Ankle PAILs/RAILs, Calf Stretch Straight Knee, Calf Stretch Bent Knee, Heel Drop
+Trunk: Dead Bug, Bird Dog, 90/90 Breathing Hold, Segmental Rolling, Hollow Body Hold, Pallof Press
+End-Range: Jefferson Curl, Deep Squat Hold with Load, Passive Hang, Active Hang, Copenhagen Plank, Weighted 90/90 Posterior Lift
+Breathing: Diaphragmatic Breathing Drill, Box Breathing, Crocodile Breathing, 90/90 Breathing Hold, Supine Breathing Reset, Exhale-Deepen Stretch Protocol
+Tissue Prep: Foam Roll Quads/Thoracic/IT Band/Hamstring/Calf, Lacrosse Ball Glute/Pec Minor
+Dynamic Flow: World's Greatest Stretch, Inchworm to Squat, Spiderman Flow, Hip 90/90 Transition Flow, Ground Control Flow
+Recovery: Supine Figure-4 Hold, Supine Spinal Twist, Child's Pose, Supported Hip Flexor Hold, Legs Up the Wall`.trim();
+}
+
 // ─── Engine Export ────────────────────────────────────────────────────────────
 
 export const mobilityEngine: FocusEngineInterface = {
