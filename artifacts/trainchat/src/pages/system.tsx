@@ -91,20 +91,30 @@ async function fetchActiveSystem(focusMode?: FocusMode) {
 async function fetchSubscription() {
   try { return await customFetch<any>("/api/subscription"); } catch { return null; }
 }
-async function fetchBlockSummary() {
-  return customFetch<any>("/api/training-system/block");
-}
-async function fetchCurrentWeek(weekNumber?: number) {
-  const url = weekNumber != null
-    ? `/api/training-system/week?weekNumber=${weekNumber}`
-    : "/api/training-system/week";
+async function fetchBlockSummary(focusMode?: string) {
+  const url = focusMode
+    ? `/api/training-system/block?focus=${encodeURIComponent(focusMode)}`
+    : "/api/training-system/block";
   return customFetch<any>(url);
 }
-async function fetchWeeksList() {
-  return customFetch<any>("/api/training-system/weeks");
+async function fetchCurrentWeek(weekNumber?: number, focusMode?: string) {
+  const params = new URLSearchParams();
+  if (weekNumber != null) params.set("weekNumber", String(weekNumber));
+  if (focusMode) params.set("focus", focusMode);
+  const qs = params.toString();
+  return customFetch<any>(qs ? `/api/training-system/week?${qs}` : "/api/training-system/week");
 }
-async function fetchToday() {
-  return customFetch<any>("/api/training-system/today");
+async function fetchWeeksList(focusMode?: string) {
+  const url = focusMode
+    ? `/api/training-system/weeks?focus=${encodeURIComponent(focusMode)}`
+    : "/api/training-system/weeks";
+  return customFetch<any>(url);
+}
+async function fetchToday(focusMode?: string) {
+  const url = focusMode
+    ? `/api/training-system/today?focus=${encodeURIComponent(focusMode)}`
+    : "/api/training-system/today";
+  return customFetch<any>(url);
 }
 async function initializeSystem() {
   return customFetch<any>("/api/training-system/initialize", { method: "POST" });
@@ -552,9 +562,10 @@ function coachingNotesToBullets(notes: string, max = 3): string[] {
 }
 
 function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditComplete, onLogSession, onCheckIn, onStartSession, sessionLoggedToday, sessionInProgress, checkedInToday }: TodayViewProps) {
+  const { focusMode } = useFocusMode();
   const { data: today, isLoading, error } = useQuery({
-    queryKey: ["training-system-today"],
-    queryFn: fetchToday,
+    queryKey: ["training-system-today", focusMode],
+    queryFn: () => fetchToday(focusMode),
     retry: false,
   });
 
@@ -819,8 +830,8 @@ function WeekView({ highlightedIds, onEditExercise, onEditSession, onEditWeek, i
   const queryClient = useQueryClient();
 
   const { data: weeksList, isLoading: weeksListLoading } = useQuery({
-    queryKey: ["training-system-weeks"],
-    queryFn: fetchWeeksList,
+    queryKey: ["training-system-weeks", focusMode],
+    queryFn: () => fetchWeeksList(focusMode),
     retry: false,
   });
 
@@ -828,8 +839,8 @@ function WeekView({ highlightedIds, onEditExercise, onEditSession, onEditWeek, i
   const activeWeekNumber = selectedWeekNumber ?? currentWeekNumber;
 
   const { data: week, isLoading: weekLoading } = useQuery({
-    queryKey: ["training-system-week", activeWeekNumber],
-    queryFn: () => fetchCurrentWeek(activeWeekNumber),
+    queryKey: ["training-system-week", activeWeekNumber, focusMode],
+    queryFn: () => fetchCurrentWeek(activeWeekNumber, focusMode),
     retry: false,
     enabled: !weeksListLoading,
   });
@@ -1371,8 +1382,8 @@ function BlockView({ highlightedIds, onEditPhase, onEditWeek }: BlockViewProps) 
   const { focusMode } = useFocusMode();
 
   const { data: block, isLoading, error } = useQuery({
-    queryKey: ["training-system-block"],
-    queryFn: fetchBlockSummary,
+    queryKey: ["training-system-block", focusMode],
+    queryFn: () => fetchBlockSummary(focusMode),
     retry: false,
   });
 

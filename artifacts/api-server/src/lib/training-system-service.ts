@@ -304,10 +304,15 @@ function getCoachingNotes(goal: string, weekIndex: number, dayLabel: string): st
 // ─── Main Service Functions ───────────────────────────────────────────────────
 
 export async function getActiveTrainingSystem(userId: number, focusMode?: string | null) {
+  // Order by id desc so the most recently created system comes first.
+  // This ensures the no-focusMode fallback returns the newest system,
+  // and when multiple systems share a focusMode (shouldn't happen, but can),
+  // we get the most recent one.
   const activeSystems = await db
     .select()
     .from(trainingSystems)
-    .where(and(eq(trainingSystems.userId, userId), eq(trainingSystems.status, "active")));
+    .where(and(eq(trainingSystems.userId, userId), eq(trainingSystems.status, "active")))
+    .orderBy(desc(trainingSystems.id));
 
   if (!focusMode) {
     return activeSystems[0] ?? null;
