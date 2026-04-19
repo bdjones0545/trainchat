@@ -752,54 +752,598 @@ Dynamic Flow: World's Greatest Stretch, Inchworm to Squat, Spiderman Flow, Hip 9
 Recovery: Supine Figure-4 Hold, Supine Spinal Twist, Child's Pose, Supported Hip Flexor Hold, Legs Up the Wall`.trim();
 }
 
+// ─── Mobility Session Minimum Depth Rules ─────────────────────────────────────
+
+/**
+ * TASK 1 — Minimum session depth by mobility session type.
+ * Mirrors SPEED_SESSION_MINIMUM_DEPTH from the speed engine.
+ */
+export const MOBILITY_SESSION_MINIMUM_DEPTH: Record<string, { min: number; target: number }> = {
+  recovery_flow:          { min: 4, target: 5 },
+  general_mobility:       { min: 5, target: 6 },
+  joint_specific:         { min: 5, target: 6 },
+  posture_desk_reset:     { min: 5, target: 6 },
+  return_from_pain:       { min: 4, target: 5 },
+  performance_mobility:   { min: 5, target: 6 },
+};
+
+// ─── Mobility Session Slot Template ───────────────────────────────────────────
+
+/**
+ * TASK 2 — The canonical 6-slot progression template for every mobility session.
+ * Sessions must FEEL like a flow, not a checklist.
+ * Slot order is non-negotiable — each slot prepares the body for the next.
+ */
+export const MOBILITY_SESSION_SLOT_TEMPLATE = [
+  {
+    slot: 1,
+    label: "Tissue Prep / Soft Activation",
+    role: "tissue_prep",
+    required: true,
+    description: "Foam rolling, soft tissue release, one breathing anchor. Opens the nervous system entry signal — never skipped.",
+  },
+  {
+    slot: 2,
+    label: "Controlled Mobility (Slow Range Work)",
+    role: "passive_holds",
+    required: true,
+    description: "Passive holds, CARs, sustained end-range positions. The core range restoration block. Time is the primary variable — not reps.",
+  },
+  {
+    slot: 3,
+    label: "Dynamic Mobility / Movement Integration",
+    role: "dynamic_flow",
+    required: false,
+    description: "Continuous movement flows: World's Greatest Stretch, Spiderman Flow, 90/90 Transitions. Integrates range into coordinated movement.",
+  },
+  {
+    slot: 4,
+    label: "Joint-Specific Focus Work",
+    role: "active_control",
+    required: true,
+    description: "Deep attention to the primary limiting joint — PAILs/RAILs, CARs, active end-range holds. This is where ownership is built.",
+  },
+  {
+    slot: 5,
+    label: "Stability / Control (End-Range or Isometric)",
+    role: "active_control",
+    required: false,
+    description: "End-range isometrics, Bird Dog, Dead Bug, Pallof Press. Trains the nervous system to stabilize at the limit of available range.",
+  },
+  {
+    slot: 6,
+    label: "Flow / Breathing / Recovery Finisher",
+    role: "recovery_exit",
+    required: true,
+    description: "Parasympathetic exit — recovery holds, breathing reset, final integration. CNS downregulation is part of the adaptation signal.",
+  },
+] as const;
+
+// ─── Mobility Drill Bank ───────────────────────────────────────────────────────
+
+/**
+ * TASK 4 — Typed drill banks used by expandMobilitySessionIfTooThin().
+ * Each category maps to a slot role and session goal.
+ */
+export const MOBILITY_DRILL_BANK: Record<string, Array<{ name: string; reps: string; notes: string; rest: string; joint?: string }>> = {
+  tissue_prep: [
+    { name: "Foam Roll Quads", reps: "60 seconds each side", notes: "Move slowly and with control — pause on tight spots and breathe through the position", rest: "15s", joint: "hip" },
+    { name: "Thoracic Extension Foam Roll", reps: "60–90 seconds (T4–T10)", notes: "Focus on range quality, not intensity — let gravity do the work", rest: "15s", joint: "spine" },
+    { name: "Lacrosse Ball Glute Release", reps: "60 seconds each side", notes: "Explore end range without forcing — breathe through the position", rest: "15s", joint: "hip" },
+    { name: "Calf Foam Roll", reps: "60 seconds each side", notes: "Stay relaxed but controlled — pause on dense areas", rest: "15s", joint: "ankle" },
+    { name: "Hamstring Foam Roll", reps: "60 seconds each side", notes: "Move slowly and with control — let the tissue release between passes", rest: "15s", joint: "hip" },
+    { name: "Lacrosse Ball Pec Minor", reps: "60 seconds each side", notes: "Explore end range without forcing — breathe into the restriction", rest: "15s", joint: "shoulder" },
+    { name: "IT Band Foam Roll", reps: "60 seconds each side", notes: "Stay relaxed but controlled — pressure without aggressive forcing", rest: "15s", joint: "hip" },
+  ],
+  controlled_mobility: [
+    { name: "90/90 Hip Stretch", reps: "60 seconds each side", notes: "Exhale to deepen — explore end range without forcing", rest: "15s", joint: "hip" },
+    { name: "Couch Stretch", reps: "60 seconds each side", notes: "Posterior pelvic tilt to open hip flexor — breathe through the position", rest: "15s", joint: "hip" },
+    { name: "Frog Stretch", reps: "60–90 seconds", notes: "Stay relaxed but controlled — exhale slowly to find more range", rest: "15s", joint: "hip" },
+    { name: "Thread the Needle", reps: "60 seconds each side", notes: "Focus on range quality, not intensity — let the shoulder fall naturally", rest: "15s", joint: "spine" },
+    { name: "Open Book Stretch", reps: "60 seconds each side", notes: "Move slowly and with control — breathe through the rotation", rest: "15s", joint: "spine" },
+    { name: "Sleeper Stretch", reps: "60–90 seconds each side", notes: "Explore end range without forcing — differentiate muscle tension from joint pain", rest: "15s", joint: "shoulder" },
+    { name: "Wall Ankle Stretch", reps: "60 seconds each side", notes: "Knee tracks over third toe — breathe through the position", rest: "15s", joint: "ankle" },
+    { name: "Pigeon Stretch", reps: "90 seconds each side", notes: "Stay relaxed but controlled — exhale to sink deeper into the position", rest: "15s", joint: "hip" },
+    { name: "Adductor Rockback", reps: "60 seconds each side", notes: "Move slowly and with control — feel the inner thigh lengthen on each exhale", rest: "15s", joint: "hip" },
+    { name: "Overhead Lat Stretch", reps: "60 seconds each side", notes: "Focus on range quality — breathe through the position", rest: "15s", joint: "shoulder" },
+    { name: "Cat-Cow", reps: "10 slow controlled reps", notes: "Move slowly and with control — full spinal flexion and extension each rep", rest: "15s", joint: "spine" },
+    { name: "Calf Stretch Straight Knee", reps: "60 seconds each side", notes: "Targets gastrocnemius — breathe through the position", rest: "15s", joint: "ankle" },
+    { name: "Calf Stretch Bent Knee", reps: "60 seconds each side", notes: "Targets soleus — explore end range without forcing", rest: "15s", joint: "ankle" },
+  ],
+  dynamic_mobility: [
+    { name: "World's Greatest Stretch", reps: "5 slow transitions each side", notes: "Move slowly and with control — full thoracic rotation at the top", rest: "continuous", joint: "hip" },
+    { name: "Spiderman Flow", reps: "5 each side", notes: "Focus on range quality — hip opens fully on each rep", rest: "continuous", joint: "hip" },
+    { name: "Inchworm to Squat", reps: "8 slow reps", notes: "Move slowly and with control — pause at full hamstring stretch each rep", rest: "continuous", joint: "hip" },
+    { name: "Hip 90/90 Transition Flow", reps: "5 full transitions", notes: "Stay relaxed but controlled — smooth transition, no momentum", rest: "continuous", joint: "hip" },
+    { name: "T-Spine Rotation Flow", reps: "10 each side", notes: "Move slowly and with control — breathe through the rotation", rest: "continuous", joint: "spine" },
+    { name: "Quadruped Thoracic Rotation", reps: "60 seconds each side", notes: "Focus on range quality — the spine leads, not the arm", rest: "15s", joint: "spine" },
+  ],
+  joint_focus: [
+    { name: "Hip CARs", reps: "3 slow full-circle reps each direction", notes: "Move slowly and with control — note where the range breaks down", rest: "15-30s", joint: "hip" },
+    { name: "Shoulder CARs", reps: "3 slow full-circle reps each direction", notes: "Move slowly and with control — diagnostic, note impingement positions", rest: "15-30s", joint: "shoulder" },
+    { name: "Ankle CARs", reps: "3 slow full-circle reps each direction", notes: "Explore end range without forcing — note where dorsiflexion limits", rest: "15-30s", joint: "ankle" },
+    { name: "Thoracic CARs", reps: "3 each direction", notes: "Move slowly and with control — isolate thoracic from lumbar", rest: "15-30s", joint: "spine" },
+    { name: "Hip PAILs/RAILs", reps: "10 seconds at 20% contraction each side", notes: "Move slowly and with control — never force contraction into pain", rest: "30s", joint: "hip" },
+    { name: "Shoulder PAILs/RAILs", reps: "10 seconds at 20% contraction each side", notes: "Explore end range without forcing — light effort, not maximal", rest: "30s", joint: "shoulder" },
+    { name: "Ankle PAILs/RAILs", reps: "10 seconds at 20% contraction each side", notes: "Stay relaxed but controlled — feel the joint space open", rest: "30s", joint: "ankle" },
+    { name: "Doorway Chest Stretch", reps: "60 seconds each side", notes: "Breathe through the position — exhale deepens the anterior capsule release", rest: "15s", joint: "shoulder" },
+    { name: "Banded Ankle Distraction", reps: "60–90 seconds each side", notes: "Focus on range quality — joint capsule release takes sustained hold", rest: "15s", joint: "ankle" },
+  ],
+  stability: [
+    { name: "Bird Dog", reps: "3 × 8 slow reps each side", notes: "Stay relaxed but controlled — no lumbar extension compensation", rest: "15s" },
+    { name: "Dead Bug", reps: "3 × 8 slow reps each side", notes: "Move slowly and with control — lower back stays in contact with floor", rest: "15s" },
+    { name: "90/90 Breathing Hold", reps: "5 deep breath cycles", notes: "Breathe through the position — exhale fully to engage deep core", rest: "30s" },
+    { name: "Hip Airplane", reps: "3 × 5 each side", notes: "Move slowly and with control — this trains active hip IR/ER control", rest: "15s", joint: "hip" },
+    { name: "90/90 Active Posterior Lift", reps: "3 × 5 each side", notes: "Focus on range quality — active lift reveals nervous system ownership of range", rest: "15s", joint: "hip" },
+    { name: "Hollow Body Hold", reps: "3 × 20 seconds", notes: "Stay relaxed but controlled — posterior pelvic tilt maintained throughout", rest: "30s" },
+  ],
+  breathing: [
+    { name: "90/90 Breathing Hold", reps: "5 deep breath cycles", notes: "Breathe through the position — this is your nervous system reset", rest: "30s" },
+    { name: "Crocodile Breathing", reps: "6 deep breaths prone", notes: "Move slowly and with control — feel the 360-degree rib expansion on each inhale", rest: "30s" },
+    { name: "Box Breathing", reps: "3 rounds (4-4-4-4)", notes: "Stay relaxed but controlled — parasympathetic reset before the recovery exit", rest: "30s" },
+    { name: "Supine Breathing Reset", reps: "5 deep breaths", notes: "Focus on range quality — exhale fully, let the body sink into the ground", rest: "30s" },
+    { name: "Diaphragmatic Breathing Drill", reps: "5 deep breaths", notes: "Breathe through the position — belly rises first, then rib cage", rest: "30s" },
+    { name: "Child's Pose", reps: "90 seconds", notes: "Stay relaxed but controlled — breathe into the back body on each inhale", rest: "15s" },
+    { name: "Supine Spinal Twist", reps: "90 seconds each side", notes: "Explore end range without forcing — exhale to deepen the rotation gently", rest: "15s" },
+    { name: "Legs Up the Wall", reps: "3–5 minutes", notes: "Move slowly and with control — parasympathetic restoration, no effort required", rest: "none" },
+  ],
+};
+
+// ─── Detect Mobility Session Type ─────────────────────────────────────────────
+
+function detectMobilitySessionType(sessionName: string): string {
+  const lower = sessionName.toLowerCase();
+  if (/recover|restor|relax|parasympath|yin/.test(lower)) return "recovery_flow";
+  if (/pain|reentry|re-entry|rehab|return/.test(lower)) return "return_from_pain";
+  if (/posture|desk|reset|office/.test(lower)) return "posture_desk_reset";
+  if (/performance|athletic|sport/.test(lower)) return "performance_mobility";
+  if (/hip|shoulder|ankle|spine|thoracic|t-spine|joint/.test(lower)) return "joint_specific";
+  return "general_mobility";
+}
+
+// ─── expandMobilitySessionIfTooThin ───────────────────────────────────────────
+
+/**
+ * TASK 4 — Checks if a mobility session meets minimum depth requirements.
+ * If not, fills missing slots in canonical order from the typed drill banks.
+ *
+ * Slot fill order: tissue_prep → controlled_mobility → dynamic_mobility →
+ *                  joint_focus → stability → breathing
+ *
+ * Never adds random stretches — additions match the session's primary joint goal.
+ */
+export function expandMobilitySessionIfTooThin(
+  session: {
+    name?: string;
+    exercises?: Array<{ name: string; sets?: number; reps?: string; rest?: string; notes?: string }>;
+  },
+  sessionType?: string,
+): { expanded: typeof session; expansionsApplied: string[] } {
+  const type = sessionType ?? detectMobilitySessionType(session.name ?? "");
+  const depthRule = MOBILITY_SESSION_MINIMUM_DEPTH[type] ?? MOBILITY_SESSION_MINIMUM_DEPTH.general_mobility;
+  const exercises = [...(session.exercises ?? [])];
+  const expansionsApplied: string[] = [];
+
+  if (exercises.length >= depthRule.min) {
+    return { expanded: session, expansionsApplied };
+  }
+
+  console.log(`[MobilityDepthExpander] Session "${session.name ?? "unnamed"}" has ${exercises.length} exercises — minimum is ${depthRule.min} for type "${type}". Expanding...`);
+
+  const existingNames = new Set(exercises.map(e => e.name.toLowerCase()));
+
+  // Detect primary joint from session name to bias drill selection
+  const lower = (session.name ?? "").toLowerCase();
+  const primaryJoint = /hip|groin|pigeon|frog|adductor/.test(lower) ? "hip"
+    : /shoulder|pec|sleeper|overhead/.test(lower) ? "shoulder"
+    : /thoracic|t.spine|spine|rotation/.test(lower) ? "spine"
+    : /ankle|calf|dorsiflexion/.test(lower) ? "ankle"
+    : undefined;
+
+  const FILL_ORDER: Array<keyof typeof MOBILITY_DRILL_BANK> = [
+    "tissue_prep",
+    "controlled_mobility",
+    "dynamic_mobility",
+    "joint_focus",
+    "stability",
+    "breathing",
+  ];
+
+  for (const category of FILL_ORDER) {
+    if (exercises.length >= depthRule.target) break;
+
+    const bank = MOBILITY_DRILL_BANK[category];
+    const candidates = primaryJoint
+      ? bank.filter(d => !d.joint || d.joint === primaryJoint || d.joint === undefined)
+      : bank;
+
+    const fallback = bank; // fall back to full bank if no joint match
+
+    const pool = candidates.length > 0 ? candidates : fallback;
+
+    for (const drill of pool) {
+      if (exercises.length >= depthRule.target) break;
+      if (existingNames.has(drill.name.toLowerCase())) continue;
+
+      exercises.push({ name: drill.name, sets: 1, reps: drill.reps, rest: drill.rest, notes: drill.notes });
+      existingNames.add(drill.name.toLowerCase());
+      expansionsApplied.push(`[MobilityDepthExpander] Added "${drill.name}" from ${category} bank (type=${type}, joint=${primaryJoint ?? "any"})`);
+    }
+  }
+
+  console.log(`[MobilityDepthExpander] Expansion complete — session now has ${exercises.length} exercises. Applied: ${expansionsApplied.length} additions`);
+
+  return { expanded: { ...session, exercises }, expansionsApplied };
+}
+
+// ─── sanitizeAllMobilityNotes ──────────────────────────────────────────────────
+
+/**
+ * TASK 5 — Replaces strength/speed contaminated language in exercise notes
+ * with mobility-native coaching cues.
+ *
+ * Targets: load, weight, sets to failure, explosive, max effort, power output.
+ */
+export function sanitizeAllMobilityNotes(
+  exercises: Array<{ name: string; sets?: number; reps?: string; rest?: string; notes?: string }>,
+): { sanitized: typeof exercises; replacements: string[] } {
+  const replacements: string[] = [];
+
+  const SANITIZE_PATTERNS: Array<{ pattern: RegExp; replacement: string; label: string }> = [
+    {
+      pattern: /\b(add|increase|progressive|heavier)\s+(load|weight|loading)\b/gi,
+      replacement: "focus on range quality, not intensity",
+      label: "load_language",
+    },
+    {
+      pattern: /\b(sets?\s+to\s+failure|train\s+to\s+failure|until\s+failure)\b/gi,
+      replacement: "explore end range without forcing",
+      label: "failure_language",
+    },
+    {
+      pattern: /\b(explosive|explosively|maximum\s+speed|max\s+speed)\b/gi,
+      replacement: "move slowly and with control",
+      label: "explosive_language",
+    },
+    {
+      pattern: /\b(max\s+effort|maximum\s+effort|all.out\s+effort)\b/gi,
+      replacement: "breathe through the position",
+      label: "max_effort_language",
+    },
+    {
+      pattern: /\b(power\s+output|power\s+production|rate\s+of\s+force)\b/gi,
+      replacement: "stay relaxed but controlled",
+      label: "power_language",
+    },
+    {
+      pattern: /\b(weight|load|dumbbell|barbell|kettle\s*bell)\s+(press|curl|row|squat|deadlift|thrust)\b/gi,
+      replacement: "focus on range quality, not intensity",
+      label: "strength_exercise_language",
+    },
+    {
+      pattern: /\b(1rm|one\s+rep\s+max|training\s+max|percentage\s+of\s+max|% of max)\b/gi,
+      replacement: "breathe through the position",
+      label: "1rm_language",
+    },
+    {
+      pattern: /\b(hypertrophy|muscle\s+size|muscle\s+building|anabolic)\b/gi,
+      replacement: "focus on range quality, not intensity",
+      label: "hypertrophy_language",
+    },
+  ];
+
+  const sanitized = exercises.map(ex => {
+    if (!ex.notes) return ex;
+    let notes = ex.notes;
+    for (const { pattern, replacement, label } of SANITIZE_PATTERNS) {
+      if (pattern.test(notes)) {
+        notes = notes.replace(pattern, replacement);
+        replacements.push(`sanitized[${ex.name}]: ${label} → "${replacement}"`);
+        pattern.lastIndex = 0;
+      }
+    }
+    return notes !== ex.notes ? { ...ex, notes } : ex;
+  });
+
+  return { sanitized, replacements };
+}
+
+// ─── scoreMobilitySessionDepth ─────────────────────────────────────────────────
+
+/**
+ * TASK 6 — Scores a mobility session on depth, structure, and cleanliness.
+ *
+ * Score dimensions (100 total):
+ *   - Depth requirement met          30 pts
+ *   - Prep included                  15 pts
+ *   - Mobility progression present   20 pts
+ *   - Joint-specific clarity         15 pts
+ *   - Stability/control present      10 pts
+ *   - No strength/speed bleed        10 pts
+ *
+ * Pass threshold: 70
+ */
+export interface MobilitySessionDepthScore {
+  total: number;
+  passed: boolean;
+  breakdown: {
+    depthMet: number;
+    prepIncluded: number;
+    mobilityProgression: number;
+    jointSpecificClarity: number;
+    stabilityPresent: number;
+    noBleed: number;
+  };
+  details: string[];
+}
+
+export function scoreMobilitySessionDepth(
+  session: {
+    name?: string;
+    exercises?: Array<{ name: string; reps?: string; notes?: string }>;
+  },
+  sessionType?: string,
+): MobilitySessionDepthScore {
+  const type = sessionType ?? detectMobilitySessionType(session.name ?? "");
+  const depthRule = MOBILITY_SESSION_MINIMUM_DEPTH[type] ?? MOBILITY_SESSION_MINIMUM_DEPTH.general_mobility;
+  const exercises = session.exercises ?? [];
+  const details: string[] = [];
+  const breakdown = {
+    depthMet: 0,
+    prepIncluded: 0,
+    mobilityProgression: 0,
+    jointSpecificClarity: 0,
+    stabilityPresent: 0,
+    noBleed: 0,
+  };
+
+  // 1. Depth requirement met (30 pts)
+  if (exercises.length >= depthRule.min) {
+    breakdown.depthMet = 30;
+    details.push(`✓ Depth met: ${exercises.length} exercises (min ${depthRule.min})`);
+  } else {
+    details.push(`✗ Depth NOT met: ${exercises.length} exercises (min ${depthRule.min}) — missing ${depthRule.min - exercises.length}`);
+  }
+
+  // 2. Prep included (15 pts) — tissue prep or breathing drill at start
+  const PREP_TERMS = /foam\s*roll|lacrosse|tissue|calf\s*roll|hamstring\s*roll|breathing|crocodile|box\s*breath|diaphragm/i;
+  const hasPrepExercise = exercises.slice(0, 2).some(e => PREP_TERMS.test(e.name));
+  if (hasPrepExercise) {
+    breakdown.prepIncluded = 15;
+    details.push("✓ Prep included in opening position");
+  } else {
+    details.push("✗ No tissue prep or breathing drill detected in first 2 slots");
+  }
+
+  // 3. Mobility progression present (20 pts) — passive hold → active/control sequence exists
+  const PASSIVE_TERMS = /stretch|hold|pigeon|couch|frog|90.90|sleeper|thread|open\s*book|cat.cow/i;
+  const ACTIVE_TERMS = /cars|pails|rails|active|airplane|lift|control|flow|inchworm|spiderman|world/i;
+  const hasPassive = exercises.some(e => PASSIVE_TERMS.test(e.name));
+  const hasActive = exercises.some(e => ACTIVE_TERMS.test(e.name));
+  if (hasPassive && hasActive) {
+    breakdown.mobilityProgression = 20;
+    details.push("✓ Progression present: passive range work + active/CARs work both detected");
+  } else if (hasPassive || hasActive) {
+    breakdown.mobilityProgression = 10;
+    details.push("~ Partial progression: only passive OR active detected — session missing full arc");
+  } else {
+    details.push("✗ No mobility progression detected — session has neither passive holds nor active CARs/flows");
+  }
+
+  // 4. Joint-specific clarity (15 pts) — session targets a clear joint or region
+  const JOINT_TERMS = /hip|shoulder|spine|thoracic|ankle|calf|t.spine|pigeon|couch|sleeper|ankle|frog|adductor|pec|doorway/i;
+  const jointCount = exercises.filter(e => JOINT_TERMS.test(e.name)).length;
+  if (jointCount >= 3) {
+    breakdown.jointSpecificClarity = 15;
+    details.push(`✓ Joint-specific clarity: ${jointCount} exercises target a clear joint or region`);
+  } else if (jointCount >= 1) {
+    breakdown.jointSpecificClarity = 8;
+    details.push(`~ Weak joint clarity: only ${jointCount} exercises with clear joint targeting`);
+  } else {
+    details.push("✗ No joint-specific targeting detected — session feels generic");
+  }
+
+  // 5. Stability/control present (10 pts)
+  const STABILITY_TERMS = /bird\s*dog|dead\s*bug|pallof|bird.dog|90.90\s*breath|hollow|airplane|posterior\s*lift/i;
+  const hasStability = exercises.some(e => STABILITY_TERMS.test(e.name));
+  if (hasStability) {
+    breakdown.stabilityPresent = 10;
+    details.push("✓ Stability/control element present");
+  } else {
+    details.push("~ No dedicated stability/control exercise — session is range-only");
+  }
+
+  // 6. No strength/speed bleed (10 pts)
+  const BLEED_TERMS = /barbell|squat rack|bench\s*press|deadlift|military\s*press|power\s*clean|explosive|sets\s+to\s+failure|max\s+effort|1rm|hypertrophy/i;
+  const bleedExercises = exercises.filter(e => BLEED_TERMS.test(e.name) || BLEED_TERMS.test(e.notes ?? ""));
+  if (bleedExercises.length === 0) {
+    breakdown.noBleed = 10;
+    details.push("✓ Clean: no strength/speed contamination detected");
+  } else {
+    details.push(`✗ Bleed detected in ${bleedExercises.length} exercise(s): ${bleedExercises.map(e => e.name).join(", ")}`);
+  }
+
+  const total = Object.values(breakdown).reduce((a, b) => a + b, 0);
+  const passed = total >= 70;
+
+  console.log(`[MobilitySessionDepthAudit] "${session.name ?? "unnamed"}" — Score: ${total}/100 (${passed ? "PASS" : "FAIL"})`);
+
+  return { total, passed, breakdown, details };
+}
+
+// ─── Mobility Flow Enforcement ─────────────────────────────────────────────────
+
+/**
+ * TASK 8 — Validates that exercises in a session follow logical phase ordering.
+ * Detects and optionally repairs phase-order violations.
+ *
+ * Returns the session with exercises reordered to match the canonical
+ * slot template if violations are found.
+ */
+export function enforceMobilityFlowOrder(
+  session: {
+    name?: string;
+    exercises?: Array<{ name: string; sets?: number; reps?: string; rest?: string; notes?: string }>;
+  },
+): { ordered: typeof session; reorderApplied: boolean; violations: string[] } {
+  const exercises = session.exercises ?? [];
+  if (exercises.length === 0) return { ordered: session, reorderApplied: false, violations: [] };
+
+  const PHASE_PATTERNS: Array<{ role: string; pattern: RegExp; order: number }> = [
+    { role: "tissue_prep",    pattern: /foam\s*roll|lacrosse|tissue|calf\s*roll|hamstring\s*roll|it\s*band|pec\s*minor\s*release/i,  order: 1 },
+    { role: "breathing",      pattern: /breath|crocodile|box\s*breath|diaphragm|90.90\s*breath/i,                                    order: 2 },
+    { role: "passive_holds",  pattern: /stretch|hold|pigeon|couch|frog|90.90|sleeper|thread|open\s*book|cat.cow|supine\s*figure/i,   order: 3 },
+    { role: "cars_active",    pattern: /cars|pails|rails|active\s*(posterior|lift)|airplane|hip\s*pails/i,                           order: 4 },
+    { role: "dynamic_flow",   pattern: /flow|inchworm|spiderman|world'?s\s*greatest|ground\s*control|transition/i,                  order: 5 },
+    { role: "stability",      pattern: /bird\s*dog|dead\s*bug|pallof|hollow\s*body|90.90\s*breath(?!ing)|posterior\s*lift/i,        order: 6 },
+    { role: "recovery_exit",  pattern: /supine\s*twist|legs\s*up|child'?s\s*pose|progressive\s*relax|recovery\s*breath|supine\s*breath|figure.4/i, order: 7 },
+  ];
+
+  function getPhaseOrder(ex: { name: string }): number {
+    for (const { pattern, order } of PHASE_PATTERNS) {
+      if (pattern.test(ex.name)) return order;
+    }
+    return 4;
+  }
+
+  const orderedExercises = [...exercises].sort((a, b) => getPhaseOrder(a) - getPhaseOrder(b));
+
+  const violations: string[] = [];
+  for (let i = 0; i < exercises.length; i++) {
+    if (exercises[i].name !== orderedExercises[i].name) {
+      violations.push(`Position ${i + 1}: "${exercises[i].name}" should come after "${orderedExercises[Math.max(0, i - 1)].name}"`);
+    }
+  }
+
+  if (violations.length > 0) {
+    console.log(`[MobilityFlowEnforcer] "${session.name ?? "unnamed"}" — ${violations.length} ordering violations detected and repaired`);
+    return { ordered: { ...session, exercises: orderedExercises }, reorderApplied: true, violations };
+  }
+
+  return { ordered: session, reorderApplied: false, violations };
+}
+
 // ─── Mobility Response Contract ───────────────────────────────────────────────
 
 /**
  * Builds an explicit JSON response contract for mobility programs.
  * Injected into the system prompt so OpenAI knows the exact output structure.
  * Eliminates parse failures from ambiguous or strength-flavored responses.
+ *
+ * TASK 3 — Updated to enforce session depth, flow structure, and mobility-native
+ * language. Includes full 5–6 item example sessions with real exercise names.
  */
 export function buildMobilityResponseContract(sessionCount: number): string {
-  const exampleDays = Array.from({ length: Math.min(sessionCount, 2) }, (_, i) => {
-    const dayNames = [
-      "Day 1 — Hip Mobility (Passive Range)",
-      "Day 2 — End-Range Control (PAILs/RAILs)",
-      "Day 3 — Movement Quality + Integrated Flow",
-      "Day 4 — Hip + Shoulder Deep Focus",
-      "Day 5 — Stiffness Reduction + Dynamic Flow",
-    ];
-    return `    {
-      "name": "${dayNames[i] ?? `Day ${i + 1} — Mobility Training`}",
+  const exampleDays = [
+    `    {
+      "name": "Day 1 — Hip Mobility (Passive Range)",
       "exercises": [
+        {
+          "name": "Foam Roll Quads",
+          "sets": 1,
+          "reps": "60 seconds each side",
+          "rest": "15s",
+          "notes": "Move slowly and with control — pause on tight spots and breathe through the position"
+        },
+        {
+          "name": "90/90 Breathing Hold",
+          "sets": 1,
+          "reps": "5 deep breath cycles",
+          "rest": "30s",
+          "notes": "Breathe through the position — exhale fully, let the hips settle into the floor"
+        },
         {
           "name": "Hip CARs",
           "sets": 1,
           "reps": "3 slow controlled reps each direction",
           "rest": "15-30s",
-          "notes": "Diagnostic — note sticking points, map active vs passive range gap"
+          "notes": "Move slowly and with control — note sticking points, map active vs passive range gap"
         },
         {
           "name": "90/90 Hip Stretch",
           "sets": 1,
           "reps": "60 seconds each side",
           "rest": "15s",
-          "notes": "Bias internal rotation side if stiffer — exhale to deepen on each breath"
+          "notes": "Explore end range without forcing — exhale to deepen, bias internal rotation side"
         },
         {
           "name": "Couch Stretch",
           "sets": 1,
           "reps": "60 seconds each side",
           "rest": "15s",
-          "notes": "Hip flexor / anterior capsule — posterior pelvic tilt to deepen range"
+          "notes": "Posterior pelvic tilt to open hip flexor — breathe through the position"
+        },
+        {
+          "name": "Supine Spinal Twist",
+          "sets": 1,
+          "reps": "90 seconds each side",
+          "rest": "15s",
+          "notes": "Stay relaxed but controlled — exhale to deepen the rotation gently"
         }
       ]
-    }`;
-  }).join(",\n");
+    }`,
+    `    {
+      "name": "Day 2 — Thoracic Spine + Shoulder Release",
+      "exercises": [
+        {
+          "name": "Thoracic Extension Foam Roll",
+          "sets": 1,
+          "reps": "60–90 seconds (T4–T10)",
+          "rest": "15s",
+          "notes": "Focus on range quality, not intensity — let gravity do the work"
+        },
+        {
+          "name": "Crocodile Breathing",
+          "sets": 1,
+          "reps": "6 deep breaths prone",
+          "rest": "30s",
+          "notes": "Move slowly and with control — feel 360-degree rib expansion on each inhale"
+        },
+        {
+          "name": "Shoulder CARs",
+          "sets": 1,
+          "reps": "3 slow controlled reps each direction",
+          "rest": "15-30s",
+          "notes": "Move slowly and with control — diagnostic, note where impingement starts"
+        },
+        {
+          "name": "Thread the Needle",
+          "sets": 1,
+          "reps": "60 seconds each side",
+          "rest": "15s",
+          "notes": "Focus on range quality — the spine leads, the arm follows"
+        },
+        {
+          "name": "Open Book Stretch",
+          "sets": 1,
+          "reps": "60 seconds each side",
+          "rest": "15s",
+          "notes": "Explore end range without forcing — breathe through each rotation"
+        },
+        {
+          "name": "Child's Pose",
+          "sets": 1,
+          "reps": "90 seconds",
+          "rest": "15s",
+          "notes": "Stay relaxed but controlled — breathe into the back body on each inhale"
+        }
+      ]
+    }`,
+  ].slice(0, Math.min(sessionCount, 2)).join(",\n");
 
   return `## MOBILITY PROGRAM — MANDATORY JSON RESPONSE CONTRACT
 
 You MUST output the mobility program as a JSON code block in EXACTLY this format.
 No prose. No markdown outside the JSON block. Output the JSON block first, then a 1–2 sentence confirmation.
+
+EVERY session MUST contain at least 4–5 mobility elements minimum. You are FORBIDDEN from returning:
+  ✗ 1–3 stretch lists (too thin — always rejected)
+  ✗ Generic mobility routines with no clear flow structure
+  ✗ Single-joint isolated routines with no progression arc
+  ✗ Strength-based movements (squats with load, barbell work, loading language)
+  ✗ Sessions that feel like random stretch sequences — they MUST progress logically
+
+Sessions MUST follow this flow structure: Tissue Prep → Slow Range Work → Dynamic Integration → Joint Focus → Stability/Control → Recovery Finisher.
 
 \`\`\`json
 {
@@ -811,6 +1355,16 @@ ${exampleDays}
   ]
 }
 \`\`\`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MANDATORY DEPTH REQUIREMENTS BY SESSION TYPE:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Recovery Flow:              MINIMUM 4, TARGET 5 exercises
+  General Mobility:           MINIMUM 5, TARGET 6 exercises
+  Joint-Specific Focus:       MINIMUM 5, TARGET 6 exercises
+  Posture / Desk Reset:       MINIMUM 5, TARGET 6 exercises
+  Return-from-Pain / Rehab:   MINIMUM 4, TARGET 5 exercises
+  Performance Mobility:       MINIMUM 5, TARGET 6 exercises
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 SESSION NAME RULES — NON-NEGOTIABLE:
@@ -843,8 +1397,12 @@ EXERCISE FIELD FORMAT RULES:
 - Flows: reps = "X minutes continuous flow" or "X transitions each side"
 - Breathing: reps = "X deep breaths" or "X rounds"
 - Rest MUST be included for every exercise (use "15-30s" for holds, "continuous" for flows)
-- notes MUST include a coaching cue specific to the mobility goal
+- notes MUST include a coaching cue specific to the mobility goal — use language like:
+    "move slowly and with control", "explore end range without forcing",
+    "breathe through the position", "stay relaxed but controlled",
+    "focus on range quality, not intensity"
 - NEVER write "X reps" for a mobility hold — time is the primary variable
+- NEVER use loading language: "add weight", "progressive overload", "sets to failure", "explosive", "max effort"
 - programName MUST reference mobility (e.g., "Hip Mobility", "Thoracic + Shoulder Release")
 - programSummary MUST describe mobility qualities (not "strength and conditioning")`;
 }
@@ -853,9 +1411,11 @@ EXERCISE FIELD FORMAT RULES:
 
 const STRENGTH_BLEED_SESSION_PATTERNS_MOBILITY = /\b(lower strength|upper push|upper pull|push day|pull day|hypertrophy|leg day|back.bicep|chest.tricep|upper body strength|lower body strength|strength.day|compound strength|strength.focus|power.lifting|powerlifting|bench.day|squat.day|deadlift.day)\b/i;
 
-const STRENGTH_BLEED_EXERCISE_PATTERNS_MOBILITY = /\b(barbell back squat|conventional deadlift|flat bench press|incline bench press|military press|barbell overhead press|barbell row|weighted pull.up|barbell hip thrust|power clean|hang clean|barbell curl|tricep pushdown)\b/i;
+const STRENGTH_BLEED_EXERCISE_PATTERNS_MOBILITY = /\b(barbell back squat|conventional deadlift|flat bench press|incline bench press|military press|barbell overhead press|barbell row|weighted pull.up|barbell hip thrust|power clean|hang clean|barbell curl|tricep pushdown|dumbbell press|dumbbell curl|kettlebell swing|box jump|sprint|plyometric jump)\b/i;
 
-const MOBILITY_PROHIBITED_LANGUAGE_PATTERNS = /\b(sets? of \d+ reps?|hypertrophy|max.effort|1rm|training max|percentage of max)\b/i;
+const MOBILITY_PROHIBITED_LANGUAGE_PATTERNS = /\b(sets? of \d+ reps?|hypertrophy|max.effort|1rm|training max|percentage of max|explosive|power output|sets? to failure|all.out effort|rate of force)\b/i;
+
+const MOBILITY_PROHIBITED_NOTE_PATTERNS = /\b(add weight|progressive overload|increase load|sets? to failure|train to failure|explosive|max effort|power output|hypertrophy|muscle size|1rm|barbell|dumbbell press|kettlebell swing)\b/i;
 
 export interface MobilityBleedAuditResult {
   strengthTermsDetected: boolean;
@@ -868,7 +1428,13 @@ export interface MobilityBleedAuditResult {
 
 /**
  * Validates mobility program output for strength contamination.
- * Checks session names, exercise names, and rep field language.
+ * Checks session names, exercise names, rep field language, and notes.
+ *
+ * TASK 7 — Expanded bleed validator covers:
+ * - Strength session names (leg day, push day, hypertrophy, etc.)
+ * - Strength exercise names (barbell, dumbbell press, kettlebell swing, sprint, box jump, etc.)
+ * - Prohibited rep/note language (explosive, max effort, sets to failure, 1RM, power output)
+ * - Reject or repair approach: repairs names in place, rejects if exercises are structural contamination
  */
 export function validateMobilityOutputForBleed(
   structuredData: {
@@ -893,6 +1459,9 @@ export function validateMobilityOutputForBleed(
           if (ex.reps && MOBILITY_PROHIBITED_LANGUAGE_PATTERNS.test(ex.reps)) {
             prohibitedLanguageFound = true;
           }
+          if (ex.notes && MOBILITY_PROHIBITED_NOTE_PATTERNS.test(ex.notes)) {
+            prohibitedLanguageFound = true;
+          }
         }
       }
     }
@@ -906,7 +1475,7 @@ export function validateMobilityOutputForBleed(
     bleedingExerciseNames,
     prohibitedLanguageFound,
     repairApplied: false,
-    rejected: false,
+    rejected: strengthTermsDetected && bleedingExerciseNames.length >= 2,
   };
 }
 
