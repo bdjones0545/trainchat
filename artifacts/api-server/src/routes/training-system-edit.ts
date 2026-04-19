@@ -443,4 +443,55 @@ router.patch("/training-system/agent-memory", requireAuth, async (req, res): Pro
   }
 });
 
+// ─── POST /training-system/session-start ─────────────────────────────────────
+// Called when the user taps "Start Session". Posts a chat acknowledgment with
+// today's session summary. Never fails — returns { ok: true } regardless.
+router.post("/training-system/session-start", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.session.userId!;
+  try {
+    const todaySession = await getTodaySession(userId);
+    const sessionLabel = (todaySession as any)?.label ?? "Today's session";
+    const exercises = (todaySession as any)?.exercises ?? [];
+    const exerciseCount: number = exercises.length;
+
+    const [recentConvo] = await db
+      .select({ id: conversationsTable.id })
+      .from(conversationsTable)
+      .where(eq(conversationsTable.userId, userId))
+      .orderBy(desc(conversationsTable.updatedAt))
+      .limit(1);
+
+    if (recentConvo) {
+      const parts: string[] = [`Let's go — ${sessionLabel} is locked in.`];
+      if (exerciseCount > 0) {
+        parts.push(`${exerciseCount} exercise${exerciseCount !== 1 ? "s" : ""} on deck.`);
+      }
+      parts.push("Log your session when you're done and I'll update your plan.");
+
+      const structuredData = JSON.stringify({
+        _type: "session_started",
+        sessionLabel,
+        exerciseCount,
+      });
+
+      await db.insert(messagesTable).values({
+        conversationId: recentConvo.id,
+        role: "assistant",
+        content: parts.join(" "),
+        structuredData,
+      });
+
+      await db
+        .update(conversationsTable)
+        .set({ updatedAt: new Date() })
+        .where(eq(conversationsTable.id, recentConvo.id));
+    }
+
+    res.json({ ok: true, sessionLabel, exerciseCount });
+  } catch (err) {
+    logger.warn({ err, userId }, "[session-start] Non-fatal error posting session start ack");
+    res.json({ ok: true }); // Always succeed — UI state must not block on this
+  }
+});
+
 export default router;

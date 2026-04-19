@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, sessionLogsTable, sessionFeedbackTable, systemChangeLog, trainingSystems, exerciseLogsTable, sessionExercises, trainingSessions, trainingWeeks, trainingPhases } from "@workspace/db";
+import { db, sessionLogsTable, sessionFeedbackTable, systemChangeLog, trainingSystems, exerciseLogsTable, sessionExercises, trainingSessions, trainingWeeks, trainingPhases, conversationsTable, messagesTable } from "@workspace/db";
 import { eq, desc, and, ilike } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { z } from "zod";
@@ -14,6 +14,107 @@ import {
 } from "../lib/progression";
 import { runBlockEvaluationAndLog } from "./block-intelligence";
 import { syncMemoriesFromData } from "../lib/memory";
+
+// ─── Pipeline helpers: chat ack + agent memory ────────────────────────────────
+
+async function postSessionAckToChat(
+  userId: number,
+  sessionStatus: string,
+  scores: { difficulty?: number | null; energy?: number | null; pain?: number | null },
+  notes?: string | null
+): Promise<void> {
+  try {
+    const [recentConvo] = await db
+      .select({ id: conversationsTable.id })
+      .from(conversationsTable)
+      .where(eq(conversationsTable.userId, userId))
+      .orderBy(desc(conversationsTable.updatedAt))
+      .limit(1);
+    if (!recentConvo) return;
+
+    const diffLabel =
+      scores.difficulty == null ? null
+      : scores.difficulty <= 2 ? "felt easy"
+      : scores.difficulty >= 4 ? "was tough"
+      : "felt solid";
+
+    const painLabel =
+      scores.pain == null ? null
+      : scores.pain <= 1 ? "no pain reported"
+      : scores.pain === 2 ? "minor discomfort noted"
+      : scores.pain === 3 ? "moderate discomfort flagged"
+      : "significant pain flagged — I'll watch your load next session";
+
+    const parts: string[] = [`Session logged as ${sessionStatus}.`];
+    if (diffLabel) parts.push(`It ${diffLabel}`);
+    if (painLabel) parts.push(painLabel);
+    if (notes?.trim()) parts.push(notes.trim().slice(0, 80));
+    parts.push("Load recommendations for upcoming sessions have been updated.");
+
+    const structuredData = JSON.stringify({
+      _type: "session_logged",
+      sessionStatus,
+      difficultyScore: scores.difficulty ?? null,
+      energyScore: scores.energy ?? null,
+      painScore: scores.pain ?? null,
+    });
+
+    await db.insert(messagesTable).values({
+      conversationId: recentConvo.id,
+      role: "assistant",
+      content: parts.join(" — "),
+      structuredData,
+    });
+    await db
+      .update(conversationsTable)
+      .set({ updatedAt: new Date() })
+      .where(eq(conversationsTable.id, recentConvo.id));
+  } catch {
+    // Non-fatal — session log is already saved
+  }
+}
+
+async function updateSessionAgentMemory(
+  userId: number,
+  data: { sessionStatus: string; difficultyScore?: number | null; energyScore?: number | null; painScore?: number | null }
+): Promise<void> {
+  try {
+    const [system] = await db
+      .select({ id: trainingSystems.id, metadata: trainingSystems.metadata })
+      .from(trainingSystems)
+      .where(eq(trainingSystems.userId, userId))
+      .limit(1);
+    if (!system) return;
+
+    const meta = (system.metadata ?? {}) as Record<string, unknown>;
+    const existingMemory = (meta.agentMemory ?? {}) as Record<string, unknown>;
+
+    const performance =
+      data.difficultyScore == null ? "unknown"
+      : data.difficultyScore <= 2 ? "below_target"
+      : data.difficultyScore >= 4 ? "above_target"
+      : "on_target";
+
+    const updatedMemory = {
+      ...existingMemory,
+      performance,
+      lastSessionPerformance: {
+        status: data.sessionStatus,
+        difficulty: data.difficultyScore ?? null,
+        energy: data.energyScore ?? null,
+        pain: data.painScore ?? null,
+        loggedAt: new Date().toISOString(),
+      },
+    };
+
+    await db
+      .update(trainingSystems)
+      .set({ metadata: { ...meta, agentMemory: updatedMemory } as any })
+      .where(eq(trainingSystems.id, system.id));
+  } catch {
+    // Non-fatal
+  }
+}
 
 const router: IRouter = Router();
 
@@ -232,6 +333,20 @@ router.post("/session-logs", requireAuth, async (req: any, res): Promise<void> =
       // Non-fatal — recap already built
     }
   }
+
+  // ── Pipeline: chat ack + agent memory (fire-and-forget — never block response) ─
+  postSessionAckToChat(userId, data.sessionStatus, {
+    difficulty: data.difficultyScore,
+    energy: data.energyScore,
+    pain: data.painScore,
+  }, data.notes).catch(() => {});
+
+  updateSessionAgentMemory(userId, {
+    sessionStatus: data.sessionStatus,
+    difficultyScore: data.difficultyScore,
+    energyScore: data.energyScore,
+    painScore: data.painScore,
+  }).catch(() => {});
 
   res.status(201).json({
     id: log.id,
@@ -573,6 +688,18 @@ router.post("/session-logs/complete", requireAuth, async (req: any, res): Promis
   // ── 7b. Sync long-term coach memory (non-blocking — must not delay response) ─
   // Extracts session-level performance patterns and updates the memory store.
   syncMemoriesFromData(userId).catch(() => {});
+
+  // ── 7c. Pipeline: chat ack + agent memory update (fire-and-forget) ───────────
+  const completeStatus = data.sessionWasSkipped ? "skipped" : "completed";
+  postSessionAckToChat(userId, completeStatus, {
+    difficulty: difficultyScore,
+    pain: painScore,
+  }, data.notes).catch(() => {});
+  updateSessionAgentMemory(userId, {
+    sessionStatus: completeStatus,
+    difficultyScore,
+    painScore,
+  }).catch(() => {});
 
   // ── 8. Write accepted live adjustments to change log ───────────────────────
   if (data.liveAdjustments && data.liveAdjustments.length > 0 && activeSystemId) {

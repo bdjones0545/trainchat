@@ -1,9 +1,115 @@
 import { Router, type IRouter } from "express";
-import { db, readinessEntriesTable } from "@workspace/db";
+import { db, readinessEntriesTable, conversationsTable, messagesTable, trainingSystems } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { logger } from "../lib/logger";
 import { evaluateAndAdapt } from "../lib/check-in-adaptation";
+
+// ─── Pipeline helpers: chat ack + agent memory ────────────────────────────────
+
+async function postReadinessAckToChat(
+  userId: number,
+  scores: { energy: number; soreness: number; stress: number; sleep: number; motivation: number; pain: number },
+  adaptation: { changesApplied?: number; summary?: string } | null
+): Promise<void> {
+  try {
+    const [recentConvo] = await db
+      .select({ id: conversationsTable.id })
+      .from(conversationsTable)
+      .where(eq(conversationsTable.userId, userId))
+      .orderBy(desc(conversationsTable.updatedAt))
+      .limit(1);
+    if (!recentConvo) return;
+
+    const energyLabel =
+      scores.energy >= 4 ? "high energy"
+      : scores.energy <= 2 ? "low energy"
+      : "moderate energy";
+
+    const sorenessLabel =
+      scores.soreness >= 4 ? "high soreness"
+      : scores.soreness <= 2 ? "minimal soreness"
+      : "moderate soreness";
+
+    const changesApplied = adaptation?.changesApplied ?? 0;
+    let content = `Got it — ${energyLabel}, ${sorenessLabel} today.`;
+    if (changesApplied > 0) {
+      content += ` I've adjusted your plan based on today's check-in: ${adaptation?.summary ?? `${changesApplied} change${changesApplied !== 1 ? "s" : ""} applied`}.`;
+    } else {
+      content += ` Your plan looks appropriate for today's readiness — no adjustments needed.`;
+    }
+
+    const structuredData = JSON.stringify({
+      _type: "check_in",
+      energyScore: scores.energy,
+      sorenessScore: scores.soreness,
+      stressScore: scores.stress,
+      sleepScore: scores.sleep,
+      motivationScore: scores.motivation,
+      painScore: scores.pain,
+      adaptationChanges: changesApplied,
+    });
+
+    await db.insert(messagesTable).values({
+      conversationId: recentConvo.id,
+      role: "assistant",
+      content,
+      structuredData,
+    });
+    await db
+      .update(conversationsTable)
+      .set({ updatedAt: new Date() })
+      .where(eq(conversationsTable.id, recentConvo.id));
+  } catch {
+    // Non-fatal
+  }
+}
+
+async function updateReadinessAgentMemory(
+  userId: number,
+  scores: { energy: number; soreness: number; stress: number }
+): Promise<void> {
+  try {
+    const [system] = await db
+      .select({ id: trainingSystems.id, metadata: trainingSystems.metadata })
+      .from(trainingSystems)
+      .where(eq(trainingSystems.userId, userId))
+      .limit(1);
+    if (!system) return;
+
+    const meta = (system.metadata ?? {}) as Record<string, unknown>;
+    const existingMemory = (meta.agentMemory ?? {}) as Record<string, unknown>;
+
+    const fatigue =
+      scores.soreness >= 4 ? "high"
+      : scores.soreness <= 2 ? "low"
+      : "moderate";
+
+    const readiness =
+      scores.energy >= 4 ? "high"
+      : scores.energy <= 2 ? "low"
+      : "moderate";
+
+    const updatedMemory = {
+      ...existingMemory,
+      fatigue,
+      readiness,
+      lastCheckIn: {
+        energy: scores.energy,
+        soreness: scores.soreness,
+        stress: scores.stress,
+        checkedInAt: new Date().toISOString(),
+      },
+    };
+
+    await db
+      .update(trainingSystems)
+      .set({ metadata: { ...meta, agentMemory: updatedMemory } as any })
+      .where(eq(trainingSystems.id, system.id));
+  } catch {
+    // Non-fatal
+  }
+}
 
 const router: IRouter = Router();
 
@@ -45,6 +151,22 @@ router.post("/readiness", requireAuth, async (req, res): Promise<void> => {
       logger.error({ err, userId }, "Adaptation engine error (non-fatal)");
       return null;
     });
+
+    // ── Pipeline: chat ack + agent memory (fire-and-forget — never block response) ─
+    postReadinessAckToChat(userId, {
+      energy: energyScore,
+      soreness: sorenessScore,
+      stress: stressScore,
+      sleep: sleepScore,
+      motivation: motivationScore,
+      pain: painScore,
+    }, adaptation as { changesApplied?: number; summary?: string } | null).catch(() => {});
+
+    updateReadinessAgentMemory(userId, {
+      energy: energyScore,
+      soreness: sorenessScore,
+      stress: stressScore,
+    }).catch(() => {});
 
     res.status(201).json({
       ...entry,

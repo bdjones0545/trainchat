@@ -3431,6 +3431,13 @@ export default function SystemPage() {
   const [feedbackSessionLabel, setFeedbackSessionLabel] = useState<string | undefined>(undefined);
   const [sessionLoggedToday, setSessionLoggedToday] = useState(false);
   const [sessionInProgress, setSessionInProgress] = useState(false);
+
+  // ── Unified start-session handler: sets UI state + posts to backend pipeline ─
+  function handleStartSession() {
+    setSessionInProgress(true);
+    // Fire-and-forget: backend posts session-start ack to chat
+    customFetch("/api/training-system/session-start", { method: "POST" }).catch(() => {});
+  }
   const [showProgramLibrary, setShowProgramLibrary] = useState(false);
   const [isSwitchingProgram, setIsSwitchingProgram] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; name: string } | null>(null);
@@ -3892,7 +3899,7 @@ export default function SystemPage() {
         sessionInProgress={sessionInProgress}
         onLogSession={() => { setFeedbackSessionLabel(undefined); setShowSessionFeedback(true); setMobilePanel(null); }}
         onCheckIn={() => { setShowReadinessCheckIn(true); setMobilePanel(null); }}
-        onStartSession={() => setSessionInProgress(true)}
+        onStartSession={handleStartSession}
         onEditComplete={(result) => { handleGlobalEditComplete(result); setMobilePanel(null); }}
       />
     </div>
@@ -4056,7 +4063,7 @@ export default function SystemPage() {
                     onQuickEditComplete={handleEditComplete}
                     onLogSession={() => { setFeedbackSessionLabel(undefined); setShowSessionFeedback(true); }}
                     onCheckIn={() => setShowReadinessCheckIn(true)}
-                    onStartSession={() => setSessionInProgress(true)}
+                    onStartSession={handleStartSession}
                     sessionLoggedToday={sessionLoggedToday}
                     sessionInProgress={sessionInProgress}
                     checkedInToday={!!readinessToday}
@@ -4136,7 +4143,7 @@ export default function SystemPage() {
             </button>
           ) : (
             <button
-              onClick={() => setSessionInProgress(true)}
+              onClick={handleStartSession}
               className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground px-4 py-2.5 text-xs font-bold hover:bg-primary/90 active:scale-[0.98] transition-all"
             >
               <Zap className="w-3.5 h-3.5" />
@@ -4300,12 +4307,13 @@ export default function SystemPage() {
           onClose={() => setShowReadinessCheckIn(false)}
           onSubmitted={(adaptation) => {
             refetchReadiness();
+            // Always invalidate all system queries — readiness affects today's plan regardless
             queryClient.invalidateQueries({ queryKey: ["insights"] });
-            if (adaptation && adaptation.changesApplied > 0) {
-              queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
-              queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
-              queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
-            }
+            queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+            queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+            queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
+            queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
+            queryClient.invalidateQueries({ queryKey: ["agent-memory"] });
           }}
         />
       )}
@@ -4317,7 +4325,14 @@ export default function SystemPage() {
           onClose={() => setShowSessionFeedback(false)}
           onSubmitted={() => {
             setSessionLoggedToday(true);
+            setSessionInProgress(false);
+            // Invalidate all training system queries — session log updates load recommendations
             queryClient.invalidateQueries({ queryKey: ["insights"] });
+            queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+            queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+            queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
+            queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
+            queryClient.invalidateQueries({ queryKey: ["agent-memory"] });
           }}
         />
       )}
