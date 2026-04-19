@@ -7,6 +7,9 @@ export const activeSessionsTable = pgTable("active_sessions", {
   savedProgramId: integer("saved_program_id"),
   dayNumber: integer("day_number"),
   sessionDate: date("session_date").notNull(),
+  focusMode: text("focus_mode", {
+    enum: ["strength", "speed", "mobility"],
+  }).notNull().default("strength"),
   status: text("status", {
     enum: ["in_progress", "completed"],
   }).notNull().default("in_progress"),

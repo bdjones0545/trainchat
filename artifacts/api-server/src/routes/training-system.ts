@@ -257,13 +257,15 @@ router.post("/training-system/from-chat", requireAuth, async (req, res): Promise
 // ─── GET /training-system/history ────────────────────────────────────────────
 // Returns change log entries for the active training system.
 // Used by the History tab in the Live Program Panel.
+// Optional query param: ?focus=strength|speed|mobility
 router.get("/training-system/history", requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = req.session.userId!;
     const limitParam = req.query.limit;
     const limit = typeof limitParam === "string" ? Math.min(parseInt(limitParam, 10) || 30, 100) : 30;
+    const focusMode = typeof req.query.focus === "string" ? req.query.focus : null;
 
-    const system = await getActiveTrainingSystem(userId);
+    const system = await getActiveTrainingSystem(userId, focusMode);
     if (!system) {
       res.json({ history: [] });
       return;
@@ -470,11 +472,13 @@ router.delete("/training-system/:id", requireAuth, async (req, res): Promise<voi
 
     const wasActive = target.status === "active";
     const linkedConversationId = target.conversationId ?? null;
+    const targetFocusMode = ((target.metadata as any)?.focusMode ?? "strength") as string;
     let newActiveSystemId: number | null = null;
 
     // If deleting the active system, promote the most-recently-updated archived one
+    // FOCUS-AWARE: only promote a system in the same focus lane — never cross-promote
     if (wasActive) {
-      const [next] = await db
+      const allArchived = await db
         .select()
         .from(trainingSystems)
         .where(
@@ -484,8 +488,13 @@ router.delete("/training-system/:id", requireAuth, async (req, res): Promise<voi
             ne(trainingSystems.id, id)
           )
         )
-        .orderBy(desc(trainingSystems.updatedAt))
-        .limit(1);
+        .orderBy(desc(trainingSystems.updatedAt));
+
+      // Only promote same-focus archived systems
+      const sameFocusArchived = allArchived.filter(
+        (s) => ((s.metadata as any)?.focusMode ?? "strength") === targetFocusMode
+      );
+      const next = sameFocusArchived[0] ?? null;
 
       if (next) {
         await db
@@ -543,8 +552,9 @@ router.delete("/training-system/:id", requireAuth, async (req, res): Promise<voi
       referenceCount: 1,
     }, "[DeleteCascadeAudit]");
 
-    // If deleting the active program, clean up today's active session record so the UI
-    // doesn't show a stale "Resume Session" state after the program switch.
+    // If deleting the active program with no same-focus fallback, clean up today's
+    // active session record for that focus so the UI doesn't show a stale "Resume" state.
+    // FOCUS-AWARE: only clear the session for the deleted system's focus lane.
     if (wasActive && newActiveSystemId === null) {
       const today = new Date().toISOString().slice(0, 10);
       await db
@@ -552,7 +562,8 @@ router.delete("/training-system/:id", requireAuth, async (req, res): Promise<voi
         .where(
           and(
             eq(activeSessionsTable.userId, userId),
-            eq(activeSessionsTable.sessionDate, today)
+            eq(activeSessionsTable.sessionDate, today),
+            eq(activeSessionsTable.focusMode, targetFocusMode),
           )
         );
     }
@@ -573,10 +584,14 @@ router.delete("/training-system/:id", requireAuth, async (req, res): Promise<voi
 // Marks the current training week as completed and advances to the next week.
 // If the completed week was the final one, marks the block as complete.
 // Meant to be called both manually (from UI) and automatically (after session log).
+// Body: { focusMode?: string } or query ?focus=
 router.post("/training-system/advance-week", requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = req.session.userId!;
-    const result = await advanceToNextWeek(userId);
+    const focusMode = typeof (req.body?.focusMode ?? req.query.focus) === "string"
+      ? (req.body?.focusMode ?? req.query.focus)
+      : null;
+    const result = await advanceToNextWeek(userId, focusMode);
     if (!result) {
       res.status(404).json({ error: "No active training week to advance" });
       return;
@@ -590,10 +605,12 @@ router.post("/training-system/advance-week", requireAuth, async (req, res): Prom
 
 // ─── GET /training-system/block-completion ────────────────────────────────────
 // Checks if the current 4-week block is complete and returns next-block recommendation
+// Optional query param: ?focus=strength|speed|mobility
 router.get("/training-system/block-completion", requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = req.session.userId!;
-    const status = await getBlockCompletionStatus(userId);
+    const focusMode = typeof req.query.focus === "string" ? req.query.focus : null;
+    const status = await getBlockCompletionStatus(userId, focusMode);
     res.json(status ?? { isComplete: false, completedPhase: null, nextRecommendation: null, blockChainIndex: 0 });
   } catch (err) {
     logger.error({ err }, "[training-system] GET /block-completion error");
@@ -603,10 +620,14 @@ router.get("/training-system/block-completion", requireAuth, async (req, res): P
 
 // ─── POST /training-system/mark-block-complete ────────────────────────────────
 // Manually marks the current block as completed (manual override)
+// Body: { focusMode?: string } or query ?focus=
 router.post("/training-system/mark-block-complete", requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = req.session.userId!;
-    const result = await markBlockComplete(userId);
+    const focusMode = typeof (req.body?.focusMode ?? req.query.focus) === "string"
+      ? (req.body?.focusMode ?? req.query.focus)
+      : null;
+    const result = await markBlockComplete(userId, focusMode);
     res.json(result);
   } catch (err: any) {
     logger.error({ err }, "[training-system] POST /mark-block-complete error");
@@ -617,18 +638,19 @@ router.post("/training-system/mark-block-complete", requireAuth, async (req, res
 
 // ─── POST /training-system/continue-block ────────────────────────────────────
 // Generates a new continuation block on the existing training system.
-// Body: { mode: "next" | "repeat", adjustments?: string[], blockTypeOverride?: string }
+// Body: { mode: "next" | "repeat", adjustments?: string[], blockTypeOverride?: string, focusMode?: string }
 router.post("/training-system/continue-block", requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = req.session.userId!;
-    const { mode, adjustments, blockTypeOverride } = req.body ?? {};
+    const { mode, adjustments, blockTypeOverride, focusMode } = req.body ?? {};
 
     if (!mode || !["next", "repeat"].includes(mode)) {
       res.status(400).json({ error: "mode must be 'next' or 'repeat'" });
       return;
     }
 
-    const newPhase = await generateContinuationPhase(userId, { mode, adjustments, blockTypeOverride });
+    const resolvedFocusMode = typeof focusMode === "string" ? focusMode : null;
+    const newPhase = await generateContinuationPhase(userId, { mode, adjustments, blockTypeOverride, focusMode: resolvedFocusMode });
     res.json({ success: true, newPhaseId: newPhase.id, phaseName: newPhase.name });
   } catch (err: any) {
     logger.error({ err }, "[training-system] POST /continue-block error");

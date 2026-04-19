@@ -153,20 +153,31 @@ async function submitQuickEdit(
     body: JSON.stringify(body),
   });
 }
-async function fetchBlockCompletion() {
-  return customFetch<any>("/api/training-system/block-completion");
+async function fetchBlockCompletion(focusMode?: string) {
+  const url = focusMode
+    ? `/api/training-system/block-completion?focus=${encodeURIComponent(focusMode)}`
+    : "/api/training-system/block-completion";
+  return customFetch<any>(url);
 }
-async function markBlockCompleteFn() {
-  return customFetch<any>("/api/training-system/mark-block-complete", { method: "POST" });
+async function markBlockCompleteFn(focusMode?: string) {
+  return customFetch<any>("/api/training-system/mark-block-complete", {
+    method: "POST",
+    body: JSON.stringify({ focusMode }),
+    headers: { "Content-Type": "application/json" },
+  });
 }
-async function continueBlockFn(options: { mode: "next" | "repeat"; adjustments?: string[]; blockTypeOverride?: string }) {
+async function continueBlockFn(options: { mode: "next" | "repeat"; adjustments?: string[]; blockTypeOverride?: string; focusMode?: string }) {
   return customFetch<any>("/api/training-system/continue-block", {
     method: "POST",
     body: JSON.stringify(options),
   });
 }
-async function advanceWeekFn() {
-  return customFetch<any>("/api/training-system/advance-week", { method: "POST" });
+async function advanceWeekFn(focusMode?: string) {
+  return customFetch<any>("/api/training-system/advance-week", {
+    method: "POST",
+    body: JSON.stringify({ focusMode }),
+    headers: { "Content-Type": "application/json" },
+  });
 }
 async function restoreChange(changeLogId: number) {
   return customFetch<any>(`/api/training-system/restore/${changeLogId}`, { method: "POST" });
@@ -804,6 +815,7 @@ function WeekView({ highlightedIds, onEditExercise, onEditSession, onEditWeek, i
   const [showRefineActions, setShowRefineActions] = useState(false);
   const [refineActiveChip, setRefineActiveChip] = useState<string | null>(null);
 
+  const { focusMode } = useFocusMode();
   const queryClient = useQueryClient();
 
   const { data: weeksList, isLoading: weeksListLoading } = useQuery({
@@ -843,12 +855,12 @@ function WeekView({ highlightedIds, onEditExercise, onEditSession, onEditWeek, i
   });
 
   const advanceWeekMutation = useMutation({
-    mutationFn: advanceWeekFn,
+    mutationFn: () => advanceWeekFn(focusMode),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-weeks"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-block-completion"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-block-completion", focusMode] });
       queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
     },
@@ -1356,6 +1368,7 @@ function ProgrammingLogicCard({ phase }: { phase: any }) {
 
 function BlockView({ highlightedIds, onEditPhase, onEditWeek }: BlockViewProps) {
   const queryClient = useQueryClient();
+  const { focusMode } = useFocusMode();
 
   const { data: block, isLoading, error } = useQuery({
     queryKey: ["training-system-block"],
@@ -1364,8 +1377,8 @@ function BlockView({ highlightedIds, onEditPhase, onEditWeek }: BlockViewProps) 
   });
 
   const { data: completion, isLoading: completionLoading } = useQuery({
-    queryKey: ["training-system-block-completion"],
-    queryFn: fetchBlockCompletion,
+    queryKey: ["training-system-block-completion", focusMode],
+    queryFn: () => fetchBlockCompletion(focusMode),
     retry: false,
     refetchOnWindowFocus: false,
   });
@@ -1378,18 +1391,19 @@ function BlockView({ highlightedIds, onEditPhase, onEditWeek }: BlockViewProps) 
   function invalidateAll() {
     queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
     queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
-    queryClient.invalidateQueries({ queryKey: ["training-system-block-completion"] });
+    queryClient.invalidateQueries({ queryKey: ["training-system-block-completion", focusMode] });
     queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
     queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
   }
 
   const markCompleteMutation = useMutation({
-    mutationFn: markBlockCompleteFn,
+    mutationFn: () => markBlockCompleteFn(focusMode),
     onSuccess: () => invalidateAll(),
   });
 
   const continueBlockMutation = useMutation({
-    mutationFn: continueBlockFn,
+    mutationFn: (opts: { mode: "next" | "repeat"; adjustments?: string[]; blockTypeOverride?: string }) =>
+      continueBlockFn({ ...opts, focusMode }),
     onSuccess: () => {
       invalidateAll();
       setShowModifySheet(false);
@@ -3637,8 +3651,8 @@ export default function SystemPage() {
   }
 
   const { data: activeSessionData, refetch: refetchActiveSession } = useQuery<ActiveSessionData>({
-    queryKey: ["active-session"],
-    queryFn: () => customFetch<ActiveSessionData>("/api/active-session"),
+    queryKey: ["active-session", focusMode],
+    queryFn: () => customFetch<ActiveSessionData>(`/api/active-session?focus=${encodeURIComponent(focusMode)}`),
     enabled: !!activeSystemResolved,
     staleTime: 0,
   });
@@ -3650,9 +3664,13 @@ export default function SystemPage() {
   // ── Unified start-session handler: persists to backend ───────────────────
   async function handleStartSession() {
     try {
-      await customFetch("/api/active-session/start", { method: "POST" });
+      await customFetch("/api/active-session/start", {
+        method: "POST",
+        body: JSON.stringify({ focusMode }),
+        headers: { "Content-Type": "application/json" },
+      });
       refetchActiveSession();
-      queryClient.invalidateQueries({ queryKey: ["active-session"] });
+      queryClient.invalidateQueries({ queryKey: ["active-session", focusMode] });
     } catch {
       // Non-fatal — UI still usable
     }
@@ -4589,22 +4607,26 @@ export default function SystemPage() {
           onClose={() => setShowSessionFeedback(false)}
           onSubmitted={() => {
             // Mark session as completed on the server, then refresh all related queries
-            customFetch("/api/active-session/complete", { method: "POST" })
-              .then(() => queryClient.invalidateQueries({ queryKey: ["active-session"] }))
+            customFetch("/api/active-session/complete", {
+              method: "POST",
+              body: JSON.stringify({ focusMode }),
+              headers: { "Content-Type": "application/json" },
+            })
+              .then(() => queryClient.invalidateQueries({ queryKey: ["active-session", focusMode] }))
               .catch(() => {});
             queryClient.invalidateQueries({ queryKey: ["insights"] });
             queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
             queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
             queryClient.invalidateQueries({ queryKey: ["training-system-weeks"] });
             queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
-            queryClient.invalidateQueries({ queryKey: ["training-system-block-completion"] });
+            queryClient.invalidateQueries({ queryKey: ["training-system-block-completion", focusMode] });
             queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
             queryClient.invalidateQueries({ queryKey: ["agent-memory"] });
             // Delayed re-invalidation: allows server-side auto-advance to complete first
             setTimeout(() => {
               queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
               queryClient.invalidateQueries({ queryKey: ["training-system-weeks"] });
-              queryClient.invalidateQueries({ queryKey: ["training-system-block-completion"] });
+              queryClient.invalidateQueries({ queryKey: ["training-system-block-completion", focusMode] });
               queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
             }, 2500);
           }}

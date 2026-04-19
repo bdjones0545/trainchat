@@ -411,7 +411,7 @@ router.delete("/conversations/:id", requireAuth, async (req, res): Promise<void>
   // CASE A: find any training systems that were built from this conversation.
   // If they are singly owned (only linked to this chat), delete them too.
   const linkedSystems = await db
-    .select({ id: trainingSystems.id, status: trainingSystems.status })
+    .select({ id: trainingSystems.id, status: trainingSystems.status, metadata: trainingSystems.metadata })
     .from(trainingSystems)
     .where(and(eq(trainingSystems.userId, userId), eq(trainingSystems.conversationId, conversationId)));
 
@@ -422,9 +422,11 @@ router.delete("/conversations/:id", requireAuth, async (req, res): Promise<void>
   for (const system of linkedSystems) {
     if (system.status === "active") {
       wasActiveSystemDeleted = true;
-      // Promote the most-recently-updated archived system as the new active one
-      const [next] = await db
-        .select({ id: trainingSystems.id })
+      // FOCUS-AWARE: only promote archived systems in the same focus lane.
+      // Prevents a Speed system from being promoted when a Strength system is deleted.
+      const systemFocusMode = ((system.metadata as any)?.focusMode ?? "strength") as string;
+      const allArchived = await db
+        .select({ id: trainingSystems.id, metadata: trainingSystems.metadata })
         .from(trainingSystems)
         .where(
           and(
@@ -432,8 +434,12 @@ router.delete("/conversations/:id", requireAuth, async (req, res): Promise<void>
             eq(trainingSystems.status, "archived"),
           )
         )
-        .orderBy(desc(trainingSystems.updatedAt))
-        .limit(1);
+        .orderBy(desc(trainingSystems.updatedAt));
+
+      const sameFocusArchived = allArchived.filter(
+        (s) => ((s.metadata as any)?.focusMode ?? "strength") === systemFocusMode
+      );
+      const next = sameFocusArchived[0] ?? null;
 
       if (next) {
         await db

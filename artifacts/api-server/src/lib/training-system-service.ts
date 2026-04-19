@@ -1602,8 +1602,8 @@ function buildNextBlockRecommendation(blockType: string): {
 
 // ─── getBlockCompletionStatus ─────────────────────────────────────────────────
 
-export async function getBlockCompletionStatus(userId: number) {
-  const system = await getActiveTrainingSystem(userId);
+export async function getBlockCompletionStatus(userId: number, focusMode?: string | null) {
+  const system = await getActiveTrainingSystem(userId, focusMode);
   if (!system) return null;
 
   const allPhases = await db
@@ -1660,8 +1660,8 @@ export async function getBlockCompletionStatus(userId: number) {
 
 // ─── markBlockComplete ─────────────────────────────────────────────────────────
 
-export async function markBlockComplete(userId: number) {
-  const system = await getActiveTrainingSystem(userId);
+export async function markBlockComplete(userId: number, focusMode?: string | null) {
+  const system = await getActiveTrainingSystem(userId, focusMode);
   if (!system) throw new Error("No active training system found");
 
   const [currentPhase] = await db
@@ -1682,9 +1682,9 @@ export async function markBlockComplete(userId: number) {
 
 export async function generateContinuationPhase(
   userId: number,
-  options: { mode: "next" | "repeat"; adjustments?: string[]; blockTypeOverride?: string }
+  options: { mode: "next" | "repeat"; adjustments?: string[]; blockTypeOverride?: string; focusMode?: string | null }
 ): Promise<typeof trainingPhases.$inferSelect> {
-  const system = await getActiveTrainingSystem(userId);
+  const system = await getActiveTrainingSystem(userId, options.focusMode);
   if (!system) throw new Error("No active training system found");
 
   const allPhases = await db
@@ -1957,8 +1957,8 @@ export interface WeekAdvanceResult {
   completedPhaseId?: number;
 }
 
-export async function advanceToNextWeek(userId: number): Promise<WeekAdvanceResult | null> {
-  const system = await getActiveTrainingSystem(userId);
+export async function advanceToNextWeek(userId: number, focusMode?: string | null): Promise<WeekAdvanceResult | null> {
+  const system = await getActiveTrainingSystem(userId, focusMode);
   if (!system || !system.currentPhaseId) return null;
 
   const [currentPhase] = await db
