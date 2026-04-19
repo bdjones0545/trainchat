@@ -1,0 +1,375 @@
+FINAL FULL-SYSTEM AUDIT + GAP-FIX + MARKET RANKING
+
+CONTEXT:
+We just finished a 2-day sprint and the product is now very strong:
+- program generation
+- 4-week blocks
+- week switching
+- agent command panel
+- diff / undo / history
+- agent memory
+- age-aware programming
+- equipment-aware programming
+- exercise education modal
+- session logging UI
+- block UI
+- Today / Week / Block views
+
+But before we call this done, we need one final ruthless systems audit.
+
+This is NOT a feature brainstorm.
+This is a full end-to-end audit of the real product:
+- architecture
+- UI
+- lifecycle
+- adaptation
+- trust
+- coherence
+- ranking against other fitness apps
+
+The goal is to identify the remaining weak points, fix the important ones, and produce an honest market ranking.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Run a full systems audit of TrainChat, fix any meaningful gaps, and produce a ranked assessment against leading apps in the fitness space.
+
+==================================================
+PART 1 — FULL SYSTEMS AUDIT
+==================================================
+
+Audit the system across these 10 categories:
+
+1. Program generation quality
+2. Constraint handling
+3. Sport / age / equipment intelligence
+4. Agent command system
+5. Session lifecycle
+6. Adaptation after session logging
+7. Week advancement
+8. 4-week block continuation
+9. UI / UX clarity
+10. Data integrity / persistence / deletion behavior
+
+For each category, output:
+- Status: Working / Partial / Broken
+- Current behavior
+- Weak points
+- Recommended fix
+- Severity: Low / Medium / High / Critical
+
+==================================================
+PART 2 — END-TO-END TRACE OF THE USER LIFECYCLE
+==================================================
+
+Trace the full lifecycle of a user from:
+
+1. Build first program
+2. Save / persist
+3. Use Today view
+4. Start session
+5. Resume session
+6. Log session
+7. Advance to next session
+8. Complete week
+9. Advance to next week
+10. Complete block
+11. Generate next 4-week continuation block
+
+For each stage, verify:
+- what DB writes occur
+- what UI changes occur
+- what agent memory updates occur
+- whether chat acknowledgment happens
+- whether the next state advances automatically
+
+Log this as:
+
+[LifecycleAudit] {
+  stage,
+  currentBehavior,
+  nextState,
+  persistenceOK,
+  uiOK,
+  agentMemoryOK,
+  chatOK,
+  gapFound
+}
+
+==================================================
+PART 3 — FIX HIGH-SEVERITY GAPS
+==================================================
+
+After auditing, fix the meaningful gaps.
+
+Priority order:
+1. Critical
+2. High
+3. Medium
+4. Low
+
+DO NOT waste time on cosmetic-only fixes if system/lifecycle gaps still exist.
+
+Examples of likely high-priority areas:
+- session lifecycle persistence
+- log session affecting next workout
+- week auto-advancement
+- next 4-week continuation block generation
+- command routing failures
+- orphaned chat/program deletes
+- hidden or dead-end UX
+
+==================================================
+PART 4 — SESSION LIFECYCLE AUDIT
+==================================================
+
+Specifically verify and fix:
+
+- Start Session
+- Resume Session
+- Log Session
+- Session Completed state
+
+This must be a real persisted state machine, not a button-label swap.
+
+Expected states:
+- not_started
+- in_progress
+- completed
+
+Expected transitions:
+Start Session → Resume Session → Log Session → Session Completed
+
+Make sure it survives:
+- leaving and re-entering the screen
+- switching tabs
+- app reload
+- DB fetch
+
+==================================================
+PART 5 — LOG SESSION ADAPTATION AUDIT
+==================================================
+
+When a session is logged, verify whether the system actually adapts:
+
+Inputs:
+- completed / partial / skipped
+- session duration
+- difficulty
+- pain/discomfort
+- post-session feeling
+- enjoyment
+- notes
+
+Audit and fix whether those affect:
+- next workout
+- rest of week
+- current block bias
+- agent memory
+- chat acknowledgment
+
+Expected:
+- too hard / tired → reduce next-session fatigue
+- pain → protect movement family and modify future sessions
+- too easy / energized → maintain or slightly progress
+- skipped / partial → hold or soften progression
+
+==================================================
+PART 6 — WEEK ADVANCEMENT AUDIT
+==================================================
+
+When all sessions in a week are completed:
+
+Verify and fix:
+- week marked complete
+- active week advances automatically
+- Today / This Week views update
+- week role updates (Establish / Build / Intensify / Deload)
+- optional lightweight acknowledgment appears
+
+Expected:
+W1 complete → W2 active
+W2 complete → W3 active
+W3 complete → W4 active
+
+No dead-end states.
+
+==================================================
+PART 7 — BLOCK COMPLETION + CONTINUATION AUDIT
+==================================================
+
+When all 4 weeks are completed:
+
+Audit current behavior and fix gaps.
+
+Expected target behavior:
+- mark block complete
+- summarize performance of the block
+- carry forward memory + constraints + recent performance
+- generate the next 4-week continuation block automatically OR prompt for confirmation if needed
+- update progression chain
+- keep the training story continuous
+
+The next block should not be random.
+It should inherit:
+- goal
+- sport
+- age/population
+- equipment
+- pain history
+- adherence
+- difficulty trend
+- active emphases / biases
+- recent exercise exposure
+- prior block archetype
+
+==================================================
+PART 8 — AGENT COMMAND RELIABILITY AUDIT
+==================================================
+
+Audit every major entry point into the agent:
+
+- quick commands
+- free text command bar
+- sidebar actions
+- exercise edit buttons
+- block refocus actions
+- log session effects
+- check-in flows
+
+Verify they all converge into the same real pipeline and do not bypass the system.
+
+Fix any cases where:
+- command falls back incorrectly
+- “no specific edit identified” appears for supported commands
+- quick actions rely on NLP when they should use structured intent
+- UI action does not create a visible system result
+
+==================================================
+PART 9 — USER-FACING LANGUAGE AUDIT
+==================================================
+
+Audit all user-facing text for internal jargon leakage.
+
+User should NOT see backend language like:
+- movement family
+- equivalence cluster
+- slot
+- protected week
+
+Replace with coaching language:
+- same movement pattern
+- same training focus
+- left the next week unchanged
+- adjusted later weeks
+
+Audit:
+- main chat acknowledgments
+- diff summaries
+- result cards
+- exercise education text if needed
+
+==================================================
+PART 10 — DATA INTEGRITY AUDIT
+==================================================
+
+Audit and fix:
+- deleting chats vs saved programs
+- active system state after deletes
+- orphaned records
+- stale queries
+- duplicate saved systems
+- session state persistence
+- agent memory persistence
+
+No ghost states allowed.
+
+==================================================
+PART 11 — UI / UX CLARITY AUDIT
+==================================================
+
+Audit the main user surfaces:
+- Today
+- This Week
+- Block
+- right sidebar
+- Agent panel
+- Learn Exercise modal
+- Log Session page
+
+For each, identify:
+- hidden actions
+- confusing flows
+- duplicate actions
+- dead-end states
+- information density problems
+- unclear next steps
+
+Fix only the meaningful UX gaps that impact:
+- clarity
+- actionability
+- trust
+- discoverability
+
+==================================================
+PART 12 — MARKET RANKING AGAINST OTHER FITNESS APPS
+==================================================
+
+After the audit, produce an honest ranked assessment against major apps in the fitness space.
+
+Compare TrainChat against examples like:
+- Trainerize
+- TrueCoach
+- Fitbod
+- Future
+- Ladder
+- generic workout generator apps
+
+Score TrainChat from 1–10 on:
+1. Personalization
+2. Adaptability
+3. User control
+4. Perceived intelligence
+5. UX clarity
+6. Engagement / stickiness
+7. Coaching depth
+8. System continuity over time
+9. Market differentiation
+10. Overall product strength
+
+Then provide:
+- overall score
+- biggest competitive advantages
+- biggest remaining weaknesses
+- what must be fixed before claiming category leadership
+
+Be honest. No inflated score just to sound good.
+
+==================================================
+PART 13 — FINAL OUTPUT REQUIRED
+==================================================
+
+Return the final report in this structure:
+
+1. Executive summary
+2. Full audit table by category
+3. Lifecycle audit results
+4. High-severity fixes completed
+5. Remaining gaps not yet fixed
+6. Final recommended lifecycle model
+7. Market ranking table
+8. Overall TrainChat score
+9. Final “ready / not ready” judgment for this phase
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat should be judged as a real adaptive training system, not as a simple workout app.
+
+The audit should answer:
+- does the system truly work end to end?
+- what still breaks trust?
+- how does it compare to the best products in the space?
+- what must be fixed before moving on from the strength build?
