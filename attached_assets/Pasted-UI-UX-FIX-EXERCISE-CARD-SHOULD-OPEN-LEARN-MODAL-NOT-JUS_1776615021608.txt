@@ -1,0 +1,99 @@
+UI/UX FIX — EXERCISE CARD SHOULD OPEN LEARN MODAL (NOT JUST SMALL ICON)
+
+PROBLEM:
+Currently the "Learn Exercise" (book icon) is:
+- too small
+- low visibility
+- the only way to access exercise details
+
+Users will not discover this.
+
+==================================================
+GOAL
+==================================================
+
+Make the entire exercise card tappable to open the Learn Exercise modal.
+
+The book icon becomes secondary, not the primary interaction.
+
+==================================================
+TASK 1 — MAKE EXERCISE CARD CLICKABLE
+==================================================
+
+For each exercise card:
+
+- Add onClick handler to the entire card container
+- Trigger the same function currently used by the book icon
+
+Result:
+Tap anywhere on the exercise card → opens Learn Exercise modal
+
+==================================================
+TASK 2 — KEEP ICON AS SECONDARY TRIGGER
+==================================================
+
+Keep the book icon, but:
+- it should call the same handler
+- it should not be the only way to access the modal
+
+==================================================
+TASK 3 — ADD VISUAL AFFORDANCE
+==================================================
+
+Make it obvious the card is interactive:
+
+- add hover/tap state (slight background shift or glow)
+- add cursor pointer (web)
+- optional: subtle elevation on press
+
+==================================================
+TASK 4 — ADD DISCOVERY CUE
+==================================================
+
+Add one of the following:
+
+Option A (preferred):
+- small subtext under exercise name:
+  "Tap to learn why + how"
+
+Option B:
+- add chevron (→) on the right side
+
+Option C:
+- change icon to include label: "Learn"
+
+==================================================
+TASK 5 — DO NOT BREAK EXISTING ACTIONS
+==================================================
+
+Ensure:
+- Swap / Easier / Harder buttons still work
+- Clicking those does NOT trigger Learn modal
+- Only card-level click opens modal
+
+==================================================
+TASK 6 — MOBILE OPTIMIZATION
+==================================================
+
+Ensure:
+- touch targets are large enough
+- no accidental taps when trying to press action buttons
+- modal opens smoothly
+
+==================================================
+TASK 7 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. where click handler was added
+2. how conflicts with button clicks were avoided
+3. what visual affordance was added
+4. confirmation that both icon + card trigger the modal
+
+==================================================
+FINAL STANDARD
+==================================================
+
+User should naturally tap the exercise card to learn more.
+
+The UI should not rely on a small hidden icon for a core feature.
