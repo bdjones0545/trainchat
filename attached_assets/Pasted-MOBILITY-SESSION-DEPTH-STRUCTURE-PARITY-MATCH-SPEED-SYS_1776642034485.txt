@@ -1,0 +1,223 @@
+MOBILITY SESSION DEPTH + STRUCTURE PARITY — MATCH SPEED SYSTEM QUALITY (MOBILITY-NATIVE)
+
+CONTEXT:
+We successfully upgraded the Speed engine to enforce:
+- minimum session depth
+- slot-based structure
+- response contract enforcement
+- post-generation expansion (expandSpeedSessionIfTooThin)
+- note sanitization
+- session scoring
+
+Mobility currently lacks this depth and structure enforcement.
+
+We need to replicate the SYSTEM DESIGN — but adapt it to mobility-specific training principles.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Mobility sessions must:
+- feel complete (not 2–3 stretches)
+- flow naturally
+- include prep → mobility work → integration
+- stay mobility-native (no strength bleed)
+- adapt to pain, stiffness, posture, recovery goals
+
+Target: 5–7 mobility components per session (but feel like a flow, not a checklist)
+
+==================================================
+TASK 1 — DEFINE MOBILITY SESSION DEPTH RULES
+==================================================
+
+Create MOBILITY_SESSION_MINIMUM_DEPTH:
+
+Session Type                      Min   Target
+------------------------------------------------
+Recovery Flow                    4     5
+General Mobility                 5     6
+Joint-Specific (hip/shoulder)    5     6
+Posture / Desk Reset             5     6
+Return-from-pain / rehab         4     5
+Performance Mobility             5     6
+
+==================================================
+TASK 2 — CREATE MOBILITY SESSION SLOT TEMPLATE
+==================================================
+
+Mobility must NOT copy speed slots.
+
+Define this structure:
+
+1. Tissue Prep / Soft Activation
+2. Controlled Mobility (slow range work)
+3. Dynamic Mobility / Movement Integration
+4. Joint-Specific Focus Work
+5. Stability / Control (end-range or isometric)
+6. Optional Flow / Breathing / Recovery Finisher
+
+IMPORTANT:
+This should feel like a progression or flow — not isolated drills.
+
+==================================================
+TASK 3 — UPDATE MOBILITY RESPONSE CONTRACT
+==================================================
+
+In buildMobilityResponseContract():
+
+Add:
+
+"EVERY session MUST contain at least 4–5 mobility elements.
+You are FORBIDDEN from returning:
+- 1–3 stretch lists
+- generic mobility routines
+- single-joint isolated routines with no flow
+- strength-based movements (no squats, no loading language)
+
+Sessions must progress logically from prep → mobility → control."
+
+Also update example JSON to show:
+- full 5–6 item mobility sessions
+- realistic flow structure
+- real exercise names (90/90, couch stretch, T-spine rotation, etc.)
+
+==================================================
+TASK 4 — ADD expandMobilitySessionIfTooThin()
+==================================================
+
+Create:
+
+expandMobilitySessionIfTooThin(session, sessionType)
+
+Behavior:
+- checks if session < minimum depth
+- fills missing slots in order:
+  tissue prep → controlled mobility → dynamic → joint focus → stability → breathing
+
+Use typed drill banks:
+
+MOBILITY_DRILL_BANK = {
+  tissue_prep: [...],
+  controlled_mobility: [...],
+  dynamic_mobility: [...],
+  joint_focus: [...],
+  stability: [...],
+  breathing: [...]
+}
+
+IMPORTANT:
+- DO NOT add random stretches
+- additions must match session goal (hip, t-spine, ankle, etc.)
+- preserve flow
+
+Log: [MobilityDepthExpander]
+
+==================================================
+TASK 5 — REMOVE STRENGTH / SPEED LANGUAGE
+==================================================
+
+Create sanitizeAllMobilityNotes()
+
+Replace:
+- "load", "weight", "sets to failure"
+- "explosive", "max effort"
+- "power output"
+
+With:
+- "move slowly and with control"
+- "explore end range without forcing"
+- "breathe through the position"
+- "stay relaxed but controlled"
+- "focus on range quality, not intensity"
+
+==================================================
+TASK 6 — ADD MOBILITY SESSION SCORING
+==================================================
+
+Create scoreMobilitySessionDepth()
+
+Score dimensions (100 total):
+
+- depth requirement met (30)
+- prep included (15)
+- mobility progression present (20)
+- joint-specific clarity (15)
+- stability/control present (10)
+- no strength/speed bleed (10)
+
+Threshold: 70
+
+Log: [MobilitySessionDepthAudit]
+
+==================================================
+TASK 7 — PREVENT MOBILITY BLEED (NEW)
+==================================================
+
+Add mobility-specific bleed validator:
+
+validateMobilityOutputForBleed()
+
+Reject or repair:
+- "leg day"
+- "strength"
+- "hypertrophy"
+- "explosive"
+- barbell/dumbbell exercises
+
+Replace with:
+- mobility equivalents or remove entirely
+
+==================================================
+TASK 8 — FLOW ENFORCEMENT
+==================================================
+
+Mobility must feel like a sequence.
+
+Add rule:
+- consecutive exercises must logically progress
+- no random jumps (e.g., ankle → shoulder → hip → neck without structure)
+
+If broken:
+- reorder or repair
+
+==================================================
+TASK 9 — VALIDATION
+==================================================
+
+Test:
+
+1. "Give me a mobility program"
+2. "Hip mobility routine"
+3. "Fix tight shoulders from desk work"
+4. "Recovery day mobility"
+
+Confirm:
+- 4–6 items per session
+- clear flow
+- mobility-native language
+- no strength bleed
+- sessions feel intentional, not random
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. mobility depth rules
+2. slot template
+3. expander behavior
+4. note sanitization rules
+5. scoring system
+6. before/after examples
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Mobility sessions should feel like:
+- guided movement flows
+- not random stretch lists
+- not mini strength workouts
+
+They should be:
+controlled, intentional, and structured — with real progression inside each session.
