@@ -947,7 +947,8 @@ function inferSessionType(
 export async function createTrainingSystemFromProgram(
   userId: number,
   program: ChatProgram,
-  conversationId?: number | null
+  conversationId?: number | null,
+  focusMode?: string | null
 ): Promise<typeof trainingSystems.$inferSelect> {
   logger.info({ userId, programName: program.programName }, "[TrainingSystem] createTrainingSystemFromProgram — starting");
 
@@ -979,6 +980,7 @@ export async function createTrainingSystemFromProgram(
     status: "active",
     metadata: {
       source: "chat",
+      focusMode: focusMode ?? "strength",
       progressionStrategy: program.progressionStrategy ?? null,
       ...(program.blockMetadata ? {
         blockType: program.blockMetadata.blockType,
@@ -1118,7 +1120,8 @@ export async function createTrainingSystemFromProgram(
 
 export async function upsertTrainingSystemFromProgram(
   userId: number,
-  program: ChatProgram
+  program: ChatProgram,
+  focusMode?: string | null
 ): Promise<{ system: typeof trainingSystems.$inferSelect; isUpdate: boolean }> {
   if (!program.days || !Array.isArray(program.days) || program.days.length === 0) {
     throw new Error("Program must have at least one training day");
@@ -1128,7 +1131,7 @@ export async function upsertTrainingSystemFromProgram(
 
   // ── No active system → create fresh ──────────────────────────────────────
   if (!existingSystem) {
-    const system = await createTrainingSystemFromProgram(userId, program);
+    const system = await createTrainingSystemFromProgram(userId, program, null, focusMode);
     return { system, isUpdate: false };
   }
 
@@ -1152,6 +1155,7 @@ export async function upsertTrainingSystemFromProgram(
       weeklyFrequency: daysPerWeek,
       metadata: {
         source: "chat_edit",
+        ...(focusMode ? { focusMode } : {}),
         progressionStrategy: program.progressionStrategy ?? null,
         ...(program.blockMetadata ? {
           blockType: program.blockMetadata.blockType,
@@ -1294,6 +1298,142 @@ export async function upsertTrainingSystemFromProgram(
 // Handles block completion detection, next-block recommendation, and the
 // generation of a true continuation phase on the existing training system.
 //
+// ─── Speed Continuation Block Configs ─────────────────────────────────────
+// Speed chain: SPEED_RETURN_RECOVERY → SPEED_ACCELERATION_DEV → SPEED_MAX_VELOCITY
+//              → SPEED_ELASTIC_PLYOMETRIC → (or SPEED_COD_REACTIVE → SPEED_ELASTIC_PLYOMETRIC)
+
+const SPEED_CONTINUATION_BLOCK_CONFIGS: Record<string, {
+  phaseName: string;
+  phaseGoal: string;
+  emphasis: string;
+  weekConfigs: { label: string; focus: string; volumeLevel: "low" | "moderate" | "high" | "deload" }[];
+}> = {
+  SPEED_ACCELERATION_DEV: {
+    phaseName: "Acceleration Development Block",
+    phaseGoal: "Build drive phase mechanics and first-step power through short sprint work, wall drills, and resisted acceleration",
+    emphasis: "Drive phase mechanics, horizontal force production, acceleration posture",
+    weekConfigs: [
+      { label: "Week 1 — Establish", focus: "Mechanics drills, sub-maximal acceleration at 80–85%, wall series, posture cues", volumeLevel: "moderate" },
+      { label: "Week 2 — Build", focus: "Add 1 sprint rep, introduce resisted starts, progress distance to 20m", volumeLevel: "high" },
+      { label: "Week 3 — Intensify", focus: "Full intent sprints, contrast method (resisted → free), block start exposure", volumeLevel: "high" },
+      { label: "Week 4 — Deload", focus: "50% sprint volume, mechanics review, A-skip quality, no max intent", volumeLevel: "deload" },
+    ],
+  },
+  SPEED_MAX_VELOCITY: {
+    phaseName: "Maximum Velocity Block",
+    phaseGoal: "Develop top-end speed through flying sprint exposures, stride mechanics, and front-side drive",
+    emphasis: "Stride mechanics, front-side drive, elastic stiffness at top speed",
+    weekConfigs: [
+      { label: "Week 1 — Establish", focus: "Build-up runs, flying 20s at 90%, wicket drills, B-Skip mechanics", volumeLevel: "moderate" },
+      { label: "Week 2 — Build", focus: "Flying 30s at 95%, stride count awareness, wicket run cadence", volumeLevel: "high" },
+      { label: "Week 3 — Intensify", focus: "Full-intent flying sprints, combine with elastic hops, stride expression", volumeLevel: "high" },
+      { label: "Week 4 — Deload", focus: "Sub-maximal build-ups, mechanics review only, no max-intent runs", volumeLevel: "deload" },
+    ],
+  },
+  SPEED_COD_REACTIVE: {
+    phaseName: "Change of Direction & Reactive Block",
+    phaseGoal: "Develop deceleration control, COD mechanics, and reactive decision-making under sport-relevant pressure",
+    emphasis: "Penultimate step mechanics, decel absorption, reactive open-skill agility",
+    weekConfigs: [
+      { label: "Week 1 — Establish", focus: "Closed COD drills at 80%, decel mechanics, 505 technique, single-leg landing control", volumeLevel: "moderate" },
+      { label: "Week 2 — Build", focus: "Increase COD speed, introduce split decisions, L-drill and T-drill combinations", volumeLevel: "high" },
+      { label: "Week 3 — Intensify", focus: "Full-speed COD, reactive cues added, sport-pattern integration", volumeLevel: "high" },
+      { label: "Week 4 — Deload", focus: "Low-speed technique review, no reactive pressure, movement quality only", volumeLevel: "deload" },
+    ],
+  },
+  SPEED_ELASTIC_PLYOMETRIC: {
+    phaseName: "Elastic & Reactive Output Block",
+    phaseGoal: "Develop stretch-shortening cycle capacity and reactive strength through progressive plyometric exposure",
+    emphasis: "Ground contact time, ankle stiffness, SSC reactive strength index",
+    weekConfigs: [
+      { label: "Week 1 — Establish", focus: "Stiffness hops, low-amplitude pogo, single-leg ankle hops, depth drop introduction", volumeLevel: "moderate" },
+      { label: "Week 2 — Build", focus: "Lateral hurdle hops, bounding, reactive jumps, contact quality cues", volumeLevel: "high" },
+      { label: "Week 3 — Intensify", focus: "Complex pairs (elastic → sprint), full plyometric expressions, peak contact force", volumeLevel: "high" },
+      { label: "Week 4 — Deload", focus: "Half contact volume, stiffness hops only, full recovery between efforts", volumeLevel: "deload" },
+    ],
+  },
+  SPEED_FOOTWORK_RHYTHM: {
+    phaseName: "Footwork & Rhythm Development Block",
+    phaseGoal: "Build foot contact quality, coordination patterns, and neuromuscular timing through ladder and rhythm work",
+    emphasis: "Foot contact quality, coordination sequencing, neuromuscular timing",
+    weekConfigs: [
+      { label: "Week 1 — Establish", focus: "Basic ladder patterns, shuffle mechanics, in-out and Ickey shuffle at controlled speed", volumeLevel: "moderate" },
+      { label: "Week 2 — Build", focus: "Increase ladder speed, add lateral and diagonal patterns, crossover step complexity", volumeLevel: "high" },
+      { label: "Week 3 — Intensify", focus: "Full rhythm speed, combine ladder with sprint, shadow footwork reactive add", volumeLevel: "high" },
+      { label: "Week 4 — Deload", focus: "Low speed pattern review, light shadow work, no reactive pressure", volumeLevel: "deload" },
+    ],
+  },
+  SPEED_RETURN_RECOVERY: {
+    phaseName: "Return-to-Speed & Tissue Prep Block",
+    phaseGoal: "Restore movement quality, prepare tendons and posterior chain for return to sprint and COD demand",
+    emphasis: "Sub-maximal exposure, tissue prep, deceleration reintroduction, tendon health",
+    weekConfigs: [
+      { label: "Week 1 — Reset", focus: "Nordic curls, isometric holds, ankle stiffness prep, straight-leg calf march, no sprinting", volumeLevel: "low" },
+      { label: "Week 2 — Restore", focus: "Build-ups at 70%, light ladder, single-leg hip hinge, Copenhagen adductor", volumeLevel: "moderate" },
+      { label: "Week 3 — Rebuild", focus: "Build-ups at 80%, closed COD at slow speed, basic plyometric exposure", volumeLevel: "moderate" },
+      { label: "Week 4 — Prime", focus: "Sub-maximal sprint exposure at 85%, prepare for acceleration block entry", volumeLevel: "low" },
+    ],
+  },
+};
+
+function inferSpeedBlockTypeFromName(name: string): string {
+  const n = name.toLowerCase();
+  if (n.includes("return") || n.includes("tissue") || n.includes("recovery") || n.includes("rehab")) return "SPEED_RETURN_RECOVERY";
+  if (n.includes("footwork") || n.includes("rhythm") || n.includes("ladder") || n.includes("coordination")) return "SPEED_FOOTWORK_RHYTHM";
+  if (n.includes("elastic") || n.includes("plyometric") || n.includes("reactive output") || n.includes("ssc")) return "SPEED_ELASTIC_PLYOMETRIC";
+  if (n.includes("cod") || n.includes("change of direction") || n.includes("agility") || n.includes("decel") || n.includes("reactive")) return "SPEED_COD_REACTIVE";
+  if (n.includes("max velocity") || n.includes("top speed") || n.includes("flying sprint") || n.includes("velocity")) return "SPEED_MAX_VELOCITY";
+  return "SPEED_ACCELERATION_DEV"; // Default entry point for speed programs
+}
+
+function buildSpeedNextBlockRecommendation(blockType: string): {
+  blockType: string;
+  displayName: string;
+  rationale: string;
+  whatBuilt: string[];
+} {
+  const chain: Record<string, { blockType: string; displayName: string; rationale: string; whatBuilt: string[] }> = {
+    SPEED_RETURN_RECOVERY: {
+      blockType: "SPEED_ACCELERATION_DEV",
+      displayName: "Acceleration Development Block",
+      rationale: "Tissue and posterior chain readiness restored. Next: reintroduce max-intent sprint work starting from the drive phase up.",
+      whatBuilt: ["Posterior chain tendon readiness", "Sub-maximal sprint tolerance", "Deceleration control quality", "Foundation for high-intensity sprint work"],
+    },
+    SPEED_ACCELERATION_DEV: {
+      blockType: "SPEED_MAX_VELOCITY",
+      displayName: "Maximum Velocity Block",
+      rationale: "Drive phase and first-step power established. Next: develop top-end speed and stride mechanics through flying sprint work.",
+      whatBuilt: ["Drive phase mechanics and posture", "First-step explosive power", "Horizontal force production", "Resisted sprint tolerance"],
+    },
+    SPEED_FOOTWORK_RHYTHM: {
+      blockType: "SPEED_COD_REACTIVE",
+      displayName: "Change of Direction & Reactive Block",
+      rationale: "Foot contact quality and coordination patterns established. Next: integrate COD mechanics and reactive decision-making.",
+      whatBuilt: ["Foot contact quality and timing", "Coordination pattern fluency", "Neuromuscular sequencing", "Rhythm base for agility work"],
+    },
+    SPEED_MAX_VELOCITY: {
+      blockType: "SPEED_ELASTIC_PLYOMETRIC",
+      displayName: "Elastic & Reactive Output Block",
+      rationale: "Top-end speed developed. Next: sharpen elastic output and ground contact quality to express speed more efficiently.",
+      whatBuilt: ["Top-end sprint mechanics", "Stride rate and length efficiency", "Front-side drive expression", "Flying sprint capacity"],
+    },
+    SPEED_COD_REACTIVE: {
+      blockType: "SPEED_ELASTIC_PLYOMETRIC",
+      displayName: "Elastic & Reactive Output Block",
+      rationale: "COD control and reactive decisions developed. Next: sharpen elastic output to support faster cuts and direction changes.",
+      whatBuilt: ["COD technique and decel absorption", "Reactive decision-making speed", "Penultimate step mechanics", "Sport-specific agility patterns"],
+    },
+    SPEED_ELASTIC_PLYOMETRIC: {
+      blockType: "SPEED_ACCELERATION_DEV",
+      displayName: "Acceleration Development Block",
+      rationale: "Elastic and reactive capacity built. Cycle back to re-establish drive phase and first-step power with more elastic support.",
+      whatBuilt: ["Stretch-shortening cycle capacity", "Ground contact quality and stiffness", "Reactive strength index", "Plyometric force absorption"],
+    },
+  };
+  return chain[blockType] ?? chain["SPEED_ACCELERATION_DEV"];
+}
+
+// ─── Strength Continuation Block Configs ──────────────────────────────────
 // Block chain: FOUNDATION_ACCUMULATION → INTENSIFICATION_STRENGTH
 //              → POWER_ELASTIC_CONVERSION → REBUILD_DELOAD → (cycle repeats)
 
@@ -1516,9 +1656,15 @@ export async function generateContinuationPhase(
     await db.update(trainingPhases).set({ status: "completed" }).where(eq(trainingPhases.id, currentPhase.id));
   }
 
+  // Detect focus mode from system metadata to use the correct block chain
+  const systemFocusMode = (system.metadata as any)?.focusMode ?? "strength";
+  const isSpeedSystem = systemFocusMode === "speed";
+
   const previousBlockType = (previousPhase.metadata as any)?.blockType
-    ?? inferBlockTypeFromName(previousPhase.name);
-  const recommendation = buildNextBlockRecommendation(previousBlockType);
+    ?? (isSpeedSystem ? inferSpeedBlockTypeFromName(previousPhase.name) : inferBlockTypeFromName(previousPhase.name));
+  const recommendation = isSpeedSystem
+    ? buildSpeedNextBlockRecommendation(previousBlockType)
+    : buildNextBlockRecommendation(previousBlockType);
 
   const [profile] = await db.select().from(userProfilesTable).where(eq(userProfilesTable.userId, userId));
   const goal = profile ? normalizeGoal(profile.trainingGoal) : "general_fitness";
@@ -1562,18 +1708,27 @@ export async function generateContinuationPhase(
   // ── Part 6: Performance-aware block type selection ────────────────────────
   // Override the default chain recommendation when actual signals demand it.
   // Priority: explicit override > performance-based signal > default chain.
-  const blockDeEscalateMap: Record<string, string> = {
+
+  // De-escalation maps — mode-specific
+  const blockDeEscalateMap: Record<string, string> = isSpeedSystem ? {
+    SPEED_MAX_VELOCITY: "SPEED_ACCELERATION_DEV",
+    SPEED_COD_REACTIVE: "SPEED_FOOTWORK_RHYTHM",
+    SPEED_ELASTIC_PLYOMETRIC: "SPEED_ACCELERATION_DEV",
+    SPEED_ACCELERATION_DEV: "SPEED_RETURN_RECOVERY",
+  } : {
     INTENSIFICATION_STRENGTH: "FOUNDATION_ACCUMULATION",
     POWER_ELASTIC_CONVERSION: "INTENSIFICATION_STRENGTH",
     REBUILD_DELOAD: "FOUNDATION_ACCUMULATION",
   };
+  const safetyResetBlockType = isSpeedSystem ? "SPEED_RETURN_RECOVERY" : "FOUNDATION_ACCUMULATION";
+
   let intelligentNextBlockType = options.blockTypeOverride
     ?? (options.mode === "repeat" ? previousBlockType : recommendation.blockType);
 
   if (!options.blockTypeOverride && options.mode !== "repeat" && completedLogs.length >= 3) {
     if (adherenceRate < 0.55 || (avgDifficulty >= 4.5 && painFreq >= 0.35)) {
-      // Severe stress signals — restart at foundation level regardless of chain position
-      intelligentNextBlockType = "FOUNDATION_ACCUMULATION";
+      // Severe stress signals — restart at foundation / return-to-speed level
+      intelligentNextBlockType = safetyResetBlockType;
     } else if (fatigueTrend >= 4.0 || painFreq >= 0.35 || (avgDifficulty >= 4.2 && adherenceRate < 0.75)) {
       // Significant stress — de-escalate one block type rather than progressing
       intelligentNextBlockType = blockDeEscalateMap[recommendation.blockType] ?? recommendation.blockType;
@@ -1584,21 +1739,36 @@ export async function generateContinuationPhase(
   }
   const nextBlockType = intelligentNextBlockType;
 
-  // Build coaching notes from actual performance signals
+  // Build coaching notes from actual performance signals — mode-aware language
   const adaptationNotes: string[] = [];
   if (avgDifficulty >= 4.2) {
-    adaptationNotes.push("Based on how your last block went — consistently hard — I'm starting this one at a conservative load before building. No point walking into a new block already in a hole.");
+    adaptationNotes.push(isSpeedSystem
+      ? "Your last block was consistently demanding — CNS load was high. I'm starting this block at conservative sprint volume before building. Walking into a new speed block already fatigued kills quality."
+      : "Based on how your last block went — consistently hard — I'm starting this one at a conservative load before building. No point walking into a new block already in a hole."
+    );
   } else if (avgDifficulty <= 2.3 && completedLogs.length >= 3) {
-    adaptationNotes.push("Last block felt comfortable throughout — I'm starting this one with more challenge built in from the beginning.");
+    adaptationNotes.push(isSpeedSystem
+      ? "Last block felt well within your capacity — you absorbed the sprint work well. I'm starting this block with more challenge built in from the beginning."
+      : "Last block felt comfortable throughout — I'm starting this one with more challenge built in from the beginning."
+    );
   }
   if (painFreq >= 0.35) {
-    adaptationNotes.push("Discomfort was flagged across a fair chunk of last block's sessions — exercise selection in this block is kept conservative and injury-aware.");
+    adaptationNotes.push(isSpeedSystem
+      ? "Discomfort was flagged across a chunk of last block's sessions — sprint and tendon load in this block is managed carefully. Protect the tissue quality first."
+      : "Discomfort was flagged across a fair chunk of last block's sessions — exercise selection in this block is kept conservative and injury-aware."
+    );
   }
   if (adherenceRate < 0.65 && recentLogs.length >= 3) {
-    adaptationNotes.push("Consistency took a hit last block. I've kept sessions in this block tighter — less volume, easier to execute when life gets in the way.");
+    adaptationNotes.push(isSpeedSystem
+      ? "Consistency took a hit last block. Speed sessions in this block are tighter and shorter — easier to execute when life gets in the way. Showing up beats volume."
+      : "Consistency took a hit last block. I've kept sessions in this block tighter — less volume, easier to execute when life gets in the way."
+    );
   }
   if (fatigueTrend >= 4.0 && completedLogs.length >= 3) {
-    adaptationNotes.push("Fatigue was accumulating into the end of last block. First week here is intentionally easier — give the body time to reset before we build again.");
+    adaptationNotes.push(isSpeedSystem
+      ? "Fatigue was building into the end of last block. CNS recovery is the priority — first week here is sub-maximal. Sprint quality over sprint quantity."
+      : "Fatigue was accumulating into the end of last block. First week here is intentionally easier — give the body time to reset before we build again."
+    );
   }
 
   const coachGoal: CoachGoalType = goal === "athletic" ? "athletic_performance" : (goal as CoachGoalType);
@@ -1607,7 +1777,10 @@ export async function generateContinuationPhase(
     equipment === "minimal" ? "home_limited" :
     (equipment as CoachEquipmentLevel);
 
-  const nextBlockConfig = CONTINUATION_BLOCK_CONFIGS[nextBlockType] ?? CONTINUATION_BLOCK_CONFIGS["FOUNDATION_ACCUMULATION"];
+  // Select the block config from the correct mode's config map
+  const nextBlockConfig = isSpeedSystem
+    ? (SPEED_CONTINUATION_BLOCK_CONFIGS[nextBlockType] ?? SPEED_CONTINUATION_BLOCK_CONFIGS["SPEED_ACCELERATION_DEV"])
+    : (CONTINUATION_BLOCK_CONFIGS[nextBlockType] ?? CONTINUATION_BLOCK_CONFIGS["FOUNDATION_ACCUMULATION"]);
   const blockChainIndex = allPhases.length;
 
   const [newPhase] = await db.insert(trainingPhases).values({

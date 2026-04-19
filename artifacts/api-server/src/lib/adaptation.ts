@@ -270,12 +270,12 @@ function scoreLabel(score: number, type: string): string {
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
-export async function buildAdaptationContext(userId: number): Promise<AdaptationContext> {
+export async function buildAdaptationContext(userId: number, focusMode?: string | null): Promise<AdaptationContext> {
   const [recentReadiness, recentFeedback, performanceAdaptation, memoryDominance] = await Promise.all([
     fetchRecentReadiness(userId, 7),
     fetchRecentFeedback(userId, 5),
     buildPerformanceAdaptationContext(userId, 14).catch(() => null),
-    resolveMemoryConstraints(userId).catch(() => null),
+    resolveMemoryConstraints(userId, focusMode).catch(() => null),
   ]);
 
   const latestReadiness = recentReadiness[0] ?? null;

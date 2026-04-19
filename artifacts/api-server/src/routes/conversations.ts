@@ -592,8 +592,9 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
   const allowInsights = agentSettings.behavior.proactiveInsights;
 
   if (isPro) {
+    const _sessionFocusMode = resolveFocusMode((req.body as any)?.uiContext?.focusMode ?? null);
     const [adaptation, memories] = await Promise.all([
-      buildAdaptationContext(userId).catch(() => ({ promptContext: "" })),
+      buildAdaptationContext(userId, _sessionFocusMode).catch(() => ({ promptContext: "" })),
       allowMemory ? listMemories(userId).catch(() => []) : Promise.resolve([]),
     ]);
     adaptationCtx = adaptation.promptContext;
@@ -910,7 +911,7 @@ Keep it helpful and intelligent, never promotional.`;
     let clarificationSystem = activeSystem;
     if (!clarificationSystem && latestStructuredProgram) {
       try {
-        clarificationSystem = await createTrainingSystemFromProgram(userId, latestStructuredProgram);
+        clarificationSystem = await createTrainingSystemFromProgram(userId, latestStructuredProgram, null, nonStreamFocusMode);
         logger.info({ userId, systemId: clarificationSystem.id }, "[ClarificationFollowup] Auto-created system from chat program");
       } catch {
         // fall through to no-program response
@@ -1270,7 +1271,7 @@ Keep it helpful and intelligent, never promotional.`;
 
     if (!resolvedSystem && latestStructuredProgram) {
       try {
-        resolvedSystem = await createTrainingSystemFromProgram(userId, latestStructuredProgram);
+        resolvedSystem = await createTrainingSystemFromProgram(userId, latestStructuredProgram, null, nonStreamFocusMode);
         systemAutoCreatedForEdit = true;
         logger.info({ userId, systemId: resolvedSystem.id }, "[VibeEdit] Auto-created system from chat program before edit");
       } catch (createErr: any) {
@@ -1956,10 +1957,10 @@ Keep it helpful and intelligent, never promotional.`;
       let savedSystem: { id: number; [key: string]: any };
       let isUpdate: boolean;
       if (isNewProgramBuild) {
-        savedSystem = await createTrainingSystemFromProgram(userId, structuredData);
+        savedSystem = await createTrainingSystemFromProgram(userId, structuredData, null, nonStreamFocusMode);
         isUpdate = false;
       } else {
-        const result = await upsertTrainingSystemFromProgram(userId, structuredData);
+        const result = await upsertTrainingSystemFromProgram(userId, structuredData, nonStreamFocusMode);
         savedSystem = result.system;
         isUpdate = result.isUpdate;
       }
@@ -2225,8 +2226,9 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   const allowInsights = agentSettings.behavior.proactiveInsights;
 
   if (isPro) {
+    const _sessionFocusMode = resolveFocusMode((req.body as any)?.uiContext?.focusMode ?? null);
     const [adaptation, memories] = await Promise.all([
-      buildAdaptationContext(userId).catch(() => ({ promptContext: "" })),
+      buildAdaptationContext(userId, _sessionFocusMode).catch(() => ({ promptContext: "" })),
       allowMemory ? listMemories(userId).catch(() => []) : Promise.resolve([]),
     ]);
     adaptationCtx = adaptation.promptContext;
@@ -2513,7 +2515,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     let clarificationSystem = activeSystem;
     if (!clarificationSystem && latestStructuredProgram) {
       try {
-        clarificationSystem = await createTrainingSystemFromProgram(userId, latestStructuredProgram);
+        clarificationSystem = await createTrainingSystemFromProgram(userId, latestStructuredProgram, null, streamFocusMode);
       } catch { /* fall through */ }
     }
 
@@ -2718,7 +2720,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
     if (!resolvedSystem && latestStructuredProgram) {
       try {
-        resolvedSystem = await createTrainingSystemFromProgram(userId, latestStructuredProgram);
+        resolvedSystem = await createTrainingSystemFromProgram(userId, latestStructuredProgram, null, streamFocusMode);
         systemAutoCreatedForEdit = true;
         logger.info({ userId, systemId: resolvedSystem.id }, "[VibeEdit:stream] Auto-created system from chat program before edit");
       } catch (createErr: any) {
@@ -3304,10 +3306,10 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       let savedSystem: { id: number; [key: string]: any };
       let isUpdate: boolean;
       if (isNewProgramBuildSSE) {
-        savedSystem = await createTrainingSystemFromProgram(userId, structuredData);
+        savedSystem = await createTrainingSystemFromProgram(userId, structuredData, null, streamFocusMode);
         isUpdate = false;
       } else {
-        const result = await upsertTrainingSystemFromProgram(userId, structuredData);
+        const result = await upsertTrainingSystemFromProgram(userId, structuredData, streamFocusMode);
         savedSystem = result.system;
         isUpdate = result.isUpdate;
       }

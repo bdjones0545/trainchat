@@ -1,0 +1,421 @@
+FINISH THE SPEED / FOOTWORK SYSTEM SO IT FUNCTIONS AT THE SAME LEVEL AS THE STRENGTH SYSTEM
+
+CONTEXT:
+TrainChat now has a mature Strength system with:
+- 4-week block generation
+- weekly progression
+- agent command system
+- quick actions + free text
+- predictive adaptation
+- memory dominance
+- session lifecycle
+- log session adaptation
+- week advancement
+- continuation block generation
+- diff / undo / history
+- DB persistence
+- UI coherence across Today / Week / Block
+
+We do NOT want Speed / Footwork to be a partial side mode.
+We want it to behave at the SAME SYSTEM LEVEL as Strength.
+
+That means:
+- same architectural depth
+- same lifecycle
+- same agent control
+- same adaptation quality
+- same persistence model
+- same UI integration
+- same continuation logic
+
+The only difference should be the training brain:
+- speed / footwork blocks
+- speed / footwork movement families
+- speed / footwork drill library
+- speed / footwork adaptation rules
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Finish the Speed / Footwork focus so it functions as a first-class system equal to Strength, not a lighter feature.
+
+==================================================
+PART 1 — USE STRENGTH AS THE REFERENCE IMPLEMENTATION
+==================================================
+
+Treat the Strength engine as the gold-standard implementation.
+
+For Speed / Footwork, replicate the same system quality in all of these layers:
+
+1. Program generation
+2. 4-week block structure
+3. weekly progression
+4. refinement engine
+5. agent command integration
+6. memory dominance
+7. predictive adaptation
+8. session lifecycle
+9. session logging effects
+10. week advancement
+11. continuation block generation
+12. diff / undo / history
+13. DB persistence
+14. Today / Week / Block UI integration
+
+Do NOT leave any of these partial.
+
+==================================================
+PART 2 — BUILD COMPLETE SPEED BLOCK ARCHETYPES
+==================================================
+
+Finalize the full set of Speed / Footwork block archetypes.
+
+Suggested required archetypes:
+- acceleration_development
+- max_velocity_elastic
+- change_of_direction_control
+- reactive_footwork_rhythm
+- return_to_speed_resilience
+- speed_endurance
+- movement_mechanics_foundation
+
+For each archetype define:
+- mission
+- primary adaptation target
+- week-to-week progression philosophy
+- session-role tendencies
+- intensity / contact management
+- deload behavior
+- continuation rules
+
+These should be fully operational, not placeholders.
+
+==================================================
+PART 3 — FINALIZE SPEED MOVEMENT FAMILIES
+==================================================
+
+Create and fully wire Speed / Footwork movement families into selection, refinement, and adaptation.
+
+Required families:
+- acceleration
+- max_velocity
+- deceleration
+- change_of_direction
+- lateral_movement
+- reactive_footwork
+- elastic_plyometric
+- sprint_mechanics
+- trunk_stiffness_posture
+- tissue_prep_return_to_speed
+- speed_endurance_conditioning
+
+Each family must support:
+- selection
+- family rotation
+- equivalence clusters
+- exposure tracking
+- phase affinity
+- substitutions / regressions / progressions
+
+==================================================
+PART 4 — COMPLETE SPEED SESSION GRAMMAR
+==================================================
+
+Create full speed-specific session identities and session grammar.
+
+Examples:
+- acceleration mechanics + force projection
+- max velocity + elastic output
+- COD / decel control
+- reactive footwork + rhythm
+- tissue prep / return-to-speed
+- speed endurance / repeat sprint
+
+Each session type should define:
+- prep block
+- main speed block
+- reactive / plyometric layer
+- support work
+- conditioning if relevant
+- coaching intent
+
+This must be structurally different from Strength.
+Do NOT reuse strength session grammar with renamed labels.
+
+==================================================
+PART 5 — COMPLETE 4-WEEK SPEED PROGRESSION
+==================================================
+
+Use the same 4-week structure as Strength:
+- Week 1 = Establish
+- Week 2 = Build
+- Week 3 = Intensify
+- Week 4 = Deload
+
+But make sure Speed week progression changes:
+- drill complexity
+- sprint exposure
+- plyometric contact volume
+- decel / COD stress
+- reactivity level
+- fatigue cost
+- restoration emphasis
+
+Do NOT only change sets/reps.
+Week role must meaningfully change movement expression.
+
+==================================================
+PART 6 — EXPAND AND CLEAN THE SPEED / AGILITY DATABASE
+==================================================
+
+Audit the current live DB and identify missing speed / agility / footwork drill coverage.
+
+Then add and clean the drill inventory until it is sufficient to support a real speed system.
+
+Required coverage should include:
+- acceleration starts
+- falling starts
+- wall drills
+- A-series / dribble series
+- wicket / rhythm drills
+- lateral shuffle / crossover patterns
+- COD drills
+- decel mechanics drills
+- pogo / stiffness series
+- bounds / hops / jumps
+- low-level footwork / rhythm drills
+- return-to-speed tissue prep drills
+- speed endurance drills
+
+Each drill must have:
+- movement family
+- equipment requirements
+- field/court/space requirement
+- home compatibility
+- sport relevance
+- neural demand
+- fatigue cost
+- regression/progression cluster
+- week suitability
+- block suitability
+
+Then seed the finished inventory to the live DB.
+
+==================================================
+PART 7 — FULL AGENT COMMAND SUPPORT FOR SPEED
+==================================================
+
+The Speed system must support the same quality of agent control as Strength.
+
+Ensure these work fully:
+- quick commands in Agent panel
+- free-text commands
+- block refocus actions
+- sidebar controls
+- exercise card actions
+- log-session-driven adaptations
+
+Examples of speed-specific commands:
+- more acceleration
+- more reactive
+- reduce tendon load
+- more footwork
+- reduce COD stress
+- recovery focus
+- more top-end speed
+
+All must route through the SAME real pipeline and create real system changes.
+
+==================================================
+PART 8 — MEMORY DOMINANCE FOR SPEED
+==================================================
+
+Finish the memory dominance system for Speed mode.
+
+Speed-specific memory examples:
+- tendon load sensitivity
+- hamstring caution
+- acceleration emphasis
+- decel sensitivity
+- reactive bias
+- fatigue from sprint work
+- field/court access constraints
+
+Ensure memory can OVERRIDE the block when needed, just like Strength.
+
+Example:
+- hamstring warning + high fatigue
+→ override max velocity / sprint intensity even if the block wanted progression
+
+==================================================
+PART 9 — PREDICTIVE ADAPTATION FOR SPEED
+==================================================
+
+Complete predictive adaptation in Speed mode.
+
+After session logs, the system should be able to:
+- hold back future sprint intensity
+- reduce plyometric contacts
+- lower COD stress
+- simplify drill complexity
+- progress acceleration work
+- increase elastic/reactive emphasis if the athlete is responding well
+
+This should work across:
+- next session
+- remaining week
+- future weeks
+- continuation block
+
+==================================================
+PART 10 — SESSION LOGGING MUST FULLY INFLUENCE SPEED
+==================================================
+
+Make sure Speed logs affect the system just like Strength.
+
+Log inputs:
+- completed / partial / skipped
+- duration
+- difficulty
+- pain/discomfort
+- post-session feeling
+- enjoyment
+- notes
+
+Speed-specific interpretation examples:
+- high difficulty + low energy → reduce next session sprint density
+- pain → protect sprint / decel / footwork families
+- easy + good energy → slight progression in velocity/reactivity
+- skipped / partial → soften weekly load
+
+==================================================
+PART 11 — COMPLETE SPEED SESSION LIFECYCLE
+==================================================
+
+Ensure Speed mode supports the full session state machine:
+
+- not_started
+- in_progress
+- completed
+
+with:
+- Start Session
+- Resume Session
+- Log Session
+- Session Logged
+
+This must persist correctly and integrate with:
+- Today view
+- This Week
+- history
+- agent chat
+- adaptation logic
+
+==================================================
+PART 12 — COMPLETE WEEK ADVANCEMENT FOR SPEED
+==================================================
+
+When the user completes the required number of speed sessions in a week:
+
+- mark week complete
+- advance active week
+- update Today / Week / Block
+- surface the next week’s role cleanly
+
+Use the same robust week advancement logic already finalized for Strength.
+
+==================================================
+PART 13 — COMPLETE CONTINUATION BLOCK GENERATION FOR SPEED
+==================================================
+
+When the full 4-week speed block is complete:
+
+- mark block complete
+- summarize what happened
+- generate the next speed continuation block
+- carry forward memory, adherence, pain, fatigue, preferences, and recent drill exposure
+
+Continuation must feel intelligent, not random.
+
+Examples:
+- mechanics foundation → acceleration development
+- acceleration development → max velocity / elastic
+- high fatigue / pain → return_to_speed_resilience or mechanics foundation reset
+
+==================================================
+PART 14 — COMPLETE UI INTEGRATION FOR SPEED
+==================================================
+
+Ensure Speed mode is fully reflected in:
+- main agent tabs
+- active programs
+- Today tab
+- This Week tab
+- Block tab
+- Agent panel
+- progress / completion states
+- week switching
+- chat acknowledgments
+- shareable moments if that layer exists
+
+The UI should clearly feel like Speed mode, not Strength with renamed text.
+
+==================================================
+PART 15 — NO PARTIAL / PLACEHOLDER LOGIC
+==================================================
+
+Audit all Speed code paths and remove or complete any placeholder behavior.
+
+We do NOT want:
+- stub archetypes
+- TODO movement families
+- fallback to strength behavior
+- generic block logic
+- generic exercise selection when speed-specific logic should run
+
+If something exists only as a scaffold, either complete it now or clearly route around it without leaking strength logic.
+
+==================================================
+PART 16 — VALIDATION
+==================================================
+
+Run a full validation pass for Speed mode:
+
+1. Build a 4-week speed / footwork program
+2. Verify all 4 weeks are real and distinct
+3. Verify speed-specific session identities
+4. Verify drill rotation and family logic
+5. Verify refinements work
+6. Verify session logging affects next sessions
+7. Verify week advancement
+8. Verify block continuation generation
+9. Verify UI coherence across Today / Week / Block
+10. Verify main chat acknowledgments sound like a coach, not a backend
+
+==================================================
+PART 17 — FINAL OUTPUT REQUIRED
+==================================================
+
+Return:
+1. what parts of the Strength system were successfully replicated
+2. what speed-specific systems were completed
+3. what database/drill expansion was done
+4. whether live DB seeding was completed
+5. what lifecycle/adaptation/continuation features are fully working
+6. any remaining gaps that still prevent Speed from matching Strength
+
+==================================================
+FINAL STANDARD
+==================================================
+
+At the end of this, Speed / Footwork should operate like a true first-class TrainChat system:
+
+- same depth as Strength
+- same reliability as Strength
+- same agent integration as Strength
+- same adaptation intelligence as Strength
+- same lifecycle as Strength
+- same persistence and UI coherence as Strength
+
+The only difference should be the programming brain — not the product quality.

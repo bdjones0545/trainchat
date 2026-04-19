@@ -22,7 +22,7 @@ import { db, userMemoriesTable, sessionLogsTable, userProfilesTable } from "@wor
 import { eq, and, desc, gte } from "drizzle-orm";
 import { logger } from "./logger";
 
-// ─── Movement patterns affected by injury area ─────────────────────────────
+// ─── Movement patterns affected by injury area (strength mode) ─────────────
 
 const INJURY_PATTERN_MAP: Record<string, string[]> = {
   knee: ["squats", "lunges", "leg press", "jump landings", "step-ups", "box jumps"],
@@ -36,12 +36,43 @@ const INJURY_PATTERN_MAP: Record<string, string[]> = {
   "upper back": ["heavy shrug variations", "high-bar squat at max load"],
 };
 
+// ─── Movement patterns affected by injury area (speed/footwork mode) ────────
+
+const SPEED_INJURY_PATTERN_MAP: Record<string, string[]> = {
+  knee: ["deceleration sprints", "change-of-direction drills", "COD cuts at full speed", "depth drops", "single-leg landing drills"],
+  hamstring: ["max-intent sprints", "flying sprint exposures", "resisted sprints", "Nordic hamstring curls at high load", "bounding and linear acceleration"],
+  "lower back": ["resisted sled sprints with forward lean", "heavy bounding", "high-volume acceleration blocks"],
+  hip: ["lateral COD drills", "crossover step patterns", "hip flexor-dominant acceleration postures", "split-stance reactive drills"],
+  groin: ["lateral shuffle drills", "lateral bounding", "crossover patterns", "wide-stance COD drills"],
+  ankle: ["stiffness hop series", "pogo hops at high volume", "ankle-loaded plyometrics", "uneven surface footwork drills"],
+  achilles: ["stiffness hops", "ankle hops", "pogo series", "any high-frequency ground contact drills", "sprint acceleration at full intent"],
+  calf: ["stiffness hops at volume", "max-velocity sprint exposures", "plyometric push-off drills"],
+  foot: ["pogo hops", "ladder footwork at high speed", "barefoot sprint drills"],
+  tendon: ["high-frequency plyometric contacts", "max-velocity sprint work", "resisted sprint starts", "depth drops"],
+  "shin splint": ["high-speed ladder work", "repetitive sprint starts", "interval sprint conditioning"],
+};
+
 function getAffectedPatterns(subject: string): string[] {
   const s = subject.toLowerCase();
   for (const [area, patterns] of Object.entries(INJURY_PATTERN_MAP)) {
     if (s.includes(area)) return patterns;
   }
   return [];
+}
+
+function getAffectedPatternsForMode(subject: string, focusMode?: string | null): string[] {
+  const s = subject.toLowerCase();
+  if (focusMode === "speed") {
+    for (const [area, patterns] of Object.entries(SPEED_INJURY_PATTERN_MAP)) {
+      if (s.includes(area)) return patterns;
+    }
+    // Fallback to standard map for areas not in speed map
+    for (const [area, patterns] of Object.entries(INJURY_PATTERN_MAP)) {
+      if (s.includes(area)) return patterns;
+    }
+    return [];
+  }
+  return getAffectedPatterns(subject);
 }
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -77,7 +108,7 @@ function avg(vals: number[]): number {
 
 // ─── Main export ───────────────────────────────────────────────────────────
 
-export async function resolveMemoryConstraints(userId: number): Promise<MemoryDominanceResult> {
+export async function resolveMemoryConstraints(userId: number, focusMode?: string | null): Promise<MemoryDominanceResult> {
   const windowStart = new Date();
   windowStart.setDate(windowStart.getDate() - 21);
 
@@ -111,7 +142,7 @@ export async function resolveMemoryConstraints(userId: number): Promise<MemoryDo
         type: "injury",
         subject: m.subject,
         detail: m.detail,
-        affectedPatterns: getAffectedPatterns(m.subject),
+        affectedPatterns: getAffectedPatternsForMode(m.subject, focusMode),
         confidence: m.confidence,
       });
     }

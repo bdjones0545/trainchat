@@ -35,10 +35,48 @@ export interface NextSessionAdjustment {
   painAreaNotes: string[];
 }
 
+// ─── Speed-specific coaching note builder ──────────────────────────────────
+
+function buildSpeedCoachingNote(
+  scenario: "pain" | "fatigue" | "hard_with_energy" | "progress" | "skipped",
+  painAreas: string[]
+): { coachingNote: string; painAreaNotes: string[] } {
+  switch (scenario) {
+    case "pain": {
+      const areaText = painAreas.length > 0 ? ` in your ${painAreas.join(" and ")}` : "";
+      return {
+        coachingNote: `Discomfort flagged${areaText} last session. I've protected the sprint and COD families this session — keeping the quality there but removing the highest-load exposures. Move at a level that feels clean, not pushed.`,
+        painAreaNotes: painAreas.map((a) => `Reduce intensity on ${a}-related sprint and deceleration movements — stop if it flares`),
+      };
+    }
+    case "fatigue":
+      return {
+        coachingNote: "Last session was taxing and you left drained — CNS fatigue affects speed quality more than anything. I've trimmed sprint volume and pulled back intent this session. Sub-maximal quality work is the target, not max-effort output.",
+        painAreaNotes: [],
+      };
+    case "hard_with_energy":
+      return {
+        coachingNote: "Tough session but you had fuel left. Same session structure today — extend your recovery periods between efforts rather than cutting sprint volume. Rest is part of the quality.",
+        painAreaNotes: [],
+      };
+    case "progress":
+      return {
+        coachingNote: "Last couple sessions have felt well within your capacity. You're absorbing the work well — I've added a sprint rep and bumped the quality target slightly. Match the effort with full recovery between.",
+        painAreaNotes: [],
+      };
+    case "skipped":
+      return {
+        coachingNote: "Last session was skipped — getting back to the planned speed work is the priority. Same session structure. Don't force extra intensity to compensate.",
+        painAreaNotes: [],
+      };
+  }
+}
+
 // ─── Core logic ────────────────────────────────────────────────────────────
 
 export async function buildNextSessionAdjustment(
-  userId: number
+  userId: number,
+  focusMode?: string | null
 ): Promise<NextSessionAdjustment | null> {
   const recentLogs = await db
     .select({
@@ -59,7 +97,13 @@ export async function buildNextSessionAdjustment(
   const last = recentLogs[0];
   const prev = recentLogs.slice(1).filter((l) => l.sessionStatus !== "skipped");
 
+  const isSpeedMode = focusMode === "speed";
+
   if (last.sessionStatus === "skipped") {
+    if (isSpeedMode) {
+      const notes = buildSpeedCoachingNote("skipped", []);
+      return { adjustmentType: "maintain", setDelta: 0, addRestNote: false, ...notes };
+    }
     return {
       adjustmentType: "maintain",
       setDelta: 0,
@@ -83,6 +127,10 @@ export async function buildNextSessionAdjustment(
   // ── Decision tree ────────────────────────────────────────────────────────
 
   if (pain >= 4) {
+    if (isSpeedMode) {
+      const notes = buildSpeedCoachingNote("pain", painAreas);
+      return { adjustmentType: "reduce", setDelta: -1, addRestNote: true, ...notes };
+    }
     const areaText =
       painAreas.length > 0
         ? ` in your ${painAreas.join(" and ")}`
@@ -97,6 +145,10 @@ export async function buildNextSessionAdjustment(
   }
 
   if (fatigueScore >= 4.2 && rollingDiff >= 3.8) {
+    if (isSpeedMode) {
+      const notes = buildSpeedCoachingNote("fatigue", []);
+      return { adjustmentType: "reduce", setDelta: -1, addRestNote: true, ...notes };
+    }
     return {
       adjustmentType: "reduce",
       setDelta: -1,
@@ -108,6 +160,10 @@ export async function buildNextSessionAdjustment(
   }
 
   if (difficulty >= 4 && energy >= 3) {
+    if (isSpeedMode) {
+      const notes = buildSpeedCoachingNote("hard_with_energy", []);
+      return { adjustmentType: "maintain", setDelta: 0, addRestNote: true, ...notes };
+    }
     return {
       adjustmentType: "maintain",
       setDelta: 0,
@@ -119,6 +175,10 @@ export async function buildNextSessionAdjustment(
   }
 
   if (pain >= 3 && painAreas.length > 0) {
+    if (isSpeedMode) {
+      const notes = buildSpeedCoachingNote("pain", painAreas);
+      return { adjustmentType: "maintain", setDelta: 0, addRestNote: false, ...notes };
+    }
     return {
       adjustmentType: "maintain",
       setDelta: 0,
@@ -129,6 +189,10 @@ export async function buildNextSessionAdjustment(
   }
 
   if (difficulty <= 2 && energy >= 4 && rollingDiff <= 2.5 && prev.length >= 1) {
+    if (isSpeedMode) {
+      const notes = buildSpeedCoachingNote("progress", []);
+      return { adjustmentType: "progress", setDelta: 1, addRestNote: false, ...notes };
+    }
     return {
       adjustmentType: "progress",
       setDelta: 1,
@@ -149,17 +213,18 @@ export async function buildNextSessionAdjustment(
   };
 }
 
-export async function applyNextSessionAdjustment(userId: number): Promise<void> {
-  const adjustment = await buildNextSessionAdjustment(userId);
-  if (!adjustment || adjustment.adjustmentType === "none" || !adjustment.coachingNote) return;
-
+export async function applyNextSessionAdjustment(userId: number, focusMode?: string | null): Promise<void> {
   const [system] = await db
-    .select({ id: trainingSystems.id, currentPhaseId: trainingSystems.currentPhaseId })
+    .select({ id: trainingSystems.id, currentPhaseId: trainingSystems.currentPhaseId, metadata: trainingSystems.metadata })
     .from(trainingSystems)
     .where(and(eq(trainingSystems.userId, userId), eq(trainingSystems.status, "active")))
     .limit(1);
 
   if (!system?.currentPhaseId) return;
+
+  const resolvedFocusMode = focusMode ?? ((system.metadata as Record<string, unknown>)?.focusMode as string | null) ?? null;
+  const adjustment = await buildNextSessionAdjustment(userId, resolvedFocusMode);
+  if (!adjustment || adjustment.adjustmentType === "none" || !adjustment.coachingNote) return;
 
   const [currentWeek] = await db
     .select()
