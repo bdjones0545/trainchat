@@ -726,6 +726,7 @@ export function repairSpeedOutput(
 // ─── Incomplete Build Response Detector ──────────────────────────────────────
 
 const PREVIEW_RESPONSE_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
+  // Future-tense planning / preview language
   { pattern: /here'?s\s+the\s+foundation/i, label: "here's the foundation" },
   { pattern: /i'?ll\s+include/i, label: "I'll include" },
   { pattern: /i'?ll\s+map/i, label: "I'll map" },
@@ -739,6 +740,13 @@ const PREVIEW_RESPONSE_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /foundation\s+i'?m\s+building/i, label: "foundation I'm building" },
   { pattern: /i'?(?:ll|'m going to)\s+(?:include|add|incorporate)/i, label: "I'll add/incorporate" },
   { pattern: /(?:day\s+\d+\s*[:\-—]?\s*(?:we'?ll?|will|i'?ll))/i, label: "day X we'll/will" },
+  // False-success announcement — AI claims it built the program but returned no JSON.
+  // e.g. "Built a 3-day speed program... Check the Program tab."
+  // This is the most common failure mode: the AI skips the JSON and jumps straight
+  // to the confirmation sentence it was told to add AFTER the JSON block.
+  { pattern: /built\s+a?\s*\d*[- ]?day/i, label: "built a X-day (false success announcement)" },
+  { pattern: /check\s+the\s+(?:program|activity)\s+tab/i, label: "check the program tab (false success)" },
+  { pattern: /^built\s+(?:a|your|the)\s+/i, label: "Built a/your/the... (false success announcement)" },
 ];
 
 export interface IncompleteBuildDetection {
@@ -751,12 +759,23 @@ export interface IncompleteBuildDetection {
  * Detects whether a response is a preview/planning response rather than a completed JSON build.
  * Used to gate the strict-retry path: if OpenAI returned a prose outline instead of the
  * JSON artifact, we retry once with an explicit "build only" enforcement instruction.
+ *
+ * Two detection paths:
+ *   1. Pattern match — specific preview/false-success phrases
+ *   2. Length guard — a response under 400 chars physically cannot contain a full program
  */
 export function detectIncompleteBuildResponse(text: string): IncompleteBuildDetection {
   for (const { pattern, label } of PREVIEW_RESPONSE_PATTERNS) {
     if (pattern.test(text)) {
       return { isPreview: true, triggerPhrase: label, confidence: "high" };
     }
+  }
+  // Length-based fallback: a real speed/mobility program with exercises, sets, reps, rest,
+  // and coaching notes across multiple days will always exceed 400 characters.
+  // If the entire response is under 400 chars and has no JSON, it must be a short
+  // announcement, a clarifying question, or some other non-build output.
+  if (text.length < 400) {
+    return { isPreview: true, triggerPhrase: `short response (${text.length} chars) — not a complete program`, confidence: "high" };
   }
   return { isPreview: false, triggerPhrase: null, confidence: "low" };
 }
