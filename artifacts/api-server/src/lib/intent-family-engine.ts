@@ -300,6 +300,9 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
       /\b(progress|advance|harder version|more advanced version|level up|step up).{0,30}(this exercise|the exercise|the movement|this movement)\b/i,
       /\b(make (this |the )?(exercise|movement|lift) harder)\b/i,
       /\b(progress (this|the) movement|harder variation|more complex version)\b/i,
+      // "Make [named exercise] harder/tougher/more challenging" — e.g., "Make goblet squat harder"
+      // Negative lookahead blocks deictic ("it","this","the") and day references ("day 3")
+      /\bmake\s+(?!(?:it|this|the)\b|day\s*\d+)[a-z][a-z\s\-']{1,35}\s+(?:harder|tougher|more\s+(?:challenging|difficult|demanding|advanced|complex|intense))\b/i,
     ],
   },
 
@@ -310,6 +313,8 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
       /\b(regress|easier version|simpler version|step down|scale back|scale down).{0,30}(this exercise|the exercise|the movement|this movement)\b/i,
       /\b(make (this |the )?(exercise|movement|lift) easier)\b/i,
       /\b(regression|regress the movement|easier variation|simplified version)\b/i,
+      // "Make [named exercise] easier/simpler/less challenging" — e.g., "Make goblet squat easier"
+      /\bmake\s+(?!(?:it|this|the)\b|day\s*\d+)[a-z][a-z\s\-']{1,35}\s+(?:easier|simpler|less\s+(?:challenging|difficult|demanding|intense|advanced))\b/i,
     ],
   },
 

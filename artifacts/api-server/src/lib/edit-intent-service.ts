@@ -225,6 +225,33 @@ export function resolveTargetFromRequest(
     }
   }
 
+  // ── Priority 6: named exercise scan ──────────────────────────────────────
+  // When the request contains a harder/easier/swap signal AND the request text
+  // matches a specific exercise name in the active system, resolve to that exercise.
+  // This lets chat messages like "Make goblet squat harder" skip the AI entirely
+  // and route through the same deterministic edit engine used by the sidebar buttons.
+  const hasExerciseModSignal = /\b(harder|easier|tougher|simpler|swap|replace|substitute|progress|regress)\b/i.test(lower);
+  if (hasExerciseModSignal) {
+    // Collect all exercises across the entire system with their DB IDs.
+    for (const phase of system.phases ?? []) {
+      for (const week of phase.weeks ?? []) {
+        for (const session of week.sessions ?? []) {
+          for (const exercise of session.exercises ?? []) {
+            const exNameLower = (exercise.name ?? "").toLowerCase().trim();
+            if (exNameLower.length > 2 && lower.includes(exNameLower)) {
+              return {
+                type: "exercise",
+                id: exercise.id,
+                label: exercise.name,
+                parentLabel: session.label ?? undefined,
+              };
+            }
+          }
+        }
+      }
+    }
+  }
+
   return undefined;
 }
 

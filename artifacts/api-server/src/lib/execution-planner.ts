@@ -285,29 +285,41 @@ export async function buildExecutionPlan({
 
   // ── Exercise progression ──────────────────────────────────────────────────
   else if (intent === "exercise_progression") {
+    const exerciseName = extractExerciseName(message);
     plan = {
       action: "APPLY_MUTATION",
       intentFamily: intent,
-      scope,
+      scope: exerciseName ? { type: "exercise", exerciseName } : scope,
       mutation: {
         type: "progression",
-        params: { category: inferExerciseCategory(message) },
+        params: {
+          category: inferExerciseCategory(message),
+          ...(exerciseName ? { targetExercise: exerciseName } : {}),
+        },
       },
-      reasoning: "Exercise progression flow",
+      reasoning: exerciseName
+        ? `Exercise progression for named exercise: ${exerciseName}`
+        : "Exercise progression flow",
     };
   }
 
   // ── Exercise regression ───────────────────────────────────────────────────
   else if (intent === "exercise_regression") {
+    const exerciseName = extractExerciseName(message);
     plan = {
       action: "APPLY_MUTATION",
       intentFamily: intent,
-      scope,
+      scope: exerciseName ? { type: "exercise", exerciseName } : scope,
       mutation: {
         type: "regression",
-        params: { category: inferExerciseCategory(message) },
+        params: {
+          category: inferExerciseCategory(message),
+          ...(exerciseName ? { targetExercise: exerciseName } : {}),
+        },
       },
-      reasoning: "Exercise regression flow",
+      reasoning: exerciseName
+        ? `Exercise regression for named exercise: ${exerciseName}`
+        : "Exercise regression flow",
     };
   }
 
@@ -584,6 +596,18 @@ function extractExerciseName(message: string): string | null {
   if (insteadMatch) {
     const candidate = insteadMatch[1].trim();
     if (candidate.length > 3 && !/^(it|this|that|the)$/.test(candidate)) {
+      return candidate;
+    }
+  }
+
+  // Pattern: "make [named exercise] harder/easier" — e.g., "Make goblet squat harder"
+  // Negative lookahead blocks deictic ("it","this","the") and day references
+  const harderEasierMatch = lower.match(
+    /\bmake\s+(?!(?:it|this|the)\b|day\s*\d+)([a-z][a-z\s\-']{1,35?})\s+(?:harder|tougher|easier|simpler|more\s+\w+|less\s+\w+)\b/i
+  );
+  if (harderEasierMatch) {
+    const candidate = harderEasierMatch[1].trim();
+    if (candidate.length > 2 && !/^(it|this|that|the|my|your|a|an)$/.test(candidate)) {
       return candidate;
     }
   }
