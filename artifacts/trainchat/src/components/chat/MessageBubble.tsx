@@ -1,6 +1,8 @@
 import { useMemo } from "react";
+import { Share2 } from "lucide-react";
 import SystemUpdateCard from "./SystemUpdateCard";
 import BuildSummaryCard from "./BuildSummaryCard";
+import { buildShareMoment, type ShareMoment } from "@/types/share-moments";
 
 interface Message {
   id: number;
@@ -15,6 +17,7 @@ interface Props {
   onProgramGenerated?: () => void;
   onViewProgram?: () => void;
   onShowChange?: () => void;
+  onShareMoment?: (moment: ShareMoment) => void;
 }
 
 function formatTime(dateStr: string) {
@@ -141,13 +144,22 @@ function parseInline(text: string): React.ReactNode {
   });
 }
 
-// Parse structuredData to detect system_edit vs program_build vs program
+// Parse structuredData to detect system_edit vs program_build vs program vs coaching events
 function parseStructuredData(raw: string | null | undefined) {
   if (!raw) return { type: "none" as const };
   try {
     const data = JSON.parse(raw);
     if (data?._type === "system_edit") {
       return { type: "system_edit" as const, data };
+    }
+    if (data?._type === "block_completed") {
+      return { type: "block_completed" as const, data };
+    }
+    if (data?._type === "week_advanced") {
+      return { type: "week_advanced" as const, data };
+    }
+    if (data?._type === "session_logged") {
+      return { type: "session_logged" as const, data };
     }
     if (data?.days && Array.isArray(data.days)) {
       if (data._buildMeta) {
@@ -161,12 +173,46 @@ function parseStructuredData(raw: string | null | undefined) {
   return { type: "none" as const };
 }
 
-export default function MessageBubble({ message, onViewProgram, onShowChange }: Props) {
+export default function MessageBubble({ message, onViewProgram, onShowChange, onShareMoment }: Props) {
   const isUser = message.role === "user";
   const parsed = parseStructuredData(message.structuredData);
   const isSystemEdit = !isUser && parsed.type === "system_edit";
   const hasProgram = !isUser && parsed.type === "program";
   const isInitialBuild = !isUser && parsed.type === "program_build";
+  const isBlockComplete = !isUser && parsed.type === "block_completed";
+  const isSessionLogged = !isUser && parsed.type === "session_logged";
+
+  // Determine if a session log is "wow" worthy (meaningful adaptation signal)
+  const sessionLogIsWow = isSessionLogged && (() => {
+    const d = parsed.data as any;
+    const difficulty = d?.difficultyScore ?? 0;
+    const energy = d?.energyScore ?? 3;
+    const pain = d?.painScore ?? 0;
+    return difficulty >= 4 || energy <= 2 || pain >= 4;
+  })();
+
+  function handleBlockCompleteShare() {
+    if (!onShareMoment) return;
+    const data = parsed.data as any;
+    const fromWeek = data?.fromWeek ?? null;
+    const moment = buildShareMoment({
+      type: "BLOCK_COMPLETE",
+      agentQuote: message.content.length < 200 ? message.content : undefined,
+      blockWeek: fromWeek,
+      triggerSource: "block_completed_message",
+    });
+    onShareMoment(moment);
+  }
+
+  function handleSessionLogShare() {
+    if (!onShareMoment) return;
+    const moment = buildShareMoment({
+      type: "SESSION_LOG_ADAPTATION",
+      agentQuote: message.content.length < 200 ? message.content : undefined,
+      triggerSource: "session_logged_message",
+    });
+    onShareMoment(moment);
+  }
 
   return (
     <div className={`flex items-start gap-3 mb-5 message-animate ${isUser ? "flex-row-reverse" : ""}`}>
@@ -220,6 +266,32 @@ export default function MessageBubble({ message, onViewProgram, onShowChange }: 
                     Program updated — see right panel
                   </span>
                 </div>
+              </div>
+            )}
+
+            {/* Block completion share CTA */}
+            {isBlockComplete && onShareMoment && (
+              <div className="mt-3 pt-2.5 border-t border-border">
+                <button
+                  onClick={handleBlockCompleteShare}
+                  className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground hover:text-primary transition-colors"
+                >
+                  <Share2 size={11} />
+                  Share block completion
+                </button>
+              </div>
+            )}
+
+            {/* Session log adaptation share CTA — only for notable sessions */}
+            {sessionLogIsWow && onShareMoment && (
+              <div className="mt-3 pt-2.5 border-t border-border">
+                <button
+                  onClick={handleSessionLogShare}
+                  className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground hover:text-primary transition-colors"
+                >
+                  <Share2 size={11} />
+                  Share what changed
+                </button>
               </div>
             )}
           </div>

@@ -44,6 +44,9 @@ import { useStreamMessage } from "@/hooks/useStreamMessage";
 import { clearAuthState, markOnboardingComplete, logRouteDecision, readDeviceId, readOnboardingComplete } from "@/lib/routing";
 import { resolveProgramState } from "@/lib/resolveProgramState";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
+import ShareMomentPrompt from "@/components/share/ShareMomentPrompt";
+import ShareMomentModal from "@/components/share/ShareMomentModal";
+import { buildShareMoment, type ShareMoment } from "@/types/share-moments";
 
 const SUGGESTION_CHIPS = [
   { label: "Build a 4-day strength system", prompt: "Design a 4-day strength training system for me", highlight: true },
@@ -196,6 +199,9 @@ export default function Chat() {
    * of the previous program. Cleared once the new program is saved.
    */
   const [isNewBuildSession, setIsNewBuildSession] = useState(false);
+  const [pendingShareMoment, setPendingShareMoment] = useState<ShareMoment | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const shareMomentTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
    * Optimistic user message — set immediately when the user submits so the
@@ -927,6 +933,19 @@ export default function Chat() {
         setNewProgramSignal((n) => n + 1);
         setRightPanelOpen(true);
         setMobilePanel("right");
+        // Trigger share moment CTA after a short delay (let program panel settle first)
+        if (shareMomentTimeoutRef.current) clearTimeout(shareMomentTimeoutRef.current);
+        shareMomentTimeoutRef.current = setTimeout(() => {
+          const sys = activeSystem as any;
+          const moment = buildShareMoment({
+            type: "PROGRAM_GENERATED",
+            programName: sys?.name ?? latestProgram?.programName,
+            trainingStyle: sys?.trainingStyle ?? sys?.overarchingGoal,
+            weeklyFrequency: sys?.weeklyFrequency,
+            triggerSource: "program_saved",
+          });
+          setPendingShareMoment(moment);
+        }, 2000);
       }
       // After a program modification (edit): switch to Program tab, highlight, and open panel
       if (result.systemEdit?.applied) {
@@ -941,6 +960,19 @@ export default function Chat() {
         // Track last change summary for continuity chip in panel header
         if (result.systemEdit.changeSummary) {
           setLastChangeSummary(result.systemEdit.changeSummary);
+          // Trigger share moment CTA for meaningful agent adjustments
+          if (shareMomentTimeoutRef.current) clearTimeout(shareMomentTimeoutRef.current);
+          shareMomentTimeoutRef.current = setTimeout(() => {
+            const sys = activeSystem as any;
+            const moment = buildShareMoment({
+              type: "AGENT_ADJUSTMENT",
+              programName: sys?.name,
+              trainingStyle: sys?.trainingStyle ?? sys?.overarchingGoal,
+              changeSummary: result.systemEdit!.changeSummary,
+              triggerSource: "agent_adjustment",
+            });
+            setPendingShareMoment(moment);
+          }, 1500);
         }
       }
       // After any AI rebuild (systemSaved) that produced a change log entry,
@@ -2033,6 +2065,10 @@ export default function Chat() {
                       setMobilePanel("right");
                       if (changeTargets.length > 0) setNewChangeSignal((n) => n + 1);
                     }}
+                    onShareMoment={(moment) => {
+                      setPendingShareMoment(moment);
+                      setShowShareModal(true);
+                    }}
                   />
                 ))}
 
@@ -2140,6 +2176,17 @@ export default function Chat() {
               </div>
             )}
           </div>
+
+          {/* Share moment prompt — appears after wow events, dismissed by user */}
+          {pendingShareMoment && !showShareModal && (
+            <div className="flex-shrink-0 max-w-2xl mx-auto w-full px-4">
+              <ShareMomentPrompt
+                moment={pendingShareMoment}
+                onShare={() => setShowShareModal(true)}
+                onDismiss={() => setPendingShareMoment(null)}
+              />
+            </div>
+          )}
 
           {/* Undo toast — appears briefly after a program change */}
           {undoChangeLogId && (
@@ -2346,6 +2393,17 @@ export default function Chat() {
     {isAnonymousUser && (
       <AnonymousConversionFloor
         onCreateAccount={() => setLocation("/register?from=conversion-floor")}
+      />
+    )}
+
+    {/* ─── Share moment modal ──────────────────────────────────────────────── */}
+    {showShareModal && pendingShareMoment && (
+      <ShareMomentModal
+        moment={pendingShareMoment}
+        onClose={() => {
+          setShowShareModal(false);
+          setPendingShareMoment(null);
+        }}
       />
     )}
     </>

@@ -178,6 +178,38 @@ The user interface features a dark theme with electric blue accents and the Inte
 3. **Rolling 7-day week advancement fallback** (`session-logs.ts`): `checkAndAutoAdvanceWeek` now falls back to a rolling 7-day window if the calendar Mon–Sun count doesn't reach `weeklyFrequency` — prevents mid-week starters from being stuck in the same training week indefinitely.
 4. **Orphaned active session cleanup on program delete** (`training-system.ts`): When a user deletes their only/active program (no fallback program), today's `active_sessions` record is cleaned up to prevent stale "Resume Session" UI state.
 
+## Shareable AI Coaching Moment System
+
+A lightweight growth layer that turns key AI coaching events into beautiful, screenshot-worthy share cards.
+
+### Share Moment Types
+1. **PROGRAM_GENERATED** — Triggered after a new program is built and saved
+2. **AGENT_ADJUSTMENT** — Triggered after a meaningful agent edit with a change summary
+3. **BLOCK_COMPLETE** — Triggered when a user completes a 4-week training block (from message structuredData)
+4. **NEXT_BLOCK_READY** — Triggered when the continuation phase is generated
+5. **SESSION_LOG_ADAPTATION** — Triggered when session log produces a notable adaptation signal (difficulty ≥4, energy ≤2, or pain ≥4)
+6. **PROGRESS_MILESTONE** — Triggered on milestone session counts (3, 6, 12, 25, 50, 100)
+
+### Architecture
+- **Types** (`artifacts/trainchat/src/types/share-moments.ts`): `ShareMoment` interface, `buildShareMoment()` factory with safe data filtering, `isMilestoneSessions()`
+- **ShareMomentCard** (`artifacts/trainchat/src/components/share/ShareMomentCard.tsx`): Dark-theme, premium screenshot-worthy card component (React with inline styles for image export)
+- **ShareMomentModal** (`artifacts/trainchat/src/components/share/ShareMomentModal.tsx`): Modal with three export actions: save image (html-to-image), copy caption (clipboard), native share sheet
+- **ShareMomentPrompt** (`artifacts/trainchat/src/components/share/ShareMomentPrompt.tsx`): Subtle inline CTA that appears in the chat after wow moments
+- **Backend route** (`artifacts/api-server/src/routes/share-moments.ts`): POST `/api/share-moments/audit` for structured audit logging
+- **DB table** (`lib/db/src/schema/share-moments.ts`): `share_moment_audit` table tracking all share moment generation and actions
+
+### Wow Moment Detection
+- `result.systemSaved` → PROGRAM_GENERATED (after 2s delay)
+- `result.systemEdit?.applied && changeSummary` → AGENT_ADJUSTMENT (after 1.5s delay)  
+- `structuredData._type === "block_completed"` in messages → BLOCK_COMPLETE (inline CTA in MessageBubble)
+- `structuredData._type === "session_logged"` with difficulty ≥4, energy ≤2, or pain ≥4 → SESSION_LOG_ADAPTATION (inline CTA in MessageBubble)
+
+### Safe Data Filtering
+Cards never expose: pain specifics, bodyweight, age, private notes, injury details. Only include: training type, adaptation summary, block/week info, count-based metrics, coach insight quotes.
+
+### Package Added
+- `html-to-image` (artifacts/trainchat) — for PNG export of share cards
+
 ## External Dependencies
 
 - **OpenAI**: Provides core AI capabilities, specifically using the GPT-4o model.
