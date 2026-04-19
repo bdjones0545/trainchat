@@ -3102,8 +3102,8 @@ function generateFallbackResponse(
         structuredData: null,
       };
     }
-    // Detect recovery / deload / restore
-    if (/recover|restore|deload|rest|relax|yin/.test(lower)) {
+    // Detect recovery / deload / restore / fatigue
+    if (/recover|restore|deload|rest|relax|yin|exhaust|tired|fatigued|heavy.training|low.energy|burnout/.test(lower)) {
       return {
         content: `Recovery flow session — parasympathetic emphasis, no active loading.\n\nStructure (40–50 min total):\n1. Diaphragmatic breathing drill (5 min) — CNS downregulation entry\n2. Child's pose + segmental breathing (5 min)\n3. Supine figure-4 / pigeon holds (10 min) — hip and posterior chain\n4. Supine spinal twist (5 min each side)\n5. Supported hip flexor hold (5 min each side)\n6. Legs up the wall (10 min) — venous return, systemic recovery\n7. Box breathing exit (5 min)\n\nThis is low-load, high-parasympathetic. It's appropriate after a heavy training week or any day you're running below 70%.`,
         structuredData: null,

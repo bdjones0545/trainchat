@@ -1,0 +1,301 @@
+FINALIZE MOBILITY ENGINE PARITY — FLOW DOSING, POSITIONAL CONTROL, AND RANGE ADAPTATION
+
+CONTEXT:
+Mobility engine has been built using the same architecture as Strength and Speed:
+- 4-week blocks
+- mobility block archetypes
+- movement families
+- session grammar (flow-based)
+- agent integration
+- memory dominance
+- predictive adaptation
+- session lifecycle
+- continuation logic
+- DB-backed exercise library
+
+Current state ≈ 80–90% complete.
+
+Remaining gaps:
+- lack of structured “dose” system (time, positions, flows)
+- weak rotation / repetition control
+- insufficient pattern distribution control
+- adaptation not fully mobility-aware
+- flow intelligence not enforced at system level
+
+We now finalize Mobility so it matches Strength and Speed in system quality.
+
+==================================================
+PART 1 — MOBILITY FLOW EXPOSURE TRACKER
+==================================================
+
+Create MobilityExposureTracker (parallel to BlockExposureTracker / SpeedExposureTracker).
+
+Track per 4-week block:
+- movementFamily → exercise → weeks used
+- joint focus (hip / shoulder / spine / ankle)
+- flow pattern usage
+
+Apply penalties:
+- used once → −4
+- used twice → −8
+- used 3+ → hard block
+
+Goal:
+- prevent repeating same mobility drills
+- ensure variation in joint focus and movement patterns
+- maintain fresh stimulus across weeks
+
+==================================================
+PART 2 — POSITIONAL / PATTERN CLUSTER SYSTEM
+==================================================
+
+Define equivalence clusters for mobility patterns:
+
+Examples:
+- hip_internal_external_rotation_cluster (90/90 variations)
+- hip_flexor_extension_cluster (couch stretch, lunge stretch)
+- thoracic_rotation_cluster
+- shoulder_overhead_cluster
+- ankle_dorsiflexion_cluster
+- breathing_trunk_cluster
+- dynamic_flow_cluster
+
+Rule:
+If a cluster is selected heavily in a session:
+→ suppress selecting another from same cluster in adjacent slots
+
+Goal:
+- avoid stacking redundant positions
+- improve movement diversity
+- ensure balanced joint exposure
+
+==================================================
+PART 3 — MOBILITY DOSE SYSTEM (CRITICAL)
+==================================================
+
+Replace simple sets/reps with mobility-specific dosing:
+
+Each exercise/flow must define:
+- holdDuration (seconds)
+- timeUnderTension
+- flowLength (seconds/minutes)
+- breathCycles (if applicable)
+- intensityLevel (low / moderate / high control demand)
+- fatigueCost (low/moderate)
+
+Each session computes:
+- total session time
+- total time under tension
+- total positional exposure per joint
+- control vs range ratio
+
+Enforce caps based on:
+- week role
+- block type
+- fatigue state
+- pain signals
+
+==================================================
+PART 4 — RANGE + CONTROL PROGRESSION MODEL
+==================================================
+
+Implement progression logic across 4 weeks:
+
+Week 1 (Establish):
+- shallow range
+- low complexity
+- shorter holds
+- basic positions
+
+Week 2 (Build):
+- increased range
+- longer holds
+- more stability demand
+
+Week 3 (Intensify):
+- deeper range
+- longer TUT
+- more complex transitions
+- higher control requirement
+
+Week 4 (Deload):
+- reduced volume
+- simplified flows
+- recovery emphasis
+
+Goal:
+Progression must be about:
+- range depth
+- control quality
+- positional difficulty
+
+NOT just time or reps.
+
+==================================================
+PART 5 — JOINT DISTRIBUTION BALANCER
+==================================================
+
+Ensure each session and week has balanced joint coverage.
+
+Track:
+- hip work %
+- shoulder work %
+- spine work %
+- ankle work %
+
+If imbalance detected:
+→ bias selection toward underrepresented joint
+
+Goal:
+Prevent:
+- hip-dominant programs
+- shoulder neglect
+- spine underdevelopment
+
+==================================================
+PART 6 — MOBILITY-SPECIFIC PREDICTIVE ADAPTATION
+==================================================
+
+Extend predictive system for mobility:
+
+Track:
+- stiffness signals (from logs)
+- pain location trends
+- fatigue / soreness
+- adherence
+
+Adjust future weeks:
+- increase joint-specific focus
+- reduce complexity if fatigue high
+- increase recovery flows if soreness high
+- bias control work if instability present
+
+Example:
+Hip stiffness trend →
+→ increase hip mobility families in future weeks
+
+==================================================
+PART 7 — SESSION LOG INTERPRETATION (MOBILITY-SPECIFIC)
+==================================================
+
+Map log inputs to mobility behavior:
+
+difficulty:
+- too easy → increase range or control demand
+- too hard → reduce complexity / range
+
+pain:
+- increase joint-specific prep + reduce aggressive ranges
+
+feeling:
+- tired → bias recovery flows
+- good → allow progression
+
+enjoyment:
+- low → increase dynamic flow variety
+
+notes:
+- parse for joint-specific issues
+
+==================================================
+PART 8 — FLOW CONTINUITY SYSTEM
+==================================================
+
+Ensure sessions feel like coherent flows, not random drills.
+
+Implement:
+- logical ordering of movements
+- smooth transitions between positions
+- progressive sequencing within session
+
+Example:
+hip CARs → 90/90 → loaded end-range → dynamic flow
+
+NOT:
+random unrelated exercises
+
+==================================================
+PART 9 — AGENT LANGUAGE SPECIALIZATION
+==================================================
+
+Update agent responses for mobility:
+
+Avoid:
+“Reduced intensity”
+
+Use:
+“I’m giving your hips more controlled range this week so you can move deeper without forcing it.”
+
+Style:
+- calm
+- coach-like
+- movement-focused
+- non-technical
+
+==================================================
+PART 10 — CONTINUATION BLOCK INTELLIGENCE
+==================================================
+
+Mobility continuation must follow logic:
+
+Examples:
+- restore_range → control_end_range
+- control_end_range → movement_quality_rebuild
+- high fatigue/pain → recovery_flow
+- instability → positional_control focus
+
+Use:
+- memory
+- adherence
+- pain trends
+- stiffness trends
+
+==================================================
+PART 11 — VALIDATION
+==================================================
+
+Verify:
+
+- no repeated drill dominance
+- balanced joint distribution
+- correct time-based dosing
+- progression across 4 weeks feels real
+- adaptation changes future sessions
+- flow sequencing is logical
+- agent responses sound like a mobility coach
+
+==================================================
+PART 12 — FINAL SYSTEM CHECK
+==================================================
+
+Log:
+
+[MobilityParityCheck] {
+  exposureTracking: true/false,
+  clusterControl: true/false,
+  doseSystem: true/false,
+  rangeProgression: true/false,
+  jointBalance: true/false,
+  predictiveAdaptation: true/false,
+  flowContinuity: true/false
+}
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Mobility must match Strength and Speed in:
+
+- system depth
+- variation quality
+- adaptation intelligence
+- progression logic
+- agent quality
+
+But feel fundamentally different:
+
+Strength → load-based  
+Speed → output-based  
+Mobility → control + range + flow-based  
+
+No weak spots.

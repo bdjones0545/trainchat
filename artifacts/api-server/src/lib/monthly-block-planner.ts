@@ -18,6 +18,11 @@
  * session generator, so every layer inherits this mission.
  */
 
+import {
+  RANGE_PROGRESSION_MODEL,
+  MOBILITY_SESSION_CAPS_BY_WEEK,
+} from "./focus-engines/mobility-intelligence";
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type MonthlyBlockType =
@@ -1125,6 +1130,35 @@ export function buildMobilityMonthlyBlockPlan(
 }
 
 export function buildMobilityMonthlyBlockContext(plan: MonthlyBlockPlan): string {
+  const weekProgressionRows = RANGE_PROGRESSION_MODEL.map(w => {
+    const caps = MOBILITY_SESSION_CAPS_BY_WEEK[w.week];
+    return [
+      `WEEK ${w.week} — ${w.label}`,
+      `  Range depth: ${w.rangeDepth} | Hold target: ${w.holdDurationRange[0]}–${w.holdDurationRange[1]}s | Complexity: ${w.complexityLevel} | Control demand: ${w.controlDemand}`,
+      `  Control:Range ratio: ${w.controlToRangeRatio} | Session cap: ${caps.maxSessionMinutes} min | TUT cap: ${caps.maxTUTMinutes} min | Max exercises: ${caps.maxExercises}`,
+      `  PAILs/RAILs: ${w.pailsRailsAllowed ? "Allowed" : "Not yet — passive range first"} | End-range loading: ${w.endRangeLoadingAllowed ? "Allowed where control is verified" : "Not yet"}`,
+      `  Session directives:`,
+      w.keyDirectives.map(d => `    • ${d}`).join("\n"),
+    ].join("\n");
+  }).join("\n\n");
+
+  const blockId = (plan as MonthlyBlockPlan & { blockType?: string }).blockType;
+  const continuationMap: Record<string, string> = {
+    mobility_range_restoration: "After 4 weeks: progress to mobility_end_range_control (passive range consistently achieved, CARs smooth) OR a joint-specific focus block if one area is clearly limiting.",
+    mobility_end_range_control: "After 4 weeks: progress to mobility_movement_quality (active control reliable in 3+ joint directions). If gains plateau, return to mobility_range_restoration for targeted passive work.",
+    mobility_movement_quality: "After 4 weeks: cycle back to sport-specific mobility emphasis OR enter maintenance (2x/week CARs + 1 flow session). Consider integrating mobility blocks alongside strength blocks.",
+    mobility_hip_focus: "After 4 weeks: progress to mobility_end_range_control (hip control block) or mobility_movement_quality if hip range is now reliable across all 6 directions.",
+    mobility_shoulder_focus: "After 4 weeks: progress to mobility_end_range_control (shoulder PAILs/RAILs emphasis). Reassess T-spine — if still limiting, add mobility_spine_focus block.",
+    mobility_spine_focus: "After 4 weeks: progress to mobility_movement_quality (thoracic range integrated into pattern work) or mobility_shoulder_focus if shoulder complex is the next limiter.",
+    mobility_ankle_focus: "After 4 weeks: progress to mobility_movement_quality (ankle range integrated into squat and sprint mechanics). Maintain daily: CARs + banded distraction protocol.",
+    mobility_stiffness_reduction: "After 4 weeks: progress to mobility_range_restoration (tissue now responsive, ready for systematic range work). Keep tissue prep elevated at 10-12 min every session.",
+    mobility_recovery_flow: "After 4 weeks: assess readiness for active work. Return to mobility_range_restoration OR mobility_end_range_control based on current range and control state.",
+    mobility_reentry_support: "After 4 weeks: if pain-free CARs achieved across all target joints, progress to mobility_stiffness_reduction or mobility_range_restoration at 70% range demand.",
+  };
+  const continuationNote = blockId && continuationMap[blockId]
+    ? continuationMap[blockId]
+    : "After this block: assess range and control state. Select next block based on the most limited mobility quality.";
+
   return `## MOBILITY MONTHLY BLOCK PLAN — MOBILITY ENGINE LAYER 1
 Block Type: ${plan.displayName}
 Mission: ${plan.missionStatement}
@@ -1140,11 +1174,17 @@ ${plan.progressionPhilosophy}
 SPORT/GOAL BIAS:
 ${plan.sportGoalBias}
 ${plan.specialPopulationFraming ? `\nSPECIAL FRAMING:\n${plan.specialPopulationFraming}` : ""}
-FOUR-WEEK MOBILITY ARC:
+FOUR-WEEK RANGE/CONTROL PROGRESSION (from Mobility Intelligence Layer):
+${weekProgressionRows}
+
+BLOCK-TYPE WEEK ARC (exercise sequencing specifics):
 ${plan.weekProgressionArc}
 
 KEY MOBILITY PROGRAMMING PRINCIPLES FOR THIS BLOCK:
-${plan.keyPrinciples.map((p, i) => `${i + 1}. ${p}`).join("\n")}`;
+${plan.keyPrinciples.map((p, i) => `${i + 1}. ${p}`).join("\n")}
+
+CONTINUATION BLOCK INTELLIGENCE:
+${continuationNote}`;
 }
 
 /**

@@ -11,6 +11,20 @@
  *
  * Architecture mirrors the Strength and Speed engines exactly.
  * Same infrastructure, different programming brain.
+ *
+ * PARITY STATUS (12-part spec):
+ *  1. Exposure Tracking      ✓ MobilityExposureTracker
+ *  2. Cluster Control        ✓ MOBILITY_CLUSTER_DEFINITIONS (16 clusters)
+ *  3. Dose System            ✓ MOBILITY_DOSE_PROFILES + session caps by week
+ *  4. Range/Control Progress ✓ RANGE_PROGRESSION_MODEL (4-week arc)
+ *  5. Joint Distribution     ✓ JOINT_DISTRIBUTION_TARGETS
+ *  6. Predictive Adaptation  ✓ buildMobilityPredictiveAdaptationContext
+ *  7. Session Log Interp.    ✓ buildMobilitySessionLogInterpretationRules
+ *  8. Flow Continuity        ✓ FLOW_PHASE_SEQUENCE + buildFlowContinuityDirective
+ *  9. Agent Language         ✓ MOBILITY_AGENT_LANGUAGE
+ * 10. Continuation Intel.    ✓ MOBILITY_CONTINUATION_RULES (enhanced)
+ * 11. Validation             ✓ buildMobilityParityCheck
+ * 12. Startup Log            ✓ [MobilityParityCheck] console.log
  */
 
 import type {
@@ -22,6 +36,14 @@ import type {
   QuickCommandDescriptor,
   MemoryNamespaceDescriptor,
 } from "./engine-interface";
+import {
+  buildMobilitySessionContext,
+  buildMobilityParityCheck,
+  buildMobilitySessionLogInterpretationRules,
+  buildMobilityPredictiveAdaptationContext,
+  MOBILITY_AGENT_LANGUAGE,
+  type MobilityJoint,
+} from "./mobility-intelligence";
 import {
   buildMobilityMonthlyBlockPlan,
   buildMobilityMonthlyBlockContext,
@@ -222,28 +244,39 @@ const MOBILITY_SESSION_GRAMMAR: SessionGrammarDescriptor = {
 
 const MOBILITY_CONTINUATION_RULES: ContinuationRuleDescriptor = {
   nextBlockOptions: [
-    "MOBILITY_REENTRY_SUPPORT → MOBILITY_RESTORE_RANGE (pain-free baseline established)",
-    "MOBILITY_STIFFNESS_REDUCTION → MOBILITY_RESTORE_RANGE (chronic stiffness addressed)",
-    "MOBILITY_RESTORE_RANGE → MOBILITY_CONTROL_END_RANGE (range consistently achieved)",
-    "MOBILITY_JOINT_SPECIFIC_FOCUS → MOBILITY_CONTROL_END_RANGE (single-joint baseline built)",
-    "MOBILITY_CONTROL_END_RANGE → MOBILITY_MOVEMENT_QUALITY_REBUILD (control reliable across sessions)",
-    "MOBILITY_MOVEMENT_QUALITY_REBUILD → MOBILITY_END_RANGE_STRENGTH (quality integrated into patterns)",
-    "Any block → MOBILITY_RECOVERY_FLOW (high-stress training week, fatigue accumulation, or deload)",
-    "MOBILITY_RECOVERY_FLOW → MOBILITY_RESTORE_RANGE or MOBILITY_CONTROL_END_RANGE (after recovery)",
+    "mobility_reentry_support → mobility_range_restoration (pain-free baseline established for 2+ sessions)",
+    "mobility_stiffness_reduction → mobility_range_restoration (chronic stiffness addressed, tissue pliable)",
+    "mobility_range_restoration → mobility_end_range_control (passive range consistently achieved, CARs clean)",
+    "mobility_hip_focus → mobility_end_range_control (hip passive range built, ready to own it)",
+    "mobility_shoulder_focus → mobility_end_range_control (shoulder range reliable, introduce PAILs/RAILs)",
+    "mobility_spine_focus → mobility_movement_quality (thoracic range restored, integrate into movement)",
+    "mobility_ankle_focus → mobility_movement_quality (dorsiflexion improved, integrate into squat/sprint)",
+    "mobility_end_range_control → mobility_movement_quality (control reliable across 3+ sessions)",
+    "mobility_movement_quality → [return to sport focus block or maintenance cycling]",
+    "Any block → mobility_recovery_flow (high-stress training week, fatigue >7/10, or explicit deload)",
+    "mobility_recovery_flow → mobility_range_restoration OR mobility_end_range_control (after recovery week)",
+    "ESCALATION RULE: If pain persists >3 sessions → back to mobility_reentry_support immediately",
   ],
-  progressionDirection: "Tissue preparation → Range restoration → Active control → End-range loading → Integrated movement quality → Maintenance. Increase hold duration before increasing loading. Passive range first, active control second, loaded range third.",
+  progressionDirection: "Tissue preparation → Passive range restoration → CARs (diagnostic + active) → End-range control (PAILs/RAILs) → End-range loading → Integrated movement quality → Sport/activity transfer. Primary variable: hold duration. Secondary: contraction demand. Tertiary: positional complexity.",
   deescalationTriggers: [
-    "Joint pain > 3/10 during holds — immediately regress to lighter input",
-    "Pain persisting 24h+ after sessions — shift to recovery/restoration flow",
-    "Range regression after previous gains — return to passive restoration work",
-    "Compensatory movement patterns appearing — return to joint-specific isolation",
+    "Joint pain >3/10 during holds — immediately drop to half range, no active loading",
+    "Pain persisting 24h+ after sessions — shift to mobility_recovery_flow for full week",
+    "Pain persisting across 3+ sessions — return to mobility_reentry_support framework",
+    "Range regression after previous gains — return to passive restoration, add tissue prep",
+    "Compensatory movement patterns emerging — return to joint-specific isolation (joint-focus block)",
+    "Active CARs range dropping below Week 1 baseline — de-escalate to passive holds only",
+    "Fatigue accumulation from concurrent training — mobility_recovery_flow as bridge",
   ],
   adaptationCues: [
-    "Range improving 2+ sessions → progress from passive holds to CARs / active control",
-    "Active control reliable 3+ sessions → introduce end-range loading (Jefferson curl, loaded holds)",
-    "High training fatigue → shift to recovery/restoration flow block",
-    "Stiffness complaint → bias toward stiffness_reduction archetype with tissue prep focus",
-    "Pain complaint → bias toward reentry_support with controlled range reintroduction",
+    "CARs quality improving (smoother, fuller circle) 2+ sessions → add PAILs/RAILs at 20% effort",
+    "Passive range +5–10° measurable improvement → begin active control work at new range",
+    "Active control reliable 3+ sessions at current range → introduce end-range loading",
+    "Easy sessions reported consistently → increase hold duration (15-20s), add contraction demand",
+    "Stiffness complaint (morning or post-training) → bias tissue_preparation + contract-relax → dynamic flow",
+    "Pain complaint (any joint) → bias reentry_support, graded range reintroduction, no loading",
+    "High training week → shift mobility emphasis to recovery_flow + breathing integration",
+    "Sport-specific limitation reported → shift to targeted joint-focus block for 4 weeks",
+    "Range gains plateauing → assess if restriction is capsular (need distraction) vs muscular (need holds)",
   ],
 };
 
@@ -285,44 +318,106 @@ function buildMobilityPromptContext(userMessage: string, goal?: string, sport?: 
 
   const emphasisHints: string[] = [];
   let blockTypeHint: MobilityBlockType | undefined;
+  let emphasizedJoint: MobilityJoint | undefined;
 
-  if (/hip|hips|groin|pigeon|90.90|couch.stretch|hip.flexor/.test(lower)) {
-    emphasisHints.push("User message signals hip mobility intent — bias toward hip complex work: Hip CARs, 90/90 Stretch, Couch Stretch, Frog Stretch, Hip PAILs/RAILs.");
+  // ── Intent signal parsing ──────────────────────────────────────────────────
+  if (/hip|hips|groin|pigeon|90.90|couch.stretch|hip.flexor|adductor|frog/.test(lower)) {
+    emphasisHints.push(
+      "HIP INTENT DETECTED — bias toward hip complex work. Priority cluster: hip_rotation_cluster + hip_articulation_cluster. " +
+      "Lead with Hip CARs (diagnostic), follow with 90/90 Stretch 45-60s, Couch Stretch, Frog Stretch. " +
+      "If Week 2+: introduce Hip PAILs/RAILs at 20% contraction. Check hip internal rotation — most neglected direction.",
+    );
     blockTypeHint = "mobility_hip_focus";
+    emphasizedJoint = "hip";
   }
-  if (/shoulder|overhead|rotator|sleeper|wall.slide|pec/.test(lower)) {
-    emphasisHints.push("User message signals shoulder range intent — bias toward shoulder CARs, wall slides, sleeper stretch, pec minor work, and end-range shoulder control.");
+  if (/shoulder|overhead|rotator|sleeper|wall.slide|pec|deltoid|capsule/.test(lower)) {
+    emphasisHints.push(
+      "SHOULDER INTENT DETECTED — T-spine mobility precedes shoulder work (always). " +
+      "Lead with thoracic extension foam roll, then Shoulder CARs, Wall Slides, Sleeper Stretch (posterior capsule). " +
+      "shoulder_posterior_cluster = max 1 drill. shoulder_cars_cluster = CARs + Wall Slides together is appropriate. " +
+      "Week 3+: introduce Shoulder PAILs/RAILs, banded end-range work.",
+    );
     blockTypeHint = blockTypeHint ?? "mobility_shoulder_focus";
+    emphasizedJoint = "shoulder";
   }
-  if (/thoracic|t.spine|upper.back|rotation|rib/.test(lower)) {
-    emphasisHints.push("User message signals thoracic spine intent — bias toward T-spine extension/rotation: foam roll, open books, thread the needle, thoracic CARs.");
-    blockTypeHint = blockTypeHint ?? "mobility_range_restoration";
+  if (/thoracic|t.spine|upper.back|rotation|rib|spine|spinal/.test(lower)) {
+    emphasisHints.push(
+      "THORACIC SPINE INTENT DETECTED — extension precedes rotation (always). " +
+      "thoracic_extension_cluster first: foam roll T4-T10, Cat-Cow. Then thoracic_rotation_cluster: Open Book, Thread the Needle, Quadruped Rotation. " +
+      "Breathing amplifies thoracic range — pair breathing drill with thoracic work. " +
+      "Thoracic CARs with dowel in Week 2+. Max 2 rotation variants per session.",
+    );
+    blockTypeHint = blockTypeHint ?? "mobility_spine_focus";
+    emphasizedJoint = "spine";
   }
-  if (/ankle|dorsiflexion|calf|squat.depth/.test(lower)) {
-    emphasisHints.push("User message signals ankle mobility intent — bias toward ankle dorsiflexion and foot complex work: wall ankle stretch, banded distraction, ankle CARs.");
-    blockTypeHint = blockTypeHint ?? "mobility_range_restoration";
+  if (/ankle|dorsiflexion|calf|squat.depth|foot|plantarflexion/.test(lower)) {
+    emphasisHints.push(
+      "ANKLE INTENT DETECTED — ankle dorsiflexion is the squat and sprint prerequisite. " +
+      "ankle_passive_cluster: pick 1 (Wall Ankle Stretch OR Banded Distraction). " +
+      "ankle_active_cluster: Ankle CARs always, PAILs/RAILs in Week 2+. " +
+      "ankle_calf_cluster: both Calf Stretch variants together (straight = gastroc, bent = soleus — different muscles). " +
+      "Progress: daily CARs → add banded distraction → heel drops → loaded dorsiflexion.",
+    );
+    blockTypeHint = blockTypeHint ?? "mobility_ankle_focus";
+    emphasizedJoint = "ankle";
   }
-  if (/recover|restore|rest|deload|relax|parasympathetic/.test(lower)) {
-    emphasisHints.push("User message signals recovery/restoration intent — bias toward MOBILITY_RECOVERY_FLOW: yin holds, breathing-integrated stretches, gentle flows.");
+  if (/recover|restore|rest|deload|relax|parasympathetic|restor/.test(lower)) {
+    emphasisHints.push(
+      "RECOVERY INTENT DETECTED — shift to mobility_recovery_flow archetype. " +
+      "Increase breathing_reset_cluster priority. Recovery holds 2-5 min per position. " +
+      "No PAILs/RAILs, no end-range loading. Nervous system downregulation is the goal. " +
+      "Session structure: tissue prep → breathing → yin holds → recovery exit. Max 35 min.",
+    );
     blockTypeHint = blockTypeHint ?? "mobility_recovery_flow";
   }
-  if (/control|stability|end.range|pails|rails|car|articular/.test(lower)) {
-    emphasisHints.push("User message signals end-range control intent — bias toward PAILs/RAILs, CARs, end-range isometrics, and active control work.");
+  if (/control|stability|end.range|pails|rails|car|articular|own/.test(lower)) {
+    emphasisHints.push(
+      "END-RANGE CONTROL INTENT DETECTED — active control work is the priority. " +
+      "PAILs/RAILs are the primary tool: passive hold first to reach range, then 5-10s isometric at 20-40% effort. " +
+      "CARs are diagnostic — slow, full-range circles to assess active vs passive range gap. " +
+      "End-range isometrics build tissue tolerance. Passive range MUST exist before control work.",
+    );
     blockTypeHint = blockTypeHint ?? "mobility_end_range_control";
   }
-  if (/stiff|stiffness|tight|tightness|morning/.test(lower)) {
-    emphasisHints.push("User message signals stiffness reduction intent — bias toward tissue prep, contract-relax sequences, and dynamic mobility flows.");
+  if (/stiff|stiffness|tight|tightness|morning|locked.up/.test(lower)) {
+    emphasisHints.push(
+      "STIFFNESS INTENT DETECTED — tissue prep before ANY passive holds. " +
+      "Foam rolling + contract-relax sequences → dynamic flow → THEN passive holds. " +
+      "breathing_reset_cluster opens the session. Stiffness responds to heat + movement, not aggressive forcing. " +
+      "Dynamic mobility flow (10 min) before passive positional work differentiates stiffness sessions.",
+    );
     blockTypeHint = blockTypeHint ?? "mobility_stiffness_reduction";
   }
-  if (/pain|hurt|injury|return|comeback|re.entry/.test(lower)) {
-    emphasisHints.push("User message signals pain/re-entry intent — bias toward MOBILITY_REENTRY_SUPPORT: graduated range, graded exposure, pain-aware progression.");
+  if (/pain|hurt|injury|return|comeback|re.entry|sensitive|achy/.test(lower)) {
+    emphasisHints.push(
+      "PAIN/REENTRY INTENT DETECTED — mobility_reentry_support framework applies. " +
+      "Graded range reintroduction ONLY. Week 1: 50% available range, no PAILs, no loading. " +
+      "Differentiate: sharp/stabbing = stop immediately (may be structural). Dull ache = proceed carefully. " +
+      "Pain >3/10 = reduce range, increase breathing, no active loading. " +
+      "Goal: establish pain-free CARs before any passive end-range holds.",
+    );
     blockTypeHint = blockTypeHint ?? "mobility_reentry_support";
   }
-  if (/breath|breathing|diaphragm|box.breath/.test(lower)) {
-    emphasisHints.push("User message signals breathing integration intent — bias toward breathing drills, 90/90 breathing hold, crocodile breathing, and respiratory mechanics.");
+  if (/breath|breathing|diaphragm|box.breath|exhale|inhale/.test(lower)) {
+    emphasisHints.push(
+      "BREATHING INTENT DETECTED — breathing_reset_cluster is the session anchor. " +
+      "Crocodile breathing (prone) confirms diaphragm activation. Box breathing (4-4-4-4) for nervous system reset. " +
+      "90/90 Breathing Hold is both a breathing drill AND hip position — dual purpose. " +
+      "Exhale = range amplifier (deepen passive holds on the out-breath).",
+    );
+    blockTypeHint = blockTypeHint ?? "mobility_movement_quality";
+  }
+  if (/movement|quality|flow|sequence|transition/.test(lower)) {
+    emphasisHints.push(
+      "MOVEMENT QUALITY INTENT DETECTED — dynamic_flow_cluster is the session anchor. " +
+      "World's Greatest Stretch and Spiderman Flow are diagnostic — note where movement quality breaks down. " +
+      "Slow, deliberate transitions expose joint control gaps. Max 1 dynamic flow sequence per session. " +
+      "Flows close the session — all joint work must precede the integrating flow.",
+    );
     blockTypeHint = blockTypeHint ?? "mobility_movement_quality";
   }
 
+  // ── Build block plan context ───────────────────────────────────────────────
   const seed = Math.random();
   const mobilityBlockPlan = buildMobilityMonthlyBlockPlan(
     goal ?? userMessage.slice(0, 100),
@@ -333,84 +428,103 @@ function buildMobilityPromptContext(userMessage: string, goal?: string, sport?: 
   );
   const blockContext = buildMobilityMonthlyBlockContext(mobilityBlockPlan);
 
+  // ── Build intelligence system context (week 2 assumed without explicit signal) ─
+  const intelligenceContext = buildMobilitySessionContext(2, {
+    emphasizedJoint,
+  });
+
   return `
 [FOCUS MODE: MOBILITY]
-Active training focus: Mobility — covering range restoration, positional control, joint-specific focus, movement quality, end-range strength, stiffness reduction, and recovery flow.
+Active training focus: Mobility — range restoration, positional control, joint prep, end-range control, tissue tolerance, recovery flow.
 
 THIS IS NOT LIGHT STRENGTH. THIS IS NOT RECOVERY CARDIO. THIS IS NOT A STRETCH LIST.
-Mobility work operates on its own biomotor logic lane — it is structured, progressive, adaptive, and agent-driven.
+Mobility operates on its own biomotor logic lane — structured, progressive, systematic, and agent-driven.
 
 ${blockContext}
 
+─────────────────────────────────────────
 MOVEMENT FAMILIES available in this mode:
-1. Hip Mobility — Hip CARs, 90/90 Stretch, 90/90 Active Lift, Couch Stretch, Hip PAILs/RAILs, Frog Stretch, Adductor Rockback, Adductor CARs, Pigeon Stretch, Deep Squat Hip Stretch, Hip Airplane
-2. Shoulder Mobility — Shoulder CARs, Wall Slides, Sleeper Stretch, Band Distraction, Doorway Chest Stretch, Pec Minor Stretch, Cross-Body Shoulder Stretch, Shoulder PAILs/RAILs
-3. Thoracic Spine — Thoracic Extension Foam Roll, Cat-Cow, Quadruped Thoracic Rotation, Thread the Needle, Open Book Stretch, Thoracic CARs, Rib Roll, T-Spine Extension on Ball
-4. Ankle Mobility — Wall Ankle Stretch, Banded Ankle Distraction, Ankle CARs, Ankle Circles, Calf Stretch Straight Knee, Calf Stretch Bent Knee, Heel Drop, Ankle PAILs/RAILs
-5. Trunk Control — Dead Bug, Bird Dog, 90/90 Breathing Hold, Segmental Rolling, Hollow Body Hold, Pallof Press (anti-rotation)
-6. End-Range Strength — Jefferson Curl, Deep Squat Hold with Load, Passive/Active Hang, Hip PAILs/RAILs (loaded), Weighted 90/90 Lift, Copenhagen Plank
+─────────────────────────────────────────
+1. Hip Mobility — Hip CARs, 90/90 Stretch, 90/90 Active Posterior Lift, Couch Stretch, Hip PAILs/RAILs, Frog Stretch, Adductor Rockback, Adductor CARs, Pigeon Stretch, Deep Squat Hip Stretch, Hip Airplane, Spiderman Hip Stretch
+2. Shoulder Mobility — Shoulder CARs, Wall Slides, Sleeper Stretch, Band Shoulder Distraction, Doorway Chest Stretch, Pec Minor Stretch, Cross-Body Shoulder Stretch, Shoulder PAILs/RAILs, Overhead Lat Stretch, Banded Pass-Through
+3. Thoracic Spine — Thoracic Extension Foam Roll, Cat-Cow, Quadruped Thoracic Rotation, Thread the Needle, Open Book Stretch, Thoracic CARs, Thoracic CARs with Dowel, Rib Roll, T-Spine Extension on Ball, Side-Lying T-Spine Rotation
+4. Ankle Mobility — Wall Ankle Stretch, Banded Ankle Distraction, Ankle CARs, Ankle PAILs/RAILs, Calf Stretch Straight Knee, Calf Stretch Bent Knee, Heel Drop, Ankle Circles
+5. Trunk Control — Dead Bug, Dead Bug with Band, Bird Dog, 90/90 Breathing Hold, Segmental Rolling, Hollow Body Hold, Pallof Press
+6. End-Range Strength — Jefferson Curl, Deep Squat Hold with Load, Passive Hang, Active Hang, Copenhagen Plank, Hip PAILs/RAILs (loaded isometric), Weighted 90/90 Posterior Lift
 7. Positional Control — Hip CARs (controlled), Shoulder CARs (loaded), 90/90 Active Posterior Lift, Hip IR End-Range Hold, Shoulder IR End-Range Hold, Thoracic CARs with Dowel
-8. Breathing Integration — Diaphragmatic Breathing, Box Breathing, Crocodile Breathing, 90/90 Breathing Hold, PRI Hip Shift with Exhale, Supine Breathing Reset
-9. Tissue Preparation — Foam Roll Quads, Thoracic Foam Roll, Lacrosse Ball Glute Release, Lacrosse Ball Pec Minor, Calf Foam Roll, Hamstring Foam Roll
-10. Dynamic Mobility Flow — World's Greatest Stretch Flow, Inchworm to Squat, Spiderman Flow, Hip 90/90 Transition Flow, Groundwork Mobility Sequence
-11. Recovery & Restoration — Supine Figure-4, Supine Spinal Twist, Child's Pose, Supported Hip Flexor Hold, Legs Up the Wall, Recovery Breathing Protocol
+8. Breathing Integration — Diaphragmatic Breathing Drill, Box Breathing, Crocodile Breathing, 90/90 Breathing Hold, Supine Breathing Reset, Exhale-Deepen Stretch Protocol
+9. Tissue Preparation — Foam Roll Quads, Thoracic Foam Roll, Lacrosse Ball Glute Release, Lacrosse Ball Pec Minor, Calf Foam Roll, Hamstring Foam Roll, IT Band Foam Roll
+10. Dynamic Mobility Flow — World's Greatest Stretch Flow, Inchworm to Squat, Spiderman Flow, Hip 90/90 Transition Flow, Ground Control Flow
+11. Recovery & Restoration — Supine Figure-4 Hold, Supine Spinal Twist, Child's Pose, Supported Hip Flexor Hold, Legs Up the Wall, Progressive Relaxation Flow
 
-CRITICAL MOBILITY SESSION RULES:
-- Breathing is the primary tool — exhale to deepen passive range, inhale to create active control
-- Passive range FIRST, then active control — never train control in a range you haven't restored
-- NEVER push through joint pain — differentiate muscle tension (acceptable) vs joint impingement (stop)
-- Hold durations: 30–90 sec passive, 5–10 sec active isometrics, 3–5 reps for CARs
-- Track specific joint deficits — mobility is targeted and systematic, not random
+─────────────────────────────────────────
+${intelligenceContext}
+─────────────────────────────────────────
 
-4-WEEK MOBILITY SESSION STRUCTURE:
-- Week 1 (Establish): Tissue prep + passive holds, introduce CARs, no end-range loading
-- Week 2 (Build): Add active control work, PAILs/RAILs intro, increase hold durations
-- Week 3 (Intensify): End-range loading introduced, control work at full range, movement quality integration
-- Week 4 (Deload): Recovery/restoration flow emphasis, reduce intensity, consolidate gains
+MOBILITY PROGRESSION VARIABLES (primary input to programming decisions):
+- Range depth: how far into end-range the hold or work occurs
+- Time under tension: hold duration is the primary volume variable (not reps)
+- Control difficulty: passive hold → active isometric → loaded end-range
+- Positional complexity: isolated joint → multi-joint → flow sequences
+- Contraction demand: 20% effort (Week 2) → 30% (Week 3) → 40% (Week 4 max for PAILs)
 
-PRIMARY SESSION SKELETON (5-Part Structure):
-1. Tissue Prep / Breathing (5–10 min): foam rolling, breathing drill, parasympathetic activation
-2. Mobility Activation / CARs (10 min): joint CARs for priority regions, synovial activation
-3. Positional Work / End-Range (15 min): holds, PAILs/RAILs, loaded end-range where appropriate
-4. Dynamic Movement Integration (10 min): flows, transitions, multi-joint mobility patterns
-5. Recovery / Downregulation (5–10 min): gentle holds, breathing reset, nervous system exit
-
-MOBILITY PROGRESSION VARIABLES (NOT just sets/reps):
-- Range depth (how far into end-range the work occurs)
-- Time under tension (hold duration)
-- Control difficulty (passive → active → loaded)
-- Positional demand (how many joints simultaneously at end-range)
-- Complexity of movement transitions (isolated → multi-joint → flow sequences)
-
-AGENT COACHING LANGUAGE in Mobility mode:
-- Reference mobility qualities: end-range, tissue length, joint space, active control, range ownership, capsular vs muscular restriction
-- DO NOT default to strength language ("load", "volume", "progressive overload")
-- DO NOT default to speed language ("quality", "CNS", "reactive")
-- Think and speak in terms of: "own the range, not just reach it"
-- Adaptation vocabulary: range depth, hold duration, control demand, positional complexity
-${emphasisHints.length > 0 ? "\nLIVE MESSAGE SIGNALS:\n" + emphasisHints.join("\n") : ""}
+AGENT LANGUAGE RULES:
+Preferred vocabulary: ${MOBILITY_AGENT_LANGUAGE.preferredVocabulary.join(", ")}
+Prohibited vocabulary: ${MOBILITY_AGENT_LANGUAGE.prohibitedVocabulary.join(", ")}
+Voice examples:
+${MOBILITY_AGENT_LANGUAGE.coachVoiceExamples.map(e => `  "${e}"`).join("\n")}
+${emphasisHints.length > 0 ? "\n─────────────────────────────────────────\nLIVE MESSAGE SIGNALS:\n" + emphasisHints.join("\n") : ""}
 `.trim();
 }
 
 // ─── Adaptation Heuristics ────────────────────────────────────────────────────
 
 function getMobilityAdaptationHeuristics(): string {
+  const logInterpretation = buildMobilitySessionLogInterpretationRules();
+  const predictiveAdaptation = buildMobilityPredictiveAdaptationContext();
+
   return `
 MOBILITY ENGINE — Adaptation Heuristics:
-- Pain signal (any session): immediately regress to MOBILITY_REENTRY_SUPPORT, reduce range demand, check for joint impingement vs muscle tension
-- Stiffness complaint: shift to MOBILITY_STIFFNESS_REDUCTION — tissue prep focus, contract-relax sequences, dynamic flows before passive holds
-- Range improving 2+ sessions: progress from passive holds → PAILs/RAILs → CARs → active control
-- Active control reliable 3+ sessions: introduce end-range loading (Jefferson curl, weighted 90/90 lift, loaded shoulder holds)
-- High training week (strength or speed): shift to MOBILITY_RECOVERY_FLOW — yin holds, breathing integration, no active loading
-- Fatigue accumulation: reduce session length, increase recovery/restoration ratio, prioritize breathing drills
-- Easy sessions reported: increase hold duration, add PAILs/RAILs contraction demand, introduce next complexity level
-- Hard/painful sessions: hold complexity, increase passive recovery, return to range restoration focus
-- Shoulder range limiting overhead patterns: prioritize Shoulder CARs + T-spine rotation before any pressing session
-- Hip restriction limiting squat/sprint: prioritize 90/90 + Hip CARs + couch stretch before lower body sessions
-- Ankle dorsiflexion limiting squat depth: daily ankle CARs + banded distraction protocol before all squat sessions
-- Block transition: move from RESTORE_RANGE → CONTROL_END_RANGE after 3–4 weeks of consistent range gains
+
+BLOCK PROGRESSION LADDER (canonical order):
+1. mobility_reentry_support → 2. mobility_stiffness_reduction → 3. mobility_range_restoration →
+4. [hip/shoulder/spine/ankle focus blocks] → 5. mobility_end_range_control → 6. mobility_movement_quality → maintenance
+Recovery bridge: any block → mobility_recovery_flow → resume at appropriate ladder point
+
+CRITICAL PROGRESSION GATES:
+- CANNOT progress to active control without 2+ sessions of reliable passive range
+- CANNOT introduce PAILs/RAILs before passive range is consistent
+- CANNOT introduce end-range loading before active control is reliable in 3+ sessions
+- CANNOT run dynamic flows before passive phase is complete in the session
+- MUST de-escalate to mobility_reentry_support if pain persists 3+ sessions
+
+JOINT-SPECIFIC ADAPTATION RULES:
+- Shoulder range limiting overhead: T-spine extension FIRST (every session), then shoulder CARs + wall slides
+- Hip restriction limiting squat/sprint: Hip CARs + 90/90 + Couch Stretch before every lower body session
+- Ankle dorsiflexion limiting squat depth: daily Ankle CARs + banded distraction is the daily standard
+- Thoracic rotation limiting throwing/rotation: foam roll extension → rotation sequence (always extension before rotation)
+- Pain or impingement: graded range reintroduction only, no PAILs, no loading
+
+${predictiveAdaptation}
+
+${logInterpretation}
 `.trim();
 }
+
+// ─── Startup Parity Check ─────────────────────────────────────────────────────
+
+const _mobilityParityCheck = buildMobilityParityCheck();
+const _allSystemsReady = Object.values(_mobilityParityCheck).every(Boolean);
+
+console.log("[MobilityParityCheck]", JSON.stringify({
+  ..._mobilityParityCheck,
+  allSystemsReady: _allSystemsReady,
+  clusterCount: 16,
+  movementFamilies: MOBILITY_MOVEMENT_FAMILIES.length,
+  blockArchetypes: MOBILITY_BLOCK_ARCHETYPES.length,
+  quickCommands: MOBILITY_QUICK_COMMANDS.length,
+  parity: _allSystemsReady ? "FULL_PARITY" : "INCOMPLETE",
+}));
 
 // ─── Engine Export ────────────────────────────────────────────────────────────
 

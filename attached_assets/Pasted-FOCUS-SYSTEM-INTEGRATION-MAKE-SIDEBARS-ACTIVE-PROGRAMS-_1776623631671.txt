@@ -1,0 +1,290 @@
+FOCUS-SYSTEM INTEGRATION — MAKE SIDEBARS + ACTIVE PROGRAMS FULLY MODE-AWARE
+
+CONTEXT:
+TrainChat now supports multiple focus systems:
+- Strength
+- Speed / Footwork
+- Mobility
+
+Each focus has its own programming engine and should remain isolated:
+- separate program chain
+- separate block progression
+- separate adaptation logic
+- separate continuation logic
+- separate active context
+
+Right now we need to finish the focus integration across the UI so the app always knows which focus the user is in and loads the correct program automatically.
+
+This applies especially to:
+1. the RIGHT SIDEBAR
+2. the Active Programs experience
+3. focus switching inside Active Programs
+
+We want this to feel seamless and obvious.
+The user should never accidentally be looking at the wrong focus program.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make the right sidebar and Active Programs fully focus-aware so they always pull the correct program, and allow the user to switch between focuses cleanly inside Active Programs.
+
+==================================================
+PART 1 — DEFINE FOCUS-AWARE ACTIVE PROGRAM STATE
+==================================================
+
+We need explicit focus-aware active program state.
+
+Add or confirm a model like:
+
+activeProgramByFocus = {
+  strength: trainingSystemId | null,
+  speed: trainingSystemId | null,
+  mobility: trainingSystemId | null
+}
+
+Do NOT rely on one generic activeTrainingSystemId for all focuses.
+Each focus needs its own active program chain.
+
+If schema changes are needed, implement them safely.
+
+==================================================
+PART 2 — RIGHT SIDEBAR MUST RESPECT CURRENT FOCUS
+==================================================
+
+The right sidebar should detect the current focus mode and load the correct program/session for that focus.
+
+Requirements:
+- if focus = strength → right sidebar shows strength session controls + strength program context
+- if focus = speed → right sidebar shows speed session controls + speed program context
+- if focus = mobility → right sidebar shows mobility session controls + mobility program context
+
+This includes:
+- today’s session state
+- session controls
+- log session
+- check-in
+- any command actions
+- active modifiers / memory state
+
+The sidebar must never accidentally show the strength session while the user is in Speed mode.
+
+==================================================
+PART 3 — ACTIVE PROGRAMS PAGE MUST LOAD THE CORRECT FOCUS PROGRAM
+==================================================
+
+When the user opens Active Programs, it must load the active program for the CURRENT focus.
+
+Examples:
+- user is in Strength mode → Active Programs loads the strength program
+- user is in Speed mode → Active Programs loads the speed program
+- user is in Mobility mode → Active Programs loads the mobility program
+
+If no active program exists for that focus:
+- show a clean empty state for that focus
+- do NOT show another focus’s program
+
+==================================================
+PART 4 — ADD FOCUS SWITCHING INSIDE ACTIVE PROGRAMS
+==================================================
+
+Inside Active Programs, add focus tabs / segmented control so the user can switch between:
+- Strength
+- Speed / Footwork
+- Mobility
+
+This should:
+- match the main focus system
+- visually indicate the active focus
+- update the displayed program immediately
+- update the right sidebar context as needed
+- apply the correct subtle mode color treatment
+
+This allows the user to inspect other focus programs without having to leave the page.
+
+==================================================
+PART 5 — SYNC FOCUS SWITCHING ACROSS THE APP
+==================================================
+
+Focus switching must stay coherent across:
+- main agent tabs
+- Active Programs
+- right sidebar
+- agent panel
+- Today / Week / Block views
+
+If the user changes focus in one place, the rest of the system should update accordingly.
+
+Define a single source of truth for current focus mode and make all related surfaces subscribe to it.
+
+==================================================
+PART 6 — FOCUS-AWARE DATA FETCHING
+==================================================
+
+Update queries/endpoints so they are focus-aware.
+
+Examples:
+- getCurrentProgram(focusMode)
+- getTodaySession(focusMode)
+- getCurrentWeek(focusMode)
+- getBlockData(focusMode)
+- getAgentMemory(focusMode) if memory is namespaced by focus
+
+Any existing query that implicitly assumes one active program must be updated.
+
+==================================================
+PART 7 — FOCUS-AWARE EMPTY STATES
+==================================================
+
+If a user has:
+- a Strength program
+- no Speed program
+- no Mobility program
+
+Then:
+- Strength tab shows the active program
+- Speed tab shows “No active Speed program yet”
+- Mobility tab shows “No active Mobility program yet”
+
+Add focus-specific empty-state copy and CTA:
+- Build Strength Program
+- Build Speed Program
+- Build Mobility Program
+
+These CTAs should route into the correct focus engine.
+
+==================================================
+PART 8 — PREVENT CROSS-FOCUS CONTAMINATION
+==================================================
+
+Critical:
+Switching to another focus must not overwrite, mutate, or replace the active program from another focus.
+
+Examples:
+- opening Speed should not change the active Strength system
+- deleting a Mobility program should not affect Strength
+- logging a Speed session should not alter Strength session state
+- right sidebar actions must hit the current focus engine only
+
+Add guardrails so focus isolation remains intact.
+
+==================================================
+PART 9 — FOCUS-AWARE SESSION LIFECYCLE
+==================================================
+
+Session lifecycle must also be focus-specific:
+- not_started
+- in_progress
+- completed
+
+A session in progress in Strength should not cause the sidebar to show Resume Session when the user switches to Speed unless a Speed session is also in progress.
+
+Persist and query session state by focus/program context.
+
+==================================================
+PART 10 — FOCUS-AWARE AGENT MEMORY / MODIFIERS
+==================================================
+
+If agent memory/modifiers are stored by focus, make sure:
+- Strength modifiers show only in Strength
+- Speed modifiers show only in Speed
+- Mobility modifiers show only in Mobility
+
+If there is also global memory (injury/equipment/age), keep it shared.
+But focus-specific emphases/biases must stay isolated.
+
+Right sidebar HUD / Agent panel / Block tab should all read the correct focus-scoped memory.
+
+==================================================
+PART 11 — UI / UX POLISH
+==================================================
+
+Make the focus switching feel premium and obvious.
+
+Requirements:
+- focus tabs visible and clean
+- correct subtle mode color / accent shifts
+- no confusing reload flicker
+- preserve mobile-first layout
+- smooth transitions between focuses
+- strong active-state indication
+
+Do NOT make it feel like three separate apps.
+It should feel like one intelligent system with multiple lanes.
+
+==================================================
+PART 12 — AUDIT LOGGING
+==================================================
+
+Add logs:
+
+[FocusSidebarAudit] {
+  currentFocus,
+  sidebarProgramId,
+  sidebarSessionId,
+  sidebarModeCorrect: true/false
+}
+
+[FocusActiveProgramsAudit] {
+  selectedFocus,
+  loadedProgramId,
+  loadedFromCorrectEngine: true/false,
+  emptyStateShown: true/false
+}
+
+[FocusSwitchAudit] {
+  previousFocus,
+  nextFocus,
+  stateSyncedAcrossUI: true/false
+}
+
+We need to confirm the correct focus program is always being shown.
+
+==================================================
+PART 13 — VALIDATION
+==================================================
+
+Test all of these cases:
+
+1. User has active Strength program only
+- Strength shows program
+- Speed shows empty state
+- Mobility shows empty state
+
+2. User has Strength + Speed active programs
+- switching tabs shows the correct one
+- right sidebar updates accordingly
+
+3. User has a session in progress in Strength
+- switching to Speed does not show Resume Session unless Speed also has one in progress
+
+4. Logging, editing, deleting, and quick actions in one focus do not affect the others
+
+5. Building a new program from a focus-specific empty state creates it under the correct focus
+
+==================================================
+PART 14 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. how active program state is now stored by focus
+2. how the right sidebar determines which program/session to show
+3. how Active Programs switches focus
+4. how focus state is synchronized across the app
+5. how empty states work per focus
+6. what guardrails prevent cross-focus contamination
+7. what was fully completed vs still needs follow-up
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat should now behave like one intelligent platform with three clean focus lanes:
+
+- Strength
+- Speed / Footwork
+- Mobility
+
+The right sidebar and Active Programs must always know which focus the user is in and show the correct program for that focus.
+
+The user should be able to switch focuses inside Active Programs and immediately see the correct program, controls, and state — with no bleed between systems.
