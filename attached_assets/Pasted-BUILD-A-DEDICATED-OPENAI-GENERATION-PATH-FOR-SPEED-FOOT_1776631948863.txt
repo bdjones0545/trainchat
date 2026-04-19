@@ -1,0 +1,237 @@
+BUILD A DEDICATED OPENAI GENERATION PATH FOR SPEED / FOOTWORK
+
+CONTEXT:
+We confirmed that Speed generation was falling into fallback behavior and previously producing stale or strength-flavored programs.
+
+We removed hidden program-generation fallbacks, which is correct.
+
+Now the next issue is clear:
+Speed needs a stronger, dedicated OpenAI handling path so the primary generation succeeds reliably and produces true speed-native programs.
+
+Strength already has a more mature generation flow.
+Speed now needs equivalent OpenAI handling maturity.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Create a dedicated OpenAI generation path for Speed / Footwork that is as reliable and structured as Strength, with speed-native prompts, architecture injection, response shaping, validation, and repair.
+
+==================================================
+PART 1 — AUDIT CURRENT SPEED OPENAI PATH
+==================================================
+
+Trace the full Speed generation flow when a user requests a speed program.
+
+Audit:
+- request normalization
+- focus routing
+- speed engine preparation
+- system prompt construction
+- architecture brief injection
+- OpenAI request payload
+- OpenAI response parsing
+- ProgramStructure conversion
+- validation / rejection
+
+Log:
+
+[SpeedOpenAIAudit] {
+  focusMode,
+  normalizedIntent,
+  speedArchitectureBuilt,
+  systemPromptBuilt,
+  openAIRequestSent,
+  responseReceived,
+  parseSucceeded,
+  programStructureBuilt,
+  validationPassed,
+  failurePoint
+}
+
+We need to know exactly where Speed is failing.
+
+==================================================
+PART 2 — CREATE A SPEED-SPECIFIC SYSTEM PROMPT
+==================================================
+
+Build a dedicated Speed system prompt, not a lightly modified Strength prompt.
+
+It must encode:
+- sprint / speed coaching language
+- speed block archetypes
+- speed session grammar
+- movement families
+- week progression logic
+- full recovery rules
+- quality-over-fatigue principles
+- no strength bias
+
+The prompt should clearly describe that this is a speed / footwork system, not a lifting program.
+
+==================================================
+PART 3 — BUILD A STRUCTURED SPEED ARCHITECTURE BRIEF
+==================================================
+
+Create a speed-specific architecture brief object that is injected into the OpenAI call before generation.
+
+It must include:
+- selected speed block archetype
+- current week role
+- session identities
+- movement family requirements
+- drill ordering rules
+- volume / contact expectations
+- conditioning rules
+- progression intent
+
+This should be as explicit as Strength’s architecture layer.
+
+==================================================
+PART 4 — DEFINE A SPEED RESPONSE CONTRACT
+==================================================
+
+The OpenAI output must conform to a clear structure.
+
+Define a speed-native response contract that can be parsed deterministically into ProgramStructure.
+
+It should include:
+- program title
+- program summary
+- days
+- sessions
+- exercises/drills
+- sets / reps / distance / rest as appropriate
+- coaching notes
+- week logic if required
+
+Do NOT rely on loose prose output.
+Speed generation needs a structured contract.
+
+==================================================
+PART 5 — ADD SPEED-SPECIFIC PARSING + VALIDATION
+==================================================
+
+Build or strengthen a speed-specific parser / validator.
+
+Validation must ensure:
+- focusMode = speed
+- session identities are speed-native
+- exercises are from speed families
+- no strength-flavored session names like:
+  - Lower Strength
+  - Upper Push
+  - Hypertrophy
+- proper sprint / footwork / COD / reactive language appears
+- structure is complete enough to persist
+
+If OpenAI returns weak/invalid output:
+- repair if possible
+- otherwise reject cleanly
+
+==================================================
+PART 6 — ADD SPEED-SPECIFIC REPAIR LAYER
+==================================================
+
+If the OpenAI response is close but imperfect, add a repair layer before rejection.
+
+Examples:
+- missing session description → derive from architecture brief
+- weak title → rewrite as speed-native title
+- one bad strength-flavored session label → repair from selected speed session identity
+- incomplete rest / volume field → fill from speed defaults
+
+Important:
+Repair should preserve the real speed engine and not become a hidden fallback builder.
+
+==================================================
+PART 7 — ENSURE NO STRENGTH BLEED IN OPENAI OUTPUT
+==================================================
+
+Add a final anti-bleed validation pass.
+
+Reject or repair if the Speed output contains:
+- strength titles
+- hypertrophy language
+- upper/lower lift splits
+- strength movement families
+- strength block names
+
+Log:
+
+[SpeedBleedAudit] {
+  strengthTermsDetected,
+  repairApplied,
+  rejected
+}
+
+==================================================
+PART 8 — PRESERVE REAL ENGINE LOGIC
+==================================================
+
+The OpenAI path must still be grounded in the real Speed engine.
+
+That means:
+- OpenAI should not invent arbitrary speed logic
+- it should operate inside the speed engine’s architecture, block structure, and family constraints
+
+The engine remains the source of truth.
+OpenAI is shaping and enriching the program, not replacing the system.
+
+==================================================
+PART 9 — IMPROVE FAILURE HANDLING
+==================================================
+
+If Speed generation fails, return a clean retryable error as it does now.
+
+But improve the internal failure classification:
+- prompt failure
+- parse failure
+- validation failure
+- bleed failure
+- structure failure
+
+This will help us harden Speed quickly.
+
+==================================================
+PART 10 — TEST CASES
+==================================================
+
+Run and validate at least:
+
+1. “Design a speed and acceleration training program for me”
+2. “Build a 3 day speed program”
+3. “Give me a footwork and deceleration plan”
+4. “Make a reactive speed program for soccer”
+5. “Create a return-to-speed plan”
+
+For each:
+- confirm OpenAI path succeeds
+- confirm true speed-native output
+- confirm no fallback builder used
+- confirm no strength bleed
+
+==================================================
+PART 11 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. where Speed OpenAI generation was failing
+2. what dedicated speed prompt/brief/contract was added
+3. what parser/validator/repair logic was added
+4. whether Speed now succeeds reliably through OpenAI
+5. test outputs for all 5 example requests
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Speed / Footwork must now have a dedicated, reliable OpenAI generation path that behaves like Strength:
+
+- structured
+- speed-native
+- parseable
+- validated
+- repairable when close
+- never strength-flavored
+- never dependent on hidden fallback program builders
