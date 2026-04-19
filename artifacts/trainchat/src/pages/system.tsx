@@ -3758,6 +3758,19 @@ export default function SystemPage() {
             setChangeDetailId(null);
             setActiveTab("today");
           }}
+          onViewProgram={(exerciseIds) => {
+            setHighlightedIds({
+              exercises: new Set(exerciseIds),
+              sessions: new Set(),
+              weeks: new Set(),
+              phases: new Set(),
+            });
+            setChangeDetailId(null);
+            setActiveTab("today");
+            setTimeout(() => {
+              setHighlightedIds({ exercises: new Set(), sessions: new Set(), weeks: new Set(), phases: new Set() });
+            }, 3000);
+          }}
         />
       )}
 
