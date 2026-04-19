@@ -1,0 +1,83 @@
+We need to rewrite Agent main-chat acknowledgments so they use plain coaching language instead of internal system language.
+
+CONTEXT:
+The current chat response includes phrases like:
+- movement family
+- slot
+- protected week
+- equivalence cluster
+
+These are internal engine terms and should NEVER appear in user-facing chat.
+
+The user should hear:
+- same movement pattern
+- same training focus
+- same pulling/lower-body/explosive emphasis
+- future week left unchanged
+- I also adjusted later weeks
+
+==================================================
+GOAL
+==================================================
+
+Keep internal terminology in logs and engine logic, but translate all user-facing acknowledgment text into clear coaching language.
+
+==================================================
+TASK 1 — ADD USER-FACING TRANSLATION LAYER
+==================================================
+
+Before posting the acknowledgment to main chat, rewrite internal terms into plain language.
+
+Examples:
+- "movement family" → "movement pattern" or "training focus"
+- "slot" → "place in the workout"
+- "protected week" → "future week left unchanged"
+- "equivalence cluster" → "similar exercise pattern"
+- "downstream propagation" → "I also adjusted later weeks"
+
+==================================================
+TASK 2 — USE SPECIFIC COACHING LANGUAGE
+==================================================
+
+Where possible, be more specific than “pattern.”
+
+Examples:
+- row/pull changes → "same pulling focus"
+- squat changes → "same lower-body strength focus"
+- hinge changes → "same posterior-chain focus"
+- jump/power changes → "same explosive emphasis"
+- recovery changes → "same recovery goal"
+
+==================================================
+TASK 3 — KEEP CHAT SHORT AND CLEAR
+==================================================
+
+User-facing acknowledgments should sound like a coach, not a developer log.
+
+Example rewrite:
+
+OLD:
+"Eccentric Ring Row replaced with Barbell Row — chosen to preserve the same movement family. Applied to 1 future week; skipped 1 protected week."
+
+NEW:
+"I replaced Eccentric Ring Row with Barbell Row so the workout keeps the same pulling focus. Sets, reps, and rest stayed the same. I also carried that change into one future week and left one week unchanged."
+
+==================================================
+TASK 4 — DO NOT CHANGE LOGS
+==================================================
+
+Keep all internal terminology in:
+- audit logs
+- diff payloads
+- engine traces
+
+Only rewrite the user-facing acknowledgment text.
+
+==================================================
+TASK 5 — OUTPUT
+==================================================
+
+Return:
+1. what translation layer was added
+2. examples of old vs new phrasing
+3. confirmation that logs still preserve internal terminology
