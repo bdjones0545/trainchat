@@ -232,12 +232,33 @@ Exercise libraries/tags/families, block archetypes, weekly logic, session gramma
 - `artifacts/trainchat/src/pages/chat.tsx` — focus mode tabs at top of center column, mode-specific chips, passes `focusMode` in every chatUIContext to backend
 
 ### Backend Files
-- `artifacts/api-server/src/lib/focus-engines/engine-interface.ts` — shared interface all engines must implement
+- `artifacts/api-server/src/lib/focus-engines/engine-interface.ts` — shared interface all engines must implement (updated: buildPromptContext accepts optional goal/sport/experience)
 - `artifacts/api-server/src/lib/focus-engines/strength-engine.ts` — reference implementation (block archetypes, movement families, session grammar, continuation rules, prompt context)
-- `artifacts/api-server/src/lib/focus-engines/speed-engine.ts` — speed/footwork engine architecture
+- `artifacts/api-server/src/lib/focus-engines/speed-engine.ts` — full speed/footwork engine: 6 block archetypes, 8 movement families, speed session grammar, continuation rules, full prompt context with SpeedBlockType integration, live block plan injection into every AI call
 - `artifacts/api-server/src/lib/focus-engines/mobility-engine.ts` — mobility engine architecture
-- `artifacts/api-server/src/lib/focus-engines/focus-mode-router.ts` — routes to correct engine, validates memory namespace isolation, prevents cross-contamination
+- `artifacts/api-server/src/lib/focus-engines/focus-mode-router.ts` — routes to correct engine, passes goal/sport/experience to prompt builder, validates memory namespace isolation, prevents cross-contamination
 - `artifacts/api-server/src/lib/focus-mode-audit.ts` — structured audit logging (`[FocusModeAudit]`, `[CrossContaminationAudit]`)
+- `artifacts/api-server/src/lib/monthly-block-planner.ts` — now exports `SpeedBlockType`, `SPEED_BLOCKS` record, `buildSpeedMonthlyBlockPlan()`, `buildSpeedMonthlyBlockContext()` — 6 speed-specific block types with full definitions
+
+### Speed Engine Block Types (monthly-block-planner.ts)
+All 6 speed blocks are fully defined with mission, primary/secondary adaptation, volume/intensity/neural profiles, progression philosophy, week arc, key principles, and sport/goal bias:
+- `speed_acceleration_development` — drive phase, 0–30m, wall drills, sled sprints, falling starts
+- `speed_max_velocity` — flying sprints, 30–60m+, wicket runs, stride mechanics, ankle stiffness
+- `speed_cod_deceleration` — penultimate step mechanics, decel absorption, COD drills, Nordic support
+- `speed_reactive_footwork` — ladder patterns, cone drills, shadow/mirror work, reactive cues
+- `speed_return_to_speed` — sub-maximal sprint exposure, tissue prep, conservative volume, Nordic/isometric
+- `speed_endurance_capacity` — tempo runs, repeat 30m, 150m endurance, incomplete rest intervals
+
+### Speed Exercise Database Expansion
+65+ speed-specific exercises added to `exercise-library-data.ts` and seeded to DB (703 total active):
+- **Wall Drills**: Wall March, Wall Drive, Wall A-Skip
+- **Sprint Mechanics**: B-Skip, Wicket Run, March→Skip→Run, Build-Up Run, Sled Sprint, Kneeling Start, Flying 20m Sprint
+- **Footwork**: Speed Ladder (In-Out, Ickey Shuffle, Lateral, Linear), L-Drill, Box Drill (4 Cone), Mirror Drill, Shadow Footwork
+- **COD & Deceleration**: Single-Leg Decel Landing, Decel-to-Re-Accelerate, Hip Lock Decel, Lateral Bound to Hard Stop, Crossover Step, Drop-Step Decel
+- **Elastic/Plyometric**: Stiffness Hops, Single-Leg Stiffness Hops, Lateral Hurdle Hops, Skater Jump, Skater Jump to Stick, Linear Bounding, Countermovement Jump to Sprint
+- **Return-to-Speed Tissue Prep**: Nordic Hamstring Curl, Isometric Hamstring Hold, Straight-Leg Calf March, Copenhagen Hip Adductor, Ankle Stiffness Prep, Single-Leg Hip Hinge March
+- **Speed Endurance**: Tempo Run, Repeat 30m Sprint, 150m Speed Endurance Run
+- **Speed-Strength**: Sled Push (Speed-Strength), Single-Leg Broad Jump
 
 ### Integration Points
 - `artifacts/api-server/src/lib/ai.ts` — `AIResponseOptions.focusMode`, focus engine context injected early in system prompt

@@ -1,0 +1,282 @@
+BUILD THE SPEED / FOOTWORK ENGINE BY REPLICATING THE WORKING STRENGTH ENGINE ARCHITECTURE
+
+CONTEXT:
+TrainChat now has a strong, working Strength engine with:
+- 4-week blocks
+- week progression
+- agent control
+- refinements
+- predictive adaptation
+- memory dominance
+- continuation logic
+- session lifecycle
+- diff / undo / history
+- DB persistence
+
+We do NOT want to reinvent the system for Speed / Footwork.
+We want to replicate the working Strength engine architecture as closely as possible, but swap in speed-specific programming logic.
+
+This is the fastest, safest path.
+
+In addition, we likely need to expand the exercise database with more speed, footwork, and agility drills and seed them to the live DB.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Create a Speed / Footwork engine that mirrors the Strength engine architecture 1:1 in system design, while using speed-specific:
+- block archetypes
+- movement families
+- session grammar
+- adaptation rules
+- drill inventory
+
+Also audit and expand the speed/agility drill database, then seed it to the live DB.
+
+==================================================
+PART 1 — REPLICATE THE STRENGTH ENGINE ARCHITECTURE
+==================================================
+
+Use the current Strength engine as the reference implementation.
+
+Replicate the SAME architecture for Speed / Footwork:
+
+- generation pipeline
+- 4-week block model
+- weekly progression framework
+- refinement pipeline
+- predictive adaptation
+- memory dominance
+- continuation logic
+- session lifecycle
+- undo / diff / history
+- DB persistence
+- agent integration
+- week/block UI shell
+
+Do NOT build a simplified or separate toy system.
+The Speed engine should inherit the same product/system quality as Strength.
+
+==================================================
+PART 2 — DEFINE SPEED / FOOTWORK BLOCK ARCHETYPES
+==================================================
+
+Create speed-specific block archetypes.
+
+Suggested initial set:
+- acceleration_development
+- max_velocity_elastic
+- change_of_direction_control
+- reactive_footwork_rhythm
+- return_to_speed_resilience
+- speed_endurance
+- movement_mechanics_foundation
+
+These should plug into the same block framework used by Strength.
+
+Each block should define:
+- mission
+- primary adaptation target
+- session-role tendencies
+- progression philosophy
+- deload behavior
+
+==================================================
+PART 3 — DEFINE SPEED MOVEMENT FAMILIES
+==================================================
+
+Create speed-specific movement families so the selector can operate like the Strength engine does.
+
+Suggested families:
+- acceleration
+- max_velocity
+- deceleration
+- change_of_direction
+- lateral_movement
+- reactive_footwork
+- elastic_plyometric
+- sprint_mechanics
+- trunk_stiffness_posture
+- tissue_prep_return_to_speed
+- conditioning_speed_endurance
+
+These should be the speed equivalent of squat / hinge / pull / power families in Strength.
+
+==================================================
+PART 4 — CREATE SPEED SESSION GRAMMAR
+==================================================
+
+Build session grammar for speed days the same way Strength uses session structure.
+
+Examples of speed session identities:
+- acceleration mechanics + power
+- max velocity + elastic output
+- COD / decel control
+- reactive footwork + rhythm
+- return-to-speed tissue prep
+- speed endurance / repeat sprint
+
+Important:
+This should NOT be “strength with more jumps.”
+It needs its own session identities and sequencing logic.
+
+==================================================
+PART 5 — KEEP THE SAME 4-WEEK SKELETON, CHANGE THE EXPRESSION
+==================================================
+
+Use the same 4-week progression framework:
+- Week 1 = establish
+- Week 2 = build
+- Week 3 = intensify
+- Week 4 = deload
+
+But for speed, these should influence:
+- drill complexity
+- contact volume
+- reactivity
+- sprint intensity
+- COD stress
+- fatigue cost
+- tissue resilience emphasis
+
+Not just sets/reps.
+
+==================================================
+PART 6 — AUDIT CURRENT SPEED / AGILITY DATABASE COVERAGE
+==================================================
+
+Before adding drills, audit what already exists in the DB.
+
+Return:
+- current speed / agility / footwork drills present
+- current metadata quality
+- duplicates
+- missing families
+- missing regressions / progressions
+- missing home / field / gym equipment tags
+
+We need to know what is already usable before adding more.
+
+==================================================
+PART 7 — EXPAND THE DATABASE WITH SPEED / AGILITY DRILLS
+==================================================
+
+Add missing exercises/drills needed for a real speed engine.
+
+Examples of drill types to include:
+- acceleration starts
+- falling starts
+- wall drills
+- A-skips / dribble series
+- wicket / stride rhythm drills
+- lateral shuffle / crossover patterns
+- COD drills
+- decel mechanics drills
+- pogo / stiffness series
+- bounds / hops / jumps
+- low-level footwork / rhythm drills
+- return-to-speed tissue prep drills
+
+For each drill, add rich metadata:
+- movement family
+- block suitability
+- week-role suitability
+- equipment needs
+- field/court requirement
+- home-gym compatibility
+- neural demand
+- fatigue cost
+- progression level
+- sport relevance
+- regression / progression cluster
+
+==================================================
+PART 8 — SEED TO LIVE DATABASE
+==================================================
+
+After the speed drill inventory is clean and tagged correctly:
+
+- seed it to the live database
+- do not create duplicates
+- preserve existing IDs where appropriate
+- ensure the live selector can immediately use the new drills
+
+Add logging for:
+- drills inserted
+- drills updated
+- duplicates skipped
+
+==================================================
+PART 9 — REUSE THE SAME ADAPTATION + MEMORY FRAMEWORK
+==================================================
+
+The Speed engine should use the same adaptation structure already built for Strength:
+- session logs update memory
+- memory dominance can override block intent
+- predictive block adaptation modifies future weeks
+- continuation blocks use recent performance
+
+But the interpretation should be speed-specific.
+
+Examples:
+- high fatigue → reduce contact volume / decel stress
+- pain trend → protect sprint/COD patterns
+- low adherence → simplify session complexity
+- easy sessions → progress reactivity or sprint intensity
+
+==================================================
+PART 10 — KEEP FOCUS ISOLATION CLEAN
+==================================================
+
+The Speed engine must not affect Strength state.
+
+Ensure:
+- separate block progression chain
+- separate active focus context
+- separate mode-specific metadata
+- shared global constraints only (age, equipment, injury, sport)
+
+No cross-contamination.
+
+==================================================
+PART 11 — VALIDATION
+==================================================
+
+Validate:
+1. Generate a 4-week speed / footwork program
+2. Confirm all 4 weeks exist and differ meaningfully
+3. Confirm speed-specific session identities appear
+4. Confirm speed drill selection uses the new movement families
+5. Confirm refinements work in speed mode
+6. Confirm session logging affects future speed sessions
+7. Confirm continuation logic works for speed blocks
+
+==================================================
+PART 12 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. what parts of the Strength engine were replicated directly
+2. what speed-specific block archetypes were added
+3. what speed movement families were added
+4. what database audit found
+5. what drills were added / updated
+6. whether live DB seeding was completed
+7. what is fully working now vs scaffolded for next phase
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Speed / Footwork should feel like:
+- the same high-quality TrainChat system architecture as Strength
+- but with a fully different programming brain
+
+It should be:
+- equally intelligent
+- equally adaptive
+- equally agent-driven
+- equally persistent
+- equally periodized
+
+Not a simplified side feature.

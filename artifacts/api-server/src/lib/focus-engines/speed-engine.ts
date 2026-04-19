@@ -19,6 +19,7 @@ import type {
   QuickCommandDescriptor,
   MemoryNamespaceDescriptor,
 } from "./engine-interface";
+import { buildSpeedMonthlyBlockPlan, buildSpeedMonthlyBlockContext, type SpeedBlockType } from "../monthly-block-planner";
 
 // ─── Block Archetypes ─────────────────────────────────────────────────────────
 
@@ -173,57 +174,95 @@ const SPEED_MEMORY_NAMESPACE: MemoryNamespaceDescriptor = {
 
 // ─── Prompt Context ───────────────────────────────────────────────────────────
 
-function buildSpeedPromptContext(userMessage: string): string {
+function buildSpeedPromptContext(userMessage: string, goal?: string, sport?: string, experience?: string): string {
   const lower = userMessage.toLowerCase();
 
+  // Determine which speed block type best matches the user's current message
   const emphasisHints: string[] = [];
-  if (/accelerat|first.step|drive.phase|start/.test(lower)) {
-    emphasisHints.push("User message signals acceleration intent — bias toward SPEED_ACCELERATION_DEV, block/resisted work, drive phase mechanics.");
+  let blockTypeHint: SpeedBlockType | undefined;
+
+  if (/accelerat|first.step|drive.phase|start|block.start|wall.drill|sled/.test(lower)) {
+    emphasisHints.push("User message signals ACCELERATION intent — use speed_acceleration_development block: wall drills, falling starts, sled sprints, resisted acceleration, drive phase mechanics.");
+    blockTypeHint = "speed_acceleration_development";
   }
-  if (/agility|cut|change.of.direction|cod|reactive/.test(lower)) {
-    emphasisHints.push("User message signals reactive/COD intent — bias toward SPEED_REACTIVE_AGILITY, sport-specific patterns, deceleration control.");
+  if (/max.vel|top.speed|flying.sprint|stride|wicket|upright/.test(lower)) {
+    emphasisHints.push("User message signals MAX VELOCITY intent — use speed_max_velocity block: flying sprints (20–40m), wicket runs, B-Skip, stride mechanics, stiffness hops.");
+    blockTypeHint = blockTypeHint ?? "speed_max_velocity";
   }
-  if (/jump|elastic|plyometric|bound|hop|ssc/.test(lower)) {
-    emphasisHints.push("User message signals elastic output intent — bias toward SPEED_ELASTIC_OUTPUT, plyometrics, SSC development.");
+  if (/agility|cut|change.of.direction|cod|reactive|decel|stop.and.go/.test(lower)) {
+    emphasisHints.push("User message signals COD/REACTIVE intent — use speed_cod_deceleration or speed_reactive_footwork block: T-drill, L-drill, mirror drill, 505, decel-to-re-accelerate, single-leg decel landing.");
+    blockTypeHint = blockTypeHint ?? "speed_cod_deceleration";
   }
-  if (/footwork|ladder|rhythm|coordination/.test(lower)) {
-    emphasisHints.push("User message signals footwork/rhythm intent — bias toward SPEED_FOOTWORK_RHYTHM, pattern work, timing.");
+  if (/jump|elastic|plyometric|bound|hop|ssc|stiffness/.test(lower)) {
+    emphasisHints.push("User message signals ELASTIC OUTPUT intent — include stiffness hops, skater jumps, lateral hurdle hops, linear bounding, countermovement jump to sprint.");
   }
-  if (/recover|tendon|tissue|hamstring|return/.test(lower)) {
-    emphasisHints.push("User message signals return-to-speed or tissue care intent — bias toward SPEED_RETURN_RECOVERY, sub-maximal work.");
+  if (/footwork|ladder|rhythm|coordination|shuffle/.test(lower)) {
+    emphasisHints.push("User message signals FOOTWORK/RHYTHM intent — use speed_reactive_footwork block: speed ladder (in-out, Ickey, lateral), shadow footwork, mirror drill, box drill.");
+    blockTypeHint = blockTypeHint ?? "speed_reactive_footwork";
   }
+  if (/recover|tendon|tissue|hamstring|return|rehab|comeback/.test(lower)) {
+    emphasisHints.push("User message signals RETURN-TO-SPEED intent — use speed_return_to_speed block: Nordic curls, isometric hamstring hold, straight-leg calf march, ankle stiffness prep, build-up runs at 70–80%.");
+    blockTypeHint = blockTypeHint ?? "speed_return_to_speed";
+  }
+  if (/endurance|repeat.sprint|conditioning|conditioning.speed/.test(lower)) {
+    emphasisHints.push("User message signals SPEED ENDURANCE intent — use speed_endurance_capacity block: tempo runs, repeat 30m sprints, 150m speed endurance runs, incomplete recovery intervals.");
+    blockTypeHint = blockTypeHint ?? "speed_endurance_capacity";
+  }
+
+  // Generate a speed-specific monthly block plan to inject as the periodization layer
+  const seed = Math.random();
+  const speedBlockPlan = buildSpeedMonthlyBlockPlan(
+    goal ?? userMessage.slice(0, 100),
+    sport ?? null,
+    experience ?? null,
+    seed,
+    blockTypeHint,
+  );
+  const blockContext = buildSpeedMonthlyBlockContext(speedBlockPlan);
 
   return `
 [FOCUS MODE: SPEED / FOOTWORK]
-Active training focus: Speed & Footwork — covering acceleration, max velocity, change of direction, elastic/reactive output, footwork, deceleration control, and return-to-speed.
+Active training focus: Speed & Footwork — acceleration, max velocity, COD, elastic/reactive output, footwork, deceleration control, return-to-speed.
 
-THIS IS NOT STRENGTH WITH MORE JUMPS. Speed work operates on its own biomotor logic.
+THIS IS NOT STRENGTH WITH MORE JUMPS. Speed work operates on its own biomotor logic lane.
 
-BLOCK ARCHETYPES available in this mode:
-- Acceleration Development: drive phase, 0–30m, resisted starts, full recovery
-- Maximum Velocity: flying sprints, 30–60m, stride mechanics
-- Reactive Agility & COD: direction change, decision speed, sport-specific reads
-- Elastic & Plyometric Output: SSC, ankle stiffness, reactive strength index
-- Footwork & Rhythm: ladder, coordination, foot contact quality
-- Return-to-Speed / Tissue Prep: sub-max work, tendon health, decel reintroduction
+${blockContext}
 
-MOVEMENT GRAMMAR for this mode:
-- Speed work is CNS-dominant — ALWAYS first in session, never after heavy lifting
-- Volume is LOW — quality of effort over quantity of reps
-- Full recovery between max-intent efforts (2–6 min)
-- Acceleration warm-up required: A-walks → A-skips → build-ups
-- Never combine max-intensity speed with max-intensity strength on same day
+MOVEMENT FAMILIES available in this mode:
+1. Acceleration Drills — Wall March, Wall Drive, Wall A-Skip, Falling Start, Kneeling Start, Sled Sprint, Sled Push, A-Skip, Acceleration Drill
+2. Max Velocity — Flying 20m Sprint, B-Skip, Wicket Run, Build-Up Run, Flying Start Sprint, Sprint Mechanics Drill
+3. COD & Deceleration — 5-10-5, L-Drill, Box Drill, 505 Drill, T-Drill, Decel to Re-Accelerate, Single-Leg Decel Landing, Hip Lock Decel, Deceleration Sprint Stop, COD Cut Sprint, Backpedal Sprint
+4. Reactive Agility — Mirror Drill, Shadow Footwork, Reactive Agility Drill, Drop-Step Decel, Crossover Step
+5. Footwork & Rhythm — Speed Ladder In-Out, Ickey Shuffle, Lateral Ladder, Linear Ladder, March to Skip to Run, Lateral Shuffle, Carioca, Zigzag Hops
+6. Elastic & Plyometric — Stiffness Hops, Single-Leg Stiffness Hops, Lateral Hurdle Hops, Skater Jump, Skater Jump to Stick, Linear Bounding, Pogo Hops, Ankle Hops, Countermovement Jump to Sprint, Single-Leg Hops, Lateral Bound, Alternating Bounds
+7. Speed-Strength Transfer — Sled Push, Jump Squat, Trap Bar Jump, Power Clean, Countermovement Jump to Sprint
+8. Return-to-Speed Tissue Prep — Nordic Hamstring Curl, Isometric Hamstring Hold, Straight-Leg Calf March, Single-Leg Hip Hinge March, Ankle Stiffness Prep, Copenhagen Hip Adductor, Build-Up Run
+9. Speed Endurance — Tempo Run, Repeat 30m Sprint, 150m Speed Endurance Run, Assault Bike Sprint
 
-SESSION STRUCTURE:
-- 1 primary speed quality (acceleration OR max velocity OR COD — not all three)
-- 2–3 supporting qualities (footwork, elastic work, or decel drills)
-- Conditioning/fitness work only at session END, never before speed
+CRITICAL SPEED SESSION RULES:
+- Speed work is CNS-dominant — ALWAYS first in session, never after heavy lifting or high fatigue
+- Volume is LOW — 4–8 max-intent sprints per session. Quality beats quantity every time
+- Full recovery between max-intent efforts: acceleration = 2–4 min, max velocity = 4–6 min
+- Mandatory acceleration warm-up: A-walks → Wall March → A-Skip → Build-Up → full sprint
+- Never combine max-intensity speed with max-intensity strength on the same day
 
-AGENT BEHAVIOR in Speed mode:
-- Responses and examples bias toward sprint mechanics, reactive qualities, agility, footwork, and speed-strength transfer
-- Coaching language references speed qualities: ground contact, stride rate, elasticity, COD angle, reactive decision time
-- Do NOT default to strength-first language or load-based prescriptions
-- Think in terms of "qualities first, fitness second"
+4-WEEK SPEED SESSION STRUCTURE:
+- Week 1 (Establish): mechanics drills + sub-maximal speed exposure (80–85%)
+- Week 2 (Build): add 1–2 sprints, progress distance or complexity
+- Week 3 (Intensify): full intent, introduce reactive/COD element, contrast pairs
+- Week 4 (Deload): 50% volume, mechanics review, no max intent
+
+PRIMARY SESSION SKELETON:
+1. Tissue Prep + CNS Activation (Nordic, ankle stiffness, single-leg work) — 10 min
+2. Acceleration Warm-Up Series (march → skip → build-ups) — 10 min
+3. Primary Speed Quality (1 quality only: acceleration OR max velocity OR COD) — 20 min
+4. Secondary/Supporting Qualities (footwork, elastic, or decel work) — 15 min
+5. Conditioning / Fitness finisher (only if in speed endurance block) — 10 min
+
+AGENT COACHING LANGUAGE in Speed mode:
+- Reference speed qualities: ground contact time, stride rate, elasticity, COD angle, drive phase, front-side mechanics, reactive decision time
+- Do NOT default to strength language ("sets and reps") — use sprint-specific language ("efforts", "reps at X%", "distances", "contact quality")
+- Qualities first, fitness second
 ${emphasisHints.length > 0 ? "\nLIVE MESSAGE SIGNALS:\n" + emphasisHints.join("\n") : ""}
 `.trim();
 }

@@ -53,15 +53,20 @@ export function getEngineForMode(focusMode: FocusMode): FocusEngineInterface {
  */
 export function buildFocusModePromptContext(
   focusMode: FocusMode,
-  userMessage: string
+  userMessage: string,
+  goal?: string,
+  sport?: string,
+  experience?: string,
 ): string {
   const engine = getEngineForMode(focusMode);
-  const context = engine.buildPromptContext(userMessage);
+  const context = engine.buildPromptContext(userMessage, goal, sport, experience);
 
   logger.info(`[FocusModeRouter] Context built`, {
     focusMode,
     engineUsed: engine.label,
     contextLength: context.length,
+    goal: goal ?? "none",
+    sport: sport ?? "none",
   });
 
   return context;

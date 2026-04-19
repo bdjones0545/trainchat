@@ -493,6 +493,271 @@ export function buildMonthlyBlockPlanForType(
   };
 }
 
+// ─── Speed Block System ───────────────────────────────────────────────────────
+
+export type SpeedBlockType =
+  | "speed_acceleration_development"
+  | "speed_max_velocity"
+  | "speed_cod_deceleration"
+  | "speed_reactive_footwork"
+  | "speed_return_to_speed"
+  | "speed_endurance_capacity";
+
+const SPEED_BLOCKS: Record<SpeedBlockType, Omit<MonthlyBlockPlan, "blockType" | "sportGoalBias" | "weekProgressionArc">> = {
+  speed_acceleration_development: {
+    displayName: "Acceleration Development Block",
+    missionStatement: "Build first-step power and drive-phase mechanics — horizontal force application, acceleration posture, and short-distance sprint quality at 0–30m.",
+    primaryAdaptation: "Horizontal force production, drive phase mechanics, first-step acceleration",
+    secondaryAdaptation: "Sprint posture, ground contact mechanics, rate of force development",
+    volumeProfile: "moderate",
+    intensityProfile: "high",
+    neuralDemandProfile: "high",
+    progressionPhilosophy: "Weekly sprint volume increases by 10–15%. Distance stays short (10–30m). Resisted load is reduced as free-sprint quality improves. Full recovery between every effort — CNS freshness is the constraint.",
+    isSpecialPopulation: false,
+    keyPrinciples: [
+      "Acceleration work is ALWAYS first in the session — never after fatigue",
+      "Short distances only (10–30m) — acceleration mechanics degrade past 30m",
+      "Full recovery between efforts (2–4 min) — no conditioning effect intended",
+      "Resisted starts (sled, band) paired with free sprints for contrast",
+      "Wall drills and falling starts build the mechanics before maximal intent",
+    ],
+  },
+  speed_max_velocity: {
+    displayName: "Maximum Velocity Block",
+    missionStatement: "Develop top-end speed mechanics — stride cycle, front-side drive, upright sprint posture, and reactive ground contact at 30–60m+ distances.",
+    primaryAdaptation: "Top-end speed, stride mechanics, flight phase efficiency",
+    secondaryAdaptation: "Ankle stiffness, elastic ground contact, neuromuscular coordination",
+    volumeProfile: "moderate",
+    intensityProfile: "high",
+    neuralDemandProfile: "high",
+    progressionPhilosophy: "Flying sprint volume builds weekly (total meters). Ground contact quality is the metric — not effort. Wicket runs and stride rhythm drills precede max-intent sprints. Full recovery essential.",
+    isSpecialPopulation: false,
+    keyPrinciples: [
+      "Flying starts (20m run-up) allow full acceleration before velocity window",
+      "Wicket runs groove stride rhythm before max-intent flying sprints",
+      "Focus on front-side mechanics — thigh separation, knee drive, ankle dorsiflexion",
+      "Volume is low: 4–8 × 20–40m max effort per session",
+      "Elastic support work (ankle hops, pogo series) reinforces stiffness qualities",
+    ],
+  },
+  speed_cod_deceleration: {
+    displayName: "COD & Deceleration Block",
+    missionStatement: "Build the mechanics and strength to decelerate efficiently, absorb force at the penultimate step, and re-accelerate out of direction changes — the most trainable speed quality in team sport.",
+    primaryAdaptation: "Deceleration absorption, COD mechanics, re-acceleration out of cuts",
+    secondaryAdaptation: "Posterior chain eccentric strength, knee stability, lateral force production",
+    volumeProfile: "moderate",
+    intensityProfile: "moderate",
+    neuralDemandProfile: "high",
+    progressionPhilosophy: "Closed-skill drills first (pre-planned cuts), reactive drills added in Week 3+. Intensity progresses from body-weight mechanics at controlled speed to full-speed reactive patterns. Nordic and landing work support tissue tolerance.",
+    isSpecialPopulation: false,
+    keyPrinciples: [
+      "Deceleration mechanics must be established before reactive/open-skill drills",
+      "Plant mechanics (penultimate step, shin angle) are the trainable COD variable",
+      "Nordic curls and landing strength are non-negotiable structural support",
+      "Pre-planned drills (5-10-5, T-drill) before reactive mirror/shadow drills",
+      "Sport-specific cut patterns introduced in Week 3–4 only",
+    ],
+  },
+  speed_reactive_footwork: {
+    displayName: "Reactive Footwork & Rhythm Block",
+    missionStatement: "Develop coordination, neuromuscular timing, and open-skill agility — the bridge between trained speed qualities and game-speed execution.",
+    primaryAdaptation: "Reactive decision speed, foot contact quality, coordination under speed",
+    secondaryAdaptation: "Pattern recognition, timing, multi-directional athletic expression",
+    volumeProfile: "high",
+    intensityProfile: "moderate",
+    neuralDemandProfile: "moderate",
+    progressionPhilosophy: "Pattern complexity increases weekly. Week 1: simple bilateral patterns. Week 2: alternating/lateral complexity. Week 3: reactive external stimulus. Week 4: sport-specific integration. Lower fatigue cost allows higher session frequency.",
+    isSpecialPopulation: false,
+    keyPrinciples: [
+      "Footwork is low-load — volume can be higher than sprint sessions",
+      "Ladder, cone, and shadow drills develop the coordination quality",
+      "Reactive element (visual cue, partner, ball) introduced in Week 2–3",
+      "Foot contact quality > speed of pattern — rushing patterns defeats the purpose",
+      "Can be programmed on non-sprint days — excellent active recovery tool",
+    ],
+  },
+  speed_return_to_speed: {
+    displayName: "Return-to-Speed Block",
+    missionStatement: "Rebuild speed qualities conservatively after time off, injury, or high load accumulation — prioritizing tissue tolerance, deceleration reintroduction, and sub-maximal sprint exposure before returning to full intent.",
+    primaryAdaptation: "Tissue resilience, sub-maximal sprint mechanics, tendon preparation",
+    secondaryAdaptation: "Movement quality restoration, deceleration confidence, tissue conditioning",
+    volumeProfile: "low",
+    intensityProfile: "low",
+    neuralDemandProfile: "low",
+    progressionPhilosophy: "Sprint intensity caps at 70–80% in Week 1–2, rising to 85–90% in Week 3. Volume is low. Tissue prep drills (Nordic, hamstring isometrics, calf conditioning) precede any sprint work. No reactive or COD drills until Week 3.",
+    isSpecialPopulation: false,
+    keyPrinciples: [
+      "No session should produce the next-day hamstring or calf soreness — if it does, too much",
+      "Tissue prep (Nordic, isometric hamstring, calf march) is mandatory — not optional",
+      "Sprint intensity: Week 1 = 70%, Week 2 = 80%, Week 3 = 85–90%, Week 4 = gradual re-entry to full intent",
+      "COD and reactive work reintroduced no earlier than Week 3",
+      "This block succeeds if the athlete ends it more resilient, not more fatigued",
+    ],
+  },
+  speed_endurance_capacity: {
+    displayName: "Speed Endurance Block",
+    missionStatement: "Develop the capacity to repeat high-quality sprint efforts — build lactate tolerance, aerobic speed reserve, and repeat-sprint ability for sport competition demands.",
+    primaryAdaptation: "Repeat sprint ability, lactate tolerance, aerobic speed reserve",
+    secondaryAdaptation: "Sprint mechanics under accumulating fatigue, mental resilience, pacing",
+    volumeProfile: "high",
+    intensityProfile: "moderate",
+    neuralDemandProfile: "moderate",
+    progressionPhilosophy: "Tempo runs at 60–75% build the aerobic base first. Flying 30m repeats at 90% add speed stimulus. Incomplete rest intervals train the repeat-sprint quality. Volume builds by 10–15% per week. Mechanics quality is the check — if form deteriorates, rest is insufficient.",
+    isSpecialPopulation: false,
+    keyPrinciples: [
+      "Speed endurance is NOT fitness work — sprint mechanics must be maintained throughout",
+      "Tempo runs (60–75%) are the aerobic base — not max effort",
+      "Incomplete recovery (45–90s) teaches repeat-sprint tolerance",
+      "Absolute top-end speed is not the target here — sustained sprint quality is",
+      "Mechanics under fatigue is the adaptation — not just getting through the reps",
+    ],
+  },
+};
+
+export function buildSpeedMonthlyBlockPlan(
+  goal: string | null,
+  sport: string | null,
+  experience: string | null,
+  seed: number,
+  blockTypeOverride?: string,
+): MonthlyBlockPlan & { blockType: SpeedBlockType } {
+  const g = (goal ?? "").toLowerCase();
+  const e = (experience ?? "").toLowerCase();
+
+  let blockType: SpeedBlockType;
+
+  if (blockTypeOverride && blockTypeOverride in SPEED_BLOCKS) {
+    blockType = blockTypeOverride as SpeedBlockType;
+  } else if (e.includes("return") || e.includes("recovery") || e.includes("rehab") || g.includes("return")) {
+    blockType = "speed_return_to_speed";
+  } else if (g.includes("endurance") || g.includes("repeat sprint") || g.includes("conditioning")) {
+    blockType = "speed_endurance_capacity";
+  } else if (g.includes("agility") || g.includes("footwork") || g.includes("reactive")) {
+    blockType = seed < 0.5 ? "speed_cod_deceleration" : "speed_reactive_footwork";
+  } else if (g.includes("acceleration") || g.includes("first step") || g.includes("drive phase")) {
+    blockType = "speed_acceleration_development";
+  } else if (g.includes("top speed") || g.includes("max velocity") || g.includes("sprint")) {
+    blockType = "speed_max_velocity";
+  } else if (e.includes("beginner") || e.includes("new")) {
+    blockType = seed < 0.5 ? "speed_return_to_speed" : "speed_reactive_footwork";
+  } else {
+    // Standard progression: default to acceleration first, then build from there
+    const options: SpeedBlockType[] = [
+      "speed_acceleration_development",
+      "speed_reactive_footwork",
+      "speed_cod_deceleration",
+      "speed_max_velocity",
+    ];
+    blockType = options[Math.floor(seed * options.length)];
+  }
+
+  const baseDefinition = SPEED_BLOCKS[blockType];
+  const sportGoalBias = buildSpeedSportBias(blockType, sport, goal);
+  const weekProgressionArc = buildSpeedWeekArc(blockType);
+
+  const plan = {
+    blockType,
+    ...baseDefinition,
+    sportGoalBias,
+    weekProgressionArc,
+  } as MonthlyBlockPlan & { blockType: SpeedBlockType };
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[BuildAudit:SpeedMonthlyBlock]", JSON.stringify({
+      blockType,
+      displayName: plan.displayName,
+      primaryAdaptation: plan.primaryAdaptation,
+      sport: sport ?? "none",
+      goal: goal ?? "none",
+      seed: Number(seed.toFixed(4)),
+    }));
+  }
+
+  return plan;
+}
+
+function buildSpeedSportBias(blockType: SpeedBlockType, sport: string | null, goal: string | null): string {
+  const s = (sport ?? "").toLowerCase();
+
+  if (s.includes("soccer") || s.includes("football") && !s.includes("american")) {
+    return "Bias toward acceleration-COD integration, repeat sprint ability, hamstring resilience (Nordic curls, Copenhagen), and in-game reactive agility patterns";
+  }
+  if (s.includes("basketball")) {
+    return "Bias toward lateral COD speed, deceleration mechanics, reactive footwork, court-width sprint patterns, and plyometric power in the vertical plane";
+  }
+  if (s.includes("football") || s.includes("rugby") || s.includes("lacrosse")) {
+    return "Bias toward linear acceleration (0–20m), first-step explosion, sprint-to-cut sequences, and collision-position sprint mechanics";
+  }
+  if (s.includes("tennis") || s.includes("badminton") || s.includes("squash")) {
+    return "Bias toward split-step reactivity, lateral acceleration, T-pattern COD, and repeat-sprint footwork within the court dimension";
+  }
+  if (s.includes("hockey")) {
+    return "Bias toward lateral crossover speed, edge-mechanics transfer, explosive starts, and repeat-sprint conditioning across short distances";
+  }
+  if (s.includes("track") || s.includes("sprint")) {
+    return "Bias toward pure acceleration mechanics (drive phase), max velocity development, and speed endurance for repeat-sprint or race-pace preparation";
+  }
+
+  switch (blockType) {
+    case "speed_acceleration_development":
+      return "Bias toward resisted starts, wall drills, falling starts, short sprint distances, and full-recovery effort structure";
+    case "speed_max_velocity":
+      return "Bias toward flying sprints, wicket runs, stride rhythm, ankle stiffness, and elastic ground contact quality";
+    case "speed_cod_deceleration":
+      return "Bias toward penultimate-step mechanics, COD strength (Nordic, landing), pre-planned agility drills, and decel-to-re-accelerate patterns";
+    case "speed_reactive_footwork":
+      return "Bias toward ladder patterns, cone touch drills, shadow work, partner-reactive patterns, and open-skill timing";
+    case "speed_return_to_speed":
+      return "Bias toward tissue prep (Nordic, calf march, hamstring isometrics), sub-maximal sprint exposure, and conservative volume management";
+    case "speed_endurance_capacity":
+      return "Bias toward tempo runs, flying 30m repeats, incomplete-rest repeat sprints, and mechanics-under-fatigue maintenance";
+    default:
+      return "Bias toward speed quality development, sprint mechanics, and reactive athletic output";
+  }
+}
+
+function buildSpeedWeekArc(blockType: SpeedBlockType): string {
+  switch (blockType) {
+    case "speed_acceleration_development":
+      return "Week 1: Establish (Wall drills, falling starts, RPE 85%, 10–20m) → Week 2: Build (Add resisted starts, 10–30m, maintain quality) → Week 3: Intensify (Full acceleration intent, 20–30m, contrast sled + free sprint) → Week 4: Deload (50% volume, mechanics review, 10–20m)";
+    case "speed_max_velocity":
+      return "Week 1: Establish (Wicket runs, build-up runs, 30m flying at 90%) → Week 2: Build (Flying 20–30m at 95%, stride rhythm emphasis) → Week 3: Intensify (Flying 30–40m full intent, ground contact quality focus) → Week 4: Deload (50% volume, wicket review, low-intent build-ups)";
+    case "speed_cod_deceleration":
+      return "Week 1: Establish (Pre-planned drills at 75% speed, decel mechanics, Nordic intro) → Week 2: Build (Pre-planned at 90%, cut angle progression, landing strength) → Week 3: Intensify (Reactive cues introduced, full-speed planned drills, decel-to-re-accelerate) → Week 4: Deload (Planned drills only, low volume, mechanics review)";
+    case "speed_reactive_footwork":
+      return "Week 1: Establish (Simple ladder patterns, bilateral footwork, deliberate pace) → Week 2: Build (Alternating and lateral complexity, add cone patterns) → Week 3: Intensify (Reactive element added, partner or visual cue, speed up patterns) → Week 4: Deload (Low-complexity patterns, coordination review, sport-specific light integration)";
+    case "speed_return_to_speed":
+      return "Week 1: Foundation (Tissue prep only, 70% sprint intent, short distances 10–20m) → Week 2: Build (80% intent, add decel drills, increase tissue prep) → Week 3: Challenge (85–90% intent, reintroduce COD prep, short reactive footwork) → Week 4: Consolidate (90% intent, assess readiness for acceleration or max velocity block)";
+    case "speed_endurance_capacity":
+      return "Week 1: Establish (Tempo runs at 65–70%, short distances, full focus on mechanics) → Week 2: Build (Tempo volume +15%, add flying 30m at 90%, incomplete rest) → Week 3: Intensify (Repeat sprint sets, 45–60s rest, mechanics under fatigue emphasis) → Week 4: Recovery (Reduce volume 50%, maintain sprint quality, aerobic consolidation)";
+    default:
+      return "Week 1: Establish → Week 2: Build → Week 3: Intensify → Week 4: Deload";
+  }
+}
+
+export function buildSpeedMonthlyBlockContext(plan: MonthlyBlockPlan): string {
+  return `## SPEED MONTHLY BLOCK PLAN — SPEED/FOOTWORK ENGINE LAYER 1
+Block Type: ${plan.displayName}
+Mission: ${plan.missionStatement}
+
+PRIMARY ADAPTATION TARGET: ${plan.primaryAdaptation}
+SECONDARY ADAPTATION TARGET: ${plan.secondaryAdaptation}
+
+VOLUME PROFILE: ${plan.volumeProfile.toUpperCase()} | INTENSITY PROFILE: ${plan.intensityProfile.toUpperCase()} | NEURAL DEMAND: ${plan.neuralDemandProfile.toUpperCase()}
+
+PROGRESSION PHILOSOPHY:
+${plan.progressionPhilosophy}
+
+SPORT/GOAL BIAS:
+${plan.sportGoalBias}
+
+FOUR-WEEK ARC:
+${plan.weekProgressionArc}
+
+KEY SPEED PROGRAMMING PRINCIPLES FOR THIS BLOCK:
+${plan.keyPrinciples.map((p, i) => `${i + 1}. ${p}`).join("\n")}`;
+}
+
 /**
  * Returns a concise block context string suitable for injection into AI prompts.
  */

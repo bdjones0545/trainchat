@@ -2358,7 +2358,13 @@ export async function generateAIResponse(
   // ── Focus Mode Context ─────────────────────────────────────────────────────
   // Builds mode-specific prompt context from the active focus engine.
   // Injected early in the extras to establish the agent's programming bias.
-  const focusModeContext = buildFocusModePromptContext(focusMode, userMessage);
+  const focusModeContext = buildFocusModePromptContext(
+    focusMode,
+    userMessage,
+    profile?.trainingGoal ?? extractedConstraints?.primaryGoal ?? undefined,
+    profile?.sportFocus ?? extractedConstraints?.sportFocus ?? undefined,
+    profile?.experienceLevel ?? extractedConstraints?.experienceLevel ?? undefined,
+  );
   const focusModeAdaptationContext = getFocusModeAdaptationHeuristics(focusMode);
 
   // Audit the focus mode usage

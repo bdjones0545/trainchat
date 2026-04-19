@@ -83,8 +83,9 @@ export interface FocusEngineInterface {
   /**
    * Produces a focused prompt context string injected into the AI system prompt.
    * This is the primary mechanism for mode-based agent behavior differentiation.
+   * Optional profile params (goal, sport, experience) allow richer block selection.
    */
-  buildPromptContext(userMessage: string): string;
+  buildPromptContext(userMessage: string, goal?: string, sport?: string, experience?: string): string;
 
   /**
    * Returns adaptation heuristic guidance for this mode.
