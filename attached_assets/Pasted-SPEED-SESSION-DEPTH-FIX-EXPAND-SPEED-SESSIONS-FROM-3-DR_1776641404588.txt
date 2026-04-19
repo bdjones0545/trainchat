@@ -1,0 +1,210 @@
+SPEED SESSION DEPTH FIX — EXPAND SPEED SESSIONS FROM 3 DRILLS TO FULL 5–7 ITEM SESSIONS
+
+CONTEXT:
+The Speed / Footwork engine is now successfully generating and saving real speed programs.
+
+However, the sessions are still too thin.
+
+Current issue:
+A speed day is often being generated with only 3 drills, for example:
+- Wall March
+- A-Skip
+- Falling Start
+
+This is a real speed program now, but it feels incomplete.
+It is missing the rest of the session architecture and does not yet match the depth/quality of the Strength system.
+
+We need Speed sessions to feel like full training sessions, not just a short drill list.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make Speed sessions generate as complete 5–7 item sessions with proper depth, sequencing, and support work — while preserving the speed-first philosophy.
+
+==================================================
+TASK 1 — DEFINE MINIMUM SESSION DEPTH BY SPEED SESSION TYPE
+==================================================
+
+Create explicit minimum session depth rules for speed sessions.
+
+Examples:
+- acceleration session → minimum 5 items
+- max velocity session → minimum 5 items
+- reactive footwork / decel session → minimum 5 items
+- elastic output session → minimum 5 items
+- speed endurance session → minimum 5 items
+- return-to-speed session → minimum 4 items (can be slightly lighter)
+
+Each session type should define both:
+- minimum required items
+- target ideal range (e.g. 5–7)
+
+==================================================
+TASK 2 — CREATE SPEED SESSION SLOT TEMPLATE
+==================================================
+
+Define a standard speed session slot model.
+
+Suggested slot structure:
+1. tissue prep / activation
+2. sprint prep / mechanics
+3. primary speed quality
+4. secondary speed / reactive / COD quality
+5. support drill
+6. trunk / posture / tissue resilience
+7. optional conditioning / tempo / recovery finisher (depending on block)
+
+Not every session must use all 7, but the engine should fill enough slots to make the session feel complete.
+
+==================================================
+TASK 3 — ENFORCE SESSION COMPLETENESS IN GENERATION
+==================================================
+
+After the AI response is parsed, validate each speed session:
+
+- number of drills
+- presence of required slot categories
+- sequencing quality
+
+If a session has only 3 drills and should have 5–7:
+- treat it as incomplete
+- repair or augment it before save
+
+==================================================
+TASK 4 — ADD SPEED SESSION REPAIR / AUGMENTATION
+==================================================
+
+Create a post-generation augmentation layer such as:
+
+expandSpeedSessionIfTooThin(session, sessionType, weekRole, blockType)
+
+It should add missing pieces from approved speed families.
+
+Examples:
+If session = Acceleration Development and only has 3 drills:
+- add a secondary acceleration or reactive support drill
+- add a trunk/posture/tissue support drill
+- add a finisher if appropriate
+
+This should preserve the session’s identity and not turn it into random filler.
+
+==================================================
+TASK 5 — SESSION TYPE-SPECIFIC SUPPORT LOGIC
+==================================================
+
+Add support drill logic by session type.
+
+Examples:
+
+Acceleration Development:
+- tissue prep
+- mechanics
+- main acceleration
+- secondary start / resisted / projection drill
+- stiffness / posture / trunk support
+
+Reactive Footwork + Deceleration Control:
+- prep
+- footwork pattern
+- decel drill
+- reactive drill
+- tissue support / eccentric support
+
+Elastic Output:
+- prep
+- elastic plyometric
+- secondary elastic / bound
+- speed-strength transfer
+- trunk / posture support
+
+Speed Endurance:
+- prep
+- primary repeat sprint / tempo
+- secondary mechanics under fatigue
+- recovery / tissue support
+
+==================================================
+TASK 6 — REMOVE STRENGTH-LANGUAGE LEAKS FROM SPEED COACH NOTES
+==================================================
+
+Current note example in Speed:
+"Record any weights used so you can track progress week-to-week."
+
+That is strength language and should not appear in Speed.
+
+Replace with speed-native notes such as:
+- Focus on execution quality and full recovery
+- Stop the rep if posture or contact quality drops
+- Prioritize sharp mechanics over fatigue
+- Keep sprint output high; do not turn this into conditioning unless programmed
+
+Add a validator to catch strength-style coaching notes in Speed mode.
+
+==================================================
+TASK 7 — VALIDATE TOTAL SESSION QUALITY
+==================================================
+
+For Speed sessions, create a completeness/quality check:
+
+scoreSpeedSessionDepth(session)
+
+Dimensions:
+- slot coverage
+- session identity clarity
+- support work present
+- trunk/tissue support present
+- conditioning only when appropriate
+- no random filler
+- no strength-language bleed
+
+If score below threshold:
+- repair / expand before save
+
+==================================================
+TASK 8 — UI CONFIRMATION
+==================================================
+
+After fix, the Program tab in Speed mode should show sessions that visibly feel more complete.
+
+Expected:
+- usually 5–7 exercises/drills
+- more balanced session flow
+- speed-native coach notes
+- no feeling that the session stops halfway through
+
+==================================================
+TASK 9 — VALIDATION
+==================================================
+
+Test these session types:
+1. Acceleration Development
+2. Max Velocity
+3. Reactive Footwork + Deceleration
+4. Elastic Output + Speed Endurance
+5. Return-to-Speed
+
+For each, confirm:
+- minimum depth met
+- session identity preserved
+- support work included
+- coach notes are speed-native
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. the new minimum session depth rules
+2. the speed session slot template
+3. what augmentation/repair layer was added
+4. how strength-style coach notes were removed
+5. before/after examples for at least 3 speed session types
+
+==================================================
+FINAL STANDARD
+==================================================
+
+A Speed session should now feel like a full training session, not a short drill list.
+
+It should preserve the quality-first speed philosophy while still giving enough depth, structure, and support work to feel complete and worthy of the TrainChat system.

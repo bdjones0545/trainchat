@@ -57,9 +57,13 @@ import {
   buildSpeedResponseContract,
   validateSpeedOutputForBleed,
   repairSpeedOutput,
+  expandSpeedSessionIfTooThin,
+  sanitizeAllSpeedNotes,
+  scoreSpeedSessionDepth,
   classifySpeedGenerationFailure,
   detectIncompleteBuildResponse,
   type SpeedBleedAuditResult,
+  type SpeedSessionDepthAudit,
 } from "./focus-engines/speed-engine";
 import {
   buildMobilityArchitectureBrief,
@@ -3574,6 +3578,72 @@ Output the corrected program JSON and a brief calm confirmation.`;
         // ── Stamp focusMode on clean/repaired output ─────────────────────────
         if (structuredData && !(structuredData as { focusMode?: string }).focusMode) {
           (structuredData as { focusMode?: string }).focusMode = "speed";
+        }
+
+        // ── Speed coach note sanitization ─────────────────────────────────────
+        // Remove strength-language from coaching notes (e.g. "Record any weights used").
+        // Runs after bleed repair so the program is in its final name-repaired state.
+        if (structuredData) {
+          const { sanitized: notesSanitized, notesModifiedCount } = sanitizeAllSpeedNotes(
+            structuredData as unknown as Parameters<typeof sanitizeAllSpeedNotes>[0]
+          );
+          if (notesModifiedCount > 0) {
+            structuredData = notesSanitized as typeof structuredData;
+            logger.info(
+              { notesModifiedCount },
+              "[SpeedNotesSanitizer] Strength-language removed from speed coach notes"
+            );
+          }
+        }
+
+        // ── Session depth expansion ────────────────────────────────────────────
+        // Expands any session that came back with fewer exercises than the minimum.
+        // Adds missing drills from the approved speed augmentation bank by slot type.
+        if (structuredData?.days && Array.isArray(structuredData.days)) {
+          const depthAudits: SpeedSessionDepthAudit[] = [];
+          const expandedDays = structuredData.days.map((day: { name?: string; exercises?: Array<{ name: string; sets?: number; reps?: string; rest?: string; notes?: string }> }, idx: number) => {
+            const { expanded, audit } = expandSpeedSessionIfTooThin(day, idx);
+            depthAudits.push(audit);
+            return expanded;
+          });
+
+          const anyExpanded = depthAudits.some((a) => a.wasExpanded);
+          if (anyExpanded) {
+            (structuredData as { days: typeof expandedDays }).days = expandedDays;
+            logger.info(
+              {
+                sessionsExpanded: depthAudits.filter((a) => a.wasExpanded).length,
+                expansions: depthAudits
+                  .filter((a) => a.wasExpanded)
+                  .map((a) => ({
+                    session: a.sessionName,
+                    before: a.exercisesBeforeExpansion,
+                    after: a.exercisesAfterExpansion,
+                    added: a.drillsAdded,
+                  })),
+              },
+              "[SpeedDepthExpander] Thin sessions expanded with approved augmentation drills"
+            );
+          }
+
+          // Score each session for completeness and log
+          if (process.env.NODE_ENV !== "production") {
+            const depthScores = expandedDays.map((day: { name?: string; exercises?: Array<{ name: string; notes?: string }> }) =>
+              scoreSpeedSessionDepth(day)
+            );
+            console.log("[SpeedSessionDepthAudit]", JSON.stringify({
+              sessions: depthScores.map((s) => ({
+                name: s.sessionName,
+                count: s.exerciseCount,
+                minimumMet: s.minimumMet,
+                hasTissuePrep: s.hasTissuePrep,
+                hasPrimarySpeed: s.hasPrimarySpeedWork,
+                hasSupport: s.hasSecondarySupport,
+                score: s.score,
+                passed: s.passed,
+              })),
+            }));
+          }
         }
       }
 

@@ -420,41 +420,103 @@ Tissue Prep: Nordic Hamstring Curl, Isometric Hamstring Hold, Straight-Leg Calf 
  * This eliminates parse failures from ambiguous or prose-heavy responses.
  */
 export function buildSpeedResponseContract(sessionCount: number): string {
-  const exampleDays = Array.from({ length: Math.min(sessionCount, 2) }, (_, i) => {
-    const dayNames = [
-      "Day 1 — Acceleration Development",
-      "Day 2 — Reactive Footwork + Deceleration Control",
-      "Day 3 — Elastic Output",
-      "Day 4 — Max Velocity + Footwork",
-      "Day 5 — COD + Acceleration Contrast",
-    ];
-    return `    {
-      "name": "${dayNames[i] ?? `Day ${i + 1} — Speed Training`}",
+  const day1Example = `    {
+      "name": "Day 1 — Acceleration Development",
       "exercises": [
         {
-          "name": "Wall March",
+          "name": "Isometric Hamstring Hold",
           "sets": 2,
+          "reps": "30s each leg",
+          "rest": "45s",
+          "notes": "Tissue prep — posterior chain activation before sprint work, long-lever hamstring tension"
+        },
+        {
+          "name": "Wall March",
+          "sets": 3,
           "reps": "10 contacts",
           "rest": "60s",
-          "notes": "CNS activation — drive phase mechanics, tall spine, dorsiflexed foot"
+          "notes": "Drive phase mechanics — tall spine, aggressive knee drive, dorsiflexed foot, sharp arm action"
         },
         {
           "name": "A-Skip",
           "sets": 3,
           "reps": "20m",
           "rest": "60s",
-          "notes": "Acceleration warm-up — knee drive, arm action, rhythm"
+          "notes": "Sprint mechanics warm-up — synchronized knee drive and arm swing, rhythm and timing"
         },
         {
           "name": "Falling Start",
           "sets": 5,
           "reps": "1 effort × 20m",
           "rest": "3 min",
-          "notes": "Primary acceleration work — 95–100% intent, full recovery between efforts"
+          "notes": "Primary acceleration work — 95–100% intent every rep, lean to breaking point, aggressive first step. Full recovery required"
+        },
+        {
+          "name": "Stiffness Hops",
+          "sets": 3,
+          "reps": "10 contacts",
+          "rest": "90s",
+          "notes": "Elastic support — short ground contact, stiff ankle, vertical force. Stop if contact quality or rhythm drops"
+        },
+        {
+          "name": "Speed Ladder In-Out",
+          "sets": 4,
+          "reps": "1 length",
+          "rest": "45s",
+          "notes": "Footwork finisher — sharp contacts, stay light, crisp rhythm. Prioritize quality over speed"
         }
       ]
     }`;
-  }).join(",\n");
+
+  const day2Example = `    {
+      "name": "Day 2 — Reactive Footwork + Deceleration Control",
+      "exercises": [
+        {
+          "name": "Nordic Hamstring Curl",
+          "sets": 3,
+          "reps": "6 reps",
+          "rest": "90s",
+          "notes": "Tissue prep — eccentric hamstring load, deceleration capacity, protect posterior chain before COD work"
+        },
+        {
+          "name": "A-Skip",
+          "sets": 3,
+          "reps": "20m",
+          "rest": "60s",
+          "notes": "Speed mechanics warm-up — arm action, foot strike position, build tempo across sets"
+        },
+        {
+          "name": "T-Drill",
+          "sets": 5,
+          "reps": "1 effort, full recovery",
+          "rest": "2 min",
+          "notes": "Primary COD work — sharp cuts, low hip on change, re-accelerate out of every turn. 100% effort each rep"
+        },
+        {
+          "name": "Single-Leg Decel Landing",
+          "sets": 3,
+          "reps": "5 each leg",
+          "rest": "90s",
+          "notes": "Deceleration control — stick the landing, knee over toes, absorb through hip. Stop if knee caves"
+        },
+        {
+          "name": "Jump Squat",
+          "sets": 3,
+          "reps": "4 reps",
+          "rest": "2 min",
+          "notes": "Speed-strength bridge — explosive intent every rep, land soft, reset before next. Not conditioning"
+        },
+        {
+          "name": "Lateral Hurdle Hops",
+          "sets": 3,
+          "reps": "6 contacts",
+          "rest": "90s",
+          "notes": "Elastic support — stiff ankle, minimize ground contact time, stay reactive laterally"
+        }
+      ]
+    }`;
+
+  const exampleDays = sessionCount >= 2 ? [day1Example, day2Example].join(",\n") : day1Example;
 
   return `## SPEED PROGRAM — MANDATORY JSON RESPONSE CONTRACT
 
@@ -483,6 +545,36 @@ ${exampleDays}
   ]
 }
 \`\`\`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SESSION DEPTH — MANDATORY MINIMUM:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EVERY session MUST contain at least 5 exercises (target: 5–7).
+Do NOT output a session with only 2, 3, or 4 items. That is an incomplete session.
+
+REQUIRED SESSION SLOT ORDER (fill in sequence):
+  Slot 1 — Tissue Prep / CNS Activation (1–2 exercises): e.g., Isometric Hamstring Hold, Nordic Hamstring Curl, Ankle Stiffness Prep
+  Slot 2 — Sprint Mechanics / Speed Warm-Up (1–2 exercises): e.g., Wall March, A-Skip, March to Skip to Run
+  Slot 3 — PRIMARY Speed Quality (1 exercise, max-intent): e.g., Falling Start, Flying 20m Sprint, T-Drill, Skater Jump
+  Slot 4 — Secondary Speed / Reactive / COD (1 exercise): e.g., Stiffness Hops, Mirror Drill, Lateral Bound, Lateral Hurdle Hops
+  Slot 5 — Footwork / Trunk / Tissue Support (1 exercise): e.g., Speed Ladder In-Out, Single-Leg Hip Hinge March, Copenhagen Hip Adductor
+  Slot 6 — Optional Speed-Strength Bridge or Finisher (1 exercise, when appropriate): e.g., Jump Squat, Trap Bar Jump, Pogo Hops
+
+Minimum by session type:
+  Acceleration Development → minimum 5, target 6
+  Max Velocity → minimum 5, target 6
+  Reactive Footwork + Deceleration Control → minimum 5, target 6
+  Elastic Output → minimum 5, target 6
+  Speed Endurance → minimum 5, target 5
+  Return-to-Speed / Tissue Prep → minimum 4, target 5
+
+COACHING NOTES — SPEED-ONLY LANGUAGE:
+  ✓ "Focus on execution quality and full recovery"
+  ✓ "Stop the rep if posture or contact quality drops"
+  ✓ "Prioritize sharp mechanics over fatigue"
+  ✓ "Keep sprint output high — this is not conditioning"
+  ✗ NEVER write: "Record any weights used", "track progress week-to-week", "add weight when", "increase the load"
+  ✗ NEVER use progressive overload or strength-tracking language in speed coach notes
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 SESSION NAME RULES — NON-NEGOTIABLE:
@@ -721,6 +813,380 @@ export function repairSpeedOutput(
   }
 
   return { repaired, repairsApplied };
+}
+
+// ─── Session Depth Augmentation Layer ────────────────────────────────────────
+
+/** Minimum exercise count by session type name pattern. */
+const SPEED_SESSION_MINIMUM_DEPTH: Array<{ pattern: RegExp; minimum: number; target: number }> = [
+  { pattern: /return.to.speed|tissue.prep/i, minimum: 4, target: 5 },
+  { pattern: /speed.endurance|tempo/i, minimum: 5, target: 5 },
+  { pattern: /acceleration/i, minimum: 5, target: 6 },
+  { pattern: /max.vel|maximum.vel|flying/i, minimum: 5, target: 6 },
+  { pattern: /reactive|footwork|decel/i, minimum: 5, target: 6 },
+  { pattern: /elastic|plyometric|bound/i, minimum: 5, target: 6 },
+  { pattern: /cod|contrast|agility/i, minimum: 5, target: 6 },
+];
+
+type SpeedExerciseTemplate = {
+  name: string;
+  sets: number;
+  reps: string;
+  rest: string;
+  notes: string;
+};
+
+/**
+ * Approved augmentation drills by session type.
+ * These are used to fill in missing slots when a session comes back too thin.
+ * Grouped by the slot they fill: tissue_prep, mechanics, secondary, footwork, bridge.
+ */
+const SPEED_AUGMENTATION_BANKS: Record<string, Record<string, SpeedExerciseTemplate[]>> = {
+  acceleration: {
+    tissue_prep: [
+      { name: "Isometric Hamstring Hold", sets: 2, reps: "30s each leg", rest: "45s", notes: "Posterior chain activation — long-lever hamstring tension before sprint work" },
+      { name: "Ankle Stiffness Prep", sets: 2, reps: "12 contacts", rest: "45s", notes: "Prep stiff ankle and Achilles tendon for sprint loading" },
+    ],
+    mechanics: [
+      { name: "A-Skip", sets: 3, reps: "20m", rest: "60s", notes: "Sprint mechanics — knee drive, arm swing, synchronized rhythm" },
+      { name: "Wall March", sets: 3, reps: "10 contacts", rest: "60s", notes: "Drive phase mechanics — tall spine, dorsiflexed foot, aggressive knee" },
+    ],
+    secondary: [
+      { name: "Stiffness Hops", sets: 3, reps: "10 contacts", rest: "90s", notes: "Elastic support — short contact time, stiff ankle, vertical force. Stop if quality drops" },
+      { name: "Pogo Hops", sets: 3, reps: "10 contacts", rest: "90s", notes: "Ankle stiffness and elastic load — fast ground contact, minimal knee bend" },
+    ],
+    footwork: [
+      { name: "Speed Ladder In-Out", sets: 4, reps: "1 length", rest: "45s", notes: "Footwork finisher — sharp contacts, light feet, crisp rhythm" },
+      { name: "Single-Leg Hip Hinge March", sets: 2, reps: "8 each leg", rest: "60s", notes: "Posterior chain posture support — hip hinge mechanics, tall spine" },
+    ],
+    bridge: [
+      { name: "Jump Squat", sets: 3, reps: "4 reps", rest: "2 min", notes: "Speed-strength bridge — explosive intent every rep, land soft, reset. Not conditioning" },
+    ],
+  },
+  max_velocity: {
+    tissue_prep: [
+      { name: "Ankle Stiffness Prep", sets: 2, reps: "12 contacts", rest: "45s", notes: "Achilles/ankle prep for flying sprint mechanics" },
+      { name: "Isometric Hamstring Hold", sets: 2, reps: "30s each leg", rest: "45s", notes: "Posterior chain activation — max velocity demands high hamstring output" },
+    ],
+    mechanics: [
+      { name: "A-Skip", sets: 3, reps: "20m", rest: "60s", notes: "Stride mechanics warm-up — front-side drive, knee lift, arm action" },
+      { name: "B-Skip", sets: 3, reps: "20m", rest: "60s", notes: "Max velocity drill — hip extension mechanics, hamstring activation in trail leg" },
+    ],
+    secondary: [
+      { name: "Pogo Hops", sets: 3, reps: "10 contacts", rest: "90s", notes: "Elastic stiffness support — vertical force, fast turnover, stiff ankle" },
+      { name: "Single-Leg Stiffness Hops", sets: 3, reps: "8 contacts each leg", rest: "90s", notes: "Unilateral elastic load — asymmetrical stiffness quality, stop if quality drops" },
+    ],
+    footwork: [
+      { name: "Carioca", sets: 3, reps: "20m", rest: "45s", notes: "Hip mobility and coordination finisher — stay light, fast hip rotation" },
+      { name: "Speed Ladder Lateral", sets: 4, reps: "1 length", rest: "45s", notes: "Lateral footwork quality — quick contacts, upright posture" },
+    ],
+    bridge: [
+      { name: "Countermovement Jump to Sprint", sets: 3, reps: "3 reps", rest: "2 min", notes: "Speed-strength bridge — explosive CMJ into sprint, link elastic to linear speed" },
+    ],
+  },
+  reactive_cod: {
+    tissue_prep: [
+      { name: "Nordic Hamstring Curl", sets: 3, reps: "6 reps", rest: "90s", notes: "Eccentric hamstring load — deceleration tissue capacity, protect posterior chain" },
+      { name: "Copenhagen Hip Adductor", sets: 2, reps: "8 each leg", rest: "60s", notes: "Groin and hip stability prep — lateral force absorption for COD work" },
+    ],
+    mechanics: [
+      { name: "A-Skip", sets: 3, reps: "20m", rest: "60s", notes: "Speed warm-up — arm action, foot strike position, build tempo" },
+      { name: "March to Skip to Run", sets: 3, reps: "30m", rest: "60s", notes: "Movement pattern progression — mechanics continuity from drill to sprint" },
+    ],
+    secondary: [
+      { name: "Single-Leg Decel Landing", sets: 3, reps: "5 each leg", rest: "90s", notes: "Deceleration control — stick the landing, knee over toes, absorb through hip" },
+      { name: "Lateral Hurdle Hops", sets: 3, reps: "6 contacts", rest: "90s", notes: "Elastic lateral support — stiff ankle, minimize contact time, reactive" },
+    ],
+    footwork: [
+      { name: "Zigzag Hops", sets: 3, reps: "10m", rest: "60s", notes: "Reactive footwork — quick direction changes, stay light, sharp contacts" },
+      { name: "Speed Ladder In-Out", sets: 4, reps: "1 length", rest: "45s", notes: "Coordination finisher — sharp foot contacts, upright posture" },
+    ],
+    bridge: [
+      { name: "Jump Squat", sets: 3, reps: "4 reps", rest: "2 min", notes: "Speed-strength bridge — vertical explosion, land soft. Not conditioning" },
+    ],
+  },
+  elastic: {
+    tissue_prep: [
+      { name: "Ankle Stiffness Prep", sets: 2, reps: "12 contacts", rest: "45s", notes: "Achilles and ankle prep — tendon prep before plyometric loading" },
+      { name: "Nordic Drops", sets: 2, reps: "5 reps", rest: "60s", notes: "Eccentric hamstring prep — slow controlled lowering, protect from plyometric overload" },
+    ],
+    mechanics: [
+      { name: "A-Skip", sets: 3, reps: "20m", rest: "60s", notes: "Sprint mechanics warm-up — rhythm and cadence before elastic work" },
+      { name: "Wall Drive", sets: 3, reps: "8 each leg", rest: "60s", notes: "Drive phase mechanics — arm drive and hip power activation" },
+    ],
+    secondary: [
+      { name: "Skater Jump to Stick", sets: 3, reps: "5 each leg", rest: "90s", notes: "Lateral elastic load — single-leg landing control, reactive rebound" },
+      { name: "Alternating Bounds", sets: 3, reps: "20m", rest: "90s", notes: "Triple extension elastic output — long ground contact, powerful hip drive" },
+    ],
+    footwork: [
+      { name: "Speed Ladder In-Out", sets: 4, reps: "1 length", rest: "45s", notes: "Footwork finisher — fast contacts, stay light after plyometric load" },
+      { name: "Single-Leg Hip Hinge March", sets: 2, reps: "8 each leg", rest: "60s", notes: "Posterior chain posture reset — hip hinge pattern after high elastic volume" },
+    ],
+    bridge: [
+      { name: "Countermovement Jump to Sprint", sets: 3, reps: "3 reps", rest: "2 min", notes: "Elastic to linear speed transfer — link plyometric output into sprint acceleration" },
+    ],
+  },
+  return_to_speed: {
+    tissue_prep: [
+      { name: "Isometric Hamstring Hold", sets: 2, reps: "30s each leg", rest: "45s", notes: "Sub-maximal posterior chain activation — gentle tissue prep, no strain" },
+      { name: "Straight-Leg Calf March", sets: 2, reps: "10 each leg", rest: "45s", notes: "Achilles and calf reintroduction — slow controlled loading, monitor for discomfort" },
+    ],
+    mechanics: [
+      { name: "A-Walk", sets: 2, reps: "20m", rest: "45s", notes: "Movement quality restoration — slow deliberate mechanics, re-establish coordination" },
+      { name: "A-Skip", sets: 2, reps: "20m", rest: "60s", notes: "Sub-maximal speed mechanics — 60–70% effort, focus on rhythm" },
+    ],
+    secondary: [
+      { name: "Pogo Hops", sets: 2, reps: "8 contacts", rest: "90s", notes: "Low-load tendon reintroduction — short contact, 50–60% effort max. Stop if any discomfort" },
+    ],
+    footwork: [
+      { name: "Speed Ladder In-Out", sets: 3, reps: "1 length", rest: "60s", notes: "Coordination and rhythm restoration — light effort, quality over speed" },
+    ],
+  },
+  default: {
+    tissue_prep: [
+      { name: "Isometric Hamstring Hold", sets: 2, reps: "30s each leg", rest: "45s", notes: "Posterior chain activation before speed work" },
+    ],
+    mechanics: [
+      { name: "A-Skip", sets: 3, reps: "20m", rest: "60s", notes: "Sprint mechanics warm-up — knee drive, arm action, rhythm" },
+    ],
+    secondary: [
+      { name: "Stiffness Hops", sets: 3, reps: "10 contacts", rest: "90s", notes: "Elastic support — short contact, stiff ankle. Stop if quality drops" },
+    ],
+    footwork: [
+      { name: "Speed Ladder In-Out", sets: 4, reps: "1 length", rest: "45s", notes: "Footwork finisher — sharp contacts, crisp rhythm, light feet" },
+      { name: "Single-Leg Hip Hinge March", sets: 2, reps: "8 each leg", rest: "60s", notes: "Posture and posterior chain support — tall spine, hip hinge pattern" },
+    ],
+    bridge: [
+      { name: "Jump Squat", sets: 3, reps: "4 reps", rest: "2 min", notes: "Speed-strength bridge — explosive intent, land soft, reset between reps" },
+    ],
+  },
+};
+
+function getSessionBank(sessionName: string): Record<string, SpeedExerciseTemplate[]> {
+  const lower = sessionName.toLowerCase();
+  if (/return.to.speed|tissue.prep/i.test(lower)) return SPEED_AUGMENTATION_BANKS.return_to_speed;
+  if (/acceleration/i.test(lower)) return SPEED_AUGMENTATION_BANKS.acceleration;
+  if (/max.vel|maximum.vel|flying/i.test(lower)) return SPEED_AUGMENTATION_BANKS.max_velocity;
+  if (/reactive|footwork|decel|cod/i.test(lower)) return SPEED_AUGMENTATION_BANKS.reactive_cod;
+  if (/elastic|plyometric|bound/i.test(lower)) return SPEED_AUGMENTATION_BANKS.elastic;
+  return SPEED_AUGMENTATION_BANKS.default;
+}
+
+function getSessionMinimum(sessionName: string): { minimum: number; target: number } {
+  for (const { pattern, minimum, target } of SPEED_SESSION_MINIMUM_DEPTH) {
+    if (pattern.test(sessionName)) return { minimum, target };
+  }
+  return { minimum: 5, target: 6 };
+}
+
+export interface SpeedSessionDepthAudit {
+  dayIndex: number;
+  sessionName: string;
+  exercisesBeforeExpansion: number;
+  minimumRequired: number;
+  wasExpanded: boolean;
+  drillsAdded: string[];
+  exercisesAfterExpansion: number;
+}
+
+/**
+ * Expands a speed session that has fewer exercises than the minimum required.
+ * Adds missing drills from the approved augmentation bank, preserving session identity.
+ * Returns the expanded day and audit info.
+ */
+export function expandSpeedSessionIfTooThin(
+  day: { name?: string; exercises?: SpeedExerciseTemplate[] },
+  dayIndex: number,
+): { expanded: typeof day; audit: SpeedSessionDepthAudit } {
+  const sessionName = day.name ?? "";
+  const { minimum } = getSessionMinimum(sessionName);
+  const exercises = day.exercises ?? [];
+  const beforeCount = exercises.length;
+
+  const audit: SpeedSessionDepthAudit = {
+    dayIndex,
+    sessionName,
+    exercisesBeforeExpansion: beforeCount,
+    minimumRequired: minimum,
+    wasExpanded: false,
+    drillsAdded: [],
+    exercisesAfterExpansion: beforeCount,
+  };
+
+  if (beforeCount >= minimum) {
+    return { expanded: day, audit };
+  }
+
+  const bank = getSessionBank(sessionName);
+  const existingNames = new Set(exercises.map((e) => e.name.toLowerCase()));
+  const expanded = { ...day, exercises: [...exercises] };
+
+  const SLOT_ORDER = ["tissue_prep", "mechanics", "secondary", "footwork", "bridge"];
+
+  let filled = expanded.exercises.length;
+  for (const slot of SLOT_ORDER) {
+    if (filled >= minimum) break;
+    const drills = bank[slot] ?? SPEED_AUGMENTATION_BANKS.default[slot] ?? [];
+    for (const drill of drills) {
+      if (filled >= minimum) break;
+      if (!existingNames.has(drill.name.toLowerCase())) {
+        expanded.exercises.push({ ...drill });
+        existingNames.add(drill.name.toLowerCase());
+        audit.drillsAdded.push(drill.name);
+        filled++;
+      }
+    }
+  }
+
+  audit.wasExpanded = audit.drillsAdded.length > 0;
+  audit.exercisesAfterExpansion = expanded.exercises.length;
+  return { expanded, audit };
+}
+
+// ─── Speed Coach Note Sanitizer ───────────────────────────────────────────────
+
+const STRENGTH_NOTE_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
+  {
+    pattern: /record\s+(any\s+)?weights?\s+used[^.]*\./gi,
+    replacement: "Focus on execution quality and full recovery between efforts.",
+  },
+  {
+    pattern: /track\s+(your\s+)?progress\s+week.to.week[^.]*\./gi,
+    replacement: "Prioritize sharp mechanics over fatigue — stop if quality drops.",
+  },
+  {
+    pattern: /add\s+weight\s+when[^.]*\./gi,
+    replacement: "Keep sprint output high — do not add volume without confirming recovery.",
+  },
+  {
+    pattern: /increase\s+(the\s+)?load[^.]*\./gi,
+    replacement: "Prioritize execution quality over increasing demand.",
+  },
+  {
+    pattern: /progressive\s+overload[^.]*\./gi,
+    replacement: "Progress by improving mechanics and intent, not by adding load.",
+  },
+  {
+    pattern: /aim\s+for\s+\d+\s*(kg|lbs?|pounds?)[^.]*\./gi,
+    replacement: "Focus on execution quality and full recovery.",
+  },
+  {
+    pattern: /(\d+\s*(kg|lbs?)\s*(or\s+more|target))[^.]*\./gi,
+    replacement: "Prioritize sharp mechanics — quality beats quantity in speed work.",
+  },
+];
+
+/**
+ * Removes strength-training language from speed session coaching notes.
+ * Replaces detected strength-language patterns with speed-native coaching cues.
+ * Returns sanitized notes and whether any sanitization was applied.
+ */
+export function sanitizeSpeedCoachNotes(
+  notes: string,
+): { sanitized: string; wasModified: boolean } {
+  let sanitized = notes;
+  let wasModified = false;
+  for (const { pattern, replacement } of STRENGTH_NOTE_PATTERNS) {
+    if (pattern.test(sanitized)) {
+      sanitized = sanitized.replace(pattern, replacement);
+      wasModified = true;
+    }
+  }
+  return { sanitized, wasModified };
+}
+
+/**
+ * Applies note sanitization across all exercises in all days of a speed program.
+ * Returns the sanitized program and a count of notes that were modified.
+ */
+export function sanitizeAllSpeedNotes(program: RepairableProgram): {
+  sanitized: RepairableProgram;
+  notesModifiedCount: number;
+} {
+  const sanitized: RepairableProgram = JSON.parse(JSON.stringify(program)) as RepairableProgram;
+  let notesModifiedCount = 0;
+  if (sanitized.days) {
+    for (const day of sanitized.days) {
+      if (day.exercises) {
+        for (const ex of day.exercises) {
+          if (ex.notes) {
+            const result = sanitizeSpeedCoachNotes(ex.notes);
+            if (result.wasModified) {
+              ex.notes = result.sanitized;
+              notesModifiedCount++;
+            }
+          }
+        }
+      }
+    }
+  }
+  return { sanitized, notesModifiedCount };
+}
+
+// ─── Session Depth Scorer ─────────────────────────────────────────────────────
+
+export interface SpeedSessionDepthScore {
+  sessionName: string;
+  exerciseCount: number;
+  minimumMet: boolean;
+  hasTissuePrep: boolean;
+  hasPrimarySpeedWork: boolean;
+  hasSecondarySupport: boolean;
+  hasFootworkOrTrunk: boolean;
+  strengthNotesDetected: boolean;
+  score: number;
+  threshold: number;
+  passed: boolean;
+}
+
+const TISSUE_PREP_TERMS = /isometric|nordic|hamstring|ankle.stiff|straight.leg.calf|calf.march|hip.hinge.march|copenhagen|nordic.drop/i;
+const PRIMARY_SPEED_TERMS = /sprint|falling.start|flying|block.start|kneeling.start|t.drill|5.10.5|l.drill|box.drill|505|skater.jump|countermovement.jump|depth.drop|lateral.bound|bounding/i;
+const SECONDARY_SUPPORT_TERMS = /stiffness.hop|pogo|lateral.hurdle|skater|alternating.bound|mirror.drill|reactive|single.leg.decel|hip.lock.decel|jump.squat|trap.bar.jump|power.clean/i;
+const FOOTWORK_TRUNK_TERMS = /ladder|carioca|zigzag|shuffle|lateral.shuffle|hip.hinge.march|copenhagen|back.pedal/i;
+const STRENGTH_NOTE_TERMS = /record.*weights|track.*progress.*week|add.*weight|increase.*load|progressive.*overload/i;
+
+/**
+ * Scores the completeness and quality of a single speed session.
+ * Used for logging and post-generation quality gating.
+ */
+export function scoreSpeedSessionDepth(
+  session: { name?: string; exercises?: Array<{ name: string; notes?: string }> },
+): SpeedSessionDepthScore {
+  const sessionName = session.name ?? "";
+  const exercises = session.exercises ?? [];
+  const { minimum } = getSessionMinimum(sessionName);
+
+  const allText = exercises.map((e) => `${e.name} ${e.notes ?? ""}`).join(" ");
+
+  const hasTissuePrep = TISSUE_PREP_TERMS.test(allText);
+  const hasPrimarySpeedWork = PRIMARY_SPEED_TERMS.test(allText);
+  const hasSecondarySupport = SECONDARY_SUPPORT_TERMS.test(allText);
+  const hasFootworkOrTrunk = FOOTWORK_TRUNK_TERMS.test(allText);
+  const strengthNotesDetected = STRENGTH_NOTE_TERMS.test(exercises.map((e) => e.notes ?? "").join(" "));
+  const minimumMet = exercises.length >= minimum;
+
+  let score = 0;
+  if (minimumMet) score += 30;
+  if (hasTissuePrep) score += 15;
+  if (hasPrimarySpeedWork) score += 25;
+  if (hasSecondarySupport) score += 15;
+  if (hasFootworkOrTrunk) score += 10;
+  if (!strengthNotesDetected) score += 5;
+
+  const threshold = 70;
+  return {
+    sessionName,
+    exerciseCount: exercises.length,
+    minimumMet,
+    hasTissuePrep,
+    hasPrimarySpeedWork,
+    hasSecondarySupport,
+    hasFootworkOrTrunk,
+    strengthNotesDetected,
+    score,
+    threshold,
+    passed: score >= threshold,
+  };
 }
 
 // ─── Incomplete Build Response Detector ──────────────────────────────────────
