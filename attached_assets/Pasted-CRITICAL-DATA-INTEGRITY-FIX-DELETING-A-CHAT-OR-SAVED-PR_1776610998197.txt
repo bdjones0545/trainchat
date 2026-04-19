@@ -1,0 +1,162 @@
+CRITICAL DATA INTEGRITY FIX — DELETING A CHAT OR SAVED PROGRAM MUST HANDLE THE LINKED OBJECT
+
+CONTEXT:
+In the left sidebar of main chat, when a chat or saved program is deleted, the linked object is not also deleted/unlinked correctly.
+
+Current bad behavior:
+- delete chat → linked saved program may remain
+- delete saved program → linked chat may remain
+- UI may remove one object while the other still exists in DB
+- orphaned chat/program relationships are created
+
+This breaks trust and makes the system feel inconsistent.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Fix deletion behavior so chats and saved programs follow consistent lifecycle rules.
+
+==================================================
+TASK 1 — AUDIT THE RELATIONSHIP MODEL
+==================================================
+
+Identify how these entities are currently linked:
+
+- chat / conversation
+- saved program
+- training system
+- active system
+- message structuredData if relevant
+
+Return:
+- exact foreign keys / IDs / linking fields
+- whether the relationship is one-to-one, one-to-many, or loosely coupled
+
+We need to know what “connected to it” means in the current schema.
+
+==================================================
+TASK 2 — DEFINE OWNERSHIP RULES
+==================================================
+
+Implement explicit rules:
+
+CASE A:
+If a chat owns a generated saved program and that program is not referenced elsewhere,
+deleting the chat should also delete (or soft-delete) the linked saved program / training system.
+
+CASE B:
+If a saved program is deleted and its source chat is only meaningful because of that program,
+delete or archive the linked chat as well.
+
+CASE C:
+If multiple chats or entities reference the same saved program,
+do NOT blindly hard-delete; remove the link and only delete the program if no references remain.
+
+==================================================
+TASK 3 — CHOOSE SAFE DELETE STRATEGY
+==================================================
+
+Prefer soft delete / archived flags if the system already supports them.
+
+If hard delete is used:
+- ensure all dependent rows are cleaned up
+- no orphaned records remain
+
+If soft delete is used:
+- both linked objects should disappear from normal UI queries
+
+==================================================
+TASK 4 — IMPLEMENT CASCADE / UNLINK LOGIC
+==================================================
+
+Fix delete handlers on both sides:
+
+1. deleteChat(chatId)
+2. deleteSavedProgram(programId)
+
+Each must:
+- load linked entity
+- determine ownership/reference count
+- delete or unlink appropriately
+- update active selections if needed
+
+==================================================
+TASK 5 — HANDLE ACTIVE STATE SAFELY
+==================================================
+
+If the deleted chat/program was currently active:
+- clear active selection
+- switch to a safe fallback state
+- do not leave stale active IDs in memory/UI
+
+==================================================
+TASK 6 — REFRESH UI ON BOTH SIDES
+==================================================
+
+After deletion:
+- refresh left sidebar chat list
+- refresh saved programs list
+- refresh active program state
+- refresh any relevant training-system queries
+
+No stale sidebar rows.
+No ghost program entries.
+
+==================================================
+TASK 7 — ADD AUDIT LOGGING
+==================================================
+
+Add logs:
+
+[DeleteCascadeAudit] {
+  sourceType: "chat" | "program",
+  sourceId,
+  linkedEntityFound,
+  linkedEntityType,
+  actionTaken: "deleted" | "soft_deleted" | "unlinked" | "skipped",
+  referenceCount
+}
+
+This must be easy to trace.
+
+==================================================
+TASK 8 — VALIDATION
+==================================================
+
+Test these cases:
+
+1. Delete a chat with one linked saved program
+Expected:
+- both disappear if singly owned
+
+2. Delete a saved program with one linked chat
+Expected:
+- both disappear if singly owned
+
+3. Delete a chat where program is referenced elsewhere
+Expected:
+- chat deleted, program preserved, link removed
+
+4. Delete a currently active program/chat
+Expected:
+- UI clears active state safely
+
+==================================================
+TASK 9 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. current relationship model
+2. ownership rules implemented
+3. whether delete is hard or soft
+4. where cascade/unlink logic was added
+5. before/after behavior for all 4 validation cases
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Chats and saved programs must never become orphaned from each other.
+
+Deleting one must correctly delete or unlink the connected object based on ownership rules, and the UI must immediately reflect the result.
