@@ -1015,6 +1015,7 @@ export default function Chat() {
       await customFetch<any>("/api/training-system/from-chat", {
         method: "POST",
         body: JSON.stringify({
+          conversationId: activeConvoId ?? undefined,
           programName: latestProgram.programName,
           description: latestProgram.description ?? "",
           progressionStrategy: latestProgram.progressionStrategy ?? undefined,
@@ -1181,7 +1182,13 @@ export default function Chat() {
     if (isDeleting) return;
     setIsDeleting(true);
     try {
-      const result = await customFetch<{ success: boolean; wasActive: boolean; newActiveSystemId: number | null }>(
+      const result = await customFetch<{
+        success: boolean;
+        wasActive: boolean;
+        newActiveSystemId: number | null;
+        linkedConversationId: number | null;
+        conversationDeleted: boolean;
+      }>(
         `/api/training-system/${id}`,
         { method: "DELETE" }
       );
@@ -1192,11 +1199,34 @@ export default function Chat() {
       queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
       queryClient.refetchQueries({ queryKey: ["training-system-week"] });
+
       // If the deleted system had a live draft in the right panel, clear it
       if (result.wasActive) {
         setLatestProgram(null);
         setIsSaved(false);
       }
+
+      // CASE B: if the linked conversation was also deleted, refresh the sidebar
+      // and clear the active conversation if it was the deleted one
+      if (result.conversationDeleted) {
+        await queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+        if (result.linkedConversationId !== null && activeConvoId === result.linkedConversationId) {
+          const remaining = conversations.filter((c: any) => c.id !== result.linkedConversationId);
+          if (remaining.length > 0) {
+            handleSelectConvo(remaining[0].id);
+          } else {
+            setActiveConvoId(null);
+          }
+        }
+      }
+
+      console.log("[DeleteCascadeAudit] program deleted", {
+        sourceType: "program",
+        sourceId: id,
+        wasActive: result.wasActive,
+        linkedConversationId: result.linkedConversationId,
+        conversationDeleted: result.conversationDeleted,
+      });
     } catch (err) {
       console.error("[DeleteProgram] Failed:", err);
       if (operationErrorTimeoutRef.current) clearTimeout(operationErrorTimeoutRef.current);
@@ -1220,7 +1250,14 @@ export default function Chat() {
     });
     setIsDeleting(true);
     try {
-      await customFetch(`/api/conversations/${id}`, { method: "DELETE" });
+      const result = await customFetch<{
+        success: boolean;
+        trainingSystemsDeleted: number;
+        savedProgramsDeleted: number;
+        wasActiveSystemDeleted: boolean;
+        newActiveSystemId: number | null;
+      }>(`/api/conversations/${id}`, { method: "DELETE" });
+
       // Repair active pointer: if we just deleted the active conversation,
       // switch to the most recent remaining one. If none remain, clear the
       // pointer and show the empty state — do NOT auto-create a ghost session.
@@ -1232,12 +1269,33 @@ export default function Chat() {
           setActiveConvoId(null);
         }
       }
-      // Invalidate and refetch so sidebar reflects the persisted DB state
+
+      // If a linked active training system was also deleted, clear the draft panel
+      if (result.wasActiveSystemDeleted) {
+        setLatestProgram(null);
+        setIsSaved(false);
+      }
+
+      // Invalidate conversation list so sidebar reflects the deletion
       await queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+
+      // Invalidate all training-system queries in case a linked program was also deleted
+      if (result.trainingSystemsDeleted > 0) {
+        queryClient.invalidateQueries({ queryKey: ["training-system-library"] });
+        queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+        queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+        queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
+        queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
+        queryClient.refetchQueries({ queryKey: ["training-system-week"] });
+      }
+
       const remaining = conversations.filter((c: any) => c.id !== id);
       console.log("[SessionDeleteAudit] success", {
         clickedSessionId: id,
         deleteSucceeded: true,
+        trainingSystemsDeleted: result.trainingSystemsDeleted,
+        savedProgramsDeleted: result.savedProgramsDeleted,
+        wasActiveSystemDeleted: result.wasActiveSystemDeleted,
         invalidatedQueryKeys: [getListConversationsQueryKey()],
         remainingSessionIds: remaining.map((c: any) => c.id),
       });

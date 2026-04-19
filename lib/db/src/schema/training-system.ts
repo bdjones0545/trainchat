@@ -10,6 +10,7 @@ import {
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
+import { conversationsTable } from "./conversations";
 
 // ─── Training System (top-level persistent system per user) ─────────────────
 
@@ -18,6 +19,9 @@ export const trainingSystems = pgTable("training_systems", {
   userId: integer("user_id")
     .notNull()
     .references(() => usersTable.id, { onDelete: "cascade" }),
+
+  conversationId: integer("conversation_id")
+    .references(() => conversationsTable.id, { onDelete: "set null" }),
 
   name: text("name").notNull(),
   overarchingGoal: text("overarching_goal").notNull(),

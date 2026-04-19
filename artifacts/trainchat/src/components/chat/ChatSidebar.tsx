@@ -16,6 +16,7 @@ interface Props {
   activeId: number | null;
   onSelect: (id: number) => void;
   onNew: () => void;
+  onDeleteSuccess?: (id: number, wasActiveSystemDeleted: boolean) => void;
 }
 
 function formatDate(dateStr: string) {
@@ -28,7 +29,7 @@ function formatDate(dateStr: string) {
   return d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
-export default function ChatSidebar({ conversations, activeId, onSelect, onNew }: Props) {
+export default function ChatSidebar({ conversations, activeId, onSelect, onNew, onDeleteSuccess }: Props) {
   const queryClient = useQueryClient();
   const deleteConvo = useDeleteConversation();
 
@@ -37,8 +38,15 @@ export default function ChatSidebar({ conversations, activeId, onSelect, onNew }
     deleteConvo.mutate(
       { id },
       {
-        onSuccess: () => {
+        onSuccess: (result: any) => {
           queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: ["training-system-library"] });
+          queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+          queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+          queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
+          queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
+          queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+          onDeleteSuccess?.(id, result?.wasActiveSystemDeleted ?? false);
         },
       }
     );

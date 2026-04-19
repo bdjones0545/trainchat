@@ -945,7 +945,8 @@ function inferSessionType(
  */
 export async function createTrainingSystemFromProgram(
   userId: number,
-  program: ChatProgram
+  program: ChatProgram,
+  conversationId?: number | null
 ): Promise<typeof trainingSystems.$inferSelect> {
   logger.info({ userId, programName: program.programName }, "[TrainingSystem] createTrainingSystemFromProgram — starting");
 
@@ -967,6 +968,7 @@ export async function createTrainingSystemFromProgram(
   // Create the training system
   const [system] = await db.insert(trainingSystems).values({
     userId,
+    conversationId: conversationId ?? null,
     name: program.programName,
     overarchingGoal: program.description ?? program.programName,
     trainingStyle: program.splitType ?? phaseConfig.phaseName,

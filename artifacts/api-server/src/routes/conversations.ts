@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, conversationsTable, messagesTable, neuralProfilesTable } from "@workspace/db";
-import { eq, desc, count } from "drizzle-orm";
+import { db, conversationsTable, messagesTable, neuralProfilesTable, trainingSystems, savedProgramsTable } from "@workspace/db";
+import { eq, desc, count, and } from "drizzle-orm";
 import { CreateConversationBody, GetConversationParams, DeleteConversationParams, ListMessagesParams, SendMessageBody, SendMessageParams } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
 import { generateAIResponse, type ProgramStructure, validateProgramAgainstConstraints } from "../lib/ai";
@@ -396,15 +396,82 @@ router.delete("/conversations/:id", requireAuth, async (req, res): Promise<void>
   }
 
   const userId = req.session.userId!;
-  const [convo] = await db.select().from(conversationsTable).where(eq(conversationsTable.id, params.data.id));
+  const conversationId = params.data.id;
+
+  const [convo] = await db.select().from(conversationsTable).where(eq(conversationsTable.id, conversationId));
 
   if (!convo || convo.userId !== userId) {
     res.status(404).json({ error: "Conversation not found" });
     return;
   }
 
-  await db.delete(conversationsTable).where(eq(conversationsTable.id, params.data.id));
-  res.sendStatus(204);
+  // ── Cascade: delete linked training systems ───────────────────────────────
+  // CASE A: find any training systems that were built from this conversation.
+  // If they are singly owned (only linked to this chat), delete them too.
+  const linkedSystems = await db
+    .select({ id: trainingSystems.id, status: trainingSystems.status })
+    .from(trainingSystems)
+    .where(and(eq(trainingSystems.userId, userId), eq(trainingSystems.conversationId, conversationId)));
+
+  let trainingSystemsDeleted = 0;
+  let wasActiveSystemDeleted = false;
+  let newActiveSystemId: number | null = null;
+
+  for (const system of linkedSystems) {
+    if (system.status === "active") {
+      wasActiveSystemDeleted = true;
+      // Promote the most-recently-updated archived system as the new active one
+      const [next] = await db
+        .select({ id: trainingSystems.id })
+        .from(trainingSystems)
+        .where(
+          and(
+            eq(trainingSystems.userId, userId),
+            eq(trainingSystems.status, "archived"),
+          )
+        )
+        .orderBy(desc(trainingSystems.updatedAt))
+        .limit(1);
+
+      if (next) {
+        await db
+          .update(trainingSystems)
+          .set({ status: "active", updatedAt: new Date() })
+          .where(eq(trainingSystems.id, next.id));
+        newActiveSystemId = next.id;
+      }
+    }
+    await db.delete(trainingSystems).where(eq(trainingSystems.id, system.id));
+    trainingSystemsDeleted++;
+  }
+
+  // ── Cascade: delete linked saved_programs snapshots ──────────────────────
+  // The DB constraint is "set null" on delete, but we want to actually remove
+  // the orphaned snapshot row when the source conversation is deleted.
+  const deletedPrograms = await db
+    .delete(savedProgramsTable)
+    .where(and(eq(savedProgramsTable.userId, userId), eq(savedProgramsTable.conversationId, conversationId)))
+    .returning({ id: savedProgramsTable.id });
+  const savedProgramsDeleted = deletedPrograms.length;
+
+  // ── Audit log ─────────────────────────────────────────────────────────────
+  logger.info({
+    sourceType: "chat",
+    sourceId: conversationId,
+    linkedEntityFound: linkedSystems.length > 0 || savedProgramsDeleted > 0,
+    linkedEntityType: "training_system+saved_programs",
+    actionTaken: trainingSystemsDeleted > 0 || savedProgramsDeleted > 0 ? "deleted" : "none",
+    referenceCount: linkedSystems.length,
+    trainingSystemsDeleted,
+    savedProgramsDeleted,
+    wasActiveSystemDeleted,
+    newActiveSystemId,
+  }, "[DeleteCascadeAudit]");
+
+  // Delete the conversation (messages cascade via DB FK)
+  await db.delete(conversationsTable).where(eq(conversationsTable.id, conversationId));
+
+  res.json({ success: true, trainingSystemsDeleted, savedProgramsDeleted, wasActiveSystemDeleted, newActiveSystemId });
 });
 
 router.get("/conversations/:id/messages", requireAuth, async (req, res): Promise<void> => {

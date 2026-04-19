@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
-import { trainingSystems } from "@workspace/db";
+import { trainingSystems, conversationsTable, savedProgramsTable } from "@workspace/db";
 import { eq, and, desc, ne } from "drizzle-orm";
 import {
   getActiveTrainingSystem,
@@ -148,9 +148,10 @@ router.post("/training-system/initialize", requireAuth, async (req, res): Promis
 router.post("/training-system/from-chat", requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = req.session.userId!;
-    const program = req.body as ChatProgram;
+    const { conversationId: rawConversationId, ...program } = req.body as ChatProgram & { conversationId?: number | null };
+    const conversationId = typeof rawConversationId === "number" ? rawConversationId : null;
 
-    logger.info({ userId, programName: program?.programName }, "[training-system] POST /from-chat — received");
+    logger.info({ userId, programName: program?.programName, conversationId }, "[training-system] POST /from-chat — received");
 
     // Basic validation
     if (!program || !program.programName) {
@@ -169,9 +170,9 @@ router.post("/training-system/from-chat", requireAuth, async (req, res): Promise
       }
     }
 
-    const system = await createTrainingSystemFromProgram(userId, program);
+    const system = await createTrainingSystemFromProgram(userId, program, conversationId);
 
-    logger.info({ userId, systemId: system.id }, "[training-system] POST /from-chat — Training System created successfully");
+    logger.info({ userId, systemId: system.id, conversationId }, "[training-system] POST /from-chat — Training System created successfully");
 
     // Create an initial "Version 1" change log entry so the History tab
     // immediately shows the program build as the first version snapshot.
@@ -414,6 +415,7 @@ router.delete("/training-system/:id", requireAuth, async (req, res): Promise<voi
     }
 
     const wasActive = target.status === "active";
+    const linkedConversationId = target.conversationId ?? null;
     let newActiveSystemId: number | null = null;
 
     // If deleting the active system, promote the most-recently-updated archived one
@@ -449,12 +451,50 @@ router.delete("/training-system/:id", requireAuth, async (req, res): Promise<voi
       }
     }
 
+    // ── Cascade: delete linked saved_programs snapshot ───────────────────────
+    let savedProgramsDeleted = 0;
+    if (linkedConversationId !== null) {
+      const deletedPrograms = await db
+        .delete(savedProgramsTable)
+        .where(eq(savedProgramsTable.conversationId, linkedConversationId))
+        .returning({ id: savedProgramsTable.id });
+      savedProgramsDeleted = deletedPrograms.length;
+    }
+
+    // ── Cascade: delete linked conversation (source chat) ────────────────────
+    // CASE B: if the training system was created from a specific conversation,
+    // delete that conversation (messages cascade via DB FK).
+    let conversationDeleted = false;
+    if (linkedConversationId !== null) {
+      const [linkedConvo] = await db
+        .select({ id: conversationsTable.id, userId: conversationsTable.userId })
+        .from(conversationsTable)
+        .where(eq(conversationsTable.id, linkedConversationId));
+
+      if (linkedConvo && linkedConvo.userId === userId) {
+        await db.delete(conversationsTable).where(eq(conversationsTable.id, linkedConversationId));
+        conversationDeleted = true;
+      }
+    }
+
+    // ── Audit log ─────────────────────────────────────────────────────────────
+    logger.info({
+      sourceType: "program",
+      sourceId: id,
+      linkedConversationId,
+      linkedEntityFound: linkedConversationId !== null,
+      linkedEntityType: "conversation",
+      actionTaken: conversationDeleted ? "deleted" : (linkedConversationId !== null ? "skipped" : "none"),
+      savedProgramsDeleted,
+      referenceCount: 1,
+    }, "[DeleteCascadeAudit]");
+
     // Hard delete — cascade removes phases → weeks → sessions → exercises → change logs
     await db.delete(trainingSystems).where(eq(trainingSystems.id, id));
 
-    logger.info({ userId, systemId: id, wasActive, newActiveSystemId }, "[training-system] DELETE /:id — deleted");
+    logger.info({ userId, systemId: id, wasActive, newActiveSystemId, linkedConversationId, conversationDeleted }, "[training-system] DELETE /:id — deleted");
 
-    res.json({ success: true, wasActive, newActiveSystemId });
+    res.json({ success: true, wasActive, newActiveSystemId, linkedConversationId, conversationDeleted });
   } catch (err) {
     logger.error({ err }, "[training-system] DELETE /:id error");
     res.status(500).json({ error: "Failed to delete training system" });
