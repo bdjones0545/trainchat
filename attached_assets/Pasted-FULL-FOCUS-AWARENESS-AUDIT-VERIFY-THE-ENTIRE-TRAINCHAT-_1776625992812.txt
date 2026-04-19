@@ -1,0 +1,264 @@
+FULL FOCUS-AWARENESS AUDIT — VERIFY THE ENTIRE TRAINCHAT SYSTEM IS TRULY FOCUS-AWARE
+
+CONTEXT:
+TrainChat now supports three focus systems:
+- Strength
+- Speed / Footwork
+- Mobility
+
+Each focus has its own engine and should remain isolated:
+- separate program chain
+- separate block progression
+- separate adaptation logic
+- separate continuation logic
+- separate active context
+- separate focus-specific memory/modifiers where relevant
+
+We have already integrated much of the focus structure into:
+- main agent
+- Active Programs
+- right sidebar
+- focus tabs
+- generation engines
+
+Now we need one full audit of the ENTIRE system to verify that every important surface is actually focus-aware and that there is no focus leakage, wrong-engine routing, wrong-memory usage, or wrong-program rendering.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Audit the full TrainChat system to ensure it is truly focus-aware end to end, including the agent.
+
+==================================================
+PART 1 — AUDIT ALL ENTRY POINTS
+==================================================
+
+Audit every major entry point and verify which focus engine it uses.
+
+Check:
+1. Main agent prompt / program generation
+2. Main chat follow-up requests
+3. Agent panel quick commands
+4. Free-text command bar
+5. Right sidebar actions
+6. Active Programs page
+7. Saved Programs page
+8. Today / This Week / Block views
+9. Session start / resume / log
+10. Log Session submission
+11. Continuation block generation
+12. Delete flows
+13. Empty states
+14. Focus switching tabs
+
+For each, return:
+- focus awareness status
+- current engine used
+- whether wrong-engine access is possible
+- severity of any gap found
+
+==================================================
+PART 2 — AGENT FOCUS-AWARENESS AUDIT
+==================================================
+
+This is the most important part.
+
+Verify that the agent:
+- knows the currently selected focus
+- receives the correct focus context in its system prompt
+- uses the correct focus engine for generation/refinement
+- reads the correct active program for that focus
+- writes changes to the correct focus program
+- uses the correct focus-specific continuation logic
+- uses the correct focus memory/modifiers where relevant
+
+We need an explicit audit of agent routing:
+
+[AgentFocusAudit] {
+  activeFocus,
+  engineInjected,
+  activeProgramResolved,
+  memoryNamespaceUsed,
+  continuationNamespaceUsed,
+  wrongFocusRisk
+}
+
+==================================================
+PART 3 — PROGRAM STATE AUDIT
+==================================================
+
+Verify that all program state is focus-aware.
+
+Check:
+- activeProgramByFocus
+- saved programs by focus
+- active session by focus
+- current block by focus
+- current week by focus
+- progression chain by focus
+
+Make sure:
+- no single global activeSystem assumption remains
+- no view reads another focus’s program accidentally
+- empty states appear correctly when a focus has no program
+
+==================================================
+PART 4 — MEMORY / MODIFIER AUDIT
+==================================================
+
+Audit memory structure and usage.
+
+Separate:
+GLOBAL MEMORY
+- age
+- injuries
+- equipment
+- sport
+
+FOCUS-SPECIFIC MEMORY
+- strength emphases
+- speed emphases
+- mobility emphases
+- fatigue/adaptation signals tied to that focus
+
+Verify:
+- the correct memory is read in each focus
+- one focus does not pollute the others
+- right sidebar / agent panel / block tab display the correct focus-scoped modifiers
+
+==================================================
+PART 5 — SESSION LIFECYCLE AUDIT BY FOCUS
+==================================================
+
+Verify session state machine is focus-specific:
+
+- not_started
+- in_progress
+- completed
+
+A Strength session in progress must not create:
+- Resume Session in Speed
+- Log Session in Mobility
+unless those sessions are also in progress
+
+Audit:
+- start session
+- resume session
+- log session
+- completion state
+- post-log advancement
+
+==================================================
+PART 6 — CONTINUATION LOGIC AUDIT BY FOCUS
+==================================================
+
+Verify that block continuation is fully focus-specific.
+
+Check:
+- Strength continuation chain
+- Speed continuation chain
+- Mobility continuation chain
+
+Make sure:
+- completing a Speed block does not use Strength continuation logic
+- Mobility continuation reads mobility performance/memory
+- correct next block archetype is selected per focus
+
+==================================================
+PART 7 — UI FOCUS COHERENCE AUDIT
+==================================================
+
+Audit visual and UX coherence across:
+- main focus tabs
+- Active Programs
+- right sidebar
+- agent panel
+- Today / Week / Block
+- empty states
+
+Verify:
+- correct program shown for current focus
+- correct color/accent mode shown
+- correct CTA copy per focus
+- focus switch updates all relevant surfaces
+- no stale UI after switching focus
+
+==================================================
+PART 8 — DELETE / DATA INTEGRITY AUDIT
+==================================================
+
+Verify deleting:
+- chat
+- saved program
+- active program
+- focus-specific program
+
+does not:
+- delete the wrong focus program
+- leave orphaned session state
+- leave stale active references
+- corrupt another focus’s state
+
+==================================================
+PART 9 — FIX ANY HIGH-SEVERITY GAPS
+==================================================
+
+If any focus-awareness gaps are found, fix the high-severity ones immediately.
+
+Priority:
+1. wrong engine routing
+2. wrong program rendering
+3. wrong session state
+4. wrong continuation logic
+5. wrong memory namespace
+6. stale UI / empty-state failures
+
+==================================================
+PART 10 — VALIDATION SCENARIOS
+==================================================
+
+Run these scenarios:
+
+1. User has only Strength program
+- Strength shows program
+- Speed/Mobility show empty state
+- agent respects Strength only
+
+2. User has Strength + Speed programs
+- switching focus updates all surfaces
+- agent refines the correct focus program
+
+3. User has session in progress in Strength
+- Speed/Mobility do not show Resume unless they also have one
+
+4. User completes a Speed block
+- Speed continuation logic runs only for Speed
+
+5. User deletes one focus program
+- other focuses remain intact
+
+==================================================
+PART 11 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. full audit table by surface / entry point
+2. agent focus-awareness results
+3. any focus leakage found
+4. fixes applied
+5. remaining low-priority gaps
+6. final verdict: fully focus-aware or not yet
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat should now behave like one intelligent platform with three clean, isolated focus lanes.
+
+At every entry point, the system must know exactly which focus it is operating in.
+
+No wrong engine.
+No wrong program.
+No wrong memory.
+No wrong session state.
+No focus leakage.
