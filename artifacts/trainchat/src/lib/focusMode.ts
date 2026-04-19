@@ -28,3 +28,32 @@ export function writeFocusMode(mode: FocusMode): void {
     // ignore
   }
 }
+
+/**
+ * getActiveSystemForFocus — safe focus-aware program selector.
+ *
+ * This is the SINGLE shared way to retrieve the active system for a given
+ * focus. Never duplicate this lookup inline. Returns null when:
+ * - activeProgramByFocus is not yet loaded (null/undefined)
+ * - there is no active program for the current focus
+ *
+ * Usage:
+ *   const system = getActiveSystemForFocus(focusMode, { strength: myProgram, speed: null, mobility: null });
+ */
+export function getActiveSystemForFocus(
+  currentFocus: FocusMode,
+  activeProgramByFocus: Partial<Record<FocusMode, any | null>> | null | undefined
+): any | null {
+  if (!activeProgramByFocus || !currentFocus) return null;
+  return activeProgramByFocus[currentFocus] ?? null;
+}
+
+/**
+ * Safe default shape for activeProgramByFocus.
+ * Use this as the initial value to prevent undefined lookups on first render.
+ */
+export const EMPTY_ACTIVE_PROGRAM_BY_FOCUS: Record<FocusMode, null> = {
+  strength: null,
+  speed: null,
+  mobility: null,
+};

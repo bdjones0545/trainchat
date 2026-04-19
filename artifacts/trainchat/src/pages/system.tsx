@@ -3586,7 +3586,49 @@ export default function SystemPage() {
   const [showReadinessCheckIn, setShowReadinessCheckIn] = useState(false);
   const [showSessionFeedback, setShowSessionFeedback] = useState(false);
   const [feedbackSessionLabel, setFeedbackSessionLabel] = useState<string | undefined>(undefined);
+
+  const [showProgramLibrary, setShowProgramLibrary] = useState(false);
+  const [isSwitchingProgram, setIsSwitchingProgram] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; name: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteErrorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const queryClient = useQueryClient();
+  const { data: me } = useGetMe();
+  const [, setLocation] = useLocation();
+  const logout = useLogout();
+
+  // ── Focus mode — context-provided single source of truth ──────────────────
+  // MUST be declared before activeSystem (which depends on focusMode for its query key)
+  const { focusMode, setFocusMode } = useFocusMode();
+  const focusConfig: FocusModeConfig = FOCUS_MODE_CONFIGS[focusMode];
+
+  // ── Active system — focus-aware, must be declared BEFORE any hook that reads it ──
+  // Previously this was declared AFTER activeSessionData, causing a TDZ crash:
+  // "Cannot access 'activeSystem' before initialization"
+  const { data: activeSystem, isLoading: systemLoading } = useQuery({
+    queryKey: ["training-system-active", focusMode],
+    queryFn: () => fetchActiveSystem(focusMode),
+    retry: false,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+
+  // Safe focus-aware selector — single shared lookup, never duplicated inline
+  const activeSystemResolved = activeSystem ?? null;
+
+  // Audit log: emitted after activeSystem resolves so values are trustworthy
+  console.log("[FocusProgramInitAudit]", {
+    currentFocus: focusMode,
+    activeProgramByFocusReady: !systemLoading,
+    activeSystemResolved: !!activeSystemResolved,
+    activeSystemId: activeSystemResolved?.id ?? null,
+    emptyStateShown: !systemLoading && !activeSystemResolved,
+  });
+
   // ── Real session lifecycle — server-backed active session ─────────────────
+  // activeSystem is now declared above — safe to reference in `enabled`
   interface ActiveSessionData {
     id?: number;
     status: "not_started" | "in_progress" | "completed";
@@ -3597,7 +3639,7 @@ export default function SystemPage() {
   const { data: activeSessionData, refetch: refetchActiveSession } = useQuery<ActiveSessionData>({
     queryKey: ["active-session"],
     queryFn: () => customFetch<ActiveSessionData>("/api/active-session"),
-    enabled: !!activeSystem,
+    enabled: !!activeSystemResolved,
     staleTime: 0,
   });
 
@@ -3617,31 +3659,6 @@ export default function SystemPage() {
     // Fire-and-forget: backend posts session-start ack to chat
     customFetch("/api/training-system/session-start", { method: "POST" }).catch(() => {});
   }
-  const [showProgramLibrary, setShowProgramLibrary] = useState(false);
-  const [isSwitchingProgram, setIsSwitchingProgram] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; name: string } | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const deleteErrorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const queryClient = useQueryClient();
-  const { data: me } = useGetMe();
-  const [, setLocation] = useLocation();
-  const logout = useLogout();
-
-  // ── Focus mode — context-provided single source of truth ──────────────────
-  const { focusMode, setFocusMode } = useFocusMode();
-  const focusConfig: FocusModeConfig = FOCUS_MODE_CONFIGS[focusMode];
-
-  console.log("[FocusActiveProgramsAudit]", { focusMode, page: "system" });
-
-  const { data: activeSystem, isLoading: systemLoading } = useQuery({
-    queryKey: ["training-system-active", focusMode],
-    queryFn: () => fetchActiveSystem(focusMode),
-    retry: false,
-    staleTime: 0,
-    refetchOnMount: "always",
-  });
 
   const { data: subscription } = useQuery({
     queryKey: ["subscription"],
@@ -3720,7 +3737,7 @@ export default function SystemPage() {
       const sameDay = latestDate.toDateString() === today.toDateString();
       return sameDay ? latest : null;
     },
-    enabled: !!activeSystem,
+    enabled: !!activeSystemResolved,
     retry: false,
   });
 
@@ -3932,7 +3949,18 @@ export default function SystemPage() {
         <button
           type="button"
           style={{ touchAction: "manipulation" }}
-          onClick={() => setShowProgramLibrary((v) => !v)}
+          onClick={() => {
+            const nextOpen = !showProgramLibrary;
+            console.log("[FocusSidebarNavAudit]", {
+              clickedItem: "saved_programs",
+              currentFocus: focusMode,
+              targetProgramFound: !!activeSystemResolved,
+              activeProgramId: activeSystemResolved?.id ?? null,
+              savedProgramCount: programLibrary.length,
+              safeRouteUsed: true,
+            });
+            setShowProgramLibrary(nextOpen);
+          }}
           className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all text-left"
         >
           <Library className="w-4 h-4 text-muted-foreground flex-shrink-0" />
@@ -3950,7 +3978,9 @@ export default function SystemPage() {
         </button>
         {showProgramLibrary && programLibrary.length === 0 && (
           <div className="ml-2 px-3 py-2">
-            <p className="text-[11px] text-muted-foreground/60">No saved programs yet</p>
+            <p className="text-[11px] text-muted-foreground/60">
+              No {focusConfig.shortLabel} programs saved yet
+            </p>
           </div>
         )}
         {showProgramLibrary && programLibrary.length > 0 && (
@@ -4148,7 +4178,7 @@ export default function SystemPage() {
           </div>
           <p className="text-xs text-muted-foreground pl-11">
             {hasSystem
-              ? `${activeSystem.name} — Structured training, built for you`
+              ? `${activeSystem?.name ?? "Your Program"} — Structured training, built for you`
               : "Your personalized training operating system"}
           </p>
 
