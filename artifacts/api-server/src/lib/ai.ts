@@ -2636,7 +2636,10 @@ export async function generateAIResponse(
         const errText = await resp.text();
         const is429 = resp.status === 429;
         if (attempt < maxRetries && (is429 || resp.status >= 500)) {
-          const delayMs = is429 ? 5000 * (attempt + 1) : 1500 * (attempt + 1);
+          // 429 = TPM/RPM rate limit. The TPM window is 60s so we need to wait
+          // significantly longer than 5s to ensure the window partially resets.
+          // Use 20s on first retry, 40s on second to avoid re-hitting the limit.
+          const delayMs = is429 ? 20000 * (attempt + 1) : 1500 * (attempt + 1);
           logger.warn({ attempt, status: resp.status, delayMs }, "[callOpenAI] Retrying after non-200 response");
           await new Promise((res) => setTimeout(res, delayMs));
           return callOpenAI(msgs, maxTok, attempt + 1);
@@ -2659,9 +2662,13 @@ export async function generateAIResponse(
   };
 
   try {
+    // Speed and mobility builds carry a very large system prompt (architecture brief
+    // + response contract). Capping history at 10 messages keeps the total token
+    // count well under the 30K TPM limit. All other paths keep the 30-message window.
+    const historyWindowSize = (focusMode === "speed" || focusMode === "mobility") && isBuildIntent ? 10 : 30;
     const baseMessages = [
       { role: "system" as const, content: systemPrompt },
-      ...history.slice(-30).map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+      ...history.slice(-historyWindowSize).map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
       { role: "user" as const, content: userMessage },
     ];
 
