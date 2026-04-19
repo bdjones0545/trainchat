@@ -22,6 +22,7 @@ import {
 } from "@/lib/learn-exercise";
 import { useFocusMode } from "@/hooks/useFocusMode";
 import { FOCUS_MODE_CONFIGS } from "@/lib/focusModeConfig";
+import type { FocusMode } from "@/lib/focusMode";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -101,6 +102,16 @@ interface Props {
   programSource?: "live" | "draft" | "none";
   /** Block phase metadata from the hierarchical planning system */
   blockMetadata?: BlockMetadata | null;
+  /** Which focus lanes currently have an active program (used for focus tab indicators) */
+  activeFocusModes?: { strength: boolean; speed: boolean; mobility: boolean };
+  /** Called when the user clicks a focus tab in the sidebar to switch lanes */
+  onFocusModeChange?: (mode: FocusMode) => void;
+  /**
+   * True while the weekly program data is being fetched from the DB (e.g. right
+   * after a new program is saved). When true and program is null, the panel shows
+   * a loading state instead of the "Ready to build" empty state.
+   */
+  isWeekDataLoading?: boolean;
 }
 
 type Tab = "program" | "changes" | "history" | "forecast";
@@ -2218,7 +2229,11 @@ export default function LiveProgramPanel({
   lastChangeSummary,
   programSource = "none" as const,
   blockMetadata,
+  activeFocusModes,
+  onFocusModeChange,
+  isWeekDataLoading = false,
 }: Props) {
+  const { focusMode } = useFocusMode();
   const [activeTab, setActiveTab] = useState<Tab>("program");
   const [hasUnseenChange, setHasUnseenChange] = useState(false);
   const [showBuildSuccess, setShowBuildSuccess] = useState(false);
@@ -2261,6 +2276,27 @@ export default function LiveProgramPanel({
     return <BuildingFromScratch stage={buildingState.stage} actionType={buildingState.actionType} />;
   }
 
+  // Week data loading: program was just saved but the weekly structure is still
+  // fetching from the DB. Show a lightweight pulse skeleton so the sidebar doesn't
+  // flash "Ready to build" between save and weekData load.
+  if (isWeekDataLoading && !program) {
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        <div className="p-4 border-b border-border flex-shrink-0 bg-primary/3">
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" style={{ animationDuration: "1s" }} />
+            <span className="text-[11px] font-semibold text-primary/80">Loading your program…</span>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="bg-card border border-border/40 rounded-xl h-14 animate-pulse" style={{ animationDelay: `${n * 80}ms` }} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   const tabs: { id: Tab; label: string; subtitle: string; icon: React.ElementType }[] = [
     { id: "program", label: "Program", subtitle: "Current build · live", icon: Dumbbell },
     { id: "changes", label: "Changes", subtitle: "What changed & why", icon: Activity },
@@ -2290,6 +2326,44 @@ export default function LiveProgramPanel({
           <CheckCircle className="w-3 h-3 text-primary flex-shrink-0" />
           <span className="text-[11px] font-semibold text-primary">Training system created</span>
           <span className="ml-auto text-[10px] text-primary/50">{program?.splitType ?? ""}</span>
+        </div>
+      )}
+
+      {/* Focus lane tabs — shows which focus modes have active programs */}
+      {onFocusModeChange && activeFocusModes && (
+        <div className="flex items-center gap-1 px-3 py-2 border-b border-border/50 flex-shrink-0 bg-muted/20">
+          {(["strength", "speed", "mobility"] as const).map((mode) => {
+            const cfg = FOCUS_MODE_CONFIGS[mode];
+            const isActive = focusMode === mode;
+            const hasProgram = activeFocusModes[mode];
+            const colorMap: Record<string, string> = {
+              strength: "border-primary/40 text-primary bg-primary/10",
+              speed: "border-sky-500/40 text-sky-400 bg-sky-500/10",
+              mobility: "border-emerald-500/40 text-emerald-400 bg-emerald-500/10",
+            };
+            return (
+              <button
+                key={mode}
+                onClick={() => hasProgram ? onFocusModeChange(mode) : undefined}
+                className={[
+                  "relative flex items-center gap-1 px-2 py-1 rounded-md border text-[10px] font-semibold transition-all duration-150",
+                  isActive
+                    ? colorMap[mode]
+                    : hasProgram
+                    ? "border-border/40 text-muted-foreground hover:text-foreground hover:bg-muted/50 hover:border-border/70"
+                    : "border-border/20 text-muted-foreground/30 cursor-default",
+                ].join(" ")}
+                disabled={!hasProgram}
+                title={hasProgram ? `Switch to ${cfg.label}` : `No ${cfg.label} program yet`}
+              >
+                {cfg.shortLabel}
+                {hasProgram && !isActive && (
+                  <span className="w-1 h-1 rounded-full bg-current opacity-60 flex-shrink-0" />
+                )}
+              </button>
+            );
+          })}
+          <span className="ml-auto text-[9px] text-muted-foreground/40 uppercase tracking-wider">Focus</span>
         </div>
       )}
 

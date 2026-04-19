@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import {
   SendHorizontal, Zap, PanelLeftClose, PanelLeft, Activity,
@@ -309,7 +309,7 @@ export default function Chat() {
     staleTime: 30000,
   });
 
-  const { data: weekData } = useQuery({
+  const { data: weekData, isLoading: weekDataLoading } = useQuery({
     // Include activeSystem.id AND focusMode so React Query creates distinct cache entries
     // per focus lane — prevents stale exercises from another focus leaking in.
     queryKey: ["training-system-week", activeSystem?.id ?? null, focusMode],
@@ -335,6 +335,21 @@ export default function Chat() {
   const currentPlan = subscription?.plan ?? "free";
   const currentStreak = streakData?.currentStreak ?? 0;
   const hasActiveSystem = !!activeSystem?.id;
+
+  // Derive which focus lanes have an active program so the sidebar focus tabs
+  // can show which lanes are populated. Computed from the already-loaded library.
+  const activeFocusModes = useMemo(() => {
+    const active = { strength: false, speed: false, mobility: false };
+    for (const p of programLibrary) {
+      const status = (p as any).status;
+      if (status !== "active") continue;
+      const fm: string = ((p as any).metadata as any)?.focusMode ?? "strength";
+      if (fm === "strength") active.strength = true;
+      else if (fm === "speed") active.speed = true;
+      else if (fm === "mobility") active.mobility = true;
+    }
+    return active;
+  }, [programLibrary]);
 
   // ── Live Program Engine ───────────────────────────────────────────────────
   // When the user has a real DB training system, derive a displayable ProgramStructure
@@ -870,6 +885,12 @@ export default function Chat() {
       // Conversational or draft response — may contain a program preview
       streamJustFinishedRef.current = true;
       setTimeout(() => { streamJustFinishedRef.current = false; }, 5000);
+    } else if (result.systemSaved) {
+      // New program just saved to DB — also register the assistant message as the session
+      // draft so the sidebar shows the program immediately while weekData loads from the DB.
+      // Once weekData arrives, dbSystemProgram takes over as the canonical source.
+      streamJustFinishedRef.current = true;
+      setTimeout(() => { streamJustFinishedRef.current = false; }, 8000);
     }
 
     queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(resolvedConvoId) });
@@ -1706,6 +1727,9 @@ export default function Chat() {
           }
           lastChangeSummary={lastChangeSummary ?? undefined}
           blockMetadata={(activeSystem as any)?.metadata ?? undefined}
+          activeFocusModes={activeFocusModes}
+          onFocusModeChange={setFocusMode}
+          isWeekDataLoading={hasActiveSystem && weekDataLoading}
         />
       </div>
     </div>
@@ -2426,6 +2450,9 @@ export default function Chat() {
                   newProgramSignal={newProgramSignal}
                   changeTargets={changeTargets}
                   blockMetadata={(activeSystem as any)?.metadata ?? undefined}
+                  activeFocusModes={activeFocusModes}
+                  onFocusModeChange={setFocusMode}
+                  isWeekDataLoading={hasActiveSystem && weekDataLoading}
                 />
               </div>
             </div>
