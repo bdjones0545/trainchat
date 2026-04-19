@@ -52,6 +52,7 @@ import { auditLanguageInterpretation } from "./language-audit";
 import { type ResponsePolicy, buildResponsePolicyPromptSection } from "./response-policy-engine";
 import { detectAndBuildDirectives } from "./programs/agentControlDirectives";
 import { buildFocusModePromptContext, getFocusModeAdaptationHeuristics } from "./focus-engines/focus-mode-router";
+import { buildSpeedArchitectureBrief } from "./focus-engines/speed-engine";
 import { resolveFocusMode, logFocusModeAudit } from "./focus-mode-audit";
 import type { FocusMode } from "./focus-engines/engine-interface";
 
@@ -2331,6 +2332,36 @@ export async function generateAIResponse(
           bilateral_hinge: lockedExerciseSelections.bilateral_hinge_strength,
         });
       }
+    }
+  } else if (isBuildIntent && focusMode === "speed") {
+    // ── Speed Architecture Brief ───────────────────────────────────────────
+    // Builds a prescriptive speed-specific session skeleton so the AI does not
+    // fall back on the base system prompt's strength-centric session structures.
+    const metaDays = (intentResult?.metadata as { targetDays?: number | null } | undefined)?.targetDays ?? null;
+    const days = extractedConstraints?.daysPerWeek ?? metaDays ?? agentSettings?.training.daysPerWeek ?? null;
+    const goal = extractedConstraints?.primaryGoal ?? agentSettings?.training.goal ?? null;
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[SpeedBuildAudit:Input]", JSON.stringify({
+        intentType: intentResult?.type ?? actionDecision?.actionType,
+        userMessageSnippet: userMessage.slice(0, 120),
+        goal, days,
+        focusMode,
+      }));
+    }
+
+    try {
+      architectureBriefText = buildSpeedArchitectureBrief(days, goal, userMessage);
+
+      if (architectureBriefText) {
+        logger.info(
+          { days, goal, intentType: intentResult?.type },
+          "[SpeedArchitectureEngine] Speed architecture brief injected into prompt"
+        );
+      }
+    } catch (archErr) {
+      const errMsg = archErr instanceof Error ? archErr.message : String(archErr);
+      logger.warn({ archErrMessage: errMsg }, "[SpeedArchitectureEngine] Failed to build speed brief — continuing without it");
     }
   }
 

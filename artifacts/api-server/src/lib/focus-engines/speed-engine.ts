@@ -281,6 +281,137 @@ SPEED ENGINE — Adaptation Heuristics:
 `.trim();
 }
 
+// ─── Speed Architecture Brief ─────────────────────────────────────────────────
+
+/**
+ * Builds a prescriptive architecture brief for speed/footwork program builds.
+ * Mirrors the authority level of the strength `buildArchitectureBrief` so the AI
+ * does not fall back on the base prompt's strength-centric session structures.
+ *
+ * Injected into the system prompt as `architectureBriefText` when focusMode === "speed".
+ */
+export function buildSpeedArchitectureBrief(
+  days: number | null,
+  goal: string | null,
+  userMessage: string,
+): string {
+  const sessionCount = days ?? 3;
+  const lower = userMessage.toLowerCase();
+
+  // ── Detect primary speed sub-intent ──────────────────────────────────────
+  const isAcceleration = /accelerat|first.step|drive.phase|start|block.start|wall.drill|sled/.test(lower);
+  const isMaxVelocity = /max.vel|top.speed|flying|stride|wicket|upright/.test(lower);
+  const isCOD = /agility|cut|change.of.direction|cod|reactive|decel|stop.and.go/.test(lower);
+  const isElastic = /jump|elastic|plyometric|bound|hop|ssc|stiffness/.test(lower);
+  const isFootwork = /footwork|ladder|rhythm|coordination|shuffle/.test(lower);
+
+  const primaryFocus = isAcceleration
+    ? "Acceleration Development"
+    : isMaxVelocity
+    ? "Maximum Velocity"
+    : isCOD
+    ? "Reactive Agility & COD"
+    : isElastic
+    ? "Elastic & Plyometric Output"
+    : isFootwork
+    ? "Footwork & Rhythm Development"
+    : "Acceleration + Elastic Development";
+
+  // ── Day skeletons — rotate speed qualities across the week ────────────────
+  const allDaySkeletons = [
+    `Day 1 — Acceleration Development:
+  Block A — CNS Activation (10 min): Wall March × 2×10, Single-Leg Hip Hinge March × 2×8 each, Ankle Stiffness Prep × 2×12 contacts
+  Block B — Acceleration Warm-Up (10 min): A-Walk × 2×20m, A-Skip × 2×20m, Build-Up Run × 3×30m (sub-maximal)
+  Block C — Primary Speed Work (20 min): Falling Start × 4–6 efforts × 20–30m, rest 2–4 min between — 95–100% intent
+  Block D — Elastic Support (10 min): Stiffness Hops × 3×10 contacts, Pogo Hops × 3×10 contacts, 90s rest
+  Block E — Footwork Finisher (10 min): Speed Ladder In-Out × 4, Lateral Shuffle × 4×10m`,
+
+    `Day 2 — Reactive Footwork + Deceleration Control:
+  Block A — CNS Activation (10 min): Nordic Hamstring Curl × 2×6, Copenhagen Hip Adductor × 2×8 each, Straight-Leg Calf March × 2×10
+  Block B — Speed Warm-Up (10 min): March to Skip to Run × 3×20m, A-Skip × 3×20m, Build-Up Run × 3×30m
+  Block C — COD / Reactive Work (20 min): T-Drill × 4–6 efforts full recovery; then Mirror Drill × 4–6 efforts; or 5-10-5 × 4 efforts
+  Block D — Deceleration Control (10 min): Single-Leg Decel Landing × 3×5 each, Hip Lock Decel × 3×4 each, Deceleration Sprint Stop × 3×20m
+  Block E — Speed-Strength Bridge (10 min): Jump Squat × 3×4 reps, 2 min rest; OR Trap Bar Jump × 3×4 reps`,
+
+    `Day 3 — Elastic Output + Speed Endurance:
+  Block A — Tissue Prep (10 min): Isometric Hamstring Hold × 2×30s each, Ankle Stiffness Prep × 2×12, Nordic Drops × 2×5
+  Block B — Acceleration Warm-Up (10 min): Wall Drive × 3×8, A-Skip × 3×20m, Flying Build-Up Run × 3×30m
+  Block C — Plyometric Elastic (20 min): Lateral Hurdle Hops × 4×6, Skater Jump to Stick × 3×5 each, Linear Bounding × 3×20m, 90s–3 min rest
+  Block D — Speed Endurance (10 min): Repeat 30m Sprint × 4–6 efforts × 60–90s recovery, OR Tempo Run × 4×100m at 70–75%
+  Block E — Footwork (optional): Speed Ladder Ickey Shuffle × 3, Carioca × 3×10m`,
+
+    `Day 4 — Max Velocity + Footwork:
+  Block A — CNS Activation (10 min): Ankle Stiffness Prep × 2×12, A-Walk × 2×20m, Single-Leg Hip Hinge March × 2×8 each
+  Block B — Max Velocity Warm-Up (10 min): A-Skip × 3×20m, B-Skip × 3×20m, Build-Up Run × 3×40m (build to max)
+  Block C — Max Velocity (20 min): Flying 20m Sprint × 4–6 efforts, 4–6 min full recovery between — 100% intent
+  Block D — Footwork (10 min): Speed Ladder Lateral × 4, Zigzag Hops × 4×10m, Carioca × 4×10m
+  Block E — Elastic Finisher (10 min): Countermovement Jump to Sprint × 3×3, Skater Jump × 3×5 each`,
+
+    `Day 5 — COD + Acceleration Contrast:
+  Block A — CNS Activation (10 min): Wall March × 2×10, Nordic Hamstring Curl × 2×6, Isometric Hamstring Hold × 2×20s each
+  Block B — Warm-Up (10 min): A-Walk, A-Skip, Build-Up Run × 3×30m
+  Block C — Acceleration Contrast (15 min): Falling Start × 3×20m; contrast with Box Jump × 3×4 reps immediately after each sprint
+  Block D — Reactive COD (15 min): L-Drill × 4–6 efforts; then Drop-Step Decel × 3×4 each
+  Block E — Finisher (10 min): Lateral Bound × 3×5 each, Alternating Bounds × 3×20m`,
+  ];
+
+  const dayPlans = allDaySkeletons.slice(0, sessionCount);
+
+  return `## SPEED / FOOTWORK ARCHITECTURE BRIEF — MANDATORY STRUCTURE
+
+ACTIVE FOCUS: ${primaryFocus}
+SESSION COUNT: ${sessionCount}-day speed program
+PROGRAM GOAL: ${goal ?? "Speed & acceleration development"}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CRITICAL BUILD CONSTRAINTS — NON-NEGOTIABLE:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. THIS IS A SPEED PROGRAM — NOT strength, NOT conditioning.
+   PROHIBITED as primary work: barbell squat, conventional deadlift, bench press,
+   pull-up, barbell row, overhead press, or any traditional strength exercise.
+   Speed-strength bridge exercises (Jump Squat, Trap Bar Jump) are ONLY used in a
+   supporting Block D or E role — never as the session anchor.
+
+2. EXERCISE LANGUAGE — use sprint-specific terms:
+   - Sprint/speed efforts → "X efforts × Ym, rest Z min"
+   - Plyometric contacts → "X sets × Y contacts, 90s rest"
+   - COD drills → "X efforts, full recovery between"
+   - Footwork patterns → "X sets × Ym"
+   NEVER use "sets of 10 reps" for speed or plyometric work.
+
+3. CNS ORDER — speed and plyometric work is ALWAYS the first high-intensity
+   block after warm-up. It is NEVER placed after heavy lifting or fatigue.
+
+4. REST IS MANDATORY:
+   - Max-intent sprints (acceleration/max velocity): 2–6 min between efforts
+   - Plyometrics: 90s–3 min between sets
+   - COD/reactive: full recovery (1.5–3 min) between efforts
+   - Footwork/rhythm: 30–60s (lower CNS demand)
+
+5. VOLUME IS LOW — quality beats quantity:
+   - Sprint efforts: 4–6 per session maximum at max intent
+   - Plyometric contacts: 24–40 total per session (e.g., 4×8 or 3×10)
+   - Never add volume without confirming recovery
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PRESCRIBED SESSION STRUCTURE — FILL EXACTLY THIS SKELETON:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${dayPlans.join("\n\n")}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+APPROVED EXERCISE VOCABULARY:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Acceleration: Wall March, Wall Drive, Wall A-Skip, Falling Start, Kneeling Start, Sled Sprint, Sled Push, A-Skip, Block Start
+Max Velocity: Flying 20m Sprint, B-Skip, Wicket Run, Build-Up Run, Flying Start Sprint, Sprint Mechanics Drill
+COD: 5-10-5, L-Drill, Box Drill, 505 Drill, T-Drill, Decel to Re-Accelerate, Single-Leg Decel Landing, Hip Lock Decel, COD Cut Sprint, Backpedal Sprint
+Reactive: Mirror Drill, Shadow Footwork, Reactive Agility Drill, Drop-Step Decel, Crossover Step
+Footwork: Speed Ladder In-Out, Ickey Shuffle, Lateral Ladder, Linear Ladder, March to Skip to Run, Lateral Shuffle, Carioca, Zigzag Hops
+Elastic: Stiffness Hops, Single-Leg Stiffness Hops, Lateral Hurdle Hops, Skater Jump, Skater Jump to Stick, Linear Bounding, Pogo Hops, Ankle Hops, Countermovement Jump to Sprint, Single-Leg Hops, Lateral Bound, Alternating Bounds
+Speed-Strength Bridge: Sled Push, Jump Squat, Trap Bar Jump, Power Clean, Countermovement Jump to Sprint
+Tissue Prep: Nordic Hamstring Curl, Isometric Hamstring Hold, Straight-Leg Calf March, Single-Leg Hip Hinge March, Ankle Stiffness Prep, Copenhagen Hip Adductor, Build-Up Run`.trim();
+}
+
 // ─── Engine Export ────────────────────────────────────────────────────────────
 
 export const speedEngine: FocusEngineInterface = {
