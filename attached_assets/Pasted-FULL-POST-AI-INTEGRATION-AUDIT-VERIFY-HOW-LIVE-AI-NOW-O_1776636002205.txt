@@ -1,0 +1,255 @@
+FULL POST-AI INTEGRATION AUDIT — VERIFY HOW LIVE AI NOW OPERATES INSIDE TRAINCHAT
+
+CONTEXT:
+TrainChat was originally built with the system layers working before live AI was connected:
+- program generation architecture
+- focus engines (Strength / Speed / Mobility)
+- memory
+- adaptation
+- refinement
+- session lifecycle
+- continuation logic
+- persistence
+- UI integration
+
+Now live OpenAI is connected through Replit’s managed integration.
+
+That means we must now audit the actual AI integration layer across the full product.
+
+This audit is NOT about whether the app works without AI.
+It is about whether AI is now operating correctly inside the real TrainChat system.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Run a full audit of how live AI now integrates with the agent and the broader TrainChat system, fix any important gaps, and verify that AI is enhancing the system rather than bypassing or degrading it.
+
+==================================================
+PART 1 — AUDIT ALL AI ENTRY POINTS
+==================================================
+
+Trace every place where live AI is now used.
+
+Audit these entry points:
+1. Main program generation
+2. Focus-specific generation (Strength / Speed / Mobility)
+3. Agent free-text commands
+4. Agent quick commands if they invoke AI
+5. Refinement requests
+6. Clarifying-question flows
+7. Log-session acknowledgment generation
+8. Continuation block messaging
+9. Any AI-generated summaries/descriptions in UI
+10. Exercise explanation / education surfaces if AI is involved
+
+For each entry point, return:
+- whether AI is used
+- which prompt builder is used
+- which focus context is injected
+- what deterministic layer surrounds it
+- what validation/repair layer exists
+
+==================================================
+PART 2 — AGENT INTEGRATION AUDIT
+==================================================
+
+Verify the live AI is actually behaving like the TrainChat agent and not a generic chatbot.
+
+Audit:
+- how the main system prompt is built
+- how focusMode is injected
+- how memory is injected
+- how block/session context is injected
+- how active program context is injected
+- how the agent decides what system action to take
+
+Return:
+
+[AgentIntegrationAudit] {
+  focusMode,
+  systemPromptSource,
+  memoryInjected,
+  activeProgramInjected,
+  engineContextInjected,
+  deterministicActionLayerPresent,
+  genericChatbotRisk
+}
+
+We need to confirm AI is operating as the TrainChat agent, not as a loose assistant.
+
+==================================================
+PART 3 — FOCUS-AWARE AI AUDIT
+==================================================
+
+Verify AI respects focus structure everywhere.
+
+For Strength, Speed, and Mobility:
+- correct focus prompt used
+- correct engine context used
+- no strength bleed into speed/mobility
+- no wrong program fetched
+- no wrong memory/modifier namespace used
+- no wrong continuation chain used
+
+Run real test prompts for all three focuses and confirm the output matches the selected focus.
+
+==================================================
+PART 4 — AI VS DETERMINISTIC SYSTEM BOUNDARY AUDIT
+==================================================
+
+This is critical.
+
+Audit where AI is allowed to decide and where the system is the source of truth.
+
+We want:
+- engine = source of truth
+- AI = interpreter / enhancer / response layer
+
+Verify that AI does NOT bypass:
+- architecture brief
+- movement family rules
+- memory dominance
+- exposure tracking
+- continuation logic
+- focus isolation
+- session lifecycle
+- persistence rules
+
+If any AI path can override the deterministic system in unsafe ways, flag and fix it.
+
+==================================================
+PART 5 — VALIDATION / REPAIR / FAILURE HANDLING AUDIT
+==================================================
+
+Audit how AI outputs are validated and repaired.
+
+Check:
+- structured contract enforcement
+- parseability
+- strength bleed detection
+- focus mismatch detection
+- repair layers
+- failure classification
+- user-facing error handling
+- retry behavior
+
+Return:
+- which surfaces have validation
+- which do not
+- where AI outputs are currently trusted too much
+
+==================================================
+PART 6 — MEMORY INTEGRATION AUDIT
+==================================================
+
+Audit how AI reads and uses memory.
+
+Verify:
+- global memory is injected correctly
+- focus-specific modifiers are injected correctly if relevant
+- memory dominance still takes precedence over weaker AI output
+- AI does not ignore pain/fatigue/equipment constraints when memory says otherwise
+
+Check whether AI acknowledgments and suggestions actually reflect stored memory patterns.
+
+==================================================
+PART 7 — DB / CHAT / UI CONSISTENCY AUDIT
+==================================================
+
+Now that AI is live, verify consistency between:
+
+- chat output
+- right panel
+- Active Programs
+- database state
+- session history
+- current block / current week
+- draft vs active program state
+
+We need to catch any case where AI says one thing but DB/UI show another.
+
+Examples:
+- AI says program updated, but DB not changed
+- AI says draft in progress, but panel hides wrong thing
+- AI says next block exists, but progression chain doesn’t show it
+
+==================================================
+PART 8 — AI OBSERVABILITY AUDIT
+==================================================
+
+Audit logging around live AI.
+
+We should be able to tell:
+- when AI was called
+- which focus was active
+- which prompt builder ran
+- whether parse succeeded
+- whether repair ran
+- whether output was rejected
+- whether system state was updated
+
+Add/confirm logs like:
+- [OpenAIAudit]
+- [FocusOpenAIAudit]
+- [AgentIntegrationAudit]
+- [BleedAudit]
+- [SystemStateSyncAudit]
+
+We need enough observability to debug real-user issues quickly.
+
+==================================================
+PART 9 — FIX HIGH-SEVERITY GAPS
+==================================================
+
+After auditing, fix the important issues immediately.
+
+Priority order:
+1. AI bypassing deterministic system
+2. wrong focus / wrong engine context
+3. missing validation on AI output
+4. UI/DB/chat mismatch
+5. unhandled AI failure paths
+6. weak observability
+
+==================================================
+PART 10 — VALIDATION SCENARIOS
+==================================================
+
+Run at least these real scenarios:
+
+1. Strength build request
+2. Speed build request
+3. Mobility build request
+4. refine a session in each focus
+5. start a new build while an active program already exists
+6. log a session and confirm AI acknowledgment reflects real state
+7. continue a block and verify AI language matches the actual new block
+8. trigger a forced AI failure and verify clean fallback/error behavior
+
+==================================================
+PART 11 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. full audit table by AI surface
+2. how AI integrates with the agent now
+3. whether AI is correctly bounded by the deterministic system
+4. fixes applied
+5. remaining low-priority issues
+6. final verdict: AI integration safe / partially safe / unsafe
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Live AI should now operate as a disciplined layer inside TrainChat:
+
+- focus-aware
+- memory-aware
+- system-bounded
+- validated
+- observable
+- consistent with DB and UI
+
+The AI should amplify the system, not destabilize it.
