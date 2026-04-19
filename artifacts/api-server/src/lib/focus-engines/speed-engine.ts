@@ -412,6 +412,377 @@ Speed-Strength Bridge: Sled Push, Jump Squat, Trap Bar Jump, Power Clean, Counte
 Tissue Prep: Nordic Hamstring Curl, Isometric Hamstring Hold, Straight-Leg Calf March, Single-Leg Hip Hinge March, Ankle Stiffness Prep, Copenhagen Hip Adductor, Build-Up Run`.trim();
 }
 
+// ─── Speed Response Contract ──────────────────────────────────────────────────
+
+/**
+ * Builds an explicit JSON response contract for speed programs.
+ * Injected into the system prompt so OpenAI knows the exact output structure.
+ * This eliminates parse failures from ambiguous or prose-heavy responses.
+ */
+export function buildSpeedResponseContract(sessionCount: number): string {
+  const exampleDays = Array.from({ length: Math.min(sessionCount, 2) }, (_, i) => {
+    const dayNames = [
+      "Day 1 — Acceleration Development",
+      "Day 2 — Reactive Footwork + Deceleration Control",
+      "Day 3 — Elastic Output",
+      "Day 4 — Max Velocity + Footwork",
+      "Day 5 — COD + Acceleration Contrast",
+    ];
+    return `    {
+      "name": "${dayNames[i] ?? `Day ${i + 1} — Speed Training`}",
+      "exercises": [
+        {
+          "name": "Wall March",
+          "sets": 2,
+          "reps": "10 contacts",
+          "rest": "60s",
+          "notes": "CNS activation — drive phase mechanics, tall spine, dorsiflexed foot"
+        },
+        {
+          "name": "A-Skip",
+          "sets": 3,
+          "reps": "20m",
+          "rest": "60s",
+          "notes": "Acceleration warm-up — knee drive, arm action, rhythm"
+        },
+        {
+          "name": "Falling Start",
+          "sets": 5,
+          "reps": "1 effort × 20m",
+          "rest": "3 min",
+          "notes": "Primary acceleration work — 95–100% intent, full recovery between efforts"
+        }
+      ]
+    }`;
+  }).join(",\n");
+
+  return `## SPEED PROGRAM — MANDATORY JSON RESPONSE CONTRACT
+
+You MUST output the speed program as a JSON code block in EXACTLY this format.
+No prose. No markdown outside the JSON block. Output the JSON block first, then a 1–2 sentence confirmation.
+
+\`\`\`json
+{
+  "programName": "Speed & Acceleration Development",
+  "programSummary": "Brief description of the speed focus, primary quality, and progression intent for this program",
+  "focusMode": "speed",
+  "days": [
+${exampleDays}
+  ]
+}
+\`\`\`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SESSION NAME RULES — NON-NEGOTIABLE:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Day names MUST use speed-native language. Approved formats:
+  ✓ "Day 1 — Acceleration Development"
+  ✓ "Day 2 — Reactive Footwork + Deceleration Control"
+  ✓ "Day 3 — Elastic Output"
+  ✓ "Day 4 — Max Velocity + Footwork"
+  ✓ "Day 5 — COD + Acceleration Contrast"
+  ✓ "Day 1 — Return-to-Speed Tissue Prep"
+  ✓ "Day 2 — Footwork & Rhythm"
+
+STRICTLY PROHIBITED session names (causes automatic rejection):
+  ✗ Lower Strength
+  ✗ Upper Push / Upper Pull
+  ✗ Hypertrophy Day
+  ✗ Push Day / Pull Day
+  ✗ Leg Day
+  ✗ Back & Biceps
+  ✗ Chest & Triceps
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXERCISE FIELD FORMAT RULES:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Sprint efforts: reps = "X efforts × Ym" (e.g., "4 efforts × 20m")
+- Flying sprints: reps = "X efforts × Ym flying" (e.g., "5 efforts × 20m flying")
+- Plyometric contacts: reps = "X contacts" (e.g., "10 contacts")
+- COD drills: reps = "X efforts, full recovery" (e.g., "4 efforts, full recovery")
+- Footwork patterns: reps = "X sets × Ym" or "X runs" (e.g., "4 × 10m")
+- Rest MUST be included for every exercise
+- notes MUST include coaching cue or quality focus
+- NEVER write "10 reps" for a sprint or plyometric movement
+- programName MUST reference speed (e.g., "Speed & Acceleration", "Footwork & Deceleration")
+- programSummary MUST describe speed qualities (not "strength and conditioning")`;
+}
+
+// ─── Speed Output Bleed Validator ─────────────────────────────────────────────
+
+const STRENGTH_BLEED_SESSION_PATTERNS = /\b(lower strength|upper push|upper pull|push day|pull day|hypertrophy|leg day|back.bicep|chest.tricep|upper body strength|lower body strength|strength.day|compound strength|strength.focus|power.lifting|powerlifting)\b/i;
+
+const STRENGTH_BLEED_EXERCISE_PATTERNS = /\b(barbell back squat|conventional deadlift|flat bench press|incline bench press|military press|barbell overhead press|barbell row|weighted pull.up|barbell hip thrust)\b/i;
+
+export interface SpeedBleedAuditResult {
+  strengthTermsDetected: boolean;
+  bleedingSessionNames: string[];
+  bleedingExerciseNames: string[];
+  repairApplied: boolean;
+  rejected: boolean;
+}
+
+/**
+ * Validates speed program output for strength contamination.
+ * Checks session names and exercise names for strength-biased language.
+ */
+export function validateSpeedOutputForBleed(
+  structuredData: { programName?: string; days?: Array<{ name?: string; exercises?: Array<{ name: string }> }> },
+): SpeedBleedAuditResult {
+  const bleedingSessionNames: string[] = [];
+  const bleedingExerciseNames: string[] = [];
+
+  if (structuredData.days) {
+    for (const day of structuredData.days) {
+      if (day.name && STRENGTH_BLEED_SESSION_PATTERNS.test(day.name)) {
+        bleedingSessionNames.push(day.name);
+      }
+      if (day.exercises) {
+        for (const ex of day.exercises) {
+          if (ex.name && STRENGTH_BLEED_EXERCISE_PATTERNS.test(ex.name)) {
+            bleedingExerciseNames.push(ex.name);
+          }
+        }
+      }
+    }
+  }
+
+  const strengthTermsDetected = bleedingSessionNames.length > 0 || bleedingExerciseNames.length > 0;
+
+  return {
+    strengthTermsDetected,
+    bleedingSessionNames,
+    bleedingExerciseNames,
+    repairApplied: false,
+    rejected: false,
+  };
+}
+
+// ─── Speed Output Repair Layer ────────────────────────────────────────────────
+
+type RepairableProgram = {
+  programName?: string;
+  programSummary?: string;
+  focusMode?: string;
+  days?: Array<{
+    name?: string;
+    exercises?: Array<{
+      name: string;
+      sets?: number;
+      reps?: string;
+      rest?: string;
+      notes?: string;
+    }>;
+  }>;
+};
+
+const SPEED_SESSION_NAME_MAP: Record<string, string> = {
+  "lower strength": "Acceleration Development",
+  "upper push": "Elastic Output + Speed-Strength Bridge",
+  "upper pull": "Reactive Footwork + Deceleration Control",
+  "push day": "Acceleration Development",
+  "pull day": "Reactive Footwork + Deceleration Control",
+  "hypertrophy": "Elastic Output",
+  "leg day": "Acceleration + Elastic Development",
+  "lower body strength": "Acceleration Development",
+  "upper body strength": "Elastic Output + Speed-Strength Bridge",
+  "strength day": "Acceleration Development",
+};
+
+const SPEED_DEFAULT_REST_BY_EXERCISE_TYPE: Record<string, string> = {
+  sprint: "3 min",
+  flying: "4 min",
+  drill: "2 min",
+  hop: "90s",
+  jump: "2 min",
+  bound: "90s",
+  ladder: "45s",
+  shuffle: "45s",
+  march: "60s",
+  skip: "60s",
+  walk: "45s",
+  run: "2 min",
+  decel: "2 min",
+  cod: "2 min",
+  agility: "2 min",
+  curl: "90s",
+  hold: "60s",
+};
+
+/**
+ * Repairs a speed output that is "close but imperfect":
+ * - Replaces strength-flavored session names with speed-native names
+ * - Fills missing rest fields from speed defaults
+ * - Repairs weak/generic program titles
+ * - Stamps focusMode = "speed"
+ * - Stamps programSummary if missing or generic
+ *
+ * Returns the repaired program and a list of repairs applied.
+ * Repair preserves the real exercise content — it only fixes labeling and metadata.
+ */
+export function repairSpeedOutput(
+  program: RepairableProgram,
+  bleedResult: SpeedBleedAuditResult,
+): { repaired: RepairableProgram; repairsApplied: string[] } {
+  const repaired: RepairableProgram = JSON.parse(JSON.stringify(program)) as RepairableProgram;
+  const repairsApplied: string[] = [];
+
+  // ── 1. Stamp focusMode ──────────────────────────────────────────────────────
+  if (!repaired.focusMode || repaired.focusMode !== "speed") {
+    repaired.focusMode = "speed";
+    repairsApplied.push("stamped_focusMode=speed");
+  }
+
+  // ── 2. Repair weak/generic program title ───────────────────────────────────
+  if (!repaired.programName || /strength|hypertrophy|muscle|lifting/i.test(repaired.programName)) {
+    repaired.programName = "Speed & Acceleration Development";
+    repairsApplied.push("repaired_programName");
+  }
+
+  // ── 3. Repair missing or generic program summary ───────────────────────────
+  if (!repaired.programSummary || /strength|hypertrophy|muscle/i.test(repaired.programSummary)) {
+    repaired.programSummary = "CNS-dominant speed development program — acceleration mechanics, elastic output, and reactive footwork built on quality-over-volume principles.";
+    repairsApplied.push("repaired_programSummary");
+  }
+
+  // ── 4. Repair strength-contaminated session names ──────────────────────────
+  if (repaired.days) {
+    const speedSessionNames = [
+      "Day 1 — Acceleration Development",
+      "Day 2 — Reactive Footwork + Deceleration Control",
+      "Day 3 — Elastic Output",
+      "Day 4 — Max Velocity + Footwork",
+      "Day 5 — COD + Acceleration Contrast",
+    ];
+    let sessionIndex = 0;
+
+    repaired.days = repaired.days.map((day, idx) => {
+      if (!day.name) {
+        const repairName = speedSessionNames[idx] ?? `Day ${idx + 1} — Speed Training`;
+        repairsApplied.push(`repaired_missing_session_name[day${idx + 1}]`);
+        return { ...day, name: repairName };
+      }
+      const lowerName = day.name.toLowerCase();
+      let repairedName: string | undefined;
+      for (const [pattern, replacement] of Object.entries(SPEED_SESSION_NAME_MAP)) {
+        if (lowerName.includes(pattern)) {
+          repairedName = replacement;
+          break;
+        }
+      }
+      if (repairedName) {
+        repairsApplied.push(`repaired_session_name[day${idx + 1}]: "${day.name}" → "${repairedName}"`);
+        sessionIndex++;
+        return { ...day, name: repairedName };
+      }
+      return day;
+    });
+  }
+
+  // ── 5. Fill missing rest fields from speed defaults ───────────────────────
+  if (repaired.days) {
+    for (let d = 0; d < repaired.days.length; d++) {
+      const day = repaired.days[d];
+      if (day.exercises) {
+        for (let e = 0; e < day.exercises.length; e++) {
+          const ex = day.exercises[e];
+          if (!ex.rest || ex.rest === "" || ex.rest === "—") {
+            const lowerName = ex.name.toLowerCase();
+            let defaultRest = "90s";
+            for (const [keyword, rest] of Object.entries(SPEED_DEFAULT_REST_BY_EXERCISE_TYPE)) {
+              if (lowerName.includes(keyword)) {
+                defaultRest = rest;
+                break;
+              }
+            }
+            repaired.days[d].exercises![e] = { ...ex, rest: defaultRest };
+            repairsApplied.push(`filled_rest[day${d + 1},${ex.name}]=${defaultRest}`);
+          }
+        }
+      }
+    }
+  }
+
+  return { repaired, repairsApplied };
+}
+
+// ─── Speed Generation Failure Classifier ─────────────────────────────────────
+
+export type SpeedFailureType =
+  | "prompt_failure"
+  | "parse_failure"
+  | "validation_failure"
+  | "bleed_failure"
+  | "structure_failure"
+  | "unknown_failure";
+
+export interface SpeedFailureClassification {
+  type: SpeedFailureType;
+  description: string;
+  retryable: boolean;
+}
+
+/**
+ * Classifies the root cause of a speed generation failure.
+ * Used for targeted diagnostics and retry strategy.
+ */
+export function classifySpeedGenerationFailure(context: {
+  openAICallSucceeded: boolean;
+  rawContentAvailable: boolean;
+  parsedJsonAvailable: boolean;
+  hasDays: boolean;
+  bleedDetected: boolean;
+  structureComplete: boolean;
+}): SpeedFailureClassification {
+  if (!context.openAICallSucceeded) {
+    return {
+      type: "prompt_failure",
+      description: "OpenAI API call failed — network, timeout, or rate limit error",
+      retryable: true,
+    };
+  }
+  if (!context.rawContentAvailable) {
+    return {
+      type: "prompt_failure",
+      description: "OpenAI returned empty content",
+      retryable: true,
+    };
+  }
+  if (!context.parsedJsonAvailable) {
+    return {
+      type: "parse_failure",
+      description: "OpenAI did not output a valid JSON block — response contract was ignored",
+      retryable: true,
+    };
+  }
+  if (!context.hasDays) {
+    return {
+      type: "validation_failure",
+      description: "JSON parsed but program has no days array — incomplete structure",
+      retryable: true,
+    };
+  }
+  if (context.bleedDetected) {
+    return {
+      type: "bleed_failure",
+      description: "Speed program contains strength-contaminated session names or exercises",
+      retryable: true,
+    };
+  }
+  if (!context.structureComplete) {
+    return {
+      type: "structure_failure",
+      description: "Program structure is incomplete — missing required fields",
+      retryable: true,
+    };
+  }
+  return {
+    type: "unknown_failure",
+    description: "Speed generation failed for an unclassified reason",
+    retryable: true,
+  };
+}
+
 // ─── Engine Export ────────────────────────────────────────────────────────────
 
 export const speedEngine: FocusEngineInterface = {

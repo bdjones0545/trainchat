@@ -52,7 +52,14 @@ import { auditLanguageInterpretation } from "./language-audit";
 import { type ResponsePolicy, buildResponsePolicyPromptSection } from "./response-policy-engine";
 import { detectAndBuildDirectives } from "./programs/agentControlDirectives";
 import { buildFocusModePromptContext, getFocusModeAdaptationHeuristics } from "./focus-engines/focus-mode-router";
-import { buildSpeedArchitectureBrief } from "./focus-engines/speed-engine";
+import {
+  buildSpeedArchitectureBrief,
+  buildSpeedResponseContract,
+  validateSpeedOutputForBleed,
+  repairSpeedOutput,
+  classifySpeedGenerationFailure,
+  type SpeedBleedAuditResult,
+} from "./focus-engines/speed-engine";
 import { buildMobilityArchitectureBrief } from "./focus-engines/mobility-engine";
 import { resolveFocusMode, logFocusModeAudit } from "./focus-mode-audit";
 import type { FocusMode } from "./focus-engines/engine-interface";
@@ -2354,34 +2361,81 @@ export async function generateAIResponse(
       }
     }
   } else if (isBuildIntent && focusMode === "speed") {
-    // ── Speed Architecture Brief ───────────────────────────────────────────
-    // Builds a prescriptive speed-specific session skeleton so the AI does not
-    // fall back on the base system prompt's strength-centric session structures.
+    // ── Speed Architecture Brief + Response Contract ───────────────────────
+    // Builds a prescriptive speed-specific session skeleton AND an explicit
+    // JSON response contract so OpenAI outputs parseable speed-native programs.
+    // The response contract is the primary fix for parse failures.
     const metaDays = (intentResult?.metadata as { targetDays?: number | null } | undefined)?.targetDays ?? null;
     const days = extractedConstraints?.daysPerWeek ?? metaDays ?? agentSettings?.training.daysPerWeek ?? null;
     const goal = extractedConstraints?.primaryGoal ?? agentSettings?.training.goal ?? null;
+    const sessionCount = days ?? 3;
 
-    if (process.env.NODE_ENV !== "production") {
-      console.log("[SpeedBuildAudit:Input]", JSON.stringify({
+    logger.info(
+      {
+        focusMode,
         intentType: intentResult?.type ?? actionDecision?.actionType,
         userMessageSnippet: userMessage.slice(0, 120),
-        goal, days,
+        goal,
+        days: sessionCount,
+        isBuildIntent,
+      },
+      "[SpeedOpenAIAudit] Speed build initiated — constructing architecture brief + response contract"
+    );
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[SpeedOpenAIAudit]", JSON.stringify({
         focusMode,
+        normalizedIntent: intentResult?.type ?? actionDecision?.actionType,
+        userMessageSnippet: userMessage.slice(0, 120),
+        goal,
+        days: sessionCount,
+        speedArchitectureBuilt: false,
+        systemPromptBuilt: false,
+        openAIRequestSent: false,
+        responseReceived: false,
+        parseSucceeded: false,
+        programStructureBuilt: false,
+        validationPassed: false,
+        failurePoint: null,
+        phase: "pre-build",
       }));
     }
 
     try {
       architectureBriefText = buildSpeedArchitectureBrief(days, goal, userMessage);
+      const speedResponseContract = buildSpeedResponseContract(sessionCount);
+      // Append the response contract to the architecture brief so it is part
+      // of the same mandatory-structure block. This is the key improvement:
+      // the AI now has an explicit JSON schema to follow for speed programs.
+      architectureBriefText = architectureBriefText
+        ? `${architectureBriefText}\n\n${speedResponseContract}`
+        : speedResponseContract;
 
-      if (architectureBriefText) {
-        logger.info(
-          { days, goal, intentType: intentResult?.type },
-          "[SpeedArchitectureEngine] Speed architecture brief injected into prompt"
-        );
+      logger.info(
+        { days: sessionCount, goal, intentType: intentResult?.type, briefLength: architectureBriefText.length },
+        "[SpeedArchitectureEngine] Speed architecture brief + response contract injected into prompt"
+      );
+
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[SpeedOpenAIAudit]", JSON.stringify({
+          phase: "brief-built",
+          speedArchitectureBuilt: true,
+          systemPromptBuilt: true,
+          briefLength: architectureBriefText.length,
+          contractInjected: true,
+        }));
       }
     } catch (archErr) {
       const errMsg = archErr instanceof Error ? archErr.message : String(archErr);
       logger.warn({ archErrMessage: errMsg }, "[SpeedArchitectureEngine] Failed to build speed brief — continuing without it");
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[SpeedOpenAIAudit]", JSON.stringify({
+          phase: "brief-error",
+          speedArchitectureBuilt: false,
+          failurePoint: "architecture_brief_construction",
+          errorMessage: errMsg,
+        }));
+      }
     }
   } else if (isBuildIntent && focusMode === "mobility") {
     // ── Mobility Architecture Brief ────────────────────────────────────────
@@ -2523,11 +2577,56 @@ export async function generateAIResponse(
       { role: "user" as const, content: userMessage },
     ];
 
-    // Use decision-tree token budget if available, otherwise fall back to context-based heuristic
+    // Use decision-tree token budget if available, otherwise fall back to context-based heuristic.
+    // Speed program builds get a higher token budget (3600) because multi-day sprint programs
+    // with full exercise prescriptions, rest periods, and coaching notes require more output.
     const maxTokens = actionDecision?.recommendedMaxTokens
-      ?? (editContext !== null || intentResult?.type === "ADJUST_FOR_PAIN" || intentResult?.type === "ADJUST_FOR_READINESS" ? 4000 : 2800);
+      ?? (focusMode === "speed" && isBuildIntent ? 3600
+        : editContext !== null || intentResult?.type === "ADJUST_FOR_PAIN" || intentResult?.type === "ADJUST_FOR_READINESS" ? 4000
+        : 2800);
+
+    // Log that the OpenAI request is being sent (speed path gets dedicated logging)
+    if (isBuildIntent && focusMode === "speed" && process.env.NODE_ENV !== "production") {
+      console.log("[SpeedOpenAIAudit]", JSON.stringify({
+        phase: "openai-request-sent",
+        openAIRequestSent: true,
+        maxTokens,
+        systemPromptLength: systemPrompt.length,
+      }));
+    }
 
     let { cleanContent, structuredData } = await callOpenAI(baseMessages, maxTokens);
+
+    // Log the response for speed builds
+    if (isBuildIntent && focusMode === "speed" && process.env.NODE_ENV !== "production") {
+      console.log("[SpeedOpenAIAudit]", JSON.stringify({
+        phase: "openai-response-received",
+        responseReceived: true,
+        parseSucceeded: structuredData !== null,
+        programStructureBuilt: structuredData !== null,
+        programName: structuredData?.programName ?? null,
+        dayCount: structuredData?.days?.length ?? 0,
+        day1Name: structuredData?.days?.[0]?.name ?? null,
+        day1ExerciseCount: structuredData?.days?.[0]?.exercises?.length ?? 0,
+        failurePoint: structuredData === null ? "parse_failure" : null,
+      }));
+    }
+
+    // For speed builds where OpenAI failed to produce a JSON block, classify and log
+    if (isBuildIntent && focusMode === "speed" && structuredData === null) {
+      const failureClass = classifySpeedGenerationFailure({
+        openAICallSucceeded: true,
+        rawContentAvailable: cleanContent.length > 0,
+        parsedJsonAvailable: false,
+        hasDays: false,
+        bleedDetected: false,
+        structureComplete: false,
+      });
+      logger.warn(
+        { failureType: failureClass.type, failureDescription: failureClass.description },
+        "[SpeedOpenAIAudit] Speed build — OpenAI did not return a valid JSON block (parse failure)"
+      );
+    }
 
     // ── Post-generation safety filter — older adult exercise substitution ──
     // Deterministically replaces any prohibited exercises (box jumps, heavy
@@ -2985,39 +3084,161 @@ Output the corrected program JSON and a brief calm confirmation.`;
         };
       }
 
-      // Speed focus guard: reject if primary exercises are strength-only lifts
+      // ── Speed-specific: full bleed validation + repair pass ───────────────
+      // Runs a comprehensive check across all session names and exercises.
+      // Attempts to repair close-but-imperfect outputs before rejecting.
       if (focusMode === "speed") {
-        const STRENGTH_ONLY_PATTERNS = /\b(barbell squat|back squat|bench press|conventional deadlift|overhead press|barbell row|pull-up|chin-up)\b/i;
-        const day1Exercises = structuredData.days[0]?.exercises ?? [];
-        const speedViolations = day1Exercises
-          .slice(0, 3)
-          .filter((ex: { name: string }) => STRENGTH_ONLY_PATTERNS.test(ex.name));
-        if (speedViolations.length > 0) {
-          logger.error(
-            { focusMode, violatingExercises: speedViolations.map((e: { name: string }) => e.name) },
-            "[ProgramGenerationPathAudit] REJECTED — speed program contains prohibited strength-primary exercises in lead positions"
+        const bleedResult: SpeedBleedAuditResult = validateSpeedOutputForBleed(structuredData as unknown as Parameters<typeof validateSpeedOutputForBleed>[0]);
+
+        if (bleedResult.strengthTermsDetected) {
+          logger.warn(
+            {
+              bleedingSessionNames: bleedResult.bleedingSessionNames,
+              bleedingExerciseNames: bleedResult.bleedingExerciseNames,
+            },
+            "[SpeedBleedAudit] Strength contamination detected in speed output — attempting repair"
           );
-          return {
-            content: `The speed program build produced an incorrect structure (strength exercises in lead positions). Want to try again? I'll rebuild it with the correct speed mechanics focus.`,
-            structuredData: null,
-          };
+
+          if (process.env.NODE_ENV !== "production") {
+            console.log("[SpeedBleedAudit]", JSON.stringify({
+              strengthTermsDetected: true,
+              bleedingSessionNames: bleedResult.bleedingSessionNames,
+              bleedingExerciseNames: bleedResult.bleedingExerciseNames,
+              repairApplied: false,
+              rejected: false,
+            }));
+          }
+
+          // Attempt repair — only session names and metadata are repaired.
+          // Exercise content from OpenAI is preserved unless it is truly prohibited.
+          const { repaired, repairsApplied } = repairSpeedOutput(
+            structuredData as unknown as Parameters<typeof repairSpeedOutput>[0],
+            bleedResult,
+          );
+          const postRepairBleed = validateSpeedOutputForBleed(repaired as unknown as Parameters<typeof validateSpeedOutputForBleed>[0]);
+
+          if (!postRepairBleed.strengthTermsDetected) {
+            // Repair succeeded — use the repaired program
+            structuredData = repaired as typeof structuredData;
+            bleedResult.repairApplied = true;
+
+            logger.info(
+              { repairsApplied, repairCount: repairsApplied.length },
+              "[SpeedBleedAudit] Repair succeeded — strength bleed removed, proceeding with repaired program"
+            );
+
+            if (process.env.NODE_ENV !== "production") {
+              console.log("[SpeedBleedAudit]", JSON.stringify({
+                strengthTermsDetected: true,
+                repairApplied: true,
+                repairsApplied,
+                rejected: false,
+              }));
+            }
+          } else {
+            // Repair could not eliminate bleed — reject
+            bleedResult.rejected = true;
+            const failureClass = classifySpeedGenerationFailure({
+              openAICallSucceeded: true,
+              rawContentAvailable: true,
+              parsedJsonAvailable: true,
+              hasDays: true,
+              bleedDetected: true,
+              structureComplete: false,
+            });
+
+            logger.error(
+              {
+                bleedingSessionNames: postRepairBleed.bleedingSessionNames,
+                bleedingExerciseNames: postRepairBleed.bleedingExerciseNames,
+                failureType: failureClass.type,
+              },
+              "[SpeedBleedAudit] Repair failed — strength contamination persists — REJECTING speed output"
+            );
+
+            if (process.env.NODE_ENV !== "production") {
+              console.log("[SpeedBleedAudit]", JSON.stringify({
+                strengthTermsDetected: true,
+                repairApplied: true,
+                repairFailed: true,
+                rejected: true,
+                failureType: failureClass.type,
+                remainingBleedSessionNames: postRepairBleed.bleedingSessionNames,
+              }));
+
+              console.log("[SpeedOpenAIAudit]", JSON.stringify({
+                phase: "rejected",
+                parseSucceeded: true,
+                programStructureBuilt: true,
+                validationPassed: false,
+                failurePoint: failureClass.type,
+                failureDescription: failureClass.description,
+              }));
+            }
+
+            return {
+              content: `The speed program build returned a strength-flavored structure that couldn't be repaired. Want to try again? I'll rebuild it with correct speed mechanics, sprint structure, and no strength bleed.`,
+              structuredData: null,
+            };
+          }
+        } else {
+          // No bleed detected — log clean audit
+          if (process.env.NODE_ENV !== "production") {
+            console.log("[SpeedBleedAudit]", JSON.stringify({
+              strengthTermsDetected: false,
+              repairApplied: false,
+              rejected: false,
+            }));
+          }
+        }
+
+        // ── Stamp focusMode on clean/repaired output ─────────────────────────
+        if (structuredData && !(structuredData as { focusMode?: string }).focusMode) {
+          (structuredData as { focusMode?: string }).focusMode = "speed";
         }
       }
 
       // Success audit log
-      logger.info(
-        {
-          requestedFocus: focusMode,
-          engineUsed: "openai+focus-engine-context",
-          fallbackBuilderUsed: false,
-          deprecatedPathDetected: false,
-          generationRejected: false,
-          retryTriggered: false,
-          dayCount: structuredData.days.length,
-          programName: structuredData.programName,
-        },
-        "[ProgramGenerationPathAudit] Program validated and approved — returning real engine output"
-      );
+      if (focusMode === "speed") {
+        logger.info(
+          {
+            requestedFocus: "speed",
+            engineUsed: "openai+speed-architecture-brief+response-contract",
+            fallbackBuilderUsed: false,
+            generationRejected: false,
+            dayCount: structuredData.days.length,
+            programName: structuredData.programName,
+            allSessionNames: structuredData.days.map((d: { name?: string }) => d.name ?? "unnamed"),
+          },
+          "[SpeedOpenAIAudit] Speed program validated and approved — returning real speed engine output"
+        );
+        if (process.env.NODE_ENV !== "production") {
+          console.log("[SpeedOpenAIAudit]", JSON.stringify({
+            phase: "success",
+            parseSucceeded: true,
+            programStructureBuilt: true,
+            validationPassed: true,
+            failurePoint: null,
+            dayCount: structuredData.days.length,
+            programName: structuredData.programName,
+            sessionNames: structuredData.days.map((d: { name?: string }) => d.name ?? "unnamed"),
+          }));
+        }
+      } else {
+        logger.info(
+          {
+            requestedFocus: focusMode,
+            engineUsed: "openai+focus-engine-context",
+            fallbackBuilderUsed: false,
+            deprecatedPathDetected: false,
+            generationRejected: false,
+            retryTriggered: false,
+            dayCount: structuredData.days.length,
+            programName: structuredData.programName,
+          },
+          "[ProgramGenerationPathAudit] Program validated and approved — returning real engine output"
+        );
+      }
     }
 
     return { content: cleanContent, structuredData };
@@ -3031,6 +3252,43 @@ Output the corrected program JSON and a brief calm confirmation.`;
     // degrade to a strength-biased or template fallback program.
     // Return a clean recoverable error and let the user retry.
     if (isBuildIntent && (focusMode === "speed" || focusMode === "mobility")) {
+      if (focusMode === "speed") {
+        const failureClass = classifySpeedGenerationFailure({
+          openAICallSucceeded: false,
+          rawContentAvailable: false,
+          parsedJsonAvailable: false,
+          hasDays: false,
+          bleedDetected: false,
+          structureComplete: false,
+        });
+        logger.error(
+          {
+            focusMode,
+            isBuildIntent,
+            fallbackBuilderUsed: false,
+            generationRejected: true,
+            failureType: failureClass.type,
+            failureDescription: failureClass.description,
+            retryable: failureClass.retryable,
+          },
+          "[SpeedOpenAIAudit] Speed build failed — OpenAI call error — no fallback program generated"
+        );
+        if (process.env.NODE_ENV !== "production") {
+          console.log("[SpeedOpenAIAudit]", JSON.stringify({
+            phase: "api-error",
+            openAIRequestSent: true,
+            responseReceived: false,
+            parseSucceeded: false,
+            validationPassed: false,
+            failurePoint: failureClass.type,
+            failureDescription: failureClass.description,
+          }));
+        }
+        return {
+          content: `I couldn't complete the speed program build — the generation engine is temporarily unavailable.\n\nThis happens occasionally. Want to try again?`,
+          structuredData: null,
+        };
+      }
       logger.error(
         { focusMode, isBuildIntent, fallbackBuilderUsed: false, generationRejected: true },
         "[ProgramGenerationPathAudit] Build intent failed — focus mode requires real engine — no fallback program generated"
