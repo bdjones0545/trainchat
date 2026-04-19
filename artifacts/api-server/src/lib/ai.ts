@@ -1416,6 +1416,9 @@ The conversion rule: show intelligence first → build tension → deliver parti
   // Priority routing hint — tells the AI which engine dominates when multiple are active
   const routingHint = buildRoutingHint(routing, userMessage);
 
+  // Home gym constraint block — injected when equipment is restricted to home setup
+  const homeGymConstraintBlock = buildHomeGymConstraintBlock(normalizeEquipment(profile.equipmentAccess));
+
   return coreIdentity + `
 
 ## USER TRAINING PROFILE
@@ -1431,13 +1434,62 @@ ${profile.injuries ? `- Injuries / Limitations: ${profile.injuries}` : ""}
 ${profile.sportFocus ? `- Sport / Activity Focus: ${profile.sportFocus}` : ""}
 ${profile.exercisePreferences ? `- Exercise Preferences: ${profile.exercisePreferences}` : ""}
 ${profile.exercisesToAvoid ? `- Exercises to Avoid (NEVER program these): ${profile.exercisesToAvoid}` : ""}
-
+${homeGymConstraintBlock}
 ${routingHint}${reEntryContext}${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${conditioningContext}${powerSpeedContext}${sportContext}${periodizationContext}${mobilityContext}${specialConsiderationsContext}${specialConsiderationsClarification}${returnFromInjuryContext}${returnFromInjuryClarification}`;
 }
 
 // ─── Special Considerations Clarification Hint ────────────────────────────────
 // Wraps a clarification question into a soft instruction if one is warranted.
 // Only fires for genuinely ambiguous high-risk contexts — NOT for normal requests.
+
+// ─── Home Gym Constraint Block ─────────────────────────────────────────────────
+// Injected into the system prompt when the user's equipment is restricted to a home setup.
+// Explicitly tells the AI what IS and IS NOT available, and what exercises are banned.
+// This is the LAST LINE OF DEFENSE — the exercise selection pipeline already hard-filters
+// by equipment, but this prompt block prevents the AI from hallucinating gym exercises.
+
+function buildHomeGymConstraintBlock(equipmentLevel: string): string {
+  if (equipmentLevel !== "home_limited" && equipmentLevel !== "dumbbells_only") return "";
+
+  return `
+
+## HOME GYM EQUIPMENT CONSTRAINT — MANDATORY [HARD CONSTRAINT — NON-NEGOTIABLE]
+
+This program is CONSTRAINED to home gym equipment. The user does NOT have access to a commercial gym.
+
+AVAILABLE equipment (default home gym — use ONLY these):
+- Dumbbells (adjustable or fixed)
+- Resistance bands
+- Bodyweight (floor space, wall, chair, step)
+- Kettlebell (if available)
+- Adjustable bench (optional)
+
+UNAVAILABLE equipment — NEVER select exercises requiring:
+- Pull-up bar → NO Pull-Up, Chin-Up, Neutral-Grip Pull-Up, Wide-Grip Pull-Up, Weighted Pull-Up, Band-Assisted Pull-Up, Hanging Leg Raise, Scapular Pull-Up, or ANY hanging exercise
+- Plyo box → NO Box Jump, Depth Jump (Box Step-Up with a low step/chair is acceptable)
+- Barbell + rack → NO Back Squat, Front Squat, Bench Press (barbell), Barbell Row, Barbell Deadlift, Barbell RDL (dumbbell versions ARE allowed)
+- Cable machine → NO Cable Row, Cable Fly, Lat Pulldown, Cable Curl, Tricep Pushdown
+- Any other machine (leg press, hack squat, Smith machine, etc.)
+
+VERTICAL PULL — HOME GYM REPLACEMENTS:
+Since Pull-Up and Chin-Up require a pull-up bar (unavailable), use:
+- Dumbbell Row / Single-Arm DB Row
+- Dumbbell Pullover
+- Band Pull-Apart (rear delt / scapula)
+- Inverted Row (if a table or low bar is available — only if noted by user)
+- Face Pull (band)
+
+PLYOMETRIC POWER — HOME GYM REPLACEMENTS:
+Since Box Jump requires a plyo box (unavailable), use:
+- Jump Squat / Squat Jump
+- Pogo Hops / Continuous Hops
+- Broad Jump
+- Snap-Down Jumps (landing mechanics)
+
+PROGRAM TITLE AND ACKNOWLEDGMENT:
+- Title the program with "Home Gym" prefix (e.g., "Home Gym Strength Program — 3-Day")
+- In your response, acknowledge the home gym constraint: "Built this around home gym equipment — no pull-up bar, box, barbell, or machines assumed."`;
+}
 
 function buildSpecialConsiderationsClarificationHint(question: string | null): string {
   if (!question) return "";
@@ -3361,6 +3413,7 @@ function buildIntelligentProgram(profile: UserProfile): ProgramStructure {
 
 function buildProgramName(profile: UserProfile): string {
   const goal = normalizeGoal(profile.trainingGoal);
+  const equipment = normalizeEquipment(profile.equipmentAccess);
   const sport = profile.sportFocus;
   const season = profile.seasonContext;
 
@@ -3384,14 +3437,17 @@ function buildProgramName(profile: UserProfile): string {
   };
 
   const daysLabel = `${profile.daysPerWeek}-Day`;
+  // Prefix "Home Gym" when the program was constrained to home equipment
+  const isHomeGym = equipment === "home_limited" || equipment === "dumbbells_only";
+  const homeGymPrefix = isHomeGym ? "Home Gym " : "";
 
   if (sport) {
     const sportName = sport.charAt(0).toUpperCase() + sport.slice(1);
     const seasonLabel = season ? ` ${seasonLabels[season]}` : "";
-    return `${sportName}${seasonLabel} Performance Program — ${daysLabel}`;
+    return `${homeGymPrefix}${sportName}${seasonLabel} Performance Program — ${daysLabel}`;
   }
 
-  return `${goalLabels[goal]} Program — ${daysLabel}`;
+  return `${homeGymPrefix}${goalLabels[goal]} Program — ${daysLabel}`;
 }
 
 function buildProgramDescription(profile: UserProfile, spec: ReturnType<typeof buildTrainingSpec>): string {

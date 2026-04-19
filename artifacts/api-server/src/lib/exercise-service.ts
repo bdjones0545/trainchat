@@ -17,11 +17,25 @@ export type { ExerciseLibraryEntry } from "@workspace/db";
 
 // ─── Equipment mapping ────────────────────────────────────────────────────────
 
+// ─── Equipment Level Map ───────────────────────────────────────────────────────
+//
+// IMPORTANT: pull_up_bar and plyo_box are SPECIALTY equipment items.
+// They are NOT included in home_limited or dumbbells_only profiles.
+// A standard home gym has dumbbells, bands, bodyweight, kettlebell — NOT a pull-up bar or plyo box.
+// This ensures Pull-Ups and Box Jumps are hard-filtered from home gym programs.
+//
+// Equipment tags used in the exercise library:
+//   barbell, dumbbell, cable, machine, bodyweight, kettlebell, band,
+//   trap_bar, rings, trx, sled, med_ball, pull_up_bar, plyo_box
+
 const EQUIPMENT_LEVEL_MAP: Record<string, string[]> = {
-  full_gym: ["barbell", "dumbbell", "cable", "machine", "bodyweight", "kettlebell", "band", "trap_bar", "rings", "trx", "sled", "med_ball"],
+  full_gym: ["barbell", "dumbbell", "cable", "machine", "bodyweight", "kettlebell", "band", "trap_bar", "rings", "trx", "sled", "med_ball", "pull_up_bar", "plyo_box"],
   dumbbells_only: ["dumbbell", "bodyweight", "band", "kettlebell"],
+  // home_limited = default home gym profile:
+  // dumbbells, resistance bands, kettlebell, bodyweight movements, floor/wall/step
+  // Does NOT include: pull_up_bar, plyo_box, barbell, cable, machine, sled, rings, trx
   home_limited: ["dumbbell", "bodyweight", "band", "kettlebell"],
-  bodyweight: ["bodyweight", "band", "rings", "trx"],
+  bodyweight: ["bodyweight", "band"],
 };
 
 const DIFFICULTY_ORDER: Record<string, number> = {
@@ -30,6 +44,47 @@ const DIFFICULTY_ORDER: Record<string, number> = {
   advanced: 2,
   elite: 3,
 };
+
+// ─── Specialty Equipment Blocklist ─────────────────────────────────────────────
+//
+// These items represent equipment that is REQUIRED to perform an exercise.
+// If an exercise lists any of these, the user MUST have it in their allowed list.
+//
+// This prevents exercises like Pull-Up (["pull_up_bar","bodyweight","band"]) from
+// slipping through a home gym filter just because "bodyweight" is in the allowed list.
+//
+// Without this: Pull-Up passes home_limited because "bodyweight" matches.
+// With this: Pull-Up is rejected from home_limited because "pull_up_bar" is not allowed.
+
+const SPECIALTY_EQUIPMENT_BLOCKLIST = [
+  "pull_up_bar",
+  "plyo_box",
+  "barbell",
+  "cable",
+  "machine",
+  "trap_bar",
+  "sled",
+  "rings",
+  "trx",
+  "med_ball",
+];
+
+/**
+ * Check whether an exercise's equipment requirements are satisfied by the allowed set.
+ *
+ * Logic:
+ *  1. If the exercise requires ANY specialty item NOT in the allowed list → reject.
+ *     (This is the hard constraint — having "bodyweight" doesn't excuse needing a pull-up bar.)
+ *  2. The exercise must have at least one allowed equipment item.
+ */
+function hasAllowedEquipment(exerciseEquipment: string[], allowed: string[]): boolean {
+  for (const item of exerciseEquipment) {
+    if (SPECIALTY_EQUIPMENT_BLOCKLIST.includes(item) && !allowed.includes(item)) {
+      return false;
+    }
+  }
+  return exerciseEquipment.some((e) => allowed.includes(e));
+}
 
 // ─── Core query functions ─────────────────────────────────────────────────────
 
@@ -101,8 +156,7 @@ export async function getSwapCandidates(opts: {
 
   function applyConstraints(candidates: Awaited<ReturnType<typeof getClusterMembers>>) {
     return candidates.filter((ex) => {
-      const hasEquipment = (ex.equipment as string[]).some((eq) => allowed.includes(eq));
-      if (!hasEquipment) return false;
+      if (!hasAllowedEquipment(ex.equipment as string[], allowed)) return false;
       if (injuryFlags.length > 0) {
         const stress = ex.jointStressProfile as string[];
         if (injuryFlags.some((flag) => stress.includes(flag))) return false;
@@ -286,10 +340,18 @@ export async function getByMovementPattern(opts: {
   const maxNeuralLevel = maxNeuralDemand ? neuralOrder[maxNeuralDemand] : 2;
   const maxTimeLevel = maxTimeCost ? neuralOrder[maxTimeCost] : 2;
 
+  // ── HomeGymAudit: track rejected exercises when using restricted equipment ──────
+  const isRestrictedProfile = equipmentLevel === "home_limited" || equipmentLevel === "dumbbells_only";
+  const rejectedByEquipment: Array<{ name: string; equipment: string[] }> = [];
+
   const filtered = rows.filter((ex) => {
     if (excludeSet.has(ex.name.toLowerCase())) return false;
-    const hasEquipment = (ex.equipment as string[]).some((e) => allowed.includes(e));
-    if (!hasEquipment) return false;
+    if (!hasAllowedEquipment(ex.equipment as string[], allowed)) {
+      if (isRestrictedProfile) {
+        rejectedByEquipment.push({ name: ex.name, equipment: ex.equipment as string[] });
+      }
+      return false;
+    }
     if ((DIFFICULTY_ORDER[ex.difficultyLevel] ?? 1) > maxLevel) return false;
     if (injuryFlags.length > 0) {
       const stress = ex.jointStressProfile as string[];
@@ -310,6 +372,18 @@ export async function getByMovementPattern(opts: {
     }
     return true;
   });
+
+  // ── HomeGymAudit log ─────────────────────────────────────────────────────────
+  if (isRestrictedProfile && process.env.NODE_ENV !== "production") {
+    console.log("[HomeGymAudit]", JSON.stringify({
+      pattern,
+      equipmentLevel,
+      allowedEquipment: allowed,
+      totalCandidates: rows.length,
+      rejectedByEquipment: rejectedByEquipment.slice(0, 10),
+      finalPool: filtered.map((e) => e.name),
+    }));
+  }
 
   // Score: intent tags first, then sport transfer tags (for sport-specific biasing)
   if (intentTags.length > 0 || sportTransferTags.length > 0) {
@@ -400,8 +474,7 @@ export async function getByBodyRegion(opts: {
   const maxNeuralLevel = maxNeuralDemand ? neuralOrder[maxNeuralDemand] : 2;
 
   const filtered = rows.filter((ex) => {
-    const hasEquipment = (ex.equipment as string[]).some((e) => allowed.includes(e));
-    if (!hasEquipment) return false;
+    if (!hasAllowedEquipment(ex.equipment as string[], allowed)) return false;
     if ((DIFFICULTY_ORDER[ex.difficultyLevel] ?? 1) > maxLevel) return false;
     if (injuryFlags.length > 0) {
       const stress = ex.jointStressProfile as string[];

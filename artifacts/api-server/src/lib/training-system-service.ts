@@ -81,8 +81,15 @@ function normalizeGoal(goal: string): string {
 
 function normalizeEquipment(equipment: string): string {
   const lower = equipment.toLowerCase();
-  if (lower.includes("full") || lower.includes("gym") || lower.includes("barbell")) return "full_gym";
-  if (lower.includes("dumbbell") || lower.includes("home")) return "dumbbells";
+  // IMPORTANT: Check "home gym" BEFORE generic "gym" — "home gym" must never map to full_gym.
+  // A home gym has dumbbells, bands, bodyweight — NOT barbells, pull-up bars, plyo boxes, cables, or machines.
+  if (lower.includes("home gym") || lower.includes("home-gym")) return "home_limited";
+  if (lower.includes("home") && (lower.includes("dumbbell") || lower.includes("band") || lower.includes("limited") || lower.includes("only"))) return "home_limited";
+  if (lower.includes("home") && !lower.includes("full") && !lower.includes("barbell")) return "home_limited";
+  if (lower.includes("full") || lower.includes("commercial") || lower.includes("barbell")) return "full_gym";
+  // "gym" alone (without "home") means a real gym
+  if (lower.includes("gym") && !lower.includes("home")) return "full_gym";
+  if (lower.includes("dumbbell")) return "dumbbells";
   if (lower.includes("body") || lower.includes("calisthenics") || lower.includes("no equipment")) return "bodyweight";
   if (lower.includes("minimal") || lower.includes("resistance")) return "minimal";
   return "full_gym";
@@ -204,7 +211,7 @@ function buildPhaseConfig(goal: string, daysPerWeek: number): {
   return configs[goal] ?? configs.general_fitness;
 }
 
-function getSystemName(goal: string, style: string): string {
+function getSystemName(goal: string, style: string, equipment?: string): string {
   const goalLabel: Record<string, string> = {
     strength: "Strength",
     hypertrophy: "Hypertrophy",
@@ -213,7 +220,12 @@ function getSystemName(goal: string, style: string): string {
     endurance: "Endurance",
     general_fitness: "General Fitness",
   };
-  return `${goalLabel[goal] ?? "Training"} System`;
+  const goalName = goalLabel[goal] ?? "Training";
+  const isHomeGym = equipment === "home_limited" || equipment === "minimal" || equipment === "dumbbells";
+  if (isHomeGym) {
+    return `Home Gym ${goalName} System`;
+  }
+  return `${goalName} System`;
 }
 
 function getWarmupNotes(sessionType: string, emphasis: string): string {
@@ -609,7 +621,7 @@ export async function initializeTrainingSystem(userId: number): Promise<typeof t
     (equipment as CoachEquipmentLevel);
 
   const phaseConfig = buildPhaseConfig(goal, daysPerWeek);
-  const systemName = getSystemName(goal, trainingStyle);
+  const systemName = getSystemName(goal, trainingStyle, equipment);
 
   const [system] = await db.insert(trainingSystems).values({
     userId,

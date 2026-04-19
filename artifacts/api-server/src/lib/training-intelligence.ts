@@ -219,9 +219,13 @@ export function normalizeExperience(rawLevel: string): ExperienceTier {
 
 export function normalizeEquipment(rawEquipment: string): EquipmentLevel {
   const e = rawEquipment.toLowerCase();
-  if (e.includes("bodyweight") || e.includes("no equipment") || e.includes("home") && !e.includes("dumbbell") && !e.includes("barbell")) return "bodyweight";
+  // IMPORTANT: Check "home gym" BEFORE generic "gym" — "home gym" must never map to full_gym.
+  // Default home gym = dumbbells + bands + bodyweight. No pull-up bar, no barbell, no cable, no plyo box.
+  if (e.includes("home gym") || e.includes("home-gym")) return "home_limited";
+  if (e.includes("home") && !e.includes("full") && !e.includes("barbell")) return "home_limited";
+  if (e.includes("bodyweight") || e.includes("no equipment") || e.includes("calisthenics")) return "bodyweight";
   if ((e.includes("dumbbell") || e.includes("dumbbells")) && !e.includes("barbell") && !e.includes("full")) return "dumbbells_only";
-  if (e.includes("home") || e.includes("limited") || (e.includes("dumbbell") && e.includes("some"))) return "home_limited";
+  if (e.includes("limited") || (e.includes("dumbbell") && e.includes("some"))) return "home_limited";
   return "full_gym"; // full gym, barbell, commercial, etc.
 }
 
