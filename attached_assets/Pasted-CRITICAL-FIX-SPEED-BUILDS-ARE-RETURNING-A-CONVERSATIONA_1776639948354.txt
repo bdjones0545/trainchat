@@ -1,0 +1,215 @@
+CRITICAL FIX — SPEED BUILDS ARE RETURNING A CONVERSATIONAL PREVIEW INSTEAD OF A FINISHED SAVED PROGRAM
+
+CONTEXT:
+In Speed / Footwork mode, the user can request a build (example: "3 days") and after ~60 seconds receives a speed-flavored conversational response like:
+
+- "Here’s the foundation I’m building around you..."
+- outlines of Day 1 / Day 2 / Day 3
+- mention of exercises that will be included
+
+But no actual full program appears in the right panel and no final saved program is produced.
+
+This means the system is still allowing a conversational / planning response to satisfy a build request instead of requiring a final structured build artifact.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make Speed build requests complete as real builds:
+- full structured program
+- parsed successfully
+- saved to DB
+- shown in the right panel / Active Programs
+
+Do NOT allow a conversational preview to count as a completed build.
+
+==================================================
+TASK 1 — TRACE THE EXACT SPEED BUILD EXECUTION PATH
+==================================================
+
+For a real user prompt in Speed mode:
+- "3 days"
+- "Build me a speed program"
+- "Design a speed and acceleration program"
+
+Trace the full path:
+
+[SpeedBuildCompletionAudit] {
+  userMessage,
+  resolvedIntent,
+  actionDecision,
+  focusMode,
+  responseMode,
+  architectureBriefInjected,
+  responseContractInjected,
+  openAIResponseType,
+  parseAttempted,
+  parseSucceeded,
+  validationPassed,
+  programSaved,
+  rightPanelUpdated,
+  finalState
+}
+
+We need to know exactly where the build stops becoming a real build.
+
+==================================================
+TASK 2 — DISALLOW CONVERSATIONAL PREVIEW RESPONSES FOR BUILD INTENTS
+==================================================
+
+If resolved intent is:
+- BUILD_PROGRAM
+- REBUILD_PROGRAM
+- any explicit build action
+
+Then the response must NOT be allowed to end as:
+- a high-level explanation
+- a preview
+- a scaffold
+- a “here’s the foundation”
+- a “I’ll include...”
+- a “once you complete your profile”
+
+For build intents, only two valid outcomes are allowed:
+1. full structured program build saved successfully
+2. clean recoverable error
+
+No in-between conversational completion.
+
+==================================================
+TASK 3 — HARDEN THE SPEED RESPONSE CONTRACT
+==================================================
+
+Strengthen buildSpeedResponseContract() so the model is explicitly forbidden from returning:
+- prose-first build plans
+- preview language
+- future-tense promises
+- “I’m building around you”
+- “I’ll map this out”
+- “once you complete your profile”
+
+Add an explicit rule like:
+
+"For build intents, return ONLY the final structured JSON build artifact. Do not return an outline, preview, explanation, or promise of a later build."
+
+==================================================
+TASK 4 — ADD PREVIEW / INCOMPLETE BUILD DETECTOR
+==================================================
+
+Create a detector such as:
+
+detectIncompleteBuildResponse(text)
+
+It should flag language like:
+- "here's the foundation"
+- "I'll include"
+- "I'll map"
+- "once you complete"
+- "I’m building around you"
+- "this will be structured"
+
+If detected during a build intent:
+- treat as structure_failure or preview_failure
+- do NOT show this as a successful build
+- either retry with stricter build-only instruction or fail cleanly
+
+==================================================
+TASK 5 — ADD A STRICT RETRY FOR PREVIEW RESPONSES
+==================================================
+
+If OpenAI returns a speed-flavored preview instead of the final JSON build:
+
+Retry once with a stricter instruction block:
+
+"STRICT BUILD MODE:
+The previous response was not a completed program.
+Return ONLY the final structured JSON program matching the contract.
+Do not explain, preview, promise, or describe what you are going to build."
+
+This retry should happen before the user sees the preview response.
+
+==================================================
+TASK 6 — REQUIRE PARSE + SAVE BEFORE SUCCESS
+==================================================
+
+For Speed build intents, success must require all of the following:
+- OpenAI response received
+- parsed into ProgramStructure
+- validated
+- focus integrity passed
+- saved to DB
+- right panel / active program state updated
+
+If any step fails:
+- do NOT present the result as a completed build
+- surface a retryable error state instead
+
+==================================================
+TASK 7 — IMPROVE FRONTEND BUILD STATUS
+==================================================
+
+If the build is still genuinely in progress, the user should see:
+- Building your speed program...
+- Saving your program...
+- Finalizing your sessions...
+
+Do NOT let a preview-like assistant message look like the finished outcome.
+
+If build fails:
+- show a clear retry CTA
+- preserve the request context
+
+==================================================
+TASK 8 — LOG PREVIEW FAILURES EXPLICITLY
+==================================================
+
+Add logs:
+
+[SpeedPreviewFailureAudit] {
+  previewDetected,
+  triggerPhrase,
+  retryTriggered,
+  retrySucceeded,
+  parseSucceededAfterRetry,
+  programSaved
+}
+
+We need to know how often OpenAI returns a preview instead of a real build.
+
+==================================================
+TASK 9 — VALIDATION
+==================================================
+
+Test these prompts in Speed mode:
+1. "3 days"
+2. "Build me a speed program"
+3. "Design a speed and acceleration program"
+4. "Create a footwork and deceleration program"
+
+Expected for all:
+- no preview-only response
+- full structured program built
+- saved to DB
+- visible in right panel / Active Programs
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. where the build was stopping before completion
+2. whether preview/incomplete responses were being treated as success
+3. what contract hardening was added
+4. what preview detector + retry logic was added
+5. validation results for all test prompts
+
+==================================================
+FINAL STANDARD
+==================================================
+
+In Speed mode, a build request must produce:
+- a real final program
+- saved to the database
+- visible in the UI
+
+A conversational outline or “foundation” response must never count as a completed build.

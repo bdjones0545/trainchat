@@ -458,6 +458,18 @@ export function buildSpeedResponseContract(sessionCount: number): string {
 
   return `## SPEED PROGRAM — MANDATORY JSON RESPONSE CONTRACT
 
+⛔ ABSOLUTE PROHIBITION — READ BEFORE RESPONDING:
+You are FORBIDDEN from returning any of the following:
+  - A preview, outline, scaffold, or plan of what you will build
+  - Prose describing the structure ("Here's the foundation I'm building...")
+  - Future-tense promises ("I'll include...", "I'll map...", "I'll build...")
+  - Conditional language ("Once you complete your profile...", "Once I have...")
+  - Any response that is not the final, complete, fully-populated JSON program
+
+If you return a preview instead of the complete JSON program, it is a CRITICAL FAILURE.
+There is no intermediate step. There is no "planning phase." Output the final program NOW.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 You MUST output the speed program as a JSON code block in EXACTLY this format.
 No prose. No markdown outside the JSON block. Output the JSON block first, then a 1–2 sentence confirmation.
 
@@ -711,11 +723,50 @@ export function repairSpeedOutput(
   return { repaired, repairsApplied };
 }
 
+// ─── Incomplete Build Response Detector ──────────────────────────────────────
+
+const PREVIEW_RESPONSE_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
+  { pattern: /here'?s\s+the\s+foundation/i, label: "here's the foundation" },
+  { pattern: /i'?ll\s+include/i, label: "I'll include" },
+  { pattern: /i'?ll\s+map/i, label: "I'll map" },
+  { pattern: /once\s+you\s+complete\s+your\s+profile/i, label: "once you complete your profile" },
+  { pattern: /i'?m\s+building\s+around\s+you/i, label: "I'm building around you" },
+  { pattern: /this\s+will\s+be\s+structured/i, label: "this will be structured" },
+  { pattern: /here'?s\s+what\s+i'?(?:ll|m)\s+build/i, label: "here's what I'll build" },
+  { pattern: /here'?s\s+(?:a\s+)?(?:an?\s+)?(?:overview|outline|preview|scaffold|breakdown)/i, label: "overview/outline language" },
+  { pattern: /once\s+(?:we\s+)?(?:have|get|know)/i, label: "once we have/know" },
+  { pattern: /i'?(?:ll|'m going to)\s+(?:build|design|create|put together|structure)/i, label: "I'll build/design/create" },
+  { pattern: /foundation\s+i'?m\s+building/i, label: "foundation I'm building" },
+  { pattern: /i'?(?:ll|'m going to)\s+(?:include|add|incorporate)/i, label: "I'll add/incorporate" },
+  { pattern: /(?:day\s+\d+\s*[:\-—]?\s*(?:we'?ll?|will|i'?ll))/i, label: "day X we'll/will" },
+];
+
+export interface IncompleteBuildDetection {
+  isPreview: boolean;
+  triggerPhrase: string | null;
+  confidence: "high" | "low";
+}
+
+/**
+ * Detects whether a response is a preview/planning response rather than a completed JSON build.
+ * Used to gate the strict-retry path: if OpenAI returned a prose outline instead of the
+ * JSON artifact, we retry once with an explicit "build only" enforcement instruction.
+ */
+export function detectIncompleteBuildResponse(text: string): IncompleteBuildDetection {
+  for (const { pattern, label } of PREVIEW_RESPONSE_PATTERNS) {
+    if (pattern.test(text)) {
+      return { isPreview: true, triggerPhrase: label, confidence: "high" };
+    }
+  }
+  return { isPreview: false, triggerPhrase: null, confidence: "low" };
+}
+
 // ─── Speed Generation Failure Classifier ─────────────────────────────────────
 
 export type SpeedFailureType =
   | "prompt_failure"
   | "parse_failure"
+  | "preview_failure"
   | "validation_failure"
   | "bleed_failure"
   | "structure_failure"
@@ -754,6 +805,13 @@ export function classifySpeedGenerationFailure(context: {
     };
   }
   if (!context.parsedJsonAvailable) {
+    if (context.rawContentAvailable) {
+      return {
+        type: "preview_failure",
+        description: "OpenAI returned prose/preview content instead of a JSON build artifact — response contract was ignored",
+        retryable: true,
+      };
+    }
     return {
       type: "parse_failure",
       description: "OpenAI did not output a valid JSON block — response contract was ignored",

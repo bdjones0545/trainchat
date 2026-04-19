@@ -58,6 +58,7 @@ import {
   validateSpeedOutputForBleed,
   repairSpeedOutput,
   classifySpeedGenerationFailure,
+  detectIncompleteBuildResponse,
   type SpeedBleedAuditResult,
 } from "./focus-engines/speed-engine";
 import {
@@ -2740,6 +2741,118 @@ export async function generateAIResponse(
         }
       } catch (truncationRetryErr) {
         logger.warn({ truncationRetryErr }, "[TruncationRetry] Compact retry threw — returning original failure");
+      }
+    }
+
+    // ── Preview / Incomplete Build Detection + Strict Retry (speed/mobility) ─
+    // If the AI returned a conversational preview or planning outline instead of
+    // the final JSON build artifact, detect it and retry once with an explicit
+    // "build only" enforcement prompt. This is the primary guard against the
+    // "here's the foundation" pattern that looks like a completed build to users
+    // but produces no saved program.
+    //
+    // This fires when: isBuildIntent AND structuredData is STILL null after
+    // truncation retry AND the response is non-empty (i.e. a prose response
+    // was returned rather than a truncated/empty one).
+    if (isBuildIntent && (focusMode === "speed" || focusMode === "mobility") && structuredData === null && cleanContent.length > 0) {
+      const previewDetection = detectIncompleteBuildResponse(cleanContent);
+
+      logger.warn(
+        {
+          focusMode,
+          previewDetected: previewDetection.isPreview,
+          triggerPhrase: previewDetection.triggerPhrase,
+          responseLength: cleanContent.length,
+        },
+        "[SpeedPreviewFailureAudit] Build intent returned no JSON — classifying response"
+      );
+
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[SpeedPreviewFailureAudit]", JSON.stringify({
+          previewDetected: previewDetection.isPreview,
+          triggerPhrase: previewDetection.triggerPhrase,
+          focusMode,
+          retryTriggered: false,
+          retrySucceeded: false,
+          parseSucceededAfterRetry: false,
+          programSaved: false,
+          phase: "pre-retry",
+        }));
+      }
+
+      if (previewDetection.isPreview) {
+        const strictBuildInstruction = `STRICT BUILD MODE — CRITICAL FAILURE RECOVERY:
+
+Your previous response was a PREVIEW or PLANNING response, not a completed program.
+
+You returned language matching: "${previewDetection.triggerPhrase}"
+This is NOT an acceptable build output. It is a critical failure.
+
+MANDATORY:
+- Return ONLY the final structured JSON program matching the response contract above.
+- Do NOT explain what you are going to build.
+- Do NOT outline or preview the program.
+- Do NOT promise a later build.
+- Do NOT use phrases like "I'll include", "I'll map", "here's the foundation", "once you complete".
+- Output the complete, fully-populated JSON build artifact NOW. Nothing else.
+
+Return the JSON code block immediately.`;
+
+        logger.warn(
+          { focusMode, triggerPhrase: previewDetection.triggerPhrase },
+          "[SpeedPreviewFailureAudit] Preview response detected — retrying with strict build-only instruction"
+        );
+
+        try {
+          const previewRetryMessages = [
+            ...baseMessages,
+            { role: "assistant" as const, content: cleanContent },
+            { role: "user" as const, content: strictBuildInstruction },
+          ];
+          const previewRetryResult = await callOpenAI(previewRetryMessages, maxTokens);
+          const retrySucceeded = previewRetryResult.structuredData !== null;
+
+          if (process.env.NODE_ENV !== "production") {
+            console.log("[SpeedPreviewFailureAudit]", JSON.stringify({
+              previewDetected: true,
+              triggerPhrase: previewDetection.triggerPhrase,
+              focusMode,
+              retryTriggered: true,
+              retrySucceeded,
+              parseSucceededAfterRetry: retrySucceeded,
+              programSaved: false,
+              phase: "post-retry",
+            }));
+          }
+
+          if (retrySucceeded) {
+            cleanContent = previewRetryResult.cleanContent;
+            structuredData = previewRetryResult.structuredData;
+            logger.info(
+              { focusMode },
+              "[SpeedPreviewFailureAudit] Strict retry succeeded — structured data recovered from preview failure"
+            );
+          } else {
+            // Both attempts returned prose — surface a clean retryable error.
+            logger.warn(
+              { focusMode },
+              "[SpeedPreviewFailureAudit] Strict retry also returned no JSON — returning clean recoverable error"
+            );
+            return {
+              content: `I wasn't able to complete your ${focusMode} program build. The AI returned a planning overview instead of a finished program, and the recovery attempt also didn't produce a complete build.\n\nWant to try again? Just say **"build my program"** and I'll start fresh.`,
+              structuredData: null,
+            };
+          }
+        } catch (previewRetryErr) {
+          logger.warn(
+            { previewRetryErr, focusMode },
+            "[SpeedPreviewFailureAudit] Preview retry threw — returning clean recoverable error"
+          );
+          return {
+            content: `I wasn't able to complete your ${focusMode} program build due to a technical issue.\n\nWant to try again? Just say **"build my program"** and I'll start fresh.`,
+            structuredData: null,
+          };
+        }
       }
     }
 

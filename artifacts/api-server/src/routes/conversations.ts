@@ -1974,6 +1974,20 @@ Keep it helpful and intelligent, never promotional.`;
       systemSaved = true;
       autoSavedSystemId = savedSystem.id;
 
+      if (nonStreamFocusMode === "speed" || nonStreamFocusMode === "mobility") {
+        logger.info(
+          {
+            userId,
+            systemId: savedSystem.id,
+            focusMode: nonStreamFocusMode,
+            programName: structuredData.programName,
+            dayCount: structuredData.days?.length ?? 0,
+            programSaved: true,
+          },
+          "[SpeedBuildCompletionAudit] Build completed successfully — program saved to DB"
+        );
+      }
+
       const emptySnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
       const fullProgramSnapshot = structuredData as unknown as Record<string, unknown>;
 
@@ -3323,6 +3337,20 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       }
       systemSaved = true;
       autoSavedSystemId = savedSystem.id;
+
+      if (streamFocusMode === "speed" || streamFocusMode === "mobility") {
+        logger.info(
+          {
+            userId,
+            systemId: savedSystem.id,
+            focusMode: streamFocusMode,
+            programName: structuredData.programName,
+            dayCount: structuredData.days?.length ?? 0,
+            programSaved: true,
+          },
+          "[SpeedBuildCompletionAudit] Build completed successfully — program saved to DB (stream path)"
+        );
+      }
 
       const emptySnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
       const fullProgramSnapshot = structuredData as unknown as Record<string, unknown>;
