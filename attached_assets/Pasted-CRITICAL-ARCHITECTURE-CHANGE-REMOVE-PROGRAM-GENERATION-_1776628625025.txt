@@ -1,0 +1,198 @@
+CRITICAL ARCHITECTURE CHANGE — REMOVE PROGRAM-GENERATION FALLBACKS ENTIRELY
+
+CONTEXT:
+We are seeing the same stale-program issue reappear because fallback program builders are bypassing the real focus engines.
+
+This has already caused:
+- stale repeated Strength programs
+- Speed/Mobility producing strength-flavored programs
+- bypass of variation, exposure tracking, memory dominance, and block logic
+
+At this stage, hidden fallback builders are doing more harm than good.
+
+We no longer want ANY fallback path that generates a program outside the real focus engines.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Remove all program-generation fallbacks so every generated program must come from the real focus engine only.
+
+Fallbacks may remain for:
+- response messaging
+- retries
+- error handling
+- empty states
+
+But NOT for:
+- program architecture
+- session generation
+- block creation
+- exercise selection
+
+==================================================
+TASK 1 — AUDIT ALL PROGRAM-GENERATION FALLBACKS
+==================================================
+
+Find every path where a fallback can generate or return a program.
+
+Audit:
+- generateFallbackResponse
+- buildIntelligentProgram
+- speed fallback builders
+- mobility fallback builders
+- generic program constructors
+- any default “safe” program builder
+- any hidden template-based fallback path
+
+Return:
+- file
+- function
+- what it builds
+- whether it bypasses the real engine
+
+==================================================
+TASK 2 — REMOVE FALLBACK PROGRAM BUILDERS
+==================================================
+
+Delete or disable any fallback builder that creates program structure outside the real focus engines.
+
+That includes:
+- generic fallback program builders
+- strength-biased default builders
+- speed/mobility special fallback builders if they are separate from the real engine
+
+No separate backup programming brain should remain.
+
+==================================================
+TASK 3 — FORCE ONE REAL GENERATION PATH
+==================================================
+
+All program generation must go through one explicit entry point such as:
+
+generateProgramForFocus({
+  focusMode,
+  profile,
+  constraints,
+  intent
+})
+
+This function must always:
+- choose the correct focus engine
+- run the real block/session/exercise generation logic
+- return the real program
+
+There must be no alternate builder path.
+
+==================================================
+TASK 4 — FAIL LOUDLY INSTEAD OF DEGRADING PROGRAM QUALITY
+==================================================
+
+If the real engine cannot generate a program:
+- return a clear recoverable error
+- preserve the request context
+- allow retry
+- log the failure
+
+Do NOT silently substitute a lower-quality stale/template program.
+
+Preferred UX:
+- “I couldn’t complete the build cleanly. Retry?”
+or
+- automatic retry once, then clean failure state
+
+==================================================
+TASK 5 — KEEP FALLBACKS ONLY FOR RESPONSE LAYER
+==================================================
+
+Allowed fallbacks:
+- safe explanation text
+- retry messaging
+- loading recovery
+- temporary UI fallback
+- non-program response formatting
+
+Not allowed:
+- alternate session architecture
+- alternate exercise selection
+- alternate block builder
+
+==================================================
+TASK 6 — ADD HARD GUARD AGAINST STALE BUILDS
+==================================================
+
+Add a validation layer before returning a program:
+
+- verify correct focus
+- verify real engine used
+- verify variation seed applied
+- verify block/session structure exists
+- verify program did not come from deprecated fallback builder
+
+If validation fails:
+- reject the result
+- log a HIGH severity error
+- do not send stale program to user
+
+==================================================
+TASK 7 — ADD AUDIT LOGGING
+==================================================
+
+Add logs:
+
+[ProgramGenerationPathAudit] {
+  requestedFocus,
+  engineUsed,
+  fallbackBuilderUsed,
+  deprecatedPathDetected,
+  generationRejected,
+  retryTriggered
+}
+
+We need proof that all builds now come from the real engines only.
+
+==================================================
+TASK 8 — VALIDATION
+==================================================
+
+Test:
+1. Strength build
+2. Speed build
+3. Mobility build
+
+For each:
+- normal generation
+- forced failure / fallback conditions
+
+Expected:
+- either real engine output
+- or clean recoverable error
+
+Never:
+- stale template output
+- wrong-focus output
+- hidden fallback-generated program
+
+==================================================
+TASK 9 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. all fallback builders removed/disabled
+2. the single remaining generation path
+3. what happens now when generation fails
+4. how stale output is prevented
+5. validation results for Strength / Speed / Mobility
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat must never silently degrade program quality through hidden fallback builders.
+
+A generated program must either:
+- come from the real focus engine
+OR
+- fail cleanly with retry/error handling
+
+No more stale fallback programs.
