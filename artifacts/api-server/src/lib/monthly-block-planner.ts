@@ -758,6 +758,395 @@ KEY SPEED PROGRAMMING PRINCIPLES FOR THIS BLOCK:
 ${plan.keyPrinciples.map((p, i) => `${i + 1}. ${p}`).join("\n")}`;
 }
 
+// ─── Mobility Block System ────────────────────────────────────────────────────
+
+export type MobilityBlockType =
+  | "mobility_range_restoration"
+  | "mobility_end_range_control"
+  | "mobility_movement_quality"
+  | "mobility_hip_focus"
+  | "mobility_shoulder_focus"
+  | "mobility_spine_focus"
+  | "mobility_ankle_focus"
+  | "mobility_stiffness_reduction"
+  | "mobility_recovery_flow"
+  | "mobility_reentry_support";
+
+const MOBILITY_BLOCKS: Record<MobilityBlockType, Omit<MonthlyBlockPlan, "blockType" | "sportGoalBias" | "weekProgressionArc">> = {
+  mobility_range_restoration: {
+    displayName: "Range Restoration Block",
+    missionStatement: "Restore passive and active range of motion across priority joints. Establish the movement ceiling that control and loading work will build upon.",
+    primaryAdaptation: "Passive tissue length and joint capsule mobility",
+    secondaryAdaptation: "Nervous system exposure to new range positions, pain-free range development",
+    volumeProfile: "moderate",
+    intensityProfile: "low",
+    neuralDemandProfile: "low",
+    progressionPhilosophy: "Increase hold duration each week before increasing range demand. Passive holds precede active control. Week 1: 30s holds → Week 2: 45s holds → Week 3: 60–90s holds + contract-relax → Week 4: recovery/consolidation.",
+    isSpecialPopulation: false,
+    keyPrinciples: [
+      "Passive range is the prerequisite — you cannot control range you haven't first reached",
+      "Hold duration is the primary progression variable, not load or reps",
+      "Breathing amplifies range — exhale to deepen every passive hold",
+      "Never force a joint — steady, sustained tension is more effective than aggressive pushing",
+      "Track which joints are limiting movement and address them systematically each session",
+    ],
+  },
+
+  mobility_end_range_control: {
+    displayName: "End-Range Control Block",
+    missionStatement: "Train the nervous system to actively own newly restored range. Convert passive flexibility into active mobility through isometric control at the limit of available range.",
+    primaryAdaptation: "Active control at end-range through PAILs, RAILs, and CARs",
+    secondaryAdaptation: "Nervous system ownership of range, joint stability in extended positions",
+    volumeProfile: "moderate",
+    intensityProfile: "moderate",
+    neuralDemandProfile: "moderate",
+    progressionPhilosophy: "Begin with 20% isometric contraction effort, build to 40% over 4 weeks. CARs are the diagnostic tool — if range decreases in active CARs vs passive, prioritize control work. Loaded end-range introduced only in Week 3+ when control is reliable.",
+    isSpecialPopulation: false,
+    keyPrinciples: [
+      "Passive range means nothing if you cannot actively control it — own the range, don't just reach it",
+      "PAILs = Progressive Angular Isometric Loading (push into restriction) — builds tissue at new range",
+      "RAILs = Regressive Angular Isometric Loading (pull away from restriction) — activates joint control",
+      "CARs are the primary training AND assessment tool — perform daily",
+      "Progress contraction intensity weekly: 20% → 30% → 40% — never maximal effort in early weeks",
+    ],
+  },
+
+  mobility_movement_quality: {
+    displayName: "Movement Quality Block",
+    missionStatement: "Integrate restored range and control into functional movement patterns. Build compound mobility that transfers to athletic and daily movement demands.",
+    primaryAdaptation: "Multi-joint mobility integration and movement pattern quality",
+    secondaryAdaptation: "Movement sequencing, positional transitions, movement standard fluency",
+    volumeProfile: "moderate",
+    intensityProfile: "moderate",
+    neuralDemandProfile: "moderate",
+    progressionPhilosophy: "Start with slow, deliberate movement flows. Progress to more complex transitions and longer sequences. Week 3 integrates dynamic flows with loaded positions. Movement quality is the metric, not duration or reps.",
+    isSpecialPopulation: false,
+    keyPrinciples: [
+      "Isolated joint work precedes integrated movement — establish the components before the compound",
+      "Flows are trained, not improvised — session structure matters as much as individual exercises",
+      "Slow, controlled transitions expose weaknesses in positional control across joints",
+      "World's Greatest Stretch and Spiderman flows are diagnostic — note where movement quality breaks down",
+      "Movement quality work is the bridge from mobility training to athletic performance",
+    ],
+  },
+
+  mobility_hip_focus: {
+    displayName: "Hip Focus Block",
+    missionStatement: "Systematically develop hip mobility in all 6 directions — flexion, extension, internal rotation, external rotation, abduction, adduction. Build the foundation for lower body movement quality.",
+    primaryAdaptation: "Hip capsule mobility across all planes, acetabular-femoral joint health",
+    secondaryAdaptation: "Hip-related lower back tension reduction, squat depth and stride length improvement",
+    volumeProfile: "moderate",
+    intensityProfile: "low",
+    neuralDemandProfile: "low",
+    progressionPhilosophy: "Address all 6 hip directions each week. CARs are the daily foundation. Prioritize the most restricted direction per athlete. Week 2+ introduces PAILs/RAILs for the most restricted range. Week 3 adds active control and loaded end-range progressions.",
+    isSpecialPopulation: false,
+    keyPrinciples: [
+      "Hip CARs are the cornerstone — they assess AND develop range simultaneously",
+      "The 90/90 position is the hip mobility studio — it exposes both internal and external rotation",
+      "Couch stretch addresses the most restricted hip flexor pattern in desk-bound athletes",
+      "Internal rotation is the most neglected hip direction — address it explicitly",
+      "Adductor restriction is common — Frog Stretch and Adductor Rockback address it directly",
+    ],
+  },
+
+  mobility_shoulder_focus: {
+    displayName: "Shoulder Focus Block",
+    missionStatement: "Restore and develop shoulder complex mobility — glenohumeral joint, scapular control, thoracic contribution. Address the chain from thoracic extension through GH internal/external rotation.",
+    primaryAdaptation: "Glenohumeral IR/ER range, shoulder elevation, posterior capsule flexibility",
+    secondaryAdaptation: "Scapulohumeral rhythm, overhead capacity, pressing and pulling pattern prerequisite",
+    volumeProfile: "moderate",
+    intensityProfile: "low",
+    neuralDemandProfile: "low",
+    progressionPhilosophy: "T-spine mobility always precedes shoulder-specific work — the thorax drives shoulder range. Shoulder CARs daily as foundation. Sleeper stretch for posterior capsule. Wall slides for scapular control. Weeks 3–4 introduce loaded end-range shoulder work.",
+    isSpecialPopulation: false,
+    keyPrinciples: [
+      "Shoulder mobility begins with thoracic extension — T-spine work first every session",
+      "Shoulder CARs are the daily diagnostic and training tool",
+      "Posterior capsule tightness (sleeper stretch) is the most common overhead limitation",
+      "Pec minor restriction drives scapular protraction — address it before pressing volume",
+      "Wall slides train the scapular upward rotation pattern that overhead work demands",
+    ],
+  },
+
+  mobility_spine_focus: {
+    displayName: "Spinal Mobility Block",
+    missionStatement: "Restore and develop segmental spinal mobility — thoracic extension, thoracic rotation, and lumbar safe range. Builds the foundation for rotational power, overhead capacity, and postural health.",
+    primaryAdaptation: "Thoracic extension, thoracic rotation, segmental spinal articulation",
+    secondaryAdaptation: "Rib cage expansion, diaphragmatic breathing quality, lumbar decompression",
+    volumeProfile: "moderate",
+    intensityProfile: "low",
+    neuralDemandProfile: "low",
+    progressionPhilosophy: "Foam roller thoracic extension is the entry point. Segment-by-segment articulation builds from T4 to T10. Rotation work follows extension — always. Breathing integration amplifies thoracic range via rib cage expansion.",
+    isSpecialPopulation: false,
+    keyPrinciples: [
+      "Thoracic extension must precede thoracic rotation — you cannot rotate what you cannot extend",
+      "Segment-by-segment approach: work one vertebral level at a time on the foam roller",
+      "Cat-Cow is a diagnostic tool — identify which segments are restricted and target them",
+      "Breathing is the most underused tool for thoracic mobility — rib expansion drives T-spine range",
+      "Never attempt lumbar rotation — all rotation work should occur in the thoracic spine",
+    ],
+  },
+
+  mobility_ankle_focus: {
+    displayName: "Ankle Mobility Block",
+    missionStatement: "Restore ankle dorsiflexion range — the most commonly restricted mobility prerequisite for squatting, landing, and sprinting. Address calves, soleus, and talocrural joint capsule.",
+    primaryAdaptation: "Ankle dorsiflexion range, talocrural joint mobility, squat depth prerequisite",
+    secondaryAdaptation: "Calf and Achilles tissue length, foot arch control, single-leg landing mechanics",
+    volumeProfile: "moderate",
+    intensityProfile: "low",
+    neuralDemandProfile: "low",
+    progressionPhilosophy: "Daily ankle CARs are the minimum effective dose. Banded distraction addresses the joint capsule (not just the muscle). Wall stretch addresses gastrocnemius, bent-knee stretch addresses soleus. Heel drops build tissue tolerance. Week 3+ introduces loaded dorsiflexion work.",
+    isSpecialPopulation: false,
+    keyPrinciples: [
+      "Ankle restriction has two causes: tight calves (muscular) and restricted joint capsule (structural) — treat both",
+      "Banded ankle distraction is the most effective tool for capsular restriction",
+      "Measure progress: knee-to-wall distance is the gold standard dorsiflexion test",
+      "Daily practice matters more than session volume — short daily work beats weekly sessions",
+      "Calf and Achilles health is inseparable from ankle dorsiflexion — single-leg calf raises support both",
+    ],
+  },
+
+  mobility_stiffness_reduction: {
+    displayName: "Stiffness Reduction Block",
+    missionStatement: "Address chronic tissue stiffness and morning tightness through targeted dynamic warm-up, contract-relax sequences, and tissue preparation work. Reduce barriers to range access.",
+    primaryAdaptation: "Myofascial tissue pliability, chronic stiffness reduction, range access improvement",
+    secondaryAdaptation: "Blood flow and tissue temperature, nervous system readiness for mobility work",
+    volumeProfile: "moderate",
+    intensityProfile: "low",
+    neuralDemandProfile: "low",
+    progressionPhilosophy: "Tissue prep (foam rolling, lacrosse ball) before all stretching in this block. Contract-relax sequences are more effective than passive holds for chronic stiffness — use them first. Dynamic movements follow tissue prep. Progress by reducing the time needed to access range.",
+    isSpecialPopulation: false,
+    keyPrinciples: [
+      "Foam rolling and tissue work precede all stretching — you cannot stretch effectively through stiff tissue",
+      "Contract-relax (PNF) beats passive holds for chronic stiffness — contract 5–10s, release, deepen",
+      "Dynamic movements (World's Greatest Stretch, hip flow) are more effective than static holds for morning stiffness",
+      "Heat application before mobility work dramatically accelerates range access",
+      "Stiffness is a signal — address the training week context (high volume = more recovery bias)",
+    ],
+  },
+
+  mobility_recovery_flow: {
+    displayName: "Recovery Flow Block",
+    missionStatement: "Parasympathetic restoration through gentle, sustained holds and breathing-integrated movement. Reduces systemic fatigue, nervous system stress, and tissue soreness after high-load training phases.",
+    primaryAdaptation: "Nervous system downregulation, tissue recovery, pain signal reduction",
+    secondaryAdaptation: "Passive range maintenance, breathing quality, sleep preparation",
+    volumeProfile: "low",
+    intensityProfile: "low",
+    neuralDemandProfile: "low",
+    progressionPhilosophy: "No progression in the traditional sense — this block is recovery-driven. Hold duration and breathing quality are the focus. Sessions are 20–30 minutes. No active loading, no PAILs/RAILs intensity. Pure restoration.",
+    isSpecialPopulation: false,
+    keyPrinciples: [
+      "This block is NOT lazy — it serves the highest-quality recovery function in the program",
+      "5-minute+ holds in key positions (yin yoga style) drive deep nervous system restoration",
+      "Breathing IS the training stimulus in this block — diaphragmatic breath count is the metric",
+      "No loading, no isometric contractions — pure passive restoration",
+      "Use after heavy training weeks, during competition season, or when energy/readiness is low",
+    ],
+  },
+
+  mobility_reentry_support: {
+    displayName: "Re-Entry Support Block",
+    missionStatement: "Safely reintroduce movement to post-injury or post-layoff athletes. Graduated range exposure, graded tissue loading, and pain-aware progression before any active mobility training begins.",
+    primaryAdaptation: "Pain-free range re-establishment, tissue graded exposure, movement confidence",
+    secondaryAdaptation: "Nervous system desensitization to movement, tissue resilience baseline",
+    volumeProfile: "low",
+    intensityProfile: "low",
+    neuralDemandProfile: "low",
+    progressionPhilosophy: "Session 1: identify the pain-free range and work only within it. Week 1: passive holds at 50% of pain-free range. Week 2: reach toward pain-free limit. Week 3: hold at pain-free end range. No PAILs/RAILs or loading until Week 4+ and only if pain-free. Progress is driven by subjective pain feedback, not protocol.",
+    isSpecialPopulation: true,
+    specialPopulationFraming: "Re-entry protocol — all exercise selection and progression is guided by pain-free range. Differentiate joint pain (stop) from muscle tension (acceptable). No end-range loading until 3+ sessions are pain-free.",
+    keyPrinciples: [
+      "Pain-free range is sacred — never push past it regardless of schedule or program week",
+      "Differentiate joint pain from muscle tension: joint pain = stop immediately, muscle tension = work with caution",
+      "CARs at reduced range are the assessment tool — use them to track pain-free range progress",
+      "Progress in this block is measured in millimeters of range, not weeks of protocol",
+      "Success = the athlete ends this block more confident in their movement, not more fatigued",
+    ],
+  },
+};
+
+function selectMobilityBlockType(
+  goal: string | null,
+  sport: string | null,
+  experience: string | null,
+  seed: number,
+): MobilityBlockType {
+  const g = (goal ?? "").toLowerCase();
+  const e = (experience ?? "").toLowerCase();
+
+  if (e.includes("return") || e.includes("re-entry") || e.includes("injury") || g.includes("return") || g.includes("pain")) {
+    return "mobility_reentry_support";
+  }
+  if (g.includes("hip") || g.includes("90/90") || g.includes("couch") || g.includes("pigeon")) {
+    return "mobility_hip_focus";
+  }
+  if (g.includes("shoulder") || g.includes("overhead") || g.includes("rotator")) {
+    return "mobility_shoulder_focus";
+  }
+  if (g.includes("spine") || g.includes("thoracic") || g.includes("back") || g.includes("rotation")) {
+    return "mobility_spine_focus";
+  }
+  if (g.includes("ankle") || g.includes("dorsiflexion") || g.includes("squat depth") || g.includes("calf")) {
+    return "mobility_ankle_focus";
+  }
+  if (g.includes("stiff") || g.includes("tight") || g.includes("morning")) {
+    return "mobility_stiffness_reduction";
+  }
+  if (g.includes("recover") || g.includes("restore") || g.includes("rest") || g.includes("deload")) {
+    return "mobility_recovery_flow";
+  }
+  if (g.includes("control") || g.includes("car") || g.includes("pails") || g.includes("end-range")) {
+    return "mobility_end_range_control";
+  }
+  if (g.includes("movement") || g.includes("quality") || g.includes("flow")) {
+    return "mobility_movement_quality";
+  }
+
+  const generalOptions: MobilityBlockType[] = [
+    "mobility_range_restoration",
+    "mobility_hip_focus",
+    "mobility_movement_quality",
+    "mobility_end_range_control",
+    "mobility_stiffness_reduction",
+  ];
+  return generalOptions[Math.floor(seed * generalOptions.length)];
+}
+
+function buildMobilityWeekArc(blockType: MobilityBlockType): string {
+  switch (blockType) {
+    case "mobility_range_restoration":
+      return "Week 1: Establish (30s holds, tissue prep, CARs intro) → Week 2: Build (45s holds, contract-relax sequences, increase joint coverage) → Week 3: Intensify (60–90s holds, PAILs/RAILs intro, breathing integration) → Week 4: Deload (Recovery flow, consolidate gains, reduced session length)";
+    case "mobility_end_range_control":
+      return "Week 1: Establish (20% PAILs/RAILs contraction, CARs at full passive range) → Week 2: Build (25–30% contraction, add loaded CARs) → Week 3: Intensify (35–40% contraction, introduce end-range loading) → Week 4: Deload (CARs only, no loading, maintenance holds)";
+    case "mobility_movement_quality":
+      return "Week 1: Establish (slow deliberate flows, note breakdown points) → Week 2: Build (add complexity to transitions, time under position) → Week 3: Intensify (full compound flows, loaded positions where appropriate) → Week 4: Deload (simple flows only, breathing emphasis, integration review)";
+    case "mobility_hip_focus":
+      return "Week 1: Establish (CARs in all 6 directions, 90/90 holds 45s) → Week 2: Build (identify most restricted direction, couch stretch + frog, extend hold to 60s) → Week 3: Intensify (PAILs/RAILs for most restricted direction, weighted 90/90 lift) → Week 4: Deload (CARs maintenance, passive holds, recovery flow)";
+    case "mobility_shoulder_focus":
+      return "Week 1: Establish (Shoulder CARs, T-spine extension, sleeper stretch 30s) → Week 2: Build (Wall slides, pec minor, increase to 45s holds) → Week 3: Intensify (Shoulder PAILs/RAILs, banded work, 60s holds) → Week 4: Deload (CARs only, light passive holds, recovery integration)";
+    case "mobility_spine_focus":
+      return "Week 1: Establish (Cat-cow, foam roll thoracic, open books) → Week 2: Build (Segment-by-segment foam roll, quadruped rotation, rib roll) → Week 3: Intensify (Thoracic CARs, breathing integration, side-lying rotation) → Week 4: Deload (Gentle flow only, breathing priority, no active loading)";
+    case "mobility_ankle_focus":
+      return "Week 1: Establish (Ankle CARs, wall ankle stretch, calf stretch both versions) → Week 2: Build (Banded distraction, increase dorsiflexion challenge, heel drops) → Week 3: Intensify (Ankle PAILs/RAILs, loaded dorsiflexion position) → Week 4: Deload (Daily CARs, maintenance stretches, no loading)";
+    case "mobility_stiffness_reduction":
+      return "Week 1: Establish (Tissue prep first, contract-relax sequences, 10 min dynamic flow) → Week 2: Build (Add passive holds after dynamic work, extend tissue prep) → Week 3: Intensify (Full protocol: prep → dynamic → passive → active control) → Week 4: Deload (Dynamic flow only, breathing integration, nervous system reset)";
+    case "mobility_recovery_flow":
+      return "Week 1: Foundation (5-min holds, breathing priority, full-body gentle flow) → Week 2: Deepen (Identify 2–3 high-priority holds, 5–8 min each) → Week 3: Maintain (Same protocol, add breathing reset) → Week 4: Consolidate (Light maintenance, assess readiness for active mobility work)";
+    case "mobility_reentry_support":
+      return "Week 1: Foundation (Pain-free CARs only, 50% range, tissue prep) → Week 2: Build (Approach pain-free end range, hold 20s) → Week 3: Challenge (Hold at pain-free limit 30–45s, introduce active control) → Week 4: Consolidate (Assess readiness for MOBILITY_RESTORE_RANGE or MOBILITY_END_RANGE_CONTROL)";
+    default:
+      return "Week 1: Establish → Week 2: Build → Week 3: Intensify → Week 4: Deload";
+  }
+}
+
+function buildMobilityGoalBias(blockType: MobilityBlockType, sport: string | null, goal: string | null): string {
+  const s = (sport ?? "").toLowerCase();
+
+  if (s.includes("soccer") || s.includes("football") && !s.includes("american")) {
+    return "Bias toward hip mobility (all directions), adductor range, hamstring flexibility, and ankle dorsiflexion for deep sprint mechanics and kicking patterns";
+  }
+  if (s.includes("basketball")) {
+    return "Bias toward ankle dorsiflexion (landing depth), hip internal rotation, thoracic rotation for court vision, and shoulder mobility for overhead passing";
+  }
+  if (s.includes("football") || s.includes("rugby")) {
+    return "Bias toward hip flexor restoration, thoracic rotation for collision posture, shoulder complex integrity, and spinal decompression after contact loading";
+  }
+  if (s.includes("baseball") || s.includes("softball") || s.includes("tennis") || s.includes("golf")) {
+    return "Bias toward thoracic rotation (maximal rotation range), hip internal rotation, shoulder IR/ER balance, and spinal derotation protocols";
+  }
+  if (s.includes("swimming") || s.includes("volleyball")) {
+    return "Bias toward shoulder complex mobility (all planes), thoracic extension for streamline/spike position, and hip flexor restoration from repetitive kicking or jump loading";
+  }
+  if (s.includes("gymnastics") || s.includes("dance") || s.includes("martial")) {
+    return "Bias toward global range restoration, end-range control work, hip splits preparation, and shoulder hypermobility control";
+  }
+
+  switch (blockType) {
+    case "mobility_range_restoration":
+      return "Bias toward longest-held restriction patterns, passive hold durations, and systematic joint-by-joint range restoration";
+    case "mobility_end_range_control":
+      return "Bias toward PAILs/RAILs at highest-priority joint restrictions, loaded CARs, and end-range isometric holds";
+    case "mobility_movement_quality":
+      return "Bias toward compound mobility flows, multi-joint transition patterns, and movement standard integration";
+    case "mobility_hip_focus":
+      return "Bias toward hip CARs, 90/90 system, couch stretch, frog stretch, and hip PAILs/RAILs for the most restricted direction";
+    case "mobility_shoulder_focus":
+      return "Bias toward shoulder CARs, T-spine extension prerequisite, sleeper stretch, wall slides, and shoulder PAILs/RAILs";
+    case "mobility_spine_focus":
+      return "Bias toward segmental thoracic mobilization, thoracic CARs, breathing integration, and rotation work after extension is established";
+    case "mobility_ankle_focus":
+      return "Bias toward dorsiflexion protocols, banded distraction, calf tissue work, and daily ankle CARs";
+    case "mobility_stiffness_reduction":
+      return "Bias toward tissue prep, contract-relax sequences, dynamic flows first, and progressive deepening into passive holds";
+    case "mobility_recovery_flow":
+      return "Bias toward parasympathetic restoration, long passive holds, breathing protocols, and systemic recovery emphasis";
+    case "mobility_reentry_support":
+      return "Bias toward pain-free range mapping, conservative progression, CARs as assessment, and graduated tissue exposure";
+    default:
+      return "Bias toward systematic joint health, range acquisition, active control development, and integrated movement quality";
+  }
+}
+
+export function buildMobilityMonthlyBlockPlan(
+  goal: string | null,
+  sport: string | null,
+  experience: string | null,
+  seed: number,
+  blockTypeOverride?: string,
+): MonthlyBlockPlan & { blockType: MobilityBlockType } {
+  const blockType: MobilityBlockType =
+    blockTypeOverride && blockTypeOverride in MOBILITY_BLOCKS
+      ? (blockTypeOverride as MobilityBlockType)
+      : selectMobilityBlockType(goal, sport, experience, seed);
+
+  const baseDefinition = MOBILITY_BLOCKS[blockType];
+  const sportGoalBias = buildMobilityGoalBias(blockType, sport, goal);
+  const weekProgressionArc = buildMobilityWeekArc(blockType);
+
+  const plan = {
+    blockType,
+    ...baseDefinition,
+    sportGoalBias,
+    weekProgressionArc,
+  } as MonthlyBlockPlan & { blockType: MobilityBlockType };
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[BuildAudit:MobilityMonthlyBlock]", JSON.stringify({
+      blockType,
+      displayName: plan.displayName,
+      primaryAdaptation: plan.primaryAdaptation,
+      sport: sport ?? "none",
+      goal: goal ?? "none",
+      seed: Number(seed.toFixed(4)),
+    }));
+  }
+
+  return plan;
+}
+
+export function buildMobilityMonthlyBlockContext(plan: MonthlyBlockPlan): string {
+  return `## MOBILITY MONTHLY BLOCK PLAN — MOBILITY ENGINE LAYER 1
+Block Type: ${plan.displayName}
+Mission: ${plan.missionStatement}
+
+PRIMARY ADAPTATION TARGET: ${plan.primaryAdaptation}
+SECONDARY ADAPTATION TARGET: ${plan.secondaryAdaptation}
+
+VOLUME PROFILE: ${plan.volumeProfile.toUpperCase()} | INTENSITY PROFILE: ${plan.intensityProfile.toUpperCase()} | NEURAL DEMAND: ${plan.neuralDemandProfile.toUpperCase()}
+
+PROGRESSION PHILOSOPHY:
+${plan.progressionPhilosophy}
+
+SPORT/GOAL BIAS:
+${plan.sportGoalBias}
+${plan.specialPopulationFraming ? `\nSPECIAL FRAMING:\n${plan.specialPopulationFraming}` : ""}
+FOUR-WEEK MOBILITY ARC:
+${plan.weekProgressionArc}
+
+KEY MOBILITY PROGRAMMING PRINCIPLES FOR THIS BLOCK:
+${plan.keyPrinciples.map((p, i) => `${i + 1}. ${p}`).join("\n")}`;
+}
+
 /**
  * Returns a concise block context string suitable for injection into AI prompts.
  */

@@ -2260,7 +2260,7 @@ export async function generateAIResponse(
   // Initialized to null — only populated when buildArchitectureBrief runs on the non-SP path.
   let lockedExerciseSelections: ReturnType<typeof getLastSlotSelection> = null;
 
-  if (isBuildIntent) {
+  if (isBuildIntent && focusMode === "strength") {
     // For structural rebuilds, also check the intent metadata for targetDays
     const metaDays = (intentResult?.metadata as { targetDays?: number | null } | undefined)?.targetDays ?? null;
     // Settings precedence: explicit prompt constraints → agentSettings profile defaults → null
@@ -2277,6 +2277,7 @@ export async function generateAIResponse(
         hasMemoryContext: !!memoryContext,
         hasExistingProgram: !!currentProgram,
         sessionSportFocus: extractedConstraints?.sportFocus ?? null,
+        focusModeGated: focusMode,
       }));
     }
 
@@ -2395,6 +2396,7 @@ export async function generateAIResponse(
       responseMode: responseMode ?? null,
       hasActiveProgram: hasActiveProgram ?? (currentProgram != null),
       agentSettings: agentSettings ?? null,
+      focusMode: focusMode ?? null,
     });
     // Apply variation mandate enforcement to the fallback program (same guardrail as the OpenAI path).
     if (isBuildIntent && fallbackResult.structuredData && lockedExerciseSelections) {
@@ -2899,6 +2901,7 @@ Output the corrected program JSON and a brief calm confirmation.`;
       extractedConstraints: extractedConstraints ?? null,
       responseMode: responseMode ?? null,
       hasActiveProgram: hasActiveProgram ?? (currentProgram != null),
+      focusMode: focusMode ?? null,
     });
   }
 }
@@ -3041,6 +3044,7 @@ interface FallbackOptions {
   responseMode?: ResponseMode | null;
   hasActiveProgram?: boolean;
   agentSettings?: AgentSettingsContext | null;
+  focusMode?: FocusMode | null;
 }
 
 function generateFallbackResponse(
@@ -3049,7 +3053,68 @@ function generateFallbackResponse(
   profile: UserProfile | null,
   options: FallbackOptions = {}
 ): AIResponse {
-  const { currentProgram, editIntent, intentResult, extractedConstraints, neuralBias, neuralImbalances, responseMode, hasActiveProgram, agentSettings } = options;
+  const { currentProgram, editIntent, intentResult, extractedConstraints, neuralBias, neuralImbalances, responseMode, hasActiveProgram, agentSettings, focusMode } = options;
+
+  // ── Mobility Focus Mode — dedicated fallback ───────────────────────────────
+  // When the user is in Mobility mode, the strength fallback must not fire.
+  // Return a mode-appropriate response that demonstrates the mobility engine is active.
+  if (focusMode === "mobility") {
+    const lower = userMessage.toLowerCase();
+    // Detect re-entry / injury context
+    if (/pain|hurt|injury|return|comeback|re.entry/.test(lower)) {
+      return {
+        content: `Flagging the pain signal before we build anything.\n\nIf it's acute or getting worse — stop loading that area and get it assessed.\n\nIf it's chronic — tell me: is it sharp or dull, what movements aggravate it, and what range of motion is currently pain-free.\n\nWith that, I'll map out a re-entry mobility protocol specifically for where you are.`,
+        structuredData: null,
+      };
+    }
+    // Detect stiffness / tightness / morning
+    if (/stiff|tight|morning|sitting|desk/.test(lower)) {
+      return {
+        content: `Got it — chronic stiffness from sustained positions. That's a tissue length + neuromuscular inhibition problem, not just "needs more stretching."\n\nHere's where I'll focus:\n- **Hip capsule** (6-direction CARs + 90/90 end-range control)\n- **Thoracic extension/rotation** (foam roll + open books + thread the needle)\n- **Breathing reset** (crocodile breathing to restore diaphragm piston mechanics)\n\nTell me: is this a standalone mobility session, or are you adding it to an existing strength/speed week? That changes the structure.`,
+        structuredData: null,
+      };
+    }
+    // Detect hip-specific
+    if (/hip|hips|groin|pigeon|90.90|couch|hip flexor/.test(lower)) {
+      return {
+        content: `Hip complex is a high-priority region — capsular restriction, muscular shortening, and neuromuscular inhibition often layer on top of each other.\n\nSession structure I'll build around:\n1. Hip CARs — synovial activation across all 6 directions\n2. 90/90 passive holds (both IR and ER) — restoring range\n3. Hip PAILs/RAILs — turning passive range into active control\n4. Couch stretch — hip flexor / anterior capsule restoration\n5. Breathing integration — exhale to deepen passive range\n\nWant this as a daily 20-minute protocol or a longer once-per-week deep session?`,
+        structuredData: null,
+      };
+    }
+    // Detect thoracic / posture / rotation
+    if (/thoracic|t.spine|upper.back|posture|rotation/.test(lower)) {
+      return {
+        content: `Thoracic mobility is the missing link in most training systems — poor T-spine rotation limits shoulder overhead, hip extension, and rotational power.\n\nStructure for this session:\n1. Thoracic foam roll (segmental extension, 2 min)\n2. Quadruped thoracic rotation — both sides, controlled\n3. Open book stretch — gravity-assisted rotation\n4. Thoracic CARs with dowel — active rotation at full range\n5. Side-lying T-spine rotation — breathing-integrated deep work\n\nIs this to support an existing strength program, or a standalone mobility block?\n\n(Also: any history of shoulder impingement or cervical issues I should know about?)`,
+        structuredData: null,
+      };
+    }
+    // Detect shoulder / overhead / rotator
+    if (/shoulder|overhead|rotator|sleeper|wall.slide|pec/.test(lower)) {
+      return {
+        content: `Shoulder range work breaks into two distinct layers — GH joint mobility (the ball-and-socket) and scapular mobility (the platform the GH joint sits on). Missing either one limits the other.\n\nApproach:\n1. Shoulder CARs — full-range GH joint articulation, slow and controlled\n2. Wall slides — scapular upward rotation and posterior capsule work\n3. Sleeper stretch — posterior GH capsule\n4. Pec minor stretch / banded distraction — anterior restriction clearance\n5. Shoulder PAILs/RAILs — building active ownership of the new range\n\nWhat's the limitation? Overhead reach, internal rotation, or external rotation?\n\nThat determines whether I bias toward the posterior capsule or anterior.`,
+        structuredData: null,
+      };
+    }
+    // Detect ankle / dorsiflexion
+    if (/ankle|dorsiflexion|calf|squat.depth/.test(lower)) {
+      return {
+        content: `Ankle dorsiflexion restriction is one of the most compensated issues in training — the body will find range through pronation, knee cave, or lumbar flexion if it can't get it at the ankle.\n\nProtocol:\n1. Ankle CARs — joint articulation and synovial activation\n2. Banded ankle distraction — posterior capsule mobilization\n3. Wall ankle stretch — isolated dorsiflexion loading\n4. Calf stretch (straight knee → bent knee) — gastroc then soleus\n5. Ankle PAILs/RAILs — active control in new dorsiflexion range\n\nHow much restriction are we working with? Can you get your knee 4 inches past your toes with foot flat on the ground?`,
+        structuredData: null,
+      };
+    }
+    // Detect recovery / deload / restore
+    if (/recover|restore|deload|rest|relax|yin/.test(lower)) {
+      return {
+        content: `Recovery flow session — parasympathetic emphasis, no active loading.\n\nStructure (40–50 min total):\n1. Diaphragmatic breathing drill (5 min) — CNS downregulation entry\n2. Child's pose + segmental breathing (5 min)\n3. Supine figure-4 / pigeon holds (10 min) — hip and posterior chain\n4. Supine spinal twist (5 min each side)\n5. Supported hip flexor hold (5 min each side)\n6. Legs up the wall (10 min) — venous return, systemic recovery\n7. Box breathing exit (5 min)\n\nThis is low-load, high-parasympathetic. It's appropriate after a heavy training week or any day you're running below 70%.`,
+        structuredData: null,
+      };
+    }
+    // Generic mobility build request
+    return {
+      content: `Building your mobility program now.\n\nBefore I structure it — a few quick calibrations:\n1. **Primary target region?** (hips, thoracic, shoulders, ankles, full-body)\n2. **Goal context?** (sport performance, post-injury, general range, posture correction)\n3. **Frequency available?** (daily 15-20 min, 3x/week 45 min, or once-weekly deep session)\n\nMobility work has a specific dose-response curve — the structure changes significantly based on where you are and what you're trying to achieve.\n\nAnswer those and I'll build it around you.`,
+      structuredData: null,
+    };
+  }
 
   // ── Settings-based response modifier (applied to conversational replies) ───
   // conciseResponses: shorten / strip rationale from fallback text
