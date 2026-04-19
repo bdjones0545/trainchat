@@ -1,0 +1,196 @@
+CRITICAL AUDIT + FIX — HOME GYM REQUESTS ARE NOT PRODUCING REAL HOME-GYM PROGRAMS
+
+CONTEXT:
+A user requested:
+“Build a program using only home gym equipment”
+
+But the generated program still included exercises like:
+- Box Jump
+- Pull-Up
+- other gym-dependent or uncertain-equipment movements
+
+This means the system is not treating “home gym only” as a strong enough equipment constraint.
+
+We need to fix this before expanding the library.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make “home gym” generate a real equipment-aware program by:
+
+1. translating “home gym” into a structured equipment profile
+2. filtering exercise candidates by that profile BEFORE scoring
+3. preventing assumed equipment (box, pull-up bar, machines, etc.) unless explicitly provided
+4. only then expanding the home gym library if needed
+
+==================================================
+TASK 1 — TRACE HOME GYM REQUEST THROUGH THE FULL PIPELINE
+==================================================
+
+Use this exact input:
+“Build a program using only home gym equipment”
+
+Log:
+
+[HomeGymAudit] {
+  rawInput,
+  normalizedInput,
+  extractedConstraints,
+  equipmentProfile,
+  allowedEquipment,
+  disallowedEquipment,
+  candidatePoolSizesBySlot,
+  rejectedExercisesByEquipment,
+  finalSelectedExercises
+}
+
+We need to know whether “home gym” is being converted into a real equipment profile at all.
+
+==================================================
+TASK 2 — DEFINE A DEFAULT HOME GYM EQUIPMENT PROFILE
+==================================================
+
+Create a default conservative home gym profile.
+
+By default assume available:
+- dumbbells
+- adjustable bench
+- resistance bands
+- bodyweight
+- floor space
+- wall / chair / step
+
+By default do NOT assume:
+- pull-up bar
+- plyo box
+- rack
+- barbell + plates
+- cable machine
+- specialty machines
+- sleds
+- med balls
+- battle ropes
+
+This default profile should be used whenever user says “home gym” but does not specify exact equipment.
+
+==================================================
+TASK 3 — HARD FILTER CANDIDATES BEFORE SCORING
+==================================================
+
+This is critical.
+
+The equipment profile must filter candidate pools BEFORE the ranking/scoring system runs.
+
+Do NOT allow:
+- generic high-scoring gym exercises
+to remain in the candidate pool if equipment is unavailable.
+
+If the equipment profile does not include pull-up bar:
+- Pull-Up must never be selectable
+
+If the equipment profile does not include plyo box:
+- Box Jump must never be selectable
+
+If the profile does not include rack/barbell:
+- heavy barbell squat/deadlift patterns must not be selectable
+
+==================================================
+TASK 4 — ADD “ASSUMED EQUIPMENT” LOGIC
+==================================================
+
+Every exercise should require explicit equipment matching.
+
+We need to know:
+- what equipment each exercise requires
+- whether that equipment is present
+- whether the exercise was rejected
+
+Add logging so we can see why an exercise stayed or got filtered.
+
+==================================================
+TASK 5 — IMPROVE HOME GYM EXERCISE SUBSTITUTION
+==================================================
+
+When the ideal gym exercise is filtered out, replace it with a home-gym-appropriate alternative in the same movement family.
+
+Examples:
+- Pull-Up → band pulldown / dumbbell row / inverted row if setup exists
+- Box Jump → squat jump / pogo hops / snap-down jump / broad jump if safe
+- Heavy barbell deadlift → DB RDL / suitcase deadlift / kickstand RDL
+- Machine leg work → split squat / step-up / goblet squat / RFESS
+
+The substitutions must preserve session intent.
+
+==================================================
+TASK 6 — EXPAND HOME GYM LIBRARY ONLY IF NEEDED
+==================================================
+
+After fixing the constraint pipeline, audit whether the home gym pool is too shallow.
+
+If so, expand with:
+- dumbbell-based lower/upper body exercises
+- band-based progressions
+- bodyweight progressions
+- low-equipment power options
+- limited-space conditioning options
+
+But do NOT do this until equipment filtering is correct.
+
+==================================================
+TASK 7 — TITLE + ACKNOWLEDGMENT SHOULD REFLECT HOME GYM
+==================================================
+
+The final program should not just say:
+“Strength Program — 3-Day”
+
+If home gym is the core constraint, the output should acknowledge it.
+
+Examples:
+- Home Gym Strength Program — 3-Day
+- 3-Day Home Equipment Strength Plan
+- Strength Program — Home Gym Setup
+
+Main chat acknowledgment should also mention that the plan was built around home-gym constraints.
+
+==================================================
+TASK 8 — VALIDATION
+==================================================
+
+Test these prompts:
+
+1. “Build a program using only home gym equipment”
+2. “Build me a 3 day home gym strength program”
+3. “I only have dumbbells and bands at home”
+4. “Home gym only — no pull-up bar, no rack”
+
+Expected:
+- no assumed pull-up bar movements
+- no assumed box jumps
+- no assumed machine/cable work
+- no assumed heavy barbell work unless explicitly stated
+- program still feels strong, athletic, and coherent
+
+==================================================
+TASK 9 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. whether “home gym” was previously creating a real equipment profile
+2. whether candidate filtering was happening before scoring
+3. what default home gym profile was added
+4. what exercises were incorrectly slipping through
+5. what substitutions were added
+6. whether library expansion was needed
+
+==================================================
+FINAL STANDARD
+==================================================
+
+When a user asks for a home gym program, TrainChat must build something that could realistically be performed in a normal home gym without assuming specialty equipment.
+
+The program must feel:
+- practical
+- coherent
+- equipment-aware
+- trustworthy
