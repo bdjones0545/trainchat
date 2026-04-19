@@ -1,0 +1,257 @@
+PERFORMANCE OPTIMIZATION AUDIT — CUT PROGRAM GENERATION TIME FROM ~65 SECONDS TO A TARGET OF 8–15 SECONDS
+
+CONTEXT:
+Program generation is now taking about 65 seconds, which is too slow for production UX.
+
+TrainChat now has:
+- Strength / Speed / Mobility focus engines
+- architecture briefs
+- response contracts
+- memory injection
+- validation
+- repair
+- retries
+- persistence
+- right panel / active program sync
+
+The system is powerful, but generation latency is too high.
+
+We need a full performance audit and optimization pass.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Reduce end-to-end program generation time dramatically, targeting:
+- ideal: 8–15 seconds
+- acceptable: 15–25 seconds max
+
+This includes:
+- AI generation latency
+- parsing/validation
+- DB save
+- UI update
+
+==================================================
+TASK 1 — ADD FULL LATENCY INSTRUMENTATION
+==================================================
+
+Instrument the full build pipeline with timings.
+
+Measure each stage separately:
+
+[BuildLatencyAudit] {
+  focusMode,
+  totalMs,
+  intentResolutionMs,
+  promptAssemblyMs,
+  openAICallMs,
+  parseMs,
+  validationMs,
+  repairMs,
+  dbSaveMs,
+  uiSyncMs,
+  retriesTriggered,
+  retryDelayMs
+}
+
+We need exact timings, not guesses.
+
+==================================================
+TASK 2 — IDENTIFY THE TOP LATENCY SOURCES
+==================================================
+
+Break down where the time is actually going.
+
+Likely suspects:
+- prompt assembly too large
+- too much conversation history
+- too many prompt sections
+- OpenAI response time
+- long output length
+- retry loops
+- validation causing extra model calls
+- save / re-fetch / invalidation overhead
+
+Return the top 5 slowest contributors.
+
+==================================================
+TASK 3 — SHRINK BUILD PROMPTS AGGRESSIVELY
+==================================================
+
+For BUILD_PROGRAM / REBUILD_PROGRAM paths only:
+
+Reduce prompt size by removing or compressing non-essential sections.
+
+Keep only what is load-bearing for builds:
+- base identity
+- focus mode context
+- profile essentials
+- hard constraints
+- architecture brief
+- response contract
+- critical memory only
+
+Reduce or remove for build path if not essential:
+- long conversation history
+- verbose UI context
+- duplicated intent hints
+- redundant behavior instructions
+- lower-value memory
+- repeated examples
+
+Goal:
+dramatically reduce prompt tokens without reducing build quality.
+
+==================================================
+TASK 4 — LIMIT HISTORY EVEN MORE FOR BUILD REQUESTS
+==================================================
+
+Current build history is still likely too large.
+
+For program builds:
+- send only the minimum recent turns needed
+- or summarize prior context instead of raw messages
+
+Suggested:
+- 2–6 most relevant turns max
+- not 10, not 30
+
+The current request + profile + architecture brief should do most of the work.
+
+==================================================
+TASK 5 — MAKE THE ENGINE DO MORE, MODEL DO LESS
+==================================================
+
+Audit what the AI is currently deciding that should be deterministic.
+
+The deterministic engine should decide:
+- focus
+- block type
+- week roles
+- session identities
+- minimum session depth
+- slot requirements
+- constraints
+
+The model should mainly:
+- fill the structured program
+- generate polish/coaching notes
+- adapt wording
+
+Move any unnecessary reasoning out of the model path.
+
+==================================================
+TASK 6 — REDUCE OUTPUT SIZE
+==================================================
+
+For build requests, reduce unnecessary prose in the model output.
+
+The primary output should be:
+- structured JSON program
+- concise user-facing summary
+
+Do NOT let the model generate long explanations during the build path.
+
+If needed:
+- generate a very short summary after save using deterministic copy or a lightweight pass
+
+==================================================
+TASK 7 — OPTIMIZE VALIDATION / REPAIR
+==================================================
+
+Audit the current validation stack:
+- constraint validator
+- quality validator
+- bleed validator
+- repair layer
+- retry layer
+
+Goals:
+- keep correctness
+- reduce extra model calls
+- avoid expensive second passes unless truly needed
+
+Possible improvements:
+- deterministic validation first
+- lightweight repair before re-calling OpenAI
+- only retry on high-value failure modes
+
+==================================================
+TASK 8 — TIGHTEN RETRY POLICY
+==================================================
+
+Retries are necessary but expensive.
+
+Optimize:
+- only retry on truly retryable API failures
+- do not retry unnecessarily on outputs that can be repaired locally
+- do not add long waits unless a 429/5xx actually occurred
+
+We need resilience without turning the common path into a slow path.
+
+==================================================
+TASK 9 — SPEED UP DB / UI COMPLETION
+==================================================
+
+After the build is complete:
+- save efficiently
+- avoid redundant queries
+- avoid slow re-fetch chains if the newly built program is already in memory
+
+The user should see the result immediately after save, without waiting on avoidable UI churn.
+
+==================================================
+TASK 10 — ADD PERCEIVED-PERFORMANCE IMPROVEMENTS
+==================================================
+
+Even after real optimizations, improve perceived speed:
+
+Show staged progress states like:
+- Building your block...
+- Filling your sessions...
+- Finalizing your program...
+- Saving your program...
+
+But do NOT use fake delays.
+These must reflect real pipeline stages.
+
+==================================================
+TASK 11 — VALIDATION
+==================================================
+
+Test:
+1. Strength build
+2. Speed build
+3. Mobility build
+
+Measure before/after total generation time and stage timings.
+
+Return:
+- old total time
+- new total time
+- biggest improvements by stage
+
+==================================================
+TASK 12 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. full latency breakdown
+2. top bottlenecks
+3. prompt/token reductions made
+4. validation/retry optimizations made
+5. DB/UI completion optimizations made
+6. before/after timings for all 3 focus modes
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Program generation should feel fast enough for real consumer use.
+
+Target:
+- ideally under 15 seconds
+- never anywhere near 65 seconds on the common path
+
+The system must stay intelligent and structured, but the model should only do work that actually requires the model.
