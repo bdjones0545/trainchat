@@ -1,0 +1,116 @@
+We need to fix the Block Update result UI — it currently takes over the entire screen with a long unscrollable list of updates and has no clear exit.
+
+This is a UX bug and must be refactored into a controlled, agent-like experience.
+
+==================================================
+GOAL
+==================================================
+
+Convert the "Updated Exercises" screen into a structured, dismissible, bottom-sheet style result with summary-first UX.
+
+==================================================
+TASK 1 — CHANGE TO BOTTOM SHEET
+==================================================
+
+Replace full-screen takeover with a bottom sheet:
+- max height: 70% of viewport
+- rounded top corners
+- draggable (swipe down to close)
+- background remains visible
+
+==================================================
+TASK 2 — ADD CLEAR EXIT OPTIONS
+==================================================
+
+Add:
+- top-right "X" button
+- swipe down to dismiss
+- tap outside to close
+
+User must never be trapped.
+
+==================================================
+TASK 3 — COLLAPSE CHANGES BY DEFAULT
+==================================================
+
+Instead of rendering all updates immediately:
+
+Show summary:
+- "Block Updated"
+- total number of exercises changed
+- 2–3 bullet highlights (from diff)
+
+Add:
+[View Changes] button
+
+Only render full list when expanded.
+
+==================================================
+TASK 4 — GROUP DUPLICATE CHANGES
+==================================================
+
+Do NOT list repeated exercises multiple times.
+
+Group by exercise name:
+
+Example:
+Instead of:
+Reverse Lunge (x4)
+Leg Extension (x5)
+
+Render:
+Reverse Lunge (4 updates)
+• tempo adjusted
+
+Leg Extension (5 updates)
+• reps increased to 12–15
+
+==================================================
+TASK 5 — ADD HIGH-LEVEL COACH SUMMARY
+==================================================
+
+Above the list, add:
+
+"Shifted this block toward hypertrophy:"
+• higher reps
+• slower tempo
+• more time under tension
+
+This should be derived from diff.
+
+==================================================
+TASK 6 — ADD CTA TO SYSTEM
+==================================================
+
+Add:
+[View Updated Program]
+
+On click:
+- scroll to affected exercises
+- briefly highlight them
+
+==================================================
+TASK 7 — SCROLL FIX
+==================================================
+
+Ensure:
+- internal container scrolls (overflow-y-auto)
+- entire UI is never locked
+
+==================================================
+TASK 8 — KEEP DATA REAL
+==================================================
+
+All changes must still come from:
+result.diff
+
+No fake summaries — derive from real diff data.
+
+==================================================
+OUTPUT
+==================================================
+
+Return:
+1. updated component structure
+2. how grouping logic works
+3. how summary is derived from diff
