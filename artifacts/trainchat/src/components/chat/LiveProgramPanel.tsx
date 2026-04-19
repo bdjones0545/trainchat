@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Dumbbell, Save, CheckCircle, Loader2, Lock, Zap, PlayCircle,
@@ -571,6 +571,33 @@ function ProgramTab({
     staleTime: 30_000,
   });
 
+  // ── Current-week DB data for exercise ID lookup (needed for direct edits) ──
+  const { focusMode: panelFocusMode } = useFocusMode();
+  const { data: currentWeekDbData } = useQuery({
+    queryKey: ["live-panel-week-ids", savedProgramId, panelFocusMode],
+    queryFn: () => {
+      const url = panelFocusMode
+        ? `/api/training-system/week?focus=${encodeURIComponent(panelFocusMode)}`
+        : "/api/training-system/week";
+      return customFetch<any>(url);
+    },
+    enabled: !!isSaved,
+    staleTime: 60_000,
+  });
+
+  const exerciseIdMap = useMemo(() => {
+    const map = new Map<string, number>();
+    const sessions = (currentWeekDbData as any)?.sessions ?? [];
+    for (const session of sessions) {
+      for (const ex of (session.exercises ?? []) as Array<{ id?: number; name?: string }>) {
+        if (typeof ex.id === "number" && ex.name) {
+          map.set(ex.name.toLowerCase(), ex.id);
+        }
+      }
+    }
+    return map;
+  }, [currentWeekDbData]);
+
   // ── Learn Exercise modal state (centralized) ─────────────────────────────
   const [learnModalOpen, setLearnModalOpen] = useState(false);
   const [selectedExercise, setSelectedExercise] = useState<LearnExerciseData | null>(null);
@@ -622,6 +649,56 @@ function ProgramTab({
     if (!msg || !onSendMessage || buildingState?.isBuilding) return;
     setRefineInput("");
     sendRefinement(msg, "refine-input", { interactionType: "freeform_refine" });
+  }
+
+  // ── Direct exercise edit — bypasses chat, calls edit API deterministically ─
+  async function handleDirectExerciseEdit(
+    exerciseName: string,
+    action: "easier" | "harder" | "swap",
+    actionKey: string,
+  ) {
+    if (buildingState?.isBuilding) return;
+    const request =
+      action === "easier" ? `Make ${exerciseName} easier`
+      : action === "harder" ? `Make ${exerciseName} harder`
+      : `Swap ${exerciseName} with something similar`;
+
+    const exerciseId = exerciseIdMap.get(exerciseName.toLowerCase());
+    if (!exerciseId) {
+      sendRefinement(request, actionKey, {
+        exerciseId: exerciseName,
+        interactionType: "exercise_action",
+      });
+      return;
+    }
+
+    setPendingRefinement(actionKey);
+    try {
+      await customFetch<any>("/api/training-system/edit", {
+        method: "POST",
+        body: JSON.stringify({
+          request,
+          source: "quick_action",
+          targetContext: {
+            type: "exercise",
+            id: exerciseId,
+            label: exerciseName,
+          },
+        }),
+      });
+      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+      queryClient.invalidateQueries({ queryKey: ["live-panel-week-ids"] });
+      setPendingRefinement(null);
+      setShowProgramUpdated(true);
+      if (programUpdatedTimerRef.current) clearTimeout(programUpdatedTimerRef.current);
+      programUpdatedTimerRef.current = setTimeout(() => setShowProgramUpdated(false), 3000);
+    } catch {
+      setPendingRefinement(null);
+      sendRefinement(request, actionKey, {
+        exerciseId: exerciseName,
+        interactionType: "exercise_action",
+      });
+    }
   }
 
   // ── Active session state (server-backed) ─────────────────────────────────
@@ -1616,13 +1693,21 @@ function ProgramTab({
                                       key={action.label}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        sendRefinement(action.buildMessage(ex.name), exActionKey, {
-                                          dayIndex: idx,
-                                          exerciseId: ex.name,
-                                          interactionType: "exercise_action",
-                                        });
+                                        if (isSaved) {
+                                          const dir =
+                                            action.label === "Easier" ? "easier" as const
+                                            : action.label === "Harder" ? "harder" as const
+                                            : "swap" as const;
+                                          handleDirectExerciseEdit(ex.name, dir, exActionKey);
+                                        } else {
+                                          sendRefinement(action.buildMessage(ex.name), exActionKey, {
+                                            dayIndex: idx,
+                                            exerciseId: ex.name,
+                                            interactionType: "exercise_action",
+                                          });
+                                        }
                                       }}
-                                      disabled={!!buildingState?.isBuilding}
+                                      disabled={!!buildingState?.isBuilding || !!pendingRefinement}
                                       className={`h-7 inline-flex items-center gap-1 px-2.5 rounded-full text-[10px] font-medium border transition-all duration-150 active:scale-95 select-none ${
                                         isLoading
                                           ? "bg-primary/12 border-primary/35 text-primary"
