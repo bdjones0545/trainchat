@@ -2116,6 +2116,15 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     return;
   }
 
+  // ── Pipeline Latency Tracking ─────────────────────────────────────────────
+  const _pipeline_t0 = Date.now();
+  let _t_history_done = 0;
+  let _t_intent_done = 0;
+  let _t_ai_start = 0;
+  let _t_ai_end = 0;
+  let _t_db_start = 0;
+  let _t_db_end = 0;
+
   const streamUIContext = (req.body as any)?.uiContext ?? null;
   // Read the fresh-build flag passed by the frontend when the user starts a new builder session.
   // When true: scope intent classification to conversation history only (ignore DB active system)
@@ -2421,6 +2430,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     execPlan.action === "GUIDANCE" ? "COACHING_RESPONSE" :
     "EXECUTION_RESPONSE";
 
+  _t_intent_done = Date.now();
   // Emit classifying stage — intent and action type are now known
   emit(buildStageEvent("classifying", intentResult.type, execPlan.action));
 
@@ -3142,6 +3152,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM";
   const safeUIContext = (isFreshBuildSession || isNewBuildIntent) ? null : streamUIContext;
 
+  _t_ai_start = Date.now();
   let { content: aiContent, structuredData } = await generateAIResponse(
     parsed.data.content,
     history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
@@ -3269,6 +3280,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     }
   }
 
+  _t_ai_end = Date.now();
   // Stage 6: Validate — AI response quality checks done; now persist
   emit(buildStageEvent("validating", intentResult.type, execPlan.action));
 
@@ -3291,6 +3303,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
   // Stage 7: Save Program State
   emit(buildStageEvent("saving", intentResult.type, execPlan.action));
+  _t_db_start = Date.now();
 
   const [assistantMessage] = await db.insert(messagesTable).values({
     conversationId: params.data.id, role: "assistant", content: aiContent,
@@ -3298,6 +3311,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   }).returning();
 
   await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+  _t_db_end = Date.now();
 
   // ── Auto-save / Change Engine ─────────────────────────────────────────────
   // Same routing as non-streaming path:
@@ -3421,6 +3435,22 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
     stripeStorage.incrementMessageCount(userId).catch(() => {});
   }
+
+  // ── Pipeline Latency Audit ────────────────────────────────────────────────
+  const _pipeline_total = Date.now() - _pipeline_t0;
+  logger.info(
+    {
+      totalMs: _pipeline_total,
+      setupMs: _t_intent_done > 0 ? _t_intent_done - _pipeline_t0 : null,
+      aiCallMs: (_t_ai_start > 0 && _t_ai_end > 0) ? _t_ai_end - _t_ai_start : null,
+      dbSaveMs: (_t_db_start > 0 && _t_db_end > 0) ? _t_db_end - _t_db_start : null,
+      postAiMs: (_t_ai_end > 0 && _t_db_start > 0) ? _t_db_start - _t_ai_end : null,
+      intentType: intentResult.type,
+      isBuildIntent: intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM",
+      focusMode: streamFocusMode,
+    },
+    "[PipelineLatencyAudit] SSE request completed"
+  );
 
   done(buildCompleteEvent({
     userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo,

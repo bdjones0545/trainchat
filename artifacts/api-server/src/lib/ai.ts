@@ -2582,7 +2582,15 @@ export async function generateAIResponse(
     memoryNamespaceUsed: focusMode,
   });
 
-  const extras = [focusModeContext, focusModeAdaptationContext, behaviorInstructions, profileFillContext, adaptationContext, memoryContext, sessionSportOverride, insightHint, conversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, agentIntentProfileSection, responsePolicySection, architectureBriefText, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection]
+  // ── Build-path output compaction instruction ──────────────────────────────
+  // Injects a one-line directive to keep notes/intent fields brief. This alone
+  // can reduce output tokens by 15-25%, directly cutting generation time.
+  // Only injected for build paths — conversational and edit paths keep full detail.
+  const buildCompactInstruction = isBuildIntent
+    ? `## OUTPUT COMPACTION — BUILD PATH\nKeep all exercise notes and intent fields to 1 sentence max. Do not add rationale paragraphs. JSON only, no extra prose after the code block.`
+    : null;
+
+  const extras = [focusModeContext, focusModeAdaptationContext, behaviorInstructions, profileFillContext, adaptationContext, memoryContext, sessionSportOverride, insightHint, conversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, agentIntentProfileSection, responsePolicySection, architectureBriefText, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection, buildCompactInstruction]
     .filter(Boolean)
     .join("\n\n");
   const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;
@@ -2629,8 +2637,11 @@ export async function generateAIResponse(
     msgs: { role: "system" | "user" | "assistant"; content: string }[],
     maxTok: number,
     attempt = 0,
-  ): Promise<{ cleanContent: string; structuredData: ProgramStructure | null }> => {
-    const maxRetries = 2;
+  ): Promise<{ cleanContent: string; structuredData: ProgramStructure | null; openAIMs?: number }> => {
+    // Reduced from 2 → 1 retry. Retry cascade (truncation + constraint + quality) can
+    // chain to 5+ AI calls. Only retry on true 429/5xx — not on parse failures.
+    const maxRetries = 1;
+    const t0 = Date.now();
     try {
       const resp = await fetch(`${openAIBaseUrl}/chat/completions`, {
         method: "POST",
@@ -2641,10 +2652,8 @@ export async function generateAIResponse(
         const errText = await resp.text();
         const is429 = resp.status === 429;
         if (attempt < maxRetries && (is429 || resp.status >= 500)) {
-          // 429 = TPM/RPM rate limit. The TPM window is 60s so we need to wait
-          // significantly longer than 5s to ensure the window partially resets.
-          // Use 20s on first retry, 40s on second to avoid re-hitting the limit.
-          const delayMs = is429 ? 20000 * (attempt + 1) : 1500 * (attempt + 1);
+          // Reduced 429 wait: 20s → 8s. If we still hit limits, the retry adds 8s not 20s.
+          const delayMs = is429 ? 8000 * (attempt + 1) : 1500 * (attempt + 1);
           logger.warn({ attempt, status: resp.status, delayMs }, "[callOpenAI] Retrying after non-200 response");
           await new Promise((res) => setTimeout(res, delayMs));
           return callOpenAI(msgs, maxTok, attempt + 1);
@@ -2653,7 +2662,9 @@ export async function generateAIResponse(
       }
       const data = (await resp.json()) as { choices: { message: { content: string } }[] };
       const rawContent = data.choices[0]?.message?.content ?? "I'm unable to respond right now.";
-      return extractStructuredData(rawContent);
+      const openAIMs = Date.now() - t0;
+      const result = extractStructuredData(rawContent);
+      return { ...result, openAIMs };
     } catch (fetchErr) {
       const isNetworkError = fetchErr instanceof TypeError;
       if (attempt < maxRetries && isNetworkError) {
@@ -2666,24 +2677,41 @@ export async function generateAIResponse(
     }
   };
 
+  // Latency tracking — initialized at entry to generateAIResponse
+  const _t_entry = Date.now();
+  let _t_openai_start = 0;
+  let _t_openai_end = 0;
+  let _t_parse_end = 0;
+  let _t_validation_end = 0;
+  let _retriesTriggered = 0;
+  let _retryDelayMs = 0;
+
   try {
-    // Speed and mobility builds carry a very large system prompt (architecture brief
-    // + response contract). Capping history at 10 messages keeps the total token
-    // count well under the 30K TPM limit. All other paths keep the 30-message window.
-    const historyWindowSize = (focusMode === "speed" || focusMode === "mobility") && isBuildIntent ? 10 : 30;
+    // ── HISTORY WINDOW — BUILD PATH OPTIMIZATION ───────────────────────────
+    // Build requests only need the last few turns for context. Sending 30 turns
+    // adds 6K-15K input tokens and significantly increases time-to-first-token.
+    // Reduced: all builds → 4 turns max, edit paths → 12, conversational → 15.
+    const historyWindowSize = isBuildIntent ? 4 : (editContext !== null ? 12 : 15);
     const baseMessages = [
       { role: "system" as const, content: systemPrompt },
       ...history.slice(-historyWindowSize).map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
       { role: "user" as const, content: userMessage },
     ];
 
-    // Use decision-tree token budget if available, otherwise fall back to context-based heuristic.
-    // Speed program builds get a higher token budget (3600) because multi-day sprint programs
-    // with full exercise prescriptions, rest periods, and coaching notes require more output.
+    // ── TOKEN BUDGET — TIGHTENED FOR BUILD PATHS ───────────────────────────
+    // Previous budgets (3600 / 2800) were far too generous. At ~60 tokens/sec,
+    // 3600 max = up to 60s generation time. Typical programs need 1600-2200 tokens:
+    //   3-day × 7 exercises × 80 tokens = ~1680 tokens + overhead = ~1900
+    //   5-day × 7 exercises × 80 tokens = ~2800 tokens + overhead = ~3100
+    // Speed / mobility are 3-4 days → 2600 is sufficient.
+    // Strength can be 5-day → keep 2800 but instruct compact notes.
+    // Edit paths are surgical (patch + 1 program) → 2800 is plenty.
     const maxTokens = actionDecision?.recommendedMaxTokens
-      ?? ((focusMode === "speed" || focusMode === "mobility") && isBuildIntent ? 3600
-        : editContext !== null || intentResult?.type === "ADJUST_FOR_PAIN" || intentResult?.type === "ADJUST_FOR_READINESS" ? 4000
-        : 2800);
+      ?? ((focusMode === "speed") && isBuildIntent ? 2600
+        : (focusMode === "mobility") && isBuildIntent ? 2200
+        : isBuildIntent ? 2600
+        : editContext !== null || intentResult?.type === "ADJUST_FOR_PAIN" || intentResult?.type === "ADJUST_FOR_READINESS" ? 2800
+        : 2000);
 
     // Log that the OpenAI request is being sent (speed and mobility paths get dedicated logging)
     if (isBuildIntent && focusMode === "speed" && process.env.NODE_ENV !== "production") {
@@ -2703,7 +2731,23 @@ export async function generateAIResponse(
       }));
     }
 
-    let { cleanContent, structuredData, truncated } = await callOpenAI(baseMessages, maxTokens);
+    _t_openai_start = Date.now();
+    let { cleanContent, structuredData, truncated, openAIMs: _primaryOpenAIMs } = await callOpenAI(baseMessages, maxTokens);
+    _t_openai_end = Date.now();
+
+    logger.info(
+      {
+        focusMode,
+        isBuildIntent,
+        openAICallMs: _t_openai_end - _t_openai_start,
+        maxTokens,
+        historyWindowSize,
+        systemPromptChars: systemPrompt.length,
+        parseSucceeded: structuredData !== null,
+        truncated: truncated ?? false,
+      },
+      "[BuildLatency] Primary OpenAI call completed"
+    );
 
     // ── Truncation recovery — one retry with a compact token budget ───────
     // If the initial build response was detected as truncated (missing closing
@@ -2960,25 +3004,15 @@ Return the JSON code block immediately.`;
           "[ConstraintEnforcement] Day count violation detected — retrying with stricter instruction"
         );
 
-        const MAX_RETRIES = 2;
+        // Reduced from 2 → 1 retry. A single correction attempt is sufficient;
+        // a second retry rarely recovers and doubles the latency cost.
+        const MAX_RETRIES = 1;
         for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-          const violationDetails = criticalViolations
-            .map((v) => `• ${v.field}: expected ${v.expected}, got ${v.actual}`)
-            .join("\n");
+          const correctionInstruction = `CONSTRAINT VIOLATION DETECTED — MANDATORY CORRECTION:
 
-          const correctionInstruction = `CONSTRAINT VIOLATION DETECTED — MANDATORY CORRECTION REQUIRED:
+The program has ${structuredData.days.length} day(s). The user requested ${extractedConstraints.daysPerWeek} day(s). Fix this now.
 
-The program you just generated has ${structuredData.days.length} day(s). The user explicitly requested ${extractedConstraints.daysPerWeek} day(s).
-
-THIS IS A CRITICAL ERROR. You MUST fix it now.
-
-RULES FOR THIS RETRY:
-1. The program MUST have EXACTLY ${extractedConstraints.daysPerWeek} training days — no more, no less.
-2. The "days" array in your JSON MUST have exactly ${extractedConstraints.daysPerWeek} elements.
-3. This constraint cannot be negotiated or approximated.
-4. Count the days array length before outputting. If it is not ${extractedConstraints.daysPerWeek}, fix it.
-
-Regenerate the complete program now with exactly ${extractedConstraints.daysPerWeek} days.`;
+Output the complete program with EXACTLY ${extractedConstraints.daysPerWeek} days. No more, no less.`;
 
           const retryMessages = [
             ...baseMessages,
@@ -2986,6 +3020,7 @@ Regenerate the complete program now with exactly ${extractedConstraints.daysPerW
             { role: "user" as const, content: correctionInstruction },
           ];
 
+          _retriesTriggered++;
           const retryResult = await callOpenAI(retryMessages, maxTokens);
           logger.info(
             {
@@ -3793,6 +3828,24 @@ Output the corrected program JSON and a brief calm confirmation.`;
         );
       }
     }
+
+    // ── Final Latency Audit ──────────────────────────────────────────────────
+    const _t_total = Date.now() - _t_entry;
+    logger.info(
+      {
+        focusMode,
+        isBuildIntent,
+        totalMs: _t_total,
+        openAICallMs: _t_openai_end > 0 ? _t_openai_end - _t_openai_start : null,
+        validationMs: _t_validation_end > 0 ? _t_validation_end - _t_openai_end : null,
+        retriesTriggered: _retriesTriggered,
+        historyWindowSize: isBuildIntent ? 4 : 15,
+        maxTokensBudget: maxTokens,
+        systemPromptChars: systemPrompt.length,
+        parseSucceeded: structuredData !== null,
+      },
+      "[BuildLatencyAudit] generateAIResponse completed"
+    );
 
     return { content: cleanContent, structuredData };
   } catch (error) {
