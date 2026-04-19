@@ -59,6 +59,9 @@ import { useLogout } from "@workspace/api-client-react";
 import { customFetch } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import { clearAuthState } from "@/lib/routing";
+import { useFocusMode } from "@/hooks/useFocusMode";
+import { FOCUS_MODE_CONFIGS, type FocusModeConfig } from "@/lib/focusModeConfig";
+import type { FocusMode } from "@/lib/focusMode";
 import TopNav from "@/components/layout/TopNav";
 import MobileSlideLayout, { type SlidePanel } from "@/components/layout/MobileSlideLayout";
 import BlockStatusCard from "@/components/training/BlockStatusCard";
@@ -79,8 +82,11 @@ import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_17752640
 
 // ─── API helpers ─────────────────────────────────────────────────────────────
 
-async function fetchActiveSystem() {
-  return customFetch<any>("/api/training-system/active");
+async function fetchActiveSystem(focusMode?: FocusMode) {
+  const url = focusMode
+    ? `/api/training-system/active?focus=${encodeURIComponent(focusMode)}`
+    : "/api/training-system/active";
+  return customFetch<any>(url).catch(() => null);
 }
 async function fetchSubscription() {
   try { return await customFetch<any>("/api/subscription"); } catch { return null; }
@@ -2908,16 +2914,32 @@ function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
 
-function EmptySystemState({ onInitialize, isLoading }: { onInitialize: () => void; isLoading: boolean }) {
+function EmptySystemState({
+  onInitialize,
+  isLoading,
+  headline,
+  subline,
+  chatCtaLabel,
+}: {
+  onInitialize: () => void;
+  isLoading: boolean;
+  headline?: string;
+  subline?: string;
+  chatCtaLabel?: string;
+}) {
   const [, setLocation] = useLocation();
   return (
     <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
       <div className="w-20 h-20 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-6">
         <Target className="w-10 h-10 text-primary" />
       </div>
-      <h2 className="text-xl font-bold text-foreground mb-3">No Training System Yet</h2>
+      <h2 className="text-xl font-bold text-foreground mb-3">
+        {headline ?? "No Training System Yet"}
+      </h2>
       <p className="text-sm text-muted-foreground mb-2 max-w-xs leading-relaxed">
-        Ask your coach to build a program in Chat, then tap <strong>Save to My System</strong> to activate it here.
+        {subline ?? (
+          <>Ask your coach to build a program in Chat, then tap <strong>Save to My System</strong> to activate it here.</>
+        )}
       </p>
       <p className="text-xs text-muted-foreground/70 mb-8 max-w-xs leading-relaxed">
         Or generate one automatically from your profile below.
@@ -2929,7 +2951,7 @@ function EmptySystemState({ onInitialize, isLoading }: { onInitialize: () => voi
         className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-xl font-semibold text-sm hover:bg-primary/90 transition-all duration-150 shadow-lg shadow-primary/20 mb-3 w-full max-w-xs justify-center"
       >
         <MessageSquare className="w-4 h-4" />
-        Build in Chat
+        {chatCtaLabel ?? "Build in Chat"}
       </button>
 
       {/* Secondary CTA — auto-generate from profile */}
@@ -3607,10 +3629,18 @@ export default function SystemPage() {
   const [, setLocation] = useLocation();
   const logout = useLogout();
 
+  // ── Focus mode — context-provided single source of truth ──────────────────
+  const { focusMode, setFocusMode } = useFocusMode();
+  const focusConfig: FocusModeConfig = FOCUS_MODE_CONFIGS[focusMode];
+
+  console.log("[FocusActiveProgramsAudit]", { focusMode, page: "system" });
+
   const { data: activeSystem, isLoading: systemLoading } = useQuery({
-    queryKey: ["training-system-active"],
-    queryFn: fetchActiveSystem,
+    queryKey: ["training-system-active", focusMode],
+    queryFn: () => fetchActiveSystem(focusMode),
     retry: false,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: subscription } = useQuery({
@@ -3636,7 +3666,7 @@ export default function SystemPage() {
       await customFetch<any>(`/api/training-system/set-active/${systemId}`, { method: "POST" });
       setShowProgramLibrary(false);
       setMobilePanel(null);
-      await queryClient.refetchQueries({ queryKey: ["training-system-active"] });
+      await queryClient.refetchQueries({ queryKey: ["training-system-active", focusMode] });
       queryClient.invalidateQueries({ queryKey: ["training-system-library"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
@@ -4121,6 +4151,50 @@ export default function SystemPage() {
               ? `${activeSystem.name} — Structured training, built for you`
               : "Your personalized training operating system"}
           </p>
+
+          {/* Focus Selector */}
+          <div className="mt-4 flex gap-1 rounded-xl border border-border bg-muted/30 p-1 w-fit">
+            {(["strength", "speed", "mobility"] as FocusMode[]).map((mode) => {
+              const cfg = FOCUS_MODE_CONFIGS[mode];
+              const isActive = focusMode === mode;
+              return (
+                <button
+                  key={mode}
+                  onClick={() => setFocusMode(mode)}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 ${
+                    isActive
+                      ? "bg-background text-foreground shadow-sm border border-border"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {cfg.shortLabel}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Mobile focus selector (mobile only) ─── */}
+      <div className="md:hidden flex-shrink-0 border-b border-border bg-background px-3 py-2.5">
+        <div className="flex gap-1 rounded-xl border border-border bg-muted/30 p-1">
+          {(["strength", "speed", "mobility"] as FocusMode[]).map((mode) => {
+            const cfg = FOCUS_MODE_CONFIGS[mode];
+            const isActive = focusMode === mode;
+            return (
+              <button
+                key={mode}
+                onClick={() => setFocusMode(mode)}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 ${
+                  isActive
+                    ? "bg-background text-foreground shadow-sm border border-border"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {cfg.shortLabel}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -4184,6 +4258,9 @@ export default function SystemPage() {
             <EmptySystemState
               onInitialize={() => initialize.mutate()}
               isLoading={initialize.isPending}
+              headline={focusConfig.emptyStateHeadline}
+              subline={focusConfig.emptyStateSubline}
+              chatCtaLabel={`Build ${focusConfig.shortLabel} Program`}
             />
           ) : (
             <>

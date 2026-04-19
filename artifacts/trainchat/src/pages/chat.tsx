@@ -67,17 +67,23 @@ async function fetchStreak() {
   }
 }
 
-async function fetchActiveSystem() {
+async function fetchActiveSystem(focusMode?: string) {
   try {
-    return await customFetch<any>("/api/training-system/active");
+    const url = focusMode
+      ? `/api/training-system/active?focus=${encodeURIComponent(focusMode)}`
+      : "/api/training-system/active";
+    return await customFetch<any>(url);
   } catch {
     return null;
   }
 }
 
-async function fetchCurrentWeek() {
+async function fetchCurrentWeek(focusMode?: string) {
   try {
-    return await customFetch<any>("/api/training-system/week");
+    const url = focusMode
+      ? `/api/training-system/week?focus=${encodeURIComponent(focusMode)}`
+      : "/api/training-system/week";
+    return await customFetch<any>(url);
   } catch {
     return null;
   }
@@ -287,8 +293,8 @@ export default function Chat() {
   });
 
   const { data: activeSystem } = useQuery({
-    queryKey: ["training-system-active"],
-    queryFn: fetchActiveSystem,
+    queryKey: ["training-system-active", focusMode],
+    queryFn: () => fetchActiveSystem(focusMode),
     enabled: !!me,
     staleTime: 0,
     refetchOnMount: "always",
@@ -302,11 +308,10 @@ export default function Chat() {
   });
 
   const { data: weekData } = useQuery({
-    // Include activeSystem.id so React Query creates a NEW cache entry whenever
-    // the program changes — prevents stale exercises from a previous system
-    // leaking into the sidebar after a new program build.
-    queryKey: ["training-system-week", activeSystem?.id ?? null],
-    queryFn: fetchCurrentWeek,
+    // Include activeSystem.id AND focusMode so React Query creates distinct cache entries
+    // per focus lane — prevents stale exercises from another focus leaking in.
+    queryKey: ["training-system-week", activeSystem?.id ?? null, focusMode],
+    queryFn: () => fetchCurrentWeek(focusMode),
     enabled: !!me && !!activeSystem?.id,
     staleTime: 0,
     refetchOnMount: "always",
@@ -902,15 +907,15 @@ export default function Chat() {
     if (result.systemEdit?.applied || result.systemSaved) {
       // Force-refetch the active system (not just invalidate) so activeSystem.id
       // updates immediately. This triggers the weekData query key to change
-      // (["training-system-week", newId]) which forces a fresh cache entry —
-      // eliminating any risk of stale exercises from the old program.
-      queryClient.refetchQueries({ queryKey: ["training-system-active"] });
+      // (["training-system-week", newId, focusMode]) which forces a fresh cache entry —
+      // eliminating any risk of stale exercises from the old program or another focus lane.
+      queryClient.refetchQueries({ queryKey: ["training-system-active", focusMode] });
       queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-library"] });
       // Partial key match: invalidates all ["training-system-week", *] entries
-      // so any observer re-fetches with the current active system.
+      // so any observer re-fetches with the current active system and focus.
       queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
 
       if (result.systemSaved) {
@@ -1048,6 +1053,7 @@ export default function Chat() {
         method: "POST",
         body: JSON.stringify({
           conversationId: activeConvoId ?? undefined,
+          focusMode,
           programName: latestProgram.programName,
           description: latestProgram.description ?? "",
           progressionStrategy: latestProgram.progressionStrategy ?? undefined,

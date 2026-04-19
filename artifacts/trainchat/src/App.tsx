@@ -20,6 +20,7 @@ import { computeRoute, readDeviceId, type UserMode } from "@/lib/routing";
 import { getOrCreateDeviceId } from "@/lib/deviceId";
 import { DeviceResetPanel } from "@/components/debug/DeviceResetPanel";
 import ScrollToTop from "@/components/ScrollToTop";
+import { FocusModeProvider } from "@/contexts/FocusModeContext";
 
 // Attach the device ID to every API request immediately on module load.
 // Anonymous users are identified server-side via this header when there is
@@ -329,14 +330,16 @@ function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <ScrollToTop />
-            <Router />
-          </WouterRouter>
-          <DebugGate />
-          <Toaster />
-        </TooltipProvider>
+        <FocusModeProvider>
+          <TooltipProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <ScrollToTop />
+              <Router />
+            </WouterRouter>
+            <DebugGate />
+            <Toaster />
+          </TooltipProvider>
+        </FocusModeProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   );

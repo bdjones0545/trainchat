@@ -303,13 +303,40 @@ function getCoachingNotes(goal: string, weekIndex: number, dayLabel: string): st
 
 // ─── Main Service Functions ───────────────────────────────────────────────────
 
-export async function getActiveTrainingSystem(userId: number) {
-  const [system] = await db
+export async function getActiveTrainingSystem(userId: number, focusMode?: string | null) {
+  const activeSystems = await db
     .select()
     .from(trainingSystems)
     .where(and(eq(trainingSystems.userId, userId), eq(trainingSystems.status, "active")));
 
-  return system ?? null;
+  if (!focusMode) {
+    return activeSystems[0] ?? null;
+  }
+
+  const focusMatch = activeSystems.find(
+    (s) => ((s.metadata as any)?.focusMode ?? "strength") === focusMode
+  );
+  return focusMatch ?? null;
+}
+
+export async function getAllActiveSystemsByFocus(userId: number): Promise<{
+  strength: typeof trainingSystems.$inferSelect | null;
+  speed: typeof trainingSystems.$inferSelect | null;
+  mobility: typeof trainingSystems.$inferSelect | null;
+}> {
+  const activeSystems = await db
+    .select()
+    .from(trainingSystems)
+    .where(and(eq(trainingSystems.userId, userId), eq(trainingSystems.status, "active")));
+
+  const result = { strength: null as any, speed: null as any, mobility: null as any };
+  for (const s of activeSystems) {
+    const fm = ((s.metadata as any)?.focusMode ?? "strength") as string;
+    if (fm === "strength") result.strength = s;
+    else if (fm === "speed") result.speed = s;
+    else if (fm === "mobility") result.mobility = s;
+  }
+  return result;
 }
 
 export async function getFullTrainingSystem(systemId: number) {
@@ -425,8 +452,8 @@ export function dbSystemToProgramStructure(
   };
 }
 
-export async function getTodaySession(userId: number) {
-  const system = await getActiveTrainingSystem(userId);
+export async function getTodaySession(userId: number, focusMode?: string | null) {
+  const system = await getActiveTrainingSystem(userId, focusMode);
   if (!system || !system.currentPhaseId) return null;
 
   const [currentPhase] = await db
@@ -464,8 +491,8 @@ export async function getTodaySession(userId: number) {
   return { ...todaySession, exercises, currentWeek, currentPhase };
 }
 
-export async function getCurrentWeek(userId: number, weekNumber?: number) {
-  const system = await getActiveTrainingSystem(userId);
+export async function getCurrentWeek(userId: number, weekNumber?: number, focusMode?: string | null) {
+  const system = await getActiveTrainingSystem(userId, focusMode);
   if (!system || !system.currentPhaseId) return null;
 
   const [currentPhase] = await db
@@ -513,8 +540,8 @@ export async function getCurrentWeek(userId: number, weekNumber?: number) {
   return { ...targetWeek, sessions: sessionsWithExercises, phase: currentPhase };
 }
 
-export async function getWeeksList(userId: number) {
-  const system = await getActiveTrainingSystem(userId);
+export async function getWeeksList(userId: number, focusMode?: string | null) {
+  const system = await getActiveTrainingSystem(userId, focusMode);
   if (!system || !system.currentPhaseId) return null;
 
   const [currentPhase] = await db
@@ -565,8 +592,8 @@ export async function getWeeksList(userId: number) {
   };
 }
 
-export async function getBlockSummary(userId: number) {
-  const system = await getActiveTrainingSystem(userId);
+export async function getBlockSummary(userId: number, focusMode?: string | null) {
+  const system = await getActiveTrainingSystem(userId, focusMode);
   if (!system) return null;
 
   const phases = await db
@@ -950,18 +977,36 @@ export async function createTrainingSystemFromProgram(
   conversationId?: number | null,
   focusMode?: string | null
 ): Promise<typeof trainingSystems.$inferSelect> {
-  logger.info({ userId, programName: program.programName }, "[TrainingSystem] createTrainingSystemFromProgram — starting");
+  logger.info({ userId, programName: program.programName, focusMode }, "[TrainingSystem] createTrainingSystemFromProgram — starting");
 
   // Validate program has days
   if (!program.days || !Array.isArray(program.days) || program.days.length === 0) {
     throw new Error("Program must have at least one training day");
   }
 
-  // Archive any existing active training systems
-  await db
-    .update(trainingSystems)
-    .set({ status: "archived" })
+  const resolvedFocusMode = focusMode ?? "strength";
+
+  // Archive only same-focus active systems — different focus lanes stay active
+  const allActiveSystems = await db
+    .select()
+    .from(trainingSystems)
     .where(and(eq(trainingSystems.userId, userId), eq(trainingSystems.status, "active")));
+
+  const sameFocusSystems = allActiveSystems.filter(
+    (s) => ((s.metadata as any)?.focusMode ?? "strength") === resolvedFocusMode
+  );
+
+  for (const s of sameFocusSystems) {
+    await db
+      .update(trainingSystems)
+      .set({ status: "archived" })
+      .where(eq(trainingSystems.id, s.id));
+  }
+
+  logger.info(
+    { userId, archivedCount: sameFocusSystems.length, focusMode: resolvedFocusMode },
+    "[TrainingSystem] createTrainingSystemFromProgram — archived same-focus systems"
+  );
 
   const goal = inferGoalFromProgram(program);
   const daysPerWeek = program.days.length;
@@ -980,7 +1025,7 @@ export async function createTrainingSystemFromProgram(
     status: "active",
     metadata: {
       source: "chat",
-      focusMode: focusMode ?? "strength",
+      focusMode: resolvedFocusMode,
       progressionStrategy: program.progressionStrategy ?? null,
       ...(program.blockMetadata ? {
         blockType: program.blockMetadata.blockType,
@@ -1127,11 +1172,14 @@ export async function upsertTrainingSystemFromProgram(
     throw new Error("Program must have at least one training day");
   }
 
-  const existingSystem = await getActiveTrainingSystem(userId);
+  const resolvedFocusMode = focusMode ?? "strength";
 
-  // ── No active system → create fresh ──────────────────────────────────────
+  // Focus-aware: find the existing system for THIS focus lane only
+  const existingSystem = await getActiveTrainingSystem(userId, resolvedFocusMode);
+
+  // ── No active system for this focus → create fresh ────────────────────────
   if (!existingSystem) {
-    const system = await createTrainingSystemFromProgram(userId, program, null, focusMode);
+    const system = await createTrainingSystemFromProgram(userId, program, null, resolvedFocusMode);
     return { system, isUpdate: false };
   }
 
@@ -1155,7 +1203,7 @@ export async function upsertTrainingSystemFromProgram(
       weeklyFrequency: daysPerWeek,
       metadata: {
         source: "chat_edit",
-        ...(focusMode ? { focusMode } : {}),
+        focusMode: resolvedFocusMode,
         progressionStrategy: program.progressionStrategy ?? null,
         ...(program.blockMetadata ? {
           blockType: program.blockMetadata.blockType,

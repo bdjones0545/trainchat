@@ -5,6 +5,7 @@ import { trainingSystems, conversationsTable, savedProgramsTable, activeSessions
 import { eq, and, desc, ne } from "drizzle-orm";
 import {
   getActiveTrainingSystem,
+  getAllActiveSystemsByFocus,
   getFullTrainingSystem,
   getTodaySession,
   getCurrentWeek,
@@ -29,15 +30,41 @@ import { logger } from "../lib/logger";
 const router: IRouter = Router();
 
 // ─── GET /training-system/active ─────────────────────────────────────────────
-// Returns the active training system (shallow — no nested structure)
+// Returns the active training system for the given focus (shallow — no nested structure)
+// Optional query param: ?focus=strength|speed|mobility
 router.get("/training-system/active", requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = req.session.userId!;
-    const system = await getActiveTrainingSystem(userId);
+    const focusMode = typeof req.query.focus === "string" ? req.query.focus : null;
+    const system = await getActiveTrainingSystem(userId, focusMode);
+    console.log("[FocusSidebarAudit]", {
+      currentFocus: focusMode ?? "unset",
+      sidebarProgramId: system?.id ?? null,
+      sidebarModeCorrect: !focusMode || ((system?.metadata as any)?.focusMode ?? "strength") === focusMode,
+    });
     res.json(system ?? null);
   } catch (err) {
     console.error("[training-system] GET /active error", err);
     res.status(500).json({ error: "Failed to load training system" });
+  }
+});
+
+// ─── GET /training-system/active-by-focus ─────────────────────────────────────
+// Returns active programs for all three focus lanes simultaneously.
+// Used by the Active Programs page to show focus tabs.
+router.get("/training-system/active-by-focus", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const userId = req.session.userId!;
+    const byFocus = await getAllActiveSystemsByFocus(userId);
+    console.log("[FocusActiveProgramsAudit]", {
+      strengthProgramId: byFocus.strength?.id ?? null,
+      speedProgramId: byFocus.speed?.id ?? null,
+      mobilityProgramId: byFocus.mobility?.id ?? null,
+    });
+    res.json(byFocus);
+  } catch (err) {
+    console.error("[training-system] GET /active-by-focus error", err);
+    res.status(500).json({ error: "Failed to load programs by focus" });
   }
 });
 
@@ -62,11 +89,13 @@ router.get("/training-system/full", requireAuth, async (req, res): Promise<void>
 });
 
 // ─── GET /training-system/today ───────────────────────────────────────────────
-// Returns today's session with exercises
+// Returns today's session with exercises for the given focus
+// Optional query param: ?focus=strength|speed|mobility
 router.get("/training-system/today", requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = req.session.userId!;
-    const todaySession = await getTodaySession(userId);
+    const focusMode = typeof req.query.focus === "string" ? req.query.focus : null;
+    const todaySession = await getTodaySession(userId, focusMode);
 
     if (process.env.NODE_ENV !== "production" && todaySession) {
       console.log("[BuildAudit:TodaySource]", JSON.stringify({
@@ -88,13 +117,15 @@ router.get("/training-system/today", requireAuth, async (req, res): Promise<void
 });
 
 // ─── GET /training-system/week ────────────────────────────────────────────────
-// Returns the current week (or a specific week by ?weekNumber=N) with all sessions and exercises
+// Returns the current week (or a specific week by ?weekNumber=N) for the given focus
+// Optional query params: ?weekNumber=N&focus=strength|speed|mobility
 router.get("/training-system/week", requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = req.session.userId!;
     const weekNumberParam = req.query.weekNumber;
     const weekNumber = typeof weekNumberParam === "string" ? parseInt(weekNumberParam, 10) || undefined : undefined;
-    const week = await getCurrentWeek(userId, weekNumber);
+    const focusMode = typeof req.query.focus === "string" ? req.query.focus : null;
+    const week = await getCurrentWeek(userId, weekNumber, focusMode);
 
     res.json(week ?? null);
   } catch (err) {
@@ -105,10 +136,12 @@ router.get("/training-system/week", requireAuth, async (req, res): Promise<void>
 
 // ─── GET /training-system/weeks ───────────────────────────────────────────────
 // Returns list of all weeks in the current phase with status, labels, session counts
+// Optional query param: ?focus=strength|speed|mobility
 router.get("/training-system/weeks", requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = req.session.userId!;
-    const weeksList = await getWeeksList(userId);
+    const focusMode = typeof req.query.focus === "string" ? req.query.focus : null;
+    const weeksList = await getWeeksList(userId, focusMode);
     res.json(weeksList ?? null);
   } catch (err) {
     console.error("[training-system] GET /weeks error", err);
@@ -118,10 +151,12 @@ router.get("/training-system/weeks", requireAuth, async (req, res): Promise<void
 
 // ─── GET /training-system/block ───────────────────────────────────────────────
 // Returns current block/phase summary and program overview
+// Optional query param: ?focus=strength|speed|mobility
 router.get("/training-system/block", requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = req.session.userId!;
-    const block = await getBlockSummary(userId);
+    const focusMode = typeof req.query.focus === "string" ? req.query.focus : null;
+    const block = await getBlockSummary(userId, focusMode);
 
     res.json(block ?? null);
   } catch (err) {
@@ -149,10 +184,11 @@ router.post("/training-system/initialize", requireAuth, async (req, res): Promis
 router.post("/training-system/from-chat", requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = req.session.userId!;
-    const { conversationId: rawConversationId, ...program } = req.body as ChatProgram & { conversationId?: number | null };
+    const { conversationId: rawConversationId, focusMode: rawFocusMode, ...program } = req.body as ChatProgram & { conversationId?: number | null; focusMode?: string | null };
     const conversationId = typeof rawConversationId === "number" ? rawConversationId : null;
+    const focusMode = typeof rawFocusMode === "string" ? rawFocusMode : null;
 
-    logger.info({ userId, programName: program?.programName, conversationId }, "[training-system] POST /from-chat — received");
+    logger.info({ userId, programName: program?.programName, conversationId, focusMode }, "[training-system] POST /from-chat — received");
 
     // Basic validation
     if (!program || !program.programName) {
@@ -171,7 +207,7 @@ router.post("/training-system/from-chat", requireAuth, async (req, res): Promise
       }
     }
 
-    const system = await createTrainingSystemFromProgram(userId, program, conversationId);
+    const system = await createTrainingSystemFromProgram(userId, program, conversationId, focusMode);
 
     logger.info({ userId, systemId: system.id, conversationId }, "[training-system] POST /from-chat — Training System created successfully");
 
@@ -372,17 +408,34 @@ router.post("/training-system/set-active/:id", requireAuth, async (req, res): Pr
       return;
     }
 
-    await db
-      .update(trainingSystems)
-      .set({ status: "archived" })
+    // Focus-aware: only archive systems in the same focus lane as the target
+    const targetFocusMode = ((target.metadata as any)?.focusMode ?? "strength") as string;
+    const allActiveSystems = await db
+      .select()
+      .from(trainingSystems)
       .where(and(eq(trainingSystems.userId, userId), eq(trainingSystems.status, "active")));
+
+    const sameFocusActive = allActiveSystems.filter(
+      (s) => ((s.metadata as any)?.focusMode ?? "strength") === targetFocusMode
+    );
+
+    for (const s of sameFocusActive) {
+      await db.update(trainingSystems).set({ status: "archived" }).where(eq(trainingSystems.id, s.id));
+    }
 
     await db
       .update(trainingSystems)
       .set({ status: "active" })
       .where(eq(trainingSystems.id, id));
 
-    logger.info({ userId, systemId: id }, "[training-system] POST /set-active — program switched");
+    console.log("[FocusSwitchAudit]", {
+      action: "set-active",
+      targetFocusMode,
+      systemId: id,
+      archivedSameFocusCount: sameFocusActive.length,
+    });
+
+    logger.info({ userId, systemId: id, targetFocusMode }, "[training-system] POST /set-active — program switched");
 
     res.json({ success: true, systemId: id });
   } catch (err) {

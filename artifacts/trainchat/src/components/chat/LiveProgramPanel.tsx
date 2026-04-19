@@ -20,6 +20,8 @@ import {
   type LearnExerciseData,
   type LearnExerciseContext,
 } from "@/lib/learn-exercise";
+import { useFocusMode } from "@/hooks/useFocusMode";
+import { FOCUS_MODE_CONFIGS } from "@/lib/focusModeConfig";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -128,6 +130,24 @@ function scopeColor(scope: string) {
     case "system": return "text-primary bg-primary/10";
     default: return "text-muted-foreground bg-muted/30";
   }
+}
+
+// ─── Focus Badge — shows the active focus mode in the live program header ─────
+
+function FocusBadge() {
+  const { focusMode } = useFocusMode();
+  const cfg = FOCUS_MODE_CONFIGS[focusMode];
+  const colorMap: Record<string, string> = {
+    strength: "text-primary/80 bg-primary/8 border-primary/20",
+    speed:    "text-sky-400/90 bg-sky-500/8 border-sky-500/20",
+    mobility: "text-emerald-400/90 bg-emerald-500/8 border-emerald-500/20",
+  };
+  const color = colorMap[focusMode] ?? colorMap.strength;
+  return (
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md border text-[9px] font-bold uppercase tracking-wider flex-shrink-0 ${color}`}>
+      {cfg.shortLabel}
+    </span>
+  );
 }
 
 // ─── Build phase helpers ───────────────────────────────────────────────────────
@@ -997,6 +1017,7 @@ function ProgramTab({
               Live Program
             </span>
           </div>
+          <FocusBadge />
           {!isPremium && (
             <span className="ml-auto text-[9px] font-semibold text-amber-400/80 flex items-center gap-1 flex-shrink-0">
               <Lock className="w-2.5 h-2.5" /> Preview

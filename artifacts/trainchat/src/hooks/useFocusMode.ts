@@ -1,21 +1,8 @@
 /**
- * useFocusMode — React hook for global focus mode state
+ * useFocusMode — React hook for global focus mode state.
  *
- * Reads from and writes to localStorage.
- * Exposes the current mode and a setter used by the tab switcher.
+ * Reads from the FocusModeContext (single source of truth).
+ * Components anywhere in the tree get the same live value.
  */
 
-import { useState, useCallback } from "react";
-import { type FocusMode, readFocusMode, writeFocusMode } from "@/lib/focusMode";
-
-export function useFocusMode() {
-  const [focusMode, setFocusModeState] = useState<FocusMode>(readFocusMode);
-
-  const setFocusMode = useCallback((mode: FocusMode) => {
-    writeFocusMode(mode);
-    setFocusModeState(mode);
-    console.log("[FocusModeAudit] modeChanged", { newMode: mode });
-  }, []);
-
-  return { focusMode, setFocusMode };
-}
+export { useFocusModeContext as useFocusMode } from "@/contexts/FocusModeContext";
