@@ -3109,6 +3109,116 @@ interface FallbackOptions {
   focusMode?: FocusMode | null;
 }
 
+// ─── Speed Fallback Program Builder ─────────────────────────────────────────
+// Called when focusMode === "speed" and OpenAI is unavailable.
+// Builds a proper ProgramStructure with sprint drills, plyometrics, and COD
+// work — never strength exercises as the session anchor.
+function buildSpeedFallbackProgram(
+  days: number,
+  userMessage: string,
+): ProgramStructure {
+  const lower = userMessage.toLowerCase();
+  const isAcceleration = /accelerat|first.step|drive.phase|start|wall.drill|sled/.test(lower);
+  const isCOD = /agility|cut|change.of.direction|cod|reactive|decel/.test(lower);
+  const isMaxVelocity = /max.vel|top.speed|flying|stride|wicket/.test(lower);
+
+  const primaryFocus = isAcceleration
+    ? "Acceleration Development"
+    : isMaxVelocity
+    ? "Maximum Velocity"
+    : isCOD
+    ? "Reactive Agility & COD"
+    : "Acceleration + Elastic Development";
+
+  const allDays: ProgramDay[] = [
+    {
+      dayNumber: 1,
+      name: "Acceleration Development",
+      focus: "Drive phase mechanics, first-step power, horizontal force production",
+      exercises: [
+        { name: "Wall March", sets: 2, reps: "10 each", rest: "45s", intent: "CNS activation — hip drive mechanics" },
+        { name: "Single-Leg Hip Hinge March", sets: 2, reps: "8 each side", rest: "30s", intent: "Posterior chain prep, ankle stiffness" },
+        { name: "Ankle Stiffness Prep", sets: 2, reps: "12 contacts", rest: "30s", intent: "Spring-mass mechanics warm-up" },
+        { name: "A-Walk", sets: 2, reps: "20m", rest: "30s", intent: "Acceleration warm-up — hip mechanics" },
+        { name: "A-Skip", sets: 3, reps: "20m", rest: "45s", intent: "Drive phase coordination" },
+        { name: "Build-Up Run", sets: 3, reps: "30m at 80–90%", rest: "90s", intent: "Sub-maximal acceleration warm-up" },
+        { name: "Falling Start", sets: 5, reps: "20–30m, 95–100% intent", rest: "3 min", intent: "Primary acceleration work — horizontal force production" },
+        { name: "Stiffness Hops", sets: 3, reps: "10 contacts", rest: "90s", intent: "Elastic support — ankle stiffness, SSC" },
+        { name: "Speed Ladder In-Out", sets: 4, reps: "10m", rest: "30s", intent: "Foot contact quality, rhythm" },
+      ],
+    },
+    {
+      dayNumber: 2,
+      name: "Reactive Footwork + Deceleration Control",
+      focus: "COD mechanics, deceleration capacity, reactive decision speed",
+      exercises: [
+        { name: "Nordic Hamstring Curl", sets: 2, reps: "6 slow", rest: "90s", intent: "Posterior chain tissue prep — decel protection" },
+        { name: "Copenhagen Hip Adductor", sets: 2, reps: "8 each side", rest: "45s", intent: "Groin tissue load tolerance" },
+        { name: "March to Skip to Run", sets: 3, reps: "20m", rest: "45s", intent: "Speed warm-up — graduated CNS ramp" },
+        { name: "T-Drill", sets: 5, reps: "full effort, rest 2 min", rest: "2 min", intent: "Primary COD — cutting mechanics, re-acceleration" },
+        { name: "Mirror Drill", sets: 4, reps: "10s effort", rest: "90s", intent: "Reactive agility — open skill, decision speed" },
+        { name: "Single-Leg Decel Landing", sets: 3, reps: "5 each side", rest: "60s", intent: "Deceleration control — penultimate step mechanics" },
+        { name: "Hip Lock Decel", sets: 3, reps: "4 each side", rest: "60s", intent: "Braking mechanics, knee stability" },
+        { name: "Jump Squat", sets: 3, reps: "4 reps", rest: "2 min", intent: "Speed-strength bridge — rate of force development" },
+      ],
+    },
+    {
+      dayNumber: 3,
+      name: "Elastic Output + Speed Endurance",
+      focus: "SSC development, plyometric output, speed endurance capacity",
+      exercises: [
+        { name: "Isometric Hamstring Hold", sets: 2, reps: "30s each side", rest: "45s", intent: "Tissue prep — posterior chain tolerance" },
+        { name: "Ankle Stiffness Prep", sets: 2, reps: "12 contacts", rest: "30s", intent: "Pre-plyometric spring-mass readiness" },
+        { name: "A-Skip", sets: 3, reps: "20m", rest: "45s", intent: "Acceleration warm-up" },
+        { name: "Build-Up Run", sets: 3, reps: "40m at 85%", rest: "90s", intent: "Sub-maximal speed warm-up" },
+        { name: "Lateral Hurdle Hops", sets: 4, reps: "6 contacts", rest: "90s", intent: "Lateral elastic power, SSC" },
+        { name: "Skater Jump to Stick", sets: 3, reps: "5 each side", rest: "90s", intent: "Single-leg elastic loading, lateral decel" },
+        { name: "Linear Bounding", sets: 3, reps: "20m", rest: "2 min", intent: "Horizontal elastic force production, stride length" },
+        { name: "Repeat 30m Sprint", sets: 5, reps: "30m, 60–90s recovery", rest: "60–90s", intent: "Speed endurance — alactic-aerobic bridge" },
+      ],
+    },
+    {
+      dayNumber: 4,
+      name: "Max Velocity + Footwork",
+      focus: "Top-end speed mechanics, stride quality, foot contact patterns",
+      exercises: [
+        { name: "Ankle Stiffness Prep", sets: 2, reps: "12 contacts", rest: "30s", intent: "Spring-mass prep" },
+        { name: "B-Skip", sets: 3, reps: "20m", rest: "45s", intent: "Max velocity warm-up — front-side mechanics" },
+        { name: "Build-Up Run", sets: 4, reps: "40m building to max", rest: "2 min", intent: "Progressive velocity ramp" },
+        { name: "Flying 20m Sprint", sets: 5, reps: "20m flying, 4–6 min rest", rest: "4–6 min", intent: "Primary max velocity work — 100% intent" },
+        { name: "Speed Ladder Lateral", sets: 4, reps: "10m", rest: "30s", intent: "Foot contact quality, lateral coordination" },
+        { name: "Carioca", sets: 4, reps: "10m each direction", rest: "30s", intent: "Hip mobility + footwork rhythm integration" },
+        { name: "Countermovement Jump to Sprint", sets: 3, reps: "3 reps", rest: "2 min", intent: "SSC + acceleration contrast" },
+      ],
+    },
+    {
+      dayNumber: 5,
+      name: "COD + Acceleration Contrast",
+      focus: "Change-of-direction, resisted acceleration, elastic contrast",
+      exercises: [
+        { name: "Wall March", sets: 2, reps: "10 each", rest: "45s", intent: "Drive phase prep" },
+        { name: "Nordic Hamstring Curl", sets: 2, reps: "6 slow", rest: "90s", intent: "Decel tissue tolerance prep" },
+        { name: "A-Walk", sets: 2, reps: "20m", rest: "30s", intent: "Warm-up — hip mechanics" },
+        { name: "Falling Start", sets: 3, reps: "20m, full intent", rest: "3 min", intent: "Acceleration contrast primer" },
+        { name: "Box Jump", sets: 3, reps: "4 reps", rest: "2 min", intent: "Contrast — reactive power after sprint" },
+        { name: "L-Drill", sets: 5, reps: "full effort, 2 min rest", rest: "2 min", intent: "COD — multi-directional cutting" },
+        { name: "Lateral Bound", sets: 3, reps: "5 each side", rest: "90s", intent: "Lateral elastic power" },
+        { name: "Alternating Bounds", sets: 3, reps: "20m", rest: "90s", intent: "Stride length + horizontal elastic output" },
+      ],
+    },
+  ];
+
+  const sessionDays = allDays.slice(0, days);
+
+  return {
+    programName: `Speed & Acceleration Program — ${days}-Day`,
+    description: `A ${days}-day speed development program focused on ${primaryFocus.toLowerCase()}. Structured around sprint mechanics, reactive drills, plyometric elastic work, and deceleration control. CNS-dominant training — all max-intent work is placed first in each session, post-warm-up, before any fatigue accumulates.`,
+    progressionStrategy: "Week 1: establish mechanics at sub-maximal intensity (80–85%). Week 2: increase effort toward 95%. Week 3: full intent, introduce contrast pairs. Week 4: deload at 50% volume, maintain intensity.",
+    splitType: "speed-focused",
+    days: sessionDays,
+  };
+}
+
 function generateFallbackResponse(
   userMessage: string,
   history: ChatMessage[],
@@ -3369,6 +3479,16 @@ function generateFallbackResponse(
         exercisesToAvoid: null,
       };
 
+      // ── Speed mode intercept — never use strength builder for speed requests ─
+      if (focusMode === "speed") {
+        const speedDays = extractedConstraints?.daysPerWeek ?? 3;
+        const speedProgram = buildSpeedFallbackProgram(speedDays, userMessage);
+        return {
+          content: `Built a ${speedDays}-day speed & acceleration program.\n\nCheck the Program tab — want to adjust anything?\n\nDo you have access to a track or open field, or will you be training in a gym/limited space?`,
+          structuredData: speedProgram,
+        };
+      }
+
       const program = applyNeural(buildIntelligentProgram(defaultProfile));
       const confirmationLine = buildConstraintAwareConfirmation(defaultProfile, extractedConstraints ?? null);
       const refinementQ = extractedConstraints?.equipment
@@ -3413,6 +3533,16 @@ function generateFallbackResponse(
       if (extractedConstraints.limitations) {
         effectiveProfile.injuries = extractedConstraints.limitations;
       }
+    }
+
+    // ── Speed mode intercept (with-profile path) ─────────────────────────────
+    if (focusMode === "speed") {
+      const speedDays = effectiveProfile.daysPerWeek ?? 3;
+      const speedProgram = buildSpeedFallbackProgram(speedDays, userMessage);
+      return {
+        content: `Built a ${speedDays}-day speed & acceleration program.\n\nCheck the Program tab — want to adjust anything?\n\nDo you have access to a track or open field, or will you be training in a gym/limited space?`,
+        structuredData: speedProgram,
+      };
     }
 
     // Build the program with effective (constraint-merged) profile
