@@ -207,6 +207,28 @@ function buildPhaseConfig(goal: string, daysPerWeek: number): {
         { label: "Week 4 — Deload", focus: "Active recovery and consolidation", volumeLevel: "deload" },
       ],
     },
+    speed: {
+      phaseName: "Speed Foundation Block",
+      phaseGoal: "Develop acceleration mechanics, reactive footwork, and elastic output",
+      emphasis: "Sprint mechanics, CNS-first sequencing, plyometric foundation, deceleration control.",
+      weekConfigs: [
+        { label: "Week 1 — Mechanics", focus: "Establish sprint mechanics and CNS activation protocols at sub-maximal intent", volumeLevel: "moderate" },
+        { label: "Week 2 — Volume Build", focus: "Add sprint volume, introduce reactive and change-of-direction work", volumeLevel: "moderate" },
+        { label: "Week 3 — Full Intent", focus: "Full-intent sprints, reactive integration, elastic output", volumeLevel: "high" },
+        { label: "Week 4 — Deload", focus: "50% sprint volume, mechanics review, no max intent", volumeLevel: "deload" },
+      ],
+    },
+    mobility: {
+      phaseName: "Mobility Foundation Block",
+      phaseGoal: "Restore and build usable range of motion across all primary joints",
+      emphasis: "Joint mobility, motor control, tissue tolerance, and progressive range of motion loading.",
+      weekConfigs: [
+        { label: "Week 1 — Assess & Establish", focus: "Identify restrictions and establish baseline range of motion", volumeLevel: "moderate" },
+        { label: "Week 2 — Progressive Loading", focus: "Increase intensity and hold durations across key patterns", volumeLevel: "moderate" },
+        { label: "Week 3 — Integration", focus: "Functional integration of mobility under load and movement", volumeLevel: "high" },
+        { label: "Week 4 — Consolidate", focus: "Maintain gains, reduce intensity, prime next block", volumeLevel: "low" },
+      ],
+    },
   };
 
   return configs[goal] ?? configs.general_fitness;
@@ -1013,7 +1035,11 @@ export async function createTrainingSystemFromProgram(
     "[TrainingSystem] createTrainingSystemFromProgram — archived same-focus systems"
   );
 
-  const goal = inferGoalFromProgram(program);
+  const inferredGoal = inferGoalFromProgram(program);
+  // Speed and mobility programs must use their own phase configs — never default to the strength fallback.
+  const goal = resolvedFocusMode === "speed" ? "speed"
+             : resolvedFocusMode === "mobility" ? "mobility"
+             : inferredGoal;
   const daysPerWeek = program.days.length;
   const phaseConfig = buildPhaseConfig(goal, daysPerWeek);
 
@@ -1194,7 +1220,11 @@ export async function upsertTrainingSystemFromProgram(
     "[TrainingSystem] upsertTrainingSystemFromProgram — updating existing system"
   );
 
-  const goal = inferGoalFromProgram(program);
+  const inferredGoalUpsert = inferGoalFromProgram(program);
+  // Speed and mobility programs must use their own phase configs.
+  const goal = resolvedFocusMode === "speed" ? "speed"
+             : resolvedFocusMode === "mobility" ? "mobility"
+             : inferredGoalUpsert;
   const daysPerWeek = program.days.length;
   const phaseConfig = buildPhaseConfig(goal, daysPerWeek);
 

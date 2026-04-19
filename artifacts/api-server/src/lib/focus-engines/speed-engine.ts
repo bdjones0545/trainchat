@@ -510,7 +510,10 @@ EXERCISE FIELD FORMAT RULES:
 
 // ─── Speed Output Bleed Validator ─────────────────────────────────────────────
 
-const STRENGTH_BLEED_SESSION_PATTERNS = /\b(lower strength|upper push|upper pull|push day|pull day|hypertrophy|leg day|back.bicep|chest.tricep|upper body strength|lower body strength|strength.day|compound strength|strength.focus|power.lifting|powerlifting)\b/i;
+// Matches session names contaminated with strength-training language.
+// Covers both classic split names (push/pull/legs) and any name that
+// uses "strength" as a primary descriptor (e.g. "Upper Strength + ...").
+const STRENGTH_BLEED_SESSION_PATTERNS = /\b(lower strength|upper strength|upper push|upper pull|push day|pull day|hypertrophy|leg day|back.bicep|chest.tricep|upper body strength|lower body strength|strength.day|compound strength|strength.focus|power.lifting|powerlifting|structural balance)\b/i;
 
 const STRENGTH_BLEED_EXERCISE_PATTERNS = /\b(barbell back squat|conventional deadlift|flat bench press|incline bench press|military press|barbell overhead press|barbell row|weighted pull.up|barbell hip thrust)\b/i;
 
@@ -578,6 +581,7 @@ type RepairableProgram = {
 
 const SPEED_SESSION_NAME_MAP: Record<string, string> = {
   "lower strength": "Acceleration Development",
+  "upper strength": "Elastic Output + Speed-Strength Bridge",
   "upper push": "Elastic Output + Speed-Strength Bridge",
   "upper pull": "Reactive Footwork + Deceleration Control",
   "push day": "Acceleration Development",
@@ -587,6 +591,7 @@ const SPEED_SESSION_NAME_MAP: Record<string, string> = {
   "lower body strength": "Acceleration Development",
   "upper body strength": "Elastic Output + Speed-Strength Bridge",
   "strength day": "Acceleration Development",
+  "structural balance": "Reactive Footwork + Deceleration Control",
 };
 
 const SPEED_DEFAULT_REST_BY_EXERCISE_TYPE: Record<string, string> = {
