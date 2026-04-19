@@ -484,9 +484,22 @@ interface TodayViewProps {
   onEditExercise: (exercise: any, sessionLabel: string) => void;
   onEditSession: (session: any, weekLabel?: string) => void;
   onQuickEditComplete: (result: EditResult) => void;
+  onLogSession?: () => void;
+  onCheckIn?: () => void;
+  sessionLoggedToday?: boolean;
+  checkedInToday?: boolean;
 }
 
-function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditComplete }: TodayViewProps) {
+function coachingNotesToBullets(notes: string, max = 3): string[] {
+  if (!notes || !notes.trim()) return [];
+  const parts = notes
+    .split(/\.\s+|;\s*|\n+/)
+    .map((s) => s.trim().replace(/\.+$/, "").trim())
+    .filter((s) => s.length > 10);
+  return parts.slice(0, max);
+}
+
+function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditComplete, onLogSession, onCheckIn, sessionLoggedToday, checkedInToday }: TodayViewProps) {
   const { data: today, isLoading, error } = useQuery({
     queryKey: ["training-system-today"],
     queryFn: fetchToday,
@@ -518,9 +531,11 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditC
   const dayOfWeekLabel = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date().getDay()];
   const sessionHighlight = highlightedIds.sessions.has(today.id) ? "ring-2 ring-primary/50 ring-offset-1 ring-offset-background" : "";
 
+  const sessionFocusBullets = coachingNotesToBullets(today.coachingNotes ?? "");
+
   return (
-    <div className="space-y-5">
-      {/* Session hero */}
+    <div className="space-y-4">
+      {/* Session hero — action-first */}
       <div className={`rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/20 p-5 transition-all duration-500 ${sessionHighlight}`}>
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex-1 min-w-0">
@@ -546,7 +561,9 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditC
             </button>
           </div>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
+
+        {/* Metadata chips */}
+        <div className="flex items-center gap-2 flex-wrap mb-4">
           <div className="flex items-center gap-1.5 bg-background/60 rounded-lg px-3 py-1.5 border border-border">
             <Layers className="w-3.5 h-3.5 text-muted-foreground" />
             <span className="text-xs font-medium text-foreground capitalize">{today.sessionType}</span>
@@ -564,7 +581,54 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditC
             </div>
           )}
         </div>
+
+        {/* Primary CTAs — inline in hero so they're visible immediately */}
+        <div className="flex gap-2">
+          {sessionLoggedToday ? (
+            <div className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-green-500/10 border border-green-500/20 px-4 py-2.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+              <span className="text-xs font-bold text-green-400">Session logged</span>
+            </div>
+          ) : (
+            <button
+              onClick={onLogSession}
+              className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground px-4 py-2.5 text-xs font-bold hover:bg-primary/90 active:scale-[0.98] transition-all"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Log Session
+            </button>
+          )}
+          {!checkedInToday && (
+            <button
+              onClick={onCheckIn}
+              className="flex items-center gap-1.5 rounded-xl border border-border bg-background/60 px-3.5 py-2.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-all flex-shrink-0"
+            >
+              <Activity className="w-3.5 h-3.5" />
+              Check In
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Session Focus — coaching notes as bullets, visible before exercises */}
+      {sessionFocusBullets.length > 0 && (
+        <div className="rounded-xl bg-amber-500/5 border border-amber-500/15 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-5 h-5 rounded-full bg-amber-500/15 flex items-center justify-center">
+              <Info className="w-3 h-3 text-amber-400" />
+            </div>
+            <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">Session Focus</span>
+          </div>
+          <ul className="space-y-2">
+            {sessionFocusBullets.map((bullet, i) => (
+              <li key={i} className="flex items-start gap-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400/60 mt-1.5 flex-shrink-0" />
+                <span className="text-sm text-muted-foreground leading-relaxed">{bullet}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Warmup */}
       {today.warmupNotes && (
@@ -599,19 +663,19 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditC
               />
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Coach notes */}
-      {today.coachingNotes && (
-        <div className="rounded-xl bg-amber-500/5 border border-amber-500/15 p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-5 h-5 rounded-full bg-amber-500/15 flex items-center justify-center">
-              <Info className="w-3 h-3 text-amber-400" />
+          {/* Finish session nudge — always visible after exercises */}
+          {!sessionLoggedToday && (
+            <div className="px-5 py-4 border-t border-border bg-muted/20 flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">Done with today's session?</p>
+              <button
+                onClick={onLogSession}
+                className="flex items-center gap-1.5 text-xs font-semibold text-primary border border-primary/30 bg-primary/5 hover:bg-primary/10 rounded-lg px-3 py-1.5 transition-all"
+              >
+                <CheckCircle2 className="w-3 h-3" />
+                Log it
+              </button>
             </div>
-            <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">Coach Notes</span>
-          </div>
-          <p className="text-sm text-muted-foreground leading-relaxed">{today.coachingNotes}</p>
+          )}
         </div>
       )}
     </div>
@@ -3009,6 +3073,7 @@ export default function SystemPage() {
   const [showReadinessCheckIn, setShowReadinessCheckIn] = useState(false);
   const [showSessionFeedback, setShowSessionFeedback] = useState(false);
   const [feedbackSessionLabel, setFeedbackSessionLabel] = useState<string | undefined>(undefined);
+  const [sessionLoggedToday, setSessionLoggedToday] = useState(false);
   const [showProgramLibrary, setShowProgramLibrary] = useState(false);
   const [isSwitchingProgram, setIsSwitchingProgram] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; name: string } | null>(null);
@@ -3616,27 +3681,8 @@ export default function SystemPage() {
           ) : (
             <>
               {activeTab === "today" && (
-                <div className="space-y-5">
-                  {/* Readiness check-in prompt */}
-                  {readinessToday === null && (
-                    <button
-                      onClick={() => setShowReadinessCheckIn(true)}
-                      className="w-full flex items-center gap-3 rounded-xl border border-dashed border-primary/30 bg-primary/5 hover:bg-primary/8 px-4 py-3 transition-colors text-left"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
-                        <Activity className="w-4 h-4 text-primary" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-primary">How are you feeling today?</p>
-                        <p className="text-[11px] text-muted-foreground">Quick check-in helps your coach adapt your plan</p>
-                      </div>
-                      <span className="text-[11px] font-semibold text-primary border border-primary/30 bg-primary/10 rounded-lg px-3 py-1.5 flex-shrink-0">
-                        Check in →
-                      </span>
-                    </button>
-                  )}
-
-                  {/* Readiness logged today */}
+                <div className="space-y-4">
+                  {/* Readiness logged today — compact status badge */}
                   {readinessToday && (
                     <div className="flex items-center gap-2 rounded-xl border border-green-500/20 bg-green-500/5 px-4 py-2.5">
                       <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
@@ -3659,27 +3705,17 @@ export default function SystemPage() {
                     <TrainingProfileCard />
                   </div>
 
-                  {/* Today's session */}
+                  {/* Today's session — action-first, with inline CTAs */}
                   <TodayView
                     highlightedIds={highlightedIds}
                     onEditExercise={openExerciseEdit}
                     onEditSession={openSessionEdit}
                     onQuickEditComplete={handleEditComplete}
+                    onLogSession={() => { setFeedbackSessionLabel(undefined); setShowSessionFeedback(true); }}
+                    onCheckIn={() => setShowReadinessCheckIn(true)}
+                    sessionLoggedToday={sessionLoggedToday}
+                    checkedInToday={!!readinessToday}
                   />
-
-                  {/* Log session button */}
-                  <div className="flex justify-center pb-2">
-                    <button
-                      onClick={() => {
-                        setFeedbackSessionLabel(undefined);
-                        setShowSessionFeedback(true);
-                      }}
-                      className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground border border-border rounded-xl px-4 py-2.5 hover:bg-muted/40 transition-all"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      Log completed session
-                    </button>
-                  </div>
                 </div>
               )}
               {activeTab === "week" && (
@@ -3725,6 +3761,37 @@ export default function SystemPage() {
           )}
         </div>
       </div>
+
+      {/* ─── Session Action Bar (Today tab only — persistent CTA above agent bar) ─── */}
+      {hasSystem && activeTab === "today" && (
+        <div className="flex-shrink-0 border-t border-border bg-background/98 backdrop-blur-sm px-4 py-3 flex items-center gap-2.5">
+          {/* Check In — only show if not yet done today */}
+          {!readinessToday && (
+            <button
+              onClick={() => setShowReadinessCheckIn(true)}
+              className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-2.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-all flex-shrink-0"
+            >
+              <Activity className="w-3.5 h-3.5" />
+              Check In
+            </button>
+          )}
+          {/* Log Session — primary CTA */}
+          {sessionLoggedToday ? (
+            <div className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-green-500/10 border border-green-500/20 px-4 py-2.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+              <span className="text-xs font-bold text-green-400">Session logged today</span>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setFeedbackSessionLabel(undefined); setShowSessionFeedback(true); }}
+              className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground px-4 py-2.5 text-xs font-bold hover:bg-primary/90 active:scale-[0.98] transition-all"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Log Session
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ─── Desktop VibeBar (desktop only) ─── */}
       {hasSystem && activeTab !== "history" && (
@@ -3896,6 +3963,7 @@ export default function SystemPage() {
           sessionLabel={feedbackSessionLabel}
           onClose={() => setShowSessionFeedback(false)}
           onSubmitted={() => {
+            setSessionLoggedToday(true);
             queryClient.invalidateQueries({ queryKey: ["insights"] });
           }}
         />
