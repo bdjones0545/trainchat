@@ -486,7 +486,9 @@ interface TodayViewProps {
   onQuickEditComplete: (result: EditResult) => void;
   onLogSession?: () => void;
   onCheckIn?: () => void;
+  onStartSession?: () => void;
   sessionLoggedToday?: boolean;
+  sessionInProgress?: boolean;
   checkedInToday?: boolean;
 }
 
@@ -499,7 +501,7 @@ function coachingNotesToBullets(notes: string, max = 3): string[] {
   return parts.slice(0, max);
 }
 
-function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditComplete, onLogSession, onCheckIn, sessionLoggedToday, checkedInToday }: TodayViewProps) {
+function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditComplete, onLogSession, onCheckIn, onStartSession, sessionLoggedToday, sessionInProgress, checkedInToday }: TodayViewProps) {
   const { data: today, isLoading, error } = useQuery({
     queryKey: ["training-system-today"],
     queryFn: fetchToday,
@@ -589,13 +591,21 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditC
               <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
               <span className="text-xs font-bold text-green-400">Session logged</span>
             </div>
-          ) : (
+          ) : sessionInProgress ? (
             <button
               onClick={onLogSession}
               className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground px-4 py-2.5 text-xs font-bold hover:bg-primary/90 active:scale-[0.98] transition-all"
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
               Log Session
+            </button>
+          ) : (
+            <button
+              onClick={onStartSession}
+              className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground px-4 py-2.5 text-xs font-bold hover:bg-primary/90 active:scale-[0.98] transition-all"
+            >
+              <Zap className="w-3.5 h-3.5" />
+              Start Session
             </button>
           )}
           {!checkedInToday && (
@@ -3040,6 +3050,352 @@ function PreviewLockedView({
   );
 }
 
+// ─── Session Controls Panel ────────────────────────────────────────────────────
+
+interface SessionControlsPanelProps {
+  readinessToday: any;
+  sessionLoggedToday: boolean;
+  sessionInProgress: boolean;
+  onLogSession: () => void;
+  onCheckIn: () => void;
+  onStartSession: () => void;
+  onEditComplete: (result: EditResult) => void;
+}
+
+type SessionStatus = "not_started" | "in_progress" | "completed";
+
+function sessionStatusLabel(status: SessionStatus) {
+  if (status === "completed") return { text: "Completed", color: "text-green-400", dot: "bg-green-400" };
+  if (status === "in_progress") return { text: "In Progress", color: "text-amber-400", dot: "bg-amber-400" };
+  return { text: "Not Started", color: "text-muted-foreground", dot: "bg-muted-foreground/40" };
+}
+
+function readinessDots(score: number | undefined, max = 5) {
+  if (!score) return null;
+  return (
+    <div className="flex gap-0.5">
+      {Array.from({ length: max }).map((_, i) => (
+        <span key={i} className={`w-2 h-2 rounded-full ${i < score ? "bg-primary/70" : "bg-muted-foreground/20"}`} />
+      ))}
+    </div>
+  );
+}
+
+function energyLabel(score: number | undefined): string {
+  if (!score) return "—";
+  if (score <= 1) return "Empty";
+  if (score <= 2) return "Low";
+  if (score <= 3) return "Moderate";
+  if (score <= 4) return "High";
+  return "Peak";
+}
+function sorenessLabel(score: number | undefined): string {
+  if (!score) return "—";
+  if (score <= 1) return "None";
+  if (score <= 2) return "Mild";
+  if (score <= 3) return "Moderate";
+  if (score <= 4) return "Significant";
+  return "Severe";
+}
+function cnsLabel(energy: number | undefined, sleep: number | undefined): string {
+  if (!energy && !sleep) return "—";
+  const avg = ((energy ?? 3) + (sleep ?? 3)) / 2;
+  if (avg >= 4.5) return "Peak";
+  if (avg >= 3.5) return "Good";
+  if (avg >= 2.5) return "Moderate";
+  if (avg >= 1.5) return "Low";
+  return "Very low";
+}
+function cnsScore(energy: number | undefined, sleep: number | undefined): number {
+  if (!energy && !sleep) return 3;
+  return Math.round(((energy ?? 3) + (sleep ?? 3)) / 2);
+}
+function suggestedAdjustment(soreness: number | undefined, energy: number | undefined, stress: number | undefined): string | null {
+  if (!soreness && !energy && !stress) return null;
+  const s = soreness ?? 1;
+  const e = energy ?? 3;
+  const st = stress ?? 1;
+  if (s >= 4 || e <= 2) return "Consider reducing session volume today";
+  if (st >= 4) return "Mental load is high — keep intensity manageable";
+  if (s >= 3 && e <= 3) return "Moderate fatigue — focus on technique over load";
+  if (e >= 5) return "Energy is peak — push intensity if programming allows";
+  return null;
+}
+
+function modifierColor(type: "emphasis" | "constraint" | "bias") {
+  if (type === "emphasis") return "bg-primary/10 border-primary/20 text-primary";
+  if (type === "constraint") return "bg-amber-500/10 border-amber-500/20 text-amber-400";
+  return "bg-blue-500/10 border-blue-500/20 text-blue-400";
+}
+
+const QUICK_COMMANDS = [
+  "Shorten today's session",
+  "Make it more explosive",
+  "Reduce volume today",
+  "Swap all machine work for free weights",
+];
+
+function SessionControlsPanel({
+  readinessToday,
+  sessionLoggedToday,
+  sessionInProgress,
+  onLogSession,
+  onCheckIn,
+  onStartSession,
+  onEditComplete,
+}: SessionControlsPanelProps) {
+  const queryClient = useQueryClient();
+  const [cmdInput, setCmdInput] = useState("");
+  const [cmdState, setCmdState] = useState<"idle" | "submitting" | "done" | "error">("idle");
+  const [cmdResult, setCmdResult] = useState<string | null>(null);
+
+  const { data: today } = useQuery({
+    queryKey: ["training-system-today"],
+    queryFn: fetchToday,
+    retry: false,
+    staleTime: 30000,
+  });
+
+  const { data: memData } = useQuery({
+    queryKey: ["agent-memory"],
+    queryFn: fetchAgentMemory,
+    retry: false,
+    staleTime: 30000,
+  });
+  const agentMemory = memData?.agentMemory;
+
+  const editMutation = useMutation({
+    mutationFn: (req: string) => submitGlobalEdit(req),
+    onSuccess: (data) => {
+      setCmdState("done");
+      const first = data.changeSummary?.split(/\.\s/)[0]?.replace(/\.$/, "") ?? "Changes applied";
+      setCmdResult(first);
+      onEditComplete(data);
+      queryClient.invalidateQueries({ queryKey: ["agent-memory"] });
+    },
+    onError: () => {
+      setCmdState("error");
+      setCmdResult("Something went wrong. Try again.");
+    },
+  });
+
+  function fireCmd(req: string) {
+    if (!req.trim() || editMutation.isPending) return;
+    setCmdInput("");
+    setCmdState("submitting");
+    setCmdResult(null);
+    editMutation.mutate(req.trim());
+  }
+
+  const sessionStatus: SessionStatus = sessionLoggedToday
+    ? "completed"
+    : sessionInProgress
+    ? "in_progress"
+    : "not_started";
+
+  const statusInfo = sessionStatusLabel(sessionStatus);
+
+  const allModifiers = [
+    ...(agentMemory?.activeEmphases ?? []).map((v) => ({ type: "emphasis" as const, value: v })),
+    ...(agentMemory?.activeConstraints ?? []).map((v) => ({ type: "constraint" as const, value: v })),
+    ...(agentMemory?.activeBiases ?? []).map((v) => ({ type: "bias" as const, value: v })),
+    ...(agentMemory?.lastModifiers ?? []).slice(0, 2).map((m) => ({ type: "bias" as const, value: m.label })),
+  ].filter((m, i, arr) => arr.findIndex((x) => x.value === m.value) === i).slice(0, 6);
+
+  const energyScore = readinessToday?.energyScore;
+  const sleepScore = readinessToday?.sleepScore;
+  const sorenessScore = readinessToday?.sorenessScore;
+  const stressScore = readinessToday?.stressScore;
+  const hasReadiness = !!(energyScore || sleepScore || sorenessScore);
+  const adjustment = suggestedAdjustment(sorenessScore, energyScore, stressScore);
+
+  return (
+    <div className="space-y-4">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Session Controls</p>
+
+      {/* ── Session State Header ── */}
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <div className="px-4 py-3 border-b border-border bg-muted/20 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <Dumbbell className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+            <span className="text-xs font-semibold text-foreground truncate capitalize">
+              {today?.sessionType ? `${today.sessionType} Session` : "Today's Session"}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <span className={`w-1.5 h-1.5 rounded-full ${statusInfo.dot}`} />
+            <span className={`text-[11px] font-semibold ${statusInfo.color}`}>{statusInfo.text}</span>
+          </div>
+        </div>
+        <div className="px-4 py-3 space-y-2">
+          {/* Primary CTA */}
+          {sessionStatus === "completed" ? (
+            <div className="flex items-center gap-2 rounded-lg bg-green-500/10 border border-green-500/20 px-3 py-2.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+              <span className="text-xs font-bold text-green-400">Session logged today</span>
+            </div>
+          ) : sessionStatus === "in_progress" ? (
+            <button
+              onClick={onLogSession}
+              className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary text-primary-foreground px-3 py-2.5 text-xs font-bold hover:bg-primary/90 active:scale-[0.98] transition-all"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Log Session
+            </button>
+          ) : (
+            <button
+              onClick={onStartSession}
+              className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary text-primary-foreground px-3 py-2.5 text-xs font-bold hover:bg-primary/90 active:scale-[0.98] transition-all"
+            >
+              <Zap className="w-3.5 h-3.5" />
+              Start Session
+            </button>
+          )}
+          {/* Secondary CTAs */}
+          <div className="flex gap-2">
+            {sessionStatus === "in_progress" && (
+              <button
+                onClick={onLogSession}
+                className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-all"
+              >
+                <CheckCircle2 className="w-3 h-3" />
+                Log Session
+              </button>
+            )}
+            <button
+              onClick={onCheckIn}
+              className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-semibold transition-all ${
+                readinessToday
+                  ? "text-green-400 border-green-500/20 bg-green-500/5"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+              }`}
+            >
+              <Activity className="w-3 h-3" />
+              {readinessToday ? "Check-In ✓" : "Daily Check-In"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── System Status ── */}
+      {hasReadiness && (
+        <div className="rounded-xl border border-border bg-card overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-border bg-muted/20">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">System Status</p>
+          </div>
+          <div className="px-4 py-3 space-y-2.5">
+            {energyScore && (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[11px] text-muted-foreground w-20 flex-shrink-0">Energy</span>
+                {readinessDots(energyScore)}
+                <span className="text-[11px] font-semibold text-foreground text-right flex-shrink-0">{energyLabel(energyScore)}</span>
+              </div>
+            )}
+            {sorenessScore && (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[11px] text-muted-foreground w-20 flex-shrink-0">Soreness</span>
+                {readinessDots(sorenessScore)}
+                <span className="text-[11px] font-semibold text-foreground text-right flex-shrink-0">{sorenessLabel(sorenessScore)}</span>
+              </div>
+            )}
+            {(energyScore || sleepScore) && (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[11px] text-muted-foreground w-20 flex-shrink-0">CNS Ready</span>
+                {readinessDots(cnsScore(energyScore, sleepScore))}
+                <span className="text-[11px] font-semibold text-foreground text-right flex-shrink-0">{cnsLabel(energyScore, sleepScore)}</span>
+              </div>
+            )}
+            {adjustment && (
+              <div className="mt-1 pt-2.5 border-t border-border/60">
+                <div className="flex items-start gap-2">
+                  <Info className="w-3 h-3 text-amber-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-amber-400/90 leading-snug">{adjustment}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Active Modifiers ── */}
+      {allModifiers.length > 0 && (
+        <div className="rounded-xl border border-border bg-card overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-border bg-muted/20">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Active Modifiers</p>
+          </div>
+          <div className="px-4 py-3 flex flex-wrap gap-1.5">
+            {allModifiers.map((m, i) => (
+              <span
+                key={i}
+                className={`inline-flex items-center text-[11px] font-semibold rounded-full border px-2.5 py-1 ${modifierColor(m.type)}`}
+              >
+                {m.value}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Command Input ── */}
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-border bg-muted/20">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Command Agent</p>
+        </div>
+        <div className="px-4 py-3 space-y-2">
+          {/* Quick command chips */}
+          <div className="flex flex-wrap gap-1.5">
+            {QUICK_COMMANDS.map((q) => (
+              <button
+                key={q}
+                onClick={() => fireCmd(q)}
+                disabled={editMutation.isPending}
+                className="text-[10px] font-semibold bg-muted/50 text-muted-foreground border border-border rounded-full px-2.5 py-1 hover:text-foreground hover:border-primary/40 hover:bg-primary/5 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+          {/* Free-text input */}
+          <div className="flex gap-2">
+            <input
+              value={cmdInput}
+              onChange={(e) => { setCmdInput(e.target.value); if (cmdState !== "idle") setCmdState("idle"); }}
+              onKeyDown={(e) => e.key === "Enter" && fireCmd(cmdInput)}
+              placeholder="Adjust today's session..."
+              disabled={editMutation.isPending}
+              className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40 transition-all disabled:opacity-50"
+            />
+            <button
+              onClick={() => fireCmd(cmdInput)}
+              disabled={!cmdInput.trim() || editMutation.isPending}
+              className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex-shrink-0"
+            >
+              {editMutation.isPending ? (
+                <div className="w-3 h-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+              ) : (
+                <Send className="w-3 h-3" />
+              )}
+            </button>
+          </div>
+          {/* Feedback message */}
+          {cmdState === "done" && cmdResult && (
+            <div className="flex items-start gap-2 rounded-lg bg-green-500/8 border border-green-500/15 px-3 py-2">
+              <CheckCircle2 className="w-3 h-3 text-green-400 flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-green-400 leading-snug">{cmdResult}</p>
+            </div>
+          )}
+          {cmdState === "error" && cmdResult && (
+            <div className="flex items-start gap-2 rounded-lg bg-red-500/8 border border-red-500/15 px-3 py-2">
+              <AlertCircle className="w-3 h-3 text-red-400 flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-red-400 leading-snug">{cmdResult}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -3074,6 +3430,7 @@ export default function SystemPage() {
   const [showSessionFeedback, setShowSessionFeedback] = useState(false);
   const [feedbackSessionLabel, setFeedbackSessionLabel] = useState<string | undefined>(undefined);
   const [sessionLoggedToday, setSessionLoggedToday] = useState(false);
+  const [sessionInProgress, setSessionInProgress] = useState(false);
   const [showProgramLibrary, setShowProgramLibrary] = useState(false);
   const [isSwitchingProgram, setIsSwitchingProgram] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; name: string } | null>(null);
@@ -3528,30 +3885,16 @@ export default function SystemPage() {
         onModify={(prefill) => { handleInsightModify(prefill); setMobilePanel(null); }}
       />
       <TrainingProfileCard />
-      <div className="h-px bg-border my-4" />
-      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-2">Quick Actions</p>
-      <div className="space-y-2">
-        <button
-          onClick={() => { setShowReadinessCheckIn(true); setMobilePanel(null); }}
-          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border border-border bg-card hover:border-primary/30 hover:bg-primary/5 transition-all text-left"
-        >
-          <Activity className="w-4 h-4 text-primary flex-shrink-0" />
-          <div>
-            <p className="text-sm font-semibold text-foreground">Daily Check-In</p>
-            <p className="text-[11px] text-muted-foreground">Log how you're feeling today</p>
-          </div>
-        </button>
-        <button
-          onClick={() => { setFeedbackSessionLabel(undefined); setShowSessionFeedback(true); setMobilePanel(null); }}
-          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border border-border bg-card hover:border-primary/30 hover:bg-primary/5 transition-all text-left"
-        >
-          <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
-          <div>
-            <p className="text-sm font-semibold text-foreground">Log Session</p>
-            <p className="text-[11px] text-muted-foreground">Mark today's workout complete</p>
-          </div>
-        </button>
-      </div>
+      <div className="h-px bg-border my-2" />
+      <SessionControlsPanel
+        readinessToday={readinessToday}
+        sessionLoggedToday={sessionLoggedToday}
+        sessionInProgress={sessionInProgress}
+        onLogSession={() => { setFeedbackSessionLabel(undefined); setShowSessionFeedback(true); setMobilePanel(null); }}
+        onCheckIn={() => { setShowReadinessCheckIn(true); setMobilePanel(null); }}
+        onStartSession={() => setSessionInProgress(true)}
+        onEditComplete={(result) => { handleGlobalEditComplete(result); setMobilePanel(null); }}
+      />
     </div>
   );
 
@@ -3713,7 +4056,9 @@ export default function SystemPage() {
                     onQuickEditComplete={handleEditComplete}
                     onLogSession={() => { setFeedbackSessionLabel(undefined); setShowSessionFeedback(true); }}
                     onCheckIn={() => setShowReadinessCheckIn(true)}
+                    onStartSession={() => setSessionInProgress(true)}
                     sessionLoggedToday={sessionLoggedToday}
+                    sessionInProgress={sessionInProgress}
                     checkedInToday={!!readinessToday}
                   />
                 </div>
@@ -3775,19 +4120,27 @@ export default function SystemPage() {
               Check In
             </button>
           )}
-          {/* Log Session — primary CTA */}
+          {/* Primary session CTA — state-driven */}
           {sessionLoggedToday ? (
             <div className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-green-500/10 border border-green-500/20 px-4 py-2.5">
               <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
               <span className="text-xs font-bold text-green-400">Session logged today</span>
             </div>
-          ) : (
+          ) : sessionInProgress ? (
             <button
               onClick={() => { setFeedbackSessionLabel(undefined); setShowSessionFeedback(true); }}
               className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground px-4 py-2.5 text-xs font-bold hover:bg-primary/90 active:scale-[0.98] transition-all"
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
               Log Session
+            </button>
+          ) : (
+            <button
+              onClick={() => setSessionInProgress(true)}
+              className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground px-4 py-2.5 text-xs font-bold hover:bg-primary/90 active:scale-[0.98] transition-all"
+            >
+              <Zap className="w-3.5 h-3.5" />
+              Start Session
             </button>
           )}
         </div>
