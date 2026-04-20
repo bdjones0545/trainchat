@@ -1,0 +1,108 @@
+STRENGTH BUILD FAILURE FIX — JSON RELIABILITY + TRUNCATION CONTROL
+
+We are seeing frequent failures:
+
+"I wasn't able to complete your program build. The AI returned an invalid response."
+
+This means structuredData === null after retry.
+
+We need to fix root causes:
+1) JSON not returned
+2) JSON truncated
+3) Prompt too large
+
+----------------------------------------
+TASK 1 — Add JSON presence detector
+----------------------------------------
+
+After OpenAI response:
+
+IF response does NOT contain:
+- "```json"
+OR
+- "{"
+
+→ classify as invalid immediately
+
+Trigger retry BEFORE parsing
+
+----------------------------------------
+TASK 2 — Add truncation detector
+----------------------------------------
+
+IF response contains:
+- "```json"
+BUT does NOT contain closing "}"
+
+OR fails JSON.parse
+
+→ classify as TRUNCATION
+
+Trigger retry with:
+
+"Your response was cut off. Return COMPLETE JSON. Ensure closing braces."
+
+----------------------------------------
+TASK 3 — Reduce strength max_tokens further
+----------------------------------------
+
+Change:
+
+strength build:
+max_tokens: 2600 → 2000
+
+This reduces:
+- latency
+- truncation risk
+
+----------------------------------------
+TASK 4 — Add HARD JSON-FIRST instruction
+----------------------------------------
+
+At VERY TOP of strength build prompt:
+
+🚨 CRITICAL OUTPUT RULE:
+Your response MUST start with a JSON code block.
+Do NOT include any text before it.
+Do NOT explain.
+Do NOT confirm.
+Only output JSON.
+
+----------------------------------------
+TASK 5 — Add fallback minimal build mode (LAST RESORT)
+----------------------------------------
+
+If retry fails again:
+
+Trigger a SECOND retry with:
+
+"RETURN MINIMAL VALID PROGRAM:
+- 3–4 exercises per session
+- valid JSON only
+- no extra text"
+
+This ensures:
+- system NEVER fails completely
+- user always gets something usable
+
+----------------------------------------
+TASK 6 — Add audit logging
+----------------------------------------
+
+[StrengthBuildFailureAudit]
+{
+  hasJsonBlock,
+  parseSucceeded,
+  truncated,
+  retryCount,
+  finalOutcome
+}
+
+----------------------------------------
+SUCCESS CRITERIA
+----------------------------------------
+
+Strength builds should:
+- NEVER return plain text
+- NEVER fail silently
+- ALWAYS produce valid JSON OR minimal fallback

@@ -2714,8 +2714,16 @@ export async function generateAIResponse(
     // adds 6K-15K input tokens and significantly increases time-to-first-token.
     // Reduced: all builds → 4 turns max, edit paths → 12, conversational → 15.
     const historyWindowSize = isBuildIntent ? 4 : (editContext !== null ? 12 : 15);
+
+    // ── JSON-FIRST enforcement — prepend hard output rule for all build paths ─
+    // Prevents the AI from returning a confirmation sentence or planning overview
+    // instead of starting with the required JSON code block.
+    const buildEnforcementPrefix = isBuildIntent
+      ? `🚨 CRITICAL OUTPUT RULE:\nYour response MUST start with a JSON code block.\nDo NOT include any text before it.\nDo NOT explain.\nDo NOT confirm.\nOnly output JSON.\n\n`
+      : "";
+
     const baseMessages = [
-      { role: "system" as const, content: systemPrompt },
+      { role: "system" as const, content: buildEnforcementPrefix + systemPrompt },
       ...history.slice(-historyWindowSize).map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
       { role: "user" as const, content: userMessage },
     ];
@@ -2731,7 +2739,8 @@ export async function generateAIResponse(
     const maxTokens = actionDecision?.recommendedMaxTokens
       ?? ((focusMode === "speed") && isBuildIntent ? 2600
         : (focusMode === "mobility") && isBuildIntent ? 2200
-        : isBuildIntent ? 2600
+        : (focusMode === "strength") && isBuildIntent ? 2000
+        : isBuildIntent ? 2000
         : editContext !== null || intentResult?.type === "ADJUST_FOR_PAIN" || intentResult?.type === "ADJUST_FOR_READINESS" ? 2800
         : 2000);
 
@@ -2800,7 +2809,13 @@ export async function generateAIResponse(
         }));
       }
       try {
-        const retryResult = await callOpenAI(baseMessages, truncationRetryBudget);
+        // Append a targeted completion instruction so the AI knows to resume and close the JSON
+        const truncationRetryMessages = [
+          ...baseMessages,
+          { role: "assistant" as const, content: cleanContent },
+          { role: "user" as const, content: "Your response was cut off. Return COMPLETE JSON. Ensure closing braces." },
+        ];
+        const retryResult = await callOpenAI(truncationRetryMessages, truncationRetryBudget);
         if (retryResult.structuredData) {
           cleanContent = retryResult.cleanContent;
           structuredData = retryResult.structuredData;
@@ -2832,18 +2847,35 @@ export async function generateAIResponse(
     // Fires when: isBuildIntent AND structuredData is STILL null after truncation retry
     // AND the response is non-empty (prose returned instead of truncated/empty).
     if (isBuildIntent && structuredData === null && cleanContent.length > 0) {
+      // ── Task 1: JSON presence detector ─────────────────────────────────────
+      // Classify immediately whether the response has any JSON indicator at all.
+      // This drives targeted retry messaging and audit accuracy.
+      const hasJsonBlock = cleanContent.includes("```json");
+      const hasBraceContent = cleanContent.includes("{");
+      const noJsonPresent = !hasJsonBlock && !hasBraceContent;
+
       // Global length guard: a real program JSON can never fit in under 400 chars.
       // If the response is that short and has no JSON it's definitively a false-success
       // or short confirmation — treat as a detected preview even before pattern matching.
       const lengthGuardTriggered = cleanContent.length < 400;
-      const previewDetection = lengthGuardTriggered
-        ? { isPreview: true, triggerPhrase: `short response (${cleanContent.length} chars) — not a complete program`, confidence: "high" as const }
+      const previewDetection = (noJsonPresent || lengthGuardTriggered)
+        ? {
+            isPreview: true,
+            triggerPhrase: noJsonPresent
+              ? `no JSON block present — response has no \`\`\`json or { content`
+              : `short response (${cleanContent.length} chars) — not a complete program`,
+            confidence: "high" as const,
+          }
         : detectIncompleteBuildResponse(cleanContent);
 
       logger.warn(
         {
           focusMode,
+          hasJsonBlock,
+          hasBraceContent,
+          noJsonPresent,
           previewDetected: previewDetection.isPreview,
+          falseSuccessDetected: previewDetection.isPreview,
           triggerPhrase: previewDetection.triggerPhrase,
           responseLength: cleanContent.length,
           lengthGuardTriggered,
@@ -2854,6 +2886,8 @@ export async function generateAIResponse(
       if (process.env.NODE_ENV !== "production") {
         console.log("[BuildFailureAudit]", JSON.stringify({
           focusMode,
+          hasJsonBlock,
+          noJsonPresent,
           previewDetected: previewDetection.isPreview,
           falseSuccessDetected: previewDetection.isPreview,
           triggerPhrase: previewDetection.triggerPhrase,
@@ -2863,6 +2897,16 @@ export async function generateAIResponse(
           programSaved: false,
           phase: "pre-retry",
         }));
+        // Task 6: strength-specific audit
+        if (focusMode === "strength") {
+          console.log("[StrengthBuildFailureAudit]", JSON.stringify({
+            hasJsonBlock,
+            parseSucceeded: false,
+            truncated: truncated ?? false,
+            retryCount: 0,
+            finalOutcome: "pending-retry",
+          }));
+        }
       }
 
       if (previewDetection.isPreview) {
@@ -2895,6 +2939,8 @@ Return the FULL program now.`;
           if (process.env.NODE_ENV !== "production") {
             console.log("[BuildFailureAudit]", JSON.stringify({
               focusMode,
+              hasJsonBlock,
+              noJsonPresent,
               previewDetected: true,
               falseSuccessDetected: true,
               triggerPhrase: previewDetection.triggerPhrase,
@@ -2913,28 +2959,99 @@ Return the FULL program now.`;
               { focusMode },
               "[BuildFailureAudit] Strict retry succeeded — structured data recovered from preview/false-success failure"
             );
-          } else {
-            // Both attempts failed — hard block, do NOT return any success message.
-            logger.warn(
-              { focusMode },
-              "[BuildFailureAudit] Strict retry also returned no JSON — returning hard-blocked error"
-            );
-            if (process.env.NODE_ENV !== "production") {
-              console.log("[BuildFailureAudit]", JSON.stringify({
-                focusMode,
-                previewDetected: true,
-                falseSuccessDetected: true,
-                retryTriggered: true,
-                retrySucceeded: false,
-                parseSucceeded: false,
-                programSaved: false,
-                phase: "hard-block",
+            if (process.env.NODE_ENV !== "production" && focusMode === "strength") {
+              console.log("[StrengthBuildFailureAudit]", JSON.stringify({
+                hasJsonBlock,
+                parseSucceeded: true,
+                truncated: truncated ?? false,
+                retryCount: 1,
+                finalOutcome: "retry-succeeded",
               }));
             }
-            return {
-              content: `I wasn't able to complete your program build. The AI returned an invalid response. Try again.`,
-              structuredData: null,
-            };
+          } else {
+            // ── Task 5: Minimal build fallback (last resort) ──────────────────
+            // First retry failed — attempt a second retry with a minimal program
+            // instruction. This ensures the system always produces something usable
+            // rather than failing completely.
+            logger.warn(
+              { focusMode },
+              "[BuildFailureAudit] Strict retry returned no JSON — attempting minimal build fallback"
+            );
+
+            const minimalBuildInstruction = `RETURN MINIMAL VALID PROGRAM:
+- 3-4 exercises per session
+- valid JSON only
+- no extra text`;
+
+            try {
+              const minimalRetryMessages = [
+                ...baseMessages,
+                { role: "user" as const, content: minimalBuildInstruction },
+              ];
+              const minimalRetryResult = await callOpenAI(minimalRetryMessages, maxTokens);
+              const minimalSucceeded = minimalRetryResult.structuredData !== null;
+
+              if (process.env.NODE_ENV !== "production") {
+                console.log("[BuildFailureAudit]", JSON.stringify({
+                  focusMode,
+                  hasJsonBlock,
+                  noJsonPresent,
+                  previewDetected: true,
+                  falseSuccessDetected: true,
+                  retryTriggered: true,
+                  retrySucceeded: minimalSucceeded,
+                  parseSucceeded: minimalSucceeded,
+                  programSaved: false,
+                  phase: "minimal-fallback",
+                }));
+                if (focusMode === "strength") {
+                  console.log("[StrengthBuildFailureAudit]", JSON.stringify({
+                    hasJsonBlock,
+                    parseSucceeded: minimalSucceeded,
+                    truncated: truncated ?? false,
+                    retryCount: 2,
+                    finalOutcome: minimalSucceeded ? "minimal-fallback-succeeded" : "hard-block",
+                  }));
+                }
+              }
+
+              if (minimalSucceeded) {
+                cleanContent = minimalRetryResult.cleanContent;
+                structuredData = minimalRetryResult.structuredData;
+                logger.info(
+                  { focusMode },
+                  "[BuildFailureAudit] Minimal build fallback succeeded — structured data recovered"
+                );
+              } else {
+                // All three attempts failed — hard block.
+                logger.warn(
+                  { focusMode },
+                  "[BuildFailureAudit] All retries exhausted — returning hard-blocked error"
+                );
+                return {
+                  content: `I wasn't able to complete your program build. The AI returned an invalid response. Try again.`,
+                  structuredData: null,
+                };
+              }
+            } catch (minimalRetryErr) {
+              logger.warn(
+                { minimalRetryErr, focusMode },
+                "[BuildFailureAudit] Minimal build fallback threw — returning hard-blocked error"
+              );
+              if (process.env.NODE_ENV !== "production" && focusMode === "strength") {
+                console.log("[StrengthBuildFailureAudit]", JSON.stringify({
+                  hasJsonBlock,
+                  parseSucceeded: false,
+                  truncated: truncated ?? false,
+                  retryCount: 2,
+                  finalOutcome: "hard-block-exception",
+                }));
+              }
+              return {
+                content: `I wasn't able to complete your program build. The AI returned an invalid response. Try again.`,
+                structuredData: null,
+              };
+            }
           }
         } catch (previewRetryErr) {
           logger.warn(
@@ -2944,6 +3061,8 @@ Return the FULL program now.`;
           if (process.env.NODE_ENV !== "production") {
             console.log("[BuildFailureAudit]", JSON.stringify({
               focusMode,
+              hasJsonBlock,
+              noJsonPresent,
               previewDetected: true,
               falseSuccessDetected: true,
               retryTriggered: true,
@@ -2952,6 +3071,15 @@ Return the FULL program now.`;
               programSaved: false,
               phase: "hard-block-exception",
             }));
+            if (focusMode === "strength") {
+              console.log("[StrengthBuildFailureAudit]", JSON.stringify({
+                hasJsonBlock,
+                parseSucceeded: false,
+                truncated: truncated ?? false,
+                retryCount: 1,
+                finalOutcome: "hard-block-exception",
+              }));
+            }
           }
           return {
             content: `I wasn't able to complete your program build. The AI returned an invalid response. Try again.`,
