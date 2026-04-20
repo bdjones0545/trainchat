@@ -139,11 +139,11 @@ interface StructuredEditPayload {
   source?: string;
 }
 
-async function submitGlobalEdit(payload: string | StructuredEditPayload) {
+async function submitGlobalEdit(payload: string | StructuredEditPayload, focusMode?: string) {
   const body =
     typeof payload === "string"
-      ? { request: payload }
-      : { intent: payload.intent, request: "", source: payload.source ?? "quick_action" };
+      ? { request: payload, ...(focusMode ? { focusMode } : {}) }
+      : { intent: payload.intent, request: "", source: payload.source ?? "quick_action", ...(focusMode ? { focusMode } : {}) };
   return customFetch<EditResult>("/api/training-system/edit", {
     method: "POST",
     body: JSON.stringify(body),
@@ -152,12 +152,13 @@ async function submitGlobalEdit(payload: string | StructuredEditPayload) {
 
 async function submitQuickEdit(
   payload: string | StructuredEditPayload,
-  targetContext?: { type: string; id: number; label: string; parentLabel?: string }
+  targetContext?: { type: string; id: number; label: string; parentLabel?: string },
+  focusMode?: string
 ) {
   const body =
     typeof payload === "string"
-      ? { request: payload, targetContext }
-      : { intent: payload.intent, request: "", source: payload.source ?? "quick_action", targetContext };
+      ? { request: payload, targetContext, ...(focusMode ? { focusMode } : {}) }
+      : { intent: payload.intent, request: "", source: payload.source ?? "quick_action", targetContext, ...(focusMode ? { focusMode } : {}) };
   return customFetch<EditResult>("/api/training-system/edit", {
     method: "POST",
     body: JSON.stringify(body),
@@ -264,6 +265,7 @@ interface ExerciseCardProps {
 }
 
 function ExerciseCard({ exercise, index, sessionLabel, highlightedIds, onEdit, onQuickEditComplete }: ExerciseCardProps) {
+  const { focusMode: exerciseCardFocusMode } = useFocusMode();
   const highlight = useHighlightClass(exercise.id, highlightedIds);
   const [showActions, setShowActions] = useState(false);
   const [activeChip, setActiveChip] = useState<string | null>(null);
@@ -303,7 +305,7 @@ function ExerciseCard({ exercise, index, sessionLabel, highlightedIds, onEdit, o
   const quickMutation = useMutation({
     mutationFn: ({ req, chip }: { req: string; chip: string }) => {
       setActiveChip(chip);
-      return submitQuickEdit(req, { type: "exercise", id: exercise.id, label: exercise.name, parentLabel: sessionLabel });
+      return submitQuickEdit(req, { type: "exercise", id: exercise.id, label: exercise.name, parentLabel: sessionLabel }, exerciseCardFocusMode);
     },
     onSuccess: (data) => {
       setActiveChip(null);
@@ -853,7 +855,7 @@ function WeekView({ highlightedIds, onEditExercise, onEditSession, onEditWeek, i
     mutationFn: ({ req, chip, intent }: { req?: string; chip: string; intent?: CommandIntentKey }) => {
       setRefineActiveChip(chip);
       const payload = intent ? { intent, scope: "week", source: "quick_action" } : (req ?? chip);
-      return submitQuickEdit(payload, { type: "week", id: week?.id ?? 0, label: week?.label ?? `Week ${activeWeekNumber}`, parentLabel: week?.phase?.name });
+      return submitQuickEdit(payload, { type: "week", id: week?.id ?? 0, label: week?.label ?? `Week ${activeWeekNumber}`, parentLabel: week?.phase?.name }, focusMode);
     },
     onSuccess: (data) => {
       setRefineActiveChip(null);
@@ -2049,7 +2051,7 @@ function VibeBar({ onEditComplete, onUndone }: VibeBarProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const editMutation = useMutation({
-    mutationFn: ({ payload }: VibeMutation) => submitGlobalEdit(payload),
+    mutationFn: ({ payload }: VibeMutation) => submitGlobalEdit(payload, vibeBarFocusMode),
     onSuccess: (data) => {
       setLastResult(data);
       setVibeState("result");
@@ -2535,6 +2537,7 @@ interface AgentPanelProps {
 }
 
 function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
+  const { focusMode: agentPanelFocusMode } = useFocusMode();
   const queryClient = useQueryClient();
   const [selectedScope, setSelectedScope] = useState<AgentScope>("today");
   const [phase, setPhase] = useState<AgentPanelPhase>("idle");
@@ -2606,7 +2609,8 @@ function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
     mutationFn: ({ req, scope, intent }: { req: string; scope: AgentScope; intent?: CommandIntentKey }) =>
       submitQuickEdit(
         intent ? { intent, scope, source: "quick_action" } : req,
-        buildTargetContext(scope)
+        buildTargetContext(scope),
+        agentPanelFocusMode
       ),
     onSuccess: (data) => {
       setLastResult(data);
@@ -3389,6 +3393,7 @@ function SessionControlsPanel({
   onStartSession,
   onEditComplete,
 }: SessionControlsPanelProps) {
+  const { focusMode: sessionControlsFocusMode } = useFocusMode();
   const queryClient = useQueryClient();
   const [cmdInput, setCmdInput] = useState("");
   const [cmdState, setCmdState] = useState<"idle" | "submitting" | "done" | "error">("idle");
@@ -3410,7 +3415,7 @@ function SessionControlsPanel({
   const agentMemory = memData?.agentMemory;
 
   const editMutation = useMutation({
-    mutationFn: (req: string) => submitGlobalEdit(req),
+    mutationFn: (req: string) => submitGlobalEdit(req, sessionControlsFocusMode),
     onSuccess: (data) => {
       setCmdState("done");
       const first = data.changeSummary?.split(/\.\s/)[0]?.replace(/\.$/, "") ?? "Changes applied";
@@ -4625,8 +4630,10 @@ export default function SystemPage() {
           target={editTarget}
           prefillRequest={editPrefill}
           exerciseContext={editTarget.type === "exercise" ? editExerciseContext : undefined}
+          focusMode={focusMode}
           uiContext={{
             page: "system",
+            focusMode,
             activeProgramId: activeSystem?.id ?? null,
             activeProgramName: activeSystem?.name ?? null,
             selectedExerciseName: editTarget.type === "exercise" ? editTarget.label : undefined,

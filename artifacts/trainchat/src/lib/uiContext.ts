@@ -11,6 +11,9 @@
 export interface UIContext {
   page?: "/chat" | "/system" | "/billing" | string;
 
+  /** Current active focus mode — routes the edit to the correct training system. */
+  focusMode?: "strength" | "speed" | "mobility" | string | null;
+
   activeProgramId?: number | null;
   activeProgramName?: string | null;
 
@@ -35,6 +38,7 @@ export function buildUIContextPrompt(ctx: UIContext | null | undefined): string 
   const lines: string[] = [];
 
   if (ctx.page) lines.push(`Current page: ${ctx.page}`);
+  if (ctx.focusMode) lines.push(`Active training focus: ${ctx.focusMode}`);
   if (ctx.activeProgramName) lines.push(`Active program: "${ctx.activeProgramName}"`);
   if (ctx.selectedWeek != null) lines.push(`User is viewing Week ${ctx.selectedWeek}`);
   if (ctx.selectedSessionName) lines.push(`Selected session: "${ctx.selectedSessionName}"`);

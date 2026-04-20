@@ -755,6 +755,7 @@ function ProgramTab({
         method: "POST",
         body: JSON.stringify({
           request,
+          focusMode: panelFocusMode,
           source: "quick_action",
           targetContext: {
             type: "exercise",

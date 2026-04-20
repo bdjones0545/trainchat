@@ -647,7 +647,10 @@ Keep it helpful and intelligent, never promotional.`;
   // the old program.
   const [latestStructuredProgram, activeSystem] = await Promise.all([
     Promise.resolve(resolveCurrentProgram(history)),
-    getActiveTrainingSystem(userId).catch(() => null),
+    // Pass focusMode so we resolve the correct focus's training system.
+    // Only filter by focus when the UI explicitly sends a focusMode; otherwise
+    // fall back to the unscoped query (handles old clients and edge cases).
+    getActiveTrainingSystem(userId, nonStreamUiCtx?.focusMode ? nonStreamFocusMode : undefined).catch(() => null),
   ]);
 
   const hasActiveProgram = latestStructuredProgram !== null;
@@ -2303,10 +2306,11 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   }
 
   // ── Stage 3: Classify Change Type ────────────────────────────────────────
-  // Load active program + system in parallel, then classify intent
+  // Load active program + system in parallel, then classify intent.
+  // Pass focusMode so we resolve the correct focus's training system.
   const [latestStructuredProgram, activeSystem] = await Promise.all([
     Promise.resolve(resolveCurrentProgram(history)),
-    getActiveTrainingSystem(userId).catch(() => null),
+    getActiveTrainingSystem(userId, streamUIContext?.focusMode ? streamFocusMode : undefined).catch(() => null),
   ]);
 
   const hasActiveProgram = latestStructuredProgram !== null;

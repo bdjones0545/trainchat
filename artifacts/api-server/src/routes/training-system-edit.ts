@@ -192,6 +192,7 @@ const EditRequestBody = z.object({
   intent: z.string().optional(),
   targetContext: TargetContextSchema.optional(),
   source: z.enum(["ai_edit", "quick_action", "initialize", "auto_adjust"]).optional(),
+  focusMode: z.enum(["strength", "speed", "mobility"]).optional(),
 }).refine((d) => d.intent || (d.request && d.request.length > 0), {
   message: "Either 'intent' or a non-empty 'request' is required.",
 });
@@ -223,16 +224,45 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
   }
 
   const userId = req.session.userId!;
-  const { request: rawRequest, intent, targetContext, source = "ai_edit" } = parsed.data;
+  const { request: rawRequest, intent, targetContext, source = "ai_edit", focusMode } = parsed.data;
   const userRequest = rawRequest ?? "";
   const uiContext = (req.body as any)?.uiContext ?? null;
+  // focusMode can also come from uiContext (chat path); body-level takes precedence
+  const resolvedFocusMode: string | undefined = focusMode ?? (uiContext?.focusMode as string | undefined) ?? undefined;
 
   try {
-    // 1. Load active training system
-    const activeSystem = await getActiveTrainingSystem(userId);
+    // 1. Load active training system — FOCUS-SCOPED
+    // If focusMode is provided, we MUST resolve to that focus's training system.
+    // Never fall back to the last-created system regardless of focus.
+    const activeSystem = await getActiveTrainingSystem(userId, resolvedFocusMode);
     if (!activeSystem) {
       res.status(404).json({ error: "No active training system found. Initialize your system first." });
       return;
+    }
+
+    // ── FOCUS MISMATCH GUARD ────────────────────────────────────────────────
+    // If a focusMode was explicitly requested, verify the resolved system matches.
+    // Reject any edit that would mutate the wrong focus's program.
+    if (resolvedFocusMode) {
+      const systemFocus = ((activeSystem.metadata as any)?.focusMode ?? "strength") as string;
+      if (systemFocus !== resolvedFocusMode) {
+        logger.error(
+          {
+            userId,
+            requestedFocus: resolvedFocusMode,
+            resolvedFocus: systemFocus,
+            resolvedTrainingSystemId: activeSystem.id,
+            command: intent ?? userRequest,
+          },
+          "[FocusMismatchEditBlock] CRITICAL — edit would have mutated the wrong focus program. REJECTED."
+        );
+        res.status(409).json({
+          error: `Focus mismatch: requested edit for '${resolvedFocusMode}' but resolved system is '${systemFocus}'. Edit rejected.`,
+          requestedFocus: resolvedFocusMode,
+          resolvedFocus: systemFocus,
+        });
+        return;
+      }
     }
 
     // 2. Load full system with hierarchy + adaptation context + memories in parallel
@@ -313,6 +343,25 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
 
     // 4. Apply the edit plan to the database (with family propagation across weeks)
     const editResult = await applyEditPlan(editPlan, undefined, activeSystem.id);
+
+    // ── FOCUS-SCOPED EDIT AUDIT LOG ─────────────────────────────────────────
+    const auditSystemFocus = ((activeSystem.metadata as any)?.focusMode ?? "strength") as string;
+    logger.info(
+      {
+        surface: source,
+        requestedFocus: resolvedFocusMode ?? "none",
+        requestedTrainingSystemId: null,
+        resolvedTrainingSystemId: activeSystem.id,
+        resolvedFocus: auditSystemFocus,
+        mismatchBlocked: false,
+        editApplied: editResult.appliedCount > 0,
+        appliedCount: editResult.appliedCount,
+        intent: editPlan.intent,
+        scope: editPlan.scope,
+        userId,
+      },
+      "[FocusScopedEditAudit]"
+    );
 
     // 5. Persist the change log entry
     let changeLogId: number | undefined;

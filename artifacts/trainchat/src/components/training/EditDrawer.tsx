@@ -126,6 +126,8 @@ interface EditDrawerProps {
   prefillRequest?: string;
   exerciseContext?: ExerciseContext;
   uiContext?: Record<string, unknown>;
+  /** Current active focus mode — required to route edits to the correct training system. */
+  focusMode?: string;
 }
 
 type DrawerPhase = "input" | "directions" | "executing" | "success" | "error";
@@ -234,7 +236,8 @@ const DIRECTION_COLORS = [
 
 async function fetchDirections(
   request: string,
-  target: EditTarget
+  target: EditTarget,
+  focusMode?: string
 ): Promise<DirectionsResponse> {
   return customFetch<DirectionsResponse>("/api/training-system/directions", {
     method: "POST",
@@ -246,6 +249,7 @@ async function fetchDirections(
         label: target.label,
         parentLabel: target.parentLabel,
       },
+      ...(focusMode ? { focusMode } : {}),
     }),
   });
 }
@@ -253,12 +257,14 @@ async function fetchDirections(
 async function submitTargetedEdit(
   request: string,
   target: EditTarget,
-  uiContext?: Record<string, unknown>
+  uiContext?: Record<string, unknown>,
+  focusMode?: string
 ): Promise<EditResult> {
   return customFetch<EditResult>("/api/training-system/edit", {
     method: "POST",
     body: JSON.stringify({
       request,
+      focusMode,
       targetContext: {
         type: target.type,
         id: target.id,
@@ -893,7 +899,7 @@ function ExerciseLogSection({
 
 // ─── Main component ────────────────────────────────────────────────────────────
 
-export default function EditDrawer({ target, onClose, onEditComplete, prefillRequest, exerciseContext, uiContext }: EditDrawerProps) {
+export default function EditDrawer({ target, onClose, onEditComplete, prefillRequest, exerciseContext, uiContext, focusMode }: EditDrawerProps) {
   const [input, setInput] = useState(prefillRequest ?? "");
   const [visible, setVisible] = useState(false);
   const [phase, setPhase] = useState<DrawerPhase>("input");
@@ -926,7 +932,7 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
 
   // ── Directions fetch mutation ──
   const directionsMutation = useMutation({
-    mutationFn: (request: string) => fetchDirections(request, target),
+    mutationFn: (request: string) => fetchDirections(request, target, focusMode),
     onSuccess: (data) => {
       if (data.shouldSkipDirections) {
         setPhase("executing");
@@ -944,7 +950,7 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
 
   // ── Edit execution mutation ──
   const editMutation = useMutation({
-    mutationFn: (request: string) => submitTargetedEdit(request, target, uiContext),
+    mutationFn: (request: string) => submitTargetedEdit(request, target, uiContext, focusMode),
     onSuccess: (data) => {
       if (data.appliedCount === 0) {
         setErrorMsg("No changes were applied — try being more specific or rephrasing your request.");

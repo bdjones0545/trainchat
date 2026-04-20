@@ -35,6 +35,7 @@ const TargetContextSchema = z.object({
 const DirectionsRequestBody = z.object({
   request: z.string().min(1).max(2000),
   targetContext: TargetContextSchema.optional(),
+  focusMode: z.enum(["strength", "speed", "mobility"]).optional(),
 });
 
 // ─── POST /training-system/directions ─────────────────────────────────────────
@@ -46,10 +47,11 @@ router.post("/training-system/directions", requireAuth, async (req, res): Promis
   }
 
   const userId = req.session.userId!;
-  const { request: userRequest, targetContext } = parsed.data;
+  const { request: userRequest, targetContext, focusMode } = parsed.data;
 
   try {
-    const activeSystem = await getActiveTrainingSystem(userId);
+    // Load the focus-scoped active system — never fall back to last-created global system
+    const activeSystem = await getActiveTrainingSystem(userId, focusMode);
     if (!activeSystem) {
       res.status(404).json({ error: "No active training system found." });
       return;
