@@ -142,14 +142,14 @@ function buildPhaseConfig(goal: string, daysPerWeek: number): {
 } {
   const configs: Record<string, { phaseName: string; phaseGoal: string; emphasis: string; weekConfigs: { label: string; focus: string; volumeLevel: "low" | "moderate" | "high" | "deload" }[] }> = {
     strength: {
-      phaseName: "Foundation Strength Block",
-      phaseGoal: "Build foundational strength across primary movement patterns",
-      emphasis: "Progressive overload on compound lifts. Prioritize form and bar speed.",
+      phaseName: "Strength Block",
+      phaseGoal: "Build foundational strength across primary movement patterns with real week-to-week progression",
+      emphasis: "Compound bilateral lifts, progressive overload arc (Establish → Build → Intensify → Deload), bar speed and technical quality.",
       weekConfigs: [
-        { label: "Week 1 — Introduction", focus: "Establish baseline loads and technique", volumeLevel: "moderate" },
-        { label: "Week 2 — Build", focus: "Increase intensity, maintain bar speed", volumeLevel: "moderate" },
-        { label: "Week 3 — Accumulation", focus: "Push loads progressively across all main lifts", volumeLevel: "high" },
-        { label: "Week 4 — Deload", focus: "Reduce volume, prime CNS for next block", volumeLevel: "deload" },
+        { label: "Week 1 — Establish", focus: "Find baseline loads, establish positions, technique priority over load", volumeLevel: "moderate" },
+        { label: "Week 2 — Build", focus: "Add 2.5–5% to primary lifts, fuller accessory volume, controlled effort", volumeLevel: "moderate" },
+        { label: "Week 3 — Intensify", focus: "Highest neural demand — peak primary loading, 1-2 RIR top sets, biggest week", volumeLevel: "high" },
+        { label: "Week 4 — Deload", focus: "Active recovery — 60% load, flush fatigue, protect CNS for next block", volumeLevel: "deload" },
       ],
     },
     hypertrophy: {
@@ -308,8 +308,33 @@ function getWarmupNotes(sessionType: string, emphasis: string): string {
 
 function getCoachingNotes(goal: string, weekIndex: number, dayLabel: string): string {
   if (goal === "strength") {
-    if (weekIndex === 3) return "Deload week — reduce all weights by 40-50%. Focus on perfect technique and recovery.";
-    return `Log your weights for every set. Progressive overload is the primary driver here — even adding 2.5kg to a main lift is a win.`;
+    const label = dayLabel.toLowerCase();
+    const isUpperSession = label.includes("upper") || label.includes("press") || label.includes("pull");
+    const isLowerSession = label.includes("lower") || label.includes("squat") || label.includes("hinge") || label.includes("leg") || label.includes("posterior");
+    const isPowerSession = label.includes("power") || label.includes("explosive") || label.includes("full body");
+
+    if (weekIndex === 0) { // Establish
+      if (isUpperSession) return "W1 Establish — Find your working loads for the upper body compounds. Technique before load. Log every set — this data drives the rest of the block.";
+      if (isLowerSession) return "W1 Establish — Establish your squat and hinge positions. Submaximal loading (RPE 6-7). The load will come. Positions first.";
+      if (isPowerSession) return "W1 Establish — Sub-maximal power output. Focus on positions and intent. Learn the pattern, not the load.";
+      return "W1 Establish — Learn the session structure. Log your loads for every working set — this is your baseline for the block.";
+    }
+    if (weekIndex === 1) { // Build
+      if (isUpperSession) return "W2 Build — Add 2.5–5% to upper body compounds from Week 1. Maintain bar speed and technical control. 2-3 RIR on working sets.";
+      if (isLowerSession) return "W2 Build — Increase primary lift loads 2.5–5% from W1. Fuller accessory volume this week. Keep quality high on the unilateral work.";
+      if (isPowerSession) return "W2 Build — Push power output with controlled aggression. More intent than W1 — same quality.";
+      return "W2 Build — Progressive overload begins here. Add weight where you can, maintain quality where you can't. Log everything.";
+    }
+    if (weekIndex === 2) { // Intensify
+      if (isUpperSession) return "W3 Intensify — Heaviest upper body week of the block. Work to 1-2 RIR on primaries. Bar speed matters more than weight on the bar.";
+      if (isLowerSession) return "W3 Intensify — Peak lower body loading. Highest neural demand. Warm up longer, rest fully. 1-2 RIR on squats and hinges.";
+      if (isPowerSession) return "W3 Intensify — Maximum intent on power work. Full rest between sets. Express what the block has built.";
+      return "W3 Intensify — Biggest training stimulus of the block. Work to near-failure on primaries. Record your top sets.";
+    }
+    if (weekIndex === 3) { // Deload
+      return "W4 Deload — Drop loads to 60-65% of Week 3. Move well, flush fatigue, protect the CNS. The goal is restoration, not stimulus.";
+    }
+    return "Log your weights for every set. Progressive overload is the primary driver — even adding 2.5kg to a main lift is a win.";
   }
   if (goal === "hypertrophy") {
     return `Leave 1-2 reps in reserve (RIR) on working sets. Slow eccentrics (2-3s down) will increase time under tension.`;
@@ -785,19 +810,386 @@ export async function initializeTrainingSystem(userId: number): Promise<typeof t
   return system;
 }
 
-// ─── Week Progression Engine for chat-saved programs ──────────────────────────
+// ─── Strength Exercise Variant Map ────────────────────────────────────────────
 //
-// When a chat-generated program is saved to the DB across 4 weeks, we apply a
-// real progressive-overload arc so Weeks 2-4 are meaningfully different from W1.
+// Maps primary exercise names to week-appropriate variants.
+// W1 (Establish): stable, teachable variants — lower injury risk, build motor patterns.
+// W2 (Build): standard version — most common expression of the pattern.
+// W3 (Intensify): more demanding variant — pause, deficit, or heavier expression.
+// W4 (Deload): easier variant — reduce joint stress, maintain movement pattern.
 //
-// Week 1 — Establish  : -1 set (intro volume), technical focus notes
-// Week 2 — Build      : baseline sets, load-increase directive
-// Week 3 — Intensify  : +1 set on primary lifts, peak loading notes
-// Week 4 — Deload     : -2 sets, 60% exercise count, recovery focus
+// Null means "keep the AI-chosen exercise for this week."
+
+const STRENGTH_EXERCISE_VARIANTS: Record<string, { w1?: string; w2?: string; w3?: string; w4?: string }> = {
+  // Squat patterns
+  "Back Squat": { w1: "Safety Bar Squat", w3: "Pause Back Squat", w4: "Goblet Squat" },
+  "Barbell Back Squat": { w1: "Safety Bar Squat", w3: "Pause Back Squat", w4: "Goblet Squat" },
+  "Safety Bar Squat": { w3: "Back Squat", w4: "Goblet Squat" },
+  "Front Squat": { w1: "Safety Bar Squat", w4: "Goblet Squat" },
+  "Squat": { w1: "Safety Bar Squat", w3: "Pause Squat", w4: "Goblet Squat" },
+  // Hip hinge / deadlift
+  "Deadlift": { w1: "Trap Bar Deadlift", w3: "Deficit Deadlift", w4: "Romanian Deadlift" },
+  "Conventional Deadlift": { w1: "Trap Bar Deadlift", w3: "Deficit Deadlift", w4: "Romanian Deadlift" },
+  "Sumo Deadlift": { w1: "Trap Bar Deadlift", w3: "Deficit Sumo Deadlift", w4: "Romanian Deadlift" },
+  "Romanian Deadlift": { w1: "Dumbbell Romanian Deadlift", w3: "Barbell Romanian Deadlift", w4: "Dumbbell Romanian Deadlift" },
+  "RDL": { w1: "Dumbbell RDL", w3: "Barbell RDL", w4: "Dumbbell RDL" },
+  "Trap Bar Deadlift": { w3: "Conventional Deadlift", w4: "Romanian Deadlift" },
+  // Unilateral lower
+  "Bulgarian Split Squat": { w1: "Reverse Lunge", w4: "Reverse Lunge" },
+  "Split Squat": { w1: "Reverse Lunge", w3: "Bulgarian Split Squat", w4: "Reverse Lunge" },
+  "Reverse Lunge": { w3: "Bulgarian Split Squat" },
+  "Walking Lunge": { w1: "Reverse Lunge", w3: "Bulgarian Split Squat", w4: "Reverse Lunge" },
+  "Step-Up": { w3: "Rear-Foot Elevated Split Squat", w4: "Reverse Lunge" },
+  // Hip thrust / glute
+  "Hip Thrust": { w1: "Glute Bridge", w4: "Glute Bridge" },
+  "Barbell Hip Thrust": { w1: "Hip Thrust", w4: "Glute Bridge" },
+  "Glute Bridge": { w3: "Hip Thrust" },
+  // Press
+  "Bench Press": { w3: "Pause Bench Press", w4: "Dumbbell Bench Press" },
+  "Barbell Bench Press": { w3: "Pause Bench Press", w4: "Dumbbell Bench Press" },
+  "Incline Bench Press": { w1: "Dumbbell Incline Press", w3: "Pause Incline Bench Press", w4: "Dumbbell Incline Press" },
+  "Overhead Press": { w1: "Seated Dumbbell Press", w4: "Seated Dumbbell Press" },
+  "Barbell Overhead Press": { w1: "Seated Dumbbell Press", w3: "Push Press", w4: "Seated Dumbbell Press" },
+  // Row
+  "Barbell Row": { w1: "Dumbbell Row", w3: "Pendlay Row", w4: "Dumbbell Row" },
+  "Bent-Over Row": { w1: "Dumbbell Row", w3: "Pendlay Row", w4: "Dumbbell Row" },
+  "Barbell Bent-Over Row": { w1: "Dumbbell Row", w3: "Pendlay Row", w4: "Dumbbell Row" },
+  "Pendlay Row": { w1: "Dumbbell Row", w4: "Dumbbell Row" },
+  // Pull / lat
+  "Pull-Up": { w1: "Lat Pulldown", w4: "Lat Pulldown" },
+  "Chin-Up": { w1: "Lat Pulldown", w4: "Lat Pulldown" },
+  "Lat Pulldown": { w3: "Pull-Up" },
+  // Power / explosive
+  "Box Jump": { w1: "Broad Jump", w4: "Broad Jump" },
+  "Power Clean": { w1: "Hang Power Clean", w4: "Hang Power Clean" },
+  "Hang Power Clean": { w3: "Power Clean" },
+  "Push Press": { w1: "Dumbbell Push Press", w4: "Dumbbell Push Press" },
+  // Trunk
+  "Ab Wheel Rollout": { w1: "Dead Bug", w4: "Dead Bug" },
+  "Barbell Rollout": { w1: "Ab Wheel Rollout", w4: "Dead Bug" },
+  "Pallof Press": { w3: "Anti-Rotation Press", w4: "Half-Kneeling Pallof Press" },
+};
+
+// ─── Accessory Rotation Pools ─────────────────────────────────────────────────
 //
-// This mirrors how the initializeTrainingSystem (auto-gen) path works, applying
-// scaleForWeek logic to keep the user's AI-chosen exercises while giving each
-// week a genuinely different prescription.
+// For "Accessory" and "Trunk" classified exercises, rotate through week-indexed
+// alternatives so each week has visibly different support work.
+// Index = weekNumber - 1 (0-3).
+
+const TRUNK_ROTATION: [string, string, string, string] = [
+  "Dead Bug",
+  "Pallof Press",
+  "Ab Wheel Rollout",
+  "Bird Dog",
+];
+
+const UPPER_ACCESSORY_ROTATION: [string, string, string, string] = [
+  "Face Pull",
+  "Band Pull-Apart",
+  "Cable Face Pull",
+  "Rear Delt Fly",
+];
+
+// ─── Rep Range Adjuster ───────────────────────────────────────────────────────
+//
+// Shifts rep ranges based on week role.
+// Parses "4-6", "6-8", "8-10", "10-12" patterns and shifts up/down.
+// W1 (establish): nudge toward higher reps (technique-friendly)
+// W2 (build): keep as prescribed
+// W3 (intensify): nudge primaries toward lower reps (heavier)
+// W4 (deload): push toward higher reps with lighter load directive
+
+function adjustRepsForWeek(reps: string, weekNumber: number, isPrimary: boolean): string {
+  const rangeMatch = reps.match(/^(\d+)-(\d+)$/);
+  if (!rangeMatch) return reps; // non-numeric (e.g., "30 sec") — keep as-is
+
+  let lo = parseInt(rangeMatch[1], 10);
+  let hi = parseInt(rangeMatch[2], 10);
+
+  if (weekNumber === 1) {
+    // Establish: nudge up 1-2 reps to keep it technical and sub-maximal
+    lo = Math.min(lo + 2, 15);
+    hi = Math.min(hi + 2, 15);
+  } else if (weekNumber === 3 && isPrimary) {
+    // Intensify: nudge primaries down 1-2 reps (heavier expression)
+    lo = Math.max(lo - 2, 1);
+    hi = Math.max(hi - 2, 2);
+  } else if (weekNumber === 4) {
+    // Deload: push to higher reps, lighter
+    lo = Math.min(lo + 4, 15);
+    hi = Math.min(hi + 4, 20);
+  }
+
+  return `${lo}-${hi}`;
+}
+
+// ─── Week-Specific Exercise Notes ─────────────────────────────────────────────
+
+function getStrengthExerciseNote(classification: string, weekNumber: number, isDeload: boolean): string {
+  const isPrimary = classification.includes("primary") || classification.includes("power") || classification.includes("explosive");
+  const isAccessory = classification.includes("accessory") || classification.includes("unilateral") || classification.includes("secondary");
+  const isTrunk = classification.includes("trunk") || classification.includes("carry");
+  const isPrep = classification.includes("prep") || classification.includes("warm");
+
+  if (isDeload) {
+    if (isPrimary) return "Deload — drop to 60-65% of your W3 load. Bar speed only. No grinding.";
+    if (isTrunk) return "Deload — 1-2 sets only. Move well, stay loose.";
+    return "Deload — reduce load 30-40%. Flush fatigue and protect the CNS.";
+  }
+
+  if (isPrep) return weekNumber === 1
+    ? "Establish movement quality — this sets the tone for the whole block."
+    : weekNumber === 3
+    ? "Prime the CNS before the heaviest training day of the block."
+    : "Warm-up well — quality prep transfers directly to the working sets.";
+
+  if (isPrimary) {
+    switch (weekNumber) {
+      case 1: return "W1 — Establish. Focus on positions and bracing. Work to a load you could hit for 2-3 more reps. Log it.";
+      case 2: return "W2 — Build. Add 2.5–5% from Week 1. Maintain bar speed and full range. 2-3 RIR.";
+      case 3: return "W3 — Intensify. Heaviest week. Work to 1-2 RIR on top sets. Bar speed is the cue.";
+      default: return "W1 — Find your working load for this block.";
+    }
+  }
+
+  if (isAccessory || classification.includes("unilateral")) {
+    switch (weekNumber) {
+      case 1: return "W1 — Learn the positions. Leave 3 RIR. Quality over load.";
+      case 2: return "W2 — Add a small load increment. Same quality, slightly more effort.";
+      case 3: return "W3 — Push the support work. More total reps or more load than W2.";
+      default: return "Accumulate quality reps. Controlled tempo.";
+    }
+  }
+
+  if (isTrunk) {
+    switch (weekNumber) {
+      case 1: return "W1 — Find the pattern. Brace hard and hold position throughout.";
+      case 2: return "W2 — Progress duration or reps slightly. Stiffness over speed.";
+      case 3: return "W3 — Peak trunk demand. Maintain quality under fatigue.";
+      default: return "Brace hard throughout. Quality over reps.";
+    }
+  }
+
+  // Fallback
+  switch (weekNumber) {
+    case 1: return "W1 — Establish baseline. Quality of movement is the metric.";
+    case 2: return "W2 — Build. Progressive overload begins here.";
+    case 3: return "W3 — Peak effort. Highest demand of the block.";
+    default: return "Controlled reps. Record your working loads.";
+  }
+}
+
+// ─── Strength Week Expression Engine ─────────────────────────────────────────
+//
+// The primary post-generation variation layer for strength builds.
+// Replaces applyWeekProgressionToExercises for strength focus mode.
+//
+// Applied after each week's exercises are pulled from the chat program.
+// Produces genuinely different W1–W4 expressions from a single AI-generated
+// program template, matching real periodized programming:
+//
+// W1 (Establish): stable variants, higher reps, intro sets, technique focus
+// W2 (Build): standard version, full sets, baseline load directive
+// W3 (Intensify): demanding variants, lower primary reps, +1 set on primaries
+// W4 (Deload): easier variants, fewer sets, higher reps, flush-fatigue notes
+
+function applyStrengthWeekExpression(
+  exercises: ChatProgramExercise[],
+  weekNumber: number,
+  isDeload: boolean
+): ChatProgramExercise[] {
+  // W4 Deload: smaller exercise count + week-specific notes
+  if (isDeload) {
+    const deloadCount = Math.max(Math.ceil(exercises.length * 0.6), 2);
+    return exercises.slice(0, deloadCount).map((ex) => {
+      const classification = (ex.classification ?? "").toLowerCase();
+      const variantKey = ex.name;
+      const variant = STRENGTH_EXERCISE_VARIANTS[variantKey];
+      const swappedName = variant?.w4 ?? ex.name;
+
+      return {
+        ...ex,
+        name: swappedName,
+        sets: typeof ex.sets === "number" ? Math.max(2, ex.sets - 2) : ex.sets,
+        reps: adjustRepsForWeek(ex.reps ?? "8-10", 4, false),
+        rest: "60 sec",
+        notes: getStrengthExerciseNote(classification, 4, true),
+        intent: ex.intent,
+      };
+    });
+  }
+
+  const setModsByWeek: Record<number, { primary: number; accessory: number }> = {
+    1: { primary: -1, accessory: -1 },
+    2: { primary: 0,  accessory: 0  },
+    3: { primary: 1,  accessory: 0  },
+  };
+  const setMods = setModsByWeek[weekNumber] ?? setModsByWeek[2];
+
+  const restByWeek: Record<number, { primary: string; accessory: string }> = {
+    1: { primary: "2-3 min", accessory: "90 sec" },
+    2: { primary: "2-3 min", accessory: "90 sec" },
+    3: { primary: "3-4 min", accessory: "90 sec" },
+  };
+  const restConfig = restByWeek[weekNumber] ?? restByWeek[2];
+
+  let trunkRotationIdx = 0; // counts trunk exercises to rotate across slots
+
+  return exercises.map((ex, idx) => {
+    const classification = (ex.classification ?? "").toLowerCase();
+
+    const isPrimary =
+      classification.includes("primary") ||
+      classification.includes("explosive") ||
+      classification.includes("power");
+    const isAccessory = !isPrimary && (
+      classification.includes("accessory") ||
+      classification.includes("secondary") ||
+      classification.includes("unilateral")
+    );
+    const isTrunk = classification.includes("trunk") || classification.includes("carry");
+    const isPrep = classification.includes("prep") || classification.includes("warm");
+
+    // ── Set scaling ──────────────────────────────────────────────────────────
+    const setMod = (isPrimary || classification.includes("secondary")) ? setMods.primary : setMods.accessory;
+    const scaledSets = typeof ex.sets === "number" ? Math.max(2, ex.sets + setMod) : ex.sets;
+
+    // ── Exercise variant swap ────────────────────────────────────────────────
+    const variantLookup = STRENGTH_EXERCISE_VARIANTS[ex.name];
+    let swappedName = ex.name;
+    if (variantLookup) {
+      const weekKey = `w${weekNumber}` as "w1" | "w2" | "w3" | "w4";
+      swappedName = variantLookup[weekKey] ?? ex.name;
+    }
+
+    // ── Trunk rotation: rotate to a different trunk exercise each week ───────
+    if (isTrunk) {
+      // Only rotate if there's no variant map entry AND it's a generic trunk slot
+      if (!variantLookup) {
+        const rotationOffset = (weekNumber - 1 + trunkRotationIdx) % TRUNK_ROTATION.length;
+        const candidate = TRUNK_ROTATION[rotationOffset];
+        // Only swap if the candidate is different from the current exercise
+        if (candidate && candidate.toLowerCase() !== ex.name.toLowerCase()) {
+          swappedName = candidate;
+        }
+      }
+      trunkRotationIdx++;
+    }
+
+    // ── Rep range adjustment ─────────────────────────────────────────────────
+    const adjustedReps = ex.reps ? adjustRepsForWeek(ex.reps, weekNumber, isPrimary) : ex.reps;
+
+    // ── Rest period ──────────────────────────────────────────────────────────
+    let rest = ex.rest;
+    if (!isPrep) {
+      rest = (isPrimary || classification.includes("secondary")) ? restConfig.primary : restConfig.accessory;
+    }
+
+    // ── Per-exercise week note ───────────────────────────────────────────────
+    const exerciseNote = getStrengthExerciseNote(classification, weekNumber, false);
+
+    return {
+      ...ex,
+      name: swappedName,
+      sets: scaledSets,
+      reps: adjustedReps,
+      rest,
+      notes: exerciseNote,
+    };
+  });
+}
+
+// ─── Strength Week Variation Validator ───────────────────────────────────────
+//
+// Computes a variation score across the 4 generated weeks and logs audit data.
+// Called after all weeks are built to confirm they are genuinely different.
+//
+// Variation score: percentage of exercises that differ across weeks (name or reps).
+// Threshold: 30% variation is the minimum acceptable.
+
+export interface StrengthWeekVariationAuditResult {
+  variationScore: number;
+  totalExercisesChecked: number;
+  identicalExercisesAcrossWeeks: number;
+  rotatedExercises: number;
+  primaryVariationsChanged: number;
+  trunkRotationsApplied: number;
+  repRangesChanged: number;
+  repairNeeded: boolean;
+}
+
+export function validateStrengthWeekVariation(
+  weekExerciseLists: ChatProgramExercise[][]
+): StrengthWeekVariationAuditResult {
+  if (weekExerciseLists.length < 2) {
+    return {
+      variationScore: 0,
+      totalExercisesChecked: 0,
+      identicalExercisesAcrossWeeks: 0,
+      rotatedExercises: 0,
+      primaryVariationsChanged: 0,
+      trunkRotationsApplied: 0,
+      repRangesChanged: 0,
+      repairNeeded: false,
+    };
+  }
+
+  const baseWeek = weekExerciseLists[0];
+  let identical = 0;
+  let rotated = 0;
+  let primaryChanged = 0;
+  let trunkChanged = 0;
+  let repChanged = 0;
+
+  for (let i = 1; i < weekExerciseLists.length; i++) {
+    const week = weekExerciseLists[i];
+    const compareLength = Math.min(baseWeek.length, week.length);
+
+    for (let j = 0; j < compareLength; j++) {
+      const base = baseWeek[j];
+      const current = week[j];
+
+      const nameChanged = base.name !== current.name;
+      const repsChanged = base.reps !== current.reps;
+
+      if (!nameChanged && !repsChanged) {
+        identical++;
+      } else {
+        rotated++;
+        if (nameChanged) {
+          const classification = (base.classification ?? "").toLowerCase();
+          if (classification.includes("primary") || classification.includes("power") || classification.includes("explosive")) {
+            primaryChanged++;
+          }
+          if (classification.includes("trunk")) {
+            trunkChanged++;
+          }
+        }
+        if (repsChanged) repChanged++;
+      }
+    }
+  }
+
+  const total = identical + rotated;
+  const variationScore = total > 0 ? Math.round((rotated / total) * 100) : 0;
+
+  return {
+    variationScore,
+    totalExercisesChecked: total,
+    identicalExercisesAcrossWeeks: identical,
+    rotatedExercises: rotated,
+    primaryVariationsChanged: primaryChanged,
+    trunkRotationsApplied: trunkChanged,
+    repRangesChanged: repChanged,
+    repairNeeded: variationScore < 30,
+  };
+}
+
+// ─── Week Progression Engine (non-strength fallback) ──────────────────────────
+//
+// Legacy progression for speed/mobility/other focus modes.
+// Applies a simple set-count and note-override arc.
+// Strength builds use applyStrengthWeekExpression instead.
 
 function applyWeekProgressionToExercises(
   exercises: ChatProgramExercise[],
@@ -1092,6 +1484,10 @@ export async function createTrainingSystemFromProgram(
   logger.info({ phaseId: phase.id }, "[TrainingSystem] phase created");
 
   const dayOfWeekMap = assignDaysOfWeek(daysPerWeek);
+  const isStrength = resolvedFocusMode === "strength" || goal === "strength";
+
+  // Track per-week exercise lists for variation validation (strength builds only)
+  const weekExerciseListsByDay: ChatProgramExercise[][][] = []; // [weekIdx][dayIdx] = exercises
 
   // Create 4 weeks
   for (let weekIdx = 0; weekIdx < 4; weekIdx++) {
@@ -1111,6 +1507,8 @@ export async function createTrainingSystemFromProgram(
 
     logger.info({ weekId: week.id, weekNumber }, "[TrainingSystem] week created");
 
+    const weekDayExercises: ChatProgramExercise[][] = [];
+
     // Create sessions from the chat program days
     for (let dayIdx = 0; dayIdx < program.days.length; dayIdx++) {
       const day = program.days[dayIdx];
@@ -1118,9 +1516,11 @@ export async function createTrainingSystemFromProgram(
       const dayOfWeek = dayOfWeekMap[dayIdx] ?? dayIdx + 1;
 
       const warmupNotes = getWarmupNotes(sessionType, day.focus ?? day.name);
-      const coachingNotes = day.notes
-        ? day.notes
-        : getCoachingNotes(goal, weekIdx, day.name);
+      // For strength builds, always use week-specific session notes to ensure W1-W4 differ.
+      // Other focus modes preserve the AI-generated day notes.
+      const coachingNotes = isStrength
+        ? getCoachingNotes(goal, weekIdx, day.name)
+        : (day.notes ? day.notes : getCoachingNotes(goal, weekIdx, day.name));
 
       const [session] = await db.insert(trainingSessions).values({
         trainingWeekId: week.id,
@@ -1134,8 +1534,14 @@ export async function createTrainingSystemFromProgram(
         orderIndex: dayIdx,
       }).returning();
 
-      // Apply week progression: scales sets, volume, and coaching notes per week role
-      const progressedExercises = applyWeekProgressionToExercises(day.exercises, weekNumber, isDeload);
+      // ── Apply week-aware exercise expression ──────────────────────────────
+      // Strength: full expression engine (variant swaps, rep adjustments, rotation)
+      // Other modes: simple set/note scaling
+      const progressedExercises = isStrength
+        ? applyStrengthWeekExpression(day.exercises, weekNumber, isDeload)
+        : applyWeekProgressionToExercises(day.exercises, weekNumber, isDeload);
+
+      weekDayExercises.push(progressedExercises);
 
       // Classify then sort into proper training-flow order
       const classifiedExercises = progressedExercises.map((ex) => ({
@@ -1160,9 +1566,41 @@ export async function createTrainingSystemFromProgram(
         });
       }
     }
+
+    weekExerciseListsByDay.push(weekDayExercises);
   }
 
   logger.info({ systemId: system.id, userId }, "[TrainingSystem] createTrainingSystemFromProgram — complete");
+
+  // ── Variation audit for strength builds ──────────────────────────────────
+  if (isStrength && weekExerciseListsByDay.length === 4) {
+    // Flatten each week to a single exercise list for Day 1 (primary session)
+    const day1PerWeek = weekExerciseListsByDay.map((wk) => wk[0] ?? []);
+    const variationAudit = validateStrengthWeekVariation(day1PerWeek);
+
+    logger.info(
+      { ...variationAudit, systemId: system.id },
+      "[StrengthWeekVariationAudit] Variation check complete"
+    );
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[StrengthWeekVariationAudit]", JSON.stringify({
+        systemId: system.id,
+        ...variationAudit,
+        source: "createTrainingSystemFromProgram",
+      }));
+
+      if (variationAudit.repairNeeded) {
+        console.log("[StrengthWeekRepairAudit]", JSON.stringify({
+          systemId: system.id,
+          variationScore: variationAudit.variationScore,
+          repairApplied: false,
+          note: "Variation below threshold — check STRENGTH_EXERCISE_VARIANTS map coverage for these exercises",
+          source: "createTrainingSystemFromProgram",
+        }));
+      }
+    }
+  }
 
   if (process.env.NODE_ENV !== "production") {
     const day1 = program.days[0];
@@ -1174,6 +1612,7 @@ export async function createTrainingSystemFromProgram(
       weekNumbers: [1, 2, 3, 4],
       sessionsPerWeek: program.days.length,
       totalSessionsGenerated: 4 * program.days.length,
+      strengthExpressionApplied: isStrength,
       weekProgressionApplied: true,
       day1Name: day1?.name ?? null,
       day1Exercises: (day1?.exercises ?? []).map((e) => e.name),
@@ -1282,6 +1721,10 @@ export async function upsertTrainingSystemFromProgram(
     .where(eq(trainingSystems.id, existingSystem.id));
 
   const dayOfWeekMap = assignDaysOfWeek(daysPerWeek);
+  const isStrengthUpsert = resolvedFocusMode === "strength" || goal === "strength";
+
+  // Track per-week exercise lists for variation validation (strength builds only)
+  const weekExerciseListsByDayUpsert: ChatProgramExercise[][][] = []; // [weekIdx][dayIdx] = exercises
 
   // Recreate 4 weeks of sessions and exercises
   for (let weekIdx = 0; weekIdx < 4; weekIdx++) {
@@ -1299,15 +1742,18 @@ export async function upsertTrainingSystemFromProgram(
       orderIndex: weekIdx,
     }).returning();
 
+    const weekDayExercisesUpsert: ChatProgramExercise[][] = [];
+
     for (let dayIdx = 0; dayIdx < program.days.length; dayIdx++) {
       const day = program.days[dayIdx];
       const sessionType = inferSessionType(day);
       const dayOfWeek = dayOfWeekMap[dayIdx] ?? dayIdx + 1;
 
       const warmupNotes = getWarmupNotes(sessionType, day.focus ?? day.name);
-      const coachingNotes = day.notes
-        ? day.notes
-        : getCoachingNotes(goal, weekIdx, day.name);
+      // For strength builds, always use week-specific session notes to ensure W1-W4 differ.
+      const coachingNotes = isStrengthUpsert
+        ? getCoachingNotes(goal, weekIdx, day.name)
+        : (day.notes ? day.notes : getCoachingNotes(goal, weekIdx, day.name));
 
       const [session] = await db.insert(trainingSessions).values({
         trainingWeekId: week.id,
@@ -1321,8 +1767,14 @@ export async function upsertTrainingSystemFromProgram(
         orderIndex: dayIdx,
       }).returning();
 
-      // Apply week progression: scales sets, volume, and coaching notes per week role
-      const progressedExercises = applyWeekProgressionToExercises(day.exercises, weekNumber, isDeload);
+      // ── Apply week-aware exercise expression ──────────────────────────────
+      // Strength: full expression engine (variant swaps, rep adjustments, rotation)
+      // Other modes: simple set/note scaling
+      const progressedExercises = isStrengthUpsert
+        ? applyStrengthWeekExpression(day.exercises, weekNumber, isDeload)
+        : applyWeekProgressionToExercises(day.exercises, weekNumber, isDeload);
+
+      weekDayExercisesUpsert.push(progressedExercises);
 
       // Classify then sort into proper training-flow order
       const classifiedExercises = progressedExercises.map((ex) => ({
@@ -1347,6 +1799,37 @@ export async function upsertTrainingSystemFromProgram(
         });
       }
     }
+
+    weekExerciseListsByDayUpsert.push(weekDayExercisesUpsert);
+  }
+
+  // ── Variation audit for strength builds ──────────────────────────────────
+  if (isStrengthUpsert && weekExerciseListsByDayUpsert.length === 4) {
+    const day1PerWeekUpsert = weekExerciseListsByDayUpsert.map((wk) => wk[0] ?? []);
+    const variationAuditUpsert = validateStrengthWeekVariation(day1PerWeekUpsert);
+
+    logger.info(
+      { ...variationAuditUpsert, systemId: existingSystem.id },
+      "[StrengthWeekVariationAudit] Variation check complete (upsert)"
+    );
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[StrengthWeekVariationAudit]", JSON.stringify({
+        systemId: existingSystem.id,
+        ...variationAuditUpsert,
+        source: "upsertTrainingSystemFromProgram",
+      }));
+
+      if (variationAuditUpsert.repairNeeded) {
+        console.log("[StrengthWeekRepairAudit]", JSON.stringify({
+          systemId: existingSystem.id,
+          variationScore: variationAuditUpsert.variationScore,
+          repairApplied: false,
+          note: "Variation below threshold — check STRENGTH_EXERCISE_VARIANTS map coverage",
+          source: "upsertTrainingSystemFromProgram",
+        }));
+      }
+    }
   }
 
   if (process.env.NODE_ENV !== "production") {
@@ -1358,6 +1841,7 @@ export async function upsertTrainingSystemFromProgram(
       weekNumbers: [1, 2, 3, 4],
       sessionsPerWeek: program.days.length,
       totalSessionsGenerated: 4 * program.days.length,
+      strengthExpressionApplied: isStrengthUpsert,
       weekProgressionApplied: true,
     }));
   }

@@ -1,0 +1,219 @@
+STRENGTH WEEK-TO-WEEK VARIATION FIX — MAKE 4-WEEK BLOCKS ACTUALLY DIFFERENT ACROSS W1–W4
+
+CONTEXT:
+Strength builds are now successfully generating and saving.
+
+However, the current 4-week block still looks too static:
+- session identities are the same across weeks
+- exercise lists appear nearly identical
+- week labels change, but the actual programming expression does not feel meaningfully different
+
+Right now it behaves like one good Week 1 program wrapped in a 4-week shell.
+
+We need Strength blocks to show real week-to-week variation while still preserving coherent block identity.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make W1–W4 of a Strength block visibly and structurally different in a way that matches real periodized programming.
+
+==================================================
+TASK 1 — AUDIT THE SAVED W1–W4 CONTENT
+==================================================
+
+For a newly built Strength program, inspect all 4 saved weeks and compare:
+
+- session labels
+- exercise names
+- sets / reps
+- rest periods
+- tempo / notes
+- exercise families
+- accessories
+- finishers
+
+Return:
+
+[StrengthWeekVariationAudit] {
+  week1Summary,
+  week2Summary,
+  week3Summary,
+  week4Summary,
+  identicalExercisesAcrossWeeks,
+  identicalSessionsAcrossWeeks,
+  visibleVariationScore
+}
+
+We need to confirm exactly how static the saved artifact is.
+
+==================================================
+TASK 2 — DEFINE REQUIRED WEEK ROLE EXPRESSION
+==================================================
+
+Strength blocks must express the week role clearly:
+
+Week 1 — Establish
+- baseline volume
+- teachable / stable exercise selection
+- lower fatigue cost
+- cleaner technique emphasis
+
+Week 2 — Build
+- slightly higher volume or slightly tougher variation
+- fuller accessory support
+- build week feel
+
+Week 3 — Intensify
+- highest neural demand
+- lower reps / stronger intensity intent where appropriate
+- more demanding primary slots
+- biggest week
+
+Week 4 — Deload
+- volume reduction
+- easier exercise variants where appropriate
+- reduced fatigue cost
+- recovery-biased notes
+
+==================================================
+TASK 3 — ENFORCE VARIATION IN THE FINAL PROGRAM
+==================================================
+
+Do NOT rely only on metadata or labels.
+
+Require meaningful differences across W1–W4 in at least these areas:
+
+- primary or secondary exercise variants
+- accessory rotation
+- set/rep prescriptions
+- rest/tempo intent
+- coaching notes
+- support movement selection
+
+Not every primary movement must rotate weekly, but the overall week must feel different.
+
+==================================================
+TASK 4 — ADD STRENGTH WEEK EXPRESSION LAYER
+==================================================
+
+Create a post-generation / post-parse variation layer such as:
+
+applyStrengthWeekExpression(program)
+
+It should modify W1–W4 after the base program is built so that each week matches its intended role.
+
+Examples:
+- W1: Belt Squat / Safety Bar / more stable options
+- W2: fuller base-volume week
+- W3: more intense primary expression
+- W4: Goblet / reduced sets / easier support options where needed
+
+This should preserve block identity while making each week actually distinct.
+
+==================================================
+TASK 5 — ROTATE SUPPORT WORK MORE AGGRESSIVELY
+==================================================
+
+If primary lifts remain somewhat stable, rotate support work more visibly across weeks.
+
+Examples:
+- trunk exercise changes
+- unilateral accessory changes
+- secondary hinge/squat changes
+- upper support exercise rotation
+- conditioning finisher changes if applicable
+
+This gives users visible week-to-week difference without making the block feel random.
+
+==================================================
+TASK 6 — ENFORCE WEEK-SPECIFIC NOTES
+==================================================
+
+Coach notes should reflect the week role.
+
+Examples:
+- W1: establish positions / find working loads
+- W2: accumulate quality volume
+- W3: highest intent / highest neural demand
+- W4: move well / unload fatigue / protect next block
+
+Do NOT allow the same note to repeat across all weeks.
+
+==================================================
+TASK 7 — VALIDATE WEEK UNIQUENESS BEFORE SAVE
+==================================================
+
+Add a validator before saving:
+
+validateStrengthWeekVariation(program)
+
+It should fail or repair if:
+- all 4 weeks use nearly identical exercise content
+- session content is functionally duplicated
+- week role is only represented in labels, not programming
+
+Return a variation score and trigger repair if below threshold.
+
+==================================================
+TASK 8 — ADD AUDIT LOGGING
+==================================================
+
+Add:
+
+[StrengthWeekVariationAudit]
+[StrengthWeekRepairAudit]
+
+Log:
+- variation score
+- number of repeated exercises across weeks
+- number of rotated accessories
+- number of primary variations changed
+- whether repair was applied
+
+==================================================
+TASK 9 — UI CONFIRMATION
+==================================================
+
+After the fix, when the user taps W1, W2, W3, W4, they should visibly see:
+- different prescriptions
+- some different exercises
+- different session notes
+- clear week identity
+
+The block should look periodized, not duplicated.
+
+==================================================
+TASK 10 — VALIDATION
+==================================================
+
+Test a new 4-day strength build and inspect all four weeks.
+
+Expected:
+- W1–W4 are clearly different
+- block still feels coherent
+- no random chaos
+- user can tell the program is progressing
+
+==================================================
+TASK 11 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. what made the current strength weeks too static
+2. what expression layer was added
+3. what validator/repair logic was added
+4. before/after week summaries
+5. final variation score after repair
+
+==================================================
+FINAL STANDARD
+==================================================
+
+A Strength block should no longer feel like one repeated week with different labels.
+
+It should feel like a real 4-week progression:
+- coherent
+- visible
+- periodized
+- believable
