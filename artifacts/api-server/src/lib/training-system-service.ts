@@ -991,8 +991,11 @@ function applyStrengthWeekExpression(
   isDeload: boolean
 ): ChatProgramExercise[] {
   // W4 Deload: smaller exercise count + week-specific notes
+  // Minimum of 4 exercises — the depth expander in ai.ts guarantees ≥5 before
+  // the program is saved, so 60% of 5 = 3 → floor raised to 4 to prevent
+  // deload sessions from collapsing below usable depth.
   if (isDeload) {
-    const deloadCount = Math.max(Math.ceil(exercises.length * 0.6), 2);
+    const deloadCount = Math.max(Math.ceil(exercises.length * 0.6), 4);
     return exercises.slice(0, deloadCount).map((ex) => {
       const classification = (ex.classification ?? "").toLowerCase();
 
@@ -1233,7 +1236,7 @@ function applyWeekProgressionToExercises(
   // Week 4 (Deload): reduce volume and exercise count
   if (isDeload) {
     return exercises
-      .slice(0, Math.max(Math.ceil(exercises.length * 0.6), 2))
+      .slice(0, Math.max(Math.ceil(exercises.length * 0.6), 4))
       .map((ex) => ({
         ...ex,
         sets: typeof ex.sets === "number" ? Math.max(2, ex.sets - 2) : ex.sets,

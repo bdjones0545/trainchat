@@ -66,6 +66,11 @@ import {
   type SpeedSessionDepthAudit,
 } from "./focus-engines/speed-engine";
 import {
+  expandStrengthSessionIfTooThin,
+  scoreStrengthSessionDepth,
+  type StrengthSessionDepthAudit,
+} from "./focus-engines/strength-session-depth";
+import {
   buildMobilityArchitectureBrief,
   buildMobilityResponseContract,
   validateMobilityOutputForBleed,
@@ -3968,6 +3973,64 @@ Output the corrected program JSON and a brief calm confirmation.`;
         // ── Stamp focusMode on clean/repaired mobility output ─────────────────
         if (structuredData && !(structuredData as { focusMode?: string }).focusMode) {
           (structuredData as { focusMode?: string }).focusMode = "mobility";
+        }
+      }
+
+      // ── Strength-specific: session depth expansion ────────────────────────
+      // Guarantees every strength session has the minimum exercise count (5 for
+      // working sessions, 4 for deload) before the program is returned.
+      // Mirrors the speed depth expander — library-driven slot fills with full
+      // audit trail. This is a hard server-side guarantee independent of what
+      // the AI returned.
+      if (focusMode === "strength" && structuredData?.days && Array.isArray(structuredData.days)) {
+        const strengthDepthAudits: StrengthSessionDepthAudit[] = [];
+        const expandedDays = structuredData.days.map((day: { name?: string; exercises?: Array<{ name: string; classification?: string; sets?: number; reps?: string; rest?: string; notes?: string }> }, idx: number) => {
+          const { expanded, audit } = expandStrengthSessionIfTooThin(day, idx);
+          strengthDepthAudits.push(audit);
+          return expanded;
+        });
+
+        const anyExpanded = strengthDepthAudits.some((a) => a.wasExpanded);
+        if (anyExpanded) {
+          (structuredData as { days: typeof expandedDays }).days = expandedDays;
+          logger.info(
+            {
+              sessionsExpanded: strengthDepthAudits.filter((a) => a.wasExpanded).length,
+              expansions: strengthDepthAudits
+                .filter((a) => a.wasExpanded)
+                .map((a) => ({
+                  session: a.sessionName,
+                  type: a.sessionType,
+                  before: a.exercisesBeforeExpansion,
+                  after: a.exercisesAfterExpansion,
+                  added: a.exercisesAdded,
+                  slots: a.slotsFilledBy,
+                })),
+            },
+            "[StrengthDepthExpander] Thin sessions expanded with library-driven augmentation exercises"
+          );
+        }
+
+        // Score each session for completeness and log in dev
+        if (process.env.NODE_ENV !== "production") {
+          const depthScores = expandedDays.map((day: { name?: string; exercises?: Array<{ name: string; classification?: string; notes?: string }> }) =>
+            scoreStrengthSessionDepth(day)
+          );
+          console.log("[StrengthSessionDepthAudit]", JSON.stringify({
+            sessions: depthScores.map((s) => ({
+              name: s.sessionName,
+              type: s.sessionType,
+              count: s.exerciseCount,
+              minimumMet: s.minimumMet,
+              hasPrepWork: s.hasPrepWork,
+              hasPrimary: s.hasPrimaryCompound,
+              hasSecondary: s.hasSecondaryWork,
+              hasUnilateral: s.hasUnilateral,
+              hasTrunk: s.hasTrunk,
+              score: s.score,
+              passed: s.passed,
+            })),
+          }));
         }
       }
 

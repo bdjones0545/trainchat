@@ -1,0 +1,213 @@
+STRENGTH SESSION DEPTH FIX — INCREASE STRENGTH SESSIONS FROM 4 EXERCISES TO FULL 5–7 ITEM SESSIONS
+
+CONTEXT:
+The strength week-variation system now works much better:
+- W1 and W3 are largely library-driven
+- W4 is explicit policy-driven
+- week roles are more visible
+- variation quality improved
+
+However, a new issue appeared:
+Strength sessions are now too thin and often only contain 4 exercises.
+
+This means the system improved week expression but underfilled the actual session architecture.
+
+We need Strength sessions to feel complete again without losing the new variation quality.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make Strength sessions generate as full 5–7 item sessions while preserving:
+- library-driven week variation
+- block identity
+- week role expression
+- focus-specific structure
+
+==================================================
+TASK 1 — DEFINE MINIMUM SESSION DEPTH BY STRENGTH SESSION TYPE
+==================================================
+
+Create STRENGTH_SESSION_MINIMUM_DEPTH.
+
+Suggested examples:
+- lower strength day → minimum 5, target 6
+- upper strength day → minimum 5, target 6
+- full body day → minimum 5, target 6
+- power / neural day → minimum 5, target 6
+- deload day → minimum 4, target 5
+
+Return the final table.
+
+==================================================
+TASK 2 — CREATE A STRENGTH SESSION SLOT TEMPLATE
+==================================================
+
+Define a standard strength session slot model.
+
+Suggested slot structure:
+1. prep / movement prep
+2. power / explosive primer (when appropriate)
+3. primary strength lift
+4. secondary strength / supplemental lift
+5. unilateral / structural support
+6. trunk / positional support
+7. optional accessory / finisher
+
+Not every session must use all 7, but most should land in the 5–7 range.
+
+==================================================
+TASK 3 — ENFORCE SESSION COMPLETENESS AFTER BUILD
+==================================================
+
+Create a post-generation layer such as:
+
+expandStrengthSessionIfTooThin(session, sessionType, weekRole, blockType)
+
+Behavior:
+- detect sessions with fewer than required exercises
+- fill missing slots using the real exercise library
+- preserve session identity and week role
+- do NOT add random filler
+
+Use the same library-driven selection principles already built for week variation.
+
+==================================================
+TASK 4 — KEEP IT LIBRARY-DRIVEN
+==================================================
+
+Do NOT solve this with a new hardcoded exercise list.
+
+Use:
+- movement family
+- cluster
+- week-role fit
+- neural demand
+- fatigue cost
+- stability demand
+- exposure state
+- session type
+
+The expander should pull from the real library the same way the week-expression system now does.
+
+==================================================
+TASK 5 — SESSION TYPE-SPECIFIC SUPPORT LOGIC
+==================================================
+
+Add support slot logic by session identity.
+
+Examples:
+
+Lower Strength — Squat Focus:
+- prep
+- primer
+- primary squat
+- secondary hinge/unilateral
+- trunk/support
+- optional accessory
+
+Upper Strength — Press Focus:
+- prep
+- primer
+- primary press
+- row/pull support
+- accessory support
+- trunk
+
+Lower Strength — Hinge Focus:
+- prep
+- primer
+- primary hinge
+- secondary squat/unilateral
+- trunk
+- optional posterior chain support
+
+Upper Strength — Pull Focus:
+- prep
+- primer
+- primary pull
+- secondary press support
+- structural shoulder/scap support
+- trunk
+
+==================================================
+TASK 6 — PRESERVE WEEK ROLE WHILE FILLING SLOTS
+==================================================
+
+The expander must respect W1/W2/W3/W4.
+
+Examples:
+- W1 = more stable / teachable support work
+- W3 = more demanding support work
+- W4 = lower fatigue / easier support work
+
+Do not fill missing slots with the same support exercise across all weeks.
+
+==================================================
+TASK 7 — ADD STRENGTH SESSION DEPTH AUDIT
+==================================================
+
+Create:
+
+scoreStrengthSessionDepth(session)
+
+Suggested dimensions:
+- minimum depth met
+- prep present
+- primary present
+- secondary present
+- support present
+- trunk present
+- week-role fit preserved
+
+Log:
+[StrengthSessionDepthAudit]
+
+Also log:
+[StrengthDepthExpander]
+when expansion is applied.
+
+==================================================
+TASK 8 — AVOID TOKEN-OPTIMIZATION REGRESSION
+==================================================
+
+Audit whether the recent build compaction / prompt reduction caused the AI to underfill strength sessions.
+
+If so:
+- keep the latency gains
+- but strengthen the contract so the model still outputs enough session depth
+
+The final system should not depend on the model “remembering” to make sessions complete.
+
+==================================================
+TASK 9 — VALIDATION
+==================================================
+
+Test a fresh 4-day strength build.
+
+Confirm:
+- sessions now have 5–7 exercises
+- week variation still works
+- no random filler
+- no collapse back to static W1 duplication
+- W4 deload days can still be slightly lighter but not empty
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. minimum session depth rules
+2. slot template
+3. expander logic
+4. how library-driven filling works
+5. before/after example of one strength session
+6. strength session depth audit results
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Strength sessions should feel complete again.
+
+The new week-variation system must stay intact, but the final saved artifact should now include full, believable 5–7 item strength sessions instead of thin 4-exercise sessions.
