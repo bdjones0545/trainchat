@@ -1,0 +1,336 @@
+FOCUS-AWARE ACTIVE PROGRAM EDIT ACTIONS + FOCUS-SCOPED AGENT LEARNING FIX
+
+CONTEXT:
+We already fixed the right sidebar so its edit/refine buttons are focus-aware and route correctly through the agent for:
+- Strength
+- Speed
+- Mobility
+
+Now we need to apply the SAME fix to the Active Programs area, including:
+- Today / This Week / Block views
+- session-level edit buttons
+- exercise-level quick actions
+- block edit buttons / refocus controls
+
+We also found a second issue:
+The agent learning / memory surfaces appear to update from Strength interactions, but not from Speed or Mobility inputs. The “What your coach has learned” section is still dominated by Strength-only learnings, even when the user works heavily in Speed or Mobility.
+
+We need to fix both:
+1. focus-aware edit actions across Active Programs
+2. focus-aware learning / memory updates across all three focuses
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make every edit button in Active Programs fully focus-aware and connected to the correct agent/system pipeline, and make agent learning update from Speed and Mobility interactions just like Strength.
+
+==================================================
+PART 1 — AUDIT ACTIVE PROGRAM EDIT BUTTONS
+==================================================
+
+Trace ALL edit/refine actions in Active Programs, including:
+- Today view session buttons
+- exercise-level quick actions
+- block edit buttons
+- refocus block button
+- command agent modal buttons
+- any quick command chips inside exercise modals
+
+Return:
+- component/file each button comes from
+- whether button labels are hardcoded
+- whether labels change based on focusMode
+- what payload/command each sends
+- whether any still default to Strength wording or Strength semantics
+
+Log:
+
+[ActiveProgramEditAudit] {
+  surface,
+  buttonLabel,
+  activeFocus,
+  focusAware,
+  payload,
+  structuredIntent,
+  sourceComponent
+}
+
+==================================================
+PART 2 — DEFINE FOCUS-SPECIFIC BUTTON SETS FOR ACTIVE PROGRAMS
+==================================================
+
+Create proper button sets for each focus across Active Programs.
+
+A. Strength
+Examples:
+- More Explosive
+- More Strength
+- More Endurance
+- Shorter Session
+- Lower Impact
+- Home Gym Version
+
+B. Speed / Footwork
+Examples:
+- More Acceleration
+- More Max Velocity
+- More Reactive
+- More Deceleration
+- More Elastic
+- Shorter Session
+- Lower Impact
+- Limited Space Version
+
+C. Mobility
+Examples:
+- More Hip Focus
+- More Recovery Flow
+- More End-Range Control
+- More Thoracic / Spine
+- More Ankle Mobility
+- Lower Intensity
+- Shorter Session
+- Desk Reset Version
+
+Do NOT show strength labels in Speed or Mobility surfaces.
+Do NOT show generic “hypertrophy” / “power-focused” buttons inside Mobility.
+
+==================================================
+PART 3 — APPLY FOCUS-AWARE BUTTONS TO ALL ACTIVE PROGRAM SURFACES
+==================================================
+
+Make the following surfaces render button sets from the actual active focus:
+
+1. Today tab
+2. This Week tab
+3. Block tab
+4. Exercise modal / log-performance modal quick commands
+5. Block refocus / command-agent modal
+
+No stale default to Strength anywhere.
+
+If focusMode = mobility:
+- all buttons and labels must be mobility-native
+
+If focusMode = speed:
+- all buttons and labels must be speed-native
+
+==================================================
+PART 4 — CONNECT ALL ACTIVE PROGRAM BUTTONS TO THE REAL AGENT PIPELINE
+==================================================
+
+Every Active Programs edit action must route through the real agent/system path.
+
+Requirements:
+- include focusMode
+- include trainingSystemId
+- include block/session/exercise context where relevant
+- send a focus-specific command
+- produce the correct structured intent where possible
+- update the actual program in DB
+- refresh the UI after save
+
+Do NOT leave any UI-only handlers or strength-default fallbacks.
+
+==================================================
+PART 5 — ADD FOCUS-SPECIFIC STRUCTURED INTENTS
+==================================================
+
+Where possible, map buttons to explicit structured intents.
+
+Examples:
+Strength:
+- strength_more_explosive
+- strength_lower_impact
+- strength_shorten_session
+
+Speed:
+- speed_more_acceleration
+- speed_more_reactive
+- speed_more_deceleration
+- speed_limited_space
+
+Mobility:
+- mobility_more_hip_focus
+- mobility_more_recovery_flow
+- mobility_more_end_range_control
+- mobility_lower_intensity
+- mobility_desk_reset
+
+Use these in the execution planner if needed to reduce ambiguity.
+
+==================================================
+PART 6 — FIX BLOCK EDIT / REFOCUS BUTTONS
+==================================================
+
+The Block-level edit controls must also be focus-aware.
+
+Examples:
+Strength block edits:
+- shift toward explosive strength
+- shift toward hypertrophy
+- lower impact
+- shorten sessions
+
+Speed block edits:
+- shift toward acceleration
+- shift toward max velocity
+- shift toward reactive/COD
+- shift toward return-to-speed
+- limited space
+
+Mobility block edits:
+- shift toward hip mobility
+- shift toward thoracic/spine
+- shift toward recovery flow
+- shift toward end-range control
+- lower intensity
+
+Do NOT show Strength block controls in Mobility or Speed.
+
+==================================================
+PART 7 — AUDIT AGENT LEARNING / MEMORY UPDATE PATHS
+==================================================
+
+We also need to fix that the agent appears to “learn” only from Strength.
+
+Trace how the system writes and reads:
+- user preferences
+- sport associations
+- style preferences
+- behavior patterns
+- inferred coaching preferences
+
+Audit whether these memory writes are:
+- only triggered in Strength
+- written without focus tagging
+- filtered incorrectly when reading for the “What your coach has learned” UI
+
+Return:
+
+[FocusLearningAudit] {
+  sourceFocus,
+  eventType,
+  memoryWriteTriggered,
+  memoryType,
+  focusTagged,
+  readByUI,
+  strengthBiased
+}
+
+==================================================
+PART 8 — MAKE SPEED AND MOBILITY WRITE REAL LEARNINGS TOO
+==================================================
+
+Ensure Speed and Mobility interactions can generate learnings just like Strength.
+
+Examples of valid learnings:
+
+Speed:
+- User prefers acceleration-focused speed work
+- User prefers reactive footwork emphasis
+- User is working on deceleration / COD
+- User prefers lower-impact speed training
+
+Mobility:
+- User is focused on hip mobility
+- User prefers recovery-flow style mobility
+- User needs end-range control emphasis
+- User is working on thoracic / ankle mobility
+
+These should be written from:
+- build requests
+- edits / refinements
+- session feedback
+- command-agent interactions
+- block refocus interactions
+
+==================================================
+PART 9 — MAKE THE LEARNINGS UI FOCUS-AWARE
+==================================================
+
+The “What your coach has learned” section should not look like a Strength-only memory feed when the user is in Mobility or Speed.
+
+Fix the read/display logic so it can:
+- show focus-relevant learnings first
+- still preserve global user truths when appropriate
+- avoid flooding Mobility with old Strength-only insights unless they are genuinely cross-focus relevant
+
+Desired behavior:
+- active focus learnings appear first
+- cross-focus/global learnings can appear below
+- clearly balanced across focuses
+
+==================================================
+PART 10 — ADD AUDIT LOGGING FOR LEARNING WRITES + READS
+==================================================
+
+Add logs:
+
+[FocusLearningWriteAudit] {
+  focusMode,
+  triggerSource,
+  learningType,
+  persisted,
+  memoryKey
+}
+
+[FocusLearningReadAudit] {
+  activeFocus,
+  displayedLearningCount,
+  focusSpecificCount,
+  globalCount,
+  strengthOnlyLeak
+}
+
+==================================================
+PART 11 — VALIDATION
+==================================================
+
+Test all of the following:
+
+A. Active Program edit buttons
+1. Strength Today / Week / Block
+2. Speed Today / Week / Block
+3. Mobility Today / Week / Block
+
+Confirm:
+- correct labels render
+- correct commands are sent
+- correct focus engine handles the edit
+- DB updates
+- UI refreshes
+
+B. Agent learning
+1. Make a speed-specific refinement
+2. Make a mobility-specific refinement
+3. Log a mobility session
+4. Refocus a speed block
+5. Refocus a mobility block
+
+Confirm:
+- relevant learnings are written
+- “What your coach has learned” updates accordingly
+- not only Strength learnings appear
+
+==================================================
+PART 12 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. where the old Active Program buttons were strength-defaulted
+2. the new button sets for Strength / Speed / Mobility
+3. how all Active Program edits now route through the agent
+4. what structured intents were added
+5. where learning writes were missing for Speed / Mobility
+6. what was fixed in the learning pipeline
+7. validation results across all three focuses
+
+==================================================
+FINAL STANDARD
+==================================================
+
+All edit actions inside Active Programs, including Block edit controls, must now be fully focus-aware and route through the real agent/system pipeline.
+
+The agent must also learn from Speed and Mobility interactions just as much as Strength, and the learnings UI must reflect the active focus instead of looking Strength-only.

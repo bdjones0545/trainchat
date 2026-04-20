@@ -560,7 +560,7 @@ export async function extractMemoriesFromMessage(
     });
   }
 
-  // ── Training emphasis preferences ─────────────────────────────────────────
+  // ── Training emphasis preferences (strength / hypertrophy / athletic) ─────
   if (
     /\b(?:strength[\s-]focused|prefer\s+strength|more\s+strength|strength[\s-]first|heavy\s+lifting|low[\s-]rep|powerlifting\s+style|strength\s+training)\b/.test(msg)
   ) {
@@ -584,7 +584,7 @@ export async function extractMemoriesFromMessage(
       detail: "User prefers hypertrophy-focused programming. Prioritize moderate rep ranges (6-15), mechanical tension, volume accumulation, and isolation work.",
     });
   } else if (
-    /\b(?:athletic|explosiv|power\s+training|sport[\s-]specific|speed\s+work|agility|conditioning|performance[\s-]based)\b/.test(msg)
+    /\b(?:athletic|explosiv|power\s+training|sport[\s-]specific|conditioning|performance[\s-]based)\b/.test(msg)
   ) {
     candidates.push({
       type: "training_preference",
@@ -593,6 +593,34 @@ export async function extractMemoriesFromMessage(
       confidence: 3,
       source: "conversation",
       detail: "User prefers athletic/performance-oriented programming. Include power, speed, and sport-transfer work alongside strength foundations.",
+    });
+  }
+
+  // ── Speed / footwork emphasis preferences ─────────────────────────────────
+  if (
+    /\b(?:acceleration|accelerat|max\s+velocity|speed\s+training|footwork|reactive\s+(?:training|work|drills?)|lateral\s+speed|change\s+of\s+direction|(?:\bCOD\b)|deceleration|sprint\s+training|more\s+(?:reactive|acceleration|speed)|speed[\s-]focused|faster\s+(?:first\s+step|feet)|agility\s+training)\b/.test(msg)
+  ) {
+    candidates.push({
+      type: "training_preference",
+      subject: "speed and footwork programming",
+      sentiment: "positive",
+      confidence: 3,
+      source: "conversation",
+      detail: "User is focused on speed and footwork development. Include acceleration, reactive, and change-of-direction work. Prioritize sprint mechanics, elastic output, and lateral quickness.",
+    });
+  }
+
+  // ── Mobility emphasis preferences ──────────────────────────────────────────
+  if (
+    /\b(?:hip\s+mobility|end[\s-]range\s+control|thoracic\s+(?:mobility|work|spine)|joint\s+mobility|mobility\s+(?:training|work|flow|program|focus)|range\s+of\s+motion|flexibility\s+(?:training|work)|recovery\s+flow|restore\s+(?:range|mobility|flexibility)|more\s+(?:mobile|flexible)|mobility[\s-]focused|joint\s+prep|tissue\s+restoration)\b/.test(msg)
+  ) {
+    candidates.push({
+      type: "training_preference",
+      subject: "mobility and joint quality programming",
+      sentiment: "positive",
+      confidence: 3,
+      source: "conversation",
+      detail: "User is focused on mobility and joint quality. Include hip mobility, end-range control, thoracic work, and tissue restoration. Prioritize positional quality, joint prep, and recovery flow.",
     });
   }
 

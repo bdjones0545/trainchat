@@ -915,12 +915,27 @@ function WeekView({ highlightedIds, onEditExercise, onEditSession, onEditWeek, i
   const weekPhaseLabel = WEEK_PHASE_NAMES[activeWeekNumber] ?? null;
   const weekPhaseDescription = WEEK_PHASE_DESCRIPTIONS[activeWeekNumber] ?? null;
 
-  const REFINE_CHIPS: Array<{ label: string; req?: string; intent?: CommandIntentKey }> = [
-    { label: "More explosive", req: `Make Week ${activeWeekNumber} more explosive and power-focused` },
-    { label: "Reduce fatigue", intent: "recovery_focus" },
-    { label: "Add conditioning", req: `Add more conditioning work to Week ${activeWeekNumber}` },
-    { label: "Shorten sessions", intent: "shorten_session" },
-  ];
+  const REFINE_CHIPS_BY_FOCUS: Record<FocusMode, Array<{ label: string; req?: string; intent?: CommandIntentKey }>> = {
+    strength: [
+      { label: "More explosive",   req: `Make Week ${activeWeekNumber} more explosive and power-focused` },
+      { label: "Reduce fatigue",   intent: "recovery_focus" },
+      { label: "Add conditioning", req: `Add more conditioning work to Week ${activeWeekNumber}` },
+      { label: "Shorten sessions", intent: "shorten_session" },
+    ],
+    speed: [
+      { label: "More acceleration", req: `Shift Week ${activeWeekNumber} toward acceleration and drive phase work` },
+      { label: "More reactive",     req: `Make Week ${activeWeekNumber} more reactive and elastic` },
+      { label: "Reduce fatigue",    intent: "recovery_focus" },
+      { label: "Shorten sessions",  intent: "shorten_session" },
+    ],
+    mobility: [
+      { label: "More hip focus",    req: `Shift Week ${activeWeekNumber} toward hip mobility and end-range control` },
+      { label: "More recovery flow",req: `Make Week ${activeWeekNumber} more recovery and restoration focused` },
+      { label: "Lower intensity",   req: `Lower the intensity of Week ${activeWeekNumber}` },
+      { label: "Shorten sessions",  intent: "shorten_session" },
+    ],
+  };
+  const REFINE_CHIPS = REFINE_CHIPS_BY_FOCUS[focusMode] ?? REFINE_CHIPS_BY_FOCUS.strength;
 
   return (
     <div className="space-y-4">
@@ -1328,20 +1343,48 @@ interface BlockViewProps {
   onEditWeek: (week: any, phaseName?: string) => void;
 }
 
-// Modify-Next-Block adjustment options
-const MODIFY_OPTIONS = [
-  { id: "power", label: "Shift focus toward power", blockType: "POWER_ELASTIC_CONVERSION" },
-  { id: "strength", label: "Increase strength emphasis", blockType: "INTENSIFICATION_STRENGTH" },
-  { id: "recovery", label: "Extended recovery focus", blockType: "REBUILD_DELOAD" },
-  { id: "foundation", label: "Re-establish the foundation", blockType: "FOUNDATION_ACCUMULATION" },
-];
+// Modify-Next-Block adjustment options — focus-aware
+const FOCUS_MODIFY_OPTIONS: Record<FocusMode, Array<{ id: string; label: string; blockType?: string }>> = {
+  strength: [
+    { id: "power",      label: "Shift focus toward power",          blockType: "POWER_ELASTIC_CONVERSION" },
+    { id: "strength",   label: "Increase strength emphasis",         blockType: "INTENSIFICATION_STRENGTH" },
+    { id: "recovery",   label: "Extended recovery focus",            blockType: "REBUILD_DELOAD" },
+    { id: "foundation", label: "Re-establish the foundation",        blockType: "FOUNDATION_ACCUMULATION" },
+  ],
+  speed: [
+    { id: "acceleration",  label: "Shift toward acceleration phase",   blockType: "SPEED_ACCELERATION" },
+    { id: "max_velocity",  label: "Shift toward max velocity",         blockType: "SPEED_MAX_VELOCITY" },
+    { id: "reactive_cod",  label: "Shift toward reactive / COD",       blockType: "SPEED_REACTIVE" },
+    { id: "recovery",      label: "Return-to-speed recovery focus",    blockType: "REBUILD_DELOAD" },
+  ],
+  mobility: [
+    { id: "hip_mobility",  label: "Shift toward hip mobility",         blockType: "MOBILITY_HIP" },
+    { id: "thoracic_spine",label: "Shift toward thoracic / spine",     blockType: "MOBILITY_THORACIC" },
+    { id: "recovery_flow", label: "Shift toward recovery flow",        blockType: "MOBILITY_RECOVERY" },
+    { id: "end_range",     label: "Shift toward end-range control",    blockType: "MOBILITY_END_RANGE" },
+  ],
+};
 
-const REPEAT_OPTIONS = [
-  { id: "more_volume", label: "Add more volume" },
-  { id: "heavier", label: "Push heavier loads" },
-  { id: "less_fatigue", label: "Reduce fatigue load" },
-  { id: "more_conditioning", label: "Add conditioning" },
-];
+const FOCUS_REPEAT_OPTIONS: Record<FocusMode, Array<{ id: string; label: string }>> = {
+  strength: [
+    { id: "more_volume",       label: "Add more volume" },
+    { id: "heavier",           label: "Push heavier loads" },
+    { id: "less_fatigue",      label: "Reduce fatigue load" },
+    { id: "more_conditioning", label: "Add conditioning" },
+  ],
+  speed: [
+    { id: "more_acceleration", label: "More acceleration emphasis" },
+    { id: "more_reactive",     label: "More reactive / elastic work" },
+    { id: "less_impact",       label: "Reduce impact load" },
+    { id: "more_deceleration", label: "Add deceleration / COD" },
+  ],
+  mobility: [
+    { id: "more_hip",       label: "More hip focus" },
+    { id: "more_thoracic",  label: "More thoracic / spine work" },
+    { id: "lower_intensity",label: "Lower intensity" },
+    { id: "more_recovery",  label: "More recovery emphasis" },
+  ],
+};
 
 function ProgrammingLogicCard({ phase }: { phase: any }) {
   const [expanded, setExpanded] = useState(false);
@@ -1427,6 +1470,9 @@ function BlockView({ highlightedIds, onEditPhase, onEditWeek }: BlockViewProps) 
   function handleStartNextBlock() {
     continueBlockMutation.mutate({ mode: "next" });
   }
+
+  const MODIFY_OPTIONS = FOCUS_MODIFY_OPTIONS[focusMode] ?? FOCUS_MODIFY_OPTIONS.strength;
+  const REPEAT_OPTIONS = FOCUS_REPEAT_OPTIONS[focusMode] ?? FOCUS_REPEAT_OPTIONS.strength;
 
   function handleConfirmModify() {
     const chosen = MODIFY_OPTIONS.find((o) => o.id === selectedModifyOption);
@@ -1954,19 +2000,34 @@ function RecentEditsBar({ edits }: { edits: EditRecord[] }) {
 
 type VibeState = "idle" | "submitting" | "result";
 
-const VIBE_CHIPS: Array<{
-  label: string;
-  req?: string;
-  intent?: CommandIntentKey;
-  kind?: "chip";
-}> = [
-  { label: "More intense", req: "Increase the overall intensity for this session" },
-  { label: "Less volume", intent: "reduce_volume" },
-  { label: "Rest day", intent: "convert_to_rest_day" },
-  { label: "Shorter session", intent: "shorten_session" },
-  { label: "Travel mode", intent: "travel_mode" },
-  { label: "More explosive", req: "Add explosive emphasis to today's training" },
-];
+type VibeChip = { label: string; req?: string; intent?: CommandIntentKey; kind?: "chip" };
+
+const FOCUS_VIBE_CHIPS: Record<FocusMode, VibeChip[]> = {
+  strength: [
+    { label: "More intense",   req: "Increase the overall intensity for this strength session" },
+    { label: "Less volume",    intent: "reduce_volume" },
+    { label: "Rest day",       intent: "convert_to_rest_day" },
+    { label: "Shorter session",intent: "shorten_session" },
+    { label: "Travel mode",    intent: "travel_mode" },
+    { label: "More explosive", req: "Add explosive emphasis to today's strength training" },
+  ],
+  speed: [
+    { label: "More acceleration", req: "Add acceleration focus to today's speed session" },
+    { label: "More reactive",     req: "Make today's speed session more reactive and elastic" },
+    { label: "Rest day",          intent: "convert_to_rest_day" },
+    { label: "Shorter session",   intent: "shorten_session" },
+    { label: "Travel mode",       intent: "travel_mode" },
+    { label: "Less impact",       req: "Reduce the impact load in today's speed session" },
+  ],
+  mobility: [
+    { label: "More hip focus",   req: "Shift today's mobility session toward hip mobility and end-range control" },
+    { label: "More recovery",    req: "Make today's mobility session more recovery-focused" },
+    { label: "Rest day",         intent: "convert_to_rest_day" },
+    { label: "Shorter session",  intent: "shorten_session" },
+    { label: "Lower intensity",  req: "Lower the intensity of today's mobility session" },
+    { label: "More end-range",   req: "Emphasize end-range control in today's mobility session" },
+  ],
+};
 
 interface VibeMutation {
   payload: string | StructuredEditPayload;
@@ -1979,6 +2040,8 @@ interface VibeBarProps {
 }
 
 function VibeBar({ onEditComplete, onUndone }: VibeBarProps) {
+  const { focusMode: vibeBarFocusMode } = useFocusMode();
+  const VIBE_CHIPS = FOCUS_VIBE_CHIPS[vibeBarFocusMode] ?? FOCUS_VIBE_CHIPS.strength;
   const [input, setInput] = useState("");
   const [vibeState, setVibeState] = useState<VibeState>("idle");
   const [lastResult, setLastResult] = useState<EditResult | null>(null);

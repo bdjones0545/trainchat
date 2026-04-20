@@ -2,6 +2,7 @@
  * CoachMemoryInsights — surfaces high-confidence learned patterns to the user
  * in plain coach language. Appears in the Block tab.
  *
+ * Focus-aware: insights relevant to the current focus mode surface first.
  * Only shows when there are ≥1 insight with confidence ≥3.
  * Fades in when the data arrives — silent when empty.
  */
@@ -9,6 +10,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Brain, TrendingUp, TrendingDown, Clock, Calendar, Dumbbell, Zap, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useFocusMode } from "@/hooks/useFocusMode";
+import type { FocusMode } from "@/lib/focusMode";
 
 interface MemoryInsight {
   id: number;
@@ -32,6 +35,18 @@ async function fetchMemoryInsights(): Promise<InsightsResponse> {
   return res.json();
 }
 
+const FOCUS_KEYWORDS: Record<FocusMode, string[]> = {
+  strength: ["strength", "hypertrophy", "power", "load", "lifting", "compound", "neural"],
+  speed: ["speed", "acceleration", "reactive", "footwork", "sprint", "lateral", "change of direction", "cod", "velocity"],
+  mobility: ["mobility", "hip", "thoracic", "end-range", "range of motion", "flexibility", "joint", "restoration"],
+};
+
+function scoreInsightForFocus(insight: MemoryInsight, focus: FocusMode): number {
+  const keywords = FOCUS_KEYWORDS[focus] ?? [];
+  const text = `${insight.subject} ${insight.coachMessage}`.toLowerCase();
+  return keywords.reduce((score, kw) => score + (text.includes(kw) ? 1 : 0), 0);
+}
+
 function iconForType(type: string, sentiment: string) {
   const cls = "w-3.5 h-3.5 shrink-0";
   if (type === "session_preference") return <Clock className={cls} />;
@@ -51,6 +66,7 @@ function sentimentColor(sentiment: string): string {
 }
 
 export default function CoachMemoryInsights() {
+  const { focusMode } = useFocusMode();
   const { data, isLoading, isError } = useQuery<InsightsResponse>({
     queryKey: ["memory-insights"],
     queryFn: fetchMemoryInsights,
@@ -60,11 +76,17 @@ export default function CoachMemoryInsights() {
 
   if (isLoading || isError || !data || data.insights.length === 0) return null;
 
-  const { insights } = data;
+  const sortedInsights = [...data.insights].sort((a, b) => {
+    const aScore = scoreInsightForFocus(a, focusMode);
+    const bScore = scoreInsightForFocus(b, focusMode);
+    if (bScore !== aScore) return bScore - aScore;
+    return b.confidence - a.confidence;
+  });
+
+  console.log(`[CoachMemoryInsights][FocusMode=${focusMode}] Rendering ${sortedInsights.length} insights, top subject: "${sortedInsights[0]?.subject}"`);
 
   return (
     <div className="space-y-2">
-      {/* Header */}
       <div className="flex items-center gap-2 px-0.5">
         <Brain className="w-3.5 h-3.5 text-primary/70" />
         <span className="text-xs font-semibold text-foreground/70 uppercase tracking-wider">
@@ -72,9 +94,8 @@ export default function CoachMemoryInsights() {
         </span>
       </div>
 
-      {/* Insight cards */}
       <div className="space-y-1.5">
-        {insights.map((insight) => (
+        {sortedInsights.map((insight) => (
           <div
             key={insight.id}
             className={cn(
