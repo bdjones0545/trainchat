@@ -1,0 +1,193 @@
+FOCUS MODE SYSTEM — ACTIVE PROGRAM UI UPGRADE
+
+CONTEXT:
+The focus switcher (Strength / Speed / Mobility) has been upgraded in the main view, but in the ACTIVE PROGRAM screen it still behaves like a passive tab.
+
+We need to make the active focus:
+- persistent
+- obvious
+- context-aware
+- visually tied to the program + session
+
+==================================================
+TASK 1 — ADD “ACTIVE MODE” HEADER
+==================================================
+
+Directly under the top navigation, add a persistent mode indicator:
+
+Example:
+
+⚡ SPEED MODE ACTIVE
+Building: Acceleration, max velocity, and reactive ability
+
+or
+
+🟢 MOBILITY MODE ACTIVE
+Building: Range of motion, control, and tissue resilience
+
+or
+
+🔵 STRENGTH MODE ACTIVE
+Building: Force production and structural strength
+
+STYLE:
+- small pill or banner
+- colored based on mode
+- sits ABOVE session card
+
+This should always be visible in active programs.
+
+==================================================
+TASK 2 — MAKE SESSION CARD MODE-AWARE
+==================================================
+
+The session card must visually reflect the focus mode.
+
+For SPEED:
+- electric blue accents
+- speed icon (⚡)
+- remove ALL strength language (e.g., "Lifting")
+
+For MOBILITY:
+- green accents
+- mobility icon (🧘 / joint)
+- emphasize flow / control language
+
+For STRENGTH:
+- deep blue
+- dumbbell icon
+- keep lifting terminology
+
+CRITICAL:
+Replace this tag dynamically:
+"Lifting" → must change based on focus:
+- Strength → Lifting
+- Speed → Speed Session
+- Mobility → Mobility Flow
+
+==================================================
+TASK 3 — UPGRADE THE FOCUS SWITCHER (IN ACTIVE VIEW)
+==================================================
+
+The switcher at the top must feel like a MODE LOCK, not tabs.
+
+Changes:
+- active focus = filled pill with glow
+- inactive = dimmed + outline
+- add icons:
+  Strength → 🏋️
+  Speed → ⚡
+  Mobility → 🧘
+
+Increase height and padding for mobile clarity.
+
+==================================================
+TASK 4 — ADD SWITCH CONFIRMATION FEEDBACK
+==================================================
+
+When user switches focus:
+
+Show a temporary inline confirmation:
+
+“Switched to Speed Mode — optimizing for acceleration & agility”
+
+Duration: ~1.5–2 seconds
+
+==================================================
+TASK 5 — PREVENT MODE CONFUSION
+==================================================
+
+If session content mismatches focus:
+
+Example:
+Speed mode but session labeled “Upper Strength”
+
+Then:
+- auto-correct label OR
+- show warning in dev logs
+
+This should NEVER reach the UI.
+
+==================================================
+TASK 6 — PROPAGATE MODE INTO BUTTONS + ACTIONS
+==================================================
+
+Buttons like:
+- Adjust
+- Start Session
+- Quick Commands
+
+Must be context-aware:
+
+Speed:
+- “Make more explosive”
+- “Add reactive drill”
+
+Mobility:
+- “Increase range”
+- “Add end-range control”
+
+Strength:
+- “Increase load”
+- “Add volume”
+
+NO cross-mode leakage.
+
+==================================================
+TASK 7 — ADD MINI MODE BADGE TO SESSION TITLE
+==================================================
+
+Update session header:
+
+Before:
+Day 1 — Acceleration Development
+
+After:
+⚡ Day 1 — Acceleration Development
+
+Small change, huge clarity.
+
+==================================================
+TASK 8 — VISUAL HIERARCHY FIX
+==================================================
+
+Current issue:
+Focus switcher competes with nav (Today / Week / Block)
+
+Fix:
+Group like this:
+
+[ Focus Mode Switcher ]
+[ Mode Indicator Banner ]
+[ Today / Week / Block Nav ]
+[ Session Card ]
+
+Focus must sit ABOVE navigation hierarchy.
+
+==================================================
+TASK 9 — VALIDATION
+==================================================
+
+Test flow:
+
+1. Open active program
+2. Look for 2 seconds
+
+User must instantly know:
+- what mode they are in
+- what that mode does
+- that everything below is influenced by it
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Focus should feel like:
+
+❌ a filter you selected earlier
+✅ a system you are currently inside of
+
+The user should never ask:
+“Wait… am I in strength or speed right now?”
+
+It should be impossible to miss.

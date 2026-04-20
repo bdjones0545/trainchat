@@ -1749,7 +1749,7 @@ export default function Chat() {
           lastChangeSummary={lastChangeSummary ?? undefined}
           blockMetadata={(activeSystem as any)?.metadata ?? undefined}
           activeFocusModes={activeFocusModes}
-          onFocusModeChange={setFocusMode}
+          onFocusModeChange={handleFocusSwitch}
           isWeekDataLoading={hasActiveSystem && weekDataLoading}
         />
       </div>
@@ -2617,7 +2617,7 @@ export default function Chat() {
                   changeTargets={changeTargets}
                   blockMetadata={(activeSystem as any)?.metadata ?? undefined}
                   activeFocusModes={activeFocusModes}
-                  onFocusModeChange={setFocusMode}
+                  onFocusModeChange={handleFocusSwitch}
                   isWeekDataLoading={hasActiveSystem && weekDataLoading}
                 />
               </div>

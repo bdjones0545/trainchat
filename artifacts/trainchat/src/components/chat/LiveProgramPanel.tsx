@@ -4,7 +4,7 @@ import {
   Dumbbell, Save, CheckCircle, Loader2, Lock, Zap, PlayCircle,
   MessageSquare, ChevronDown, ChevronUp, TrendingUp, LayoutGrid,
   Calendar, Clock, RotateCcw, GitBranch, Activity, Layers,
-  AlertCircle, RefreshCw, Send,
+  AlertCircle, RefreshCw, Send, Leaf, CheckCircle2,
 } from "lucide-react";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 import { customFetch } from "@workspace/api-client-react";
@@ -21,7 +21,7 @@ import {
   type LearnExerciseContext,
 } from "@/lib/learn-exercise";
 import { useFocusMode } from "@/hooks/useFocusMode";
-import { FOCUS_MODE_CONFIGS } from "@/lib/focusModeConfig";
+import { FOCUS_MODE_CONFIGS, getFocusModeConfig } from "@/lib/focusModeConfig";
 import type { FocusMode } from "@/lib/focusMode";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -147,18 +147,22 @@ function scopeColor(scope: string) {
 
 function FocusBadge() {
   const { focusMode } = useFocusMode();
-  const cfg = FOCUS_MODE_CONFIGS[focusMode];
-  const colorMap: Record<string, string> = {
-    strength: "text-primary/80 bg-primary/8 border-primary/20",
-    speed:    "text-sky-400/90 bg-sky-500/8 border-sky-500/20",
-    mobility: "text-emerald-400/90 bg-emerald-500/8 border-emerald-500/20",
-  };
-  const color = colorMap[focusMode] ?? colorMap.strength;
+  const cfg = getFocusModeConfig(focusMode);
+  const Icon = cfg.theme.iconName === "Dumbbell" ? Dumbbell : cfg.theme.iconName === "Zap" ? Zap : Leaf;
   return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md border text-[9px] font-bold uppercase tracking-wider flex-shrink-0 ${color}`}>
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wider flex-shrink-0 ${cfg.theme.badgeClass}`}>
+      <Icon className="w-2.5 h-2.5" />
       {cfg.shortLabel}
     </span>
   );
+}
+
+// ─── Focus Mode Icon helper ───────────────────────────────────────────────────
+
+function FocusIcon({ mode, className }: { mode: FocusMode; className?: string }) {
+  const cfg = getFocusModeConfig(mode);
+  const Icon = cfg.theme.iconName === "Dumbbell" ? Dumbbell : cfg.theme.iconName === "Zap" ? Zap : Leaf;
+  return <Icon className={className ?? "w-3 h-3"} />;
 }
 
 // ─── Build phase helpers ───────────────────────────────────────────────────────
@@ -1512,11 +1516,20 @@ function ProgramTab({
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 mb-0.5">
-                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                          isExpanded ? "bg-primary text-primary-foreground" : "bg-primary/15 text-primary"
-                        }`}>
-                          Day {day.dayNumber}
-                        </span>
+                        {/* Mode-aware session type badge */}
+                        {(() => {
+                          const sessionCfg = getFocusModeConfig(panelFocusMode);
+                          const sessionTypeLabel = panelFocusMode === "strength" ? "Lifting" : panelFocusMode === "speed" ? "Speed Session" : "Mobility Flow";
+                          return (
+                            <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                              isExpanded ? `${sessionCfg.theme.pillActiveClass}` : `${sessionCfg.theme.badgeClass}`
+                            }`}>
+                              <FocusIcon mode={panelFocusMode} className="w-2.5 h-2.5" />
+                              {sessionTypeLabel}
+                            </span>
+                          );
+                        })()}
+                        <span className="text-[9px] text-muted-foreground/40 font-medium">Day {day.dayNumber}</span>
                       </div>
                       <p className="text-[11px] font-semibold text-foreground truncate">
                         {day.name}
@@ -2306,9 +2319,11 @@ export default function LiveProgramPanel({
   const [activeTab, setActiveTab] = useState<Tab>("program");
   const [hasUnseenChange, setHasUnseenChange] = useState(false);
   const [showBuildSuccess, setShowBuildSuccess] = useState(false);
+  const [panelSwitchConfirm, setPanelSwitchConfirm] = useState<string | null>(null);
   const prevChangeSignalRef = useRef(0);
   const prevProgramSignalRef = useRef(0);
   const buildSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const panelSwitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // New program built → switch to Program tab so user sees the result
   useEffect(() => {
@@ -2398,41 +2413,75 @@ export default function LiveProgramPanel({
         </div>
       )}
 
-      {/* Focus lane tabs — shows which focus modes have active programs */}
+      {/* ── Focus Mode Switcher (Active Program Panel) ─────────────────────── */}
       {onFocusModeChange && activeFocusModes && (
-        <div className="flex items-center gap-1 px-3 py-2 border-b border-border/50 flex-shrink-0 bg-muted/20">
-          {(["strength", "speed", "mobility"] as const).map((mode) => {
-            const cfg = FOCUS_MODE_CONFIGS[mode];
-            const isActive = focusMode === mode;
-            const hasProgram = activeFocusModes[mode];
-            const colorMap: Record<string, string> = {
-              strength: "border-primary/40 text-primary bg-primary/10",
-              speed: "border-sky-500/40 text-sky-400 bg-sky-500/10",
-              mobility: "border-emerald-500/40 text-emerald-400 bg-emerald-500/10",
-            };
-            return (
-              <button
-                key={mode}
-                onClick={() => hasProgram ? onFocusModeChange(mode) : undefined}
-                className={[
-                  "relative flex items-center gap-1 px-2 py-1 rounded-md border text-[10px] font-semibold transition-all duration-150",
-                  isActive
-                    ? colorMap[mode]
-                    : hasProgram
-                    ? "border-border/40 text-muted-foreground hover:text-foreground hover:bg-muted/50 hover:border-border/70"
-                    : "border-border/20 text-muted-foreground/30 cursor-default",
-                ].join(" ")}
-                disabled={!hasProgram}
-                title={hasProgram ? `Switch to ${cfg.label}` : `No ${cfg.label} program yet`}
-              >
-                {cfg.shortLabel}
-                {hasProgram && !isActive && (
-                  <span className="w-1 h-1 rounded-full bg-current opacity-60 flex-shrink-0" />
-                )}
-              </button>
+        <div className="flex-shrink-0 border-b border-border/60 bg-background/95">
+          {/* Section label */}
+          <div className="flex items-center justify-center pt-2 pb-1">
+            <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-muted-foreground/40 select-none">Training Focus</span>
+          </div>
+
+          {/* Pill switcher */}
+          <div className="flex items-center justify-center gap-1.5 pb-2 px-3">
+            {(["strength", "speed", "mobility"] as const).map((mode) => {
+              const cfg = getFocusModeConfig(mode);
+              const isActive = focusMode === mode;
+              const hasProgram = activeFocusModes[mode];
+              return (
+                <button
+                  key={mode}
+                  onClick={() => {
+                    if (!hasProgram) return;
+                    onFocusModeChange(mode);
+                    setPanelSwitchConfirm(cfg.theme.confirmLabel);
+                    if (panelSwitchTimerRef.current) clearTimeout(panelSwitchTimerRef.current);
+                    panelSwitchTimerRef.current = setTimeout(() => setPanelSwitchConfirm(null), 2200);
+                  }}
+                  disabled={!hasProgram}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold transition-all duration-200 select-none ${
+                    isActive
+                      ? `${cfg.theme.pillActiveClass} shadow-sm`
+                      : hasProgram
+                      ? `${cfg.theme.inactiveClass} bg-muted/30`
+                      : "text-muted-foreground/30 bg-transparent cursor-default"
+                  }`}
+                  style={isActive ? cfg.theme.pillGlow : undefined}
+                  title={hasProgram ? `Switch to ${cfg.label}` : `No ${cfg.label} program yet`}
+                >
+                  <FocusIcon mode={mode} className="w-3 h-3 flex-shrink-0" />
+                  <span>{cfg.shortLabel === "Speed" ? "Speed" : cfg.label}</span>
+                  {hasProgram && !isActive && (
+                    <span className="w-1 h-1 rounded-full bg-current opacity-50 flex-shrink-0" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Active mode banner */}
+          {(() => {
+            const activeCfg = getFocusModeConfig(focusMode);
+            return panelSwitchConfirm ? (
+              <div className="flex items-center justify-center pb-2 animate-in fade-in duration-200">
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-semibold ${activeCfg.theme.badgeClass}`}>
+                  <CheckCircle2 className="w-3 h-3" />
+                  {panelSwitchConfirm}
+                </span>
+              </div>
+            ) : (
+              <div className={`flex items-start gap-2 px-4 py-2.5 border-t border-border/30 ${activeCfg.theme.bgTintClass}`}>
+                <span className={`mt-0.5 flex-shrink-0 p-1.5 rounded-lg bg-current/10`}>
+                  <FocusIcon mode={focusMode} className={`w-3 h-3 ${activeCfg.theme.iconColorClass}`} />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-[10px] font-bold uppercase tracking-wide leading-none ${activeCfg.theme.iconColorClass}`}>
+                    {activeCfg.label} Mode Active
+                  </p>
+                  <p className="text-[9px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">{activeCfg.description}</p>
+                </div>
+              </div>
             );
-          })}
-          <span className="ml-auto text-[9px] text-muted-foreground/40 uppercase tracking-wider">Focus</span>
+          })()}
         </div>
       )}
 
