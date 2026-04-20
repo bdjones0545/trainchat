@@ -1015,11 +1015,18 @@ function applyStrengthWeekExpression(
       }
 
       if (process.env.NODE_ENV !== "production" && swappedName !== ex.name) {
+        const libResult = selectStrengthVariantFromLibrary(ex.name, 4);
         console.log("[StrengthVariantSwap]", JSON.stringify({
           week: 4,
           original: ex.name,
           selected: swappedName,
           source: deloadSource,
+          reason: deloadSource === "hardcoded-map" ? "map_w4_cross_family_policy" : libResult.reason,
+          scoreDelta: libResult.scoreDelta,
+          threshold: libResult.thresholdApplied,
+          cluster: libResult.equivalenceCluster,
+          family: libResult.movementFamily,
+          candidateCount: libResult.candidateCount,
         }));
       }
 
@@ -1084,17 +1091,22 @@ function applyStrengthWeekExpression(
       }
     }
 
-    // Audit log for non-production (only when a swap occurred)
-    if (process.env.NODE_ENV !== "production" && swappedName !== ex.name) {
-      const source = libraryResult.selectedName ? "library" : "hardcoded-map";
+    // Audit log for non-production (always log — selection or no-change)
+    if (process.env.NODE_ENV !== "production") {
+      const source = libraryResult.selectedName ? "library" : (swappedName !== ex.name ? "curated_map_fallback" : "kept");
       console.log("[StrengthVariantSwap]", JSON.stringify({
         week: weekNumber,
         original: ex.name,
         selected: swappedName,
+        changed: swappedName !== ex.name,
         source,
-        librarySource: libraryResult.source,
-        scoreDiff: libraryResult.scoreDiff,
-        candidatesConsidered: libraryResult.candidatesConsidered,
+        reason: libraryResult.reason,
+        scoreDelta: libraryResult.scoreDelta,
+        threshold: libraryResult.thresholdApplied,
+        candidateCount: libraryResult.candidateCount,
+        cluster: libraryResult.equivalenceCluster,
+        family: libraryResult.movementFamily,
+        crossFamily: libraryResult.crossFamily,
       }));
     }
 

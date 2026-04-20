@@ -90,7 +90,10 @@ export const EXERCISE_EXTENDED_META: Record<string, ExerciseExtendedMeta> = {
   // equivalenceCluster: "bilateral-squat" means all of these are movement-
   // equivalent substitutes for the primary squat slot; the cluster-alternative
   // bonus rotates through them build-over-build.
-  "Back Squat":                        { family: "heavy_bilateral_squat", equivalenceCluster: "bilateral-squat", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
+  // stabilityDemand:"moderate" — base squat expression. Pause/Tempo variants
+  // use stabilityDemand:"high", creating a 1-pt W3 gap that lets them win at
+  // threshold=1 without changing complexity (both are complex/slow_grind).
+  "Back Squat":                        { family: "heavy_bilateral_squat", equivalenceCluster: "bilateral-squat", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
   "Front Squat":                       { family: "heavy_bilateral_squat", equivalenceCluster: "bilateral-squat", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
   "Pause Back Squat":                  { family: "heavy_bilateral_squat", equivalenceCluster: "bilateral-squat", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
   "Safety Bar Squat":                  { family: "heavy_bilateral_squat", equivalenceCluster: "bilateral-squat", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "high" },
@@ -130,7 +133,12 @@ export const EXERCISE_EXTENDED_META: Record<string, ExerciseExtendedMeta> = {
   // used for cross-family saturation: if bilateral RDL is already selected,
   // the movementClusterPenalty will also suppress unilateral RDL variants
   // (SLRDL, Kickstand RDL) in the same build call.
-  "Conventional Deadlift":             { family: "heavy_bilateral_hinge", equivalenceCluster: "deadlift-pattern", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
+  // stabilityDemand:"moderate" — base deadlift expression. Deficit and Paused
+  // variants stay at stabilityDemand:"high", creating a 1-pt W3 gap (threshold=1).
+  "Conventional Deadlift":             { family: "heavy_bilateral_hinge", equivalenceCluster: "deadlift-pattern", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
+  // W3 intensification variants: complex/high → score 1pt above Conventional (W3=7)
+  "Deficit Deadlift":                  { family: "heavy_bilateral_hinge", equivalenceCluster: "deadlift-pattern", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
+  "Paused Deadlift":                   { family: "heavy_bilateral_hinge", equivalenceCluster: "deadlift-pattern", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
   "Sumo Deadlift":                     { family: "heavy_bilateral_hinge", equivalenceCluster: "deadlift-pattern", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
   "Rack Pull (from knee)":             { family: "heavy_bilateral_hinge", equivalenceCluster: "deadlift-pattern", complexity: "moderate", velocityIntent: "slow_grind",  stabilityDemand: "moderate" },
   "Snatch-Grip Deadlift":              { family: "heavy_bilateral_hinge", equivalenceCluster: "deadlift-pattern", complexity: "complex",  velocityIntent: "slow_grind",  stabilityDemand: "high" },
@@ -230,6 +238,8 @@ export const EXERCISE_EXTENDED_META: Record<string, ExerciseExtendedMeta> = {
   "Cable Fly":                         { family: "upper_horizontal_push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
   "Bench Press":                       { family: "upper_horizontal_push", equivalenceCluster: "horizontal-push", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "low" },
   "Dumbbell Press (flat)":             { family: "upper_horizontal_push", equivalenceCluster: "horizontal-push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "moderate" },
+  // W3 intensification variant: complex/high vs Bench Press moderate/low → 6-pt W3 gap
+  "Pause Bench Press":                 { family: "upper_horizontal_push", equivalenceCluster: "horizontal-push", complexity: "complex",  velocityIntent: "slow_grind", stabilityDemand: "high" },
 
   // ── Upper Vertical Push ───────────────────────────────────────────────
   // vertical-push cluster: same rotation-bonus logic for OHP variants.
@@ -242,20 +252,25 @@ export const EXERCISE_EXTENDED_META: Record<string, ExerciseExtendedMeta> = {
   "Landmine Press":                    { family: "upper_vertical_push", equivalenceCluster: "vertical-push", complexity: "moderate", velocityIntent: "moderate",   stabilityDemand: "high" },
   "Seated DB Press":                   { family: "upper_vertical_push", equivalenceCluster: "vertical-push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
   "Arnold Press":                      { family: "upper_vertical_push", equivalenceCluster: "vertical-push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "high" },
-  "Z-Press":                           { family: "upper_vertical_push", equivalenceCluster: "vertical-push", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "high" },
+  // complex: seated, no leg drive, extreme thoracic demand — clear W3 step up from OHP
+  "Z-Press":                           { family: "upper_vertical_push", equivalenceCluster: "vertical-push", complexity: "complex",  velocityIntent: "slow_grind", stabilityDemand: "high" },
   "Push Press (barbell)":              { family: "upper_vertical_push", equivalenceCluster: "vertical-push", complexity: "moderate", velocityIntent: "ballistic",  stabilityDemand: "moderate" },
 
   // ── Upper Horizontal Pull ─────────────────────────────────────────────
   // equivalenceCluster: "horizontal-pull" — all are movement-equivalent for
   // the horizontal-pull slot; cluster-alternative bonus rotates through them.
-  "Barbell Row":                       { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "moderate" },
-  "Barbell Bent-Over Row":             { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "moderate" },
+  // stabilityDemand:"low" — bilateral, hip-hinge position with solid base.
+  // Pendlay Row uses stabilityDemand:"high" + complexity:"complex", creating a
+  // 6-pt W3 gap that triggers library selection of Pendlay as the W3 variant.
+  "Barbell Row":                       { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "low" },
+  "Barbell Bent-Over Row":             { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "low" },
   "Dumbbell Row":                      { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
   "Cable Row":                         { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
   "Seated Cable Row":                  { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
   "Chest-Supported Row":               { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
   "Chest-Supported Dumbbell Row":      { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
-  "Pendlay Row":                       { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "moderate" },
+  // complex/high: explosive dead-stop pull, high postural demand — W3 variant
+  "Pendlay Row":                       { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "complex",  velocityIntent: "slow_grind", stabilityDemand: "high" },
   "Seal Row":                          { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
   "Dumbbell Seal Row":                 { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
   "Kroc Row":                          { family: "upper_horizontal_pull", equivalenceCluster: "horizontal-pull", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },

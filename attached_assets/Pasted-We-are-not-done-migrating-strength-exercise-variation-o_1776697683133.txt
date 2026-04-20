@@ -1,0 +1,115 @@
+We are not done migrating strength exercise variation off hardcoded maps.
+
+Current issue:
+The new strength week expression engine is still selecting hardcoded fallback options too often. The audit output proves this. W1 and W3 should be mostly library-driven when metadata coverage is strong. W4 may still use curated map-first for cross-family deload logic, but we need exact visibility into why fallback is happening and reduce it everywhere else.
+
+Goal:
+Turn the current hybrid system into an auditable metadata-first system. Hardcoded maps should only be used as a last resort, and W4 map-first behavior should be explicitly policy-driven rather than accidentally masking metadata gaps.
+
+What to build:
+
+1. Add explicit selection outcome reasons
+In strength-week-expression.ts, every selection path must return:
+- selectedExerciseName
+- source: "library" | "curated_map" | "none"
+- reason:
+  - "library_selected"
+  - "library_no_candidates"
+  - "library_candidate_below_threshold"
+  - "map_fallback_used"
+  - "map_forced_by_policy_w4"
+  - "kept_current_exercise"
+- candidateCount
+- winningScore
+- currentExerciseScore
+- scoreDelta
+- equivalenceCluster
+- movementFamily
+
+2. Build a deep audit utility
+Expand auditExerciseVariantSelection so it logs:
+- original exercise
+- week number
+- selected exercise
+- source
+- reason
+- current exercise metadata
+- all candidate exercises considered
+- score breakdown for every candidate
+- why each candidate was rejected
+- whether fallback map was used because metadata was missing, threshold failed, or no cluster match existed
+
+3. Add metadata coverage diagnostics
+Create a diagnostic function that scans all strength exercises used in generation and reports:
+- exercises with no equivalenceCluster
+- exercises with no movement family
+- clusters with only 1 candidate
+- primary lifts whose week variants depend on curated map
+- W1 / W3 exercises that have no valid same-family progression/regression candidates
+Print this in a dev-only audit report.
+
+4. Strengthen library coverage for primary lifts
+Audit and expand EXERCISE_EXTENDED_META so major primary lift families have meaningful metadata-first candidates:
+- squat family
+- deadlift / hinge family
+- horizontal press family
+- vertical press family
+- vertical pull family
+- row family
+- trunk anti-extension
+- trunk anti-rotation
+
+For each major lift family, make sure there are viable:
+- W1 establish / simpler / more stable variants
+- W3 intensify / more demanding variants
+- W4 deload / reduced systemic cost variants
+
+5. Same-family before cross-family rule
+For W1 and W3:
+- prefer same-family variants first
+- only allow cross-family replacements if no same-family options exist
+- log when cross-family was used
+
+For W4:
+- keep curated map-first only for true cross-family deload downgrades
+- otherwise allow metadata-first same-family/lightened variants
+- make this policy explicit in code comments and logs
+
+6. Review threshold logic
+The current “must outscore current exercise by >= 2” may be too strict.
+Refactor so the threshold is configurable by week:
+- W1 threshold
+- W3 threshold
+- W4 threshold
+Add audit output showing when a candidate lost only because of threshold.
+
+7. Add a fallback reduction report
+Create a dev-only report summarizing:
+- total selections
+- % library-driven
+- % curated map
+- % no change
+- % by week
+- top exercises still depending on curated map
+This should make it obvious what remains hardcoded.
+
+8. Preserve safe policy
+Do NOT remove curated fallback entirely yet.
+Instead:
+- keep it as a final safety net
+- make every fallback explicit and measurable
+- reduce fallback through metadata improvements, not blind deletion
+
+9. Output expectation
+After implementation, I want:
+- cleaner audit logs
+- a metadata coverage report
+- a fallback dependency report
+- improved library-driven coverage for W1/W3
+- curated map retained only where it adds real coaching value, especially for W4 cross-family deloads
+
+Success criteria:
+- W1 and W3 are mostly library-driven for primary lifts
+- W4 uses curated map only when intended by policy
+- every hardcoded selection is explainable in logs
+- no silent fallback behavior remains

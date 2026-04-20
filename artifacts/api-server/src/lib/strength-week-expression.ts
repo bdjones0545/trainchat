@@ -1,26 +1,49 @@
 /**
- * Strength Week Expression Engine — Library-Driven Variant Selection
- *
- * Replaces the hardcoded STRENGTH_EXERCISE_VARIANTS map as the primary selection
- * mechanism for week-to-week exercise variation within a 4-week strength block.
+ * Strength Week Expression Engine — Auditable Metadata-First Variant Selection
  *
  * Architecture:
- *   1. Build a ClusterIndex and FamilyIndex from EXERCISE_EXTENDED_META at module load.
- *   2. Score each candidate in the same cluster (or family fallback) for the target week role.
- *   3. Return the top-scoring candidate when it meaningfully outscores the current exercise.
- *   4. Return null when the current exercise is already a good fit — callers fall back
- *      to the hardcoded variant map (last-resort) or keep the exercise as-is.
+ *   1. Build ClusterIndex and FamilyIndex from EXERCISE_EXTENDED_META at module load.
+ *   2. Score every same-cluster candidate for the target week role (3 axes: complexity,
+ *      stabilityDemand, velocityIntent). Configurable per-week threshold.
+ *   3. If the cluster produces no winner (threshold miss or no candidates), extend the
+ *      search to the full movement family — same family, broader candidate set.
+ *   4. Return null + explicit reason code when library cannot provide a winner. The
+ *      caller in training-system-service.ts then consults STRENGTH_EXERCISE_VARIANTS
+ *      (curated map) as last resort.
  *
- * Week-role ↔ metadata alignment:
- *   W1 Establish  — prefer simple complexity, lower stability demand, accessible velocity
- *   W2 Build      — keep current exercise (no library swap — load progression is the week signal)
- *   W3 Intensify  — prefer complex/moderate complexity, high stability demand
- *   W4 Deload     — prefer simple complexity, low stability demand
+ * Week role policies:
+ *   W1 Establish  — prefer simpler complexity, lower stability. Threshold = 2.
+ *   W2 Build      — no swap. Load progression is the week-to-week signal. Threshold = ∞.
+ *   W3 Intensify  — prefer complex/high-stability. Threshold = 1 (any measurable gain).
+ *   W4 Deload     — caller uses curated-map-first (cross-family deload); library is
+ *                   the fallback for exercises without a map entry. Threshold = 2.
  *
- * This matches the PHASE_MODS logic already defined in deriveSlotIntent.ts.
+ * Same-family-before-cross-family rule (items 5):
+ *   The library ONLY searches within the same equivalenceCluster or same movement family.
+ *   Cross-family selections are exclusively sourced from the curated map — this is by
+ *   design and is logged with reason "map_w4_cross_family_policy".
+ *
+ * Every selection path returns an explicit reason code (items 1, 8) so nothing is
+ * silent. The audit utilities (items 2, 3, 7) are exported for dev-only reporting.
  */
 
 import { EXERCISE_EXTENDED_META, type ExerciseExtendedMeta } from "./programs/exerciseExtendedMeta";
+
+// ─── Reason Codes ─────────────────────────────────────────────────────────────
+//
+// Every call to selectStrengthVariantFromLibrary returns one of these.
+// Callers in training-system-service.ts preserve and log the reason.
+
+export type SelectionReason =
+  | "library_selected_cluster"        // winner found within equivalenceCluster
+  | "library_selected_family"         // winner found via family fallback (cluster was insufficient)
+  | "library_no_candidates"           // exercise has no cluster or family siblings
+  | "library_below_threshold_cluster" // cluster candidates exist but none meets threshold
+  | "library_below_threshold_family"  // family candidates exist but none meets threshold after cluster also failed
+  | "library_all_tied_cluster"        // all cluster candidates score identically — threshold miss at 0 diff
+  | "library_all_tied_family"         // all family candidates also score identically
+  | "exercise_not_in_library"         // exercise name not found in EXERCISE_EXTENDED_META
+  | "w2_build_no_swap";               // W2 always keeps current exercise
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,18 +60,45 @@ export interface CandidateScore {
 }
 
 export interface LibraryVariantResult {
+  // Core output
   selectedName: string | null;
   source: "cluster" | "family" | "none";
-  candidatesConsidered: number;
-  currentScore: number;
-  selectedScore: number | null;
-  scoreDiff: number | null;
+  reason: SelectionReason;
+
+  // Scoring context
+  candidateCount: number;
+  currentExerciseScore: number;
+  winningScore: number | null;
+  scoreDelta: number | null;
+  thresholdApplied: number;
+
+  // Exercise metadata
+  equivalenceCluster: string | null;
+  movementFamily: string | null;
+
+  // Cross-family flag — true if selected exercise is in a different family
+  // (should only happen via curated map, never via library path)
+  crossFamily: boolean;
 }
 
-// ─── Cluster & Family Indexes ─────────────────────────────────────────────────
+// ─── Per-week Swap Threshold ──────────────────────────────────────────────────
 //
-// Built once at module load from EXERCISE_EXTENDED_META.
-// cluster → exercises[]; family → exercises[]
+// Candidate must outscore the current exercise by at least this many points.
+//
+//   W1: 2 — meaningful simplification; prevents swapping equal alternatives
+//   W2: 999 — never swap; load progression is the week signal
+//   W3: 1 — any measurable gain triggers swap (enables Pause/Deficit selection
+//            when base lifts are adjusted to stabilityDemand:"moderate")
+//   W4: 2 — meaningful deload; caller uses curated-map-first anyway
+
+export const SWAP_THRESHOLD_BY_WEEK: Record<number, number> = {
+  1: 2,
+  2: 999,
+  3: 1,
+  4: 2,
+};
+
+// ─── Cluster & Family Indexes ─────────────────────────────────────────────────
 
 type Index = Record<string, string[]>;
 
@@ -60,12 +110,10 @@ function buildIndexes(): { clusterIndex: Index; familyIndex: Index } {
   const familyIndex: Index = {};
 
   for (const [name, meta] of Object.entries(EXERCISE_EXTENDED_META)) {
-    // Family index — all exercises
     const fam = meta.family;
     if (!familyIndex[fam]) familyIndex[fam] = [];
     familyIndex[fam].push(name);
 
-    // Cluster index — only exercises with an explicit cluster
     const cluster = meta.equivalenceCluster;
     if (cluster && cluster !== "unclassified") {
       if (!clusterIndex[cluster]) clusterIndex[cluster] = [];
@@ -87,14 +135,10 @@ function getIndexes(): { clusterIndex: Index; familyIndex: Index } {
 
 // ─── Week-Role Scoring Tables ─────────────────────────────────────────────────
 //
-// Each dimension is scored independently then summed.
-// Positive = good fit for this week role, negative = poor fit.
+// Three independent axes: complexity, stabilityDemand, velocityIntent.
+// Score = sum of all three. Positive = good fit, negative = poor fit.
 //
-// Aligned with PHASE_MODS in deriveSlotIntent.ts:
-//   establish: complexityLimit=moderate, targetFatigueCost=moderate
-//   build: complexityLimit=high, targetFatigueCost=high
-//   intensify: complexityLimit=moderate, targetNeuralDemand=high, targetFatigueCost=high
-//   deload: complexityLimit=low, targetNeuralDemand=low, targetFatigueCost=low
+// Aligned with PHASE_MODS in deriveSlotIntent.ts.
 
 const COMPLEXITY_SCORE: Record<WeekRole, Record<string, number>> = {
   establish:  { simple: +4, moderate: +2, complex: -3 },
@@ -116,10 +160,6 @@ const VELOCITY_SCORE: Record<WeekRole, Record<string, number>> = {
   intensify:  { slow_grind: +2, moderate: +1, ballistic: +0, explosive: -1 },
   deload:     { slow_grind: +0, moderate: +2, ballistic: -1, explosive: -2 },
 };
-
-// Minimum score improvement required to trigger a swap.
-// Prevents swapping when the current exercise already fits the week role well.
-const SWAP_THRESHOLD = 2;
 
 // ─── Scoring Function ─────────────────────────────────────────────────────────
 
@@ -159,137 +199,484 @@ export function weekNumberToRole(weekNumber: number): WeekRole {
 
 // ─── Primary Selection Function ───────────────────────────────────────────────
 //
-// Searches the exercise library for the best variant of `currentExerciseName`
-// for the given week role.
+// Library-first, auditable, reason-coded selection for a given exercise × week.
 //
-// Selection order:
-//   1. Cluster-level candidates (preferred — tight interchangeability guarantee)
-//   2. Family-level candidates (broader fallback — keeps movement pattern coherent)
-//   3. Return null — caller falls back to hardcoded map or keeps current exercise
+// Search order (same-family-before-cross-family rule):
+//   1. Cluster candidates (same equivalenceCluster — tightest interchangeability)
+//   2. Family candidates (same movement family — broader, still coherent)
+//   3. Return null + reason — caller consults curated map
 //
-// Returns null when:
-//   - Exercise not found in library (unknown name)
-//   - weekNumber === 2 (Build — no swap, load progression is the signal)
-//   - No candidate scores >= current score + SWAP_THRESHOLD
-//   - Only one exercise in the cluster (nothing to rotate to)
+// Cross-family selection NEVER happens in this function. Only the curated map
+// in training-system-service.ts makes cross-family deload downgrades.
 
 export function selectStrengthVariantFromLibrary(
   currentExerciseName: string,
   weekNumber: number
 ): LibraryVariantResult {
-  const noResult: LibraryVariantResult = {
-    selectedName: null,
-    source: "none",
-    candidatesConsidered: 0,
-    currentScore: 0,
-    selectedScore: null,
-    scoreDiff: null,
+  const threshold = SWAP_THRESHOLD_BY_WEEK[weekNumber] ?? 2;
+  const weekRole = weekNumberToRole(weekNumber);
+
+  const base: Omit<LibraryVariantResult, "selectedName" | "source" | "reason" | "candidateCount" | "winningScore" | "scoreDelta"> = {
+    currentExerciseScore: 0,
+    thresholdApplied: threshold,
+    equivalenceCluster: null,
+    movementFamily: null,
+    crossFamily: false,
   };
 
-  // W2: Keep current exercise — load progression is the week-to-week signal
-  if (weekNumber === 2) return noResult;
+  // W2: never swap — load progression is the signal
+  if (weekNumber === 2) {
+    return { ...base, selectedName: null, source: "none", reason: "w2_build_no_swap", candidateCount: 0, winningScore: null, scoreDelta: null };
+  }
 
   // Must be in library
   const currentMeta = EXERCISE_EXTENDED_META[currentExerciseName];
-  if (!currentMeta) return noResult;
+  if (!currentMeta) {
+    return { ...base, selectedName: null, source: "none", reason: "exercise_not_in_library", candidateCount: 0, winningScore: null, scoreDelta: null };
+  }
 
-  const weekRole = weekNumberToRole(weekNumber);
   const currentScore = scoreStrengthCandidateForWeekRole(currentExerciseName, weekRole).score;
+  const cluster = currentMeta.equivalenceCluster ?? null;
+  const family = currentMeta.family;
+
+  const filledBase = { ...base, currentExerciseScore: currentScore, equivalenceCluster: cluster, movementFamily: family };
 
   const { clusterIndex, familyIndex } = getIndexes();
 
-  // ── Cluster-level candidates ─────────────────────────────────────────────
-  const cluster = currentMeta.equivalenceCluster;
-  let candidates: string[] = [];
-  let searchSource: "cluster" | "family" = "cluster";
+  // ── Helper: score + rank candidates ────────────────────────────────────────
+  function rankCandidates(pool: string[]): CandidateScore[] {
+    return pool
+      .map(n => scoreStrengthCandidateForWeekRole(n, weekRole))
+      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+  }
 
+  // ── 1. Cluster-level search ─────────────────────────────────────────────────
   if (cluster && cluster !== "unclassified" && clusterIndex[cluster]) {
-    candidates = clusterIndex[cluster].filter(n => n !== currentExerciseName);
+    const clusterCandidates = clusterIndex[cluster].filter(n => n !== currentExerciseName);
+
+    if (clusterCandidates.length > 0) {
+      const ranked = rankCandidates(clusterCandidates);
+      const top = ranked[0];
+      const delta = top.score - currentScore;
+
+      // Did any candidate beat the threshold?
+      if (delta >= threshold) {
+        return {
+          ...filledBase,
+          selectedName: top.name,
+          source: "cluster",
+          reason: "library_selected_cluster",
+          candidateCount: clusterCandidates.length,
+          winningScore: top.score,
+          scoreDelta: delta,
+        };
+      }
+
+      // Candidates exist but fell short — still try family before giving up
+      const allTied = ranked.every(c => c.score === top.score && top.score === currentScore);
+      const clusterReason: SelectionReason = allTied
+        ? "library_all_tied_cluster"
+        : "library_below_threshold_cluster";
+
+      // ── 2. Family-level fallback when cluster found no winner ─────────────
+      const familyCandidates = (familyIndex[family] ?? []).filter(
+        n => n !== currentExerciseName && !(clusterIndex[cluster] ?? []).includes(n)
+      );
+
+      if (familyCandidates.length > 0) {
+        const familyRanked = rankCandidates(familyCandidates);
+        const familyTop = familyRanked[0];
+        const familyDelta = familyTop.score - currentScore;
+
+        if (familyDelta >= threshold) {
+          return {
+            ...filledBase,
+            selectedName: familyTop.name,
+            source: "family",
+            reason: "library_selected_family",
+            candidateCount: familyCandidates.length,
+            winningScore: familyTop.score,
+            scoreDelta: familyDelta,
+          };
+        }
+
+        const familyAllTied = familyRanked.every(c => c.score === familyTop.score && familyTop.score === currentScore);
+        return {
+          ...filledBase,
+          selectedName: null,
+          source: "family",
+          reason: familyAllTied ? "library_all_tied_family" : "library_below_threshold_family",
+          candidateCount: clusterCandidates.length + familyCandidates.length,
+          winningScore: familyTop.score,
+          scoreDelta: familyDelta,
+        };
+      }
+
+      // No family candidates either — return cluster miss
+      return {
+        ...filledBase,
+        selectedName: null,
+        source: "cluster",
+        reason: clusterReason,
+        candidateCount: clusterCandidates.length,
+        winningScore: top.score,
+        scoreDelta: delta,
+      };
+    }
   }
 
-  // ── Family-level fallback if cluster search is empty ────────────────────
-  if (candidates.length === 0 && familyIndex[currentMeta.family]) {
-    candidates = familyIndex[currentMeta.family].filter(n => n !== currentExerciseName);
-    searchSource = "family";
+  // ── 3. No cluster — family-only search ──────────────────────────────────────
+  const familyCandidates = (familyIndex[family] ?? []).filter(n => n !== currentExerciseName);
+
+  if (familyCandidates.length === 0) {
+    return { ...filledBase, selectedName: null, source: "none", reason: "library_no_candidates", candidateCount: 0, winningScore: null, scoreDelta: null };
   }
 
-  if (candidates.length === 0) return noResult;
+  const familyRanked = rankCandidates(familyCandidates);
+  const familyTop = familyRanked[0];
+  const familyDelta = familyTop.score - currentScore;
 
-  // ── Score and rank candidates ─────────────────────────────────────────────
-  const scored = candidates
-    .map(name => scoreStrengthCandidateForWeekRole(name, weekRole))
-    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name)); // desc score, asc name for determinism
-
-  const top = scored[0];
-  const scoreDiff = top.score - currentScore;
-
-  // Only swap when the candidate is meaningfully better
-  if (scoreDiff < SWAP_THRESHOLD) {
+  if (familyDelta >= threshold) {
     return {
-      selectedName: null,
-      source: searchSource,
-      candidatesConsidered: candidates.length,
-      currentScore,
-      selectedScore: top.score,
-      scoreDiff,
+      ...filledBase,
+      selectedName: familyTop.name,
+      source: "family",
+      reason: "library_selected_family",
+      candidateCount: familyCandidates.length,
+      winningScore: familyTop.score,
+      scoreDelta: familyDelta,
     };
   }
 
+  const familyAllTied = familyRanked.every(c => c.score === familyTop.score && familyTop.score === currentScore);
   return {
-    selectedName: top.name,
-    source: searchSource,
-    candidatesConsidered: candidates.length,
-    currentScore,
-    selectedScore: top.score,
-    scoreDiff,
+    ...filledBase,
+    selectedName: null,
+    source: "family",
+    reason: familyAllTied ? "library_all_tied_family" : "library_below_threshold_family",
+    candidateCount: familyCandidates.length,
+    winningScore: familyTop.score,
+    scoreDelta: familyDelta,
   };
 }
 
-// ─── Audit: Before/After Comparison ──────────────────────────────────────────
-//
-// Generates a structured comparison of library-driven vs hardcoded-map output
-// for a given exercise across all 4 weeks. Used for [StrengthWeekVariationAudit] logging.
+// ─── Per-Candidate Audit Entry ────────────────────────────────────────────────
 
-export interface WeekVariantAuditEntry {
+export interface CandidateAuditEntry {
+  name: string;
+  score: number;
+  breakdown: { complexity: number; stability: number; velocity: number };
+  metadata: {
+    complexity: string;
+    stabilityDemand: string;
+    velocityIntent: string;
+    family: string;
+    cluster: string | null;
+  };
+  selected: boolean;
+  rejectionReason: "below_threshold" | "lower_score" | "is_current" | null;
+}
+
+export interface ExerciseWeekAudit {
   week: number;
   role: WeekRole;
-  librarySelection: string | null;
-  librarySource: "cluster" | "family" | "none";
-  hardcodedMapSelection: string | null;
-  finalSelection: string; // what actually gets used (library wins, map fallback)
+  originalExercise: string;
+  finalSelection: string;
+  selectionSource: "library_cluster" | "library_family" | "curated_map_w4_policy" | "curated_map_fallback" | "kept";
+  libraryReason: SelectionReason;
+
+  currentMeta: {
+    complexity: string;
+    stabilityDemand: string;
+    velocityIntent: string;
+    family: string;
+    cluster: string | null;
+  };
   currentScore: number;
-  selectedScore: number | null;
-  scoreDiff: number | null;
+  winningScore: number | null;
+  scoreDelta: number | null;
+  threshold: number;
+
+  hardcodedMapOption: string | null;
+  candidates: CandidateAuditEntry[];
 }
+
+// ─── Deep Audit Function ──────────────────────────────────────────────────────
+//
+// Returns per-week audit with full candidate breakdown, rejection reasons,
+// and source attribution. Used by dev-only reporting endpoints.
 
 export function auditExerciseVariantSelection(
   exerciseName: string,
   hardcodedMap: Record<string, { w1?: string; w2?: string; w3?: string; w4?: string }>
-): WeekVariantAuditEntry[] {
+): ExerciseWeekAudit[] {
+  const { clusterIndex, familyIndex } = getIndexes();
   const mapEntry = hardcodedMap[exerciseName];
+  const currentMeta = EXERCISE_EXTENDED_META[exerciseName];
 
   return [1, 2, 3, 4].map(weekNumber => {
     const role = weekNumberToRole(weekNumber);
+    const threshold = SWAP_THRESHOLD_BY_WEEK[weekNumber] ?? 2;
     const libResult = selectStrengthVariantFromLibrary(exerciseName, weekNumber);
     const weekKey = `w${weekNumber}` as "w1" | "w2" | "w3" | "w4";
-    const hardcodedSelection = mapEntry?.[weekKey] ?? null;
+    const mapOption = mapEntry?.[weekKey] ?? null;
 
-    // W1/W2/W3: library wins → map fallback
-    // W4 (deload): map wins → library fallback (map holds cross-family downgrades)
+    // W4: map-first; W1/W2/W3: library-first
     const finalSelection = weekNumber === 4
-      ? (hardcodedSelection ?? libResult.selectedName ?? exerciseName)
-      : (libResult.selectedName ?? hardcodedSelection ?? exerciseName);
+      ? (mapOption ?? libResult.selectedName ?? exerciseName)
+      : (libResult.selectedName ?? mapOption ?? exerciseName);
+
+    // Determine the selection source
+    let selectionSource: ExerciseWeekAudit["selectionSource"];
+    if (weekNumber === 4 && mapOption) {
+      selectionSource = "curated_map_w4_policy";
+    } else if (libResult.selectedName) {
+      selectionSource = libResult.source === "cluster" ? "library_cluster" : "library_family";
+    } else if (mapOption) {
+      selectionSource = "curated_map_fallback";
+    } else {
+      selectionSource = "kept";
+    }
+
+    // Build candidate list for this week
+    const candidates: CandidateAuditEntry[] = [];
+    const cluster = currentMeta?.equivalenceCluster ?? null;
+    const family = currentMeta?.family ?? "unknown";
+    const currentScore = currentMeta
+      ? scoreStrengthCandidateForWeekRole(exerciseName, role).score
+      : 0;
+
+    const clusterPool = cluster && cluster !== "unclassified"
+      ? (clusterIndex[cluster] ?? []).filter(n => n !== exerciseName)
+      : [];
+    const familyPool = (familyIndex[family] ?? []).filter(
+      n => n !== exerciseName && !clusterPool.includes(n)
+    );
+
+    for (const name of [...clusterPool, ...familyPool]) {
+      const scored = scoreStrengthCandidateForWeekRole(name, role);
+      const meta = EXERCISE_EXTENDED_META[name];
+      const delta = scored.score - currentScore;
+
+      let rejectionReason: CandidateAuditEntry["rejectionReason"] = null;
+      if (name === finalSelection) {
+        rejectionReason = null; // selected
+      } else if (delta < threshold) {
+        rejectionReason = delta < scored.score ? "below_threshold" : "lower_score";
+      } else {
+        rejectionReason = "lower_score";
+      }
+
+      candidates.push({
+        name,
+        score: scored.score,
+        breakdown: scored.breakdown,
+        metadata: {
+          complexity: meta?.complexity ?? "unknown",
+          stabilityDemand: meta?.stabilityDemand ?? "unknown",
+          velocityIntent: meta?.velocityIntent ?? "unknown",
+          family: meta?.family ?? "unknown",
+          cluster: meta?.equivalenceCluster ?? null,
+        },
+        selected: name === finalSelection,
+        rejectionReason: name === finalSelection ? null : (delta < threshold ? "below_threshold" : "lower_score"),
+      });
+    }
+
+    candidates.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
 
     return {
       week: weekNumber,
       role,
-      librarySelection: libResult.selectedName,
-      librarySource: libResult.source,
-      hardcodedMapSelection: hardcodedSelection,
+      originalExercise: exerciseName,
       finalSelection,
-      currentScore: libResult.currentScore,
-      selectedScore: libResult.selectedScore,
-      scoreDiff: libResult.scoreDiff,
+      selectionSource,
+      libraryReason: libResult.reason,
+      currentMeta: {
+        complexity: currentMeta?.complexity ?? "unknown",
+        stabilityDemand: currentMeta?.stabilityDemand ?? "unknown",
+        velocityIntent: currentMeta?.velocityIntent ?? "unknown",
+        family,
+        cluster,
+      },
+      currentScore: libResult.currentExerciseScore,
+      winningScore: libResult.winningScore,
+      scoreDelta: libResult.scoreDelta,
+      threshold,
+      hardcodedMapOption: mapOption,
+      candidates,
     };
   });
 }
+
+// ─── Metadata Coverage Diagnostics ───────────────────────────────────────────
+//
+// Scans the library and identifies coverage gaps:
+//   - exercises with no equivalenceCluster (cannot benefit from cluster search)
+//   - clusters with only 1 member (no rotation possible)
+//   - primary lift families and their W1/W3 library coverage
+
+export interface MetadataCoverageReport {
+  totalExercises: number;
+  withCluster: number;
+  withoutCluster: string[];
+  singletonClusters: Array<{ cluster: string; member: string }>;
+  clusterSizes: Record<string, number>;
+  familySizes: Record<string, number>;
+  primaryLiftCoverage: Array<{
+    exercise: string;
+    family: string;
+    cluster: string | null;
+    w1LibraryResult: string | null;
+    w1Reason: SelectionReason;
+    w3LibraryResult: string | null;
+    w3Reason: SelectionReason;
+    w4LibraryResult: string | null;
+    w4Reason: SelectionReason;
+    gaps: string[];
+  }>;
+}
+
+const PRIMARY_LIFTS_TO_AUDIT = [
+  "Back Squat", "Front Squat", "Conventional Deadlift", "Sumo Deadlift",
+  "Romanian Deadlift", "Bench Press", "Overhead Press (barbell)",
+  "Barbell Row", "Pull-Up", "Chin-Up",
+  "Bulgarian Split Squat", "Dead Bug", "Pallof Press", "Farmers Carry",
+];
+
+export function buildMetadataCoverageReport(): MetadataCoverageReport {
+  const { clusterIndex, familyIndex } = getIndexes();
+
+  const withoutCluster: string[] = [];
+  const clusterSizes: Record<string, number> = {};
+  const familySizes: Record<string, number> = {};
+
+  for (const [name, meta] of Object.entries(EXERCISE_EXTENDED_META)) {
+    if (!meta.equivalenceCluster || meta.equivalenceCluster === "unclassified") {
+      withoutCluster.push(name);
+    }
+    const c = meta.equivalenceCluster;
+    if (c && c !== "unclassified") clusterSizes[c] = (clusterSizes[c] ?? 0) + 1;
+    familySizes[meta.family] = (familySizes[meta.family] ?? 0) + 1;
+  }
+
+  const singletonClusters: MetadataCoverageReport["singletonClusters"] = [];
+  for (const [cluster, members] of Object.entries(clusterIndex)) {
+    if (members.length === 1) {
+      singletonClusters.push({ cluster, member: members[0] });
+    }
+  }
+
+  const primaryLiftCoverage = PRIMARY_LIFTS_TO_AUDIT.map(name => {
+    const meta = EXERCISE_EXTENDED_META[name];
+    const r1 = selectStrengthVariantFromLibrary(name, 1);
+    const r3 = selectStrengthVariantFromLibrary(name, 3);
+    const r4 = selectStrengthVariantFromLibrary(name, 4);
+
+    const gaps: string[] = [];
+    if (!r1.selectedName) gaps.push(`W1 gap (${r1.reason})`);
+    if (!r3.selectedName) gaps.push(`W3 gap (${r3.reason})`);
+    if (!r4.selectedName) gaps.push(`W4 gap (${r4.reason}) — may use curated map`);
+
+    return {
+      exercise: name,
+      family: meta?.family ?? "NOT_IN_LIBRARY",
+      cluster: meta?.equivalenceCluster ?? null,
+      w1LibraryResult: r1.selectedName,
+      w1Reason: r1.reason,
+      w3LibraryResult: r3.selectedName,
+      w3Reason: r3.reason,
+      w4LibraryResult: r4.selectedName,
+      w4Reason: r4.reason,
+      gaps,
+    };
+  });
+
+  return {
+    totalExercises: Object.keys(EXERCISE_EXTENDED_META).length,
+    withCluster: Object.keys(EXERCISE_EXTENDED_META).length - withoutCluster.length,
+    withoutCluster,
+    singletonClusters,
+    clusterSizes,
+    familySizes,
+    primaryLiftCoverage,
+  };
+}
+
+// ─── Fallback Reduction Report ────────────────────────────────────────────────
+//
+// Summarises library-driven vs curated-map vs no-change ratios across a set
+// of exercises. Reveals what remains hardcoded and which exercises most depend
+// on the curated map.
+
+export interface FallbackReductionReport {
+  totalSelections: number;
+  bySource: {
+    library: number;
+    curatedMap: number;
+    kept: number;
+  };
+  byWeek: Record<number, { library: number; curatedMap: number; kept: number }>;
+  libraryPct: string;
+  curatedMapPct: string;
+  keptPct: string;
+  topCuratedDependencies: Array<{
+    exercise: string;
+    weeks: number[];
+    reasons: string[];
+  }>;
+}
+
+export function buildFallbackReductionReport(
+  exerciseNames: string[],
+  hardcodedMap: Record<string, { w1?: string; w2?: string; w3?: string; w4?: string }>
+): FallbackReductionReport {
+  const byWeek: Record<number, { library: number; curatedMap: number; kept: number }> = {
+    1: { library: 0, curatedMap: 0, kept: 0 },
+    2: { library: 0, curatedMap: 0, kept: 0 },
+    3: { library: 0, curatedMap: 0, kept: 0 },
+    4: { library: 0, curatedMap: 0, kept: 0 },
+  };
+
+  const curatedDependencyMap: Record<string, { weeks: number[]; reasons: string[] }> = {};
+
+  let totalLib = 0, totalCurated = 0, totalKept = 0;
+
+  for (const name of exerciseNames) {
+    const audits = auditExerciseVariantSelection(name, hardcodedMap);
+    for (const audit of audits) {
+      const wk = audit.week;
+      if (audit.selectionSource.startsWith("library")) {
+        byWeek[wk].library++;
+        totalLib++;
+      } else if (audit.selectionSource.startsWith("curated")) {
+        byWeek[wk].curatedMap++;
+        totalCurated++;
+        if (!curatedDependencyMap[name]) curatedDependencyMap[name] = { weeks: [], reasons: [] };
+        curatedDependencyMap[name].weeks.push(wk);
+        curatedDependencyMap[name].reasons.push(`W${wk}: ${audit.libraryReason}`);
+      } else {
+        byWeek[wk].kept++;
+        totalKept++;
+      }
+    }
+  }
+
+  const total = totalLib + totalCurated + totalKept;
+  const pct = (n: number) => total > 0 ? `${Math.round((n / total) * 100)}%` : "0%";
+
+  const topCuratedDependencies = Object.entries(curatedDependencyMap)
+    .sort((a, b) => b[1].weeks.length - a[1].weeks.length)
+    .map(([exercise, { weeks, reasons }]) => ({ exercise, weeks, reasons }));
+
+  return {
+    totalSelections: total,
+    bySource: { library: totalLib, curatedMap: totalCurated, kept: totalKept },
+    byWeek,
+    libraryPct: pct(totalLib),
+    curatedMapPct: pct(totalCurated),
+    keptPct: pct(totalKept),
+    topCuratedDependencies,
+  };
+}
+
