@@ -1,0 +1,223 @@
+FOCUS SWITCHER UI UPGRADE — MAKE STRENGTH / SPEED / MOBILITY OBVIOUS, EXPLAINED, AND HARD TO MISS
+
+CONTEXT:
+The three focus tabs at the top currently read:
+- Strength
+- Speed / Footwork
+- Mobility
+
+They technically work, but for a new user:
+- it is not obvious that these are “focus modes”
+- the active state is too subtle
+- it is easy to be in the wrong focus accidentally
+- the user may not understand that each focus changes the type of program and the agent behavior
+
+We need to upgrade this UI so the focus system is obvious, intuitive, and visually strong.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Redesign the focus switcher so:
+- users immediately understand these are focus modes
+- the active focus is unmistakable
+- switching feels intentional
+- the wrong-focus problem becomes much less likely
+
+==================================================
+TASK 1 — RENAME / LABEL THE SECTION CLEARLY
+==================================================
+
+Do NOT leave the tabs floating with no explanation.
+
+Add a clear section label above or integrated with the control, such as:
+- Focus Mode
+- Training Focus
+- Choose Your Focus
+
+Also add a short helper line like:
+- This changes how your program and agent behave
+- Pick the type of training you want to build and refine
+
+This must be visible on mobile without clutter.
+
+==================================================
+TASK 2 — UPGRADE THE CONTROL FROM SUBTLE TABS TO A REAL MODE SWITCHER
+==================================================
+
+The current tabs are too easy to miss.
+
+Redesign as a stronger segmented control / pill switcher with:
+- larger tap targets
+- more contrast
+- stronger active treatment
+- clearly separated inactive states
+
+The active segment should feel selected instantly, not subtly underlined.
+
+==================================================
+TASK 3 — GIVE EACH FOCUS A VISUAL IDENTITY
+==================================================
+
+Each focus should have its own distinct visual treatment.
+
+Examples:
+- Strength → blue
+- Speed / Footwork → electric blue / cyan
+- Mobility → green
+
+Use:
+- active pill color
+- icon
+- glow / border
+- subtle header accent or mode badge
+
+The user should be able to tell what mode they are in at a glance.
+
+==================================================
+TASK 4 — ADD ICONS TO EACH FOCUS
+==================================================
+
+Add a small icon to each focus option.
+
+Examples:
+- Strength → dumbbell / barbell icon
+- Speed / Footwork → sprint / lightning / agility icon
+- Mobility → stretch / joint / leaf / recovery icon
+
+The icon should help communicate the purpose even before reading the label.
+
+==================================================
+TASK 5 — MAKE THE ACTIVE FOCUS UNMISSABLE
+==================================================
+
+When a focus is active:
+- it should have a strong filled state, not just an underline
+- inactive states should be visually secondary
+- there should be an additional active label somewhere nearby, such as:
+  - Active Focus: Mobility
+  - Mobility Mode
+  - Building in Mobility
+
+This is especially important in chat view and active program view.
+
+==================================================
+TASK 6 — ADD A FOCUS EXPLANATION SHEET / TOOLTIP
+==================================================
+
+When a user first lands here, or when they tap an info icon, show a simple explanation:
+
+Strength
+- Builds lifting and force-production programs
+
+Speed / Footwork
+- Builds sprint, acceleration, deceleration, and agility work
+
+Mobility
+- Builds range-of-motion, control, and recovery-focused programs
+
+This can be:
+- a first-time tooltip
+- an info popover
+- a small expandable helper
+
+Keep it simple and mobile-friendly.
+
+==================================================
+TASK 7 — CONFIRM FOCUS SWITCHING MORE CLEARLY
+==================================================
+
+When the user switches focus:
+- show a lightweight visual confirmation
+- update the nearby context immediately
+
+Examples:
+- “Mobility mode active”
+- “Speed / Footwork mode active”
+- “Strength mode active”
+
+The change should feel intentional.
+
+==================================================
+TASK 8 — SURFACE FOCUS IN THE CHAT / PROGRAM HEADER
+==================================================
+
+Make the active focus visible in more than one place.
+
+Examples:
+- chat header badge
+- active program badge
+- right sidebar label
+- “Agent is in Mobility mode”
+
+This reduces the chance that the user forgets what focus they are currently in.
+
+==================================================
+TASK 9 — PREVENT WRONG-FOCUS CONFUSION
+==================================================
+
+If the user types something strongly associated with another focus while currently in the wrong one, add a gentle nudge.
+
+Examples:
+- User is in Strength but says “build me a hip mobility program”
+- show:
+  “You’re currently in Strength mode. Switch to Mobility for a mobility-specific program?”
+
+Do not auto-switch silently, but make the mismatch obvious.
+
+==================================================
+TASK 10 — KEEP IT POLISHED ON MOBILE
+==================================================
+
+This needs to look premium on iPhone-sized screens.
+
+Requirements:
+- no cramped labels
+- no tiny active indicators
+- no weak contrast
+- no confusing overlap with the program status strip
+
+It should feel like a major mode selector, not a secondary filter.
+
+==================================================
+TASK 11 — VALIDATION
+==================================================
+
+Test with a first-time user perspective:
+
+1. Open app
+2. Look at the top control
+3. Determine:
+- what it is
+- which mode is active
+- what changing it does
+
+Success criteria:
+- user immediately understands these are focus modes
+- active mode is obvious
+- switching modes feels deliberate and clear
+- each focus has a distinct identity
+
+==================================================
+TASK 12 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. the new focus switcher design
+2. what visual identity each focus now has
+3. how active state is made obvious
+4. what helper / explanation UI was added
+5. how wrong-focus confusion is reduced
+6. before/after screenshots or implementation summary
+
+==================================================
+FINAL STANDARD
+==================================================
+
+A brand-new user should immediately understand:
+- these are focus modes
+- what each mode means
+- which one is active right now
+- that switching modes changes the kind of program and agent behavior
+
+The focus system should feel like a premium, central product control — not a subtle tab strip.
