@@ -1,0 +1,163 @@
+SPEED LIBRARY METADATA AUDIT + NORMALIZATION — REQUIRED BEFORE LIBRARY-DRIVEN SELECTION
+
+CONTEXT:
+We are about to refactor Speed session generation to use the full exercise library instead of hardcoded drill banks.
+
+Before doing that, we must ensure the Speed exercise library has the correct metadata and structure to support scoring-based selection.
+
+If metadata is incomplete or inconsistent, the new selection system will fail or produce low-quality sessions.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Audit and normalize the Speed exercise library so it can fully support:
+- session identity
+- slot-based selection
+- week-role variation
+- exposure-based variation
+
+==================================================
+TASK 1 — AUDIT MOVEMENT FAMILIES
+==================================================
+
+Ensure every speed exercise belongs to exactly one primary movement family:
+
+Required families:
+- acceleration
+- max_velocity
+- cod_decel
+- reactive_agility
+- elastic_plyometric
+- footwork_rhythm
+- speed_endurance
+- return_to_speed
+- tissue_prep
+
+Return:
+- list of exercises missing a family
+- list of families with low coverage
+- total counts per family
+
+==================================================
+TASK 2 — AUDIT SPEED QUALITY TAGS
+==================================================
+
+Each exercise must have at least one speed quality tag:
+
+- acceleration
+- top_speed
+- deceleration
+- change_of_direction
+- reactive
+- elastic
+- rhythm
+- endurance
+- tissue prep
+
+Return:
+- exercises missing tags
+- exercises with incorrect/misaligned tags
+- coverage gaps
+
+==================================================
+TASK 3 — AUDIT NEURAL DEMAND + FATIGUE COST
+==================================================
+
+Ensure every exercise has:
+- neuralDemand (low / moderate / high)
+- fatigueCost (low / moderate / high)
+
+Return:
+- missing values
+- inconsistencies (e.g., high neural + low fatigue where unrealistic)
+
+==================================================
+TASK 4 — AUDIT EQUIVALENCE CLUSTERS
+==================================================
+
+Identify clusters for variation.
+
+Return:
+- singleton clusters (only 1 exercise)
+- exercises not assigned to a cluster
+- weak clusters that need expansion
+
+==================================================
+TASK 5 — AUDIT SLOT COMPATIBILITY
+==================================================
+
+Ensure each exercise can map to a session slot:
+
+- tissue_prep
+- mechanics
+- primary_speed
+- secondary_speed
+- support
+- finisher
+
+Return:
+- exercises missing slot mapping
+- slot coverage gaps
+
+==================================================
+TASK 6 — AUDIT EQUIPMENT + SPACE
+==================================================
+
+Ensure exercises have:
+- equipment requirements
+- space requirements (short / medium / long sprint)
+
+Return:
+- missing values
+- mismatches
+
+==================================================
+TASK 7 — BUILD COVERAGE REPORT
+==================================================
+
+Return:
+
+[SpeedLibraryCoverageAudit]
+{
+  totalExercises,
+  familiesCoverage,
+  speedQualityCoverage,
+  neuralDemandCoverage,
+  fatigueCostCoverage,
+  clusterCoverage,
+  slotCoverage,
+  equipmentCoverage,
+  weakAreas
+}
+
+==================================================
+TASK 8 — APPLY TARGETED FIXES
+==================================================
+
+Apply minimal but high-impact fixes:
+- assign missing families
+- assign missing clusters
+- normalize neural/fatigue values
+- fix slot compatibility
+
+DO NOT over-engineer — just make it usable for scoring.
+
+==================================================
+TASK 9 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. what was missing or incorrect
+2. what was fixed
+3. remaining weak areas (if any)
+4. whether the library is now ready for scoring-based selection
+
+==================================================
+FINAL STANDARD
+==================================================
+
+The Speed library must be structured enough that:
+- any session slot can be filled from the library
+- any week role can be expressed via metadata
+- variation can occur without hardcoded drill lists
