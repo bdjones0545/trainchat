@@ -49,6 +49,12 @@ import {
   buildMobilityMonthlyBlockContext,
   type MobilityBlockType,
 } from "../monthly-block-planner";
+import {
+  selectBestMobilityExerciseForSlot,
+  buildMobilityLibraryCoverageAudit,
+  type MobilitySlotType,
+  type MobilityWeekRole,
+} from "./mobility-library";
 
 // ─── Block Archetypes ─────────────────────────────────────────────────────────
 
@@ -526,6 +532,25 @@ console.log("[MobilityParityCheck]", JSON.stringify({
   parity: _allSystemsReady ? "FULL_PARITY" : "INCOMPLETE",
 }));
 
+// ─── Startup Library Coverage Audit ──────────────────────────────────────────
+
+const _libAudit = buildMobilityLibraryCoverageAudit();
+const _weakFamiliesCount = _libAudit.weakFamilies.length;
+
+console.log("[MobilityLibraryCoverageAudit]", JSON.stringify({
+  totalExercises: _libAudit.totalExercises,
+  familyCoverage: _libAudit.familyCoverage,
+  qualityCoverage: _libAudit.qualityCoverage,
+  slotCoverage: _libAudit.slotCoverage,
+  weekRoleCoverage: _libAudit.weekRoleCoverage,
+  clusterDepth: _libAudit.clusterDepth,
+  weakFamilies: _libAudit.weakFamilies,
+  repeatRiskScore: _libAudit.repeatRiskScore,
+  neuralDemandDistribution: _libAudit.neuralDemandDistribution,
+  fatigueCostDistribution: _libAudit.fatigueCostDistribution,
+  libraryStatus: _weakFamiliesCount === 0 ? "FULL_COVERAGE" : `WEAK_FAMILIES:${_libAudit.weakFamilies.join(",")}`,
+}));
+
 // ─── Mobility Architecture Brief ──────────────────────────────────────────────
 
 /**
@@ -813,13 +838,19 @@ function detectMobilitySessionType(sessionName: string): string {
 // ─── expandMobilitySessionIfTooThin ───────────────────────────────────────────
 
 /**
- * TASK 4 — Checks if a mobility session meets minimum depth requirements.
- * If not, fills missing slots in canonical order from the typed drill banks.
+ * Checks if a mobility session meets minimum depth requirements.
+ * If not, fills missing slots using library-driven scoring via
+ * scoreMobilityCandidateForSlot() — preserving session identity and
+ * avoiding repetition.
  *
- * Slot fill order: tissue_prep → controlled_mobility → dynamic_mobility →
- *                  joint_focus → stability → breathing
+ * Slot fill order (canonical phase sequence):
+ *   breathing → prep → primary_mobility → control → integration → flow
  *
- * Never adds random stretches — additions match the session's primary joint goal.
+ * Selection is week-role aware: W1 avoids PAILs/isometrics, W4 stays
+ * parasympathetic-focused. Exercises are scored against target joint,
+ * neural demand, fatigue cost, and prior exposure.
+ *
+ * Never adds random stretches — all additions are library-validated.
  */
 export function expandMobilitySessionIfTooThin(
   session: {
@@ -827,6 +858,8 @@ export function expandMobilitySessionIfTooThin(
     exercises?: Array<{ name: string; sets?: number; reps?: string; rest?: string; notes?: string }>;
   },
   sessionType?: string,
+  weekNumber?: 1 | 2 | 3 | 4,
+  exposedExerciseNames?: Set<string>,
 ): { expanded: typeof session; expansionsApplied: string[] } {
   const type = sessionType ?? detectMobilitySessionType(session.name ?? "");
   const depthRule = MOBILITY_SESSION_MINIMUM_DEPTH[type] ?? MOBILITY_SESSION_MINIMUM_DEPTH.general_mobility;
@@ -837,47 +870,62 @@ export function expandMobilitySessionIfTooThin(
     return { expanded: session, expansionsApplied };
   }
 
-  console.log(`[MobilityDepthExpander] Session "${session.name ?? "unnamed"}" has ${exercises.length} exercises — minimum is ${depthRule.min} for type "${type}". Expanding...`);
+  console.log(`[MobilityDepthExpander] Session "${session.name ?? "unnamed"}" has ${exercises.length} exercises — minimum is ${depthRule.min} for type "${type}". Expanding via library scoring...`);
 
   const existingNames = new Set(exercises.map(e => e.name.toLowerCase()));
 
-  // Detect primary joint from session name to bias drill selection
+  // Map week number to week role for library scoring
+  const week = weekNumber ?? 1;
+  const weekRole: MobilityWeekRole =
+    week === 1 ? "establish"
+    : week === 2 ? "build"
+    : week === 3 ? "intensify"
+    : "deload";
+
+  // Detect primary joint from session name to bias exercise selection
   const lower = (session.name ?? "").toLowerCase();
-  const primaryJoint = /hip|groin|pigeon|frog|adductor/.test(lower) ? "hip"
+  const targetJoint: MobilityJoint | undefined =
+    /hip|groin|pigeon|frog|adductor/.test(lower) ? "hip"
     : /shoulder|pec|sleeper|overhead/.test(lower) ? "shoulder"
     : /thoracic|t.spine|spine|rotation/.test(lower) ? "spine"
     : /ankle|calf|dorsiflexion/.test(lower) ? "ankle"
+    : /breath|nervous|reset/.test(lower) ? "breathing"
     : undefined;
 
-  const FILL_ORDER: Array<keyof typeof MOBILITY_DRILL_BANK> = [
-    "tissue_prep",
-    "controlled_mobility",
-    "dynamic_mobility",
-    "joint_focus",
-    "stability",
+  // Canonical slot fill order — mirrors phase sequence
+  const FILL_SLOTS: MobilitySlotType[] = [
     "breathing",
+    "prep",
+    "primary_mobility",
+    "control",
+    "integration",
+    "flow",
   ];
 
-  for (const category of FILL_ORDER) {
+  for (const slotType of FILL_SLOTS) {
     if (exercises.length >= depthRule.target) break;
 
-    const bank = MOBILITY_DRILL_BANK[category];
-    const candidates = primaryJoint
-      ? bank.filter(d => !d.joint || d.joint === primaryJoint || d.joint === undefined)
-      : bank;
+    const best = selectBestMobilityExerciseForSlot({
+      slotType,
+      targetJoint,
+      weekRole,
+      existingExerciseNames: existingNames,
+      exposedExerciseNames,
+    });
 
-    const fallback = bank; // fall back to full bank if no joint match
+    if (!best) continue;
 
-    const pool = candidates.length > 0 ? candidates : fallback;
-
-    for (const drill of pool) {
-      if (exercises.length >= depthRule.target) break;
-      if (existingNames.has(drill.name.toLowerCase())) continue;
-
-      exercises.push({ name: drill.name, sets: 1, reps: drill.reps, rest: drill.rest, notes: drill.notes });
-      existingNames.add(drill.name.toLowerCase());
-      expansionsApplied.push(`[MobilityDepthExpander] Added "${drill.name}" from ${category} bank (type=${type}, joint=${primaryJoint ?? "any"})`);
-    }
+    exercises.push({
+      name: best.name,
+      sets: 1,
+      reps: best.reps,
+      rest: best.rest,
+      notes: best.notes,
+    });
+    existingNames.add(best.name.toLowerCase());
+    expansionsApplied.push(
+      `[MobilityDepthExpander] Added "${best.name}" (slot=${slotType}, family=${best.family}, joint=${best.primaryJoint}, weekRole=${weekRole}, type=${type})`
+    );
   }
 
   console.log(`[MobilityDepthExpander] Expansion complete — session now has ${exercises.length} exercises. Applied: ${expansionsApplied.length} additions`);

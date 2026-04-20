@@ -4015,9 +4015,20 @@ Output the corrected program JSON and a brief calm confirmation.`;
         // stability → breathing). Mirrors the speed depth expander exactly.
         if (structuredData?.days && Array.isArray(structuredData.days)) {
           const mobilityExpansions: string[] = [];
+          // Track names exposed so far in the program to avoid cross-session repeats
+          const programExposureNames = new Set<string>();
+          // Detect block week number from structuredData if present (falls back to 1)
+          const blockWeek: 1 | 2 | 3 | 4 =
+            ([1, 2, 3, 4] as const).includes((structuredData as { week?: number }).week as 1 | 2 | 3 | 4)
+              ? ((structuredData as { week?: number }).week as 1 | 2 | 3 | 4)
+              : 1;
           const expandedDays = structuredData.days.map((day: { name?: string; exercises?: Array<{ name: string; sets?: number; reps?: string; rest?: string; notes?: string }> }) => {
-            const { expanded, expansionsApplied } = expandMobilitySessionIfTooThin(day);
+            const { expanded, expansionsApplied } = expandMobilitySessionIfTooThin(day, undefined, blockWeek, programExposureNames);
             expansionsApplied.forEach((e) => mobilityExpansions.push(e));
+            // Record this session's exercises in the exposure tracker for subsequent sessions
+            for (const ex of expanded.exercises ?? []) {
+              programExposureNames.add(ex.name.toLowerCase());
+            }
             return expanded;
           });
 
@@ -4028,7 +4039,7 @@ Output the corrected program JSON and a brief calm confirmation.`;
                 expansionCount: mobilityExpansions.length,
                 expansions: mobilityExpansions,
               },
-              "[MobilityDepthExpander] Thin mobility sessions expanded with approved drill bank"
+              "[MobilityDepthExpander] Thin mobility sessions expanded via library scoring"
             );
             if (process.env.NODE_ENV !== "production") {
               console.log("[MobilityDepthExpander]", JSON.stringify({

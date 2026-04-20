@@ -1,0 +1,236 @@
+MOBILITY LIBRARY SYSTEM — BUILD FULL METADATA-DRIVEN MOBILITY ENGINE (MATCH SPEED + STRENGTH ARCHITECTURE)
+
+CONTEXT:
+Strength and Speed systems are now evolving toward:
+- full exercise library usage
+- metadata-driven selection
+- slot-based session construction
+- week-role expression
+- variation without hardcoding
+
+Mobility has just been stabilized (JSON contract, retry system, architecture brief).
+
+However, it is still likely:
+- relying heavily on AI-generated exercise selection
+- using small implicit or hardcoded movement sets
+- lacking scalable variation and depth
+
+We now need to upgrade Mobility to a full library-driven system.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Convert Mobility generation into a metadata-driven, library-powered system that matches the architecture of Strength and Speed.
+
+==================================================
+TASK 1 — DEFINE MOBILITY MOVEMENT FAMILIES
+==================================================
+
+Create a structured mobility family system:
+
+Required families:
+
+- hip_mobility
+- thoracic_mobility
+- ankle_mobility
+- shoulder_mobility
+- spine_control
+- breathing_reset
+- tissue_prep
+- positional_isometric
+- dynamic_mobility
+- recovery_flow
+
+Each exercise must belong to one primary family.
+
+==================================================
+TASK 2 — DEFINE MOBILITY QUALITIES
+==================================================
+
+Each exercise must include at least one quality tag:
+
+- range_of_motion
+- joint_capsule
+- soft_tissue
+- neuromuscular_control
+- stability
+- coordination
+- decompression
+- activation
+- recovery
+
+==================================================
+TASK 3 — DEFINE SESSION SLOT STRUCTURE
+==================================================
+
+Mobility sessions must follow a deterministic structure:
+
+1. breathing / nervous system reset
+2. tissue prep / activation
+3. joint-specific mobility (target area)
+4. controlled range strengthening
+5. dynamic integration / movement
+6. positional control / isometric
+7. optional recovery flow
+
+==================================================
+TASK 4 — CREATE MOBILITY SLOT COMPATIBILITY
+==================================================
+
+Each exercise must map to:
+- breathing
+- prep
+- primary_mobility
+- secondary_mobility
+- control
+- integration
+- flow
+
+==================================================
+TASK 5 — ADD NEURAL + FATIGUE MODEL
+==================================================
+
+Each exercise must include:
+
+- neuralDemand (low / moderate / high)
+- fatigueCost (low / moderate / high)
+
+Note:
+Most mobility will be low/moderate, but:
+- isometrics and control work can be moderate/high neural
+
+==================================================
+TASK 6 — CREATE EQUIVALENCE CLUSTERS
+==================================================
+
+Create clusters for variation:
+
+Examples:
+- 90/90 variations cluster
+- hip flexor stretch variations
+- thoracic rotation variations
+- ankle dorsiflexion variations
+- breathing drills cluster
+
+Ensure:
+- no singleton clusters
+- at least 2–4 per cluster
+
+==================================================
+TASK 7 — BUILD MOBILITY LIBRARY COVERAGE AUDIT
+==================================================
+
+Create:
+
+[MobilityLibraryCoverageAudit]
+
+Return:
+- total exercises
+- family coverage
+- quality coverage
+- slot coverage
+- cluster depth
+- weak families
+- repeat-risk score
+
+==================================================
+TASK 8 — REFRACTOR MOBILITY SESSION BUILDING
+==================================================
+
+Replace AI-first selection with:
+
+scoreMobilityCandidateForSlot()
+
+Use:
+- family match
+- slot compatibility
+- target body region (hip, shoulder, etc.)
+- quality match
+- neural demand
+- fatigue cost
+- week role
+- exposure history
+
+==================================================
+TASK 9 — ADD expandMobilitySessionIfTooThin()
+==================================================
+
+If session < minimum depth:
+- fill missing slots from library
+- preserve session identity
+- avoid repetition
+
+==================================================
+TASK 10 — ADD WEEK-ROLE EXPRESSION
+==================================================
+
+Mobility must adapt across weeks:
+
+W1:
+- controlled
+- slower
+- low intensity
+
+W2:
+- fuller range
+- slightly more dynamic
+
+W3:
+- highest control + integration
+- more demanding positions
+
+W4:
+- recovery / flow / decompression
+
+==================================================
+TASK 11 — REMOVE HARDCODED MOBILITY LOGIC
+==================================================
+
+Audit and remove:
+- static exercise lists
+- pattern-based fills
+- AI-only selection paths
+
+Library must become primary source.
+
+==================================================
+TASK 12 — VALIDATION
+==================================================
+
+Test:
+
+"Design a hip mobility program"
+
+Expect:
+- full structured program
+- 5–7 exercises per session
+- varied across weeks
+- no repetition patterns
+- correct targeting of hips
+- proper progression
+
+==================================================
+TASK 13 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. mobility family system
+2. quality system
+3. slot system
+4. cluster structure
+5. coverage audit
+6. example full session
+7. confirmation of library-driven generation
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Mobility must now match Speed + Strength:
+
+- structured
+- scalable
+- library-driven
+- variation-rich
+- not dependent on AI guessing exercises
