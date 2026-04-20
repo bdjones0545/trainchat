@@ -19,6 +19,10 @@ import {
 } from "./coach-select";
 import { detectInjuryFlags, normalizeExperience } from "./training-intelligence";
 import { logger } from "./logger";
+import {
+  selectStrengthVariantFromLibrary,
+  auditExerciseVariantSelection,
+} from "./strength-week-expression";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -810,15 +814,23 @@ export async function initializeTrainingSystem(userId: number): Promise<typeof t
   return system;
 }
 
-// ─── Strength Exercise Variant Map ────────────────────────────────────────────
+// ─── Strength Exercise Variant Map — LAST-RESORT FALLBACK ONLY ───────────────
 //
-// Maps primary exercise names to week-appropriate variants.
-// W1 (Establish): stable, teachable variants — lower injury risk, build motor patterns.
-// W2 (Build): standard version — most common expression of the pattern.
-// W3 (Intensify): more demanding variant — pause, deficit, or heavier expression.
-// W4 (Deload): easier variant — reduce joint stress, maintain movement pattern.
+// ⚠ This map is no longer the primary selection system.
 //
-// Null means "keep the AI-chosen exercise for this week."
+// PRIMARY path: selectStrengthVariantFromLibrary() in strength-week-expression.ts
+//   Uses EXERCISE_EXTENDED_META (family + equivalenceCluster + complexity +
+//   stabilityDemand + velocityIntent) to score and select the best week-role
+//   variant from the full exercise library. Returns null when no candidate
+//   meaningfully outscores the current exercise.
+//
+// This map is consulted ONLY when the library path returns null — i.e., when:
+//   - The exercise has no equivalenceCluster and no useful family candidates
+//   - The best library candidate fails to meet the swap threshold
+//   - A cross-family deload downgrade is needed (e.g., Back Squat → Goblet Squat)
+//
+// Do NOT add new exercises here if the library can handle them.
+// Extend EXERCISE_EXTENDED_META with equivalenceCluster assignments instead.
 
 const STRENGTH_EXERCISE_VARIANTS: Record<string, { w1?: string; w2?: string; w3?: string; w4?: string }> = {
   // Squat patterns
@@ -869,26 +881,6 @@ const STRENGTH_EXERCISE_VARIANTS: Record<string, { w1?: string; w2?: string; w3?
   "Barbell Rollout": { w1: "Ab Wheel Rollout", w4: "Dead Bug" },
   "Pallof Press": { w3: "Anti-Rotation Press", w4: "Half-Kneeling Pallof Press" },
 };
-
-// ─── Accessory Rotation Pools ─────────────────────────────────────────────────
-//
-// For "Accessory" and "Trunk" classified exercises, rotate through week-indexed
-// alternatives so each week has visibly different support work.
-// Index = weekNumber - 1 (0-3).
-
-const TRUNK_ROTATION: [string, string, string, string] = [
-  "Dead Bug",
-  "Pallof Press",
-  "Ab Wheel Rollout",
-  "Bird Dog",
-];
-
-const UPPER_ACCESSORY_ROTATION: [string, string, string, string] = [
-  "Face Pull",
-  "Band Pull-Apart",
-  "Cable Face Pull",
-  "Rear Delt Fly",
-];
 
 // ─── Rep Range Adjuster ───────────────────────────────────────────────────────
 //
@@ -1003,9 +995,33 @@ function applyStrengthWeekExpression(
     const deloadCount = Math.max(Math.ceil(exercises.length * 0.6), 2);
     return exercises.slice(0, deloadCount).map((ex) => {
       const classification = (ex.classification ?? "").toLowerCase();
-      const variantKey = ex.name;
-      const variant = STRENGTH_EXERCISE_VARIANTS[variantKey];
-      const swappedName = variant?.w4 ?? ex.name;
+
+      // W4 Deload — map-first, library fallback.
+      //
+      // The hardcoded map holds explicitly curated cross-family downgrades
+      // (e.g. Back Squat → Goblet Squat, Deadlift → RDL) that the library
+      // cannot find because they cross equivalence-cluster or family boundaries.
+      // Library is consulted only when no map entry exists for W4.
+      const variantMapEntry = STRENGTH_EXERCISE_VARIANTS[ex.name];
+      let swappedName = variantMapEntry?.w4 ?? ex.name;
+      let deloadSource: "hardcoded-map" | "library" = "hardcoded-map";
+
+      if (swappedName === ex.name) {
+        const libraryResult = selectStrengthVariantFromLibrary(ex.name, 4);
+        if (libraryResult.selectedName) {
+          swappedName = libraryResult.selectedName;
+          deloadSource = "library";
+        }
+      }
+
+      if (process.env.NODE_ENV !== "production" && swappedName !== ex.name) {
+        console.log("[StrengthVariantSwap]", JSON.stringify({
+          week: 4,
+          original: ex.name,
+          selected: swappedName,
+          source: deloadSource,
+        }));
+      }
 
       return {
         ...ex,
@@ -1033,47 +1049,53 @@ function applyStrengthWeekExpression(
   };
   const restConfig = restByWeek[weekNumber] ?? restByWeek[2];
 
-  let trunkRotationIdx = 0; // counts trunk exercises to rotate across slots
-
-  return exercises.map((ex, idx) => {
+  return exercises.map((ex) => {
     const classification = (ex.classification ?? "").toLowerCase();
 
     const isPrimary =
       classification.includes("primary") ||
       classification.includes("explosive") ||
       classification.includes("power");
-    const isAccessory = !isPrimary && (
-      classification.includes("accessory") ||
-      classification.includes("secondary") ||
-      classification.includes("unilateral")
-    );
-    const isTrunk = classification.includes("trunk") || classification.includes("carry");
     const isPrep = classification.includes("prep") || classification.includes("warm");
 
     // ── Set scaling ──────────────────────────────────────────────────────────
     const setMod = (isPrimary || classification.includes("secondary")) ? setMods.primary : setMods.accessory;
     const scaledSets = typeof ex.sets === "number" ? Math.max(2, ex.sets + setMod) : ex.sets;
 
-    // ── Exercise variant swap ────────────────────────────────────────────────
-    const variantLookup = STRENGTH_EXERCISE_VARIANTS[ex.name];
-    let swappedName = ex.name;
-    if (variantLookup) {
-      const weekKey = `w${weekNumber}` as "w1" | "w2" | "w3" | "w4";
-      swappedName = variantLookup[weekKey] ?? ex.name;
+    // ── Exercise variant swap — library-first, hardcoded map as last resort ──
+    //
+    // 1. PRIMARY: selectStrengthVariantFromLibrary() scores all cluster/family
+    //    candidates from EXERCISE_EXTENDED_META and returns the best fit for
+    //    this week role (or null if current exercise is already optimal).
+    //
+    // 2. FALLBACK: STRENGTH_EXERCISE_VARIANTS consulted only when library returns
+    //    null — captures cross-family deload downgrades and pause/deficit
+    //    intensification variants the library metadata can't distinguish.
+
+    const libraryResult = selectStrengthVariantFromLibrary(ex.name, weekNumber);
+    let swappedName = libraryResult.selectedName ?? ex.name;
+
+    // Fallback to hardcoded map only if library found nothing
+    if (swappedName === ex.name) {
+      const variantLookup = STRENGTH_EXERCISE_VARIANTS[ex.name];
+      if (variantLookup) {
+        const weekKey = `w${weekNumber}` as "w1" | "w2" | "w3" | "w4";
+        swappedName = variantLookup[weekKey] ?? ex.name;
+      }
     }
 
-    // ── Trunk rotation: rotate to a different trunk exercise each week ───────
-    if (isTrunk) {
-      // Only rotate if there's no variant map entry AND it's a generic trunk slot
-      if (!variantLookup) {
-        const rotationOffset = (weekNumber - 1 + trunkRotationIdx) % TRUNK_ROTATION.length;
-        const candidate = TRUNK_ROTATION[rotationOffset];
-        // Only swap if the candidate is different from the current exercise
-        if (candidate && candidate.toLowerCase() !== ex.name.toLowerCase()) {
-          swappedName = candidate;
-        }
-      }
-      trunkRotationIdx++;
+    // Audit log for non-production (only when a swap occurred)
+    if (process.env.NODE_ENV !== "production" && swappedName !== ex.name) {
+      const source = libraryResult.selectedName ? "library" : "hardcoded-map";
+      console.log("[StrengthVariantSwap]", JSON.stringify({
+        week: weekNumber,
+        original: ex.name,
+        selected: swappedName,
+        source,
+        librarySource: libraryResult.source,
+        scoreDiff: libraryResult.scoreDiff,
+        candidatesConsidered: libraryResult.candidatesConsidered,
+      }));
     }
 
     // ── Rep range adjustment ─────────────────────────────────────────────────

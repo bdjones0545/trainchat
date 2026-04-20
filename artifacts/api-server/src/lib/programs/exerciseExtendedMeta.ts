@@ -227,7 +227,7 @@ export const EXERCISE_EXTENDED_META: Record<string, ExerciseExtendedMeta> = {
   "Push-Up (weighted)":                { family: "upper_horizontal_push", equivalenceCluster: "horizontal-push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "moderate" },
   "Dumbbell Floor Press":              { family: "upper_horizontal_push", equivalenceCluster: "horizontal-push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
   "Machine Chest Press":               { family: "upper_horizontal_push", equivalenceCluster: "horizontal-push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
-  "Cable Fly":                         { family: "upper_horizontal_push", equivalenceCluster: "horizontal-push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
+  "Cable Fly":                         { family: "upper_horizontal_push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "low" },
   "Bench Press":                       { family: "upper_horizontal_push", equivalenceCluster: "horizontal-push", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "low" },
   "Dumbbell Press (flat)":             { family: "upper_horizontal_push", equivalenceCluster: "horizontal-push", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "moderate" },
 
@@ -284,24 +284,29 @@ export const EXERCISE_EXTENDED_META: Record<string, ExerciseExtendedMeta> = {
   "Ring Pull-Up":                      { family: "upper_vertical_pull", equivalenceCluster: "vertical-pull", complexity: "complex",  velocityIntent: "moderate",   stabilityDemand: "high" },
 
   // ── Trunk Stability ───────────────────────────────────────────────────
-  "Pallof Press":                      { family: "trunk_stability", complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "high" },
-  "Cable Pallof Press":                { family: "trunk_stability", complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "high" },
-  "Band Pallof Press":                 { family: "trunk_stability", complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "high" },
-  "Dead Bug":                          { family: "trunk_stability", complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "high" },
-  "Ab Wheel":                          { family: "trunk_stability", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "high" },
-  "RKC Plank":                         { family: "trunk_stability", complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "high" },
-  "Copenhagen Plank":                  { family: "trunk_stability", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "high" },
-  "Half-Kneeling Pallof Press":        { family: "trunk_stability", complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "high" },
-  "Stir the Pot":                      { family: "trunk_stability", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "high" },
-  "Prone Plank":                       { family: "trunk_stability", complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "moderate" },
-  "Hollow Body Hold":                  { family: "trunk_stability", complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "high" },
-  "L-Sit (box)":                       { family: "trunk_stability", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "high" },
-  "Suitcase Carry":                    { family: "trunk_stability", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "high" },
-  "Farmers Carry":                     { family: "trunk_stability", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "moderate" },
-  "Tall-Kneeling Pallof Press":        { family: "trunk_stability", complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "high" },
-  "Standing Anti-Rotation Press":      { family: "trunk_stability", complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "high" },
-  "Landmine Anti-Rotation":            { family: "trunk_stability", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "high" },
-  "Cable Lift":                        { family: "trunk_stability", complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "high" },
+  // Clusters enable library-driven week-role rotation within each archetype:
+  //   anti-extension-trunk  : supine/prone stability (Dead Bug, Plank, Ab Wheel)
+  //   anti-rotation-trunk   : lateral stiffness / Pallof family
+  //   loaded-carry          : locomotion-under-load (Farmers, Suitcase)
+  //   lateral-trunk         : unilateral adductor/abductor stiffness (Copenhagen)
+  "Dead Bug":                          { family: "trunk_stability", equivalenceCluster: "anti-extension-trunk", complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "moderate" },
+  "Hollow Body Hold":                  { family: "trunk_stability", equivalenceCluster: "anti-extension-trunk", complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "moderate" },
+  "Prone Plank":                       { family: "trunk_stability", equivalenceCluster: "anti-extension-trunk", complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "moderate" },
+  "RKC Plank":                         { family: "trunk_stability", equivalenceCluster: "anti-extension-trunk", complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "high" },
+  "Ab Wheel":                          { family: "trunk_stability", equivalenceCluster: "anti-extension-trunk", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "high" },
+  "Stir the Pot":                      { family: "trunk_stability", equivalenceCluster: "anti-extension-trunk", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "high" },
+  "L-Sit (box)":                       { family: "trunk_stability", equivalenceCluster: "anti-extension-trunk", complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "high" },
+  "Pallof Press":                      { family: "trunk_stability", equivalenceCluster: "anti-rotation-trunk",  complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "high" },
+  "Cable Pallof Press":                { family: "trunk_stability", equivalenceCluster: "anti-rotation-trunk",  complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "high" },
+  "Band Pallof Press":                 { family: "trunk_stability", equivalenceCluster: "anti-rotation-trunk",  complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "high" },
+  "Half-Kneeling Pallof Press":        { family: "trunk_stability", equivalenceCluster: "anti-rotation-trunk",  complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "high" },
+  "Tall-Kneeling Pallof Press":        { family: "trunk_stability", equivalenceCluster: "anti-rotation-trunk",  complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "high" },
+  "Standing Anti-Rotation Press":      { family: "trunk_stability", equivalenceCluster: "anti-rotation-trunk",  complexity: "simple",   velocityIntent: "slow_grind", stabilityDemand: "high" },
+  "Landmine Anti-Rotation":            { family: "trunk_stability", equivalenceCluster: "anti-rotation-trunk",  complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "high" },
+  "Farmers Carry":                     { family: "trunk_stability", equivalenceCluster: "loaded-carry",         complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "moderate" },
+  "Suitcase Carry":                    { family: "trunk_stability", equivalenceCluster: "loaded-carry",         complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "high" },
+  "Cable Lift":                        { family: "trunk_stability", equivalenceCluster: "loaded-carry",         complexity: "simple",   velocityIntent: "moderate",   stabilityDemand: "high" },
+  "Copenhagen Plank":                  { family: "trunk_stability", equivalenceCluster: "lateral-trunk",        complexity: "moderate", velocityIntent: "slow_grind", stabilityDemand: "high" },
 
   // ── Rotational ────────────────────────────────────────────────────────
   "Landmine Rotation":                 { family: "rotational", complexity: "moderate", velocityIntent: "ballistic",  stabilityDemand: "moderate" },

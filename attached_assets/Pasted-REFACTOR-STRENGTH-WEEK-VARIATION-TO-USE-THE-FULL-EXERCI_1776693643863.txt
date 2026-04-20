@@ -1,0 +1,172 @@
+REFACTOR STRENGTH WEEK VARIATION TO USE THE FULL EXERCISE LIBRARY INSTEAD OF A HARDCODED VARIANT MAP
+
+CONTEXT:
+A week-expression layer was added for Strength, including:
+- STRENGTH_EXERCISE_VARIANTS map
+- TRUNK_ROTATION pools
+- week-specific rep adjustments
+- week-specific notes
+- validateStrengthWeekVariation
+- applyStrengthWeekExpression
+
+This improved visible week-to-week variation.
+
+However, the current approach relies too heavily on a hardcoded variant map.
+
+That is NOT the right long-term architecture because we already have a full exercise library with metadata.
+
+We do not want a second manual selection system living beside the real library.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Refactor strength week variation so it uses the full exercise library and metadata-driven selection, not a hardcoded STRENGTH_EXERCISE_VARIANTS map.
+
+==================================================
+TASK 1 — AUDIT WHAT METADATA ALREADY EXISTS
+==================================================
+
+Inspect the current strength exercise library and return what metadata is already available and usable for week-role variation.
+
+Examples to look for:
+- movement family
+- equivalence cluster
+- neural demand
+- fatigue cost
+- intent tags
+- stability demand
+- sport fit
+- equipment
+- novelty / default anchor flags
+
+Return:
+- which metadata fields are already present
+- which are missing for optimal week-role selection
+- whether current metadata is enough to drive W1/W2/W3/W4 variation
+
+==================================================
+TASK 2 — REPLACE HARDCODED VARIANT LOOKUPS WITH LIBRARY SELECTION
+==================================================
+
+Refactor applyStrengthWeekExpression so it no longer depends primarily on STRENGTH_EXERCISE_VARIANTS.
+
+Instead:
+- identify the exercise’s movement family / cluster
+- query the full library for valid alternatives in that same family
+- score candidates by week role
+
+Examples:
+Week 1 (Establish):
+- more stable
+- more teachable
+- lower fatigue
+- moderate neural demand
+
+Week 2 (Build):
+- baseline / standard high-value variants
+
+Week 3 (Intensify):
+- higher neural demand
+- more demanding primaries
+- lower reps / higher intent
+
+Week 4 (Deload):
+- lower fatigue
+- more stable
+- easier recovery expression
+
+==================================================
+TASK 3 — CREATE WEEK-ROLE SCORING AGAINST THE LIBRARY
+==================================================
+
+Create a scoring function like:
+
+scoreStrengthCandidateForWeekRole(candidate, weekRole, currentSlot, currentBlockExposure)
+
+It should consider:
+- family match
+- cluster match
+- week-role fit
+- neural demand
+- fatigue cost
+- stability demand if available
+- recent exposure
+- novelty / overuse suppression
+- equipment compatibility
+
+This should choose the best library-driven variant for that week.
+
+==================================================
+TASK 4 — KEEP MANUAL MAP ONLY AS TEMPORARY LAST-RESORT
+==================================================
+
+Do NOT necessarily delete STRENGTH_EXERCISE_VARIANTS immediately.
+
+But demote it to:
+- optional last-resort fallback only
+- used only when metadata-driven selection cannot find a valid alternative
+
+The real path must be the library.
+
+==================================================
+TASK 5 — MAKE TRUNK / ACCESSORY ROTATION LIBRARY-DRIVEN TOO
+==================================================
+
+Replace or reduce hardcoded TRUNK_ROTATION / UPPER_ACCESSORY_ROTATION pools where possible.
+
+Instead:
+- choose from the full library using family + week-role + exposure logic
+- keep enough determinism so the block still feels coherent
+
+==================================================
+TASK 6 — PRESERVE BLOCK IDENTITY
+==================================================
+
+Important:
+Using the full library must NOT make the program random.
+
+The system should still preserve:
+- session identity
+- movement family intent
+- block archetype
+- coherent progression
+
+The goal is:
+real variation, not chaos.
+
+==================================================
+TASK 7 — VALIDATE BEFORE/AFTER QUALITY
+==================================================
+
+Compare:
+- hardcoded-map output
+- library-driven output
+
+On:
+- variation score
+- coherence
+- week-role expression
+- repeated exercise count
+- maintenance burden
+
+Return whether the library-driven version matches or exceeds the current behavior.
+
+==================================================
+TASK 8 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. what metadata is already sufficient in the library
+2. what scoring logic now powers strength week variation
+3. how much of the hardcoded map remains
+4. whether trunk/accessory rotation is now library-driven
+5. before/after comparison of one sample 4-week block
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Strength week variation should come from the real exercise library and its metadata, not from a manually maintained variant table.
+
+The manual map can remain only as a narrow emergency fallback, not the main system.
