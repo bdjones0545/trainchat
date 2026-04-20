@@ -1,0 +1,237 @@
+FOCUS-AWARE RIGHT SIDEBAR EDIT ACTIONS — MAKE SPEED AND MOBILITY SHOW THE CORRECT EDIT BUTTONS AND ROUTE TO THE AGENT CORRECTLY
+
+CONTEXT:
+The right sidebar is now loading the correct active program by focus.
+Mobility is building successfully.
+Speed is building successfully.
+
+However, the edit/refine buttons shown in the right sidebar are still the Strength edit buttons even when the active focus is:
+- Speed / Footwork
+- Mobility
+
+This causes two problems:
+1. the UI shows the wrong edit options for the current focus
+2. pressing those buttons may send the wrong intent to the agent or the wrong edit semantics to the system
+
+We need the right sidebar edit actions to be fully focus-aware and agent-connected.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make the right sidebar edit/refine actions:
+- change based on the active focus
+- send the correct focus-specific command to the agent
+- result in the correct structured edit against the correct program
+
+==================================================
+TASK 1 — AUDIT CURRENT RIGHT SIDEBAR ACTION SOURCE
+==================================================
+
+Trace exactly where the right sidebar edit buttons are coming from.
+
+Return:
+- component/file that defines the current buttons
+- whether buttons are hardcoded
+- whether they are keyed off focusMode or not
+- what payload each button currently sends when pressed
+- whether those payloads are strength-specific
+
+Log:
+
+[SidebarEditAudit] {
+  activeFocus,
+  renderedButtonSet,
+  sourceComponent,
+  focusAware,
+  payloads
+}
+
+==================================================
+TASK 2 — DEFINE FOCUS-SPECIFIC BUTTON SETS
+==================================================
+
+Create separate right-sidebar edit action sets for:
+
+A. Strength
+Examples:
+- More Explosive
+- More Strength
+- More Endurance
+- Shorter Sessions
+- Lower Impact
+- Home Gym Version
+
+B. Speed / Footwork
+Examples:
+- More Acceleration
+- More Max Velocity
+- More Reactive
+- More Deceleration
+- Shorter Sessions
+- Lower Impact
+- Home / Limited Space Version
+
+C. Mobility
+Examples:
+- More Hip Focus
+- More Recovery Flow
+- More End-Range Control
+- More Thoracic / Spine
+- Shorter Sessions
+- Lower Intensity
+- Desk Reset Version
+
+Do not reuse Strength labels for Speed or Mobility.
+
+==================================================
+TASK 3 — RENDER BUTTONS FROM activeFocusMode
+==================================================
+
+The right sidebar must render button groups from the actual active focus:
+- strength
+- speed
+- mobility
+
+Use the same active focus source of truth used elsewhere in the app.
+No stale default to strength.
+
+If focusMode = mobility, the sidebar must not show strength actions.
+If focusMode = speed, the sidebar must not show strength actions.
+
+==================================================
+TASK 4 — CONNECT EVERY BUTTON TO THE AGENT WITH FOCUS-SPECIFIC COMMANDS
+==================================================
+
+Each button must send a real focus-specific command through the agent/system pipeline.
+
+Examples:
+
+Speed:
+- "Shift this speed program toward acceleration"
+- "Make this block more reactive"
+- "Reduce impact but keep speed intent"
+- "Adapt this for limited space"
+
+Mobility:
+- "Shift this mobility program toward hip mobility"
+- "Make this more recovery-focused"
+- "Increase end-range control emphasis"
+- "Shorten these mobility sessions"
+
+Strength:
+- keep existing strength behavior
+
+Important:
+Buttons should not be UI-only.
+They must route through the real agent edit path and update the actual program.
+
+==================================================
+TASK 5 — PASS THE CORRECT FOCUS + PROGRAM CONTEXT
+==================================================
+
+When a button is pressed, ensure the request includes:
+- focusMode
+- active trainingSystemId
+- current phase/week if relevant
+- current program metadata
+
+Do not let Mobility or Speed edits fall through a Strength default.
+
+==================================================
+TASK 6 — MAP BUTTONS TO STRUCTURED INTENTS
+==================================================
+
+Where possible, map focus-specific sidebar buttons to structured edit intents instead of vague free text.
+
+Examples:
+- strength_more_explosive
+- speed_more_acceleration
+- speed_more_reactive
+- mobility_more_hip_focus
+- mobility_more_recovery_flow
+- mobility_shorten_sessions
+
+This improves consistency and reduces parsing ambiguity.
+
+If your execution planner supports it, add these as explicit action variants.
+
+==================================================
+TASK 7 — UPDATE BUTTON COPY TO MATCH FOCUS
+==================================================
+
+Make sure the labels feel native to the focus.
+
+Bad:
+- More Strength (inside Mobility)
+- More Explosive (inside Mobility)
+- Lower Impact (if too vague for Mobility when "Lower Intensity" is better)
+
+Good:
+- More Hip Focus
+- More Recovery Flow
+- More Reactive
+- More Max Velocity
+
+==================================================
+TASK 8 — AUDIT RESULTING EDIT FLOW
+==================================================
+
+After pressing a focus-specific button, verify all of these happen:
+- correct agent intent is generated
+- correct focus engine is used
+- correct program is edited
+- DB save succeeds
+- chat acknowledgment reflects the actual change
+- right sidebar / Active Program refreshes correctly
+
+Log:
+
+[SidebarEditExecutionAudit] {
+  buttonPressed,
+  focusMode,
+  commandSent,
+  structuredIntent,
+  engineUsed,
+  programUpdated,
+  uiRefreshed
+}
+
+==================================================
+TASK 9 — VALIDATION
+==================================================
+
+Test:
+
+1. Strength sidebar
+- buttons are strength-specific
+- edit updates the strength program
+
+2. Speed sidebar
+- buttons are speed-specific
+- "More Acceleration" updates the speed program
+- no strength labels appear
+
+3. Mobility sidebar
+- buttons are mobility-specific
+- "More Hip Focus" updates the mobility program
+- no strength labels appear
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. where the old button set was coming from
+2. the new button sets for each focus
+3. how button presses are routed to the agent now
+4. what structured intents were added
+5. validation results for strength / speed / mobility
+
+==================================================
+FINAL STANDARD
+==================================================
+
+The right sidebar edit/refine actions must now be fully focus-aware.
+
+Each focus should show the correct edit buttons and pressing them must route through the real agent + system pipeline to make the correct program changes.
