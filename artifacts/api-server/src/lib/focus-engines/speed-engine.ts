@@ -317,45 +317,16 @@ export function buildSpeedArchitectureBrief(
     ? "Footwork & Rhythm Development"
     : "Acceleration + Elastic Development";
 
-  // ── Day skeletons — rotate speed qualities across the week ────────────────
-  const allDaySkeletons = [
-    `Day 1 — Acceleration Development:
-  Block A — CNS Activation (10 min): Wall March × 2×10, Single-Leg Hip Hinge March × 2×8 each, Ankle Stiffness Prep × 2×12 contacts
-  Block B — Acceleration Warm-Up (10 min): A-Walk × 2×20m, A-Skip × 2×20m, Build-Up Run × 3×30m (sub-maximal)
-  Block C — Primary Speed Work (20 min): Falling Start × 4–6 efforts × 20–30m, rest 2–4 min between — 95–100% intent
-  Block D — Elastic Support (10 min): Stiffness Hops × 3×10 contacts, Pogo Hops × 3×10 contacts, 90s rest
-  Block E — Footwork Finisher (10 min): Speed Ladder In-Out × 4, Lateral Shuffle × 4×10m`,
-
-    `Day 2 — Reactive Footwork + Deceleration Control:
-  Block A — CNS Activation (10 min): Nordic Hamstring Curl × 2×6, Copenhagen Hip Adductor × 2×8 each, Straight-Leg Calf March × 2×10
-  Block B — Speed Warm-Up (10 min): March to Skip to Run × 3×20m, A-Skip × 3×20m, Build-Up Run × 3×30m
-  Block C — COD / Reactive Work (20 min): T-Drill × 4–6 efforts full recovery; then Mirror Drill × 4–6 efforts; or 5-10-5 × 4 efforts
-  Block D — Deceleration Control (10 min): Single-Leg Decel Landing × 3×5 each, Hip Lock Decel × 3×4 each, Deceleration Sprint Stop × 3×20m
-  Block E — Speed-Strength Bridge (10 min): Jump Squat × 3×4 reps, 2 min rest; OR Trap Bar Jump × 3×4 reps`,
-
-    `Day 3 — Elastic Output + Speed Endurance:
-  Block A — Tissue Prep (10 min): Isometric Hamstring Hold × 2×30s each, Ankle Stiffness Prep × 2×12, Nordic Drops × 2×5
-  Block B — Acceleration Warm-Up (10 min): Wall Drive × 3×8, A-Skip × 3×20m, Flying Build-Up Run × 3×30m
-  Block C — Plyometric Elastic (20 min): Lateral Hurdle Hops × 4×6, Skater Jump to Stick × 3×5 each, Linear Bounding × 3×20m, 90s–3 min rest
-  Block D — Speed Endurance (10 min): Repeat 30m Sprint × 4–6 efforts × 60–90s recovery, OR Tempo Run × 4×100m at 70–75%
-  Block E — Footwork (optional): Speed Ladder Ickey Shuffle × 3, Carioca × 3×10m`,
-
-    `Day 4 — Max Velocity + Footwork:
-  Block A — CNS Activation (10 min): Ankle Stiffness Prep × 2×12, A-Walk × 2×20m, Single-Leg Hip Hinge March × 2×8 each
-  Block B — Max Velocity Warm-Up (10 min): A-Skip × 3×20m, B-Skip × 3×20m, Build-Up Run × 3×40m (build to max)
-  Block C — Max Velocity (20 min): Flying 20m Sprint × 4–6 efforts, 4–6 min full recovery between — 100% intent
-  Block D — Footwork (10 min): Speed Ladder Lateral × 4, Zigzag Hops × 4×10m, Carioca × 4×10m
-  Block E — Elastic Finisher (10 min): Countermovement Jump to Sprint × 3×3, Skater Jump × 3×5 each`,
-
-    `Day 5 — COD + Acceleration Contrast:
-  Block A — CNS Activation (10 min): Wall March × 2×10, Nordic Hamstring Curl × 2×6, Isometric Hamstring Hold × 2×20s each
-  Block B — Warm-Up (10 min): A-Walk, A-Skip, Build-Up Run × 3×30m
-  Block C — Acceleration Contrast (15 min): Falling Start × 3×20m; contrast with Box Jump × 3×4 reps immediately after each sprint
-  Block D — Reactive COD (15 min): L-Drill × 4–6 efforts; then Drop-Step Decel × 3×4 each
-  Block E — Finisher (10 min): Lateral Bound × 3×5 each, Alternating Bounds × 3×20m`,
+  // ── Compact day rotation labels (replace verbose block-by-block skeletons) ──
+  const allDayLabels = [
+    `Day 1 — Acceleration Development: Tissue prep (Nordic Curl / Ankle Stiffness) → A-Skip/Wall March warm-up → Falling Start 4–6×20–30m (2–4 min rest, 95–100% intent) → Stiffness Hops/Pogo Hops (24–30 contacts, 90s) → Speed Ladder finisher`,
+    `Day 2 — Reactive Footwork + Deceleration: Tissue prep (Copenhagen Hip / Calf March) → March-to-Skip-to-Run warm-up → T-Drill or 5-10-5 (4–6 efforts, full recovery) → Single-Leg Decel Landing (3×5 each) → Jump Squat speed-strength bridge`,
+    `Day 3 — Elastic Output + Speed Endurance: Tissue prep (Isometric Ham Hold / Nordic Drops) → Flying Build-Up warm-up → Lateral Hurdle Hops + Linear Bounding (24–40 contacts, 90s–3 min) → Repeat 30m Sprint 4–6×(60–90s) → Carioca footwork`,
+    `Day 4 — Max Velocity + Footwork: Tissue prep (Ankle Stiffness Prep) → A-Skip/B-Skip/Build-Up warm-up → Flying 20m Sprint 4–6×(4–6 min rest, 100% intent) → Speed Ladder Lateral + Zigzag Hops → Countermovement Jump to Sprint finisher`,
+    `Day 5 — COD + Acceleration Contrast: Tissue prep (Wall March / Nordic Curl) → A-Skip warm-up → Falling Start + Box Jump contrast (3×20m + 3×4 reps) → L-Drill/Drop-Step Decel (4–6 efforts) → Lateral Bound + Alternating Bounds`,
   ];
 
-  const dayPlans = allDaySkeletons.slice(0, sessionCount);
+  const dayPlans = allDayLabels.slice(0, sessionCount);
 
   return `## SPEED / FOOTWORK ARCHITECTURE BRIEF — MANDATORY STRUCTURE
 
@@ -363,53 +334,25 @@ ACTIVE FOCUS: ${primaryFocus}
 SESSION COUNT: ${sessionCount}-day speed program
 PROGRAM GOAL: ${goal ?? "Speed & acceleration development"}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CRITICAL BUILD CONSTRAINTS — NON-NEGOTIABLE:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. THIS IS A SPEED PROGRAM — NOT strength, NOT conditioning.
-   PROHIBITED as primary work: barbell squat, conventional deadlift, bench press,
-   pull-up, barbell row, overhead press, or any traditional strength exercise.
-   Speed-strength bridge exercises (Jump Squat, Trap Bar Jump) are ONLY used in a
-   supporting Block D or E role — never as the session anchor.
+CRITICAL BUILD CONSTRAINTS:
+1. SPEED PROGRAM ONLY — PROHIBITED primary work: barbell squat, deadlift, bench press, pull-up, OHP, or any strength exercise as session anchor. Speed-strength bridge (Jump Squat, Trap Bar Jump) ONLY in supporting slot D/E.
+2. EXERCISE LANGUAGE — sprints: "X efforts × Ym, rest Z min"; plyometrics: "X contacts, 90s rest"; COD: "X efforts, full recovery"; footwork: "X sets × Ym". NEVER "sets of 10 reps" for speed/plyometric work.
+3. CNS ORDER — speed and plyometric work ALWAYS first after warm-up. Never after heavy lifting.
+4. REST — max-intent sprints: 2–6 min; plyometrics: 90s–3 min; COD: 1.5–3 min; footwork: 30–60s.
+5. VOLUME — sprint efforts: 4–6 max per session; plyometric contacts: 24–40 total.
 
-2. EXERCISE LANGUAGE — use sprint-specific terms:
-   - Sprint/speed efforts → "X efforts × Ym, rest Z min"
-   - Plyometric contacts → "X sets × Y contacts, 90s rest"
-   - COD drills → "X efforts, full recovery between"
-   - Footwork patterns → "X sets × Ym"
-   NEVER use "sets of 10 reps" for speed or plyometric work.
+SESSION ROTATION — follow this day structure:
+${dayPlans.join("\n")}
 
-3. CNS ORDER — speed and plyometric work is ALWAYS the first high-intensity
-   block after warm-up. It is NEVER placed after heavy lifting or fatigue.
-
-4. REST IS MANDATORY:
-   - Max-intent sprints (acceleration/max velocity): 2–6 min between efforts
-   - Plyometrics: 90s–3 min between sets
-   - COD/reactive: full recovery (1.5–3 min) between efforts
-   - Footwork/rhythm: 30–60s (lower CNS demand)
-
-5. VOLUME IS LOW — quality beats quantity:
-   - Sprint efforts: 4–6 per session maximum at max intent
-   - Plyometric contacts: 24–40 total per session (e.g., 4×8 or 3×10)
-   - Never add volume without confirming recovery
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PRESCRIBED SESSION STRUCTURE — FILL EXACTLY THIS SKELETON:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-${dayPlans.join("\n\n")}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 APPROVED EXERCISE VOCABULARY:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Acceleration: Wall March, Wall Drive, Wall A-Skip, Falling Start, Kneeling Start, Sled Sprint, Sled Push, A-Skip, Block Start
-Max Velocity: Flying 20m Sprint, B-Skip, Wicket Run, Build-Up Run, Flying Start Sprint, Sprint Mechanics Drill
-COD: 5-10-5, L-Drill, Box Drill, 505 Drill, T-Drill, Decel to Re-Accelerate, Single-Leg Decel Landing, Hip Lock Decel, COD Cut Sprint, Backpedal Sprint
-Reactive: Mirror Drill, Shadow Footwork, Reactive Agility Drill, Drop-Step Decel, Crossover Step
-Footwork: Speed Ladder In-Out, Ickey Shuffle, Lateral Ladder, Linear Ladder, March to Skip to Run, Lateral Shuffle, Carioca, Zigzag Hops
-Elastic: Stiffness Hops, Single-Leg Stiffness Hops, Lateral Hurdle Hops, Skater Jump, Skater Jump to Stick, Linear Bounding, Pogo Hops, Ankle Hops, Countermovement Jump to Sprint, Single-Leg Hops, Lateral Bound, Alternating Bounds
-Speed-Strength Bridge: Sled Push, Jump Squat, Trap Bar Jump, Power Clean, Countermovement Jump to Sprint
-Tissue Prep: Nordic Hamstring Curl, Isometric Hamstring Hold, Straight-Leg Calf March, Single-Leg Hip Hinge March, Ankle Stiffness Prep, Copenhagen Hip Adductor, Build-Up Run`.trim();
+Acceleration: Wall March, Wall Drive, Falling Start, Kneeling Start, Sled Sprint, A-Skip, Block Start
+Max Velocity: Flying 20m Sprint, B-Skip, Wicket Run, Build-Up Run, Flying Start Sprint
+COD: 5-10-5, L-Drill, T-Drill, 505 Drill, Single-Leg Decel Landing, Hip Lock Decel, Backpedal Sprint
+Reactive: Mirror Drill, Drop-Step Decel, Crossover Step
+Footwork: Speed Ladder In-Out, Ickey Shuffle, Lateral Ladder, March to Skip to Run, Carioca, Zigzag Hops
+Elastic: Stiffness Hops, Lateral Hurdle Hops, Skater Jump, Linear Bounding, Pogo Hops, Countermovement Jump to Sprint, Lateral Bound, Alternating Bounds
+Speed-Strength Bridge: Jump Squat, Trap Bar Jump, Sled Push, Power Clean
+Tissue Prep: Nordic Hamstring Curl, Isometric Hamstring Hold, Ankle Stiffness Prep, Copenhagen Hip Adductor`.trim();
 }
 
 // ─── Speed Response Contract ──────────────────────────────────────────────────
@@ -516,100 +459,41 @@ export function buildSpeedResponseContract(sessionCount: number): string {
       ]
     }`;
 
-  const exampleDays = sessionCount >= 2 ? [day1Example, day2Example].join(",\n") : day1Example;
-
   return `## SPEED PROGRAM — MANDATORY JSON RESPONSE CONTRACT
 
-⛔ ABSOLUTE PROHIBITION — READ BEFORE RESPONDING:
-You are FORBIDDEN from returning any of the following:
-  - A preview, outline, scaffold, or plan of what you will build
-  - Prose describing the structure ("Here's the foundation I'm building...")
-  - Future-tense promises ("I'll include...", "I'll map...", "I'll build...")
-  - Conditional language ("Once you complete your profile...", "Once I have...")
-  - Any response that is not the final, complete, fully-populated JSON program
+⛔ OUTPUT THE COMPLETE JSON PROGRAM NOW. No previews, scaffolds, or prose. No "I'll build..." language. Final program only — output it immediately.
 
-If you return a preview instead of the complete JSON program, it is a CRITICAL FAILURE.
-There is no intermediate step. There is no "planning phase." Output the final program NOW.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-You MUST output the speed program as a JSON code block in EXACTLY this format.
-No prose. No markdown outside the JSON block. Output the JSON block first, then a 1–2 sentence confirmation.
+You MUST output as a JSON code block. No markdown outside the block. JSON block first, then 1–2 sentence confirmation.
 
 \`\`\`json
 {
   "programName": "Speed & Acceleration Development",
-  "programSummary": "Brief description of the speed focus, primary quality, and progression intent for this program",
+  "programSummary": "Brief description of the speed focus, primary quality, and progression intent",
   "focusMode": "speed",
   "days": [
-${exampleDays}
+${day1Example}
   ]
 }
 \`\`\`
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-SESSION DEPTH — MANDATORY MINIMUM:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EVERY session MUST contain at least 5 exercises (target: 5–7).
-Do NOT output a session with only 2, 3, or 4 items. That is an incomplete session.
+SESSION DEPTH: Every session MUST contain 5–7 exercises. Never fewer than 5.
 
-REQUIRED SESSION SLOT ORDER (fill in sequence):
-  Slot 1 — Tissue Prep / CNS Activation (1–2 exercises): e.g., Isometric Hamstring Hold, Nordic Hamstring Curl, Ankle Stiffness Prep
-  Slot 2 — Sprint Mechanics / Speed Warm-Up (1–2 exercises): e.g., Wall March, A-Skip, March to Skip to Run
-  Slot 3 — PRIMARY Speed Quality (1 exercise, max-intent): e.g., Falling Start, Flying 20m Sprint, T-Drill, Skater Jump
-  Slot 4 — Secondary Speed / Reactive / COD (1 exercise): e.g., Stiffness Hops, Mirror Drill, Lateral Bound, Lateral Hurdle Hops
-  Slot 5 — Footwork / Trunk / Tissue Support (1 exercise): e.g., Speed Ladder In-Out, Single-Leg Hip Hinge March, Copenhagen Hip Adductor
-  Slot 6 — Optional Speed-Strength Bridge or Finisher (1 exercise, when appropriate): e.g., Jump Squat, Trap Bar Jump, Pogo Hops
+SESSION SLOT ORDER (required in sequence):
+  1: Tissue Prep/CNS (1–2 ex): e.g., Isometric Hamstring Hold, Nordic Curl, Ankle Stiffness Prep
+  2: Sprint Mechanics Warm-Up (1–2 ex): e.g., Wall March, A-Skip, March to Skip to Run
+  3: PRIMARY Speed Quality (1 ex, max-intent): e.g., Falling Start, Flying 20m Sprint, T-Drill
+  4: Secondary Speed/Reactive (1 ex): e.g., Stiffness Hops, Mirror Drill, Lateral Hurdle Hops
+  5: Footwork/Support (1 ex): e.g., Speed Ladder In-Out, Copenhagen Hip Adductor
+  6: Speed-Strength Bridge or Finisher (optional, 1 ex): e.g., Jump Squat, Trap Bar Jump
 
-Minimum by session type:
-  Acceleration Development → minimum 5, target 6
-  Max Velocity → minimum 5, target 6
-  Reactive Footwork + Deceleration Control → minimum 5, target 6
-  Elastic Output → minimum 5, target 6
-  Speed Endurance → minimum 5, target 5
-  Return-to-Speed / Tissue Prep → minimum 4, target 5
+Minimums by type: Acceleration/Max Velocity/Reactive/Elastic → min 5, target 6. Speed Endurance/Return-to-Speed → min 4–5.
 
-COACHING NOTES — SPEED-ONLY LANGUAGE:
-  ✓ "Focus on execution quality and full recovery"
-  ✓ "Stop the rep if posture or contact quality drops"
-  ✓ "Prioritize sharp mechanics over fatigue"
-  ✓ "Keep sprint output high — this is not conditioning"
-  ✗ NEVER write: "Record any weights used", "track progress week-to-week", "add weight when", "increase the load"
-  ✗ NEVER use progressive overload or strength-tracking language in speed coach notes
+NOTES — speed-only language. NEVER: "add weight", "track load", progressive overload language.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-SESSION NAME RULES — NON-NEGOTIABLE:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Day names MUST use speed-native language. Approved formats:
-  ✓ "Day 1 — Acceleration Development"
-  ✓ "Day 2 — Reactive Footwork + Deceleration Control"
-  ✓ "Day 3 — Elastic Output"
-  ✓ "Day 4 — Max Velocity + Footwork"
-  ✓ "Day 5 — COD + Acceleration Contrast"
-  ✓ "Day 1 — Return-to-Speed Tissue Prep"
-  ✓ "Day 2 — Footwork & Rhythm"
+SESSION NAMES — MUST use speed-native language (e.g., "Day 1 — Acceleration Development", "Day 2 — Reactive Footwork + Deceleration Control", "Day 3 — Elastic Output").
+PROHIBITED names: Lower Strength, Upper Push, Pull Day, Hypertrophy Day, Leg Day, Back & Biceps, Chest & Triceps.
 
-STRICTLY PROHIBITED session names (causes automatic rejection):
-  ✗ Lower Strength
-  ✗ Upper Push / Upper Pull
-  ✗ Hypertrophy Day
-  ✗ Push Day / Pull Day
-  ✗ Leg Day
-  ✗ Back & Biceps
-  ✗ Chest & Triceps
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EXERCISE FIELD FORMAT RULES:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- Sprint efforts: reps = "X efforts × Ym" (e.g., "4 efforts × 20m")
-- Flying sprints: reps = "X efforts × Ym flying" (e.g., "5 efforts × 20m flying")
-- Plyometric contacts: reps = "X contacts" (e.g., "10 contacts")
-- COD drills: reps = "X efforts, full recovery" (e.g., "4 efforts, full recovery")
-- Footwork patterns: reps = "X sets × Ym" or "X runs" (e.g., "4 × 10m")
-- Rest MUST be included for every exercise
-- notes MUST include coaching cue or quality focus
-- NEVER write "10 reps" for a sprint or plyometric movement
-- programName MUST reference speed (e.g., "Speed & Acceleration", "Footwork & Deceleration")
-- programSummary MUST describe speed qualities (not "strength and conditioning")`;
+FIELD FORMAT: sprints → "X efforts × Ym"; plyometrics → "X contacts"; COD → "X efforts, full recovery"; footwork → "X sets × Ym". Rest field required for every exercise. NEVER "10 reps" for sprints/plyometrics. programName MUST reference speed. programSummary MUST describe speed qualities.`;
 }
 
 // ─── Speed Output Bleed Validator ─────────────────────────────────────────────

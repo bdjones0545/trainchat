@@ -1,0 +1,304 @@
+NEXT PERFORMANCE OPTIMIZATION PASS — USE THE NEW LATENCY LOGS TO GET BUILDS INTO THE 8–15 SECOND RANGE
+
+CONTEXT:
+We already completed a major latency reduction pass.
+
+Changes already in place:
+- callOpenAI maxRetries reduced 2 → 1
+- 429 retry delay reduced from 20s/40s to 8s on the remaining retry path
+- history windows reduced:
+  - builds: 30 → 4 turns
+  - edits: 12 turns
+  - chat: 15 turns
+- max_tokens reduced:
+  - speed: 3600 → 2600
+  - mobility: 2200
+  - strength: 2600
+  - edits: 2800
+- constraint enforcement retries reduced
+- build output compaction added
+- full latency instrumentation added:
+  - [BuildLatencyAudit]
+  - [PipelineLatencyAudit]
+
+Now we need to use these logs to perform the NEXT optimization pass and reduce real program generation latency further.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Use the new latency telemetry to systematically reduce build time across Strength, Speed, and Mobility, targeting:
+
+- ideal: 8–15 seconds
+- acceptable: 15–20 seconds
+- unacceptable: 20+ seconds on the common path
+
+==================================================
+PART 1 — COLLECT BASELINE LATENCY DATA
+==================================================
+
+Run at least 5 builds for each focus:
+- Strength
+- Speed
+- Mobility
+
+For each build, capture:
+- [BuildLatencyAudit]
+- [PipelineLatencyAudit]
+
+Aggregate:
+- avg totalMs
+- avg openAICallMs
+- avg validationMs
+- avg setupMs
+- avg dbSaveMs
+- avg postAiMs
+- avg systemPromptChars
+- avg historyWindowSize
+- avg maxTokensBudget
+- retry frequency
+
+Return the baseline table by focus.
+
+==================================================
+PART 2 — IDENTIFY THE REAL TOP BOTTLENECKS
+==================================================
+
+Using the collected logs, identify the biggest time sinks.
+
+Classify each build focus as primarily:
+- prompt-bound
+- model-bound
+- validation-bound
+- post-processing-bound
+- DB/UI-bound
+
+Return the top 3 bottlenecks overall and top 2 bottlenecks per focus.
+
+==================================================
+PART 3 — SHRINK PROMPT SIZE FURTHER ON BUILD PATHS
+==================================================
+
+For BUILD_PROGRAM / REBUILD_PROGRAM only:
+
+Audit all prompt sections and remove/compress anything that is not essential for first-pass generation.
+
+Specifically review:
+- behaviorInstructions
+- insightHint
+- conversionHint
+- intentHint
+- specialistContextHint
+- transformHint
+- responseModePrompt
+- uiContextSection
+- neuralContext
+- duplicated memory or adaptation phrasing
+- long example lists
+
+Goal:
+reduce systemPromptChars materially without reducing build correctness.
+
+Do NOT weaken:
+- focusModeContext
+- hard constraints
+- architectureBriefText
+- response contract
+- critical memory signals
+
+==================================================
+PART 4 — CREATE COMPACT BUILD PROMPTS PER FOCUS
+==================================================
+
+Create dedicated compact build-mode prompt variants for:
+- Strength
+- Speed
+- Mobility
+
+These should be shorter than the generic assembly and tailored specifically for:
+- first-pass build success
+- structured JSON generation
+- minimal narrative
+
+The compact build prompt should still preserve:
+- correct focus identity
+- correct architecture brief
+- correct response contract
+- hard constraints
+- critical memory signals
+
+==================================================
+PART 5 — COMPRESS ARCHITECTURE BRIEFS WITHOUT LOSING CONTROL
+==================================================
+
+Audit the size of:
+- buildSpeedArchitectureBrief()
+- buildMobilityArchitectureBrief()
+- any large strength architecture sections
+
+Reduce verbosity by:
+- shortening explanations
+- converting repeated prose into compact bullet/rule format
+- removing duplicated instruction language
+- trimming example text where not strictly needed
+
+Goal:
+same control, fewer tokens.
+
+==================================================
+PART 6 — REDUCE OPENAI OUTPUT BURDEN FURTHER
+==================================================
+
+Builds should return:
+- structured JSON
+- concise notes
+- minimal prose
+
+Further tighten build-mode output instructions so the model does NOT spend tokens on:
+- long coaching paragraphs
+- repeated explanations
+- verbose session rationales
+- redundant intent descriptions
+
+If possible, reduce note fields to:
+- one short sentence
+- or deterministic defaults when safe
+
+==================================================
+PART 7 — OPTIMIZE VALIDATION / REPAIR COST
+==================================================
+
+Audit how much time validation and repair are adding.
+
+For each validator:
+- constraint
+- quality
+- speed bleed
+- mobility bleed (if added)
+- repair layers
+
+Return:
+- how often it runs
+- how often it triggers an extra model call
+- how often repairs succeed deterministically
+
+Then optimize by:
+- preferring deterministic repair before any second model call
+- skipping expensive validation on obviously valid happy-path builds where safe
+- keeping hard safety/correctness checks intact
+
+==================================================
+PART 8 — FOCUS-SPECIFIC OPTIMIZATION
+==================================================
+
+Strength:
+- ensure no unnecessary legacy prompt baggage remains
+- verify build path uses the most compact architecture possible
+
+Speed:
+- this is likely the heaviest path
+- compress speed response contract and architecture brief
+- keep bleed validation but reduce prompt duplication
+
+Mobility:
+- keep mobility-specific structure while minimizing flow/prose overhead
+- avoid overly descriptive session language in the initial build path
+
+==================================================
+PART 9 — IMPROVE FAILURE / RETRY POLICY FOR SPEED AND MOBILITY
+==================================================
+
+Now that retries are reduced, confirm the single retry is only used where it truly helps:
+- 429
+- 5xx
+- transient network issues
+- explicit preview/false-success repair path where appropriate
+
+Avoid any retry behavior that slows the common path without meaningfully improving success rate.
+
+==================================================
+PART 10 — OPTIMIZE POST-AI SAVE + UI UPDATE
+==================================================
+
+Audit:
+- DB save overhead
+- invalidation/refetch overhead
+- right panel update timing
+- Active Programs update timing
+
+If the program is already available in memory after successful parse/save:
+- render it immediately
+- avoid waiting on unnecessary refetches where safe
+
+Goal:
+reduce time from "AI finished" to "user sees full program"
+
+==================================================
+PART 11 — ADD PERFORMANCE SAFETY GUARDS
+==================================================
+
+Add warnings/logs if:
+- systemPromptChars exceeds target threshold
+- maxTokensBudget is unusually high
+- validation time exceeds threshold
+- postAiMs exceeds threshold
+
+Suggested logs:
+[BuildPerfWarning] {
+  focusMode,
+  promptTooLarge,
+  validationTooSlow,
+  postProcessingTooSlow,
+  totalMs
+}
+
+==================================================
+PART 12 — BEFORE / AFTER REPORT
+==================================================
+
+After optimizations, rerun the same 5 builds per focus and compare:
+
+- avg totalMs
+- avg openAICallMs
+- avg validationMs
+- avg setupMs
+- avg dbSaveMs
+- avg systemPromptChars
+- avg retriesTriggered
+
+Show before/after tables for:
+- Strength
+- Speed
+- Mobility
+
+==================================================
+PART 13 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. baseline latency table by focus
+2. top bottlenecks found
+3. prompt reductions made
+4. architecture brief reductions made
+5. validation/repair optimizations made
+6. DB/UI completion optimizations made
+7. before/after latency tables
+8. final recommendation for any remaining bottleneck
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Program generation should now feel fast enough for real consumer use.
+
+The system must remain:
+- structured
+- focus-aware
+- validated
+- high quality
+
+But the model should only do work that actually requires the model.
+
+Target:
+- common path under 15 seconds
+- no focus consistently above 20 seconds

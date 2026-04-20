@@ -2583,17 +2583,39 @@ export async function generateAIResponse(
   });
 
   // ── Build-path output compaction instruction ──────────────────────────────
-  // Injects a one-line directive to keep notes/intent fields brief. This alone
-  // can reduce output tokens by 15-25%, directly cutting generation time.
-  // Only injected for build paths — conversational and edit paths keep full detail.
+  // Injects a directive to keep notes/intent fields brief on build paths.
+  // Reduces output tokens by 15-25%, directly cutting generation time.
   const buildCompactInstruction = isBuildIntent
     ? `## OUTPUT COMPACTION — BUILD PATH\nKeep all exercise notes and intent fields to 1 sentence max. Do not add rationale paragraphs. JSON only, no extra prose after the code block.`
     : null;
 
-  const extras = [focusModeContext, focusModeAdaptationContext, behaviorInstructions, profileFillContext, adaptationContext, memoryContext, sessionSportOverride, insightHint, conversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, agentIntentProfileSection, responsePolicySection, architectureBriefText, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection, buildCompactInstruction]
+  // ── Build-path prompt pruning ──────────────────────────────────────────────
+  // On initial builds (CREATE_PROGRAM / START_NEW_PROGRAM) several sections are
+  // irrelevant and just burn input tokens. Suppress them on the build path.
+  //   - insightHint: next-session training insights — irrelevant before first build
+  //   - conversionHint: free-tier upsell coaching language — never needed during a build
+  const filteredInsightHint    = isBuildIntent ? null : (insightHint ?? null);
+  const filteredConversionHint = isBuildIntent ? null : (conversionHint ?? null);
+
+  const extras = [focusModeContext, focusModeAdaptationContext, behaviorInstructions, profileFillContext, adaptationContext, memoryContext, sessionSportOverride, filteredInsightHint, filteredConversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, agentIntentProfileSection, responsePolicySection, architectureBriefText, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection, buildCompactInstruction]
     .filter(Boolean)
     .join("\n\n");
   const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;
+
+  // ── Build Performance Guard ────────────────────────────────────────────────
+  // Warn if the system prompt is unusually large for a build request.
+  // Token budget is checked later after maxTokens is resolved (see below).
+  const PROMPT_SIZE_WARN_THRESHOLD = 22000;
+  if (isBuildIntent && systemPrompt.length > PROMPT_SIZE_WARN_THRESHOLD) {
+    logger.warn(
+      {
+        focusMode,
+        systemPromptChars: systemPrompt.length,
+        promptTooLarge: true,
+      },
+      "[BuildPerfWarning] Build system prompt exceeds threshold — prompt is unusually large"
+    );
+  }
   const apiKey = process.env.OPENAI_API_KEY ?? process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
   const openAIBaseUrl = process.env.OPENAI_API_KEY
     ? "https://api.openai.com/v1"
@@ -2712,6 +2734,15 @@ export async function generateAIResponse(
         : isBuildIntent ? 2600
         : editContext !== null || intentResult?.type === "ADJUST_FOR_PAIN" || intentResult?.type === "ADJUST_FOR_READINESS" ? 2800
         : 2000);
+
+    // ── Token budget warning (complementing the prompt size guard above) ─────
+    const TOKEN_BUDGET_WARN_THRESHOLD = 3200;
+    if (isBuildIntent && maxTokens > TOKEN_BUDGET_WARN_THRESHOLD) {
+      logger.warn(
+        { focusMode, maxTokensBudget: maxTokens, tokenBudgetHigh: true },
+        "[BuildPerfWarning] Build token budget exceeds threshold — generation will be slow"
+      );
+    }
 
     // Log that the OpenAI request is being sent (speed and mobility paths get dedicated logging)
     if (isBuildIntent && focusMode === "speed" && process.env.NODE_ENV !== "production") {
