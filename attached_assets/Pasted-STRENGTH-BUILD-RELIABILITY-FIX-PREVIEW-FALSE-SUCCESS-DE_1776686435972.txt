@@ -1,0 +1,111 @@
+STRENGTH BUILD RELIABILITY FIX — PREVIEW + FALSE SUCCESS DETECTION
+
+We are encountering a critical issue:
+
+The AI is returning confirmation messages like:
+"Built. Your program is ready. Check the Program tab."
+
+WITHOUT returning a JSON program.
+
+This causes:
+- structuredData = null
+- no DB save
+- right panel shows "Ready to build"
+
+We MUST apply the same protections used in speed mode to strength mode.
+
+----------------------------------------
+TASK 1 — Extend preview detection to ALL build modes
+----------------------------------------
+
+In detectIncompleteBuildResponse(), ADD:
+
+PATTERNS:
+- "built your"
+- "program is ready"
+- "check the program tab"
+- "ready to go"
+- "your plan is ready"
+
+----------------------------------------
+TASK 2 — Add length guard (global)
+----------------------------------------
+
+IF:
+- isBuildIntent === true
+- AND structuredData === null
+- AND response length < 400 chars
+
+→ FORCE RETRY
+
+----------------------------------------
+TASK 3 — Apply retry logic to strength builds
+----------------------------------------
+
+Currently retry is scoped to speed/mobility.
+
+CHANGE:
+
+IF isBuildIntent AND structuredData === null:
+  → ALWAYS run retry (ALL focus modes)
+
+----------------------------------------
+TASK 4 — Add STRICT BUILD MODE retry message
+----------------------------------------
+
+Retry prompt:
+
+"CRITICAL FAILURE: You returned a confirmation message instead of a program.
+
+You MUST return a complete JSON program.
+
+Do NOT:
+- Confirm completion
+- Say 'built'
+- Refer to UI
+- Output anything except JSON
+
+Return the FULL program now."
+
+----------------------------------------
+TASK 5 — HARD BLOCK final fallback
+----------------------------------------
+
+If retry fails:
+
+DO NOT return success message.
+
+Return:
+
+"I wasn't able to complete your program build. The AI returned an invalid response. Try again."
+
+----------------------------------------
+TASK 6 — Add audit log
+----------------------------------------
+
+Log:
+
+[BuildFailureAudit]
+{
+  focusMode,
+  previewDetected,
+  falseSuccessDetected,
+  retryTriggered,
+  retrySucceeded,
+  parseSucceeded,
+  programSaved
+}
+
+----------------------------------------
+SUCCESS CRITERIA
+----------------------------------------
+
+A strength build CANNOT:
+- Return text-only confirmation
+- Skip JSON
+- Appear successful without DB save
+
+System must either:
+1) Save program → show in right panel
+OR
+2) Fail clearly → prompt retry
