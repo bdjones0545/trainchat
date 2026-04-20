@@ -2602,10 +2602,33 @@ export async function generateAIResponse(
   // irrelevant and just burn input tokens. Suppress them on the build path.
   //   - insightHint: next-session training insights — irrelevant before first build
   //   - conversionHint: free-tier upsell coaching language — never needed during a build
+  //   - focusModeContext (mobility only): cluster suppression rules, dose profiles,
+  //     session log interpretation — all ~15-20K chars. On the build path the
+  //     architecture brief already provides the full session skeleton + exercise
+  //     vocabulary + sequencing rules. The full context is needed only for edits
+  //     and continuation conversations, not initial generation.
+  //   - focusModeAdaptationContext (mobility only): progression gates, joint adaptation
+  //     rules, predictive signals — useful in conversation, not initial build.
   const filteredInsightHint    = isBuildIntent ? null : (insightHint ?? null);
   const filteredConversionHint = isBuildIntent ? null : (conversionHint ?? null);
+  const filteredFocusModeContext = (isBuildIntent && focusMode === "mobility")
+    ? null
+    : focusModeContext;
+  const filteredFocusModeAdaptationContext = (isBuildIntent && focusMode === "mobility")
+    ? null
+    : focusModeAdaptationContext;
+  if (isBuildIntent && focusMode === "mobility" && focusModeContext) {
+    logger.info(
+      {
+        focusMode,
+        suppressedChars: (focusModeContext?.length ?? 0) + (focusModeAdaptationContext?.length ?? 0),
+        reason: "mobility build path — architecture brief covers session structure; cluster/dose/log-interpretation context suppressed to reduce prompt tokens",
+      },
+      "[MobilityBuildPromptOptimizer] Focus mode context suppressed on build path"
+    );
+  }
 
-  const extras = [focusModeContext, focusModeAdaptationContext, behaviorInstructions, profileFillContext, adaptationContext, memoryContext, sessionSportOverride, filteredInsightHint, filteredConversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, agentIntentProfileSection, responsePolicySection, architectureBriefText, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection, buildCompactInstruction]
+  const extras = [filteredFocusModeContext, filteredFocusModeAdaptationContext, behaviorInstructions, profileFillContext, adaptationContext, memoryContext, sessionSportOverride, filteredInsightHint, filteredConversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, agentIntentProfileSection, responsePolicySection, architectureBriefText, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection, buildCompactInstruction]
     .filter(Boolean)
     .join("\n\n");
   const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;
