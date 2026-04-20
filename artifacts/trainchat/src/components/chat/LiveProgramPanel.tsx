@@ -489,24 +489,77 @@ function EmptyProgramState({ buildingState }: { buildingState?: BuildingState })
   );
 }
 
-// ─── Vibe refinement chip definitions ────────────────────────────────────────
+// ─── Focus-aware refinement chip definitions ──────────────────────────────────
 
-const GLOBAL_CHIPS: { label: string; message: string }[] = [
-  { label: "More Explosive", message: "Make this program more explosive" },
-  { label: "More Strength", message: "Make this program more strength focused" },
-  { label: "More Endurance", message: "Add more endurance work to this program" },
-  { label: "Shorter Sessions", message: "Shorten all sessions" },
-  { label: "Lower Impact", message: "Make this program lower impact" },
-  { label: "Home Gym Version", message: "Convert this program for a home gym" },
-];
+interface GlobalChip {
+  label: string;
+  message: string;
+  structuredIntent: string;
+}
 
-const SESSION_ACTIONS: { label: string; button?: string; buildMessage: (dayNum: number) => string }[] = [
-  { label: "More Explosive", buildMessage: (d) => `Make Day ${d} more explosive` },
-  { label: "Easier", button: "day_regression", buildMessage: (d) => `Make Day ${d} easier` },
-  { label: "Harder", button: "day_progression", buildMessage: (d) => `Make Day ${d} harder` },
-  { label: "Shorter", buildMessage: (d) => `Make Day ${d} shorter` },
-  { label: "Add Exercise", button: "add_exercise", buildMessage: (d) => `Add a new exercise to Day ${d}` },
-];
+const FOCUS_GLOBAL_CHIPS: Record<FocusMode, GlobalChip[]> = {
+  strength: [
+    { label: "More Explosive",   message: "Make this strength program more explosive and power-focused",          structuredIntent: "strength_more_explosive" },
+    { label: "More Strength",    message: "Make this program more strength focused",                               structuredIntent: "strength_more_strength" },
+    { label: "More Endurance",   message: "Add more endurance work to this strength program",                     structuredIntent: "strength_more_endurance" },
+    { label: "Shorter Sessions", message: "Shorten all strength sessions",                                        structuredIntent: "strength_shorten_sessions" },
+    { label: "Lower Impact",     message: "Make this strength program lower impact",                              structuredIntent: "strength_lower_impact" },
+    { label: "Home Gym Version", message: "Convert this strength program for a home gym",                        structuredIntent: "strength_home_gym" },
+  ],
+  speed: [
+    { label: "More Acceleration",      message: "Shift this speed program toward acceleration and drive phase development", structuredIntent: "speed_more_acceleration" },
+    { label: "More Max Velocity",      message: "Shift this speed program toward max velocity development",                structuredIntent: "speed_more_max_velocity" },
+    { label: "More Reactive",          message: "Make this speed block more reactive and elastic",                        structuredIntent: "speed_more_reactive" },
+    { label: "More Deceleration",      message: "Add more deceleration and change of direction work to this speed program", structuredIntent: "speed_more_deceleration" },
+    { label: "Shorter Sessions",       message: "Shorten all speed sessions",                                             structuredIntent: "speed_shorten_sessions" },
+    { label: "Lower Impact",           message: "Reduce impact but keep speed intent in this program",                    structuredIntent: "speed_lower_impact" },
+    { label: "Home / Limited Space",   message: "Adapt this speed program for limited space training",                    structuredIntent: "speed_limited_space" },
+  ],
+  mobility: [
+    { label: "More Hip Focus",          message: "Shift this mobility program toward hip mobility and end-range control",  structuredIntent: "mobility_more_hip_focus" },
+    { label: "More Recovery Flow",      message: "Make this mobility program more recovery and restoration focused",        structuredIntent: "mobility_more_recovery_flow" },
+    { label: "More End-Range Control",  message: "Increase end-range control emphasis in this mobility program",           structuredIntent: "mobility_end_range_control" },
+    { label: "More Thoracic / Spine",   message: "Add more thoracic mobility and spine work to this program",             structuredIntent: "mobility_thoracic_spine" },
+    { label: "Shorter Sessions",        message: "Shorten these mobility sessions",                                        structuredIntent: "mobility_shorten_sessions" },
+    { label: "Lower Intensity",         message: "Lower the intensity of this mobility program",                          structuredIntent: "mobility_lower_intensity" },
+    { label: "Desk Reset Version",      message: "Create a desk reset version of this mobility program",                  structuredIntent: "mobility_desk_reset" },
+  ],
+};
+
+// ─── Focus-aware session action definitions ────────────────────────────────────
+
+interface SessionAction {
+  label: string;
+  button?: string;
+  structuredIntent: string;
+  buildMessage: (dayNum: number) => string;
+}
+
+const FOCUS_SESSION_ACTIONS: Record<FocusMode, SessionAction[]> = {
+  strength: [
+    { label: "More Explosive", structuredIntent: "strength_day_more_explosive", buildMessage: (d) => `Make Day ${d} of this strength program more explosive` },
+    { label: "Easier",         structuredIntent: "strength_day_easier",         button: "day_regression", buildMessage: (d) => `Make Day ${d} easier` },
+    { label: "Harder",         structuredIntent: "strength_day_harder",         button: "day_progression", buildMessage: (d) => `Make Day ${d} harder` },
+    { label: "Shorter",        structuredIntent: "strength_day_shorter",        buildMessage: (d) => `Make Day ${d} shorter` },
+    { label: "Add Exercise",   structuredIntent: "strength_day_add_exercise",   button: "add_exercise", buildMessage: (d) => `Add a new exercise to Day ${d}` },
+  ],
+  speed: [
+    { label: "More Acceleration", structuredIntent: "speed_day_more_acceleration", buildMessage: (d) => `Shift Day ${d} of this speed program toward acceleration` },
+    { label: "More Reactive",     structuredIntent: "speed_day_more_reactive",     buildMessage: (d) => `Make Day ${d} of this speed block more reactive` },
+    { label: "Easier",            structuredIntent: "speed_day_easier",            button: "day_regression", buildMessage: (d) => `Make Day ${d} easier` },
+    { label: "Harder",            structuredIntent: "speed_day_harder",            button: "day_progression", buildMessage: (d) => `Make Day ${d} harder` },
+    { label: "Shorter",           structuredIntent: "speed_day_shorter",           buildMessage: (d) => `Shorten Day ${d} of this speed program` },
+    { label: "Add Drill",         structuredIntent: "speed_day_add_drill",         button: "add_exercise", buildMessage: (d) => `Add a new speed drill to Day ${d}` },
+  ],
+  mobility: [
+    { label: "More Hip Focus",  structuredIntent: "mobility_day_more_hip_focus",  buildMessage: (d) => `Shift Day ${d} of this mobility program toward hip mobility` },
+    { label: "More Recovery",   structuredIntent: "mobility_day_more_recovery",   buildMessage: (d) => `Make Day ${d} of this mobility program more recovery focused` },
+    { label: "Easier",          structuredIntent: "mobility_day_easier",          button: "day_regression", buildMessage: (d) => `Make Day ${d} easier` },
+    { label: "Harder",          structuredIntent: "mobility_day_harder",          button: "day_progression", buildMessage: (d) => `Make Day ${d} harder` },
+    { label: "Shorter",         structuredIntent: "mobility_day_shorter",         buildMessage: (d) => `Shorten Day ${d} of this mobility program` },
+    { label: "Add Movement",    structuredIntent: "mobility_day_add_movement",    button: "add_exercise", buildMessage: (d) => `Add a new mobility movement to Day ${d}` },
+  ],
+};
 
 const EXERCISE_ACTIONS: { label: string; buildMessage: (name: string) => string }[] = [
   { label: "Swap", buildMessage: (n) => `Swap ${n} with something similar` },
@@ -651,7 +704,16 @@ function ProgramTab({
   ) {
     if (!onSendMessage || buildingState?.isBuilding) return;
     setPendingRefinement(key);
-    onSendMessage(message, { source: "right_panel", ...options });
+    const payload = { source: "right_panel", ...options };
+    console.log("[SidebarEditExecutionAudit]", {
+      buttonPressed: key,
+      focusMode: panelFocusMode,
+      commandSent: message,
+      structuredIntent: options?.structuredIntent ?? null,
+      interactionType: options?.interactionType ?? null,
+      payload,
+    });
+    onSendMessage(message, payload);
     onClose?.();
   }
 
@@ -1262,16 +1324,20 @@ function ProgramTab({
             Refine this program
           </p>
 
-          {/* Global chips — 36px height */}
+          {/* Global chips — 36px height, focus-aware */}
           <div className="flex flex-wrap gap-2">
-            {GLOBAL_CHIPS.map((chip) => {
+            {(FOCUS_GLOBAL_CHIPS[panelFocusMode] ?? FOCUS_GLOBAL_CHIPS.strength).map((chip) => {
               const key = `global-${chip.label}`;
               const isLoading = pendingRefinement === key;
               const isDisabled = !!buildingState?.isBuilding;
               return (
                 <button
                   key={chip.label}
-                  onClick={() => sendRefinement(chip.message, key, { interactionType: "global_chip" })}
+                  onClick={() => sendRefinement(chip.message, key, {
+                    interactionType: "global_chip",
+                    structuredIntent: chip.structuredIntent,
+                    focusMode: panelFocusMode,
+                  })}
                   disabled={isDisabled}
                   className={`h-9 inline-flex items-center gap-1.5 px-3.5 rounded-full text-[11px] font-semibold border transition-all duration-150 active:scale-95 select-none ${
                     isLoading
@@ -1535,10 +1601,10 @@ function ProgramTab({
                         </div>
                       )}
 
-                      {/* Session refine actions — 32px pills */}
+                      {/* Session refine actions — 32px pills, focus-aware */}
                       {onSendMessage && (
                         <div className="px-3 py-2.5 flex flex-wrap gap-1.5 border-b border-border/30">
-                          {SESSION_ACTIONS.map((action) => {
+                          {(FOCUS_SESSION_ACTIONS[panelFocusMode] ?? FOCUS_SESSION_ACTIONS.strength).map((action) => {
                             const key = `day-${idx}-${action.label}`;
                             const isLoading = pendingRefinement === key;
                             const isDisabled = !!buildingState?.isBuilding;
@@ -1549,6 +1615,8 @@ function ProgramTab({
                                   sendRefinement(action.buildMessage(day.dayNumber), key, {
                                     dayIndex: idx,
                                     interactionType: "session_action",
+                                    structuredIntent: action.structuredIntent,
+                                    focusMode: panelFocusMode,
                                     ...(action.button ? { button: action.button } : {}),
                                   })
                                 }
@@ -1715,6 +1783,7 @@ function ProgramTab({
                                             dayIndex: idx,
                                             exerciseId: ex.name,
                                             interactionType: "exercise_action",
+                                            focusMode: panelFocusMode,
                                           });
                                         }
                                       }}
