@@ -1,0 +1,189 @@
+TARGETED SPEED LIBRARY EXPANSION + LIVE DATABASE SEEDING
+
+CONTEXT:
+The Speed library metadata audit is complete.
+
+Current status:
+- metadata is clean
+- all exercises have family/slot/quality coverage
+- no singleton clusters remain
+- the library is ready for scoring-based selection
+
+However, the library is still likely too shallow in some areas for long-term high-quality variation.
+
+Known weak points:
+- speed_endurance family is thin
+- max_velocity family/cluster depth is limited
+- some support / tissue-prep / reactive areas may become repetitive over repeated builds
+
+We now need to:
+1. expand the weak areas of the Speed library
+2. tag everything correctly
+3. seed the new/updated exercises into the live database
+4. verify the live DB is actually ready for library-driven speed selection
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Expand the Speed library in a targeted way and seed the finished library updates into the live database so the scoring-based selector can use them immediately.
+
+==================================================
+TASK 1 — AUDIT FAMILY DEPTH (NOT JUST METADATA)
+==================================================
+
+Create a depth audit that reports:
+- exercises per family
+- exercises per cluster
+- exercises per slot
+- W1/W3/W4 suitability coverage by family
+- repeat risk over a 4-week block
+
+Return weak families/clusters that are technically valid but too shallow.
+
+==================================================
+TASK 2 — PRIORITIZE EXPANSION AREAS
+==================================================
+
+Prioritize additions in this order:
+
+1. speed_endurance
+2. max_velocity
+3. reactive_agility / footwork_rhythm
+4. return_to_speed / tissue_prep
+5. support slot depth
+
+==================================================
+TASK 3 — ADD TARGETED EXERCISES
+==================================================
+
+Expand the library with real speed drills that improve depth, including examples like:
+
+Speed Endurance:
+- tempo run variations
+- repeat sprint efforts
+- shuttle repeat efforts
+- curved repeat sprint
+- bike sprint variants if supported
+
+Max Velocity:
+- flying 10m / 20m
+- build-up sprint variations
+- dribble runs
+- wicket variants
+
+Reactive / Footwork:
+- more mirror / cue-based drills
+- lateral rhythm drills
+- open vs closed reactive drills
+
+Return-to-Speed / Tissue Prep:
+- calf prep
+- hamstring isometrics
+- adductor prep
+- low-level return drills
+- submaximal acceleration prep
+
+==================================================
+TASK 4 — TAG ALL NEW EXERCISES CORRECTLY
+==================================================
+
+Every new drill must have:
+- movement family
+- speed quality
+- slot
+- neuralDemand
+- fatigueCost
+- cluster
+- equipment
+- space requirement
+- week-role suitability
+
+Do not add untagged drills.
+
+==================================================
+TASK 5 — SEED TO THE LIVE DATABASE
+==================================================
+
+After the new/updated speed drills are finalized, seed them into the live database.
+
+Requirements:
+- insert new exercises into the production/live exercise table
+- update existing records safely if metadata was improved
+- avoid duplicates by checking canonical name / slug / unique identifiers first
+- preserve existing IDs when updating records instead of recreating them
+- keep all speed metadata fields intact in the DB
+- ensure the live selector can immediately query and use the seeded records
+
+Add clear logging for seeding:
+
+[SpeedLibrarySeedAudit] {
+  insertedCount,
+  updatedCount,
+  skippedDuplicateCount,
+  failedCount,
+  familiesAffected,
+  clustersAffected
+}
+
+==================================================
+TASK 6 — VERIFY LIVE DATABASE CONTENT
+==================================================
+
+After seeding, run a verification audit directly against the live database.
+
+Return:
+- total speed exercises now present in live DB
+- family counts
+- cluster counts
+- slot counts
+- whether the newly added exercises are queryable
+- whether any expected drill failed to seed
+
+Spot-check at least 10 newly added drills and confirm they exist in live DB with full metadata.
+
+==================================================
+TASK 7 — RE-RUN COVERAGE REPORT
+==================================================
+
+After expansion + seeding, return:
+- family depth before/after
+- cluster depth before/after
+- slot depth before/after
+- repeat-risk improvement
+- remaining weak areas if any
+
+==================================================
+TASK 8 — CONFIRM READY FOR LIBRARY-DRIVEN SELECTION
+==================================================
+
+After the live DB is updated, confirm whether the Speed engine is now strong enough to move away from hardcoded drill banks and toward library-first selection.
+
+Return:
+- yes/no
+- what still blocks that move if anything
+- which families are now strong enough for full selector use
+
+==================================================
+TASK 9 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. which weak areas were expanded
+2. what drills were added
+3. what was seeded into live DB
+4. seed audit results
+5. live DB verification results
+6. how the new depth improves selector quality
+7. whether the Speed library is now strong enough for full library-driven generation
+
+==================================================
+FINAL STANDARD
+==================================================
+
+The Speed library should now be:
+- metadata-complete
+- deep enough for variation
+- seeded into the live database
+- queryable by the real selector
+- strong enough to support full library-driven Speed generation without depending on small hardcoded banks for quality
