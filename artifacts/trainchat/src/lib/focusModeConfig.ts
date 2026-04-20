@@ -6,6 +6,7 @@
  * mode looks and feels like — the shell itself stays constant.
  */
 
+import type React from "react";
 import type { FocusMode } from "./focusMode";
 
 // ─── Visual Identity ──────────────────────────────────────────────────────────
@@ -23,6 +24,18 @@ export interface FocusModeTheme {
   iconColorClass: string;
   /** Chip highlight classes for primary/active chips */
   chipHighlightClass: string;
+  /** Filled pill active background for the mode switcher */
+  pillActiveClass: string;
+  /** Inline glow style for active pill */
+  pillGlow: React.CSSProperties;
+  /** Badge background class for active focus badge */
+  badgeClass: string;
+  /** Label for the "X mode active" confirmation */
+  confirmLabel: string;
+  /** Lucide icon name to show in the switcher */
+  iconName: "Dumbbell" | "Zap" | "Leaf";
+  /** Inactive icon + label class */
+  inactiveClass: string;
 }
 
 // ─── Suggestion Chips ─────────────────────────────────────────────────────────
@@ -49,9 +62,13 @@ export interface FocusModeConfig {
   description: string;
   emptyStateHeadline: string;
   emptyStateSubline: string;
+  /** Short explanation shown in the info popover */
+  focusExplanation: string;
   theme: FocusModeTheme;
   suggestionChips: SuggestionChip[];
   quickActions: QuickAction[];
+  /** Keywords that signal this mode (used for wrong-focus nudge) */
+  keywords: string[];
 }
 
 // ─── Configs ──────────────────────────────────────────────────────────────────
@@ -63,6 +80,7 @@ const STRENGTH_CONFIG: FocusModeConfig = {
   description: "Lifting, hypertrophy, power-strength, and structural development",
   emptyStateHeadline: "Build your strength system",
   emptyStateSubline: "Describe your goal, constraints, or sport — I'll build it live.",
+  focusExplanation: "Builds lifting, hypertrophy, power-strength, and structural development programs",
   theme: {
     accentHsl: "var(--primary)",
     bgTintClass: "",
@@ -70,7 +88,14 @@ const STRENGTH_CONFIG: FocusModeConfig = {
     tabUnderlineClass: "bg-primary",
     iconColorClass: "text-primary",
     chipHighlightClass: "text-primary border border-primary/50 bg-primary/10 hover:bg-primary/20 hover:border-primary/70",
+    pillActiveClass: "bg-primary text-white",
+    pillGlow: { boxShadow: "0 0 14px hsl(var(--primary)/0.55)" },
+    badgeClass: "bg-primary/15 text-primary border border-primary/30",
+    confirmLabel: "Strength mode active",
+    iconName: "Dumbbell",
+    inactiveClass: "text-muted-foreground hover:text-foreground hover:bg-muted/50",
   },
+  keywords: ["squat", "deadlift", "bench", "barbell", "dumbbell", "hypertrophy", "lift", "1rm", "strength", "powerlifting", "bodybuilding", "muscle"],
   suggestionChips: [
     { label: "Build a 4-day strength system", prompt: "Design a 4-day strength training system for me", highlight: true },
     { label: "Work around pain or injury", prompt: "Help me train around an injury or pain", highlight: false },
@@ -93,6 +118,7 @@ const SPEED_CONFIG: FocusModeConfig = {
   description: "Acceleration, reactive output, change of direction, and footwork",
   emptyStateHeadline: "Build your speed system",
   emptyStateSubline: "Tell me your sport, position, or speed goal — I'll design it.",
+  focusExplanation: "Builds sprint, acceleration, deceleration, agility, and footwork programs",
   theme: {
     accentHsl: "var(--primary)",
     bgTintClass: "bg-[hsl(200,60%,98%)] dark:bg-[hsl(200,30%,8%)]",
@@ -100,7 +126,14 @@ const SPEED_CONFIG: FocusModeConfig = {
     tabUnderlineClass: "bg-sky-500",
     iconColorClass: "text-sky-500 dark:text-sky-400",
     chipHighlightClass: "text-sky-600 dark:text-sky-400 border border-sky-500/50 bg-sky-500/10 hover:bg-sky-500/20 hover:border-sky-500/70",
+    pillActiveClass: "bg-sky-500 text-white",
+    pillGlow: { boxShadow: "0 0 14px rgba(14,165,233,0.55)" },
+    badgeClass: "bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30",
+    confirmLabel: "Speed / Footwork mode active",
+    iconName: "Zap",
+    inactiveClass: "text-muted-foreground hover:text-foreground hover:bg-muted/50",
   },
+  keywords: ["sprint", "speed", "agility", "footwork", "acceleration", "deceleration", "change of direction", "reactive", "ladder", "cone", "fast feet"],
   suggestionChips: [
     { label: "Build a speed & acceleration program", prompt: "Design a speed and acceleration training program for me", highlight: true },
     { label: "Improve change of direction", prompt: "I need to improve my change of direction and agility", highlight: false },
@@ -123,6 +156,7 @@ const MOBILITY_CONFIG: FocusModeConfig = {
   description: "Range of motion, joint control, positional quality, and restoration",
   emptyStateHeadline: "Build your mobility system",
   emptyStateSubline: "Tell me what you need to restore or unlock — I'll design the system.",
+  focusExplanation: "Builds range-of-motion, joint control, and recovery-focused programs",
   theme: {
     accentHsl: "var(--primary)",
     bgTintClass: "bg-[hsl(160,30%,98%)] dark:bg-[hsl(160,20%,8%)]",
@@ -130,7 +164,14 @@ const MOBILITY_CONFIG: FocusModeConfig = {
     tabUnderlineClass: "bg-emerald-500",
     iconColorClass: "text-emerald-600 dark:text-emerald-400",
     chipHighlightClass: "text-emerald-700 dark:text-emerald-400 border border-emerald-500/50 bg-emerald-500/10 hover:bg-emerald-500/20 hover:border-emerald-500/70",
+    pillActiveClass: "bg-emerald-500 text-white",
+    pillGlow: { boxShadow: "0 0 14px rgba(16,185,129,0.55)" },
+    badgeClass: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30",
+    confirmLabel: "Mobility mode active",
+    iconName: "Leaf",
+    inactiveClass: "text-muted-foreground hover:text-foreground hover:bg-muted/50",
   },
+  keywords: ["mobility", "flexibility", "range of motion", "hip", "shoulder mobility", "joint", "stretch", "restore", "recovery", "fascia", "tissue", "stiffness", "yoga"],
   suggestionChips: [
     { label: "Restore hip mobility", prompt: "Design a hip mobility and range of motion restoration program for me", highlight: true },
     { label: "Improve shoulder range", prompt: "I want to improve my shoulder range of motion and control", highlight: false },
@@ -156,3 +197,21 @@ export function getFocusModeConfig(mode: FocusMode): FocusModeConfig {
   return FOCUS_MODE_CONFIGS[mode];
 }
 
+/**
+ * Detect if a message text contains strong signals for a different focus mode.
+ * Returns the suggested mode or null if no mismatch detected.
+ */
+export function detectFocusMismatch(
+  currentMode: FocusMode,
+  text: string
+): FocusMode | null {
+  const lower = text.toLowerCase();
+  const modes: FocusMode[] = ["strength", "speed", "mobility"];
+  for (const mode of modes) {
+    if (mode === currentMode) continue;
+    const cfg = FOCUS_MODE_CONFIGS[mode];
+    const matchCount = cfg.keywords.filter((kw) => lower.includes(kw)).length;
+    if (matchCount >= 2) return mode;
+  }
+  return null;
+}

@@ -4,7 +4,7 @@ import {
   SendHorizontal, Zap, PanelLeftClose, PanelLeft, Activity,
   Menu, Target, CreditCard, LogOut, Dumbbell, UserPlus,
   MessageSquare, Plus, RotateCcw, Brain, ChevronDown, ChevronRight,
-  CheckCircle2, Library, Trash2, AlertTriangle,
+  CheckCircle2, Library, Trash2, AlertTriangle, Info, Leaf, X,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -48,7 +48,7 @@ import ShareMomentPrompt from "@/components/share/ShareMomentPrompt";
 import ShareMomentModal from "@/components/share/ShareMomentModal";
 import { buildShareMoment, type ShareMoment } from "@/types/share-moments";
 import { useFocusMode } from "@/hooks/useFocusMode";
-import { getFocusModeConfig } from "@/lib/focusModeConfig";
+import { getFocusModeConfig, detectFocusMismatch, FOCUS_MODE_CONFIGS } from "@/lib/focusModeConfig";
 import type { FocusMode } from "@/lib/focusMode";
 
 async function fetchSubscription() {
@@ -167,6 +167,10 @@ export default function Chat() {
   const [mobilePanel, setMobilePanel] = useState<SlidePanel>(null);
   const [showCalibration, setShowCalibration] = useState(false);
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
+  const [focusSwitchConfirm, setFocusSwitchConfirm] = useState<string | null>(null);
+  const [showFocusInfo, setShowFocusInfo] = useState(false);
+  const [focusMismatch, setFocusMismatch] = useState<{ suggested: FocusMode; text: string } | null>(null);
+  const focusSwitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [calibrationNudgeShown, setCalibrationNudgeShown] = useState(false);
   const [corePulseActive, setCorePulseActive] = useState(false);
   const corePulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -793,9 +797,26 @@ export default function Chat() {
     corePulseTimerRef.current = setTimeout(() => setCorePulseActive(false), 500);
   }
 
+  function handleFocusSwitch(mode: FocusMode) {
+    if (mode === focusMode) return;
+    setFocusMode(mode);
+    setFocusMismatch(null);
+    const cfg = getFocusModeConfig(mode);
+    setFocusSwitchConfirm(cfg.theme.confirmLabel);
+    if (focusSwitchTimerRef.current) clearTimeout(focusSwitchTimerRef.current);
+    focusSwitchTimerRef.current = setTimeout(() => setFocusSwitchConfirm(null), 2400);
+  }
+
   async function handleSend(text?: string, extraContext?: Record<string, unknown>) {
     const content = (text ?? inputText).trim();
     if (!content || stream.isActive) return;
+
+    const mismatch = detectFocusMismatch(focusMode, content);
+    if (mismatch && !focusMismatch) {
+      setFocusMismatch({ suggested: mismatch, text: content });
+      return;
+    }
+    setFocusMismatch(null);
 
     // If there is no active conversation (e.g. user deleted all sessions), auto-create
     // one now so the first message lands in a fresh conversation.
@@ -1885,6 +1906,68 @@ export default function Chat() {
         </div>
       )}
 
+      {/* ─── Focus Info modal ─── */}
+      {showFocusInfo && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+          onClick={() => setShowFocusInfo(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm bg-card border border-border rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-250"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/60">
+              <div>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-0.5">Choose Your</p>
+                <h2 className="text-base font-bold text-foreground">Training Focus</h2>
+              </div>
+              <button onClick={() => setShowFocusInfo(false)} className="text-muted-foreground/50 hover:text-muted-foreground transition-colors p-1 rounded-lg hover:bg-muted/30">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {/* Mode explanations */}
+            <div className="px-5 py-4 space-y-4">
+              {(Object.values(FOCUS_MODE_CONFIGS) as ReturnType<typeof getFocusModeConfig>[]).map((cfg) => {
+                const isActive = focusMode === cfg.id;
+                const Icon = cfg.theme.iconName === "Dumbbell" ? Dumbbell : cfg.theme.iconName === "Zap" ? Zap : Leaf;
+                return (
+                  <button
+                    key={cfg.id}
+                    onClick={() => { handleFocusSwitch(cfg.id); setShowFocusInfo(false); }}
+                    className={`w-full flex items-start gap-3 p-3 rounded-xl border transition-all text-left ${
+                      isActive
+                        ? `${cfg.theme.badgeClass} border-current/30`
+                        : "border-border hover:border-border/80 hover:bg-muted/20"
+                    }`}
+                  >
+                    <span className={`mt-0.5 flex-shrink-0 p-2 rounded-lg ${isActive ? "bg-white/20" : "bg-muted/40"}`}>
+                      <Icon className={`w-4 h-4 ${isActive ? "" : cfg.theme.iconColorClass}`} />
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[12px] font-semibold text-foreground">{cfg.label}</span>
+                        {isActive && (
+                          <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${cfg.theme.badgeClass}`}>Active</span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                        {cfg.focusExplanation}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="px-5 pb-5">
+              <p className="text-[10px] text-muted-foreground/60 text-center leading-relaxed">
+                Your focus changes the type of program your agent builds and how it responds to you.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── Mobile header ─── */}
       <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border bg-background/95 backdrop-blur-sm flex-shrink-0 z-10">
         <button
@@ -1960,38 +2043,57 @@ export default function Chat() {
           </button>
 
 
-          {/* ── Focus Mode Tabs ────────────────────────────────────────────────
-              Top-level mode switcher. Clean, premium, minimal.
-              Switching tabs changes the active programming focus. ── */}
-          <div className="flex-shrink-0 flex items-center justify-center border-b border-border/60 bg-background/95 backdrop-blur-sm pt-1">
-            {([
-              { id: "strength" as FocusMode, label: "Strength" },
-              { id: "speed" as FocusMode, label: "Speed / Footwork" },
-              { id: "mobility" as FocusMode, label: "Mobility" },
-            ] as const).map((tab) => {
-              const isActive = focusMode === tab.id;
-              const cfg = getFocusModeConfig(tab.id);
-              const activeTabClass = cfg.theme.tabActiveClass;
-              const underlineClass = cfg.theme.tabUnderlineClass;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setFocusMode(tab.id)}
-                  className={`relative px-4 py-2.5 text-xs font-semibold tracking-wide transition-all duration-200 ${
-                    isActive
-                      ? activeTabClass
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {tab.label}
-                  {isActive && (
-                    <span
-                      className={`absolute bottom-0 left-0 right-0 h-[2px] rounded-full ${underlineClass}`}
-                    />
-                  )}
-                </button>
-              );
-            })}
+          {/* ── Focus Mode Switcher ─────────────────────────────────────────
+              Premium segmented control. Switching changes the active
+              programming focus and agent behavior. ── */}
+          <div className="flex-shrink-0 border-b border-border/60 bg-background/95 backdrop-blur-sm">
+            {/* Section label row */}
+            <div className="flex items-center justify-center gap-1 pt-2 pb-1">
+              <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-muted-foreground/50 select-none">
+                Training Focus
+              </span>
+              <button
+                onClick={() => setShowFocusInfo(true)}
+                className="text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                title="What is Training Focus?"
+              >
+                <Info className="w-2.5 h-2.5" />
+              </button>
+            </div>
+
+            {/* Pill switcher */}
+            <div className="flex items-center justify-center gap-2 pb-2.5 px-3">
+              {(Object.values(FOCUS_MODE_CONFIGS) as ReturnType<typeof getFocusModeConfig>[]).map((cfg) => {
+                const isActive = focusMode === cfg.id;
+                const Icon = cfg.theme.iconName === "Dumbbell" ? Dumbbell : cfg.theme.iconName === "Zap" ? Zap : Leaf;
+                return (
+                  <button
+                    key={cfg.id}
+                    onClick={() => handleFocusSwitch(cfg.id)}
+                    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[11px] font-semibold transition-all duration-200 select-none ${
+                      isActive
+                        ? `${cfg.theme.pillActiveClass} shadow-md`
+                        : cfg.theme.inactiveClass + " bg-muted/30"
+                    }`}
+                    style={isActive ? cfg.theme.pillGlow : undefined}
+                    title={cfg.description}
+                  >
+                    <Icon className="w-3 h-3 flex-shrink-0" />
+                    <span className="leading-none">{cfg.shortLabel === "Speed" ? "Speed / Footwork" : cfg.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Switch confirmation toast */}
+            {focusSwitchConfirm && (
+              <div className="flex items-center justify-center pb-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-semibold ${getFocusModeConfig(focusMode).theme.badgeClass}`}>
+                  <CheckCircle2 className="w-3 h-3" />
+                  {focusSwitchConfirm}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Compact sticky context bar — shows when a program exists */}
@@ -2013,6 +2115,17 @@ export default function Chat() {
                     displayProgram.weekNumber ? `Week ${displayProgram.weekNumber}` : null,
                   ].filter(Boolean).join(" · ")}
                 </span>
+                {/* Active focus badge */}
+                {(() => {
+                  const activeCfg = getFocusModeConfig(focusMode);
+                  const BadgeIcon = activeCfg.theme.iconName === "Dumbbell" ? Dumbbell : activeCfg.theme.iconName === "Zap" ? Zap : Leaf;
+                  return (
+                    <span className={`hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold flex-shrink-0 ${activeCfg.theme.badgeClass}`}>
+                      <BadgeIcon className="w-2.5 h-2.5" />
+                      {activeCfg.shortLabel}
+                    </span>
+                  );
+                })()}
               </div>
               <button
                 onClick={() => {
@@ -2025,6 +2138,59 @@ export default function Chat() {
               </button>
             </div>
           )}
+
+          {/* Wrong-focus nudge banner */}
+          {focusMismatch && (() => {
+            const suggestedCfg = getFocusModeConfig(focusMismatch.suggested);
+            const currentCfg = getFocusModeConfig(focusMode);
+            const SuggestedIcon = suggestedCfg.theme.iconName === "Dumbbell" ? Dumbbell : suggestedCfg.theme.iconName === "Zap" ? Zap : Leaf;
+            return (
+              <div className="flex-shrink-0 mx-4 mt-3 mb-0 rounded-xl border border-border bg-card shadow-sm animate-in fade-in slide-in-from-top-2 duration-200 overflow-hidden">
+                <div className="flex items-start gap-3 p-3">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-semibold text-foreground">
+                      You're in <span className={currentCfg.theme.iconColorClass}>{currentCfg.label}</span> mode
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      This looks like a {suggestedCfg.label} request. Switch to {suggestedCfg.label} for a {suggestedCfg.shortLabel.toLowerCase()}-specific program?
+                    </p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <button
+                        onClick={() => {
+                          handleFocusSwitch(focusMismatch.suggested);
+                          const text = focusMismatch.text;
+                          setFocusMismatch(null);
+                          setTimeout(() => handleSend(text), 50);
+                        }}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold text-white ${suggestedCfg.theme.pillActiveClass} transition-all`}
+                        style={suggestedCfg.theme.pillGlow}
+                      >
+                        <SuggestedIcon className="w-3 h-3" />
+                        Switch to {suggestedCfg.label}
+                      </button>
+                      <button
+                        onClick={() => {
+                          const text = focusMismatch.text;
+                          setFocusMismatch(null);
+                          setTimeout(() => handleSend(text), 50);
+                        }}
+                        className="text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors px-2 py-1.5"
+                      >
+                        Stay in {currentCfg.label}
+                      </button>
+                      <button
+                        onClick={() => setFocusMismatch(null)}
+                        className="ml-auto text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Messages */}
           <div
