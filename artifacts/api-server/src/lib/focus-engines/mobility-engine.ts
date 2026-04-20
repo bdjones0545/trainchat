@@ -1401,6 +1401,60 @@ export function repairMobilityOutput(
   return { repaired, repairsApplied };
 }
 
+// ─── Mobility Preview / Incomplete Build Response Detector ────────────────────
+
+const MOBILITY_PREVIEW_RESPONSE_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
+  { pattern: /i'?ll\s+build/i, label: "I'll build" },
+  { pattern: /here'?s\s+what\s+i'?(?:ll|m)\s+include/i, label: "Here's what I'll include" },
+  { pattern: /once\s+(?:we\s+)?(?:have|get|know)/i, label: "Once we know" },
+  { pattern: /i'?ll\s+map/i, label: "I'll map" },
+  { pattern: /foundation\s+i'?m\s+building/i, label: "foundation I'm building" },
+  { pattern: /built\s+a?\s*\d*[- ]?day/i, label: "Built a X-day (false success announcement)" },
+  { pattern: /here'?s\s+the\s+foundation/i, label: "here's the foundation" },
+  { pattern: /here'?s\s+(?:a\s+)?(?:an?\s+)?(?:overview|outline|preview|scaffold|breakdown)/i, label: "overview/outline language" },
+  { pattern: /i'?(?:ll|'m going to)\s+(?:build|design|create|put together|structure)/i, label: "I'll build/design/create" },
+  { pattern: /i'?(?:ll|'m going to)\s+(?:include|add|incorporate)/i, label: "I'll include/add" },
+  { pattern: /this\s+will\s+be\s+structured/i, label: "this will be structured" },
+  { pattern: /check\s+the\s+(?:program|activity)\s+tab/i, label: "check the program tab (false success)" },
+  { pattern: /built\s+your/i, label: "built your (false success announcement)" },
+  { pattern: /program\s+is\s+ready/i, label: "program is ready (false success announcement)" },
+  { pattern: /your\s+plan\s+is\s+ready/i, label: "your plan is ready (false success announcement)" },
+  { pattern: /your\s+program\s+is\s+ready/i, label: "your program is ready (false success announcement)" },
+  { pattern: /(?:day\s+\d+\s*[:\-—]?\s*(?:we'?ll?|will|i'?ll))/i, label: "day X we'll/will" },
+  { pattern: /once\s+you\s+complete\s+your\s+profile/i, label: "once you complete your profile" },
+  { pattern: /i'?m\s+building\s+around\s+you/i, label: "I'm building around you" },
+];
+
+export interface IncompleteMobilityBuildDetection {
+  isPreview: boolean;
+  triggerPhrase: string | null;
+  confidence: "high" | "low";
+}
+
+/**
+ * Detects whether a mobility response is a preview/planning response rather than
+ * a completed JSON build. Mobility-specific version of detectIncompleteBuildResponse.
+ *
+ * Two detection paths:
+ *   1. Pattern match — mobility-specific preview/false-success phrases
+ *   2. Length guard — a response under 400 chars cannot contain a full mobility program
+ */
+export function detectIncompleteMobilityBuildResponse(text: string): IncompleteMobilityBuildDetection {
+  for (const { pattern, label } of MOBILITY_PREVIEW_RESPONSE_PATTERNS) {
+    if (pattern.test(text)) {
+      return { isPreview: true, triggerPhrase: label, confidence: "high" };
+    }
+  }
+  if (text.length < 400) {
+    return {
+      isPreview: true,
+      triggerPhrase: `short response (${text.length} chars) — not a complete mobility program`,
+      confidence: "high",
+    };
+  }
+  return { isPreview: false, triggerPhrase: null, confidence: "low" };
+}
+
 // ─── Mobility Generation Failure Classifier ───────────────────────────────────
 
 export type MobilityFailureType =

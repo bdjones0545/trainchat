@@ -76,6 +76,9 @@ import {
   validateMobilityOutputForBleed,
   repairMobilityOutput,
   classifyMobilityGenerationFailure,
+  detectIncompleteMobilityBuildResponse,
+  expandMobilitySessionIfTooThin,
+  scoreMobilitySessionDepth,
   type MobilityBleedAuditResult,
 } from "./focus-engines/mobility-engine";
 import { resolveFocusMode, logFocusModeAudit } from "./focus-mode-audit";
@@ -2871,7 +2874,9 @@ export async function generateAIResponse(
               : `short response (${cleanContent.length} chars) — not a complete program`,
             confidence: "high" as const,
           }
-        : detectIncompleteBuildResponse(cleanContent);
+        : focusMode === "mobility"
+          ? detectIncompleteMobilityBuildResponse(cleanContent)
+          : detectIncompleteBuildResponse(cleanContent);
 
       logger.warn(
         {
@@ -2902,7 +2907,7 @@ export async function generateAIResponse(
           programSaved: false,
           phase: "pre-retry",
         }));
-        // Task 6: strength-specific audit
+        // Strength-specific audit
         if (focusMode === "strength") {
           console.log("[StrengthBuildFailureAudit]", JSON.stringify({
             hasJsonBlock,
@@ -2910,6 +2915,22 @@ export async function generateAIResponse(
             truncated: truncated ?? false,
             retryCount: 0,
             finalOutcome: "pending-retry",
+          }));
+        }
+        // Mobility-specific preview failure audit
+        if (focusMode === "mobility" && previewDetection.isPreview) {
+          console.log("[MobilityPreviewFailureAudit]", JSON.stringify({
+            phase: "pre-retry",
+            hasJsonBlock,
+            noJsonPresent,
+            previewDetected: true,
+            triggerPhrase: previewDetection.triggerPhrase,
+            responseLength: cleanContent.length,
+            lengthGuardTriggered,
+            retryTriggered: false,
+            retrySucceeded: false,
+            parseSucceeded: false,
+            programSaved: false,
           }));
         }
       }
@@ -2970,6 +2991,18 @@ Return the FULL program now.`;
                 parseSucceeded: true,
                 truncated: truncated ?? false,
                 retryCount: 1,
+                finalOutcome: "retry-succeeded",
+              }));
+            }
+            if (process.env.NODE_ENV !== "production" && focusMode === "mobility") {
+              console.log("[MobilityPreviewFailureAudit]", JSON.stringify({
+                phase: "post-retry",
+                previewDetected: true,
+                triggerPhrase: previewDetection.triggerPhrase,
+                retryTriggered: true,
+                retrySucceeded: true,
+                parseSucceeded: true,
+                programSaved: false,
                 finalOutcome: "retry-succeeded",
               }));
             }
@@ -3974,6 +4007,58 @@ Output the corrected program JSON and a brief calm confirmation.`;
         if (structuredData && !(structuredData as { focusMode?: string }).focusMode) {
           (structuredData as { focusMode?: string }).focusMode = "mobility";
         }
+
+        // ── Mobility session depth expansion ──────────────────────────────────
+        // Guarantees every mobility session has the minimum exercise count before
+        // the program is returned. Fills missing slots from the approved mobility
+        // drill banks (tissue_prep → controlled_mobility → dynamic → joint_focus →
+        // stability → breathing). Mirrors the speed depth expander exactly.
+        if (structuredData?.days && Array.isArray(structuredData.days)) {
+          const mobilityExpansions: string[] = [];
+          const expandedDays = structuredData.days.map((day: { name?: string; exercises?: Array<{ name: string; sets?: number; reps?: string; rest?: string; notes?: string }> }) => {
+            const { expanded, expansionsApplied } = expandMobilitySessionIfTooThin(day);
+            expansionsApplied.forEach((e) => mobilityExpansions.push(e));
+            return expanded;
+          });
+
+          if (mobilityExpansions.length > 0) {
+            (structuredData as { days: typeof expandedDays }).days = expandedDays;
+            logger.info(
+              {
+                expansionCount: mobilityExpansions.length,
+                expansions: mobilityExpansions,
+              },
+              "[MobilityDepthExpander] Thin mobility sessions expanded with approved drill bank"
+            );
+            if (process.env.NODE_ENV !== "production") {
+              console.log("[MobilityDepthExpander]", JSON.stringify({
+                expansionCount: mobilityExpansions.length,
+                expansions: mobilityExpansions,
+              }));
+            }
+          }
+
+          // Score each session for completeness and log in dev
+          if (process.env.NODE_ENV !== "production") {
+            const depthScores = expandedDays.map((day: { name?: string; exercises?: Array<{ name: string; reps?: string; notes?: string }> }) => ({
+              sessionName: day.name ?? "unnamed",
+              score: scoreMobilitySessionDepth(day),
+            }));
+            console.log("[MobilitySessionDepthAudit]", JSON.stringify({
+              sessions: depthScores.map(({ sessionName, score: s }) => ({
+                name: sessionName,
+                total: s.total,
+                passed: s.passed,
+                depthMet: s.breakdown.depthMet,
+                prepIncluded: s.breakdown.prepIncluded,
+                mobilityProgression: s.breakdown.mobilityProgression,
+                jointClarity: s.breakdown.jointSpecificClarity,
+                stabilityPresent: s.breakdown.stabilityPresent,
+                noBleed: s.breakdown.noBleed,
+              })),
+            }));
+          }
+        }
       }
 
       // ── Strength-specific: session depth expansion ────────────────────────
@@ -4054,6 +4139,32 @@ Output the corrected program JSON and a brief calm confirmation.`;
             parseSucceeded: true,
             programStructureBuilt: true,
             validationPassed: true,
+            failurePoint: null,
+            dayCount: structuredData.days.length,
+            programName: structuredData.programName,
+            sessionNames: structuredData.days.map((d: { name?: string }) => d.name ?? "unnamed"),
+          }));
+        }
+      } else if (focusMode === "mobility") {
+        logger.info(
+          {
+            requestedFocus: "mobility",
+            engineUsed: "openai+mobility-architecture-brief+response-contract",
+            fallbackBuilderUsed: false,
+            generationRejected: false,
+            dayCount: structuredData.days.length,
+            programName: structuredData.programName,
+            allSessionNames: structuredData.days.map((d: { name?: string }) => d.name ?? "unnamed"),
+          },
+          "[MobilityBuildCompletionAudit] Mobility program validated and approved — returning real mobility engine output"
+        );
+        if (process.env.NODE_ENV !== "production") {
+          console.log("[MobilityBuildCompletionAudit]", JSON.stringify({
+            phase: "success",
+            parseSucceeded: true,
+            programStructureBuilt: true,
+            validationPassed: true,
+            bleedDetected: false,
             failurePoint: null,
             dayCount: structuredData.days.length,
             programName: structuredData.programName,
@@ -4141,6 +4252,43 @@ Output the corrected program JSON and a brief calm confirmation.`;
         }
         return {
           content: `I couldn't complete the speed program build — the generation engine is temporarily unavailable.\n\nThis happens occasionally. Want to try again?`,
+          structuredData: null,
+        };
+      }
+      if (focusMode === "mobility") {
+        const mobilityFailureClass = classifyMobilityGenerationFailure({
+          openAICallSucceeded: false,
+          rawContentAvailable: false,
+          parsedJsonAvailable: false,
+          hasDays: false,
+          bleedDetected: false,
+          structureComplete: false,
+        });
+        logger.error(
+          {
+            focusMode,
+            isBuildIntent,
+            fallbackBuilderUsed: false,
+            generationRejected: true,
+            failureType: mobilityFailureClass.type,
+            failureDescription: mobilityFailureClass.description,
+            retryable: mobilityFailureClass.retryable,
+          },
+          "[MobilityOpenAIAudit] Mobility build failed — OpenAI call error — no fallback program generated"
+        );
+        if (process.env.NODE_ENV !== "production") {
+          console.log("[MobilityOpenAIAudit]", JSON.stringify({
+            phase: "api-error",
+            openAIRequestSent: true,
+            responseReceived: false,
+            parseSucceeded: false,
+            validationPassed: false,
+            failurePoint: mobilityFailureClass.type,
+            failureDescription: mobilityFailureClass.description,
+          }));
+        }
+        return {
+          content: `I couldn't complete the mobility program build — the generation engine is temporarily unavailable.\n\nThis happens occasionally. Want to try again? I'll rebuild it from scratch with correct mobility structure.`,
           structuredData: null,
         };
       }
