@@ -1,0 +1,187 @@
+MOBILITY ENGINE HARDENING — MATCH SPEED ENGINE RELIABILITY + STRUCTURE
+
+CONTEXT:
+Strength and Speed engines are now working because they include:
+
+- strict response contracts (JSON only)
+- preview detection + retry system
+- architecture briefs defining session structure
+- post-generation validation and repair
+- depth enforcement
+- deterministic fallback handling
+
+Mobility is currently failing with:
+"I couldn't complete the mobility program build — generation engine encountered an error"
+
+This indicates the Mobility engine has not yet been upgraded to match the Speed system.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Bring Mobility generation to parity with Speed by implementing the same reliability, structure, and enforcement systems.
+
+==================================================
+TASK 1 — ADD STRICT MOBILITY RESPONSE CONTRACT
+==================================================
+
+Create buildMobilityResponseContract()
+
+Must enforce:
+- JSON code block ONLY
+- no prose before JSON
+- no explanations
+- no previews
+- no “I will build” language
+- no “once you complete…” language
+
+Include:
+
+⛔ ABSOLUTE PROHIBITION:
+- no preview
+- no outline
+- no future tense
+- no conversational output
+- ONLY final structured program
+
+==================================================
+TASK 2 — ADD PREVIEW DETECTION
+==================================================
+
+Implement detectIncompleteMobilityBuildResponse()
+
+Detect:
+- "I'll build"
+- "Here's what I'll include"
+- "Once we know"
+- "I'll map"
+- "foundation I'm building"
+- "Built a X-day program" (false success)
+- short responses (<400 chars)
+
+==================================================
+TASK 3 — ADD RETRY SYSTEM
+==================================================
+
+If:
+- structuredData === null
+- AND preview detected OR short response
+
+Then:
+- trigger STRICT RETRY
+- inject failure message
+- force JSON output
+
+If retry fails:
+→ return clean retryable error
+
+==================================================
+TASK 4 — ADD MOBILITY ARCHITECTURE BRIEF
+==================================================
+
+Create buildMobilityArchitectureBrief()
+
+Define session structure:
+
+Each session must include:
+
+1. tissue prep / breathing
+2. joint-specific mobility (target region)
+3. controlled range strengthening
+4. dynamic mobility / movement integration
+5. positional control / stability
+6. optional flow / reset
+
+Also define:
+- hip mobility
+- thoracic mobility
+- ankle mobility
+- shoulder mobility
+- full-body recovery flow
+
+==================================================
+TASK 5 — ENFORCE SESSION DEPTH
+==================================================
+
+Define:
+
+MOBILITY_SESSION_MINIMUM_DEPTH
+
+Typical:
+- minimum 5 exercises
+- target 5–6
+
+Add:
+
+expandMobilitySessionIfTooThin()
+
+==================================================
+TASK 6 — ADD VALIDATION + REPAIR
+==================================================
+
+Create:
+
+validateMobilityOutput()
+repairMobilityOutput()
+
+Check:
+- missing slots
+- too few exercises
+- strength contamination
+- generic titles
+
+Repair:
+- fill missing slots
+- rename sessions properly
+- enforce mobility language
+
+==================================================
+TASK 7 — ADD AUDIT LOGGING
+==================================================
+
+Add:
+
+[MobilityOpenAIAudit]
+[MobilityPreviewFailureAudit]
+[MobilityDepthExpander]
+[MobilityBuildCompletionAudit]
+
+==================================================
+TASK 8 — ENSURE NO FALLBACK CONTAMINATION
+==================================================
+
+Mobility must NOT:
+- call strength builder
+- return generic programs
+- fall into fallback mutation system
+
+If failure:
+→ clean retryable error only
+
+==================================================
+TASK 9 — VALIDATION
+==================================================
+
+Test:
+
+"Design a hip mobility program"
+
+Expect:
+- no error
+- full program saved
+- 5–6 exercises per session
+- structured progression
+- mobility-specific language
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Mobility must behave exactly like Speed:
+
+- deterministic output
+- structured JSON
+- retry-safe
+- no previews
+- full session depth
+- no contamination
