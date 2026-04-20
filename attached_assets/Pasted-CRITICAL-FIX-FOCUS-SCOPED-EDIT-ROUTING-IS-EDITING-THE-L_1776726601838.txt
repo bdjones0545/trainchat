@@ -1,0 +1,224 @@
+CRITICAL FIX — FOCUS-SCOPED EDIT ROUTING IS EDITING THE LAST ACTIVE PROGRAM INSTEAD OF THE CURRENT FOCUS PROGRAM
+
+CONTEXT:
+The focus UI is now much clearer and the user can clearly see:
+- Strength mode
+- Speed mode
+- Mobility mode
+
+However, there is a critical bug:
+
+If the user makes an edit while viewing one focus, the system sometimes applies the edit to the program from the LAST focus that built a program instead of the CURRENT focus being viewed.
+
+Example:
+- user is currently in Mobility focus
+- presses an edit / refine action in Mobility
+- but the edit is applied to the last Strength program that was created
+
+This is a severe focus-isolation bug and must be fixed immediately.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make all edits route to the training system that matches the CURRENT active focus, not the last-created program and not a generic active-system fallback.
+
+==================================================
+TASK 1 — TRACE THE FULL EDIT TARGET RESOLUTION PATH
+==================================================
+
+Audit how the system currently decides WHICH training system to edit when the user:
+- types a refine command in chat
+- presses a quick command
+- presses a block edit button
+- presses a session edit button
+- presses an exercise-level edit action
+- uses the right sidebar refine controls
+- uses the Active Programs command modal
+
+Trace:
+- what focusMode is available at the UI layer
+- what program/trainingSystemId is sent in the request
+- what the backend uses to resolve the target
+- where it falls back to "latest active program"
+
+Return:
+
+[EditTargetResolutionAudit] {
+  surface,
+  activeFocusAtUI,
+  trainingSystemIdSent,
+  focusModeSent,
+  backendResolutionPath,
+  resolvedTrainingSystemId,
+  resolvedTrainingSystemFocus,
+  fellBackToLastCreated,
+  bugPresent
+}
+
+==================================================
+TASK 2 — REQUIRE EXPLICIT TARGETING FROM THE UI
+==================================================
+
+Every edit request from every surface must explicitly send:
+- focusMode
+- trainingSystemId
+- phase/week/session/exercise context when relevant
+
+Do NOT allow edit requests that only send free text and rely on the backend to guess.
+
+This includes:
+- chat refine requests
+- quick command chips
+- block refocus buttons
+- right sidebar actions
+- active program command modal
+- exercise-level agent commands
+
+==================================================
+TASK 3 — FIX BACKEND TARGET RESOLUTION
+==================================================
+
+On the backend, resolve edits by:
+
+1. explicit trainingSystemId if provided
+2. otherwise, active training system for the provided focusMode
+3. NEVER generic "latest active system regardless of focus"
+
+If the UI says focusMode = mobility, the backend must never edit the strength program.
+
+If the UI says focusMode = speed, the backend must never edit the mobility or strength program.
+
+==================================================
+TASK 4 — REMOVE ANY LAST-CREATED / LAST-ACTIVE GLOBAL FALLBACK
+==================================================
+
+Audit and remove any logic like:
+- latest training system for user
+- most recent active system regardless of focus
+- last created program
+- last touched system
+
+These are unsafe now that TrainChat has multiple parallel focus programs.
+
+Parallel focus programs require strict focus-scoped editing.
+
+==================================================
+TASK 5 — MAKE THE AGENT EDIT PIPELINE FOCUS-AWARE END TO END
+==================================================
+
+For every edit:
+- the agent must receive the current focusMode
+- the current focus’s active program metadata
+- the current focus’s phase/week/session context
+- the correct trainingSystemId
+
+The agent should not infer the program target from conversation history alone.
+
+==================================================
+TASK 6 — ADD DEV GUARDS TO BLOCK WRONG-FOCUS EDITS
+==================================================
+
+Add a backend guard:
+
+If:
+- requested focusMode = mobility
+- resolved trainingSystem.focusMode = strength
+
+Then:
+- reject the edit
+- log a CRITICAL warning
+- do NOT apply the mutation
+
+Add similar guard for all mismatches.
+
+==================================================
+TASK 7 — ADD AUDIT LOGGING
+==================================================
+
+Add logs:
+
+[FocusScopedEditAudit] {
+  surface,
+  requestedFocus,
+  requestedTrainingSystemId,
+  resolvedTrainingSystemId,
+  resolvedFocus,
+  mismatchBlocked,
+  editApplied
+}
+
+[FocusMismatchEditBlock] {
+  requestedFocus,
+  resolvedFocus,
+  command,
+  trainingSystemId
+}
+
+We need to know immediately if any edit tries to cross focuses.
+
+==================================================
+TASK 8 — FIX UI REFRESH AFTER EDIT
+==================================================
+
+After a successful edit:
+- only the current focus’s queries should refresh
+- the current focus’s right panel / active program should update
+- the wrong focus should not appear changed
+
+Make sure query keys remain focus-scoped.
+
+==================================================
+TASK 9 — VALIDATION
+==================================================
+
+Run these exact tests:
+
+1. Build a Strength program
+2. Build a Speed program
+3. Build a Mobility program
+
+Then:
+
+A. While in Strength:
+- make a refine/edit
+- confirm only Strength changes
+
+B. While in Speed:
+- make a refine/edit
+- confirm only Speed changes
+
+C. While in Mobility:
+- make a refine/edit
+- confirm only Mobility changes
+
+Also test:
+- right sidebar edit buttons
+- active program block edit buttons
+- chat free-text refine requests
+- exercise quick commands
+
+FAIL if any edit applies to the wrong focus program.
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. where the wrong-focus fallback was happening
+2. which surfaces were missing explicit trainingSystemId / focusMode
+3. what backend resolution logic was changed
+4. what mismatch guards were added
+5. validation results across Strength / Speed / Mobility
+
+==================================================
+FINAL STANDARD
+==================================================
+
+An edit must always apply to the program belonging to the CURRENT active focus.
+
+If the user is in Mobility, only the Mobility program can be edited.
+If the user is in Speed, only the Speed program can be edited.
+If the user is in Strength, only the Strength program can be edited.
+
+No edit should ever mutate the last-created or last-active program from another focus.
