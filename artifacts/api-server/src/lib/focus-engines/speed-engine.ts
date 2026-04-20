@@ -1097,6 +1097,12 @@ const PREVIEW_RESPONSE_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /built\s+a?\s*\d*[- ]?day/i, label: "built a X-day (false success announcement)" },
   { pattern: /check\s+the\s+(?:program|activity)\s+tab/i, label: "check the program tab (false success)" },
   { pattern: /^built\s+(?:a|your|the)\s+/i, label: "Built a/your/the... (false success announcement)" },
+  // Additional false-success / confirmation patterns (all focus modes)
+  { pattern: /built\s+your/i, label: "built your (false success announcement)" },
+  { pattern: /program\s+is\s+ready/i, label: "program is ready (false success announcement)" },
+  { pattern: /ready\s+to\s+go/i, label: "ready to go (false success announcement)" },
+  { pattern: /your\s+plan\s+is\s+ready/i, label: "your plan is ready (false success announcement)" },
+  { pattern: /your\s+program\s+is\s+ready/i, label: "your program is ready (false success announcement)" },
 ];
 
 export interface IncompleteBuildDetection {

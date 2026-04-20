@@ -2823,18 +2823,22 @@ export async function generateAIResponse(
       }
     }
 
-    // ── Preview / Incomplete Build Detection + Strict Retry (speed/mobility) ─
-    // If the AI returned a conversational preview or planning outline instead of
-    // the final JSON build artifact, detect it and retry once with an explicit
-    // "build only" enforcement prompt. This is the primary guard against the
-    // "here's the foundation" pattern that looks like a completed build to users
-    // but produces no saved program.
+    // ── Preview / Incomplete Build Detection + Strict Retry (ALL focus modes) ──
+    // If the AI returned a conversational preview, planning outline, or a false-success
+    // confirmation message instead of the final JSON build artifact, detect it and retry
+    // once with an explicit "build only" enforcement prompt.
     //
-    // This fires when: isBuildIntent AND structuredData is STILL null after
-    // truncation retry AND the response is non-empty (i.e. a prose response
-    // was returned rather than a truncated/empty one).
-    if (isBuildIntent && (focusMode === "speed" || focusMode === "mobility") && structuredData === null && cleanContent.length > 0) {
-      const previewDetection = detectIncompleteBuildResponse(cleanContent);
+    // Applies to ALL focus modes (strength, speed, mobility).
+    // Fires when: isBuildIntent AND structuredData is STILL null after truncation retry
+    // AND the response is non-empty (prose returned instead of truncated/empty).
+    if (isBuildIntent && structuredData === null && cleanContent.length > 0) {
+      // Global length guard: a real program JSON can never fit in under 400 chars.
+      // If the response is that short and has no JSON it's definitively a false-success
+      // or short confirmation — treat as a detected preview even before pattern matching.
+      const lengthGuardTriggered = cleanContent.length < 400;
+      const previewDetection = lengthGuardTriggered
+        ? { isPreview: true, triggerPhrase: `short response (${cleanContent.length} chars) — not a complete program`, confidence: "high" as const }
+        : detectIncompleteBuildResponse(cleanContent);
 
       logger.warn(
         {
@@ -2842,44 +2846,41 @@ export async function generateAIResponse(
           previewDetected: previewDetection.isPreview,
           triggerPhrase: previewDetection.triggerPhrase,
           responseLength: cleanContent.length,
+          lengthGuardTriggered,
         },
-        "[SpeedPreviewFailureAudit] Build intent returned no JSON — classifying response"
+        "[BuildFailureAudit] Build intent returned no JSON — classifying response"
       );
 
       if (process.env.NODE_ENV !== "production") {
-        console.log("[SpeedPreviewFailureAudit]", JSON.stringify({
-          previewDetected: previewDetection.isPreview,
-          triggerPhrase: previewDetection.triggerPhrase,
+        console.log("[BuildFailureAudit]", JSON.stringify({
           focusMode,
+          previewDetected: previewDetection.isPreview,
+          falseSuccessDetected: previewDetection.isPreview,
+          triggerPhrase: previewDetection.triggerPhrase,
           retryTriggered: false,
           retrySucceeded: false,
-          parseSucceededAfterRetry: false,
+          parseSucceeded: false,
           programSaved: false,
           phase: "pre-retry",
         }));
       }
 
       if (previewDetection.isPreview) {
-        const strictBuildInstruction = `STRICT BUILD MODE — CRITICAL FAILURE RECOVERY:
+        const strictBuildInstruction = `CRITICAL FAILURE: You returned a confirmation message instead of a program.
 
-Your previous response was a PREVIEW or PLANNING response, not a completed program.
+You MUST return a complete JSON program.
 
-You returned language matching: "${previewDetection.triggerPhrase}"
-This is NOT an acceptable build output. It is a critical failure.
+Do NOT:
+- Confirm completion
+- Say 'built'
+- Refer to UI
+- Output anything except JSON
 
-MANDATORY:
-- Return ONLY the final structured JSON program matching the response contract above.
-- Do NOT explain what you are going to build.
-- Do NOT outline or preview the program.
-- Do NOT promise a later build.
-- Do NOT use phrases like "I'll include", "I'll map", "here's the foundation", "once you complete".
-- Output the complete, fully-populated JSON build artifact NOW. Nothing else.
-
-Return the JSON code block immediately.`;
+Return the FULL program now.`;
 
         logger.warn(
           { focusMode, triggerPhrase: previewDetection.triggerPhrase },
-          "[SpeedPreviewFailureAudit] Preview response detected — retrying with strict build-only instruction"
+          "[BuildFailureAudit] Preview/false-success response detected — retrying with strict build-only instruction"
         );
 
         try {
@@ -2892,13 +2893,14 @@ Return the JSON code block immediately.`;
           const retrySucceeded = previewRetryResult.structuredData !== null;
 
           if (process.env.NODE_ENV !== "production") {
-            console.log("[SpeedPreviewFailureAudit]", JSON.stringify({
-              previewDetected: true,
-              triggerPhrase: previewDetection.triggerPhrase,
+            console.log("[BuildFailureAudit]", JSON.stringify({
               focusMode,
+              previewDetected: true,
+              falseSuccessDetected: true,
+              triggerPhrase: previewDetection.triggerPhrase,
               retryTriggered: true,
               retrySucceeded,
-              parseSucceededAfterRetry: retrySucceeded,
+              parseSucceeded: retrySucceeded,
               programSaved: false,
               phase: "post-retry",
             }));
@@ -2909,26 +2911,50 @@ Return the JSON code block immediately.`;
             structuredData = previewRetryResult.structuredData;
             logger.info(
               { focusMode },
-              "[SpeedPreviewFailureAudit] Strict retry succeeded — structured data recovered from preview failure"
+              "[BuildFailureAudit] Strict retry succeeded — structured data recovered from preview/false-success failure"
             );
           } else {
-            // Both attempts returned prose — surface a clean retryable error.
+            // Both attempts failed — hard block, do NOT return any success message.
             logger.warn(
               { focusMode },
-              "[SpeedPreviewFailureAudit] Strict retry also returned no JSON — returning clean recoverable error"
+              "[BuildFailureAudit] Strict retry also returned no JSON — returning hard-blocked error"
             );
+            if (process.env.NODE_ENV !== "production") {
+              console.log("[BuildFailureAudit]", JSON.stringify({
+                focusMode,
+                previewDetected: true,
+                falseSuccessDetected: true,
+                retryTriggered: true,
+                retrySucceeded: false,
+                parseSucceeded: false,
+                programSaved: false,
+                phase: "hard-block",
+              }));
+            }
             return {
-              content: `I wasn't able to complete your ${focusMode} program build. The AI returned a planning overview instead of a finished program, and the recovery attempt also didn't produce a complete build.\n\nWant to try again? Just say **"build my program"** and I'll start fresh.`,
+              content: `I wasn't able to complete your program build. The AI returned an invalid response. Try again.`,
               structuredData: null,
             };
           }
         } catch (previewRetryErr) {
           logger.warn(
             { previewRetryErr, focusMode },
-            "[SpeedPreviewFailureAudit] Preview retry threw — returning clean recoverable error"
+            "[BuildFailureAudit] Preview retry threw — returning hard-blocked error"
           );
+          if (process.env.NODE_ENV !== "production") {
+            console.log("[BuildFailureAudit]", JSON.stringify({
+              focusMode,
+              previewDetected: true,
+              falseSuccessDetected: true,
+              retryTriggered: true,
+              retrySucceeded: false,
+              parseSucceeded: false,
+              programSaved: false,
+              phase: "hard-block-exception",
+            }));
+          }
           return {
-            content: `I wasn't able to complete your ${focusMode} program build due to a technical issue.\n\nWant to try again? Just say **"build my program"** and I'll start fresh.`,
+            content: `I wasn't able to complete your program build. The AI returned an invalid response. Try again.`,
             structuredData: null,
           };
         }
