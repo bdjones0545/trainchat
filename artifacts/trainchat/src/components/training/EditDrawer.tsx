@@ -45,7 +45,7 @@ import {
   type LiveAdjustment,
 } from "@/lib/midSessionEngine";
 import CoachInsightCard from "./CoachInsightCard";
-import { getQuickCommands } from "@/lib/quickCommands";
+import { getQuickCommands, recordQuickCommandSelection } from "@/lib/quickCommands";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -129,6 +129,7 @@ interface EditDrawerProps {
   uiContext?: Record<string, unknown>;
   /** Current active focus mode — required to route edits to the correct training system. */
   focusMode?: string;
+  userId?: string | number | null;
 }
 
 type DrawerPhase = "input" | "directions" | "executing" | "success" | "error";
@@ -852,7 +853,7 @@ function ExerciseLogSection({
 
 // ─── Main component ────────────────────────────────────────────────────────────
 
-export default function EditDrawer({ target, onClose, onEditComplete, prefillRequest, exerciseContext, uiContext, focusMode }: EditDrawerProps) {
+export default function EditDrawer({ target, onClose, onEditComplete, prefillRequest, exerciseContext, uiContext, focusMode, userId }: EditDrawerProps) {
   const [input, setInput] = useState(prefillRequest ?? "");
   const [visible, setVisible] = useState(false);
   const [phase, setPhase] = useState<DrawerPhase>("input");
@@ -871,6 +872,18 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
     focusMode,
     blockType: target.type === "phase" ? "block" : target.type,
     sessionIntent: [target.label, target.parentLabel].filter(Boolean).join(" "),
+    currentContext: [
+      exerciseContext?.category,
+      exerciseContext?.trainingGoal,
+      exerciseContext?.prescribedSets ? `${exerciseContext.prescribedSets} sets` : "",
+    ].filter(Boolean).join(" "),
+    activeModifiers: [
+      ...(Array.isArray(uiContext?.activeEmphases) ? uiContext.activeEmphases as string[] : []),
+      ...(Array.isArray(uiContext?.activeConstraints) ? uiContext.activeConstraints as string[] : []),
+      ...(Array.isArray(uiContext?.activeBiases) ? uiContext.activeBiases as string[] : []),
+    ],
+    userId,
+    limit: 6,
   });
   const isExercise = target.type === "exercise";
 
@@ -950,6 +963,13 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
   }
 
   function handleSuggestion(text: string) {
+    recordQuickCommandSelection({
+      focusMode,
+      commandLabel: text,
+      blockType: target.type === "phase" ? "block" : target.type,
+      sessionIntent: [target.label, target.parentLabel].filter(Boolean).join(" "),
+      userId,
+    });
     setInput(text);
     setTimeout(() => textareaRef.current?.focus(), 50);
   }

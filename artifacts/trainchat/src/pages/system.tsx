@@ -62,7 +62,7 @@ import { clearAuthState } from "@/lib/routing";
 import { useFocusMode } from "@/hooks/useFocusMode";
 import { FOCUS_MODE_CONFIGS, type FocusModeConfig } from "@/lib/focusModeConfig";
 import type { FocusMode } from "@/lib/focusMode";
-import { getQuickCommands } from "@/lib/quickCommands";
+import { getQuickCommands, recordQuickCommandSelection } from "@/lib/quickCommands";
 import TopNav from "@/components/layout/TopNav";
 import MobileSlideLayout, { type SlidePanel } from "@/components/layout/MobileSlideLayout";
 import BlockStatusCard from "@/components/training/BlockStatusCard";
@@ -3306,6 +3306,7 @@ interface SessionControlsPanelProps {
   readinessToday: any;
   sessionLoggedToday: boolean;
   sessionInProgress: boolean;
+  userId?: string | number | null;
   onLogSession: () => void;
   onCheckIn: () => void;
   onStartSession: () => void;
@@ -3382,6 +3383,7 @@ function SessionControlsPanel({
   readinessToday,
   sessionLoggedToday,
   sessionInProgress,
+  userId,
   onLogSession,
   onCheckIn,
   onStartSession,
@@ -3423,8 +3425,19 @@ function SessionControlsPanel({
     },
   });
 
-  function fireCmd(req: string) {
+  const sessionIntent = [today?.sessionType, today?.label, today?.emphasis].filter(Boolean).join(" ");
+
+  function fireCmd(req: string, source: "quick" | "typed" = "typed") {
     if (!req.trim() || editMutation.isPending) return;
+    if (source === "quick") {
+      recordQuickCommandSelection({
+        focusMode: sessionControlsFocusMode,
+        commandLabel: req.trim(),
+        blockType: "session",
+        sessionIntent,
+        userId,
+      });
+    }
     setCmdInput("");
     setCmdState("submitting");
     setCmdResult(null);
@@ -3455,7 +3468,19 @@ function SessionControlsPanel({
   const quickCommands = getQuickCommands({
     focusMode: sessionControlsFocusMode,
     blockType: "session",
-    sessionIntent: [today?.sessionType, today?.label, today?.emphasis].filter(Boolean).join(" "),
+    sessionIntent,
+    currentContext: [
+      today?.name,
+      today?.title,
+      today?.description,
+      adjustment,
+      sorenessScore ? `soreness ${sorenessLabel(sorenessScore)}` : "",
+      energyScore ? `energy ${energyLabel(energyScore)}` : "",
+      stressScore ? `stress ${stressScore}` : "",
+    ].filter(Boolean).join(" "),
+    activeModifiers: allModifiers.map((modifier) => modifier.value),
+    userId,
+    limit: 6,
   });
 
   return (
@@ -3596,7 +3621,7 @@ function SessionControlsPanel({
             {quickCommands.map((q) => (
               <button
                 key={q}
-                onClick={() => fireCmd(q)}
+                onClick={() => fireCmd(q, "quick")}
                 disabled={editMutation.isPending}
                 className="text-[10px] font-semibold bg-muted/50 text-muted-foreground border border-border rounded-full px-2.5 py-1 hover:text-foreground hover:border-primary/40 hover:bg-primary/5 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
@@ -4216,6 +4241,7 @@ export default function SystemPage() {
         readinessToday={readinessToday}
         sessionLoggedToday={sessionLoggedToday}
         sessionInProgress={sessionInProgress}
+        userId={me?.id}
         onLogSession={() => { setFeedbackSessionLabel(undefined); setShowSessionFeedback(true); setMobilePanel(null); }}
         onCheckIn={() => { setShowReadinessCheckIn(true); setMobilePanel(null); }}
         onStartSession={handleStartSession}
@@ -4630,6 +4656,7 @@ export default function SystemPage() {
           prefillRequest={editPrefill}
           exerciseContext={editTarget.type === "exercise" ? editExerciseContext : undefined}
           focusMode={focusMode}
+          userId={me?.id}
           uiContext={{
             page: "system",
             focusMode,

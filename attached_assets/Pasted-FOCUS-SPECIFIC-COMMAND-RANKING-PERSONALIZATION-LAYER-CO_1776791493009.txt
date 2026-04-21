@@ -1,0 +1,247 @@
+FOCUS-SPECIFIC COMMAND RANKING + PERSONALIZATION LAYER
+
+CONTEXT:
+We already replaced global/static quick commands with:
+
+getQuickCommands({ focusMode, blockType, sessionIntent })
+
+and added strict focus-specific command pools for:
+- Strength
+- Speed
+- Mobility
+
+This fixed invalid commands leaking across focuses.
+
+Now we need the next upgrade:
+
+Instead of merely filtering valid commands by focus, we want to RANK and PERSONALIZE them within each focus so the most relevant commands appear first.
+
+CRITICAL:
+This personalization must be focus-specific.
+We do NOT want global command preferences leaking across Strength / Speed / Mobility.
+
+Examples:
+- If user often chooses “More reactive work” in Speed, that should help rank speed commands only
+- If user often chooses “More hip focus” in Mobility, that should influence mobility commands only
+- If user often chooses “Increase load” in Strength, that should influence strength commands only
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Build a focus-specific command ranking and personalization layer so quick commands feel increasingly tailored to the user while remaining correct for the active focus.
+
+==================================================
+TASK 1 — DEFINE RANKING INPUTS
+==================================================
+
+Rank quick commands using this priority order:
+
+1. active focus mode
+2. current block type
+3. current session intent
+4. current exercise / session context if relevant
+5. user preference history INSIDE this focus only
+6. recent actions / recently selected commands INSIDE this focus only
+7. safety / feasibility constraints
+8. novelty / avoid repeated command clutter
+
+Do NOT use global user command preference as the primary signal.
+
+==================================================
+TASK 2 — CREATE A FOCUS-SPECIFIC PERSONALIZATION STORE
+==================================================
+
+Track command usage separately for each focus.
+
+Suggested structure:
+
+user_command_preferences {
+  userId,
+  focusMode, // strength | speed | mobility
+  commandKey,
+  selectionCount,
+  lastSelectedAt,
+  suppressionCount?,
+  createdAt,
+  updatedAt
+}
+
+If an existing learning/preferences table is better, use it — but the key requirement is:
+preferences must be scoped by focusMode.
+
+==================================================
+TASK 3 — BUILD A COMMAND RANKER
+==================================================
+
+Create something like:
+
+rankQuickCommands({
+  focusMode,
+  blockType,
+  sessionIntent,
+  currentContext,
+  candidateCommands,
+  userCommandPreferences,
+  recentCommandHistory
+})
+
+Each command should receive a score based on:
+- focus match (must already pass)
+- block relevance
+- session relevance
+- exercise relevance if applicable
+- in-focus user preference
+- recency / repeated usage
+- safety / feasibility
+- novelty balance
+
+Return:
+- sorted command list
+- optional score breakdown in dev mode
+
+==================================================
+TASK 4 — KEEP PERSONALIZATION FOCUS-SPECIFIC
+==================================================
+
+Examples:
+
+Strength:
+- “More explosive”
+- “Increase load”
+- “Lower impact”
+- “Add volume”
+
+Speed:
+- “More acceleration”
+- “More reactive”
+- “More deceleration”
+- “Reduce CNS load”
+
+Mobility:
+- “More hip focus”
+- “More recovery flow”
+- “More end-range control”
+- “Lower intensity”
+
+If a user repeatedly selects a command in one focus, it should NOT affect ordering in another focus.
+
+==================================================
+TASK 5 — ADD BLOCK- AND SESSION-AWARE BOOSTS
+==================================================
+
+Examples:
+
+Strength:
+- squat block → boost lower-body / force / volume commands
+- deload week → boost lower fatigue / lower impact commands
+
+Speed:
+- acceleration session → boost acceleration / projection / resisted start commands
+- max velocity session → boost upright mechanics / stiffness / velocity commands
+
+Mobility:
+- hip program → boost hip focus / end-range / positional control
+- recovery flow block → boost decompression / lower intensity / flow commands
+
+==================================================
+TASK 6 — ADD REPETITION / CLUTTER CONTROL
+==================================================
+
+Do not always show the same top commands forever.
+
+Add light penalties for:
+- commands chosen too recently
+- commands already active as modifiers
+- commands that conflict with the current state
+
+This should keep the UI feeling fresh without becoming random.
+
+==================================================
+TASK 7 — PERSONALIZE FROM REAL USER BEHAVIOR
+==================================================
+
+Whenever a user taps a quick command:
+- record it with focusMode
+- increment its focus-scoped preference signal
+- use it in future ranking inside that same focus
+
+Also consider:
+- successful applied commands
+- rejected/cancelled commands
+- commands that led to visible follow-up edits
+
+==================================================
+TASK 8 — ADD DEV / AUDIT LOGGING
+==================================================
+
+Add logs such as:
+
+[QuickCommandRankingAudit] {
+  focusMode,
+  blockType,
+  sessionIntent,
+  candidateCommands,
+  rankedCommands,
+  topCommand,
+  personalizationSignalsUsed
+}
+
+[QuickCommandPreferenceAudit] {
+  userId,
+  focusMode,
+  commandKey,
+  selectionCount,
+  lastSelectedAt
+}
+
+We need to verify:
+- ranking is focus-specific
+- personalization is focus-specific
+- no leakage across focuses
+
+==================================================
+TASK 9 — VALIDATION
+==================================================
+
+Test these scenarios:
+
+1. In Speed, repeatedly choose “More reactive”
+→ Speed quick commands should reorder accordingly
+→ Strength and Mobility should remain unaffected
+
+2. In Mobility, repeatedly choose “More hip focus”
+→ Mobility quick commands should reorder accordingly
+→ Speed / Strength should remain unaffected
+
+3. In Strength, repeatedly choose “More explosive”
+→ Strength quick commands should reorder accordingly
+→ Speed / Mobility should remain unaffected
+
+4. Change session type within a focus
+→ top commands should adjust based on session intent, not just user history
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. ranking model
+2. personalization storage model
+3. how focus-specific scoping is enforced
+4. how recency/clutter suppression works
+5. validation results for Strength / Speed / Mobility
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Quick commands should now feel:
+- correct for the active focus
+- relevant for the current block/session
+- increasingly tailored to the user over time
+- but NEVER contaminated by preferences from another focus
+
+The user should feel like:
+“TrainChat knows how I like to refine Strength”
+without that affecting how it behaves in Speed or Mobility.
