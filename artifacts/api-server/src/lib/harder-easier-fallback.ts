@@ -10,11 +10,10 @@
  *   3. Validate result
  *   4. Convert to EditPlan
  *   5. Log relationship candidate for future graph promotion
- *   6. Optionally write relationship back to exercise library
  */
 
-import { db, exerciseLibrary, globalLearningEventsTable, learningCandidatesTable } from "@workspace/db";
-import { eq, sql, and } from "drizzle-orm";
+import { db, globalLearningEventsTable, learningCandidatesTable } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
 import { logger } from "./logger";
 import type { EditPlan } from "./edit-intent-service";
 
@@ -50,6 +49,7 @@ export interface HarderEasierContext {
   injuryFlags?: string[];
   notes?: string;
   userId?: number;
+  focusMode?: string;
 }
 
 export interface HarderEasierResolution {
@@ -215,12 +215,48 @@ Return ONLY the JSON object — no other text.`;
 
 // ─── Relationship Logger ──────────────────────────────────────────────────────
 
-async function logExerciseRelationship(
-  fromExercise: string,
-  toExercise: string,
-  direction: "harder" | "easier",
-  userId?: number
-): Promise<void> {
+interface RelationshipCandidateParams {
+  fromExercise: string;
+  toExercise: string;
+  direction: "harder" | "easier";
+  sourceExerciseId: number;
+  targetExerciseId?: number | null;
+  userId?: number;
+  focusMode?: string;
+  rationale?: string;
+}
+
+async function logExerciseRelationship(params: RelationshipCandidateParams): Promise<void> {
+  const {
+    fromExercise,
+    toExercise,
+    direction,
+    sourceExerciseId,
+    targetExerciseId = null,
+    userId,
+    focusMode,
+    rationale,
+  } = params;
+
+  const metadata = {
+    relationshipType: direction,
+    fromExercise,
+    toExercise,
+    sourceExerciseId,
+    targetExerciseId,
+    focusMode: focusMode ?? null,
+    sourceSurface: "harder_easier_fallback",
+    confidence: 0.3,
+    rationale: rationale ?? null,
+    approved: false,
+    promoted: false,
+    aiResolved: true,
+    stagedOnly: true,
+    canonicalWriteBlocked: true,
+    promotionRule: "Manual/admin review or deterministic internal promotion tooling must approve this candidate before canonical graph mutation.",
+    resolvedBy: "harder_easier_fallback",
+  };
+
   try {
     await db.insert(globalLearningEventsTable).values({
       userId: userId ?? null,
@@ -232,15 +268,9 @@ async function logExerciseRelationship(
       normalizedRequestKey: `${direction}_variation_fallback`,
       mutationApplied: true,
       validatorPassed: true,
-      metadata: {
-        fromExercise,
-        toExercise,
-        direction,
-        resolvedBy: "harder_easier_fallback",
-      },
+      metadata,
     });
 
-    // Create or update a learning candidate for the exercise relationship
     const key = `exercise_relationship:${fromExercise.toLowerCase().replace(/\s+/g, "_")}:${direction}`;
     const summary = `AI fallback resolved "${fromExercise}" → "${toExercise}" (${direction}). Candidate for adding to exercise graph as ${direction === "harder" ? "harderVariation" : "easierVariation"}.`;
 
@@ -266,7 +296,7 @@ async function logExerciseRelationship(
           confidenceScore: confidence,
           recommendation: newCount >= 3 ? "safe_to_promote" : "needs_more_data",
           updatedAt: new Date(),
-          metadata: { fromExercise, toExercise, direction },
+          metadata: { ...metadata, confidence },
         })
         .where(eq(learningCandidatesTable.id, existing[0].id));
     } else {
@@ -278,64 +308,37 @@ async function logExerciseRelationship(
         confidenceScore: 0.3,
         riskLevel: "low",
         recommendation: "needs_more_data",
-        metadata: { fromExercise, toExercise, direction },
+        metadata,
       });
     }
 
     logger.info({ fromExercise, toExercise, direction }, "[HarderEasierFallback] Exercise relationship logged");
+    logger.info(
+      {
+        sourceExerciseId,
+        targetExerciseId,
+        relationshipType: direction,
+        aiResolved: true,
+        stagedOnly: true,
+        canonicalWriteBlocked: true,
+        promoted: false,
+      },
+      "[RelationshipFallbackAudit]"
+    );
   } catch (err) {
     logger.warn({ err }, "[HarderEasierFallback] Failed to log exercise relationship — suppressed");
-  }
-}
-
-// ─── Write Relationship Back to Exercise Library ──────────────────────────────
-// If both exercises exist in the library, immediately update the graph so the
-// next request for this exercise uses the deterministic path.
-
-async function writeRelationshipToLibrary(
-  fromExercise: string,
-  toExercise: string,
-  direction: "harder" | "easier"
-): Promise<void> {
-  try {
-    const [fromRow] = await db
-      .select({ id: exerciseLibrary.id, easierVariations: exerciseLibrary.easierVariations, harderVariations: exerciseLibrary.harderVariations })
-      .from(exerciseLibrary)
-      .where(sql`lower(${exerciseLibrary.name}) = lower(${fromExercise})`)
-      .limit(1);
-
-    if (!fromRow) return;
-
-    const [toRow] = await db
-      .select({ id: exerciseLibrary.id })
-      .from(exerciseLibrary)
-      .where(sql`lower(${exerciseLibrary.name}) = lower(${toExercise})`)
-      .limit(1);
-
-    if (!toRow) {
-      logger.info({ toExercise }, "[HarderEasierFallback] Replacement exercise not in library — skipping library write");
-      return;
-    }
-
-    const field = direction === "harder" ? "harderVariations" : "easierVariations";
-    const current = (fromRow[field] as string[]) ?? [];
-
-    if (current.some((n) => n.toLowerCase() === toExercise.toLowerCase())) {
-      logger.info({ fromExercise, toExercise, direction }, "[HarderEasierFallback] Relationship already in library — no update needed");
-      return;
-    }
-
-    const updated = [...current, toExercise];
-
-    if (direction === "harder") {
-      await db.update(exerciseLibrary).set({ harderVariations: updated }).where(eq(exerciseLibrary.id, fromRow.id));
-    } else {
-      await db.update(exerciseLibrary).set({ easierVariations: updated }).where(eq(exerciseLibrary.id, fromRow.id));
-    }
-
-    logger.info({ fromExercise, toExercise, direction }, "[HarderEasierFallback] Wrote relationship to exercise library — now deterministic");
-  } catch (err) {
-    logger.warn({ err }, "[HarderEasierFallback] Failed to write relationship to library — suppressed");
+    logger.warn(
+      {
+        sourceExerciseId,
+        targetExerciseId,
+        relationshipType: direction,
+        aiResolved: true,
+        stagedOnly: false,
+        canonicalWriteBlocked: true,
+        promoted: false,
+      },
+      "[RelationshipFallbackAudit]"
+    );
   }
 }
 
@@ -438,7 +441,6 @@ function resolutionToEditPlan(
  * Side effects (fire-and-forget):
  *   - Logs the resolved relationship as a global learning event
  *   - Creates/updates a learning candidate for future graph promotion
- *   - Writes the relationship to the exercise library if both exercises exist
  */
 export async function resolveHarderEasierFallback(ctx: HarderEasierContext): Promise<EditPlan | null> {
   logger.info(
@@ -482,17 +484,34 @@ export async function resolveHarderEasierFallback(ctx: HarderEasierContext): Pro
     "[HarderEasierFallback] Resolved successfully"
   );
 
-  // Fire-and-forget: log relationship + update library
+  // Fire-and-forget: stage relationship candidate only
   if (resolution.changeType === "replace_exercise" && resolution.replacementExerciseName) {
     const toName = resolution.replacementExerciseName;
-    Promise.allSettled([
-      logExerciseRelationship(ctx.exerciseName, toName, ctx.direction, ctx.userId),
-      writeRelationshipToLibrary(ctx.exerciseName, toName, ctx.direction),
-    ]).catch(() => {});
+    Promise.resolve(
+      logExerciseRelationship({
+        fromExercise: ctx.exerciseName,
+        toExercise: toName,
+        direction: ctx.direction,
+        sourceExerciseId: ctx.exerciseId,
+        targetExerciseId: null,
+        userId: ctx.userId,
+        focusMode: ctx.focusMode,
+        rationale: resolution.reason,
+      })
+    ).catch(() => {});
   } else {
     // Log the prescription modification event without a relationship candidate
     Promise.resolve(
-      logExerciseRelationship(ctx.exerciseName, `${ctx.exerciseName}:${ctx.direction}_prescription`, ctx.direction, ctx.userId)
+      logExerciseRelationship({
+        fromExercise: ctx.exerciseName,
+        toExercise: `${ctx.exerciseName}:${ctx.direction}_prescription`,
+        direction: ctx.direction,
+        sourceExerciseId: ctx.exerciseId,
+        targetExerciseId: null,
+        userId: ctx.userId,
+        focusMode: ctx.focusMode,
+        rationale: resolution.reason,
+      })
     ).catch(() => {});
   }
 

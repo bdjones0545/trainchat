@@ -1,0 +1,152 @@
+REMOVE CANONICAL WRITE LEAK FROM HARDER/EASIER FALLBACK — KEEP AI SUGGESTIONS STAGED, NOT SILENTLY PROMOTED
+
+CONTEXT:
+The OpenAI fallback audit found one architecture leak:
+
+harder-easier-fallback.ts currently contains writeRelationshipToLibrary(), which can write an AI-resolved harder/easier relationship directly into the canonical exercise library/relationship graph if both exercises already exist.
+
+This conflicts with our system rule:
+- AI may propose
+- AI may stage
+- AI may assist
+- AI must NOT silently promote into canonical library/graph
+
+We need to fix this immediately.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Stop AI-resolved harder/easier relationships from being written directly into the canonical library unless explicitly approved through a deterministic/manual promotion path.
+
+==================================================
+TASK 1 — AUDIT THE CURRENT WRITE PATH
+==================================================
+
+Trace:
+- where writeRelationshipToLibrary() is called
+- what conditions trigger it
+- what data it writes
+- whether it is triggered automatically from AI fallback resolution
+
+Return:
+- file/function path
+- triggering surfaces
+- written fields
+- whether canonical library is being mutated automatically
+
+==================================================
+TASK 2 — REMOVE OR GATE AUTOMATIC CANONICAL WRITES
+==================================================
+
+Change the behavior so that AI-resolved harder/easier relationships do NOT automatically write into the canonical exercise graph.
+
+Allowed behavior:
+- stage the relationship candidate
+- attach it to the current session/program context
+- log it for review
+- optionally persist it in a non-canonical candidate table
+
+Not allowed:
+- silently mutating canonical harder/easier relationships
+
+==================================================
+TASK 3 — ADD A STAGED RELATIONSHIP CANDIDATE STORE
+==================================================
+
+If not already present, add a staged storage path for AI-resolved harder/easier relationships.
+
+Suggested shape:
+
+ai_relationship_candidates {
+  id,
+  relationshipType, // harder | easier
+  sourceExerciseId,
+  targetExerciseId,
+  focusMode,
+  sourceSurface,
+  confidence,
+  rationale,
+  approved,
+  promoted,
+  createdAt
+}
+
+Use this instead of canonical write.
+
+==================================================
+TASK 4 — KEEP UX SMOOTH
+==================================================
+
+Even though the canonical graph is not updated automatically, the current user action should still succeed if the candidate passed validation.
+
+The user should get:
+- the correct harder/easier exercise in their current program
+- no broken flow
+- no visible regression
+
+The only thing changing is:
+- canonical library does not get silently rewritten
+
+==================================================
+TASK 5 — ADD PROMOTION RULES
+==================================================
+
+Define how a staged relationship can later be promoted to canonical graph.
+
+Allowed promotion methods:
+- manual/admin approval
+- deterministic review path
+- explicit internal tooling
+- optional threshold-based policy if you already have one
+
+But it must not happen automatically from one AI fallback event.
+
+==================================================
+TASK 6 — ADD AUDIT LOGGING
+==================================================
+
+Add logs:
+
+[RelationshipFallbackAudit] {
+  sourceExerciseId,
+  targetExerciseId,
+  relationshipType,
+  aiResolved,
+  stagedOnly,
+  canonicalWriteBlocked,
+  promoted
+}
+
+We need proof that canonical write leakage is gone.
+
+==================================================
+TASK 7 — VALIDATION
+==================================================
+
+Test:
+1. request harder exercise where graph is missing
+2. AI fallback resolves candidate
+3. current user program updates successfully
+4. staged relationship candidate is created
+5. canonical library remains unchanged
+6. no silent graph mutation occurs
+
+==================================================
+TASK 8 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. where the canonical write leak existed
+2. what was changed
+3. how staged relationship candidates now work
+4. how UX remains smooth
+5. validation results
+
+==================================================
+FINAL STANDARD
+==================================================
+
+AI may help resolve harder/easier exercise relationships for the current user context, but it must not silently write those relationships into the canonical exercise library.
+
+Canonical truth must remain deterministic and explicitly promoted.

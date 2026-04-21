@@ -3640,6 +3640,7 @@ export async function interpretEditRequest(
         : [],
       notes: system.specialConsiderations,
       userId: system.userId,
+      focusMode: system.focusMode ?? system.metadata?.focusMode,
     };
 
     try {
