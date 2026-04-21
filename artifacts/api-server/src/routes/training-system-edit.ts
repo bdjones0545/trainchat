@@ -36,6 +36,7 @@ import { eq, desc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { logger } from "../lib/logger";
 import { createEditAdjustmentEvent } from "../lib/system-adjustment-service";
+import { acquireFailSafeEditLock, logFailSafeAudit, resolveFailSafeState } from "../lib/fail-safe";
 
 // ─── Diff computation ─────────────────────────────────────────────────────────
 
@@ -240,6 +241,26 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
   const uiContext = (req.body as any)?.uiContext ?? null;
   // focusMode can also come from uiContext (chat path); body-level takes precedence
   const resolvedFocusMode: string | undefined = focusMode ?? (uiContext?.focusMode as string | undefined) ?? undefined;
+  const editLock = acquireFailSafeEditLock(`route:${userId}:${resolvedFocusMode ?? "any"}`);
+  if (!editLock.acquired) {
+    const resolution = resolveFailSafeState({
+      message: userRequest || intent || "edit",
+      focusMode: resolvedFocusMode as any,
+      activeProgram: null,
+      action: "APPLY_MUTATION",
+      intentType: "EDIT_PROGRAM",
+      recentCommands: [
+        { role: "user", content: userRequest || intent || "edit", createdAt: new Date() },
+        { role: "user", content: userRequest || intent || "edit", createdAt: new Date() },
+      ],
+    });
+    logFailSafeAudit(logger, { message: userRequest || intent || "edit", focusMode: resolvedFocusMode as any, action: "APPLY_MUTATION", intentType: "EDIT_PROGRAM" }, resolution);
+    res.status(409).json({
+      error: "Updating your program now. Send the next change after this one finishes so the edits land in order.",
+      failSafe: resolution,
+    });
+    return;
+  }
 
   try {
     // 1. Load active training system — FOCUS-SCOPED
@@ -286,6 +307,16 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       res.status(500).json({ error: "Failed to load training system data." });
       return;
     }
+
+    const failSafeResolution = resolveFailSafeState({
+      message: userRequest || intent || "edit",
+      focusMode: resolvedFocusMode as any,
+      activeProgram: activeSystem as any,
+      action: "APPLY_MUTATION",
+      intentType: "EDIT_PROGRAM",
+      recentCommands: [{ role: "user", content: userRequest || intent || "edit", createdAt: new Date() }],
+    });
+    logFailSafeAudit(logger, { message: userRequest || intent || "edit", focusMode: resolvedFocusMode as any, activeProgram: activeSystem as any, action: "APPLY_MUTATION", intentType: "EDIT_PROGRAM" }, failSafeResolution);
 
     // ── STRUCTURED INTENT FAST PATH ─────────────────────────────────────────
     // If the caller passes an explicit intent, skip ALL NLP and route directly
@@ -481,6 +512,8 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
     });
 
     res.status(500).json({ error: "Failed to process edit request." });
+  } finally {
+    editLock.release();
   }
 });
 

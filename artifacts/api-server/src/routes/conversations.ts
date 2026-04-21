@@ -54,6 +54,14 @@ import {
 import { resolveFocusMode } from "../lib/focus-mode-audit";
 import { logFocusModeAudit } from "../lib/focus-mode-audit";
 import { generateCoachReasoning, goalToFocusMode, type FocusMode } from "../lib/coach-reasoning-engine";
+import {
+  resolveFailSafeState,
+  applyFailSafeConstraints,
+  attachFailSafeMetadata,
+  prependFailSafeMessage,
+  logFailSafeAudit,
+  acquireFailSafeEditLock,
+} from "../lib/fail-safe";
 
 const router: IRouter = Router();
 
@@ -797,6 +805,22 @@ Keep it helpful and intelligent, never promotional.`;
     execPlan.action === "GUIDANCE" && execPlan.intentFamily === "greeting" ? "GREETING_RESPONSE" :
     execPlan.action === "GUIDANCE" ? "COACHING_RESPONSE" :
     "EXECUTION_RESPONSE";
+
+  const failSafeResolution = resolveFailSafeState({
+    message: parsed.data.content,
+    focusMode: nonStreamFocusMode,
+    activeProgram: (activeSystem as any) ?? (latestStructuredProgram as any),
+    recentCommands: history
+      .filter((m) => m.role === "user")
+      .slice(-3)
+      .map((m) => ({ role: m.role, content: m.content, createdAt: m.createdAt })),
+    requestedFrequency: extractedConstraints?.daysPerWeek ?? null,
+    requestedDuration: extractedConstraints?.sessionDuration ?? null,
+    action: execPlan.action,
+    intentType: intentResult.type,
+  });
+  extractedConstraints = applyFailSafeConstraints(extractedConstraints, failSafeResolution);
+  logFailSafeAudit(logger, { message: parsed.data.content, focusMode: nonStreamFocusMode, activeProgram: (activeSystem as any) ?? (latestStructuredProgram as any), action: execPlan.action, intentType: intentResult.type }, failSafeResolution);
 
   // ── Intent-specific routing ───────────────────────────────────────────────
 
@@ -1799,10 +1823,16 @@ Keep it helpful and intelligent, never promotional.`;
       agentSettings,
       responsePolicy: resolvedResponsePolicy,
       focusMode: nonStreamFocusMode,
+      failSafeResolution,
     }
   );
 
   // Warn if EDIT_PROGRAM was routed but no structured data returned
+  structuredData = attachFailSafeMetadata(structuredData as any, failSafeResolution) as any;
+  if (structuredData && failSafeResolution.triggered) {
+    aiContent = prependFailSafeMessage(aiContent, failSafeResolution);
+  }
+
   if (intentResult.type === "EDIT_PROGRAM" && currentProgram && !structuredData) {
     logger.warn("[IntentRouter] EDIT_PROGRAM intent with program context, but AI did not return updated JSON. Right panel will NOT update.");
   }
@@ -2460,6 +2490,22 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     execPlan.action === "GUIDANCE" ? "COACHING_RESPONSE" :
     "EXECUTION_RESPONSE";
 
+  const failSafeResolution = resolveFailSafeState({
+    message: parsed.data.content,
+    focusMode: streamFocusMode,
+    activeProgram: (activeSystem as any) ?? (latestStructuredProgram as any),
+    recentCommands: history
+      .filter((m) => m.role === "user")
+      .slice(-3)
+      .map((m) => ({ role: m.role, content: m.content, createdAt: m.createdAt })),
+    requestedFrequency: extractedConstraints?.daysPerWeek ?? null,
+    requestedDuration: extractedConstraints?.sessionDuration ?? null,
+    action: execPlan.action,
+    intentType: intentResult.type,
+  });
+  extractedConstraints = applyFailSafeConstraints(extractedConstraints, failSafeResolution);
+  logFailSafeAudit(logger, { message: parsed.data.content, focusMode: streamFocusMode, activeProgram: (activeSystem as any) ?? (latestStructuredProgram as any), action: execPlan.action, intentType: intentResult.type }, failSafeResolution);
+
   _t_intent_done = Date.now();
   // Emit classifying stage — intent and action type are now known
   emit(buildStageEvent("classifying", intentResult.type, execPlan.action));
@@ -2510,6 +2556,19 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       systemEdit: opts.systemEditVal,
       changeLogId: opts.changeLogIdVal,
     };
+  }
+
+  if (failSafeResolution.strategy === "redirect_focus") {
+    const content = failSafeResolution.userFacingMessage ?? "That request fits a different training focus. Switch focus modes and I’ll build it with the right engine.";
+    const [assistantMessage] = await db.insert(messagesTable).values({
+      conversationId: params.data.id,
+      role: "assistant",
+      content,
+      structuredData: JSON.stringify({ _type: "fail_safe", ...failSafeResolution }),
+    }).returning();
+    await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+    done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "conversation_only" }));
+    return;
   }
 
   // ── Short-circuit: RETRIEVE_CURRENT_PROGRAM ───────────────────────────────
@@ -2782,6 +2841,19 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   //   2. No DB system, chat program exists → auto-create system first, then edit
   //   3. No program at all         → return truthful "build first" SSE message
   if (execPlan.action === "APPLY_MUTATION") {
+    const editLock = acquireFailSafeEditLock(`chat:${userId}:${streamFocusMode}`);
+    if (!editLock.acquired) {
+      const lockContent = "Updating your program now. Send the next change after this one finishes so the edits land in order.";
+      const [lockMsg] = await db.insert(messagesTable).values({
+        conversationId: params.data.id,
+        role: "assistant",
+        content: lockContent,
+        structuredData: JSON.stringify({ _type: "fail_safe", category: "rapid_chained_edits", strategy: "queue_edit" }),
+      }).returning();
+      await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+      done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: lockMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, systemEditVal: { applied: false }, outcomeTypeVal: "conversation_only" }));
+      return;
+    }
     let resolvedSystem: typeof activeSystem = activeSystem;
     let systemAutoCreatedForEdit = false;
 
@@ -2808,6 +2880,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         userMsg: userMessage, assistantMsg: assistantMsg, planInfoVal: planInfo,
         intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "conversation_only",
       }));
+      editLock.release();
       return;
     }
 
@@ -2834,6 +2907,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: errMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure" }),
           systemEdit: { applied: false },
         });
+        editLock.release();
         return;
       }
 
@@ -3102,6 +3176,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           requiresReview: streamVerification.requiresReview ?? false,
         },
       });
+      editLock.release();
       return;
     } catch (err: any) {
       logger.error({ err: err?.message }, "[VibeEdit:stream] DB pipeline threw — returning error response");
@@ -3118,6 +3193,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         systemEdit: { applied: false },
         editFailure: { reason: "edit_pipeline_error" },
       });
+      editLock.release();
       return;
     }
   }
@@ -3225,10 +3301,16 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       agentSettings,
       responsePolicy: resolvedResponsePolicy,
       focusMode: streamFocusMode,
+      failSafeResolution,
     }
   );
 
   // ── HARD GUARD: Block build templates for edit/refinement and program-question intents ─
+  structuredData = attachFailSafeMetadata(structuredData as any, failSafeResolution) as any;
+  if (structuredData && failSafeResolution.triggered) {
+    aiContent = prependFailSafeMessage(aiContent, failSafeResolution);
+  }
+
   // Belt-and-suspenders protection for the streaming path:
   // 1. Edit/refine intents must never produce build-announcement language.
   // 2. Program question GUIDANCE intents (safety, explanation, coaching) must never

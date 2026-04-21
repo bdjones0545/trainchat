@@ -22,6 +22,7 @@ import {
 } from "../lib/training-system-service";
 import { z } from "zod/v4";
 import { logger } from "../lib/logger";
+import { logFailSafeAudit, resolveFailSafeState } from "../lib/fail-safe";
 
 const router: IRouter = Router();
 
@@ -66,6 +67,23 @@ router.post("/training-system/directions", requireAuth, async (req, res): Promis
 
     if (!fullSystem) {
       res.status(500).json({ error: "Failed to load training system data." });
+      return;
+    }
+
+    const failSafeResolution = resolveFailSafeState({
+      message: userRequest,
+      focusMode: focusMode as any,
+      activeProgram: activeSystem as any,
+      action: "APPLY_MUTATION",
+      intentType: "EDIT_PROGRAM",
+    });
+    logFailSafeAudit(logger, { message: userRequest, focusMode: focusMode as any, activeProgram: activeSystem as any, action: "APPLY_MUTATION", intentType: "EDIT_PROGRAM" }, failSafeResolution);
+    if (failSafeResolution.strategy === "redirect_focus" || failSafeResolution.strategy === "require_existing_program" || failSafeResolution.strategy === "queue_edit") {
+      res.json({
+        shouldSkipDirections: true,
+        directResponse: failSafeResolution.userFacingMessage,
+        failSafe: failSafeResolution,
+      });
       return;
     }
 

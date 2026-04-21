@@ -83,6 +83,7 @@ import {
 } from "./focus-engines/mobility-engine";
 import { resolveFocusMode, logFocusModeAudit } from "./focus-mode-audit";
 import type { FocusMode } from "./focus-engines/engine-interface";
+import { buildFailSafePromptSection, type FailSafeResolution } from "./fail-safe";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -2100,6 +2101,7 @@ export interface AIResponseOptions {
    * for the rebuild path).
    */
   execPlanAction?: string | null;
+  failSafeResolution?: FailSafeResolution | null;
 }
 
 // ─── Main entry point ────────────────────────────────────────────────────────
@@ -2131,6 +2133,7 @@ export async function generateAIResponse(
     responsePolicy,
     focusMode: rawFocusMode,
     execPlanAction,
+    failSafeResolution,
   } = options;
 
   const focusMode = resolveFocusMode(rawFocusMode ?? null);
@@ -2628,7 +2631,9 @@ export async function generateAIResponse(
     );
   }
 
-  const extras = [filteredFocusModeContext, filteredFocusModeAdaptationContext, behaviorInstructions, profileFillContext, adaptationContext, memoryContext, sessionSportOverride, filteredInsightHint, filteredConversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, agentIntentProfileSection, responsePolicySection, architectureBriefText, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection, buildCompactInstruction]
+  const failSafePrompt = failSafeResolution ? buildFailSafePromptSection(failSafeResolution) : null;
+
+  const extras = [filteredFocusModeContext, filteredFocusModeAdaptationContext, behaviorInstructions, profileFillContext, adaptationContext, memoryContext, sessionSportOverride, filteredInsightHint, filteredConversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, failSafePrompt, agentIntentProfileSection, responsePolicySection, architectureBriefText, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection, buildCompactInstruction]
     .filter(Boolean)
     .join("\n\n");
   const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;
