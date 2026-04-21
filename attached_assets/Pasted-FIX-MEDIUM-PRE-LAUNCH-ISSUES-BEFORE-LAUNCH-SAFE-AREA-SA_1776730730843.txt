@@ -1,0 +1,139 @@
+FIX MEDIUM PRE-LAUNCH ISSUES BEFORE LAUNCH — SAFE AREA, SAFARI BLUR, WEEK TRANSITION UX
+
+CONTEXT:
+The audit found 3 medium-priority issues that should be fixed before launch.
+
+These are not core logic failures, but they do affect:
+- mobile usability
+- Safari stability
+- retention / user clarity
+
+We need to fix all 3 now.
+
+==================================================
+ISSUE M1 — SAFE AREA INSETS MISSING
+==================================================
+
+Problem:
+The bottom chat input and action bar are not padded for the iPhone home indicator area.
+On iPhone X and later, UI elements can sit too low and feel clipped or cramped.
+
+File:
+artifacts/trainchat/src/pages/chat.tsx
+Bottom input container around line ~2514
+
+Required fix:
+- Add proper bottom safe-area support to the bottom bar wrapper
+- Use env(safe-area-inset-bottom) or equivalent Tailwind-compatible approach
+- Make sure:
+  - input
+  - send button
+  - bottom action bar
+  all sit comfortably above the home indicator
+
+Validation:
+- test on iPhone-sized viewport
+- confirm no clipping
+- confirm bottom controls remain visually balanced
+
+==================================================
+ISSUE M2 — BACKDROP BLUR ON FIXED ELEMENTS (SAFARI IOS)
+==================================================
+
+Problem:
+There are 6+ backdrop-blur-sm instances on fixed/sticky elements.
+On Safari iOS, especially older devices, this can cause:
+- scroll flicker
+- paint instability
+- janky overlays
+
+File:
+artifacts/trainchat/src/pages/chat.tsx
+
+Approx lines:
+- 1900
+- 1912
+- 1972
+- 2049
+- 2101
+- 2514
+
+Required fix:
+- Replace backdrop-blur-sm on fixed/sticky overlay elements with a more stable opaque or near-opaque background
+- Preferred direction:
+  - bg-background/95
+  - or similar strong non-blur fallback
+- Keep the premium visual feel
+- Prioritize smoothness and stability over blur
+
+Validation:
+- test scrolling on iPhone Safari-sized layout
+- confirm no flicker or shimmer on fixed elements
+- confirm visual hierarchy still looks polished
+
+==================================================
+ISSUE M3 — WEEK TRANSITION UX GAP
+==================================================
+
+Problem:
+When a user completes Week 1, they may get a chat acknowledgment, but the Live Program Panel does not make the transition feel obvious or rewarding.
+This creates drop-off risk because week advancement is not visually reinforced.
+
+Required fix:
+Add a visible "Week Complete" / "Now in Week 2" transition state in the LiveProgramPanel.
+
+Expected behavior:
+- when a week advances, the panel visually acknowledges it
+- the user can clearly see they progressed
+- the next week becomes visibly active
+- the transition feels rewarding, not silent
+
+Suggested UI ideas:
+- "Week 1 Complete" badge/banner
+- "Now in Week 2" indicator
+- subtle highlight or celebration state
+- short-lived transition card or status pill
+- clear visual emphasis on the newly active week
+
+Important:
+- do not make it cheesy
+- keep it premium and clean
+- make the advancement immediately understandable
+
+Validation:
+- complete a week in test flow
+- confirm the Live Program Panel shows progression clearly
+- confirm the user can tell the system has moved forward
+
+==================================================
+IMPLEMENTATION REQUIREMENTS
+==================================================
+
+1. Make the fixes directly in the relevant files
+2. Keep the UI polished and mobile-first
+3. Do not introduce regressions in:
+- bottom bar behavior
+- focus switcher
+- live program panel
+- active program views
+
+==================================================
+OUTPUT REQUIRED
+==================================================
+
+Return:
+1. what was changed for safe area support
+2. which fixed/sticky blur elements were replaced
+3. how week advancement is now surfaced in the Live Program Panel
+4. validation summary for all 3 fixes
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Before launch:
+- bottom controls must be safe-area aware
+- Safari fixed elements must scroll smoothly
+- week advancement must feel visible and rewarding
+
+Fix these 3 issues cleanly, then stop and report back.

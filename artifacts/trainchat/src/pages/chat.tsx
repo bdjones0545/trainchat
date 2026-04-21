@@ -1897,7 +1897,7 @@ export default function Chat() {
       )}
       {showMemoryPanel && (
         <div
-          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
           onClick={() => setShowMemoryPanel(false)}
         >
           <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md">
@@ -1909,7 +1909,7 @@ export default function Chat() {
       {/* ─── Focus Info modal ─── */}
       {showFocusInfo && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-black/75 flex items-end sm:items-center justify-center p-4"
           onClick={() => setShowFocusInfo(false)}
         >
           <div
@@ -1969,7 +1969,7 @@ export default function Chat() {
       )}
 
       {/* ─── Mobile header ─── */}
-      <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border bg-background/95 backdrop-blur-sm flex-shrink-0 z-10">
+      <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border bg-background flex-shrink-0 z-10" style={{ paddingTop: "max(12px, env(safe-area-inset-top))" }}>
         <button
           onClick={() => setMobilePanel("left")}
           className="w-10 h-10 flex items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all"
@@ -2046,7 +2046,7 @@ export default function Chat() {
           {/* ── Focus Mode Switcher ─────────────────────────────────────────
               Premium segmented control. Switching changes the active
               programming focus and agent behavior. ── */}
-          <div className="flex-shrink-0 border-b border-border/60 bg-background/95 backdrop-blur-sm">
+          <div className="flex-shrink-0 border-b border-border/60 bg-background">
             {/* Section label row */}
             <div className="flex items-center justify-center gap-1 pt-2 pb-1">
               <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-muted-foreground/50 select-none">
@@ -2098,7 +2098,7 @@ export default function Chat() {
 
           {/* Compact sticky context bar — shows when a program exists */}
           {displayProgram && (
-            <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 border-b border-border bg-background/90 backdrop-blur-sm">
+            <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 border-b border-border bg-background/98">
               <div className="flex items-center gap-2 min-w-0 overflow-hidden">
                 <div
                   className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
@@ -2511,7 +2511,7 @@ export default function Chat() {
 
           {/* Input bar — safe-area aware, always visible above Safari chrome */}
           <div
-            className="flex-shrink-0 px-4 pt-3 border-t border-border bg-background/80 backdrop-blur-sm"
+            className="flex-shrink-0 px-4 pt-3 border-t border-border bg-background"
             style={{ paddingBottom: "max(20px, env(safe-area-inset-bottom))" }}
           >
             <div className="max-w-2xl mx-auto">

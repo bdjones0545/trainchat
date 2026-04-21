@@ -632,6 +632,28 @@ function ProgramTab({
     if (currentWeekNum !== null) setSelectedWeek(currentWeekNum);
   }, [currentWeekNum]);
 
+  // ── Week advancement banner ───────────────────────────────────────────────
+  const prevWeekNumRef = useRef<number | null>(null);
+  const [weekAdvancedTo, setWeekAdvancedTo] = useState<number | null>(null);
+  const weekAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const prev = prevWeekNumRef.current;
+    if (
+      prev !== null &&
+      currentWeekNum !== null &&
+      currentWeekNum > prev
+    ) {
+      setWeekAdvancedTo(currentWeekNum);
+      if (weekAdvanceTimerRef.current) clearTimeout(weekAdvanceTimerRef.current);
+      weekAdvanceTimerRef.current = setTimeout(() => setWeekAdvancedTo(null), 6000);
+    }
+    prevWeekNumRef.current = currentWeekNum;
+    return () => {
+      if (weekAdvanceTimerRef.current) clearTimeout(weekAdvanceTimerRef.current);
+    };
+  }, [currentWeekNum]);
+
   const { data: altWeekData, isLoading: altWeekLoading } = useQuery({
     queryKey: ["week-view-select", selectedWeek],
     queryFn: () => customFetch<any>(`/api/training-system/week?weekNumber=${selectedWeek}`),
@@ -1132,6 +1154,14 @@ function ProgramTab({
           0%,60% { opacity: 1; }
           100%   { opacity: 0; }
         }
+        @keyframes week-advance-in {
+          0%   { opacity: 0; transform: translateY(-6px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes week-advance-out {
+          0%   { opacity: 1; }
+          100% { opacity: 0; }
+        }
       `}</style>
       {isUpdating && updatePhase && (
         <UpdatingBadge phase={updatePhase} stage={buildingState!.stage} actionType={buildingState?.actionType} />
@@ -1265,6 +1295,32 @@ function ProgramTab({
             <span className="text-[10px] text-muted-foreground/70 truncate leading-snug">
               Last change: {lastChangeSummary}
             </span>
+          </div>
+        )}
+
+        {/* Week Advancement Banner — shown when week number increases */}
+        {weekAdvancedTo !== null && (
+          <div
+            className="flex items-center gap-2 mb-3 px-3 py-2 rounded-xl bg-primary/8 border border-primary/20"
+            style={{ animation: "week-advance-in 0.3s ease both" }}
+          >
+            <CheckCircle2 className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <span className="text-[10px] font-bold text-primary">
+                Now in Week {weekAdvancedTo}
+              </span>
+              {weekAdvancedTo && WEEK_ROLES[weekAdvancedTo] && (
+                <span className="text-[10px] text-primary/60 ml-1.5">
+                  · {WEEK_ROLES[weekAdvancedTo]}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => setWeekAdvancedTo(null)}
+              className="text-primary/40 hover:text-primary/70 transition-colors flex-shrink-0 text-[10px] font-semibold"
+            >
+              ✕
+            </button>
           </div>
         )}
 
