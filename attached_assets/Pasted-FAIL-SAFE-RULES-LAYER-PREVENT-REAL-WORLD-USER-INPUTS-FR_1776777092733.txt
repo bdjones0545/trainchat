@@ -1,0 +1,362 @@
+FAIL-SAFE RULES LAYER — PREVENT REAL-WORLD USER INPUTS FROM BREAKING TRAINCHAT
+
+CONTEXT:
+TrainChat is now a powerful multi-focus training system with:
+- Strength
+- Speed / Footwork
+- Mobility
+
+It has:
+- structured generation
+- edits
+- progression
+- focus-aware routing
+- session lifecycle
+- AI integration
+- library-driven selection
+
+However, real users will still create situations that can break or degrade the system:
+- too many constraints
+- vague requests
+- conflicting goals
+- extreme frequencies
+- oversized long-horizon asks
+- malformed / partial build states
+- rapid chained edits
+- ambiguous focus requests
+- edge-case equipment limitations
+- unrealistic demands
+
+We need a dedicated fail-safe rules layer that sits above generation/edit execution and protects the system from unsafe, incoherent, or oversized requests.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Create a fail-safe rules layer that detects risky user requests and automatically simplifies, redirects, or safely constrains them before they can break the system.
+
+==================================================
+TASK 1 — DEFINE FAIL-SAFE CATEGORIES
+==================================================
+
+Create a structured set of fail-safe categories, including at minimum:
+
+1. long_horizon_request
+2. excessive_frequency
+3. conflicting_constraints
+4. vague_request
+5. ambiguous_focus
+6. oversized_build_request
+7. extreme_equipment_constraint
+8. rapid_chained_edits
+9. partial_program_state
+10. unsupported_combination
+11. state_mismatch_risk
+12. no_visible_change_risk
+
+Return the final list and definitions.
+
+==================================================
+TASK 2 — BUILD A FAIL-SAFE CLASSIFIER
+==================================================
+
+Create a classifier like:
+
+resolveFailSafeState({
+  message,
+  focusMode,
+  profile,
+  activeProgram,
+  recentCommands,
+  requestedFrequency,
+  requestedDuration
+})
+
+It should return:
+
+type FailSafeResolution = {
+  triggered: boolean;
+  categories: string[];
+  severity: "low" | "medium" | "high";
+  strategy:
+    | "allow"
+    | "simplify"
+    | "cap_frequency"
+    | "reduce_scope"
+    | "redirect_focus"
+    | "require_existing_program"
+    | "block_and_explain"
+    | "queue_edit"
+    | "retryable_error";
+  notes?: string[];
+};
+
+==================================================
+TASK 3 — LONG-HORIZON SAFETY RULE
+==================================================
+
+If user asks for:
+- multi-week
+- multi-month
+- season plan
+- offseason plan
+- macrocycle
+- 6/8/12+ week builds
+
+Do NOT attempt to fully materialize all weeks.
+
+Instead:
+- reduce scope
+- build a safe initial 3-day program or first block
+- store long-term horizon metadata
+- explain this as a coaching decision, not a limitation
+
+==================================================
+TASK 4 — EXCESSIVE FREQUENCY SAFETY RULE
+==================================================
+
+If user requests:
+- 6–7 days/week
+- 2x/day
+- otherwise unrealistic training density
+
+Apply safe caps.
+
+Examples:
+- default cap to 5 days/week unless system explicitly supports more
+- convert 2x/day into a safer single-session structure unless specialized support exists
+
+Do NOT crash or try to generate an oversized schedule.
+
+==================================================
+TASK 5 — CONFLICTING CONSTRAINTS SAFETY RULE
+==================================================
+
+Detect contradictory or overloaded requests such as:
+- high intensity + low impact + high volume + low fatigue
+- strength + speed + mobility + hypertrophy in one short build
+- home gym + full sprint plan with no space
+- pain + max effort + no regressions
+
+When detected:
+- simplify
+- prioritize safety and coherence
+- preserve the most important intent
+- downgrade secondary demands
+
+Rule priority:
+1. safety
+2. feasibility
+3. clarity
+4. optimization
+
+==================================================
+TASK 6 — VAGUE REQUEST DEFAULTS
+==================================================
+
+If request is too vague:
+- "build me a program"
+- "make it better"
+- "I need something"
+
+Do NOT fail.
+
+Use safe defaults:
+- 3 days/week
+- moderate volume
+- current focus mode
+- general training goal inferred from profile if available
+- otherwise beginner-safe/general-performance bias
+
+Log which defaults were applied.
+
+==================================================
+TASK 7 — AMBIGUOUS FOCUS SAFETY RULE
+==================================================
+
+If the request strongly implies another focus:
+- user in Strength asks for hip mobility
+- user in Mobility asks for acceleration
+- user in Speed asks for hypertrophy arms
+
+Do NOT silently apply wrong-engine logic.
+
+Instead:
+- redirect_focus suggestion
+- or keep current focus but warn clearly if applicable
+- only proceed automatically if intent clearly belongs in the current focus
+
+==================================================
+TASK 8 — RAPID CHAINED EDIT PROTECTION
+==================================================
+
+If multiple edit commands arrive in quick succession:
+- queue them
+- debounce them
+- or block additional edits until the current one completes
+
+This prevents:
+- propagation conflicts
+- UI desync
+- contradictory edits landing out of order
+
+Add a visible “Updating your program…” lock state if needed.
+
+==================================================
+TASK 9 — PARTIAL / INVALID PROGRAM STATE PROTECTION
+==================================================
+
+Before allowing edits, session actions, or block actions, verify:
+- program exists
+- program is fully saved
+- focus matches current focus
+- required week/session data exists
+
+If not:
+- block the action cleanly
+- show a recoverable message
+- do NOT let commands operate on null/partial state
+
+==================================================
+TASK 10 — OVERSIZED BUILD REQUEST PROTECTION
+==================================================
+
+If the request would likely create too much output or token load:
+- reduce scope automatically
+- use compact build mode
+- suppress heavy nonessential context
+- simplify response size
+
+This should apply before the OpenAI call, not after failure.
+
+==================================================
+TASK 11 — NO-VISIBLE-CHANGE PROTECTION
+==================================================
+
+If an edit would result in no obvious visible program change:
+- either upgrade the edit to create a visible change
+- or explain clearly what changed in a Coach Insight
+- do not let the user feel like the command did nothing
+
+This is especially important for:
+- “more explosive”
+- “lower impact”
+- “more recovery”
+- “more hip focus”
+
+==================================================
+TASK 12 — GRACEFUL USER-FACING MESSAGING
+==================================================
+
+For fail-safe interventions, generate calm, coach-like explanations.
+
+Examples:
+
+Long-horizon:
+“I built the first phase around that longer goal so you can start cleanly and progress forward from there.”
+
+Frequency cap:
+“I tightened this to a more recoverable weekly structure so the work stays high quality.”
+
+Conflicting constraints:
+“I prioritized the parts that can coexist cleanly and simplified the rest so the program stays effective.”
+
+Do NOT sound like:
+- a system error
+- a refusal
+- a technical limitation
+unless truly unavoidable
+
+==================================================
+TASK 13 — HOOK FAIL-SAFE LAYER INTO ALL RELEVANT PATHS
+==================================================
+
+Apply fail-safe checks before:
+- build generation
+- rebuild generation
+- major edits
+- block refocus
+- session-level edits
+- long-horizon requests
+- high-frequency requests
+
+The fail-safe layer should run BEFORE expensive generation or mutation.
+
+==================================================
+TASK 14 — ADD AUDIT LOGGING
+==================================================
+
+Add logs:
+
+[FailSafeAudit] {
+  focusMode,
+  userMessage,
+  triggered,
+  categories,
+  severity,
+  strategy,
+  resultingScope,
+  defaultsApplied,
+  userFacingMessage
+}
+
+We need to know:
+- what got caught
+- what strategy was applied
+- whether the intervention worked
+
+==================================================
+TASK 15 — VALIDATION
+==================================================
+
+Test all of these:
+
+1. "Build me a 12-week speed program"
+→ reduce to first block / 3-day safe build
+
+2. "Give me a 7 day a week strength program"
+→ cap frequency safely
+
+3. "Make me a high-intensity low-impact hypertrophy speed plan"
+→ simplify conflicting constraints
+
+4. "Build me something"
+→ apply safe defaults
+
+5. In Strength mode: "I want hip mobility"
+→ focus redirect suggestion
+
+6. Send 3 edits rapidly
+→ queue/debounce safely
+
+7. Try to edit a missing/partial program
+→ block cleanly
+
+==================================================
+TASK 16 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. fail-safe category system
+2. classifier design
+3. what strategies were implemented
+4. where the fail-safe layer was hooked in
+5. user-facing messaging examples
+6. validation results across all test cases
+
+==================================================
+FINAL STANDARD
+==================================================
+
+TrainChat should now fail safely instead of breaking.
+
+When users make requests that are:
+- too large
+- too vague
+- too conflicting
+- too fast
+- or too risky
+
+the system should simplify, redirect, constrain, or safely block them before they can destabilize generation, edits, or state.
+
+The user experience should feel coach-like and controlled — not fragile.
