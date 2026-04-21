@@ -159,7 +159,7 @@ export function resolveFailSafeState(input: ResolveFailSafeStateInput): FailSafe
   const editAction = isEditAction(input.action, input.intentType, message);
   const buildAction = input.intentType === "CREATE_PROGRAM" || input.intentType === "START_NEW_PROGRAM" || input.action === "REBUILD_PROGRAM" || /\b(build|create|make me|give me|program|plan|routine)\b/.test(lower);
 
-  if (/\b(?:multi[\s-]?week|multi[\s-]?month|season|offseason|off-season|macrocycle|mesocycle|(?:[6-9]|1[0-9]|[2-9][0-9])\s*week|(?:2|3|4|5|6|7|8|9|10|11|12)\s*month)\b/.test(lower)) {
+  if (/\b(?:multi[\s-]?week|multi[\s-]?month|season|offseason|off-season|macrocycle|mesocycle|(?:[6-9]|1[0-9]|[2-9][0-9])[\s-]*week|(?:2|3|4|5|6|7|8|9|10|11|12)[\s-]*month)\b/.test(lower)) {
     categories.push("long_horizon_request");
     notes.push("Long horizon reduced to an initial block.");
   }
@@ -169,12 +169,12 @@ export function resolveFailSafeState(input: ResolveFailSafeStateInput): FailSafe
     notes.push("Training density capped for recovery.");
   }
 
-  const highIntensity = /\b(high intensity|max effort|heavy|hard|all out|intense)\b/.test(lower);
-  const lowImpact = /\b(low impact|joint friendly|no impact|easy on joints)\b/.test(lower);
-  const highVolume = /\b(high volume|tons of volume|lots of sets|every day)\b/.test(lower);
-  const lowFatigue = /\b(low fatigue|minimal fatigue|no soreness|recoverable)\b/.test(lower);
+  const highIntensity = /\b(high[\s-]?intensity|max[\s-]?effort|heavy|hard|all[\s-]?out|intense)\b/.test(lower);
+  const lowImpact = /\b(low[\s-]?impact|joint[\s-]?friendly|no[\s-]?impact|easy on joints)\b/.test(lower);
+  const highVolume = /\b(high[\s-]?volume|tons of volume|lots of sets|every day)\b/.test(lower);
+  const lowFatigue = /\b(low[\s-]?fatigue|minimal fatigue|no soreness|recoverable)\b/.test(lower);
   const goalCount = [/\bstrength\b/.test(lower), /\bspeed|acceleration|agility\b/.test(lower), /\bmobility|flexibility|rom\b/.test(lower), /\bhypertrophy|muscle|size\b/.test(lower)].filter(Boolean).length;
-  if ((highIntensity && lowImpact && (highVolume || lowFatigue)) || goalCount >= 3 || /\bpain\b/.test(lower) && /\b(max effort|no regressions?|heavy)\b/.test(lower)) {
+  if ((highIntensity && lowImpact && (highVolume || lowFatigue || goalCount >= 2)) || goalCount >= 3 || /\bpain\b/.test(lower) && /\b(max effort|no regressions?|heavy)\b/.test(lower)) {
     categories.push("conflicting_constraints");
     notes.push("Conflicting demands simplified by safety, feasibility, clarity, then optimization.");
   }
