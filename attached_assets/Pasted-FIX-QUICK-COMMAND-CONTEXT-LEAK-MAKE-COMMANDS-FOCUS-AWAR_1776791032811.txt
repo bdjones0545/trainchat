@@ -1,0 +1,127 @@
+FIX QUICK COMMAND CONTEXT LEAK — MAKE COMMANDS FOCUS-AWARE AND BLOCK-SPECIFIC
+
+CONTEXT:
+Quick commands in the right panel are currently not fully scoped to focus mode.
+
+Example issue:
+When editing a Speed block, commands like:
+- "Shift toward hypertrophy"
+- "General fitness bias"
+
+are appearing.
+
+These are invalid for Speed and break user trust.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Ensure all quick commands are:
+- focus-aware (strength / speed / mobility)
+- block-aware (block type + intent)
+- session-aware (if applicable)
+
+==================================================
+TASK 1 — AUDIT QUICK COMMAND GENERATION
+==================================================
+
+Find:
+- where quick commands are defined or generated
+- whether they are global or scoped
+- how focus/block context is passed
+
+==================================================
+TASK 2 — INTRODUCE CONTEXT-AWARE COMMAND GENERATOR
+==================================================
+
+Replace any global command list with:
+
+getQuickCommands({
+  focusMode,
+  blockType,
+  sessionIntent
+})
+
+==================================================
+TASK 3 — DEFINE COMMAND POOLS BY FOCUS
+==================================================
+
+Create strict command sets:
+
+SPEED:
+- increase acceleration emphasis
+- increase max velocity exposure
+- add reactive work
+- improve deceleration control
+- reduce ground contact time
+- lower CNS load
+- shorten sprint distance
+- reduce volume keep intensity
+
+STRENGTH:
+- increase load
+- increase volume
+- shift toward hypertrophy
+- increase intensity
+- add accessory work
+
+MOBILITY:
+- increase end-range control
+- increase passive range
+- add isometric holds
+- improve joint control
+- increase flow/recovery work
+
+==================================================
+TASK 4 — HARD FILTER INVALID COMMANDS
+==================================================
+
+Before rendering commands:
+
+filter(command => command.focus === currentFocus)
+
+No cross-focus commands should EVER appear.
+
+==================================================
+TASK 5 — OPTIONAL: INTENT-SENSITIVE FILTERING
+==================================================
+
+If sessionIntent exists:
+
+Example:
+Acceleration block → bias commands toward:
+- start mechanics
+- force production
+- projection angle
+
+Max velocity block → bias toward:
+- upright mechanics
+- elasticity
+- stiffness
+
+==================================================
+TASK 6 — ADD DEBUG LOG
+==================================================
+
+[QuickCommandAudit] {
+  focusMode,
+  blockType,
+  sessionIntent,
+  commandsReturned
+}
+
+==================================================
+TASK 7 — VALIDATION
+==================================================
+
+Test:
+1. Open Speed block → only speed commands appear
+2. Open Strength block → no speed/mobility commands appear
+3. Open Mobility block → only mobility commands appear
+4. No cross-contamination across focuses
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Quick commands must feel like they were designed by a domain expert specifically for that training mode — not generic across the entire system.
