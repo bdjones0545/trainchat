@@ -205,6 +205,7 @@ const EditRequestBody = z.object({
   targetContext: TargetContextSchema.optional(),
   source: z.enum(["ai_edit", "quick_action", "initialize", "auto_adjust"]).optional(),
   focusMode: z.enum(["strength", "speed", "mobility"]).optional(),
+  postToChat: z.boolean().optional().default(true),
 }).refine((d) => d.intent || (d.request && d.request.length > 0), {
   message: "Either 'intent' or a non-empty 'request' is required.",
 });
@@ -236,7 +237,7 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
   }
 
   const userId = req.session.userId!;
-  const { request: rawRequest, intent, targetContext, source = "ai_edit", focusMode } = parsed.data;
+  const { request: rawRequest, intent, targetContext, source = "ai_edit", focusMode, postToChat } = parsed.data;
   const userRequest = rawRequest ?? "";
   const uiContext = (req.body as any)?.uiContext ?? null;
   // focusMode can also come from uiContext (chat path); body-level takes precedence
@@ -476,7 +477,9 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
     });
 
     const [chatConversationId, today, week, block] = await Promise.all([
-      postEditAckToChat(userId, editResult, activeSystem.id, changeLogId, diff, auditSystemFocus, editPlan.intent).catch(() => null),
+      postToChat
+        ? postEditAckToChat(userId, editResult, activeSystem.id, changeLogId, diff, auditSystemFocus, editPlan.intent).catch(() => null)
+        : Promise.resolve(null),
       getTodaySession(userId).catch(() => null),
       getCurrentWeek(userId).catch(() => null),
       getBlockSummary(userId).catch(() => null),

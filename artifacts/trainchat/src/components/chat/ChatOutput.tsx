@@ -16,6 +16,7 @@ import {
 import { useState } from "react";
 
 interface Exercise {
+  id?: number;
   name: string;
   sets: number;
   reps: string;

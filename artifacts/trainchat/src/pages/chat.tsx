@@ -118,6 +118,7 @@ function transformSystemToProgram(
       focus: session.emphasis ?? undefined,
       dayOfWeek: session.dayOfWeek ?? undefined,
       exercises: (session.exercises ?? []).map((ex: any) => ({
+        id: typeof ex.id === "number" ? ex.id : undefined,
         name: ex.name,
         sets: typeof ex.sets === "number" ? ex.sets : 3,
         reps: ex.reps ?? "10",

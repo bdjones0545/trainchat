@@ -624,6 +624,7 @@ function ProgramTab({
   const [pendingRefinement, setPendingRefinement] = useState<string | null>(null);
   const [refineInput, setRefineInput] = useState("");
   const [showProgramUpdated, setShowProgramUpdated] = useState(false);
+  const [panelEditError, setPanelEditError] = useState<string | null>(null);
 
   // ── Week selector state ──────────────────────────────────────────────────
   const currentWeekNum = program?.weekNumber ?? null;
@@ -655,15 +656,20 @@ function ProgramTab({
     };
   }, [currentWeekNum]);
 
+  const { focusMode: panelFocusMode } = useFocusMode();
+
   const { data: altWeekData, isLoading: altWeekLoading } = useQuery({
-    queryKey: ["week-view-select", selectedWeek],
-    queryFn: () => customFetch<any>(`/api/training-system/week?weekNumber=${selectedWeek}`),
+    queryKey: ["week-view-select", selectedWeek, panelFocusMode],
+    queryFn: () => {
+      const params = new URLSearchParams({ weekNumber: String(selectedWeek) });
+      if (panelFocusMode) params.set("focus", panelFocusMode);
+      return customFetch<any>(`/api/training-system/week?${params.toString()}`);
+    },
     enabled: !!isSaved && currentWeekNum !== null && selectedWeek !== currentWeekNum,
     staleTime: 30_000,
   });
 
   // ── Current-week DB data for exercise ID lookup (needed for direct edits) ──
-  const { focusMode: panelFocusMode } = useFocusMode();
   const { data: currentWeekDbData } = useQuery({
     queryKey: ["live-panel-week-ids", savedProgramId, panelFocusMode],
     queryFn: () => {
@@ -730,6 +736,7 @@ function ProgramTab({
     options?: Record<string, unknown>,
   ) {
     if (!onSendMessage || buildingState?.isBuilding) return;
+    setPanelEditError(null);
     setPendingRefinement(key);
     const payload = { source: "right_panel", ...options };
     console.log("[SidebarEditExecutionAudit]", {
@@ -756,21 +763,16 @@ function ProgramTab({
     exerciseName: string,
     action: "easier" | "harder" | "swap",
     actionKey: string,
+    exerciseIdHint?: number,
   ) {
     if (buildingState?.isBuilding) return;
+    setPanelEditError(null);
     const request =
       action === "easier" ? `Make ${exerciseName} easier`
       : action === "harder" ? `Make ${exerciseName} harder`
       : `Swap ${exerciseName} with something similar`;
 
-    const exerciseId = exerciseIdMap.get(exerciseName.toLowerCase());
-    if (!exerciseId) {
-      sendRefinement(request, actionKey, {
-        exerciseId: exerciseName,
-        interactionType: "exercise_action",
-      });
-      return;
-    }
+    const exerciseId = exerciseIdHint ?? exerciseIdMap.get(exerciseName.toLowerCase());
 
     setPendingRefinement(actionKey);
     try {
@@ -780,25 +782,35 @@ function ProgramTab({
           request,
           focusMode: panelFocusMode,
           source: "quick_action",
-          targetContext: {
-            type: "exercise",
-            id: exerciseId,
-            label: exerciseName,
-          },
+          postToChat: false,
+          ...(exerciseId
+            ? {
+                targetContext: {
+                  type: "exercise",
+                  id: exerciseId,
+                  label: exerciseName,
+                },
+              }
+            : {}),
         }),
       });
       queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
       queryClient.invalidateQueries({ queryKey: ["live-panel-week-ids"] });
+      queryClient.invalidateQueries({ queryKey: ["week-view-select"] });
       setPendingRefinement(null);
       setShowProgramUpdated(true);
       if (programUpdatedTimerRef.current) clearTimeout(programUpdatedTimerRef.current);
       programUpdatedTimerRef.current = setTimeout(() => setShowProgramUpdated(false), 3000);
-    } catch {
-      setPendingRefinement(null);
-      sendRefinement(request, actionKey, {
-        exerciseId: exerciseName,
-        interactionType: "exercise_action",
+    } catch (error) {
+      console.error("[SidebarEditExecutionAudit] direct exercise edit failed", {
+        action,
+        exerciseName,
+        exerciseId: exerciseId ?? null,
+        focusMode: panelFocusMode,
+        error,
       });
+      setPendingRefinement(null);
+      setPanelEditError("Couldn't apply that sidebar edit. Open Full edit or try again.");
     }
   }
 
@@ -1091,6 +1103,7 @@ function ProgramTab({
           focus: s.emphasis ?? undefined,
           dayOfWeek: s.dayOfWeek ?? undefined,
           exercises: (s.exercises ?? []).map((ex: any) => ({
+            id: typeof ex.id === "number" ? ex.id : undefined,
             name: ex.name,
             sets: typeof ex.sets === "number" ? ex.sets : 3,
             reps: ex.reps ?? "10",
@@ -1333,6 +1346,21 @@ function ProgramTab({
           >
             <CheckCircle className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
             <span className="text-[10px] font-semibold text-green-400">Program Updated</span>
+          </div>
+        )}
+        {panelEditError && (
+          <div
+            className="flex items-center justify-between gap-2 mb-3 px-2.5 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20"
+            style={{ animation: "fadeSlideIn 0.2s ease both" }}
+          >
+            <span className="text-[10px] font-semibold text-red-300">{panelEditError}</span>
+            <button
+              type="button"
+              onClick={() => setPanelEditError(null)}
+              className="text-[10px] font-bold text-red-300/70 hover:text-red-200"
+            >
+              Dismiss
+            </button>
           </div>
         )}
 
@@ -1848,7 +1876,7 @@ function ProgramTab({
                                             action.label === "Easier" ? "easier" as const
                                             : action.label === "Harder" ? "harder" as const
                                             : "swap" as const;
-                                          handleDirectExerciseEdit(ex.name, dir, exActionKey);
+                                          handleDirectExerciseEdit(ex.name, dir, exActionKey, ex.id);
                                         } else {
                                           sendRefinement(action.buildMessage(ex.name), exActionKey, {
                                             dayIndex: idx,
