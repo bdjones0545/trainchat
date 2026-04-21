@@ -1,0 +1,304 @@
+ADD A LIGHTWEIGHT COACH REASONING LAYER — MAKE THE AGENT FEEL LIKE IT’S THINKING LIKE A HIGH-LEVEL COACH
+
+CONTEXT:
+TrainChat is already strong technically:
+- structured generation
+- focus-aware systems (Strength / Speed / Mobility)
+- real edits and refinements
+- memory and adaptation
+- session lifecycle
+- block progression
+
+But right now the agent still feels mostly reactive and utilitarian.
+It executes well, but it does not always FEEL like a coach making decisions.
+
+We want to add a lightweight “Coach Reasoning Layer” that explains what changed and why in a way that feels intelligent, intentional, and premium.
+
+This must:
+- increase perceived intelligence
+- NOT meaningfully increase latency
+- NOT blow up token usage
+- NOT interfere with JSON build/edit contracts
+- NOT become verbose or annoying
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Add a short, high-signal “Coach Insight” layer after builds, edits, and check-in driven adjustments so the agent feels like a real coach making training decisions.
+
+==================================================
+TASK 1 — DEFINE THE COACH REASONING OBJECT
+==================================================
+
+Create a structured reasoning object that can be generated after important actions.
+
+Suggested shape:
+
+type CoachReasoningContext = {
+  focusMode: "strength" | "speed" | "mobility";
+  actionType: "build" | "edit" | "checkin";
+  userIntent?: string;
+  blockType?: string;
+  weekNumber?: number;
+  sessionType?: string;
+  changesApplied?: string[];
+  adaptationSignals?: string[];
+};
+
+The output should be a single short string:
+- 1 sentence preferred
+- 2 sentences max
+
+==================================================
+TASK 2 — CREATE A DETERMINISTIC REASONING GENERATOR
+==================================================
+
+Build a helper like:
+
+generateCoachReasoning(context)
+
+This should be deterministic / template-driven, not a separate AI call.
+
+Reasoning should vary by:
+- focus mode
+- action type
+- major change applied
+- week role if relevant
+
+Examples:
+
+Strength build:
+"Built around force production and structural balance, with week progression sequenced to increase demand before unloading fatigue."
+
+Speed edit:
+"I shifted this toward acceleration so the session emphasizes projection and sharp mechanics without adding unnecessary fatigue."
+
+Mobility check-in:
+"I reduced positional demand and biased recovery flow so you can restore range without forcing end positions."
+
+Important:
+- no fluff
+- no motivational filler
+- no generic “great job”
+- no obvious repetition of the user’s request
+
+==================================================
+TASK 3 — GENERATE REASONING AFTER BUILDS
+==================================================
+
+When a build successfully completes:
+- Strength / Speed / Mobility
+
+Generate a Coach Insight based on:
+- focus mode
+- block type
+- week role
+- overall training intent
+
+This should happen only after the build succeeds and is parseable/savable.
+
+Do NOT let this interfere with the structured program response contract.
+
+==================================================
+TASK 4 — GENERATE REASONING AFTER EDITS / REFINEMENTS
+==================================================
+
+When a user edits/refines a program:
+- session edit
+- block refocus
+- exercise adjustment
+- quick command
+- sidebar action
+- Active Programs action
+
+Generate a Coach Insight based on:
+- what changed
+- why that change improves the system
+- what training quality it now emphasizes
+
+Examples:
+- load reduction → fatigue management
+- acceleration focus → projection mechanics
+- hip mobility focus → range + positional control
+
+==================================================
+TASK 5 — GENERATE REASONING AFTER CHECK-IN / FEEDBACK ADJUSTMENTS
+==================================================
+
+When the system adjusts based on:
+- session feedback
+- pain/discomfort
+- difficulty
+- post-session feeling
+
+Generate a Coach Insight that explains the adaptation in coaching language.
+
+Examples:
+- “I pulled back lower-body fatigue slightly so you can keep output high in the next session.”
+- “I shifted this week toward recovery flow because your last sessions suggest accumulating stiffness.”
+
+==================================================
+TASK 6 — KEEP TOKEN / LATENCY IMPACT NEAR ZERO
+==================================================
+
+This must NOT be a second OpenAI call.
+
+It should be:
+- deterministic
+- rule-based
+- cheap
+- fast
+
+No additional model request.
+No added JSON complexity.
+
+==================================================
+TASK 7 — SEND THE REASONING TO THE FRONTEND
+==================================================
+
+Wherever the backend returns the final successful result for:
+- build
+- edit
+- check-in adaptation
+
+include:
+- coachReasoning or coachInsight field in the payload
+
+This should be optional and only included when relevant.
+
+==================================================
+TASK 8 — RENDER A “COACH INSIGHT” UI ELEMENT
+==================================================
+
+On the frontend, render the insight in a small premium callout.
+
+Requirements:
+- compact
+- visually distinct
+- not overpowering
+- easy to scan
+- mobile-friendly
+
+Suggested format:
+
+Coach Insight:
+Built around neural output and movement efficiency, with session sequencing designed to keep quality high across the week.
+
+Use subtle styling that matches the active focus mode.
+
+==================================================
+TASK 9 — KEEP THE TONE COACH-LIKE
+==================================================
+
+The reasoning should sound like:
+- a sharp coach
+- intentional
+- concise
+- system-aware
+
+It should NOT sound like:
+- a therapist
+- a motivational speaker
+- a chatbot
+- a debugging tool
+
+Avoid phrases like:
+- “I have updated…”
+- “based on your request…”
+- “I processed…”
+- “the system determined…”
+
+Prefer:
+- “I shifted…”
+- “Built around…”
+- “This now emphasizes…”
+- “I reduced… so…”
+
+==================================================
+TASK 10 — VARY BY FOCUS
+==================================================
+
+Strength insights should sound like:
+- force production
+- structural balance
+- loading
+- neural demand
+- progression
+
+Speed insights should sound like:
+- projection
+- mechanics
+- output
+- reactivity
+- movement efficiency
+- fatigue control
+
+Mobility insights should sound like:
+- range
+- control
+- positional quality
+- decompression
+- recovery flow
+- end-range ownership
+
+==================================================
+TASK 11 — AUDIT LOGGING
+==================================================
+
+Add logs:
+
+[CoachReasoningAudit] {
+  focusMode,
+  actionType,
+  reasoningGenerated,
+  reasoningText,
+  sourceSignals
+}
+
+We need to verify the layer is firing correctly.
+
+==================================================
+TASK 12 — VALIDATION
+==================================================
+
+Test:
+1. Strength build
+2. Speed build
+3. Mobility build
+4. Strength edit
+5. Speed refinement
+6. Mobility check-in adjustment
+
+For each:
+- confirm a Coach Insight appears
+- confirm it matches the focus
+- confirm it explains what changed and why
+- confirm there is no extra latency spike
+- confirm it does not break structured responses
+
+==================================================
+TASK 13 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. the reasoning generator design
+2. where it was hooked into builds/edits/check-ins
+3. example outputs for Strength / Speed / Mobility
+4. frontend rendering details
+5. confirmation that it does not add an extra AI call
+
+==================================================
+FINAL STANDARD
+==================================================
+
+After this change, TrainChat should no longer feel like it simply executes commands.
+
+It should feel like a real coach making decisions:
+- short
+- sharp
+- intentional
+- intelligent
+- focus-aware
+
+The user should understand not just that something changed — but why it changed.
