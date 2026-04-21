@@ -54,6 +54,7 @@ export interface EditChange {
     rest?: string;
     tempo?: string;
     notes?: string;
+    metadata?: Record<string, unknown>;
   };
   updates?: Record<string, unknown>;
   replacement?: {
@@ -382,6 +383,8 @@ RULES:
 - Prefer surgical changes (1-3 exercises, 1 session, or week-level notes) over broad rewrites.
 - Maintain NSCA programming logic at all times (see NSCA STANDARDS below).
 - If swapping an exercise, ALWAYS use a name from the SWAP CANDIDATES list if provided.
+- If adding an exercise, NEVER add an exercise that already appears in the exact same SESSION/DAY context, including near-duplicates such as equipment variants of the same movement. If the requested addition would duplicate that day, choose a different real exercise with the same movement intent.
+- For add_exercise, strongly avoid repeating an exercise already used elsewhere in the same week or block unless the user explicitly asks for that exact exercise on multiple days.
 - If reducing volume, reduce accessory/finisher sets first (not primary lifts unless asked).
 - If changing a session to recovery/mobility, update type + replace exercises with light work.
 - In the changeSummary, write like a coach who KNOWS this athlete. Reference past decisions when

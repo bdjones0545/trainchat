@@ -1,0 +1,211 @@
+FIX DUPLICATE EXERCISE ADDITIONS — DO NOT ALLOW THE AGENT TO ADD AN EXERCISE THAT IS ALREADY IN THE SAME DAY/SESSION
+
+CONTEXT:
+When the user asks TrainChat to add an exercise to a day or program, the system sometimes adds an exercise that is already present in that same day/session.
+
+This is a trust-breaking behavior.
+If the user asks to add an exercise, the result must be a NEW useful addition, not a duplicate of something already in the session.
+
+We need a duplicate-prevention layer across all exercise-add flows.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Prevent the system from adding exercises that already exist in the current session/day, and strongly discourage redundant additions already heavily used in the same week/block.
+
+==================================================
+TASK 1 — AUDIT ALL ADD-EXERCISE ENTRY POINTS
+==================================================
+
+Trace every path where an exercise can be added, including:
+- typed chat requests like “add an exercise to Day 1”
+- sidebar / right panel add buttons
+- exercise-level quick actions
+- block/session refinement commands
+- any structured intent like add_exercise
+
+Return:
+- source component / handler
+- selector function used
+- whether it currently checks for duplicates
+- whether it is day-aware / week-aware / block-aware
+
+Log:
+
+[AddExerciseAudit] {
+  surface,
+  focusMode,
+  selectorUsed,
+  duplicateCheckPresent,
+  dayAware,
+  weekAware,
+  blockAware
+}
+
+==================================================
+TASK 2 — ADD HARD SAME-DAY DUPLICATE BLOCKING
+==================================================
+
+Before any add-exercise action succeeds, collect the current session/day exercise set.
+
+Do NOT allow:
+- exact same exercise ID
+- exact same canonical exercise name
+- near-duplicate canonical alias if relevant
+
+If the candidate already exists in the same day/session:
+- reject it immediately
+- continue searching for a different candidate
+
+This should be a hard block, not just a soft penalty.
+
+==================================================
+TASK 3 — ADD SAME-WEEK OVERUSE PENALTY
+==================================================
+
+If the same exercise already appears elsewhere in the same week:
+- strongly penalize it in scoring
+- prefer another valid candidate if one exists
+
+This should not always be a hard block, because some weekly repetition is appropriate, but it should be harder for the selector to choose it again unless truly necessary.
+
+==================================================
+TASK 4 — ADD SAME-BLOCK OVERUSE PENALTY
+==================================================
+
+If the same exercise is heavily reused in the same block:
+- apply an additional softer penalty
+- prefer more varied candidates where appropriate
+
+This should preserve block identity while avoiding lazy repetition.
+
+==================================================
+TASK 5 — APPLY DUPLICATE PROTECTION TO ALL FOCUS MODES
+==================================================
+
+This must work for:
+- Strength
+- Speed / Footwork
+- Mobility
+
+Examples:
+- Strength: don’t add Romanian Deadlift if it’s already on that day
+- Speed: don’t add Repeat 30m Sprint if it already exists in the same session
+- Mobility: don’t add the same hip drill twice in the same flow
+
+==================================================
+TASK 6 — INTEGRATE INTO THE SELECTOR / FALLBACK LADDER
+==================================================
+
+The duplicate rules must apply before and during:
+1. same-family selection
+2. adjacent-family fallback
+3. curated map fallback
+4. AI proposal fallback
+
+Even AI-proposed exercises must be checked against existing session content before insertion.
+
+==================================================
+TASK 7 — IF NO VALID NON-DUPLICATE CANDIDATE EXISTS, USE OPENAI TO PROPOSE A NEW EXERCISE
+==================================================
+
+Instead of failing cleanly when all deterministic candidates are blocked, escalate to OpenAI as the final fallback.
+
+Requirements:
+- preserve current focusMode
+- preserve session/day context
+- preserve slot / training intent
+- preserve week role
+- preserve equipment / space / injury constraints
+- do NOT return an exercise already present in the same day/session
+- do NOT return a near-duplicate of an existing day exercise
+- prefer same-family first, then approved adjacent-family only if needed
+
+Use a strict JSON-only contract for the proposed exercise definition.
+
+Validate the AI-proposed exercise for:
+- real name (not placeholder/generic text)
+- focus-appropriate family
+- slot fit
+- quality/intention match
+- equipment compatibility
+- injury-flag conflicts
+- duplicate/near-duplicate conflicts with the current day
+- valid neural/fatigue/time-cost metadata
+
+If valid:
+- add it to the current session
+- stage it as a learning candidate / generated candidate
+- do NOT directly insert it into the canonical exercise library unless it passes the existing promotion rules
+
+If invalid:
+- try next AI candidate
+- if all candidates fail, then return a clean coach-like message rather than adding a duplicate
+
+==================================================
+TASK 8 — ADD AUDIT LOGGING
+==================================================
+
+Add logs:
+
+[DuplicateExerciseBlockAudit] {
+  focusMode,
+  actionSource,
+  requestedDay,
+  blockedCandidateName,
+  blockReason, // same_day_duplicate | same_week_penalty | same_block_penalty
+  replacementFound,
+  finalCandidate,
+  aiFallbackUsed
+}
+
+We need to know:
+- how often duplicates were being attempted
+- what got blocked
+- what replacement was chosen
+- when OpenAI had to be used
+
+==================================================
+TASK 9 — VALIDATION
+==================================================
+
+Test all of these:
+
+1. Strength
+- ask to add an exercise to a day that already contains common lifts
+- confirm no existing exercise is duplicated
+
+2. Speed
+- ask to add another speed drill to a day
+- confirm the system does not add an existing sprint already on that session
+
+3. Mobility
+- ask to add a hip-focused exercise
+- confirm it does not insert the same mobility drill already present
+
+4. Edge case
+- very small candidate pool
+- confirm the system blocks duplication and uses OpenAI fallback before failing
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. all add-exercise entry points audited
+2. where duplicate blocking was added
+3. how same-week and same-block penalties work
+4. how OpenAI fallback is triggered and validated
+5. validation results for Strength / Speed / Mobility
+6. example logs from duplicate blocks and AI fallback
+
+==================================================
+FINAL STANDARD
+==================================================
+
+If a user asks TrainChat to add an exercise, the system must add a NEW valid exercise.
+
+It must never add an exercise that is already present in the same day/session.
+
+If the deterministic library cannot find a strong non-duplicate candidate, OpenAI should be used as a controlled last-resort backstop.

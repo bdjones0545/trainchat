@@ -21,8 +21,12 @@ import {
   trainingSessions,
   trainingWeeks,
   trainingPhases,
+  trainingSystems,
+  exerciseLibrary,
+  globalLearningEventsTable,
+  learningCandidatesTable,
 } from "@workspace/db";
-import { eq, and, inArray, ne } from "drizzle-orm";
+import { eq, and, inArray, ne, sql } from "drizzle-orm";
 import { logger } from "./logger";
 import type { EditPlan, EditChange } from "./edit-intent-service";
 import type { SystemSnapshot } from "./change-log-service";
@@ -60,6 +64,29 @@ const PHASE_ALLOWED_FIELDS = new Set([
   "name", "goal", "emphasis", "notes", "status",
 ]);
 
+const DEMAND_LEVELS = new Set(["low", "moderate", "high"]);
+const DIFFICULTY_LEVELS = new Set(["beginner", "intermediate", "advanced", "elite"]);
+const APPROVED_ADD_ADJACENCIES: Record<string, string[]> = {
+  knee_dominant: ["accessory_lower", "hip_dominant"],
+  hip_dominant: ["accessory_lower", "knee_dominant"],
+  push_horizontal: ["push_vertical", "accessory_upper"],
+  push_vertical: ["push_horizontal", "accessory_upper"],
+  pull_horizontal: ["pull_vertical", "accessory_upper"],
+  pull_vertical: ["pull_horizontal", "accessory_upper"],
+  power_explosive: ["plyometric", "conditioning"],
+  plyometric: ["power_explosive", "conditioning"],
+  core_anti_extension: ["core_anti_rotation", "core_lateral"],
+  core_anti_rotation: ["core_anti_extension", "core_rotation", "core_lateral"],
+  core_rotation: ["core_anti_rotation", "core_lateral"],
+  core_lateral: ["core_anti_extension", "core_anti_rotation"],
+  accessory_lower: ["knee_dominant", "hip_dominant"],
+  accessory_upper: ["push_horizontal", "pull_horizontal", "push_vertical", "pull_vertical"],
+  conditioning: ["power_explosive", "plyometric"],
+  mobility_prep: ["activation", "corrective"],
+  activation: ["mobility_prep", "corrective"],
+  corrective: ["mobility_prep", "activation"],
+};
+
 function filterFields(updates: Record<string, unknown>, allowed: Set<string>): Record<string, unknown> {
   const filtered: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(updates)) {
@@ -94,6 +121,489 @@ function extractPrescriptionUpdates(updates: Record<string, unknown>): {
   return {
     prescriptionPatch: Object.keys(patch).length > 0 ? patch : null,
     remainingUpdates: remaining,
+  };
+}
+
+function normalizeExerciseName(value: string | null | undefined): string {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/\brdl\b/g, "romanian deadlift")
+    .replace(/\bdb\b/g, "dumbbell")
+    .replace(/\bkb\b/g, "kettlebell")
+    .replace(/\bbwd\b/g, "backward")
+    .replace(/\breps?\b|\bsets?\b|\beach side\b|\bper side\b/g, "")
+    .replace(/\b(barbell|dumbbell|kettlebell|cable|machine|banded|band|bodyweight|single arm|single-arm|single leg|single-leg|alternating|loaded|weighted|repeat)\b/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function exerciseNameKeys(name: string | null | undefined): Set<string> {
+  const canonical = normalizeExerciseName(name);
+  const raw = String(name ?? "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  const compact = canonical.replace(/\s+/g, "");
+  const keys = new Set([canonical, raw, compact].filter(Boolean));
+  if (canonical.includes("romanian deadlift")) keys.add("rdl");
+  if (canonical.includes("push up")) keys.add("pushup");
+  if (canonical.includes("pull up")) keys.add("pullup");
+  if (canonical.includes("30m sprint")) keys.add("sprint");
+  return keys;
+}
+
+function namesConflict(a: string | null | undefined, b: string | null | undefined): boolean {
+  const aKeys = exerciseNameKeys(a);
+  const bKeys = exerciseNameKeys(b);
+  for (const key of aKeys) {
+    if (key.length >= 3 && bKeys.has(key)) return true;
+  }
+  const aNorm = normalizeExerciseName(a);
+  const bNorm = normalizeExerciseName(b);
+  if (!aNorm || !bNorm) return false;
+  return aNorm.length >= 8 && bNorm.length >= 8 && (aNorm.includes(bNorm) || bNorm.includes(aNorm));
+}
+
+function inferMovementPattern(name: string, category?: string): string {
+  const n = `${name} ${category ?? ""}`.toLowerCase();
+  if (/squat|lunge|split squat|step.?up|leg press/.test(n)) return "knee_dominant";
+  if (/deadlift|hinge|rdl|romanian|hip thrust|glute bridge|good morning|swing/.test(n)) return "hip_dominant";
+  if (/bench|push.?up|chest press|dip/.test(n)) return "push_horizontal";
+  if (/overhead|shoulder press|z.?press|landmine press/.test(n)) return "push_vertical";
+  if (/row|face pull/.test(n)) return "pull_horizontal";
+  if (/pull.?up|chin.?up|pulldown|lat/.test(n)) return "pull_vertical";
+  if (/jump|bound|sprint|throw|plyo|power|med ball|acceleration|deceleration/.test(n)) return "power_explosive";
+  if (/plank|dead bug|hollow|anti.?extension|ab wheel/.test(n)) return "core_anti_extension";
+  if (/pallof|anti.?rotation|chop|lift/.test(n)) return "core_anti_rotation";
+  if (/carry|suitcase|side plank|lateral/.test(n)) return "core_lateral";
+  if (/mobility|stretch|cars|prep|flow|pails|rails|hip|ankle|shoulder|thoracic|breathing/.test(n)) return "mobility_prep";
+  if (/activation|glute|wall drill|march|skip/.test(n)) return "activation";
+  if (/conditioning|bike|run|rower|sled|tempo|interval/.test(n)) return "conditioning";
+  return "accessory_lower";
+}
+
+function inferFocusMode(systemMeta: unknown, sessionType?: string | null, sessionLabel?: string | null): string {
+  const metaFocus = typeof systemMeta === "object" && systemMeta ? (systemMeta as any).focusMode : null;
+  if (typeof metaFocus === "string" && metaFocus.trim()) return metaFocus;
+  const text = `${sessionType ?? ""} ${sessionLabel ?? ""}`.toLowerCase();
+  if (/mobility|recovery|range|flow|tissue/.test(text)) return "mobility";
+  if (/speed|sprint|acceleration|footwork|agility|plyo/.test(text)) return "speed";
+  return "strength";
+}
+
+function roleToSessionCategory(role?: string | null, fallback?: string): string {
+  const r = String(role ?? "").toLowerCase();
+  if (r.includes("primary")) return "primary";
+  if (r.includes("power")) return "power";
+  if (r.includes("conditioning")) return "conditioning";
+  if (r.includes("prep") || r.includes("activation")) return "activation";
+  if (r.includes("corrective")) return "recovery";
+  if (r.includes("accessory") || r.includes("unilateral")) return "accessory";
+  return fallback ?? "accessory";
+}
+
+function defaultPrescriptionForCategory(category?: string | null): Pick<NonNullable<EditChange["exercise"]>, "sets" | "reps" | "rest" | "tempo"> {
+  const c = String(category ?? "").toLowerCase();
+  if (c === "power" || c === "explosive") return { sets: 4, reps: "3-5", rest: "2-3 min", tempo: "X10X" };
+  if (c === "conditioning" || c === "finisher") return { sets: 6, reps: "20-30s", rest: "30-60s" };
+  if (c === "activation" || c === "warmup" || c === "recovery") return { sets: 2, reps: "8-10", rest: "30-45s" };
+  if (c === "trunk") return { sets: 3, reps: "8-12", rest: "60s" };
+  return { sets: 3, reps: "8-12", rest: "90s" };
+}
+
+function isGenericGeneratedName(name: string): boolean {
+  const n = name.trim().toLowerCase();
+  if (n.length < 3 || n.length > 80) return true;
+  if (/^(exercise|movement|drill|variation|option|alternative|something|anything|new exercise|new movement|new drill)$/.test(n)) return true;
+  if (/[{}[\]"`]/.test(name)) return true;
+  return false;
+}
+
+async function loadAddExerciseContext(sessionId: number) {
+  const [ctx] = await db
+    .select({
+      sessionId: trainingSessions.id,
+      sessionLabel: trainingSessions.label,
+      sessionType: trainingSessions.sessionType,
+      weekId: trainingWeeks.id,
+      weekNumber: trainingWeeks.weekNumber,
+      phaseId: trainingPhases.id,
+      trainingSystemId: trainingSystems.id,
+      systemMeta: trainingSystems.metadata,
+      equipmentAccess: trainingSystems.equipmentAccess,
+      constraints: trainingSystems.constraints,
+      overarchingGoal: trainingSystems.overarchingGoal,
+    })
+    .from(trainingSessions)
+    .innerJoin(trainingWeeks, eq(trainingSessions.trainingWeekId, trainingWeeks.id))
+    .innerJoin(trainingPhases, eq(trainingWeeks.trainingPhaseId, trainingPhases.id))
+    .innerJoin(trainingSystems, eq(trainingPhases.trainingSystemId, trainingSystems.id))
+    .where(eq(trainingSessions.id, sessionId))
+    .limit(1);
+
+  if (!ctx) return null;
+
+  const dayExercises = await db
+    .select({ id: sessionExercises.id, name: sessionExercises.name })
+    .from(sessionExercises)
+    .where(eq(sessionExercises.trainingSessionId, sessionId));
+
+  const weekExercises = await db
+    .select({ id: sessionExercises.id, name: sessionExercises.name })
+    .from(sessionExercises)
+    .innerJoin(trainingSessions, eq(sessionExercises.trainingSessionId, trainingSessions.id))
+    .where(eq(trainingSessions.trainingWeekId, ctx.weekId));
+
+  const blockExercises = await db
+    .select({ id: sessionExercises.id, name: sessionExercises.name })
+    .from(sessionExercises)
+    .innerJoin(trainingSessions, eq(sessionExercises.trainingSessionId, trainingSessions.id))
+    .innerJoin(trainingWeeks, eq(trainingSessions.trainingWeekId, trainingWeeks.id))
+    .where(eq(trainingWeeks.trainingPhaseId, ctx.phaseId));
+
+  return { ...ctx, dayExercises, weekExercises, blockExercises };
+}
+
+function occurrenceCount(name: string, rows: Array<{ name: string }>): number {
+  return rows.filter((row) => namesConflict(name, row.name)).length;
+}
+
+function detectSameDayDuplicate(name: string, rows: Array<{ name: string }>): string | null {
+  const found = rows.find((row) => namesConflict(name, row.name));
+  return found?.name ?? null;
+}
+
+async function persistGeneratedAddCandidate(params: {
+  requestedName: string;
+  candidate: any;
+  focusMode: string;
+  sourcePattern: string;
+  sessionId: number;
+}): Promise<void> {
+  try {
+    const key = `safe_add_candidate:${params.focusMode}:${normalizeExerciseName(params.requestedName).replace(/\s+/g, "_")}:${normalizeExerciseName(params.candidate.name).replace(/\s+/g, "_")}`;
+    const summary = `AI generated staged add-exercise candidate "${params.candidate.name}" for "${params.requestedName}". Not added to the canonical exercise library.`;
+    const metadata = {
+      requestedExercise: params.requestedName,
+      proposedExercise: params.candidate.name,
+      focusMode: params.focusMode,
+      sourcePattern: params.sourcePattern,
+      sessionId: params.sessionId,
+      generatedDefinition: params.candidate,
+    };
+
+    await db.insert(globalLearningEventsTable).values({
+      userId: null,
+      eventType: "exercise_addition_candidate_generated",
+      routeUsed: "openai",
+      intentType: "add_exercise",
+      editSubtype: "duplicate_safe_ai_backstop",
+      targetScope: "session",
+      normalizedRequestKey: "safe_add_exercise_backstop",
+      mutationApplied: true,
+      validatorPassed: true,
+      metadata,
+    });
+
+    const existing = await db
+      .select({ id: learningCandidatesTable.id, evidenceCount: learningCandidatesTable.evidenceCount })
+      .from(learningCandidatesTable)
+      .where(and(eq(learningCandidatesTable.key, key), eq(learningCandidatesTable.promoted, false), eq(learningCandidatesTable.dismissed, false)))
+      .limit(1);
+
+    if (existing.length > 0) {
+      await db
+        .update(learningCandidatesTable)
+        .set({
+          evidenceCount: (existing[0].evidenceCount ?? 0) + 1,
+          confidenceScore: 0.2,
+          recommendation: "needs_more_data",
+          updatedAt: new Date(),
+          metadata,
+        })
+        .where(eq(learningCandidatesTable.id, existing[0].id));
+    } else {
+      await db.insert(learningCandidatesTable).values({
+        type: "exercise_relationship_update",
+        key,
+        summary,
+        evidenceCount: 1,
+        confidenceScore: 0.2,
+        riskLevel: "medium",
+        recommendation: "needs_more_data",
+        metadata,
+      });
+    }
+  } catch (err) {
+    logger.warn({ err }, "[DuplicateExerciseBlockAudit] Failed to persist staged add candidate");
+  }
+}
+
+function validateGeneratedAddExercise(def: any, ctx: Awaited<ReturnType<typeof loadAddExerciseContext>>, sourcePattern: string): { ok: boolean; reason?: string; exercise?: NonNullable<EditChange["exercise"]> } {
+  if (!ctx || !def || typeof def !== "object") return { ok: false, reason: "not_object" };
+  const name = String(def.name ?? "").trim();
+  if (isGenericGeneratedName(name)) return { ok: false, reason: "generic_name" };
+  if (detectSameDayDuplicate(name, ctx.dayExercises)) return { ok: false, reason: "same_day_duplicate" };
+  const approved = new Set([sourcePattern, ...(APPROVED_ADD_ADJACENCIES[sourcePattern] ?? [])]);
+  const movementPattern = String(def.movementPattern ?? sourcePattern).trim();
+  if (!approved.has(movementPattern)) return { ok: false, reason: "unapproved_pattern" };
+  const neuralDemand = String(def.neuralDemand ?? "moderate");
+  const timeCost = String(def.timeCost ?? "moderate");
+  const difficultyLevel = String(def.difficultyLevel ?? "intermediate");
+  if (!DEMAND_LEVELS.has(neuralDemand) || !DEMAND_LEVELS.has(timeCost)) return { ok: false, reason: "bad_demand_schema" };
+  if (!DIFFICULTY_LEVELS.has(difficultyLevel)) return { ok: false, reason: "bad_difficulty_schema" };
+  const constraints = String(ctx.constraints ?? "").toLowerCase();
+  const jointStressProfile = Array.isArray(def.jointStressProfile) ? def.jointStressProfile.map((x: unknown) => String(x).toLowerCase()) : [];
+  if (constraints && jointStressProfile.some((flag: string) => flag && constraints.includes(flag))) return { ok: false, reason: "injury_flag_conflict" };
+  const category = roleToSessionCategory(def.role, "accessory");
+  const dose = defaultPrescriptionForCategory(category);
+  return {
+    ok: true,
+    exercise: {
+      name,
+      category,
+      sets: Number.isFinite(Number(def.sets)) ? Number(def.sets) : dose.sets,
+      reps: String(def.reps ?? dose.reps),
+      rest: String(def.rest ?? dose.rest),
+      tempo: def.tempo ? String(def.tempo) : dose.tempo,
+      notes: String(def.coachingNotes ?? def.reason ?? `Added as a non-duplicate ${category} option.`).slice(0, 500),
+      metadata: {
+        generatedCandidate: true,
+        source: "duplicate_safe_add_ai_backstop",
+        movementPattern,
+        neuralDemand,
+        timeCost,
+        difficultyLevel,
+        generatedDefinition: def,
+      },
+    },
+  };
+}
+
+async function requestAiAddCandidate(params: {
+  ctx: Awaited<ReturnType<typeof loadAddExerciseContext>>;
+  requestedName: string;
+  sourcePattern: string;
+  focusMode: string;
+  category?: string;
+}): Promise<NonNullable<EditChange["exercise"]> | null> {
+  const { ctx, requestedName, sourcePattern, focusMode, category } = params;
+  if (!ctx) return null;
+  const apiKey = process.env.OPENAI_API_KEY ?? process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  if (!apiKey) return null;
+  const baseUrl = process.env.OPENAI_API_KEY ? "https://api.openai.com/v1" : (process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? "https://api.openai.com/v1");
+  const existingDay = ctx.dayExercises.map((ex) => ex.name).join(", ") || "none";
+  const approvedPatterns = [sourcePattern, ...(APPROVED_ADD_ADJACENCIES[sourcePattern] ?? [])];
+  const prompt = `Return JSON only. Propose up to 3 real exercise definitions to add to a training session without duplicating the current day.
+
+Focus mode: ${focusMode}
+Session: ${ctx.sessionLabel}
+Session type: ${ctx.sessionType}
+Week number: ${ctx.weekNumber}
+Requested/blocked candidate: ${requestedName}
+Preferred category: ${category ?? "accessory"}
+Preferred movement pattern: ${sourcePattern}
+Approved movement patterns: ${approvedPatterns.join(", ")}
+Equipment access: ${ctx.equipmentAccess}
+Constraints/injuries: ${ctx.constraints ?? "none"}
+Program goal: ${ctx.overarchingGoal}
+Existing same-day exercises that must not be duplicated or near-duplicated: ${existingDay}
+
+Schema:
+{
+  "candidates": [
+    {
+      "name": "string",
+      "movementPattern": "string",
+      "bodyRegion": "upper_body|lower_body|full_body|core",
+      "role": "primary_strength|primary_power|unilateral_strength|accessory|conditioning|prep_activation|corrective",
+      "equipment": ["string"],
+      "difficultyLevel": "beginner|intermediate|advanced|elite",
+      "neuralDemand": "low|moderate|high",
+      "timeCost": "low|moderate|high",
+      "jointStressProfile": ["string"],
+      "coachingNotes": "string",
+      "reason": "string"
+    }
+  ]
+}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: prompt },
+          { role: "user", content: `Add one non-duplicate ${focusMode} exercise to ${ctx.sessionLabel}.` },
+        ],
+        max_tokens: 900,
+        temperature: 0.15,
+        response_format: { type: "json_object" },
+      }),
+    });
+    if (!response.ok) {
+      logger.warn({ status: response.status, body: await response.text() }, "[DuplicateExerciseBlockAudit] OpenAI add fallback failed");
+      return null;
+    }
+    const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const parsed = JSON.parse(data.choices?.[0]?.message?.content ?? "{}");
+    const candidates = Array.isArray(parsed.candidates) ? parsed.candidates : [parsed];
+    for (const candidate of candidates) {
+      const validated = validateGeneratedAddExercise(candidate, ctx, sourcePattern);
+      if (!validated.ok) {
+        logger.warn({ reason: validated.reason, candidateName: candidate?.name }, "[DuplicateExerciseBlockAudit] AI add proposal rejected");
+        continue;
+      }
+      await persistGeneratedAddCandidate({ requestedName, candidate, focusMode, sourcePattern, sessionId: ctx.sessionId });
+      return validated.exercise ?? null;
+    }
+  } catch (err) {
+    logger.warn({ err }, "[DuplicateExerciseBlockAudit] AI add fallback threw");
+  }
+  return null;
+}
+
+async function selectNonDuplicateLibraryExercise(params: {
+  ctx: Awaited<ReturnType<typeof loadAddExerciseContext>>;
+  requested: NonNullable<EditChange["exercise"]>;
+  sourcePattern: string;
+  focusMode: string;
+}): Promise<NonNullable<EditChange["exercise"]> | null> {
+  const { ctx, requested, sourcePattern, focusMode } = params;
+  if (!ctx) return null;
+  const approved = new Set([sourcePattern, ...(APPROVED_ADD_ADJACENCIES[sourcePattern] ?? [])]);
+  const rows = await db
+    .select()
+    .from(exerciseLibrary)
+    .where(eq(exerciseLibrary.isActive, true));
+
+  const requestedCategory = requested.category ?? roleToSessionCategory(null, "accessory");
+  let best: { row: typeof rows[number]; score: number; weekCount: number; blockCount: number } | null = null;
+  for (const row of rows) {
+    if (namesConflict(row.name, requested.name)) continue;
+    if (detectSameDayDuplicate(row.name, ctx.dayExercises)) continue;
+    const pattern = row.movementPattern;
+    const samePattern = pattern === sourcePattern;
+    const adjacentPattern = approved.has(pattern);
+    const intentTags = Array.isArray(row.intentTags) ? row.intentTags : [];
+    const roleCategory = roleToSessionCategory(row.role, requestedCategory);
+    let score = 0;
+    if (samePattern) score += 100;
+    else if (adjacentPattern) score += 75;
+    else score += 30;
+    if (roleCategory === requestedCategory) score += 15;
+    if (focusMode === "speed" && (intentTags.includes("power") || intentTags.includes("athletic") || pattern === "power_explosive" || pattern === "conditioning")) score += 20;
+    if (focusMode === "mobility" && (intentTags.includes("mobility") || intentTags.includes("activation") || ["mobility_prep", "activation", "corrective"].includes(pattern))) score += 25;
+    if (focusMode === "strength" && (intentTags.includes("strength") || intentTags.includes("hypertrophy"))) score += 15;
+    const weekCount = occurrenceCount(row.name, ctx.weekExercises.filter((ex) => ex.id !== 0));
+    const blockCount = occurrenceCount(row.name, ctx.blockExercises.filter((ex) => ex.id !== 0));
+    if (weekCount > 0) score -= 50 * weekCount;
+    if (blockCount > weekCount) score -= Math.min(30, 8 * (blockCount - weekCount));
+    if (!adjacentPattern && pattern !== sourcePattern) score -= 20;
+    if (!best || score > best.score) best = { row, score, weekCount, blockCount };
+  }
+  if (!best) return null;
+  const category = roleToSessionCategory(best.row.role, requested.category ?? "accessory");
+  const dose = defaultPrescriptionForCategory(category);
+  return {
+    name: best.row.name,
+    category,
+    sets: requested.sets ?? dose.sets,
+    reps: requested.reps ?? dose.reps,
+    rest: requested.rest ?? dose.rest,
+    tempo: requested.tempo ?? dose.tempo,
+    notes: requested.notes ?? best.row.description ?? `Added as a non-duplicate ${category} option.`,
+    metadata: {
+      duplicateSafeAdd: true,
+      source: "library",
+      movementPattern: best.row.movementPattern,
+      weekReuseCountBeforeAdd: best.weekCount,
+      blockReuseCountBeforeAdd: best.blockCount,
+      score: best.score,
+    },
+  };
+}
+
+async function resolveDuplicateSafeAddExercise(change: EditChange): Promise<{ change: EditChange; audit: Record<string, unknown> | null; blocked: boolean }> {
+  if (change.type !== "add_exercise" || !change.sessionId || !change.exercise?.name) {
+    return { change, audit: null, blocked: false };
+  }
+
+  const ctx = await loadAddExerciseContext(change.sessionId);
+  if (!ctx) return { change, audit: null, blocked: false };
+
+  const focusMode = inferFocusMode(ctx.systemMeta, ctx.sessionType, ctx.sessionLabel);
+  const selectorUsed = "edit_engine_duplicate_safe_selector";
+  const requested = change.exercise;
+  const existingLibrary = await db
+    .select()
+    .from(exerciseLibrary)
+    .where(sql`lower(${exerciseLibrary.name}) = lower(${requested.name})`)
+    .limit(1);
+  const sourcePattern = existingLibrary[0]?.movementPattern ?? inferMovementPattern(requested.name, requested.category);
+  const dayDuplicate = detectSameDayDuplicate(requested.name, ctx.dayExercises);
+  const weekCount = occurrenceCount(requested.name, ctx.weekExercises.filter((ex) => !ctx.dayExercises.some((day) => day.id === ex.id)));
+  const blockCount = occurrenceCount(requested.name, ctx.blockExercises);
+  const sameWeekPenalty = weekCount > 0;
+  const sameBlockPenalty = blockCount > weekCount + (dayDuplicate ? 1 : 0);
+  const shouldReplace = !!dayDuplicate || sameWeekPenalty || sameBlockPenalty;
+
+  logger.info(
+    {
+      surface: /button|chip|right panel|quick action/i.test(change.reason ?? "") ? "right_panel_button" : "edit_plan",
+      focusMode,
+      selectorUsed,
+      duplicateCheckPresent: true,
+      dayAware: true,
+      weekAware: true,
+      blockAware: true,
+    },
+    "[AddExerciseAudit]"
+  );
+
+  if (!shouldReplace) {
+    return { change, audit: null, blocked: false };
+  }
+
+  let replacement = await selectNonDuplicateLibraryExercise({ ctx, requested, sourcePattern, focusMode });
+  let aiFallbackUsed = false;
+  if (!replacement) {
+    aiFallbackUsed = true;
+    replacement = await requestAiAddCandidate({ ctx, requestedName: requested.name, sourcePattern, focusMode, category: requested.category });
+  }
+
+  const blockReason = dayDuplicate ? "same_day_duplicate" : sameWeekPenalty ? "same_week_penalty" : "same_block_penalty";
+  const audit = {
+    focusMode,
+    actionSource: change.reason ?? "add_exercise",
+    requestedDay: ctx.sessionLabel ?? ctx.sessionId,
+    blockedCandidateName: requested.name,
+    blockReason,
+    replacementFound: !!replacement,
+    finalCandidate: replacement?.name ?? null,
+    aiFallbackUsed,
+  };
+  logger.info(audit, "[DuplicateExerciseBlockAudit]");
+
+  if (!replacement) {
+    return {
+      change: {
+        ...change,
+        exercise: undefined,
+      },
+      audit,
+      blocked: true,
+    };
+  }
+
+  return {
+    change: {
+      ...change,
+      exercise: replacement,
+      reason: `${change.reason ?? "Add exercise"} — duplicate-safe resolver selected ${replacement.name}`,
+    },
+    audit,
+    blocked: !!dayDuplicate,
   };
 }
 
@@ -147,24 +657,32 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; deta
           return { applied: false, detail: `add_exercise missing sessionId or exercise.name` };
         }
 
+        const resolved = await resolveDuplicateSafeAddExercise(change);
+        const effectiveChange = resolved.change;
+        if (!effectiveChange.sessionId || !effectiveChange.exercise?.name) {
+          const requested = change.exercise?.name ?? "unknown";
+          return { applied: false, detail: `Blocked duplicate add_exercise "${requested}" in session ${change.sessionId}; no valid non-duplicate candidate found` };
+        }
+
         // Determine the next orderIndex for this session
         const existing = await db
           .select({ orderIndex: sessionExercises.orderIndex })
           .from(sessionExercises)
-          .where(eq(sessionExercises.trainingSessionId, change.sessionId));
+          .where(eq(sessionExercises.trainingSessionId, effectiveChange.sessionId));
         const maxOrder = existing.reduce((max, r) => Math.max(max, r.orderIndex ?? 0), 0);
 
         const [inserted] = await db
           .insert(sessionExercises)
           .values({
-            trainingSessionId: change.sessionId,
-            name: change.exercise.name,
-            category: (change.exercise.category as any) ?? "accessory",
-            sets: change.exercise.sets ?? 3,
-            reps: change.exercise.reps ?? "8-10",
-            rest: change.exercise.rest ?? "90s",
-            tempo: change.exercise.tempo ?? null,
-            notes: change.exercise.notes ?? null,
+            trainingSessionId: effectiveChange.sessionId,
+            name: effectiveChange.exercise.name,
+            category: (effectiveChange.exercise.category as any) ?? "accessory",
+            sets: effectiveChange.exercise.sets ?? 3,
+            reps: effectiveChange.exercise.reps ?? "8-10",
+            rest: effectiveChange.exercise.rest ?? "90s",
+            tempo: effectiveChange.exercise.tempo ?? null,
+            notes: effectiveChange.exercise.notes ?? null,
+            metadata: effectiveChange.exercise.metadata ?? null,
             orderIndex: maxOrder + 1,
             createdAt: new Date(),
             updatedAt: new Date(),
@@ -172,10 +690,10 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; deta
           .returning({ id: sessionExercises.id });
 
         if (!inserted) {
-          return { applied: false, detail: `Failed to insert exercise into session ${change.sessionId}` };
+          return { applied: false, detail: `Failed to insert exercise into session ${effectiveChange.sessionId}` };
         }
 
-        return { applied: true, detail: `Added "${change.exercise.name}" to session ${change.sessionId} (new id:${inserted.id})`, newId: inserted.id };
+        return { applied: true, detail: `Added "${effectiveChange.exercise.name}" to session ${effectiveChange.sessionId} (new id:${inserted.id})`, newId: inserted.id };
       }
 
       case "update_exercise": {
