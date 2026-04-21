@@ -1,5 +1,6 @@
 import { CheckCircle2, ArrowRight, Zap, AlertTriangle, Info, Eye } from "lucide-react";
 import { useLocation } from "wouter";
+import CoachReasoningCallout from "./CoachReasoningCallout";
 
 interface ChangedIds {
   exercises: number[];
@@ -15,6 +16,7 @@ interface SystemEditData {
   systemId: number;
   changeLogId: number;
   verificationStatus?: "verified" | "partial" | "unclear";
+  coachReasoning?: string | null;
 }
 
 interface Props {
@@ -129,6 +131,9 @@ export default function SystemUpdateCard({ data, onShowChange }: Props) {
           <p className={`text-[11px] ${config.accentColor}/70 mt-1.5 leading-relaxed`}>
             {config.subNote}
           </p>
+        )}
+        {data.coachReasoning && (
+          <CoachReasoningCallout reasoning={data.coachReasoning} variant="edit" />
         )}
       </div>
 

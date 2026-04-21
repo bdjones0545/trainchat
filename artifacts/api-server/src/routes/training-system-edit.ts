@@ -21,6 +21,7 @@ import { applyEditPlan, type EditResult } from "../lib/edit-engine";
 import { createChangeLogEntry, type SystemSnapshot } from "../lib/change-log-service";
 import { buildAdaptationContext } from "../lib/adaptation";
 import { listMemories, syncMemoriesFromData, extractMemoriesFromMessage } from "../lib/memory";
+import { generateCoachReasoning, type FocusMode } from "../lib/coach-reasoning-engine";
 import { buildDecisionMemory } from "../lib/decision-memory-service";
 import {
   getActiveTrainingSystem,
@@ -107,6 +108,8 @@ async function postEditAckToChat(
   systemId: number,
   changeLogId: number | undefined,
   diff?: EditDiff,
+  focusMode?: string,
+  intent?: string,
 ): Promise<number | null> {
   try {
     const [recentConvo] = await db
@@ -137,6 +140,12 @@ async function postEditAckToChat(
 
     const content = diffLines.length > 0 ? `${base} ${diffLines.join(" ")}` : base;
 
+    const coachReasoning = generateCoachReasoning({
+      focusMode: (focusMode as FocusMode) ?? "strength",
+      actionType: "edit",
+      intent: intent ?? editResult.changeSummary,
+    });
+
     const structuredData = JSON.stringify({
       _type: "system_edit",
       changeSummary: editResult.changeSummary,
@@ -147,6 +156,7 @@ async function postEditAckToChat(
       verificationStatus: editResult.verification.status,
       source: "programs_page",
       propagationSummary: editResult.propagationSummary ?? null,
+      coachReasoning,
     });
 
     await db.insert(messagesTable).values({
@@ -415,8 +425,15 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
 
     // Echo the change to the user's most recent chat conversation AND reload
     // affected data in parallel so neither blocks the other.
+    const coachReasoning = generateCoachReasoning({
+      focusMode: (auditSystemFocus as FocusMode) ?? "strength",
+      actionType: "edit",
+      intent: editPlan.intent,
+      scope: editPlan.scope,
+    });
+
     const [chatConversationId, today, week, block] = await Promise.all([
-      postEditAckToChat(userId, editResult, activeSystem.id, changeLogId, diff).catch(() => null),
+      postEditAckToChat(userId, editResult, activeSystem.id, changeLogId, diff, auditSystemFocus, editPlan.intent).catch(() => null),
       getTodaySession(userId).catch(() => null),
       getCurrentWeek(userId).catch(() => null),
       getBlockSummary(userId).catch(() => null),
@@ -434,6 +451,7 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       diff,
       propagationSummary: editResult.propagationSummary ?? null,
       chatConversationId: chatConversationId ?? null,
+      coachReasoning,
       updatedData: { today, week, block },
     });
   } catch (err) {

@@ -1,10 +1,12 @@
 import { Dumbbell, Calendar, Target, Zap, ArrowRight } from "lucide-react";
+import CoachReasoningCallout from "./CoachReasoningCallout";
 
 interface BuildMeta {
   frequency: number;
   goal: string | null;
   sport: string | null;
   sessionDuration: number | null;
+  _coachReasoning?: string | null;
 }
 
 interface BuildSummaryData {
@@ -108,6 +110,12 @@ export default function BuildSummaryCard({ data, onViewProgram }: Props) {
           </div>
         )}
       </div>
+
+      {meta._coachReasoning && (
+        <div className="px-3 pb-2">
+          <CoachReasoningCallout reasoning={meta._coachReasoning} variant="build" />
+        </div>
+      )}
 
       <button
         onClick={onViewProgram}

@@ -7,6 +7,7 @@
  */
 
 import { CheckCircle2, AlertTriangle, TrendingDown, TrendingUp, Activity, ChevronRight } from "lucide-react";
+import CoachReasoningCallout from "./CoachReasoningCallout";
 
 export type AdaptationMode =
   | "TRAIN_AS_PLANNED"
@@ -19,6 +20,7 @@ export interface AdaptationResult {
   mode: AdaptationMode;
   adjustmentSummary: string;
   coachExplanation: string;
+  coachReasoning?: string | null;
   changesApplied: number;
   changeLogId: number | null;
 }
@@ -94,9 +96,16 @@ export default function AdaptationSummaryCard({ adaptation, onDismiss }: Adaptat
       </div>
 
       {/* Coach explanation */}
-      <div className="px-4 pb-4">
+      <div className="px-4 pb-3">
         <p className="text-xs text-muted-foreground leading-relaxed">{adaptation.coachExplanation}</p>
       </div>
+
+      {/* Coach reasoning callout — short, sharp reasoning for why this adaptation was made */}
+      {adaptation.coachReasoning && adaptation.mode !== "TRAIN_AS_PLANNED" && (
+        <div className="px-4 pb-3">
+          <CoachReasoningCallout reasoning={adaptation.coachReasoning} variant="checkin" />
+        </div>
+      )}
 
       {/* Changes applied indicator */}
       {adaptation.changesApplied > 0 && (

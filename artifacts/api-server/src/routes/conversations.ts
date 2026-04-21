@@ -53,6 +53,7 @@ import {
 } from "../lib/refinement-impact-engine";
 import { resolveFocusMode } from "../lib/focus-mode-audit";
 import { logFocusModeAudit } from "../lib/focus-mode-audit";
+import { generateCoachReasoning, goalToFocusMode, type FocusMode } from "../lib/coach-reasoning-engine";
 
 const router: IRouter = Router();
 
@@ -1037,6 +1038,7 @@ Keep it helpful and intelligent, never promotional.`;
           });
 
           const coachingContent = buildVibeEditCoachingResponse(clarificationEditResult);
+          const _clarificationFocusMode = ((clarificationSystem?.metadata as any)?.focusMode ?? "strength") as FocusMode;
           const systemEditData = {
             _type: "system_edit" as const,
             changeSummary: clarificationEditResult.changeSummary,
@@ -1044,6 +1046,11 @@ Keep it helpful and intelligent, never promotional.`;
             systemId: clarificationSystem.id,
             changeLogId,
             verificationStatus: verification.status,
+            coachReasoning: generateCoachReasoning({
+              focusMode: _clarificationFocusMode,
+              actionType: "edit",
+              intent: clarificationEditResult.changeSummary,
+            }),
           };
 
           const [assistantMessage] = await db.insert(messagesTable).values({
@@ -1370,12 +1377,17 @@ Keep it helpful and intelligent, never promotional.`;
           hierarchicalContent = `I wasn't able to apply that change. ${hierarchicalResult.changeSummary}`;
         }
 
+        const _hierarchicalCoachReasoning = hierarchicalResult.applied ? generateCoachReasoning({
+          focusMode: nonStreamFocusMode as FocusMode,
+          actionType: "edit",
+          intent: hierarchicalResult.changeSummary,
+        }) : null;
         const [hierarchicalMsg] = await db.insert(messagesTable).values({
           conversationId: params.data.id,
           role: "assistant",
           content: hierarchicalContent,
           structuredData: hierarchicalResult.applied
-            ? JSON.stringify({ _type: "system_edit", changeSummary: hierarchicalResult.changeSummary, systemId: resolvedSystem.id })
+            ? JSON.stringify({ _type: "system_edit", changeSummary: hierarchicalResult.changeSummary, systemId: resolvedSystem.id, coachReasoning: _hierarchicalCoachReasoning })
             : null,
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
@@ -1565,6 +1577,12 @@ Keep it helpful and intelligent, never promotional.`;
         systemId: resolvedSystem.id,
         changeLogId,
         verificationStatus: directVerification.status,
+        coachReasoning: generateCoachReasoning({
+          focusMode: nonStreamFocusMode as FocusMode,
+          actionType: "edit",
+          intent: directEditPlan.intent,
+          scope: directEditPlan.scope,
+        }),
       };
 
       const [assistantMessage] = await db.insert(messagesTable).values({
@@ -1915,11 +1933,19 @@ Keep it helpful and intelligent, never promotional.`;
     (intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM");
 
   if (isInitialBuildNonStream && structuredData) {
+    const _buildFocusMode = goalToFocusMode(extractedConstraints?.primaryGoal) as FocusMode;
+    const _buildCoachReasoning = generateCoachReasoning({
+      focusMode: _buildFocusMode,
+      actionType: "build",
+      goal: extractedConstraints?.primaryGoal ?? undefined,
+      frequency: structuredData.days.length,
+    });
     (structuredData as unknown as Record<string, unknown>)._buildMeta = {
       frequency: structuredData.days.length,
       goal: extractedConstraints?.primaryGoal ?? null,
       sport: extractedConstraints?.sportFocus ?? null,
       sessionDuration: extractedConstraints?.sessionDuration ?? null,
+      _coachReasoning: _buildCoachReasoning,
     };
   }
 
@@ -2601,10 +2627,16 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           });
 
           const coachingContent = buildVibeEditCoachingResponse(clarificationEditResult);
+          const _sseClariFixFocusMode = ((clarificationSystem?.metadata as any)?.focusMode ?? "strength") as FocusMode;
           const systemEditData = {
             _type: "system_edit" as const, changeSummary: clarificationEditResult.changeSummary,
             changedIds: clarificationEditResult.changedIds, systemId: clarificationSystem.id, changeLogId,
             verificationStatus: verification.status,
+            coachReasoning: generateCoachReasoning({
+              focusMode: _sseClariFixFocusMode,
+              actionType: "edit",
+              intent: clarificationEditResult.changeSummary,
+            }),
           };
           const [assistantMessage] = await db.insert(messagesTable).values({
             conversationId: params.data.id, role: "assistant", content: coachingContent,
@@ -2838,12 +2870,17 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           streamHierarchicalContent = `I wasn't able to apply that change. ${streamHierarchicalResult.changeSummary}`;
         }
 
+        const _streamHierarchicalCoachReasoning = streamHierarchicalResult.applied ? generateCoachReasoning({
+          focusMode: streamFocusMode as FocusMode,
+          actionType: "edit",
+          intent: streamHierarchicalResult.changeSummary,
+        }) : null;
         const [streamHierarchicalMsg] = await db.insert(messagesTable).values({
           conversationId: params.data.id,
           role: "assistant",
           content: streamHierarchicalContent,
           structuredData: streamHierarchicalResult.applied
-            ? JSON.stringify({ _type: "system_edit", changeSummary: streamHierarchicalResult.changeSummary, systemId: resolvedSystem.id })
+            ? JSON.stringify({ _type: "system_edit", changeSummary: streamHierarchicalResult.changeSummary, systemId: resolvedSystem.id, coachReasoning: _streamHierarchicalCoachReasoning })
             : null,
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
@@ -3029,6 +3066,12 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         systemId: resolvedSystem.id,
         changeLogId,
         verificationStatus: streamVerification.status,
+        coachReasoning: generateCoachReasoning({
+          focusMode: streamFocusMode as FocusMode,
+          actionType: "edit",
+          intent: streamEditPlan.intent,
+          scope: streamEditPlan.scope,
+        }),
       };
 
       const [assistantMessage] = await db.insert(messagesTable).values({
@@ -3297,11 +3340,19 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     (intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM");
 
   if (isInitialBuild && structuredData) {
+    const _sseBuildFocusMode = goalToFocusMode(extractedConstraints?.primaryGoal) as FocusMode;
+    const _sseBuildCoachReasoning = generateCoachReasoning({
+      focusMode: _sseBuildFocusMode,
+      actionType: "build",
+      goal: extractedConstraints?.primaryGoal ?? undefined,
+      frequency: structuredData.days.length,
+    });
     (structuredData as unknown as Record<string, unknown>)._buildMeta = {
       frequency: structuredData.days.length,
       goal: extractedConstraints?.primaryGoal ?? null,
       sport: extractedConstraints?.sportFocus ?? null,
       sessionDuration: extractedConstraints?.sessionDuration ?? null,
+      _coachReasoning: _sseBuildCoachReasoning,
     };
   }
 

@@ -18,6 +18,7 @@ import { applyEditPlan } from "./edit-engine";
 import { createChangeLogEntry } from "./change-log-service";
 import type { EditPlan } from "./edit-intent-service";
 import { logger } from "./logger";
+import { generateCoachReasoning, type FocusMode } from "./coach-reasoning-engine";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,7 @@ export interface AdaptationResult {
   mode: AdaptationMode;
   adjustmentSummary: string;
   coachExplanation: string;
+  coachReasoning: string | null;
   changesApplied: number;
   changeLogId: number | null;
 }
@@ -240,19 +242,26 @@ export async function evaluateAndAdapt(
     const adjustmentSummary = buildSummary(mode, scores);
     const coachExplanation = buildCoachExplanation(mode, scores);
 
+    const systemFocusMode = ((system.metadata as any)?.focusMode ?? "strength") as FocusMode;
+    const coachReasoning = generateCoachReasoning({
+      focusMode: systemFocusMode,
+      actionType: "checkin",
+      adaptationMode: mode,
+    });
+
     if (mode === "TRAIN_AS_PLANNED") {
-      return { mode, adjustmentSummary, coachExplanation, changesApplied: 0, changeLogId: null };
+      return { mode, adjustmentSummary, coachExplanation, coachReasoning, changesApplied: 0, changeLogId: null };
     }
 
     const todayData = await getTodaySession(userId);
     if (!todayData) {
       logger.warn({ userId, mode }, "Check-in adaptation: no today session found — returning mode only");
-      return { mode, adjustmentSummary, coachExplanation, changesApplied: 0, changeLogId: null };
+      return { mode, adjustmentSummary, coachExplanation, coachReasoning, changesApplied: 0, changeLogId: null };
     }
 
     const editPlan = buildEditPlanForMode(mode, scores, todayData, todayData.currentWeek);
     if (!editPlan) {
-      return { mode, adjustmentSummary, coachExplanation, changesApplied: 0, changeLogId: null };
+      return { mode, adjustmentSummary, coachExplanation, coachReasoning, changesApplied: 0, changeLogId: null };
     }
 
     const editResult = await applyEditPlan(editPlan);
@@ -278,6 +287,7 @@ export async function evaluateAndAdapt(
       mode,
       adjustmentSummary,
       coachExplanation,
+      coachReasoning,
       changesApplied: editResult.appliedCount,
       changeLogId,
     };
