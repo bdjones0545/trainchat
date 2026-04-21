@@ -1,0 +1,186 @@
+LONG-HORIZON REQUEST SAFETY FIX — DO NOT TRY TO FULLY GENERATE MULTI-WEEK / MULTI-MONTH PROGRAMS IN ONE RESPONSE
+
+CONTEXT:
+When users ask for:
+- multiple weeks
+- multiple months
+- 6-week / 8-week / 12-week plans
+- long-horizon programs
+
+the system can crash or fail because it tries to fully generate too much structure at once.
+
+This is unnecessary and unsafe.
+
+TrainChat already has:
+- week progression
+- block logic
+- continuation logic
+- adaptive editing
+- active program lifecycle
+
+So for long-horizon requests, the system should interpret the user’s request as a long-term goal, but only generate a manageable actionable starting program/block now.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Prevent crashes from long-horizon program requests by converting them into a safe build behavior:
+- generate a 3-day-per-week program (or first actionable block)
+- tailored to the user’s request
+- instead of attempting to fully materialize all weeks/months at once
+
+==================================================
+TASK 1 — DETECT LONG-HORIZON BUILD REQUESTS
+==================================================
+
+Add detection for requests like:
+- 4 week
+- 6 week
+- 8 week
+- 12 week
+- 3 month
+- multiple months
+- long-term plan
+- season plan
+- offseason plan
+- full macrocycle
+
+Create a resolved flag such as:
+longHorizonRequested = true
+
+Also extract:
+- requested duration
+- requested unit (weeks / months)
+
+==================================================
+TASK 2 — OVERRIDE FULL-LENGTH MATERIALIZATION
+==================================================
+
+If longHorizonRequested = true:
+DO NOT attempt to fully generate every week/month in one OpenAI response.
+
+Instead:
+- build a safe initial 3-day-per-week program (or first block)
+- tuned to the user’s request, focus, sport, goal, and constraints
+- let the existing progression / continuation system carry it forward later
+
+This should apply to:
+- Strength
+- Speed
+- Mobility
+
+==================================================
+TASK 3 — PRESERVE THE USER’S LONG-TERM INTENT
+==================================================
+
+Even though we only generate the first actionable program/block now, preserve the long-term request in metadata.
+
+Examples:
+- requestedProgramHorizon: 12
+- requestedProgramHorizonUnit: "weeks"
+- requestedLongTermGoal: "offseason speed development"
+
+This can later inform:
+- continuation block generation
+- agent messaging
+- future progression decisions
+
+==================================================
+TASK 4 — DEFAULT TO A SAFE 3-DAY BUILD
+==================================================
+
+For long-horizon requests, default to:
+- a 3-day-per-week program
+unless the user explicitly gave a different training frequency and the system can safely support it
+
+The key rule:
+- long horizon should change intent and direction
+- not explode the size of the initial build
+
+==================================================
+TASK 5 — UPDATE AGENT LANGUAGE
+==================================================
+
+When a long-horizon request is detected, the response should explain the behavior clearly and confidently.
+
+Examples:
+- “I built your first 3-day block around that 12-week goal so you can start immediately and progress cleanly from there.”
+- “I’m starting you with the first phase of that longer plan and will build it forward as you go.”
+
+Do NOT say:
+- “I can’t do that”
+- “The system is limited”
+- “This was reduced because of errors”
+
+Frame it like a coaching decision.
+
+==================================================
+TASK 6 — REDUCE PROMPT / TOKEN LOAD FOR LONG REQUESTS
+==================================================
+
+When longHorizonRequested = true:
+- do not expand the requested number of weeks in the prompt
+- do not ask OpenAI to generate all weeks/months
+- keep the structured output limited to the initial actionable program/block
+
+This should materially reduce token load and prevent crashes.
+
+==================================================
+TASK 7 — ADD AUDIT LOGGING
+==================================================
+
+Add logs:
+
+[LongHorizonBuildAudit] {
+  userRequest,
+  focusMode,
+  requestedDuration,
+  requestedUnit,
+  longHorizonRequested,
+  buildStrategyUsed,
+  generatedDaysPerWeek,
+  generatedWeeksMaterialized,
+  metadataStored
+}
+
+We need proof that long requests are now being handled safely.
+
+==================================================
+TASK 8 — VALIDATION
+==================================================
+
+Test all of these:
+
+1. "Build me a 12-week strength program"
+2. "Make me a 3-month speed plan"
+3. "Create a 6-week mobility program"
+4. "Design an offseason plan for the next 4 months"
+
+Expected:
+- no crash
+- safe 3-day initial program/block generated
+- correct focus preserved
+- long-horizon metadata stored
+- response explains that this is the first phase/block of the longer goal
+
+==================================================
+TASK 9 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. how long-horizon requests are detected
+2. what safe build strategy now runs
+3. what metadata is stored for the longer goal
+4. how agent messaging was updated
+5. validation results for all test cases
+
+==================================================
+FINAL STANDARD
+==================================================
+
+If a user asks for a long multi-week or multi-month program, TrainChat should not crash or attempt to generate an oversized artifact.
+
+It should intelligently convert that request into:
+- a safe initial 3-day-per-week program/block
+- built specifically for the user’s long-term goal
+- with future progression handled by the system over time
