@@ -243,6 +243,9 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; deta
         }
 
         const replacement = change.replacement;
+        const replacementMetadata = replacement.metadata && typeof replacement.metadata === "object"
+          ? { ...((existing.metadata as Record<string, unknown> | null) ?? {}), ...replacement.metadata }
+          : existing.metadata;
         await db
           .update(sessionExercises)
           .set({
@@ -253,6 +256,7 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; deta
             rest: replacement.rest ?? existing.rest,
             tempo: replacement.tempo ?? null,
             notes: replacement.notes ?? null,
+            metadata: replacementMetadata,
             updatedAt: new Date(),
           })
           .where(eq(sessionExercises.id, change.id));

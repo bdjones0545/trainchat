@@ -14,6 +14,7 @@ import { logger } from "./logger";
 import { extractAgentIntentProfile, buildAgentIntentProfilePromptSection } from "./language-system";
 import { auditLanguageInterpretation } from "./language-audit";
 import { buildSwapContext, getProgressions, findExerciseByName, getSwapCandidates } from "./exercise-service";
+import { resolveSafeSwapBackstop } from "./swap-backstop-service";
 import { resolveHarderEasierFallback } from "./harder-easier-fallback";
 import { runIntentFamilyPipeline, logIntentFamilyDebug, type IntentFamilyPipelineResult } from "./intent-family-engine";
 import {
@@ -63,6 +64,7 @@ export interface EditChange {
     rest?: string;
     tempo?: string;
     notes?: string;
+    metadata?: Record<string, unknown>;
   };
   reason?: string;
 }
@@ -880,6 +882,27 @@ async function autoSelectOpenEndedSwap(opts: {
   let candidates: Awaited<ReturnType<typeof getSwapCandidates>> = [];
 
   try {
+    const sourceExercise = await findExerciseByName(exerciseName);
+    if (!sourceExercise) {
+      const backstopPlan = await resolveSafeSwapBackstop({
+        exerciseName,
+        exerciseId,
+        userRequest,
+        system,
+        equipmentLevel,
+        injuryFlags,
+      });
+      if (backstopPlan) {
+        debugInfo.candidateList = [];
+        debugInfo.candidateCount = 0;
+        debugInfo.result = "source_missing_safe_backstop_selected";
+        if (process.env.NODE_ENV !== "production") {
+          console.log("[open-ended-swap:debug]", JSON.stringify(debugInfo));
+        }
+        return backstopPlan;
+      }
+    }
+
     candidates = await getSwapCandidates({
       exerciseName,
       equipmentLevel,
@@ -895,6 +918,21 @@ async function autoSelectOpenEndedSwap(opts: {
   debugInfo.candidateCount = candidates.length;
 
   if (candidates.length === 0) {
+    const backstopPlan = await resolveSafeSwapBackstop({
+      exerciseName,
+      exerciseId,
+      userRequest,
+      system,
+      equipmentLevel,
+      injuryFlags,
+    });
+    if (backstopPlan) {
+      debugInfo.result = "safe_backstop_selected";
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[open-ended-swap:debug]", JSON.stringify(debugInfo));
+      }
+      return backstopPlan;
+    }
     debugInfo.result = "no_candidates";
     if (process.env.NODE_ENV !== "production") {
       console.log("[open-ended-swap:debug]", JSON.stringify(debugInfo));

@@ -1,0 +1,314 @@
+AI-BACKSTOP EXERCISE SWAP LAYER — LIBRARY-FIRST, SAFE AI PROPOSAL, STAGED PROMOTION
+
+CONTEXT:
+We fixed sidebar exercise swap actions so they now use direct program edits instead of falling back into generic chat.
+
+However, we identified a remaining limitation:
+
+If there is no valid exercise available in the same family / slot / quality path, the swap cannot complete cleanly.
+
+We want a smart fallback system:
+- try deterministic library selection first
+- if no acceptable candidate exists, ask OpenAI to propose a replacement
+- validate that proposal strictly
+- use it immediately in the user’s program if it passes
+- stage it safely for later promotion into the main exercise library
+- do NOT write raw AI output directly into the canonical exercise DB
+
+This should apply across:
+- Strength
+- Speed / Footwork
+- Mobility
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Add a safe AI-backed exercise fallback layer for swaps and similar direct edit actions, while keeping the exercise library structured, auditable, and protected from low-quality automatic inserts.
+
+==================================================
+TASK 1 — ADD A FALLBACK LADDER FOR EXERCISE SWAPS
+==================================================
+
+When a user requests a swap for a specific exercise, use this exact order:
+
+1. Same-family deterministic selection
+2. Approved adjacent-family deterministic selection (only if explicitly allowed)
+3. Existing curated map / policy fallback if available
+4. AI propose path (ONLY if all deterministic paths fail)
+
+Do NOT jump straight to AI if the library can already solve it.
+
+==================================================
+TASK 2 — DEFINE FAMILY ADJACENCY RULES
+==================================================
+
+Create an explicit adjacency map per focus.
+
+Examples:
+Strength:
+- squat ↔ unilateral_lower
+- hinge ↔ posterior_chain_support
+- horizontal_push ↔ press_support
+- horizontal_pull ↔ scap_support
+
+Speed:
+- acceleration ↔ max_velocity
+- cod_decel ↔ reactive_agility
+- elastic_plyometric ↔ speed_strength_transfer
+- return_to_speed ↔ tissue_prep
+
+Mobility:
+- hip_mobility ↔ positional_isometric
+- thoracic_mobility ↔ spine_control
+- ankle_mobility ↔ dynamic_mobility
+- recovery_flow ↔ breathing_reset
+
+Only allow cross-family fallback if it exists in this approved map.
+
+==================================================
+TASK 3 — ADD AN AI PROPOSE CONTRACT
+==================================================
+
+Create a strict structured AI proposal contract.
+
+Suggested type:
+
+type ProposedExerciseCandidate = {
+  name: string;
+  description: string;
+  focusMode: "strength" | "speed" | "mobility";
+  families: string[];
+  slots: string[];
+  qualities: string[];
+  equipment: string[];
+  space?: "small" | "medium" | "large";
+  neuralDemand: "low" | "moderate" | "high";
+  fatigueCost: "low" | "moderate" | "high";
+  cues: string[];
+};
+
+The model must return:
+- JSON only
+- 1 to 3 candidates max
+- no prose
+- no explanations outside JSON
+
+==================================================
+TASK 4 — BUILD THE AI PROMPT FOR FALLBACK CANDIDATES
+==================================================
+
+When deterministic swap selection fails, call OpenAI with a compact, strict prompt that includes:
+
+- current exercise name
+- focus mode
+- current family
+- current slot
+- current primary qualities
+- week role
+- equipment constraints
+- space constraints
+- adjacent-family rules allowed
+- “Preserve the same training intent”
+
+Prompt rules:
+- prefer same family
+- if impossible, use only approved adjacent families
+- preserve slot + quality intent
+- return JSON only
+- max 3 candidates
+
+==================================================
+TASK 5 — ADD A STRICT VALIDATION GATE
+==================================================
+
+Before any AI-proposed exercise can be used:
+
+Validate:
+1. schema is complete
+2. focusMode matches current focus
+3. slot compatibility matches the original slot
+4. quality overlap exists with original exercise intent
+5. family is same-family or approved adjacent-family
+6. equipment is compatible
+7. space is compatible
+8. neural/fatigue values are valid
+9. cues are short and usable
+10. no near-duplicate exercise already exists in the main library
+
+Run the candidate through the existing scoring logic if possible.
+Require a minimum fit score.
+
+If candidate fails validation:
+- try next candidate
+- if all fail, return safe user-facing swap failure
+
+==================================================
+TASK 6 — ADD A STAGING TABLE / STAGED STORAGE
+==================================================
+
+Do NOT insert raw AI proposals directly into the canonical exercises table.
+
+Create a staging store/table such as:
+
+ai_exercise_candidates {
+  id,
+  name,
+  proposal_json,
+  focus_mode,
+  origin_exercise_id,
+  origin_family,
+  origin_slot,
+  validation_score,
+  source_action,
+  approved,
+  used_in_program,
+  promoted_to_library,
+  created_at
+}
+
+This staging layer should:
+- store validated proposals
+- allow immediate use in the user’s program
+- track whether the candidate was later promoted
+
+==================================================
+TASK 7 — USE VALIDATED CANDIDATE IMMEDIATELY IN PROGRAM IF SAFE
+==================================================
+
+If an AI candidate passes validation:
+- allow it to be swapped into the current user’s program immediately
+- tag the program/exercise reference as sourced from staged candidate
+- keep the UX smooth and instant
+
+The user should not feel the fallback complexity.
+They should just see the swap succeed.
+
+==================================================
+TASK 8 — ADD PROMOTION RULES TO THE CANONICAL LIBRARY
+==================================================
+
+Create a safe promotion path so staged exercises can become real library exercises later.
+
+Promotion rules:
+- candidate passed validation
+- candidate used successfully at least once
+- no near-duplicate exists
+- metadata is complete
+- cluster assignment is resolved
+- optionally require usage threshold or manual approval flag
+
+Do NOT promote automatically on first generation unless clearly safe by policy.
+
+If promoted:
+- write to canonical exercise library
+- preserve traceability with:
+  - source = "ai_generated"
+  - promoted_from_candidate_id
+
+==================================================
+TASK 9 — ADD DUPLICATE DETECTION
+==================================================
+
+Before staging or promotion, normalize names and check for existing near-matches.
+
+Use:
+- normalized/sluggified name
+- exact name match
+- near-duplicate comparison if available
+
+If a near-duplicate exists:
+- do not create a second exercise
+- optionally map the swap to the existing library entry instead
+
+==================================================
+TASK 10 — ADD AUDIT LOGGING
+==================================================
+
+Add logs:
+
+[ExerciseFallbackAudit] {
+  focusMode,
+  originExerciseId,
+  originExerciseName,
+  requestedAction,
+  fallbackPathUsed, // same_family | adjacent_family | curated_map | ai_propose | failed
+  candidateCount,
+  selectedCandidateName,
+  validationScore,
+  staged,
+  promoted,
+  duplicateMatched
+}
+
+[AIExerciseCandidateAudit] {
+  focusMode,
+  promptSent,
+  candidateNames,
+  validationResults,
+  selectedCandidate
+}
+
+We need full visibility.
+
+==================================================
+TASK 11 — USER-FACING FAILURE HANDLING
+==================================================
+
+If deterministic + AI fallback both fail, do NOT send a vague message.
+
+Use a clean user-facing response like:
+- “I couldn’t find a strong swap for that movement while preserving the same training intent.”
+- “Try a different exercise in this session or use Easier / Harder instead.”
+
+Do not dump technical details to the user.
+
+==================================================
+TASK 12 — VALIDATION TESTS
+==================================================
+
+Test all of these:
+
+1. Strength swap where same-family candidate exists
+→ should stay deterministic
+
+2. Speed swap where same-family fails but adjacent-family succeeds
+→ should use approved adjacent family
+
+3. Mobility swap where deterministic fails and AI proposes a candidate
+→ should validate, stage, and use candidate
+
+4. AI proposes invalid candidate
+→ should reject and try next / fail cleanly
+
+5. AI proposes near-duplicate of existing exercise
+→ should match existing entry instead of creating duplicate
+
+==================================================
+TASK 13 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. fallback ladder implementation
+2. family adjacency rules
+3. AI proposal contract
+4. validation gate logic
+5. staging table/storage implementation
+6. promotion rules
+7. validation results across all test cases
+
+==================================================
+FINAL STANDARD
+==================================================
+
+When a swap cannot be solved by the current exercise library, TrainChat should:
+- try deterministic options first
+- use AI only as a controlled backstop
+- validate AI suggestions strictly
+- stage them safely
+- optionally promote high-quality candidates later
+
+The result should be:
+- smooth UX
+- smart library growth
+- zero uncontrolled AI pollution in the canonical exercise database
