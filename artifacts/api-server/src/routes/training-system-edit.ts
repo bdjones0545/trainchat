@@ -35,6 +35,7 @@ import { db, conversationsTable, messagesTable, trainingSystems } from "@workspa
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { logger } from "../lib/logger";
+import { createEditAdjustmentEvent } from "../lib/system-adjustment-service";
 
 // ─── Diff computation ─────────────────────────────────────────────────────────
 
@@ -413,6 +414,17 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
         changeLogId,
       },
     });
+
+    // ── System Adjustment Event — visible adaptation layer ─────────────────────
+    createEditAdjustmentEvent({
+      userId,
+      trainingSystemId: activeSystem.id,
+      focusMode: (auditSystemFocus as "strength" | "speed" | "mobility"),
+      intent: editPlan.intent,
+      scope: editPlan.scope,
+      changeSummary: editResult.changeSummary,
+      appliedCount: editResult.appliedCount,
+    }).catch(() => {});
 
     // 6. Compute structured diff from before/after snapshots
     const diff = computeSnapshotDiff(editResult.beforeSnapshot, editResult.afterSnapshot);

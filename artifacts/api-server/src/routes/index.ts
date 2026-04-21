@@ -27,6 +27,7 @@ import debugRouter from "./debug";
 import supportRouter from "./support";
 import activeSessionRouter from "./active-session";
 import shareMomentsRouter from "./share-moments";
+import systemAdjustmentsRouter from "./system-adjustments";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -68,5 +69,6 @@ router.use(debugRouter);
 router.use(supportRouter);
 router.use(activeSessionRouter);
 router.use(shareMomentsRouter);
+router.use(systemAdjustmentsRouter);
 
 export default router;

@@ -23,6 +23,7 @@ import {
 import { useFocusMode } from "@/hooks/useFocusMode";
 import { FOCUS_MODE_CONFIGS, getFocusModeConfig } from "@/lib/focusModeConfig";
 import type { FocusMode } from "@/lib/focusMode";
+import SystemAdjustmentsPanel from "./SystemAdjustmentsPanel";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -114,7 +115,7 @@ interface Props {
   isWeekDataLoading?: boolean;
 }
 
-type Tab = "program" | "changes" | "history" | "forecast";
+type Tab = "program" | "changes" | "history" | "forecast" | "adapted";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -2375,6 +2376,21 @@ export default function LiveProgramPanel({
   const { focusMode } = useFocusMode();
   const [activeTab, setActiveTab] = useState<Tab>("program");
   const [hasUnseenChange, setHasUnseenChange] = useState(false);
+
+  // Check for new system adjustment events to show badge on Adapted tab
+  const { data: adaptedNewCount } = useQuery<number>({
+    queryKey: ["system-adjustments-new-count", focusMode],
+    queryFn: async () => {
+      const events = await customFetch<Array<{ id: number; isNew: boolean }>>(
+        `/api/system-adjustments?focus=${encodeURIComponent(focusMode)}&limit=20`
+      );
+      return events.filter((e) => e.isNew).length;
+    },
+    enabled: !!hasActiveSystem,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  });
+  const hasUnseenAdaptation = (adaptedNewCount ?? 0) > 0 && activeTab !== "adapted";
   const [showBuildSuccess, setShowBuildSuccess] = useState(false);
   const [panelSwitchConfirm, setPanelSwitchConfirm] = useState<string | null>(null);
   const prevChangeSignalRef = useRef(0);
@@ -2440,6 +2456,7 @@ export default function LiveProgramPanel({
 
   const tabs: { id: Tab; label: string; subtitle: string; icon: React.ElementType }[] = [
     { id: "program", label: "Program", subtitle: "Current build · live", icon: Dumbbell },
+    { id: "adapted", label: "Adapted", subtitle: "What your system changed", icon: RefreshCw },
     { id: "changes", label: "Changes", subtitle: "What changed & why", icon: Activity },
     { id: "history", label: "History", subtitle: "How it evolved", icon: GitBranch },
     { id: "forecast", label: "Forecast", subtitle: "What's coming next", icon: Zap },
@@ -2547,7 +2564,9 @@ export default function LiveProgramPanel({
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
-          const showBadge = tab.id === "changes" && hasUnseenChange;
+          const showBadge =
+            (tab.id === "changes" && hasUnseenChange) ||
+            (tab.id === "adapted" && hasUnseenAdaptation);
           return (
             <button
               key={tab.id}
@@ -2601,6 +2620,9 @@ export default function LiveProgramPanel({
             lastChangeSummary={lastChangeSummary}
             blockMetadata={blockMetadata}
           />
+        )}
+        {activeTab === "adapted" && (
+          <SystemAdjustmentsPanel hasActiveSystem={hasActiveSystem} />
         )}
         {activeTab === "changes" && (
           !isPremium ? (

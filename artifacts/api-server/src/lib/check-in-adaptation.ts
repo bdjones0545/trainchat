@@ -19,6 +19,7 @@ import { createChangeLogEntry } from "./change-log-service";
 import type { EditPlan } from "./edit-intent-service";
 import { logger } from "./logger";
 import { generateCoachReasoning, type FocusMode } from "./coach-reasoning-engine";
+import { createCheckInAdjustmentEvent } from "./system-adjustment-service";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -282,6 +283,15 @@ export async function evaluateAndAdapt(
     });
 
     logger.info({ userId, mode, changesApplied: editResult.appliedCount, changeLogId }, "Check-in adaptation applied");
+
+    // ── System Adjustment Event — visible layer ───────────────────────────────
+    createCheckInAdjustmentEvent({
+      userId,
+      trainingSystemId: system.id,
+      focusMode: systemFocusMode,
+      mode,
+      scores,
+    }).catch(() => {});
 
     return {
       mode,
