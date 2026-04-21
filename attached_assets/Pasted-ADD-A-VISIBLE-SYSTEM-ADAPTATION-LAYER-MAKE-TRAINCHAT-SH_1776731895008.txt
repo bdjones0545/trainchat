@@ -1,0 +1,271 @@
+ADD A VISIBLE SYSTEM ADAPTATION LAYER — MAKE TRAINCHAT SHOW WHAT IT IS LEARNING AND CHANGING IN REAL TIME
+
+CONTEXT:
+TrainChat already has strong internal adaptation systems:
+- memory
+- feedback handling
+- check-in adjustments
+- session-driven changes
+- block continuation logic
+- focus-specific engines
+
+But most of that intelligence is still hidden.
+
+Users may not fully realize:
+- what the system learned
+- what changed
+- why something was adjusted
+- how their input is shaping the program
+
+We need to make adaptation visible without making the UI noisy.
+
+This is NOT a dashboard redesign.
+It is a lightweight “System Adjustments” layer that helps users feel the intelligence of the system.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Create a visible, premium “System Adjustments” / “What Changed” layer that shows how TrainChat is adapting to the user over time.
+
+==================================================
+TASK 1 — DEFINE ADAPTATION EVENT TYPES
+==================================================
+
+Create a structured model for visible adaptation events.
+
+Examples of events:
+- focus_bias_changed
+- fatigue_reduction_applied
+- joint_protection_applied
+- block_refocused
+- next_session_adjusted
+- week_load_reduced
+- range_control_emphasized
+- acceleration_bias_added
+- recovery_flow_bias_added
+- volume_shifted
+- movement_family_protected
+
+Suggested type:
+
+type SystemAdjustmentEvent = {
+  id: string;
+  focusMode: "strength" | "speed" | "mobility";
+  eventType: string;
+  title: string;
+  summary: string;
+  createdAt: string;
+  scope?: "session" | "week" | "block" | "system";
+  source?: "build" | "edit" | "checkin" | "session_log" | "memory" | "agent_command";
+  visiblePriority?: "low" | "medium" | "high";
+};
+
+==================================================
+TASK 2 — CAPTURE ADAPTATIONS WHEN THEY HAPPEN
+==================================================
+
+Whenever a meaningful adaptation occurs, generate and persist a SystemAdjustmentEvent.
+
+Sources to hook:
+- successful edits / refinements
+- check-in driven changes
+- session-log driven next-session adjustments
+- focus refocus changes
+- block continuation changes
+- pain / fatigue / stiffness protection logic
+- memory dominance overrides
+
+Do NOT log every microscopic change.
+Only visible / meaningful system changes should create an event.
+
+==================================================
+TASK 3 — CREATE HUMAN-FACING ADJUSTMENT COPY
+==================================================
+
+Each visible event should have:
+- short title
+- one-line summary
+
+Examples:
+
+Title:
+Reduced lower-body fatigue
+Summary:
+Pulled back lower-body loading to keep output high in your next session.
+
+Title:
+Shifted toward hip control
+Summary:
+Increased hip-focused mobility and end-range control based on your recent inputs.
+
+Title:
+Raised acceleration emphasis
+Summary:
+Reweighted this block toward projection and start mechanics.
+
+Keep the tone:
+- coach-like
+- direct
+- non-technical
+- not verbose
+
+==================================================
+TASK 4 — ADD A “SYSTEM ADJUSTMENTS” UI SURFACE
+==================================================
+
+Create a compact UI section to display these events.
+
+This can live in one or more of:
+- right sidebar
+- Active Program panel
+- “What your coach has learned” area
+- below Coach Insight
+- a small activity feed card
+
+Requirements:
+- compact
+- premium
+- easy to scan
+- mobile-friendly
+- not overwhelming
+
+Suggested label:
+- System Adjustments
+- What Changed
+- Your System Adapted
+
+==================================================
+TASK 5 — SHOW ONLY HIGH-SIGNAL ADJUSTMENTS
+==================================================
+
+Do NOT surface every tiny edit.
+
+Only display:
+- recent meaningful changes
+- events the user would care about
+- changes that increase trust and understanding
+
+Examples to surface:
+- reduced fatigue
+- protected joint
+- changed focus bias
+- shifted block direction
+- changed next session demand
+
+Examples NOT to surface unless useful:
+- tiny note cleanup
+- internal repair pass
+- metadata normalization
+
+==================================================
+TASK 6 — MAKE THE UI FOCUS-AWARE
+==================================================
+
+If active focus = Strength:
+- show Strength-relevant adjustments first
+
+If active focus = Speed:
+- show Speed-relevant adjustments first
+
+If active focus = Mobility:
+- show Mobility-relevant adjustments first
+
+Global adjustments can still appear, but current-focus adjustments should be prioritized.
+
+==================================================
+TASK 7 — MAKE IT FEEL ALIVE BUT NOT NOISY
+==================================================
+
+Add small touches:
+- color accents by focus
+- small icons per event type
+- timestamps like “Just now” / “Today”
+- subtle “new” highlight for recent events
+
+Do NOT make this a giant feed or a notification center.
+It should feel like a smart system quietly keeping the user informed.
+
+==================================================
+TASK 8 — CONNECT TO EXISTING LEARNING / MEMORY SURFACES
+==================================================
+
+The system already has:
+- What your coach has learned
+- memory / behavior signals
+- Coach Insight layer
+
+Do not duplicate them blindly.
+
+The relationship should be:
+- Coach Insight = why this decision was made right now
+- What your coach has learned = ongoing user truths
+- System Adjustments = actual changes the system made
+
+Keep these roles distinct.
+
+==================================================
+TASK 9 — ADD AUDIT LOGGING
+==================================================
+
+Add logs:
+
+[SystemAdjustmentAudit] {
+  focusMode,
+  eventType,
+  source,
+  visiblePriority,
+  persisted,
+  displayed
+}
+
+We need to see:
+- when events are created
+- when they are shown
+- whether the correct focus is prioritized
+
+==================================================
+TASK 10 — VALIDATION
+==================================================
+
+Test scenarios:
+
+1. Strength edit reduces loading
+→ event appears
+
+2. Speed refinement shifts toward acceleration
+→ speed adjustment event appears
+
+3. Mobility feedback reports stiffness
+→ mobility protection / range-control event appears
+
+4. Session log drives next-session change
+→ user sees the system adaptation
+
+5. Switch focuses
+→ relevant adjustments reorder correctly
+
+==================================================
+TASK 11 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. adaptation event model
+2. where events are created
+3. UI placement and design
+4. example events for Strength / Speed / Mobility
+5. how it differs from Coach Insight and memory
+6. validation results
+
+==================================================
+FINAL STANDARD
+==================================================
+
+After this change, users should be able to SEE that TrainChat is adapting.
+
+Not just “the app changed” — but:
+- what changed
+- why it mattered
+- how the system is evolving around them
+
+The goal is to make TrainChat’s intelligence visible, trustworthy, and sticky.
