@@ -45,6 +45,7 @@ import {
   type LiveAdjustment,
 } from "@/lib/midSessionEngine";
 import CoachInsightCard from "./CoachInsightCard";
+import { getQuickCommands } from "@/lib/quickCommands";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -132,54 +133,6 @@ interface EditDrawerProps {
 
 type DrawerPhase = "input" | "directions" | "executing" | "success" | "error";
 type FeedbackTag = "too_easy" | "challenging" | "too_hard";
-
-// ─── Contextual Suggestions ───────────────────────────────────────────────────
-
-const SUGGESTIONS: Record<EditTargetType, string[]> = {
-  exercise: [
-    "Swap this exercise",
-    "Easier variation",
-    "Harder variation",
-    "Change the rep range",
-    "Add a set",
-    "Remove a set",
-    "Make it shoulder-friendly",
-    "Add explosive cue",
-  ],
-  session: [
-    "Shorten this session",
-    "Lower the volume",
-    "Recovery emphasis",
-    "Equipment-friendly version",
-    "More explosive work",
-    "More athletic emphasis",
-    "Reduce fatigue on this day",
-  ],
-  week: [
-    "Make this a deload week",
-    "Increase intensity",
-    "Reduce overall fatigue",
-    "Travel / minimal equipment mode",
-    "Add more volume",
-    "Less volume this week",
-  ],
-  phase: [
-    "More power-focused",
-    "Shift toward hypertrophy",
-    "Field-sport emphasis",
-    "General fitness bias",
-    "More variety",
-    "Shorter block",
-  ],
-  system: [
-    "Reduce overall volume",
-    "Increase training intensity",
-    "Make it a deload week",
-    "Modify for injury",
-    "Swap all heavy compound lifts",
-    "Simplify the schedule",
-  ],
-};
 
 // ─── Target header config ─────────────────────────────────────────────────────
 
@@ -914,7 +867,11 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
 
   const config = TARGET_CONFIG[target.type];
   const Icon = config.icon;
-  const suggestions = SUGGESTIONS[target.type];
+  const suggestions = getQuickCommands({
+    focusMode,
+    blockType: target.type === "phase" ? "block" : target.type,
+    sessionIntent: [target.label, target.parentLabel].filter(Boolean).join(" "),
+  });
   const isExercise = target.type === "exercise";
 
   // Animate in

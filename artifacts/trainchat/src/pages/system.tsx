@@ -62,6 +62,7 @@ import { clearAuthState } from "@/lib/routing";
 import { useFocusMode } from "@/hooks/useFocusMode";
 import { FOCUS_MODE_CONFIGS, type FocusModeConfig } from "@/lib/focusModeConfig";
 import type { FocusMode } from "@/lib/focusMode";
+import { getQuickCommands } from "@/lib/quickCommands";
 import TopNav from "@/components/layout/TopNav";
 import MobileSlideLayout, { type SlidePanel } from "@/components/layout/MobileSlideLayout";
 import BlockStatusCard from "@/components/training/BlockStatusCard";
@@ -3377,13 +3378,6 @@ function modifierColor(type: "emphasis" | "constraint" | "bias") {
   return "bg-blue-500/10 border-blue-500/20 text-blue-400";
 }
 
-const QUICK_COMMANDS = [
-  "Shorten today's session",
-  "Make it more explosive",
-  "Reduce volume today",
-  "Swap all machine work for free weights",
-];
-
 function SessionControlsPanel({
   readinessToday,
   sessionLoggedToday,
@@ -3400,8 +3394,8 @@ function SessionControlsPanel({
   const [cmdResult, setCmdResult] = useState<string | null>(null);
 
   const { data: today } = useQuery({
-    queryKey: ["training-system-today"],
-    queryFn: fetchToday,
+    queryKey: ["training-system-today", sessionControlsFocusMode],
+    queryFn: () => fetchToday(sessionControlsFocusMode),
     retry: false,
     staleTime: 30000,
   });
@@ -3458,6 +3452,11 @@ function SessionControlsPanel({
   const stressScore = readinessToday?.stressScore;
   const hasReadiness = !!(energyScore || sleepScore || sorenessScore);
   const adjustment = suggestedAdjustment(sorenessScore, energyScore, stressScore);
+  const quickCommands = getQuickCommands({
+    focusMode: sessionControlsFocusMode,
+    blockType: "session",
+    sessionIntent: [today?.sessionType, today?.label, today?.emphasis].filter(Boolean).join(" "),
+  });
 
   return (
     <div className="space-y-4">
@@ -3594,7 +3593,7 @@ function SessionControlsPanel({
         <div className="px-4 py-3 space-y-2">
           {/* Quick command chips */}
           <div className="flex flex-wrap gap-1.5">
-            {QUICK_COMMANDS.map((q) => (
+            {quickCommands.map((q) => (
               <button
                 key={q}
                 onClick={() => fireCmd(q)}
