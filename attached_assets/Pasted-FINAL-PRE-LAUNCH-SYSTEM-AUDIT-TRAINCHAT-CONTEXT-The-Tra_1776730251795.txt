@@ -1,0 +1,244 @@
+FINAL PRE-LAUNCH SYSTEM AUDIT — TRAINCHAT
+
+CONTEXT:
+The TrainChat platform is feature-complete. We need a full system audit before launch to validate:
+
+- Cross-device UI behavior
+- Browser compatibility
+- Performance and latency
+- Agent behavior accuracy
+- State consistency
+- Focus-mode integrity (Strength / Speed / Mobility)
+- Error handling and recovery
+- Overall UX clarity
+
+This audit should simulate REAL USER behavior — not just technical correctness.
+
+==================================================
+TASK 1 — CROSS-DEVICE UI AUDIT
+==================================================
+
+Test layouts and interactions on:
+
+MOBILE:
+- iPhone Safari (PRIMARY)
+- iPhone Chrome
+- Android Chrome
+
+TABLET:
+- iPad Safari (portrait + split view)
+
+DESKTOP:
+- Chrome
+- Safari
+- Edge
+
+Validate:
+- No overflow or clipped UI
+- Safe area spacing (top/bottom)
+- Buttons always visible and clickable
+- Bottom action bar (Start Session / Command Agent) never overlaps content
+- Chat input not hidden behind keyboard
+- Smooth scrolling (no jump/flicker)
+- Program panel renders correctly
+
+Log:
+[UIAudit] device, issuesFound, severity
+
+==================================================
+TASK 2 — SAFARI-SPECIFIC VALIDATION (CRITICAL)
+==================================================
+
+Check for:
+- position: sticky / fixed issues
+- backdrop blur rendering
+- scroll momentum problems
+- input lag or delayed taps
+- flickering UI elements
+
+Log:
+[SafariAudit] issues, componentsAffected
+
+==================================================
+TASK 3 — PERFORMANCE + LATENCY AUDIT
+==================================================
+
+Measure:
+
+Program Build:
+- totalMs
+- openAICallMs
+- validationMs
+
+UI:
+- tap → response time
+- panel load time
+- navigation speed
+
+Targets:
+- Program build < 25 seconds
+- UI interactions < 100ms perceived latency
+
+Log:
+[PerformanceAudit] totalMs, aiCallMs, uiLatency, slowSteps
+
+==================================================
+TASK 4 — AGENT BEHAVIOR AUDIT
+==================================================
+
+Run test commands across all focus modes:
+
+STRENGTH:
+- “increase squat strength”
+- “add volume”
+
+SPEED:
+- “make this more explosive”
+- “add reactive drills”
+
+MOBILITY:
+- “increase end-range control”
+- “reduce joint stress”
+
+Validate:
+- correct focus routing
+- visible program changes
+- no cross-mode contamination
+
+FAIL if:
+- agent responds but program doesn’t change
+- wrong focus logic is applied
+
+Log:
+[AgentAudit] intent, focusMode, changesApplied, issues
+
+==================================================
+TASK 5 — STATE CONSISTENCY AUDIT
+==================================================
+
+Test:
+
+- Build program → refresh → persists
+- Switch tabs → return → correct state
+- Start new build → old program still accessible
+- Save → immediately reflected in UI
+- Sidebar + main view always synced
+
+FAIL if:
+- UI shows stale data
+- program disappears
+- mismatch between chat and panel
+
+Log:
+[StateAudit] consistencyScore, issues
+
+==================================================
+TASK 6 — FEATURE FLOW AUDIT
+==================================================
+
+Simulate full user journey:
+
+1. Build program
+2. View program
+3. Start session
+4. Log performance
+5. Adjust program
+6. Switch focus
+7. Build again
+
+Validate:
+- no broken steps
+- no confusion points
+- everything feels intuitive
+
+Log:
+[FeatureFlowAudit] frictionPoints, dropOffRisk
+
+==================================================
+TASK 7 — FOCUS MODE INTEGRITY
+==================================================
+
+Validate:
+
+- Active focus always visible
+- Session UI reflects focus (color, labels, icons)
+- No strength language in speed/mobility
+- No incorrect tags (e.g., “Lifting” in speed)
+- Edit buttons are focus-specific
+- Agent commands match focus
+
+Log:
+[FocusAudit] modeClarityScore, mismatches
+
+==================================================
+TASK 8 — ERROR HANDLING + RECOVERY
+==================================================
+
+Simulate failures:
+
+- AI failure (429 / network)
+- slow response
+- partial response
+
+Validate:
+- user sees clear message
+- retry option exists
+- UI does not break
+- state is preserved
+
+Log:
+[ErrorHandlingAudit] scenariosTested, recoverySuccess
+
+==================================================
+TASK 9 — UX CLARITY AUDIT
+==================================================
+
+Evaluate from NEW USER perspective:
+
+Can user immediately understand:
+- what the app does
+- what to do first
+- what each button does
+- what focus modes mean
+
+Identify:
+- confusion points
+- unclear labels
+- missing guidance
+
+Log:
+[UXAudit] clarityScore, confusionPoints
+
+==================================================
+TASK 10 — FINAL READINESS SCORE
+==================================================
+
+Output:
+
+- Overall readiness score (0–100)
+- Critical issues (must fix before launch)
+- Medium issues (polish)
+- Minor issues (post-launch improvements)
+
+Final recommendation:
+- READY TO LAUNCH
+or
+- FIX CRITICAL ISSUES FIRST
+
+==================================================
+FINAL STANDARD
+==================================================
+
+The app must feel:
+- fast
+- intuitive
+- responsive
+- intelligent
+- consistent across all devices
+
+A user should be able to:
+open → build → train → adjust
+
+with ZERO friction.
+
+Return full audit report.
