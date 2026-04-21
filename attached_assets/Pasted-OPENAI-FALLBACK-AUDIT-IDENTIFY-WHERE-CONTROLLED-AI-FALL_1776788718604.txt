@@ -1,0 +1,107 @@
+OPENAI FALLBACK AUDIT — IDENTIFY WHERE CONTROLLED AI FALLBACK SHOULD AND SHOULD NOT EXIST
+
+CONTEXT:
+TrainChat now uses OpenAI as a controlled last-resort fallback in some places, such as exercise swap/add when deterministic library selection cannot find a good candidate.
+
+We do NOT want OpenAI fallback everywhere.
+We want to audit the full system and decide where OpenAI is:
+- appropriate as a safe last-resort content backstop
+- unnecessary because deterministic logic should handle it
+- dangerous because it could break state, integrity, or focus isolation
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Audit every major system path and classify whether OpenAI fallback should:
+1. be allowed
+2. be disallowed
+3. be added in a controlled way
+
+==================================================
+TASK 1 — INVENTORY ALL CURRENT FALLBACK PATHS
+==================================================
+
+Find every place where the system currently:
+- falls back to deterministic logic
+- falls back to OpenAI
+- fails cleanly
+- retries
+- uses backup selection paths
+
+Return all fallback points by file/function/surface.
+
+==================================================
+TASK 2 — CLASSIFY EACH FALLBACK POINT
+==================================================
+
+For each fallback point, classify it into one of:
+
+A. deterministic_only
+B. openai_allowed_last_resort
+C. openai_forbidden
+
+Decision rule:
+- content-generation gap → OpenAI may be allowed
+- state/integrity/targeting/persistence problem → OpenAI forbidden
+
+==================================================
+TASK 3 — IDENTIFY HIGH-VALUE OPENAI FALLBACK OPPORTUNITIES
+==================================================
+
+Specifically audit whether OpenAI fallback should be added or improved for:
+- add exercise
+- replace exercise
+- session refocus
+- block refocus
+- rare equipment adaptation
+- rare sport-specific edge cases
+- thin library families
+
+Only recommend OpenAI where it improves UX without risking system integrity.
+
+==================================================
+TASK 4 — IDENTIFY AREAS WHERE OPENAI SHOULD NEVER BE USED
+==================================================
+
+Specifically audit:
+- focus resolution
+- trainingSystem target resolution
+- save / persistence
+- session lifecycle state
+- delete/promotion logic
+- week advancement
+- active program lookup
+
+These should generally remain deterministic-only.
+
+==================================================
+TASK 5 — ADD AUDIT LOGGING DESIGN
+==================================================
+
+Propose logs such as:
+
+[FallbackSurfaceAudit] {
+  surface,
+  currentFallbackType,
+  recommendedFallbackType,
+  openaiAllowed,
+  rationale
+}
+
+==================================================
+TASK 6 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. all current fallback surfaces
+2. classification of each (deterministic only / OpenAI allowed / OpenAI forbidden)
+3. highest-value next places to add OpenAI fallback
+4. highest-risk places where OpenAI must remain forbidden
+5. final recommendations
+
+==================================================
+FINAL STANDARD
+==================================================
+
+OpenAI fallback should be used only where it improves content flexibility without threatening program integrity, state correctness, or focus isolation.
