@@ -15,6 +15,19 @@
  *   6. validating    — quality checks: balance, recovery, safety, constraints
  *   7. saving        — persisting updated program, generating change summary
  *   8. complete      — UI update triggered (complete SSE event sent)
+ *
+ * Action types from execPlan.action (new execution planner):
+ *   GUIDANCE         — Q&A, coaching questions, explanations, general advice
+ *   APPLY_MUTATION   — Edit/adjust an existing program
+ *   REBUILD_PROGRAM  — Structural rebuild of an existing program
+ *   ASK_CLARIFICATION — Request clarification before acting
+ *   NO_OP            — No operation, conversational response
+ *
+ * Legacy action types from decision.ts (still used in some paths):
+ *   PROGRAM_GENERATION — Build a new program from scratch
+ *   STRUCTURAL_REBUILD — Full architectural restructure
+ *   DIRECT_MUTATION    — Atomic surgical edit
+ *   SESSION_ADJUSTMENT — Session-scoped adjustment for pain/readiness
  */
 
 export type BuildStage =
@@ -30,7 +43,7 @@ export type BuildStage =
 /** Default user-visible labels — used when no action-specific label exists. */
 export const STAGE_LABELS: Record<BuildStage, string> = {
   understanding: "Reading your request…",
-  loading:       "Loading your program…",
+  loading:       "Loading context…",
   classifying:   "Mapping out what needs to change…",
   planning:      "Structuring your training split…",
   applying:      "Applying updates to your program…",
@@ -41,10 +54,13 @@ export const STAGE_LABELS: Record<BuildStage, string> = {
 
 /**
  * Action-type specific stage labels.
- * Keyed by ActionType from decision.ts, then by BuildStage.
+ * Covers both legacy decision.ts action types and new execPlan.action types.
  * Falls back to STAGE_LABELS when no specific label is defined.
  */
 const ACTION_STAGE_LABELS: Record<string, Partial<Record<BuildStage, string>>> = {
+
+  // ── Legacy action types (decision.ts) ──────────────────────────────────────
+
   PROGRAM_GENERATION: {
     loading:    "Setting up from scratch…",
     classifying:"Analyzing your request…",
@@ -80,6 +96,61 @@ const ACTION_STAGE_LABELS: Record<string, Partial<Record<BuildStage, string>>> =
   PROGRAM_RETRIEVAL: {
     loading:    "Fetching your program…",
     saving:     "Loading into the panel…",
+  },
+
+  // ── New execPlan.action types ────────────────────────────────────────────────
+
+  /** Q&A, coaching questions, explanations, general advice — no program mutation. */
+  GUIDANCE: {
+    understanding: "Reviewing your question…",
+    loading:       "Gathering context…",
+    classifying:   "Organizing the key factors…",
+    planning:      "Preparing the best answer…",
+    applying:      "Thinking this through…",
+    validating:    "Reviewing the response…",
+    saving:        "Wrapping up…",
+  },
+
+  /** Targeted edit or adjustment to an existing program. */
+  APPLY_MUTATION: {
+    loading:    "Loading your current program…",
+    classifying:"Identifying what to change…",
+    planning:   "Planning the adjustment…",
+    applying:   "Applying your changes…",
+    validating: "Checking the update…",
+    saving:     "Saving your changes…",
+  },
+
+  /** Structural rebuild of an existing program with new split or goal. */
+  REBUILD_PROGRAM: {
+    loading:    "Loading your current program…",
+    classifying:"Mapping the new structure…",
+    planning:   "Restructuring your weekly split…",
+    applying:   "Rebuilding your program…",
+    validating: "Validating the new structure…",
+    saving:     "Saving your program…",
+  },
+
+  /** Request more info before acting — short-circuit path. */
+  ASK_CLARIFICATION: {
+    understanding: "Reviewing your request…",
+    loading:       "Checking context…",
+    classifying:   "Identifying what I need to know…",
+    planning:      "Forming a question…",
+    applying:      "Preparing my question…",
+    validating:    "Almost ready…",
+    saving:        "Almost done…",
+  },
+
+  /** No-op or purely conversational response. */
+  NO_OP: {
+    understanding: "Reading your message…",
+    loading:       "Gathering context…",
+    classifying:   "Reviewing the situation…",
+    planning:      "Preparing a response…",
+    applying:      "Working on it…",
+    validating:    "Reviewing the response…",
+    saving:        "Wrapping up…",
   },
 };
 

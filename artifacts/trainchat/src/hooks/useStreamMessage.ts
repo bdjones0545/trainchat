@@ -118,21 +118,38 @@ export interface StreamState {
 
 // ─── Milestone stage logic ─────────────────────────────────────────────────────
 //
-// Which stages appear as committed message bubbles depends on the action type:
+// Which stages appear as committed message bubbles depends on the action type.
 //
-//   PROGRAM_GENERATION  — full build: planning, applying, validating, saving
-//   STRUCTURAL_REBUILD  — medium:     planning, applying, saving
-//   DIRECT_MUTATION     — fast:       applying, saving
-//   SESSION_ADJUSTMENT  — fast:       applying, saving
-//   default             — full:       planning, applying, validating, saving
+// Legacy action types (decision.ts):
+//   PROGRAM_GENERATION  — full build:  planning, applying, validating, saving
+//   STRUCTURAL_REBUILD  — medium:      planning, applying, saving
+//   DIRECT_MUTATION     — fast edit:   applying, saving
+//   SESSION_ADJUSTMENT  — fast edit:   applying, saving
+//
+// New execPlan.action types:
+//   REBUILD_PROGRAM     — medium:      planning, applying, saving
+//   APPLY_MUTATION      — fast edit:   applying, saving
+//   GUIDANCE            — Q&A only:    applying  (no save — nothing was saved)
+//   ASK_CLARIFICATION   — short:       applying
+//   NO_OP               — short:       applying
 
 function getMilestoneStages(actionType?: string): Set<BuildStage> {
   switch (actionType) {
+    // Fast edits — just applying + saving
     case "DIRECT_MUTATION":
     case "SESSION_ADJUSTMENT":
+    case "APPLY_MUTATION":
       return new Set(["applying", "saving"]);
+    // Medium rebuilds — planning + applying + saving
     case "STRUCTURAL_REBUILD":
+    case "REBUILD_PROGRAM":
       return new Set(["planning", "applying", "saving"]);
+    // Q&A / guidance — applying only (no mutation, nothing saved)
+    case "GUIDANCE":
+    case "ASK_CLARIFICATION":
+    case "NO_OP":
+      return new Set(["applying"]);
+    // Full program build (default)
     case "PROGRAM_GENERATION":
     default:
       return new Set(["planning", "applying", "validating", "saving"]);
@@ -321,6 +338,20 @@ export function useStreamMessage(): UseStreamMessageResult {
                     prevIsMilestone && s.stageLabel
                       ? [...s.stageHistory, s.stageLabel]
                       : s.stageHistory;
+
+                  // [AssistantUiStateAudit] — confirms UI state matches the real action
+                  if (resolvedActionType && resolvedActionType !== s.actionType) {
+                    const isBuilding = ["PROGRAM_GENERATION", "STRUCTURAL_REBUILD", "REBUILD_PROGRAM"].includes(resolvedActionType);
+                    const isEditing  = ["DIRECT_MUTATION", "SESSION_ADJUSTMENT", "APPLY_MUTATION"].includes(resolvedActionType);
+                    const isQA       = ["GUIDANCE", "ASK_CLARIFICATION", "NO_OP"].includes(resolvedActionType);
+                    console.log("[AssistantUiStateAudit]", {
+                      intentType: event.intentType ?? s.intentType,
+                      resolvedActionType,
+                      uiStateCategory: isBuilding ? "build_program" : isEditing ? "edit_program" : isQA ? "answer_question" : "unknown",
+                      stage: event.stage,
+                      stageLabel: event.step,
+                    });
+                  }
 
                   return {
                     ...s,

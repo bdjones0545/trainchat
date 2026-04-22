@@ -10,6 +10,15 @@
  *
  * Steps are derived from the REAL pipeline stages — no fake delays,
  * no invented stages. Every step maps to an actual server BuildStage.
+ *
+ * Action type mapping:
+ *   Build:   PROGRAM_GENERATION, STRUCTURAL_REBUILD, REBUILD_PROGRAM
+ *   Edit:    DIRECT_MUTATION, SESSION_ADJUSTMENT, APPLY_MUTATION
+ *   Q&A:     GUIDANCE
+ *   Other:   ASK_CLARIFICATION, NO_OP
+ *
+ * The UI state must always match the actual server action — never show
+ * program-build copy for question-answering or editing.
  */
 
 import type { BuildStage } from "@/hooks/useStreamMessage";
@@ -17,9 +26,12 @@ import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_17752640
 
 // ─── Step sequences (tied to real BuildStage pipeline) ────────────────────────
 //
-// Each action type maps to a curated subset of stages with premium microcopy.
-// "loading" is intentionally omitted — it's a server-internal transition that
-// would look like a duplicate of "understanding" to the user.
+// Each action type maps to a curated subset of stages with accurate microcopy.
+// "loading" is intentionally omitted from most sequences — it's a server-internal
+// transition that would look like a duplicate of "understanding" to the user.
+//
+// IMPORTANT: Non-build actions (GUIDANCE, ASK_CLARIFICATION, NO_OP) must NEVER
+// show steps like "Saving your program" or "Assigning sessions & exercises".
 
 interface BuildStep {
   stage: BuildStage;
@@ -27,6 +39,9 @@ interface BuildStep {
 }
 
 const STEP_SEQUENCES: Record<string, BuildStep[]> = {
+
+  // ── Program BUILD actions ─────────────────────────────────────────────────
+  // Full build: new program from scratch.
   PROGRAM_GENERATION: [
     { stage: "understanding", label: "Reading your goal" },
     { stage: "classifying",   label: "Selecting block type" },
@@ -35,32 +50,71 @@ const STEP_SEQUENCES: Record<string, BuildStep[]> = {
     { stage: "validating",    label: "Validating your system" },
     { stage: "saving",        label: "Finalizing your program" },
   ],
+  // Legacy: full architectural restructure.
   STRUCTURAL_REBUILD: [
     { stage: "understanding", label: "Reading your request" },
     { stage: "planning",      label: "Restructuring your split" },
     { stage: "applying",      label: "Rebuilding your program" },
     { stage: "saving",        label: "Saving your program" },
   ],
+  // New execPlan action: structural rebuild.
+  REBUILD_PROGRAM: [
+    { stage: "understanding", label: "Reading your request" },
+    { stage: "planning",      label: "Restructuring your split" },
+    { stage: "applying",      label: "Rebuilding your program" },
+    { stage: "saving",        label: "Saving your program" },
+  ],
+
+  // ── Program EDIT actions ──────────────────────────────────────────────────
+  // Legacy: atomic surgical edit.
   DIRECT_MUTATION: [
     { stage: "applying", label: "Applying the change" },
-    { stage: "saving",   label: "Saving your program" },
+    { stage: "saving",   label: "Saving your changes" },
   ],
+  // Legacy: session-scoped adjustment.
   SESSION_ADJUSTMENT: [
     { stage: "applying", label: "Applying modifications" },
-    { stage: "saving",   label: "Saving your program" },
+    { stage: "saving",   label: "Saving your changes" },
+  ],
+  // New execPlan action: targeted edit or adjustment.
+  APPLY_MUTATION: [
+    { stage: "understanding", label: "Reading your request" },
+    { stage: "applying",      label: "Updating your program" },
+    { stage: "saving",        label: "Saving your changes" },
+  ],
+
+  // ── Q&A / GUIDANCE actions ────────────────────────────────────────────────
+  // Coaching questions, explanations, general advice — no program mutation.
+  GUIDANCE: [
+    { stage: "understanding", label: "Reviewing your question" },
+    { stage: "classifying",   label: "Organizing the key factors" },
+    { stage: "applying",      label: "Preparing the best answer" },
+  ],
+
+  // ── Clarification ─────────────────────────────────────────────────────────
+  ASK_CLARIFICATION: [
+    { stage: "understanding", label: "Reviewing your request" },
+    { stage: "applying",      label: "Working out what to ask" },
+  ],
+
+  // ── No-op / general chat ──────────────────────────────────────────────────
+  NO_OP: [
+    { stage: "understanding", label: "Reading your message" },
+    { stage: "applying",      label: "Preparing a response" },
   ],
 };
 
+// Default steps used only when actionType is unknown/unresolved.
+// Intentionally neutral — no program-build language.
 const DEFAULT_STEPS: BuildStep[] = [
   { stage: "understanding", label: "Reading your request" },
-  { stage: "applying",      label: "Applying changes" },
-  { stage: "saving",        label: "Saving your program" },
+  { stage: "applying",      label: "Working on a response" },
 ];
 
 // Numeric priority for each BuildStage — used for completed/active/pending math
 const STAGE_ORDER: Record<BuildStage, number> = {
   understanding: 1,
-  loading:       1.5, // between understanding and classifying
+  loading:       1.5,
   classifying:   2,
   planning:      3,
   applying:      4,
@@ -73,10 +127,21 @@ const STAGE_ORDER: Record<BuildStage, number> = {
 
 function getCardTitle(actionType?: string): string {
   switch (actionType) {
+    // Build
     case "PROGRAM_GENERATION": return "Building your system";
     case "STRUCTURAL_REBUILD":  return "Rebuilding your program";
+    case "REBUILD_PROGRAM":     return "Rebuilding your program";
+    // Edit
     case "DIRECT_MUTATION":     return "Applying your change";
     case "SESSION_ADJUSTMENT":  return "Modifying your session";
+    case "APPLY_MUTATION":      return "Updating your program";
+    // Q&A / Guidance
+    case "GUIDANCE":            return "Thinking it through";
+    // Clarification
+    case "ASK_CLARIFICATION":   return "One quick question";
+    // No-op
+    case "NO_OP":               return "Working on it";
+    // Unknown — neutral default, never shows program-build language
     default:                    return "Working on it";
   }
 }
@@ -90,7 +155,6 @@ function getStepStatus(
   steps: BuildStep[],
   currentStage: BuildStage | null,
 ): StepStatus {
-  // Before first stage event — show first step as active (stream just started)
   if (!currentStage) {
     return stepIndex === 0 ? "active" : "pending";
   }
@@ -100,7 +164,7 @@ function getStepStatus(
 
   const currentOrder = STAGE_ORDER[currentStage];
   const stepOrder    = STAGE_ORDER[step.stage];
-  const nextOrder    = nextStep ? STAGE_ORDER[nextStep.stage] : 8; // past complete
+  const nextOrder    = nextStep ? STAGE_ORDER[nextStep.stage] : 8;
 
   if (currentOrder >= nextOrder) return "completed";
   if (currentOrder >= stepOrder) return "active";
@@ -137,7 +201,6 @@ function StepRow({ label, status }: { label: string; status: StepStatus }) {
     );
   }
 
-  // pending
   return (
     <div className="flex items-center gap-2.5">
       <div className="w-3.5 h-3.5 rounded-full border border-border/30 flex-shrink-0" />
@@ -238,7 +301,7 @@ export default function AgentThinking({
         <div className="px-4 pb-3.5 space-y-2.5">
           {steps.map((step, i) => (
             <StepRow
-              key={step.stage}
+              key={step.stage + i}
               label={step.label}
               status={getStepStatus(i, steps, buildStage)}
             />
