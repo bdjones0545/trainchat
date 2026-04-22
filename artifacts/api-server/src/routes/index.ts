@@ -28,6 +28,7 @@ import supportRouter from "./support";
 import activeSessionRouter from "./active-session";
 import shareMomentsRouter from "./share-moments";
 import systemAdjustmentsRouter from "./system-adjustments";
+import clearMemoryRouter from "./clear-memory";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -70,5 +71,6 @@ router.use(supportRouter);
 router.use(activeSessionRouter);
 router.use(shareMomentsRouter);
 router.use(systemAdjustmentsRouter);
+router.use(clearMemoryRouter);
 
 export default router;

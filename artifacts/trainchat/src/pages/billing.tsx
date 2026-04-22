@@ -571,6 +571,9 @@ export default function SettingsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [showClearMemoryConfirm, setShowClearMemoryConfirm] = useState(false);
+  const [clearMemoryLoading, setClearMemoryLoading] = useState(false);
+  const [clearMemoryError, setClearMemoryError] = useState<string | null>(null);
   const [supportModalType, setSupportModalType] = useState<SupportType | null>(null);
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameInput, setNameInput] = useState("");
@@ -657,6 +660,41 @@ export default function SettingsPage() {
     } catch (err: any) {
       setDeleteError(err.message);
       setDeleteLoading(false);
+    }
+  }
+
+  // ── Clear coach memory ────────────────────────────────────────────────────────
+  async function handleClearMemory() {
+    if (clearMemoryLoading) return;
+    setClearMemoryLoading(true);
+    setClearMemoryError(null);
+    try {
+      const res = await fetch("/api/clear-memory", {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error ?? "Failed to clear coach memory. Please try again.");
+      }
+
+      // Invalidate all user-specific queries so the UI reflects the clean slate
+      await queryClient.invalidateQueries();
+
+      // Clear any persisted local state tied to programs/history
+      // (coach settings toggles in localStorage are intentionally preserved —
+      //  they are preferences, not history)
+
+      setShowClearMemoryConfirm(false);
+      console.info("[ClearCoachMemory] Reset complete", data.cleared);
+      toast({
+        title: "Coach memory cleared",
+        description: "Your chats, programs, and training history have been wiped. You're starting fresh.",
+      });
+    } catch (err: any) {
+      setClearMemoryError(err.message);
+    } finally {
+      setClearMemoryLoading(false);
     }
   }
 
@@ -1062,8 +1100,13 @@ export default function SettingsPage() {
               />
               <SettingsRow
                 label="Clear coach memory"
-                badge="Coming soon"
-                disabled
+                destructive
+                onClick={() => {
+                  console.info("[SettingsAudit:Privacy] Clear coach memory tapped");
+                  setShowClearMemoryConfirm(true);
+                  setClearMemoryError(null);
+                }}
+                rightElement={<AlertTriangle className="w-3.5 h-3.5 text-red-400/60" />}
               />
               <SettingsRow
                 label="Privacy policy"
@@ -1076,6 +1119,56 @@ export default function SettingsPage() {
                 rightElement={<ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />}
               />
             </Card>
+
+            {/* Clear memory confirmation */}
+            {showClearMemoryConfirm && (
+              <div className="mt-3 rounded-2xl border border-red-500/30 bg-red-500/5 p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-bold text-red-400">Clear coach memory?</p>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                      This will remove your chats, training history, saved programs, session logs, and personalization so you can start fresh.{" "}
+                      <strong className="text-foreground/70">Your account and membership will remain active.</strong>
+                    </p>
+                  </div>
+                </div>
+
+                {clearMemoryError && (
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-500/15 border border-red-500/25">
+                    <AlertCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                    <p className="text-xs text-red-300">{clearMemoryError}</p>
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setShowClearMemoryConfirm(false);
+                      setClearMemoryError(null);
+                    }}
+                    disabled={clearMemoryLoading}
+                    className="flex-1 py-2.5 rounded-xl border border-border text-sm font-medium text-foreground hover:bg-accent/30 transition-all disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleClearMemory}
+                    disabled={clearMemoryLoading}
+                    className="flex-1 py-2.5 rounded-xl bg-red-500/20 border border-red-500/30 text-sm font-semibold text-red-400 hover:bg-red-500/30 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+                  >
+                    {clearMemoryLoading ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Clearing…
+                      </>
+                    ) : (
+                      "Clear memory"
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
 
           {/* ── 6. SUPPORT ── */}
