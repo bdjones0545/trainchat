@@ -998,12 +998,19 @@ export default function Chat() {
         if (shareMomentTimeoutRef.current) clearTimeout(shareMomentTimeoutRef.current);
         shareMomentTimeoutRef.current = setTimeout(() => {
           const sys = activeSystem as any;
+          const prog = latestProgram;
           const moment = buildShareMoment({
             type: "PROGRAM_GENERATED",
-            programName: sys?.name ?? latestProgram?.programName,
+            programName: sys?.name ?? prog?.programName,
             trainingStyle: sys?.trainingStyle ?? sys?.overarchingGoal,
             weeklyFrequency: sys?.weeklyFrequency,
             triggerSource: "program_saved",
+            splitType: prog?.splitType ?? sys?.trainingStyle,
+            daysPerWeek: prog?.days?.length ?? sys?.weeklyFrequency,
+            weekNumber: prog?.weekNumber ?? 1,
+            blockLabel: prog?.blockLabel ?? undefined,
+            currentDayName: prog?.days?.[0]?.name ?? undefined,
+            blockLength: 4,
           });
           setPendingShareMoment(moment);
         }, 2000);
@@ -1025,12 +1032,18 @@ export default function Chat() {
           if (shareMomentTimeoutRef.current) clearTimeout(shareMomentTimeoutRef.current);
           shareMomentTimeoutRef.current = setTimeout(() => {
             const sys = activeSystem as any;
+            const prog = latestProgram ?? dbSystemProgram;
             const moment = buildShareMoment({
               type: "AGENT_ADJUSTMENT",
               programName: sys?.name,
               trainingStyle: sys?.trainingStyle ?? sys?.overarchingGoal,
               changeSummary: result.systemEdit!.changeSummary,
               triggerSource: "agent_adjustment",
+              splitType: (prog as any)?.splitType ?? sys?.trainingStyle,
+              daysPerWeek: (prog as any)?.days?.length ?? sys?.weeklyFrequency,
+              weekNumber: (prog as any)?.weekNumber ?? undefined,
+              blockLabel: (prog as any)?.blockLabel ?? undefined,
+              currentDayName: (prog as any)?.days?.[0]?.name ?? undefined,
             });
             setPendingShareMoment(moment);
           }, 1500);

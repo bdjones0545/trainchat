@@ -114,7 +114,7 @@ export default function ShareMomentModal({ moment, onClose }: Props) {
 
       {/* Sheet — constrained to viewport, scrollable inside */}
       <div className="relative w-full max-w-sm mx-4 mb-4 sm:mb-0 flex flex-col bg-card border border-border rounded-2xl shadow-2xl"
-        style={{ maxHeight: "90dvh", maxHeight: "90vh" }}
+        style={{ maxHeight: "90vh" }}
       >
         {/* Header — always visible at top, never scrolls away */}
         <div className="flex-shrink-0 flex items-center justify-between px-5 pt-5 pb-3 border-b border-border/50">

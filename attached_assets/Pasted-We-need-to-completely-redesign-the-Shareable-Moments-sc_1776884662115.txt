@@ -1,0 +1,232 @@
+We need to completely redesign the “Shareable Moments” screen in TrainChat because the current version is too generic and not something users would actually want to share.
+
+GOAL
+Replace the current “New program built” share card with a much more compelling social-style share card that feels personal, impressive, and specific to what the user just created with the TrainChat Agent.
+
+NEW CORE MESSAGE
+The share card should no longer say:
+- “New program built”
+- “Here’s your program. Everything is set and ready to go.”
+
+Instead, the primary messaging should feel like:
+- “Look what I created with the TrainChat Agent”
+- “Built with the TrainChat Agent”
+- “My program, built by the TrainChat Agent”
+
+PRIMARY CONCEPT
+The shareable card should visually showcase:
+1. The fact that the user created a program with the TrainChat Agent
+2. The current training block(s)
+3. The current day of the program
+4. A much more premium, modern, screenshot-worthy design
+
+WHAT TO BUILD
+
+1. REPLACE THE HERO CARD CONTENT
+Create a new share card layout that includes:
+
+Top label / badge:
+- TRAINCHAT AGENT
+or
+- BUILT WITH TRAINCHAT AGENT
+
+Main headline:
+- “Look what I created with the TrainChat Agent”
+
+Subheadline:
+- Dynamic program title or summary, for example:
+  - “4-Day Lower/Upper Program”
+  - “Speed + Strength Block”
+  - “Hypertrophy Phase Build”
+
+Then show dynamic training data in a much more visual way.
+
+2. SHOW BLOCKS
+We want the card to display the program blocks in a polished visual format.
+Examples:
+- Block 1: Accumulation
+- Block 2: Intensification
+- Block 3: Peak
+or if block names are not available:
+- Week 1–4
+- Current Phase
+- Training Focus
+
+Use “block chips” or “phase pills” instead of boring text rows.
+These should be visually clean and premium.
+The current block should be highlighted.
+
+Examples:
+[Block 1] [Block 2] [Block 3]
+Highlight current one with stronger glow / fill / border.
+
+If the app stores block metadata, render actual block names.
+If not, gracefully fall back to:
+- Week ranges
+- Phase number
+- Program segment labels
+
+3. SHOW CURRENT DAY
+We want the current day of the program shown clearly.
+Examples:
+- Current Day: Lower 1
+- Today’s Focus: Upper Power
+- Day 2 of 4: Upper
+- Active Session: Lower Body Strength
+
+This should be one of the most noticeable pieces of dynamic information on the card because that makes it feel alive and specific.
+
+4. SHOW PROGRAM SNAPSHOT
+Below the headline, include a compact program snapshot section with 2–4 stat tiles max, such as:
+- 4 days/week
+- Lower/Upper split
+- 4-week block
+- Current day
+OR
+- Goal
+- Focus
+- Days/week
+- Active phase
+
+These must be visually strong and easily scannable.
+
+5. REMOVE THE GENERIC COACH QUOTE BOX
+Delete the current quote section:
+- “Here’s your program. Everything is set and ready to go.”
+
+This adds no social value and makes the card feel templated.
+Replace it with something more visually useful, such as:
+- “Current phase”
+- “Today’s session”
+- “Program built from your goals”
+- “Created with AI coaching”
+
+6. SOCIAL CAPTION SHOULD ALSO CHANGE
+Replace the caption text:
+- “TrainChat just built my 4-day Lower/Upper x 4 program.”
+
+With something stronger and more shareable.
+Use a dynamic caption generator with examples like:
+- “Look what I created with the TrainChat Agent.”
+- “Built my program with the TrainChat Agent.”
+- “Custom training plan created with the TrainChat Agent.”
+- “My current block, built with the TrainChat Agent.”
+
+If possible, generate caption variants based on available program data, e.g.:
+- “Built my 4-day Lower/Upper block with the TrainChat Agent.”
+- “TrainChat Agent mapped out my current strength block.”
+- “My current training day and block, built with TrainChat Agent.”
+
+7. VISUAL DESIGN DIRECTION
+The card needs to feel premium enough that a user would actually post it.
+
+Design direction:
+- Dark premium sports-tech aesthetic
+- Strong gradients / glow accents
+- Clear hierarchy
+- Cleaner spacing
+- Better typography
+- More contrast
+- Dynamic chips/pills/cards instead of bland rectangles
+- Should feel like a real “achievement / creation / status” card
+
+Think:
+- premium fitness app
+- tech product launch card
+- shareable story card
+- polished enough for Instagram story screenshots
+
+8. IMPORTANT UX REQUIREMENT
+The share card must be based on the ACTUAL active program the user just created or is currently viewing.
+
+Do not show placeholder content if program data exists.
+The share card should pull from live program state.
+
+Priority for live data:
+- program title / program type
+- days per week
+- split / style
+- block length
+- block names or phases
+- current block / active week / active phase
+- current day / selected day / active training day
+
+If some fields do not exist, use safe fallbacks and do NOT break the UI.
+
+9. DATA FALLBACK LOGIC
+Implement robust fallback logic:
+
+Preferred data:
+- actual block names
+- actual current block
+- actual current day/session title
+
+Fallbacks:
+- if block names don’t exist, derive from weeks or phase index
+- if current day title doesn’t exist, derive from selected day or day number
+- if program title doesn’t exist, compose from style + days/week
+- if current block cannot be determined, show first active block or current week range
+
+No blank fields.
+No undefined/null text rendered in UI.
+
+10. SCREEN LAYOUT
+Suggested new card structure:
+
+Top:
+- small TrainChat Agent badge
+
+Main:
+- Headline: “Look what I created with the TrainChat Agent”
+- Dynamic subheadline: program name / type
+
+Middle:
+- “Current Block” chips
+- “Today / Current Day” feature row
+
+Lower:
+- 3–4 stat tiles for:
+  - days/week
+  - split/style
+  - block length
+  - focus/current day
+
+Bottom:
+- subtle TrainChat branding
+
+Then below card:
+- improved caption box
+- Save image / Copy text / Share buttons remain
+
+11. IMAGE EXPORT / SHARE QUALITY
+Make sure the redesigned card exports well as an image.
+Important:
+- no clipping
+- no low-contrast text
+- spacing should be balanced
+- card should look strong in portrait mobile share format
+- should look good when screenshotted or saved directly
+
+12. IMPLEMENTATION TASKS
+Please do all of the following:
+- locate the current shareable moments component
+- replace the old generic card UI
+- wire in live program data
+- add block rendering logic
+- add current day rendering logic
+- update caption generation
+- preserve existing save/copy/share functionality
+- keep component responsive for mobile
+- make sure this works for current active program state, not just initial creation state
+
+13. FINAL STANDARD
+Before finishing, verify:
+- this no longer looks like a generic template
+- it clearly says the user created something with the TrainChat Agent
+- it shows the program blocks
+- it shows the current day
+- it feels premium and social-share-worthy
+- it uses real data from the program
+- it gracefully handles missing fields
+
+Please implement the redesign directly, not just suggest ideas.
