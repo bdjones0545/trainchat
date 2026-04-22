@@ -16,6 +16,7 @@
  */
 
 import { db } from "@workspace/db";
+import { OPENAI_MODELS } from "./openai-models";
 import {
   sessionExercises,
   trainingSessions,
@@ -431,7 +432,7 @@ Schema:
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: "gpt-4o",
+        model: OPENAI_MODELS.EDIT_ENGINE,
         messages: [
           { role: "system", content: prompt },
           { role: "user", content: `Add one non-duplicate ${focusMode} exercise to ${ctx.sessionLabel}.` },

@@ -1,0 +1,84 @@
+We completed Step 1 by centralizing OpenAI model IDs into one shared config file.
+
+Now complete Step 2 only:
+Migrate the lightweight guest intent/routing path from the current mini model to the new mini model, while keeping everything else unchanged.
+
+Goal:
+Only update the lightweight guest routing / intent classification step to use the new mini model.
+Do not migrate the rest of the system yet.
+
+Current target:
+- lib/guestChat.ts
+The lightweight routing / intent / classification call currently uses the mini model role.
+
+Task:
+Change that routing model assignment from the old mini model to the new mini model in the centralized config layer.
+
+Target change:
+- ROUTING: change from "gpt-4o-mini" to "gpt-5.4-mini"
+
+Important:
+This step should only affect the lightweight routing / intent detection path used in guest chat.
+All other roles should remain exactly as they are for now.
+
+Requirements:
+1. Update the centralized model config only for the routing role.
+   Example:
+   - ROUTING: "gpt-5.4-mini"
+
+2. Verify that lib/guestChat.ts is actually using the shared ROUTING constant for the lightweight intent/routing call.
+   If it is not, fix that wiring.
+
+3. Do not change:
+- CORE
+- GUEST_RESPONSE
+- PROGRAM_GENERATION
+- EDIT_ENGINE
+- EDIT_INTENT
+- DIRECTIONS
+- EXERCISE_FALLBACK
+- SWAP_BACKSTOP
+- SHARE_MOMENTS
+
+4. Do not rewrite prompts.
+Do not change output parsing.
+Do not change schemas.
+Do not change business logic.
+Do not change fallback behavior.
+Do not change response-generation model in guest chat.
+Only change the routing model.
+
+5. Add a small comment in the model config noting:
+- ROUTING is intentionally isolated for fast / low-cost intent detection
+- this was migrated first as the safest low-risk test path
+
+6. Validate this path carefully:
+- lightweight guest intent/routing still runs
+- classification results still parse correctly
+- no enum mismatches
+- no changed JSON shape assumptions
+- no broken branching caused by slightly different model behavior
+
+7. Add a defensive safeguard if needed:
+If the routing step expects strict JSON or a structured object, make sure parsing remains robust.
+If there is already a parser/validator, preserve it.
+If there is no protection, add a minimal non-invasive validation layer without changing business behavior.
+
+8. After implementation, report:
+- the exact file(s) changed
+- confirmation that only ROUTING moved to gpt-5.4-mini
+- whether guest routing still compiles and passes basic validation
+- whether any parsing hardening was needed
+
+Success criteria:
+- guest routing now uses gpt-5.4-mini
+- nothing else moved yet
+- no behavioral regressions introduced intentionally
+- the system remains ready for Step 3
+
+Important:
+Do not perform Step 3 yet.
+Do not migrate core chat.
+Do not migrate generation.
+Do not migrate edit services.
+Only complete the guest routing model migration.

@@ -1,6 +1,7 @@
 import { db, userProfilesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
+import { OPENAI_MODELS } from "./openai-models";
 import {
   buildIntelligenceContext,
   buildDBExerciseContext,
@@ -2704,7 +2705,7 @@ export async function generateAIResponse(
       const resp = await fetch(`${openAIBaseUrl}/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({ model: "gpt-4o", messages: msgs, max_tokens: maxTok, temperature: 0.6 }),
+        body: JSON.stringify({ model: OPENAI_MODELS.CORE, messages: msgs, max_tokens: maxTok, temperature: 0.6 }),
       });
       if (!resp.ok) {
         const errText = await resp.text();

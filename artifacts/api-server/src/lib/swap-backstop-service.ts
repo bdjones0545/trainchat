@@ -1,6 +1,7 @@
 import { db, exerciseLibrary, globalLearningEventsTable, learningCandidatesTable } from "@workspace/db";
 import { and, eq, sql } from "drizzle-orm";
 import { logger } from "./logger";
+import { OPENAI_MODELS } from "./openai-models";
 import { findExerciseByName, getByMovementPattern } from "./exercise-service";
 import type { EditPlan } from "./edit-intent-service";
 
@@ -225,7 +226,7 @@ Rules:
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o",
+        model: OPENAI_MODELS.SWAP_BACKSTOP,
         messages: [
           { role: "system", content: prompt },
           { role: "user", content: `Resolve a safe swap for "${ctx.exerciseName}".` },

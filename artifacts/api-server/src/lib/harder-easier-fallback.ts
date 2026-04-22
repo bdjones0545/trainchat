@@ -15,6 +15,7 @@
 import { db, globalLearningEventsTable, learningCandidatesTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { logger } from "./logger";
+import { OPENAI_MODELS } from "./openai-models";
 import type { EditPlan } from "./edit-intent-service";
 
 // ─── Generic Placeholder Guard ────────────────────────────────────────────────
@@ -99,7 +100,7 @@ async function callOpenAIForHarderEasier(ctx: HarderEasierContext): Promise<Hard
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o",
+        model: OPENAI_MODELS.EXERCISE_FALLBACK,
         messages: [
           { role: "system", content: systemPrompt },
           {

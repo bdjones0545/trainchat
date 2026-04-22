@@ -1,5 +1,6 @@
 import { logger } from "./logger";
 import { getGuestSession, updateGuestSession } from "./guestService";
+import { OPENAI_MODELS } from "./openai-models";
 import {
   normalizeGoal,
   normalizeExperience,
@@ -258,7 +259,7 @@ async function callOpenAI(systemPrompt: string, userPrompt: string, maxTokens = 
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "gpt-4o",
+      model: OPENAI_MODELS.PROGRAM_GENERATION,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -510,7 +511,7 @@ Days: ${firstProgram.days.map(d => d.name).join(", ")}` : "Program context not a
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
         body: JSON.stringify({
-          model: "gpt-4o",
+          model: OPENAI_MODELS.PROGRAM_GENERATION,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userMessage },

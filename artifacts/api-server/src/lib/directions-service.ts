@@ -21,6 +21,7 @@
  */
 
 import { logger } from "./logger";
+import { OPENAI_MODELS } from "./openai-models";
 import { serializeSystemForPrompt, type TargetContext } from "./edit-intent-service";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -770,7 +771,7 @@ async function callDirectionsAI(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o",
+        model: OPENAI_MODELS.DIRECTIONS,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userRequest },

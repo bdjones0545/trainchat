@@ -3,6 +3,7 @@ import { db, shareMomentAuditTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { z } from "zod";
 import { logger } from "../lib/logger";
+import { OPENAI_MODELS } from "../lib/openai-models";
 
 const router: IRouter = Router();
 
@@ -182,7 +183,7 @@ router.post("/share-moments/program-card", requireAuth, async (req: any, res): P
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: "gpt-4o",
+        model: OPENAI_MODELS.SHARE_MOMENTS,
         messages: [
           { role: "system", content: PROGRAM_CARD_SYSTEM_PROMPT },
           { role: "user", content: userMessage },

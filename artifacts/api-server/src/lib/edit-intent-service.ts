@@ -11,6 +11,7 @@
  */
 
 import { logger } from "./logger";
+import { OPENAI_MODELS } from "./openai-models";
 import { extractAgentIntentProfile, buildAgentIntentProfilePromptSection } from "./language-system";
 import { auditLanguageInterpretation } from "./language-audit";
 import { buildSwapContext, getProgressions, findExerciseByName, getSwapCandidates } from "./exercise-service";
@@ -694,7 +695,7 @@ async function interpretWithAI(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o",
+        model: OPENAI_MODELS.EDIT_INTENT,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userRequest },

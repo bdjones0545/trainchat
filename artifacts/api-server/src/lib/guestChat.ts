@@ -1,5 +1,6 @@
 import { getGuestSession, updateGuestSession } from "./guestService";
 import { logger } from "./logger";
+import { OPENAI_MODELS } from "./openai-models";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -156,7 +157,7 @@ ${assistantText.slice(0, 2000)}`;
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: OPENAI_MODELS.ROUTING,
         messages: [{ role: "user", content: extractionPrompt }],
         max_tokens: 1200,
         temperature: 0,
@@ -199,7 +200,7 @@ async function callOpenAIChat(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "gpt-4o",
+      model: OPENAI_MODELS.GUEST_RESPONSE,
       messages: [
         { role: "system", content: buildGuestChatSystemPrompt(turnNumber) },
         ...messages.map((m) => ({ role: m.role, content: m.content })),
