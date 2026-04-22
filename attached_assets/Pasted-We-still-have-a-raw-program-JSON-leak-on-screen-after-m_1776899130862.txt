@@ -1,0 +1,70 @@
+We still have a raw program JSON leak on screen after multiple fixes.
+
+Current evidence:
+The assistant bubble visible in the chat UI is still rendering bare JSON for a generated program request.
+This means there is still at least one render path bypassing the shared extractProgramData / suppression contract.
+
+GOAL
+Trace the exact render path of the visible assistant bubble on the active chat screen and identify where raw message.content is still being rendered directly.
+
+IMPORTANT
+Do not change prompts or model logic.
+Do not change backend generation.
+This is a frontend render-path tracing and fix task.
+
+INVESTIGATION TASKS
+
+1. Identify the exact component tree used to render the visible assistant message on this screen.
+Do not assume it is only MessageBubble.tsx.
+Trace from the page-level chat message list down to the final visible bubble.
+
+2. Add debug logs to every candidate render layer with:
+- component name
+- message id
+- role
+- whether extractProgramData(structuredData, content) returns a program
+- whether suppression branch is being applied
+- whether raw content is still being passed through
+
+3. Specifically determine:
+- is the visible message rendered by MessageBubble.tsx?
+- is there a separate mobile/specialized assistant bubble path?
+- is there an optimistic/stream-complete message renderer different from the persisted-message renderer?
+- is there a markdown/pre/code path outside MessageBubble?
+
+4. Confirm whether the exact on-screen assistant message object has:
+- structuredData present?
+- raw content present?
+- parsed artifact detected by extractProgramData?
+- content length
+- first 100 chars
+
+5. If extractProgramData returns a valid program for this exact message but raw JSON still renders:
+- find the component branch that ignores suppression and still renders message.content
+- patch that branch
+
+6. If extractProgramData returns null for this exact message:
+- log the exact content string
+- compare it against the shared extractor patterns
+- patch the extractor only if needed to support the real visible message content shape
+
+7. Move the suppression boundary higher if necessary:
+If multiple downstream branches can render assistant content, then suppress at the earliest message-level render decision point:
+- if assistant message resolves to a valid program artifact
+- do not render raw body at all
+- render only artifact/system UI
+
+SUCCESS CRITERIA
+
+After fix:
+- the exact visible assistant bubble on the active screen no longer shows raw program JSON
+- program artifact detection and suppression apply to the live message path, not just one stored/rendered path
+- there is no assistant-message branch left that can bypass artifact suppression
+- non-program assistant messages still render normally
+
+DELIVERABLES
+Report:
+- exact render path that was still bypassing suppression
+- exact file(s) changed
+- whether the issue was a second component path, optimistic/live path, or extractor mismatch
+- confirmation that the exact screen shown no longer renders raw JSON

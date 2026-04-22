@@ -5,6 +5,7 @@ import { GUEST_CONFIG } from "@/lib/guestConfig";
 import { STORAGE_KEYS, logRouteDecision, readOnboardingComplete, readDeviceId, type UserMode } from "@/lib/routing";
 import { GuestPaywallModal } from "@/components/GuestPaywallModal";
 import logoSrc from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
+import { stripProgramJson, extractProgramData } from "@/lib/extractProgramArtifact";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -51,8 +52,13 @@ function loadLocalHistory(): ChatMessage[] {
     const raw = localStorage.getItem(CHAT_HISTORY_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed;
-    return [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((msg: ChatMessage) => {
+      if (msg.role === "assistant" && extractProgramData(null, msg.content)) {
+        return { ...msg, content: stripProgramJson(msg.content) };
+      }
+      return msg;
+    });
   } catch { return []; }
 }
 
@@ -127,7 +133,10 @@ function parseInline(text: string): React.ReactNode {
 }
 
 function AssistantMessage({ content }: { content: string }) {
-  const lines = content.split("\n");
+  const isProgram = !!extractProgramData(null, content);
+  const displayContent = isProgram ? stripProgramJson(content) : content;
+  console.log("[GuestChat] AssistantMessage render suppression check:", { isProgram, originalLen: content.length, displayLen: displayContent.length });
+  const lines = displayContent.split("\n");
 
   return (
     <div className="flex items-start gap-3 max-w-[90%]">
@@ -524,7 +533,12 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
       const newCount = data.messageCount ?? messageCount + 1;
       setMessageCount(newCount);
 
-      const assistantMsg: ChatMessage = { role: "assistant", content: data.response };
+      const rawResponse: string = data.response ?? "";
+      const cleanedResponse = data.guestProgram
+        ? stripProgramJson(rawResponse)
+        : rawResponse;
+      console.log("[GuestChat] Program render suppression check:", { hadProgram: !!data.guestProgram, rawLen: rawResponse.length, cleanLen: cleanedResponse.length });
+      const assistantMsg: ChatMessage = { role: "assistant", content: cleanedResponse };
       const updated = [...newMessages, assistantMsg];
       setMessages(updated);
       saveLocalHistory(updated);
