@@ -1705,15 +1705,54 @@ function ProgramTab({
                                 <span className="text-[10px] font-semibold text-green-400">Session active</span>
                               </div>
                               <button
-                                onClick={completeSession}
+                                onClick={() => {
+                                  const dayNum =
+                                    expandedDay !== null
+                                      ? (program?.days[expandedDay]?.dayNumber ?? expandedDay + 1)
+                                      : undefined;
+
+                                  console.log("[RightPanelLogModalAudit]", {
+                                    focusMode: panelFocusMode,
+                                    trainingSystemId: savedProgramId ?? null,
+                                    weekNumber: program?.weekNumber ?? null,
+                                    sessionId: null,
+                                    dayNumber: dayNum ?? null,
+                                    modalOpened: true,
+                                    directCompletionBlocked: true,
+                                  });
+
+                                  // Save exercise progression data immediately so it is
+                                  // captured even if the user cancels the feedback modal.
+                                  // Completion (active-session/complete) is deferred until
+                                  // the user actually submits the session log form.
+                                  if (sessionLogs.size > 0) {
+                                    const exercises = Array.from(sessionLogs.entries()).map(
+                                      ([exerciseName, sets]) => ({ exerciseName, sets })
+                                    );
+                                    customFetch("/api/session-logs/complete", {
+                                      method: "POST",
+                                      body: JSON.stringify({
+                                        savedProgramId: savedProgramId ?? undefined,
+                                        dayNumber: dayNum,
+                                        exercises,
+                                        goal: trainingGoal ?? "general_fitness",
+                                      }),
+                                    })
+                                      .then(() => {
+                                        setTimeout(() => refetchTargets(), 600);
+                                        queryClient.invalidateQueries({ queryKey: ["training-system-history", "changes"] });
+                                      })
+                                      .catch(() => {});
+                                  }
+
+                                  // Open the session log feedback modal — session is only
+                                  // marked complete after the user submits that form.
+                                  onLogSession?.();
+                                }}
                                 disabled={sessionCompleting}
                                 className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/15 border border-green-500/30 text-green-400 text-[11px] font-semibold hover:bg-green-500/25 transition-all disabled:opacity-50"
                               >
-                                {sessionCompleting ? (
-                                  <><Loader2 className="w-3 h-3 animate-spin" /> Saving…</>
-                                ) : (
-                                  <><CheckCircle className="w-3 h-3" /> Log Session</>
-                                )}
+                                <CheckCircle className="w-3 h-3" /> Log Session
                               </button>
                             </div>
                           )}

@@ -1207,6 +1207,29 @@ export default function Chat() {
     setSessionLogSubmitting(true);
     try {
       await postSessionLog(data);
+
+      // Mark the active session as complete in the active-sessions table so that
+      // the right panel's server-state query ("active-session") reflects "completed"
+      // and the session banner transitions correctly without requiring a page refresh.
+      // This is fire-and-forget — the session log is already persisted above.
+      customFetch("/api/active-session/complete", {
+        method: "POST",
+        body: JSON.stringify({ focusMode }),
+      })
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ["active-session", focusMode] });
+          queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+          queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+        })
+        .catch(() => {});
+
+      console.log("[RightPanelLogSubmitAudit]", {
+        focusMode,
+        feedbackSubmitted: true,
+        completionTriggered: true,
+        sessionStatus: data.sessionStatus ?? "completed",
+      });
+
       queryClient.invalidateQueries({ queryKey: ["streak"] });
       queryClient.invalidateQueries({ queryKey: ["insights"] });
       queryClient.invalidateQueries({ queryKey: ["neural-profile"] });
