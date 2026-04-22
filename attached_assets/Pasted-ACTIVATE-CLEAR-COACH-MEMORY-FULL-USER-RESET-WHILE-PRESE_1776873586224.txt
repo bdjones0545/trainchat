@@ -1,0 +1,246 @@
+ACTIVATE “CLEAR COACH MEMORY” — FULL USER RESET WHILE PRESERVING SUBSCRIPTION / MEMBERSHIP STATUS
+
+CONTEXT:
+On the Settings page there is currently a disabled / “Coming soon” item:
+- Clear coach memory
+
+We want to activate this feature.
+
+Expected behavior:
+When a user chooses “Clear coach memory,” it should reset them to a clean slate across the TrainChat platform.
+
+That means:
+- remove chats
+- remove coach memory / learned preferences
+- remove saved program history
+- remove active program state
+- remove session history / logs
+- remove user-specific adaptive state
+- remove focus-specific learning state
+- remove staged learning candidates tied to that user
+- clear anything else that makes the system “remember” their past usage
+
+BUT:
+- do NOT remove their account
+- do NOT remove their auth/login
+- do NOT remove their subscription / membership / billing state
+- do NOT break access if they are a paying subscriber
+
+This should feel like:
+“Start over fresh, but keep my account and membership.”
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Implement a safe, explicit “Clear coach memory” reset action that wipes user history and personalization across the platform while preserving account access and subscription status.
+
+==================================================
+TASK 1 — AUDIT ALL USER-SPECIFIC DATA THAT SHOULD BE CLEARED
+==================================================
+
+Find all user-specific surfaces/tables/state that should be reset, including at minimum:
+
+- chat conversations / messages
+- coach memory / learned preferences
+- learning candidates tied to user
+- active training systems
+- saved programs / archived programs
+- session logs / completed session history
+- check-in history
+- adaptation events / system adjustments
+- active modifiers
+- focus-specific preferences
+- command preference history
+- any user-specific cached training state
+- any user-specific staged exercise/relationship candidates
+- any user-specific recommendation / behavior memory
+
+Return the complete list of data sources that must be wiped.
+
+==================================================
+TASK 2 — DEFINE WHAT MUST BE PRESERVED
+==================================================
+
+Explicitly preserve:
+
+- user account record
+- auth / login credentials
+- subscription / membership status
+- billing / Stripe linkage
+- entitlement/access status
+- email / identity record
+- legal/compliance-required billing records if any
+
+Return the preserve list clearly.
+
+==================================================
+TASK 3 — CREATE A SAFE SERVER-SIDE RESET ACTION
+==================================================
+
+Implement a backend endpoint / action for “clear coach memory” that:
+
+- requires authenticated user
+- only resets that user’s data
+- runs as a transaction where appropriate
+- clears all resettable user data
+- preserves all account/subscription records
+- returns a clear success/failure response
+
+Suggested behavior:
+- delete or reset user-specific history tables
+- null/reset memory-style records
+- remove active/saved programs
+- remove session/check-in/adaptation state
+- preserve subscription/account rows
+
+Do NOT implement this as a frontend-only wipe.
+
+==================================================
+TASK 4 — ADD A DESTRUCTIVE CONFIRMATION FLOW
+==================================================
+
+Because this is a destructive action, add a proper confirmation modal.
+
+Modal should clearly explain:
+
+Title:
+Clear coach memory?
+
+Body:
+This will remove your chats, training history, saved programs, session logs, and personalization so you can start fresh.
+Your account and membership will remain active.
+
+Buttons:
+- Cancel
+- Clear memory
+
+Optional second confirmation if needed:
+- type CLEAR
+or
+- confirm checkbox
+
+Keep it premium and clear.
+
+==================================================
+TASK 5 — HANDLE THE POST-RESET USER EXPERIENCE
+==================================================
+
+After successful reset:
+- user remains logged in
+- subscription status remains intact
+- app refreshes to clean new-user state
+- no old chats or programs remain visible
+- onboarding / empty-state experience appears again where appropriate
+
+The user should feel like:
+“My account still exists, but TrainChat forgot everything about me.”
+
+==================================================
+TASK 6 — CLEAR FRONTEND CACHE / LOCAL STATE
+==================================================
+
+After server success:
+- invalidate all user-specific queries
+- clear local caches
+- clear in-memory active program state
+- clear chat state
+- clear any persisted local UI state tied to programs/history
+
+Do NOT leave stale UI showing deleted memory/programs until refresh.
+
+==================================================
+TASK 7 — PRESERVE MEMBERSHIP / SUBSCRIPTION
+==================================================
+
+This is critical.
+
+Ensure that:
+- paid subscribers remain paid subscribers
+- membership gating remains unchanged
+- subscription badges / access rights remain intact
+- no Stripe/customer/subscription linkage is removed
+
+Add explicit validation for subscriber and non-subscriber cases.
+
+==================================================
+TASK 8 — ADD AUDIT LOGGING
+==================================================
+
+Add logs such as:
+
+[ClearCoachMemoryAudit] {
+  userId,
+  resetTriggered,
+  chatsDeleted,
+  programsDeleted,
+  sessionLogsDeleted,
+  memoriesCleared,
+  learningStateCleared,
+  subscriptionPreserved,
+  accountPreserved,
+  success
+}
+
+We need a verifiable audit trail.
+
+==================================================
+TASK 9 — UPDATE SETTINGS UI
+==================================================
+
+On the Settings page:
+- remove “Coming soon” from Clear coach memory
+- make it tappable
+- wire it to the confirmation flow
+- style it as a destructive / caution action
+- keep Privacy & Data section clean and premium
+
+Do not make it look like a broken placeholder anymore.
+
+==================================================
+TASK 10 — VALIDATION
+==================================================
+
+Test all of these:
+
+1. Free user
+- create chats/programs/history
+- clear coach memory
+- confirm everything is wiped
+- confirm account still works
+
+2. Subscriber
+- create chats/programs/history
+- clear coach memory
+- confirm all history is wiped
+- confirm membership/subscription is still active
+- confirm access remains intact
+
+3. After reset
+- user sees clean slate
+- no stale chats/programs in UI
+- no broken references
+- no partial leftovers
+
+==================================================
+TASK 11 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. all user-specific data surfaces that were cleared
+2. all preserved account/subscription surfaces
+3. backend reset flow implemented
+4. confirmation flow implemented
+5. frontend cache/state clearing behavior
+6. validation results for free + subscriber users
+
+==================================================
+FINAL STANDARD
+==================================================
+
+“Clear coach memory” should function as a full user reset of TrainChat history, personalization, and training state, while preserving the user’s account and subscription/membership status.
+
+The result should be:
+- same account
+- same membership
+- completely fresh TrainChat experience
