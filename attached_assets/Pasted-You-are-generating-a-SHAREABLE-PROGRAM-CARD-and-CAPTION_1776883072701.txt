@@ -1,0 +1,184 @@
+You are generating a SHAREABLE PROGRAM CARD and CAPTION for TrainChat.
+
+This is NOT a generic summary.
+This is a SOCIAL-READY, HIGH-CONVERSION share output.
+
+GOAL:
+Make the user want to share their program because it looks legit, structured, and impressive.
+
+-----------------------------------
+
+INPUT DATA AVAILABLE:
+- programName
+- daysPerWeek
+- blockLengthWeeks
+- blockPhases (array of weeks with labels, e.g. ["Establish", "Build", "Intensify", "Peak"])
+- day1 (object with name + exercises)
+- focusMode (strength / speed / mobility)
+
+-----------------------------------
+
+OUTPUT FORMAT:
+
+Return ONLY structured JSON:
+
+{
+  "title": "...",
+  "subtitle": "...",
+  "phases": ["W1 — ...", "W2 — ...", ...],
+  "dayPreview": {
+    "title": "...",
+    "exercises": ["Exercise — sets x reps", ...]
+  },
+  "tagline": "...",
+  "caption": "..."
+}
+
+-----------------------------------
+
+RULES:
+
+1. TITLE (HOOK)
+Must feel personal + strong:
+Examples:
+- "My current training system"
+- "Program I just built"
+- "Day 1 locked in"
+
+DO NOT mention “AI” here.
+
+-----------------------------------
+
+2. SUBTITLE (PROOF / CONTEXT)
+
+Short, clean:
+- "4-day strength program"
+- "Speed-focused system"
+- "Built with TrainChat AI" (optional, subtle)
+
+-----------------------------------
+
+3. PHASES (CRITICAL — THIS SELLS STRUCTURE)
+
+Format EXACTLY:
+"W1 — Establish"
+"W2 — Build"
+"W3 — Intensify"
+"W4 — Peak"
+
+If no labels exist, intelligently generate:
+Establish → Build → Intensify → Peak
+
+Max 4 items.
+
+-----------------------------------
+
+4. DAY PREVIEW (MOST IMPORTANT PART)
+
+This MUST feel like a REAL workout.
+
+FORMAT:
+- Title:
+  "DAY 1 — LOWER STRENGTH"
+  "DAY 1 — SPEED + ACCELERATION"
+
+- Exercises:
+  MAX 4 exercises only
+  Format:
+  "Back Squat — 4x5"
+  "RDL — 3x6"
+
+Use:
+sets x reps OR time format if needed
+
+DO NOT:
+- include fluff text
+- include descriptions
+- include notes
+
+-----------------------------------
+
+5. TAGLINE (BOTTOM LINE)
+
+Short, punchy, identity-driven.
+
+Examples:
+- "No more guessing."
+- "Everything adjusts."
+- "Locked in."
+- "Let’s see what this does."
+
+MAX 5 words.
+
+-----------------------------------
+
+6. CAPTION (THIS DRIVES SHARES)
+
+Tone:
+Confident, minimal, slightly flex.
+
+Format:
+
+Line 1:
+Statement:
+"I built this with TrainChat."
+
+Line 2:
+What it is:
+"4-day strength system"
+
+Line 3:
+Hook:
+"Let’s see what it does."
+
+OR variations:
+- "No more guessing."
+- "Everything adapts."
+
+-----------------------------------
+
+7. STYLE CONSTRAINTS
+
+- NO paragraphs
+- NO explanations
+- NO coaching language
+- NO emojis
+- NO filler
+
+Everything should feel:
+CLEAN
+CONFIDENT
+REAL
+
+-----------------------------------
+
+8. EXAMPLE OUTPUT
+
+{
+  "title": "My current training system",
+  "subtitle": "4-day strength program",
+  "phases": [
+    "W1 — Establish",
+    "W2 — Build",
+    "W3 — Intensify",
+    "W4 — Peak"
+  ],
+  "dayPreview": {
+    "title": "DAY 1 — LOWER STRENGTH",
+    "exercises": [
+      "Back Squat — 4x5",
+      "RDL — 3x6",
+      "Split Squat — 3x8",
+      "Core — Anti-rotation"
+    ]
+  },
+  "tagline": "No more guessing.",
+  "caption": "I built this with TrainChat.\n4-day strength system.\nLet’s see what it does."
+}
+
+-----------------------------------
+
+FINAL INSTRUCTION:
+
+This must feel like something a serious athlete would share.
+If it feels generic, rewrite it.
