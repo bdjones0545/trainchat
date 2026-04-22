@@ -4,7 +4,7 @@ import {
   Dumbbell, Save, CheckCircle, Loader2, Lock, Zap, PlayCircle,
   MessageSquare, ChevronDown, ChevronUp, TrendingUp, LayoutGrid,
   Calendar, Clock, RotateCcw, GitBranch, Activity, Layers,
-  AlertCircle, RefreshCw, Send, Leaf, CheckCircle2,
+  AlertCircle, RefreshCw, Send, Leaf, CheckCircle2, Share2,
 } from "lucide-react";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 import { customFetch } from "@workspace/api-client-react";
@@ -24,6 +24,7 @@ import { useFocusMode } from "@/hooks/useFocusMode";
 import { FOCUS_MODE_CONFIGS, getFocusModeConfig } from "@/lib/focusModeConfig";
 import type { FocusMode } from "@/lib/focusMode";
 import SystemAdjustmentsPanel from "./SystemAdjustmentsPanel";
+import ProgramShareModal from "@/components/share/ProgramShareModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -628,6 +629,9 @@ function ProgramTab({
   const [refineInput, setRefineInput] = useState("");
   const [showProgramUpdated, setShowProgramUpdated] = useState(false);
   const [panelEditError, setPanelEditError] = useState<string | null>(null);
+
+  // ── Share program modal ───────────────────────────────────────────────────
+  const [showShareModal, setShowShareModal] = useState(false);
 
   // ── Week selector state ──────────────────────────────────────────────────
   const currentWeekNum = program?.weekNumber ?? null;
@@ -1442,8 +1446,38 @@ function ProgramTab({
               )}
             </button>
           )}
+          <button
+            onClick={() => setShowShareModal(true)}
+            className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-[11px] font-semibold bg-muted/50 border border-border text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-all duration-200 active:scale-[0.98] flex-shrink-0"
+          >
+            <Share2 className="w-3 h-3" />
+            Share
+          </button>
         </div>
       </div>
+
+      {/* ── Program Share Modal ─────────────────────────────────────────────── */}
+      {showShareModal && (
+        <ProgramShareModal
+          program={{
+            programName: program.programName,
+            daysPerWeek: days.length,
+            blockLengthWeeks: 4,
+            blockPhases: null,
+            day1: {
+              dayNumber: days[0]?.dayNumber ?? 1,
+              name: days[0]?.name ?? "Day 1",
+              exercises: (days[0]?.exercises ?? []).map((e) => ({
+                name: e.name,
+                sets: e.sets ?? null,
+                reps: e.reps ?? null,
+              })),
+            },
+            focusMode: panelFocusMode ?? "strength",
+          }}
+          onClose={() => setShowShareModal(false)}
+        />
+      )}
 
       {/* ── Refinement Section: Chips + Freeform Input ─────────────────────── */}
       {onSendMessage && (

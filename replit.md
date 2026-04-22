@@ -36,6 +36,7 @@ The user interface features a dark theme with electric blue accents and the Inte
 - **Agent Decision Architecture**: Employs Intent Classification, a Decision Tree for `ActionType` resolution, and a 3-Tier Assumption Confidence system.
 - **Exercise Library**: A categorized movement system with specialized fields, a Swap Cluster System, and Progression Links.
 - **Knowledge Base**: Stores coaching philosophy, exercise intelligence, and system rules in a `coaching_knowledge` database table.
+- **Shareable Program Card**: A "Share" button in the Live Program Panel triggers an AI-generated social card (title, subtitle, phases, day preview, tagline, caption). The backend at `POST /api/share-moments/program-card` uses the program card system prompt with GPT-4o to produce structured JSON; the `ProgramShareCard` component renders a screenshot-ready card with focus-mode theming; `ProgramShareModal` handles loading, preview, save-image, copy-caption, and native share.
 - **Gamification (Neural Growth Layer)**: Tracks user progress via `neural_profiles` with XP, levels, and scores.
 - **Neural Graph Intelligence Layer**: Interprets `graphState` from `neural_profiles` to generate `NeuralInterpretation` for AI guidance.
 - **Program Specialist Decision Layer**: An internal coaching agent converts natural language into structured program adjustments.
