@@ -351,6 +351,17 @@ export default function MessageBubble({ message, onViewProgram, onShowChange, on
           <div className="max-w-[90%] px-4 py-3 rounded-2xl rounded-tl-sm bg-card border border-border text-foreground">
             <RichContent text={displayContent} />
 
+            {/*
+              CASE B fallback — fragment detected, no valid program parsed, no conversational text.
+              This is the "suppression applied but nothing useful shown" state we must never leave
+              the user in. Render a visible retry prompt instead of a blank bubble.
+            */}
+            {hasFragmentProgram && !hasValidProgram && !displayContent.trim() && (
+              <p className="text-[12px] text-muted-foreground leading-relaxed italic">
+                I started building your program, but the response was cut off. Please try again.
+              </p>
+            )}
+
             {/* Build summary card — shown for new initial program builds */}
             {isInitialBuild && (
               <BuildSummaryCard data={parsed.data} onViewProgram={onViewProgram} />

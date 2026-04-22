@@ -43,7 +43,7 @@ import CoachMemoryPanel from "@/components/chat/CoachMemoryPanel";
 import { useStreamMessage } from "@/hooks/useStreamMessage";
 import { clearAuthState, markOnboardingComplete, logRouteDecision, readDeviceId, readOnboardingComplete } from "@/lib/routing";
 import { resolveProgramState } from "@/lib/resolveProgramState";
-import { extractProgramData } from "@/lib/extractProgramArtifact";
+import { extractProgramData, isProgramFragment } from "@/lib/extractProgramArtifact";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 import ShareMomentPrompt from "@/components/share/ShareMomentPrompt";
 import ShareMomentModal from "@/components/share/ShareMomentModal";
@@ -997,12 +997,23 @@ export default function Chat() {
       systemSaved: result.systemSaved,
     });
 
-    // ── IMMEDIATE PROGRAM COMMIT ──────────────────────────────────────────────
-    // Uses the shared extractProgramData contract (same as MessageBubble render
-    // suppression and messages-effect restore). One extraction path, no drift.
+    // ── IMMEDIATE PROGRAM COMMIT — explicit Case A / B / C state machine ─────
+    //
+    // CASE A: valid full program  → suppress raw text + commit + render Live panel
+    // CASE B: fragment/truncated  → suppress raw text + NO commit + MessageBubble
+    //         shows fallback text (handled in MessageBubble.tsx)
+    // CASE C: no program content  → render normally, no suppression, no commit
+    //
+    // The state "suppression applied + no commit + no fallback text" is forbidden.
+    // MessageBubble enforces the fallback for Case B; this block enforces commit
+    // only for Case A so the two sides of the contract stay aligned.
     if (result.assistantMessage?.id) {
       const msg = result.assistantMessage;
       const rawData = extractProgramData(msg.structuredData, msg.content ?? "");
+
+      // Classify the response for logging and state-machine branching
+      const isFragment = !rawData && isProgramFragment(msg.content ?? "");
+      const caseLabel = rawData ? "CASE_A_valid_program" : isFragment ? "CASE_B_fragment" : "CASE_C_no_program";
       const extractedFrom = rawData
         ? (msg.structuredData ? "structuredData" : "content_fallback")
         : "none";
@@ -1011,17 +1022,21 @@ export default function Chat() {
       if (msg.structuredData) {
         try { sdKeys = Object.keys(JSON.parse(msg.structuredData)).join(","); } catch { sdKeys = "parse_error"; }
       }
-      console.log("[Program generated]", {
+      console.log("[Program state machine]", {
+        caseLabel,
         assistantMsgId: msg.id,
         hasStructuredData: !!msg.structuredData,
         structuredDataKeys: sdKeys,
         extractedFrom,
         rawDataDays: rawData?.days?.length ?? null,
         rawDataProgramName: rawData?.programName ?? null,
-        isValidProgram: rawData !== null,
+        suppressionApplied: rawData !== null || isFragment,
+        commitAttempted: rawData !== null,
+        isFragment,
       });
 
       if (rawData) {
+        // ── CASE A: valid full program ────────────────────────────────────────
         const parsed = rawData as unknown as ProgramStructure;
         const safe: ProgramStructure = {
           ...parsed,
@@ -1058,7 +1073,15 @@ export default function Chat() {
           extractedFrom,
           hasUnsavedDraftAfterCommit: true,
         });
+      } else if (isFragment) {
+        // ── CASE B: fragment/truncated — do NOT commit, fallback text shown by MessageBubble ──
+        console.warn("[Program fragment — no commit]", {
+          assistantMsgId: msg.id,
+          reason: "extractProgramData returned null but isProgramFragment detected program content",
+          action: "suppression_applied_no_commit_fallback_text_shown_in_bubble",
+        });
       }
+      // CASE C: no program content — nothing to do, normal render
     }
 
     // Signal the messages effect that a new message just arrived via streaming.
