@@ -1,0 +1,210 @@
+We have completed the first full OpenAI model modernization pass for TrainChat.
+
+Current state:
+- every model role is centralized in one shared config file
+- all former gpt-4o usage has been migrated
+- current mapping is:
+  - CORE → gpt-4.1
+  - ROUTING → gpt-4.1-mini
+  - GUEST_RESPONSE → gpt-4.1
+  - PROGRAM_GENERATION → gpt-4.1
+  - EDIT_ENGINE → gpt-4.1
+  - EDIT_INTENT → gpt-4.1
+  - DIRECTIONS → gpt-4.1
+  - EXERCISE_FALLBACK → gpt-4.1
+  - SWAP_BACKSTOP → gpt-4.1
+  - SHARE_MOMENTS → gpt-4.1
+
+Now perform a full post-migration validation sweep.
+
+GOAL
+We do not want more model changes right now.
+We want to validate that TrainChat still behaves correctly after the migration and identify any regression risks, schema drift, tone drift, verbosity drift, or latency concerns.
+
+TASK
+Audit the full AI surface area and validate each migrated role against its expected behavior.
+
+VALIDATION CATEGORIES
+
+1. CORE CHAT VALIDATION
+Target file:
+- lib/ai.ts
+
+Validate:
+- the TrainChat agent still feels like TrainChat
+- responses remain specific, useful, and high quality
+- no over-explaining
+- no weird generic AI tone
+- no regression in conversational flow
+- no structured output assumptions breaking downstream logic
+- no hidden dependency on old gpt-4o behavior
+
+Check for:
+- prompt compatibility issues
+- higher verbosity than desired
+- changes in decisiveness
+- changes in formatting style
+- unexpected refusal or hedging behavior
+- token/latency concerns if visible in logs
+
+2. ROUTING VALIDATION
+Target file:
+- lib/guestChat.ts
+
+Validate:
+- the lightweight guest routing step still classifies correctly
+- structured routing output still parses cleanly
+- no enum drift
+- no JSON shape drift
+- no branching regressions caused by different model output behavior
+
+Check:
+- markdown fences
+- accidental prose around JSON
+- missing keys
+- malformed route decisions
+- silent fallback behavior
+
+3. GUEST RESPONSE VALIDATION
+Target file:
+- lib/guestChat.ts
+
+Validate:
+- guest-facing outputs still feel compelling
+- tone still fits product goals
+- not too robotic
+- not too long
+- not too vague
+- still conversion-friendly without sounding unnatural
+
+4. PROGRAM GENERATION VALIDATION
+Target file:
+- lib/guestGenerate.ts
+
+Validate:
+- generated programs still match expected schema
+- no missing required fields
+- no malformed days, sessions, blocks, exercises, sets, reps, etc.
+- downstream rendering still works
+- no drift in structure that could break UI
+
+Check:
+- schema validation
+- fallback behavior
+- null/undefined risk
+- assumptions around program length, days/week, titles, blocks
+
+5. EDIT LAYER VALIDATION
+Target files:
+- lib/edit-engine.ts
+- lib/edit-intent-service.ts
+- lib/directions-service.ts
+
+Validate:
+A. EDIT_INTENT
+- still identifies requested edits correctly
+- no enum drift
+- no malformed structured output
+- no intent confusion
+
+B. EDIT_ENGINE
+- still applies edits safely and correctly
+- no accidental destructive mutation behavior
+- no schema drift in returned edited program
+- no changes that would silently break program rendering
+
+C. DIRECTIONS
+- still returns concise useful exercise directions
+- does not become bloated
+- still fits the UI cleanly
+
+6. FALLBACK / BACKSTOP VALIDATION
+Target files:
+- lib/harder-easier-fallback.ts
+- lib/swap-backstop-service.ts
+
+Validate:
+- fallback swaps still respect movement family and intent
+- harder/easier logic still makes sense
+- backstop replacements remain conservative and safe
+- no malformed JSON
+- no low-quality random substitutions
+
+7. SHARE MOMENTS VALIDATION
+Target file:
+- routes/share-moments.ts
+
+Validate:
+- share captions still feel short, punchy, and usable
+- not awkward
+- not generic
+- not too verbose
+- still good for social-style share cards
+
+8. CONFIG + CODEBASE VALIDATION
+Validate:
+- all model usage still comes from the shared config only
+- no new hardcoded model strings slipped in
+- imports remain clean
+- no dead constants
+- no orphaned roles
+- no mismatch between role names and actual use
+
+9. LATENCY / COST AWARENESS REVIEW
+Without redesigning anything, inspect whether any role appears obviously over-provisioned or under-provisioned after migration.
+
+Examples:
+- should any low-stakes surface maybe remain mini later?
+- is any route likely paying flagship-model cost for low-value output?
+- is any route now at risk of higher latency?
+
+Do not change models yet.
+Just flag observations.
+
+10. OUTPUT OF THIS SWEEP
+Produce a final validation report with these sections:
+
+A. PASS / FAIL BY ROLE
+- CORE
+- ROUTING
+- GUEST_RESPONSE
+- PROGRAM_GENERATION
+- EDIT_ENGINE
+- EDIT_INTENT
+- DIRECTIONS
+- EXERCISE_FALLBACK
+- SWAP_BACKSTOP
+- SHARE_MOMENTS
+
+B. REGRESSION RISKS
+List any places where the model migration may introduce subtle issues even if compile passes.
+
+C. TONE / VERBOSITY RISKS
+Call out any surfaces likely to become too verbose, too generic, too robotic, or too soft.
+
+D. STRUCTURED OUTPUT RISKS
+Call out any JSON/schema-sensitive surfaces that deserve extra monitoring.
+
+E. LATENCY / COST OBSERVATIONS
+Flag any roles that may later be candidates for mini/downgrade optimization.
+
+F. RECOMMENDED NEXT FIXES
+Give a prioritized list:
+- P0 = must fix now before release
+- P1 = should validate soon in manual testing
+- P2 = nice to optimize later
+
+IMPORTANT RULES
+- Do not change code yet unless you find a concrete bug that must be fixed immediately
+- do not change prompts yet
+- do not change model mappings yet
+- do not redesign architecture
+- this step is audit + validation only
+
+If possible, run lightweight validation or reasoning over the actual code paths and existing validation logic, not just a superficial summary.
+
+Success criteria:
+- clear pass/fail assessment for each AI role
+- concrete regression risks identified
+- no unnecessary code churn
+- a release-minded validation report we can use for the next phase
