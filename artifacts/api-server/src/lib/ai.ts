@@ -1616,23 +1616,53 @@ function extractStructuredData(content: string): {
   structuredData: ProgramStructure | null;
   truncated?: boolean;
 } {
+  // ── Normalize line endings ─────────────────────────────────────────────────
+  // OpenAI sometimes returns \r\n (Windows-style). Normalize to \n so the
+  // fence-detection regexes work uniformly.
+  const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
   // ── Truncation detection ──────────────────────────────────────────────────
-  // If the content has an opening ```json but no closing ```, the response
-  // was cut off mid-generation. Detect and flag before attempting to parse.
-  const hasOpenTag = /```json\n/.test(content);
-  const hasCloseTag = /\n```/.test(content);
+  // Flexible fence detection: allow ``` json (space), ```JSON (uppercase), ```json (no space).
+  // Match from the point where we'd start a JSON block through to any closing ```.
+  const hasOpenTag = /```\s*json\s*\n/i.test(normalized);
+  const hasCloseTag = /\n\s*```/.test(normalized);
   if (hasOpenTag && !hasCloseTag) {
     logger.warn("[TruncationDetected] Response has opening ```json block but no closing ``` — response was likely truncated by token limit");
-    return { cleanContent: content, structuredData: null, truncated: true };
+    return { cleanContent: normalized, structuredData: null, truncated: true };
   }
 
-  const jsonMatch = content.match(/```json\n([\s\S]*?)\n```/);
+  // ── Primary extraction: flexible code-fence regex ─────────────────────────
+  // Accepts: ```json, ```JSON, ``` json, ```json  (trailing spaces on open line)
+  // Accepts closing fences with optional leading whitespace: \n    ```
+  const fenceMatch = normalized.match(/```\s*json\s*\n([\s\S]*?)\n\s*```/i);
+  const jsonMatch = fenceMatch ?? normalized.match(/```([\s\S]*?)\n\s*```/); // bare ``` fallback
+
+  // ── Fallback: raw JSON object at end of content (no fence) ───────────────
+  // Some edge-case responses omit code fences entirely and embed raw JSON.
+  // Only attempt when there is definitely no fence open or close tag.
+  if (!jsonMatch && !hasOpenTag && !hasCloseTag) {
+    const rawObjectMatch = normalized.match(/(\{[\s\S]{50,}\})\s*$/);
+    if (rawObjectMatch) {
+      try {
+        const candidate = JSON.parse(rawObjectMatch[1]) as ProgramStructure;
+        if (candidate?.days && Array.isArray(candidate.days) && candidate.days.length > 0) {
+          const idx = normalized.lastIndexOf(rawObjectMatch[1]);
+          const cleanContent = normalized.slice(0, idx).trim();
+          logger.info("[ExtractStructuredData] Extracted program from raw JSON object (no fence)");
+          return { cleanContent, structuredData: candidate };
+        }
+      } catch {
+        // not valid JSON — fall through
+      }
+    }
+    return { cleanContent: normalized, structuredData: null };
+  }
+
   if (!jsonMatch) {
-    return { cleanContent: content, structuredData: null };
+    return { cleanContent: normalized, structuredData: null };
   }
 
   // ── JSON completeness check — brace/bracket balance heuristic ────────────
-  // Even with a closing tag, the JSON body may be cut short inside a string or array.
   const rawJson = jsonMatch[1];
   const trimmedJson = rawJson.trimEnd();
   if (!trimmedJson.endsWith("}") && !trimmedJson.endsWith("]")) {
@@ -1640,7 +1670,7 @@ function extractStructuredData(content: string): {
       { lastChars: trimmedJson.slice(-20) },
       "[TruncationDetected] JSON block found but body does not close cleanly — possible mid-JSON truncation"
     );
-    return { cleanContent: content, structuredData: null, truncated: true };
+    return { cleanContent: normalized, structuredData: null, truncated: true };
   }
 
   // ── Brace depth validation ────────────────────────────────────────────────
@@ -1654,16 +1684,21 @@ function extractStructuredData(content: string): {
       { unbalancedDepth: depth },
       "[TruncationDetected] JSON brace/bracket depth is non-zero — structure is incomplete (truncated)"
     );
-    return { cleanContent: content, structuredData: null, truncated: true };
+    return { cleanContent: normalized, structuredData: null, truncated: true };
   }
 
   try {
     const structuredData = JSON.parse(rawJson) as ProgramStructure;
-    const cleanContent = content.replace(/```json\n[\s\S]*?\n```/, "").trim();
+    // Strip the matched fence block from normalized content
+    const cleanContent = normalized.replace(jsonMatch[0], "").trim();
+    logger.info(
+      { programName: (structuredData as any)?.programName, dayCount: (structuredData as any)?.days?.length },
+      "[ExtractStructuredData] Successfully extracted program from code fence"
+    );
     return { cleanContent, structuredData };
   } catch {
-    logger.warn("Failed to parse structured program JSON from AI response");
-    return { cleanContent: content, structuredData: null };
+    logger.warn({ rawJsonLength: rawJson.length }, "[ExtractStructuredData] JSON.parse failed on extracted block");
+    return { cleanContent: normalized, structuredData: null };
   }
 }
 

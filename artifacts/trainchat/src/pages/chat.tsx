@@ -695,15 +695,39 @@ export default function Chat() {
     }
 
     // ── No active DB system — draft path ─────────────────────────────────────
-    const programMessages = messages.filter((m) => {
-      if (m.role !== "assistant" || !m.structuredData) return false;
-      try {
-        const data = JSON.parse(m.structuredData);
-        if (data?._type === "system_edit") return false;
-        return data?.days && Array.isArray(data.days);
-      } catch {
-        return false;
+    // Helper: try to extract a program data object from a message.
+    // Primary source: structuredData (pre-extracted by backend).
+    // Fallback: content field (in case backend extraction failed — raw JSON in code fence).
+    function extractProgramFromMessage(m: typeof messages[number]): ProgramStructure | null {
+      // Source 1: structuredData
+      if (m.structuredData) {
+        try {
+          const data = JSON.parse(m.structuredData);
+          if (data?._type === "system_edit" || data?._type === "fail_safe") return null;
+          if (data?.days && Array.isArray(data.days) && data.days.length > 0) return data;
+        } catch { /* fall through */ }
       }
+      // Source 2: content code-fence fallback (backend extraction failed but JSON is in text)
+      if (m.content) {
+        const normalized = m.content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+        const fenceMatch = normalized.match(/```\s*json\s*\n([\s\S]*?)\n\s*```/i)
+          ?? normalized.match(/```\n([\s\S]*?)\n\s*```/);
+        if (fenceMatch) {
+          try {
+            const data = JSON.parse(fenceMatch[1]);
+            if (data?.days && Array.isArray(data.days) && data.days.length > 0 &&
+                data._type !== "system_edit" && data._type !== "fail_safe") {
+              return data;
+            }
+          } catch { /* not valid JSON */ }
+        }
+      }
+      return null;
+    }
+
+    const programMessages = messages.filter((m) => {
+      if (m.role !== "assistant") return false;
+      return extractProgramFromMessage(m) !== null;
     });
 
     if (programMessages.length > 0) {
@@ -714,42 +738,41 @@ export default function Chat() {
       if (streamJustFinishedRef.current) {
         streamJustFinishedRef.current = false;
         sessionDraftMsgIdRef.current = last.id;
-        console.log("[Program generated]", {
+        console.log("[Program generated] (messages effect)", {
           messageId: last.id,
           sessionDraftMsgId: sessionDraftMsgIdRef.current,
+          hasStructuredData: !!last.structuredData,
         });
       }
 
       // ── GHOST PREVENTION ─────────────────────────────────────────────────
       // Only populate latestProgram when the last program message matches the
-      // one generated in THIS session. Historical structuredData from previous
-      // builds (or the same conversation after a DB reset) must NOT populate
+      // one generated in THIS session. Historical data from previous builds
+      // (or the same conversation after a DB reset) must NOT populate
       // the sidebar — that is the "ghost program" bug this block fixes.
       if (sessionDraftMsgIdRef.current !== null && sessionDraftMsgIdRef.current === last.id) {
-        if (last.structuredData) {
-          try {
-            const parsed = JSON.parse(last.structuredData) as ProgramStructure;
-            const safe: ProgramStructure = {
-              ...parsed,
-              // Stamp the source message ID so resolveProgramState and the assertion
-              // layer can verify this draft came from the registered session message.
-              messageId: last.id,
-              days: Array.isArray(parsed.days) ? parsed.days.map((d) => ({
-                ...d,
-                exercises: Array.isArray(d.exercises) ? d.exercises : [],
-              })) : [],
-            };
-            setLatestProgram(safe);
-            setIsSaved(false);
-            console.log("[Program committed to state]", {
-              programName: safe.programName,
-              messageId: safe.messageId,
-              dayCount: safe.days.length,
-            });
-            console.log("[Saved programs count]", programMessages.length);
-          } catch {
-            // ignore malformed JSON
-          }
+        const programData = extractProgramFromMessage(last);
+        if (programData) {
+          const parsed = programData as ProgramStructure;
+          const safe: ProgramStructure = {
+            ...parsed,
+            // Stamp the source message ID so resolveProgramState and the assertion
+            // layer can verify this draft came from the registered session message.
+            messageId: last.id,
+            days: Array.isArray(parsed.days) ? parsed.days.map((d) => ({
+              ...d,
+              exercises: Array.isArray(d.exercises) ? d.exercises : [],
+            })) : [],
+          };
+          setLatestProgram(safe);
+          setIsSaved(false);
+          console.log("[Program committed to state] (messages effect)", {
+            programName: safe.programName,
+            messageId: safe.messageId,
+            dayCount: safe.days.length,
+            source: last.structuredData ? "structuredData" : "content_fallback",
+          });
+          console.log("[Saved programs count]", programMessages.length);
         }
       } else {
         // Historical program from a previous build or a different session —
@@ -941,51 +964,109 @@ export default function Chat() {
     });
 
     // ── IMMEDIATE PROGRAM COMMIT ──────────────────────────────────────────────
-    // If the assistant message contains a valid program in structuredData, commit
-    // it directly to latestProgram NOW — before the messages query refetches.
-    // This ensures the sidebar is NEVER blank between "stream complete" and
-    // "weekData loaded". The guard (sessionDraftMsgIdRef) prevents ghost programs.
+    // If the assistant message contains a valid program, commit it directly to
+    // latestProgram NOW — before the messages query refetches. This ensures the
+    // sidebar is NEVER blank between "stream complete" and "weekData loaded".
+    // The guard (sessionDraftMsgIdRef) prevents ghost programs from old sessions.
     //
-    // Validation: output must have programName + days + exercises to be treated
-    // as a valid program object, not just rendered as chat text.
-    if (
-      result.assistantMessage?.structuredData &&
-      result.assistantMessage?.id
-    ) {
-      try {
-        const rawData = JSON.parse(result.assistantMessage.structuredData);
-        const isValidProgram =
-          rawData &&
-          rawData._type !== "system_edit" &&
-          rawData._type !== "fail_safe" &&
-          typeof rawData.programName === "string" &&
-          Array.isArray(rawData.days) &&
-          rawData.days.length > 0 &&
-          rawData.days.every((d: any) => Array.isArray(d.exercises));
+    // Two sources are tried in order:
+    //  1. result.assistantMessage.structuredData (primary — already extracted by backend)
+    //  2. result.assistantMessage.content (fallback — in case extraction failed on backend
+    //     due to CRLF, fence variant, etc. The program JSON is still in the raw content.)
+    if (result.assistantMessage?.id) {
+      let rawData: any = null;
+      let extractedFrom = "none";
 
-        if (isValidProgram) {
-          const parsed = rawData as ProgramStructure;
-          const safe: ProgramStructure = {
-            ...parsed,
-            messageId: result.assistantMessage.id,
-            days: parsed.days.map((d) => ({
-              ...d,
-              exercises: Array.isArray(d.exercises) ? d.exercises : [],
-            })),
-          };
-          // Register this message as the authoritative session draft
-          sessionDraftMsgIdRef.current = result.assistantMessage.id;
-          setLatestProgram(safe);
-          console.log("[Program generated]", safe.programName);
-          console.log("[Program committed to state]", {
-            programName: safe.programName,
-            messageId: safe.messageId,
-            dayCount: safe.days.length,
-            systemSaved: result.systemSaved,
-          });
+      // Source 1: structuredData (pre-extracted by backend)
+      if (result.assistantMessage.structuredData) {
+        try {
+          rawData = JSON.parse(result.assistantMessage.structuredData);
+          extractedFrom = "structuredData";
+        } catch {
+          // malformed — fall through to content
         }
-      } catch {
-        // ignore malformed JSON
+      }
+
+      // Source 2: fallback — extract from raw content (code fence or bare JSON)
+      if (!rawData && result.assistantMessage.content) {
+        const normalizedContent = result.assistantMessage.content
+          .replace(/\r\n/g, "\n")
+          .replace(/\r/g, "\n");
+        // Try code fence first (flexible: ```json, ```JSON, ``` json, etc.)
+        const fenceMatch = normalizedContent.match(/```\s*json\s*\n([\s\S]*?)\n\s*```/i)
+          ?? normalizedContent.match(/```\n([\s\S]*?)\n\s*```/);
+        if (fenceMatch) {
+          try {
+            rawData = JSON.parse(fenceMatch[1]);
+            extractedFrom = "content_fence";
+          } catch {
+            // ignore
+          }
+        }
+        // Last resort: largest {...} object in content
+        if (!rawData) {
+          const bareMatch = normalizedContent.match(/(\{[\s\S]{50,}\})\s*$/);
+          if (bareMatch) {
+            try {
+              rawData = JSON.parse(bareMatch[1]);
+              extractedFrom = "content_bare_json";
+            } catch {
+              // ignore
+            }
+          }
+        }
+      }
+
+      let sdKeys = "none";
+      if (result.assistantMessage.structuredData) {
+        try { sdKeys = Object.keys(JSON.parse(result.assistantMessage.structuredData)).join(","); } catch { sdKeys = "parse_error"; }
+      }
+      console.log("[Program generated]", {
+        assistantMsgId: result.assistantMessage.id,
+        hasStructuredData: !!result.assistantMessage.structuredData,
+        structuredDataKeys: sdKeys,
+        extractedFrom,
+        rawDataDays: rawData?.days?.length ?? null,
+        rawDataProgramName: rawData?.programName ?? null,
+      });
+
+      // Validate: must be a real program object (not a system_edit or fail_safe token)
+      const isValidProgram =
+        rawData &&
+        rawData._type !== "system_edit" &&
+        rawData._type !== "fail_safe" &&
+        typeof rawData.programName === "string" &&
+        Array.isArray(rawData.days) &&
+        rawData.days.length > 0;
+
+      console.log("[Program generated] validator", {
+        isValidProgram,
+        hasType: rawData?._type ?? null,
+        hasProgramName: typeof rawData?.programName === "string",
+        hasDays: Array.isArray(rawData?.days),
+        dayCount: rawData?.days?.length ?? 0,
+      });
+
+      if (isValidProgram) {
+        const parsed = rawData as ProgramStructure;
+        const safe: ProgramStructure = {
+          ...parsed,
+          messageId: result.assistantMessage.id,
+          days: parsed.days.map((d: any) => ({
+            ...d,
+            exercises: Array.isArray(d.exercises) ? d.exercises : [],
+          })),
+        };
+        // Register this message as the authoritative session draft
+        sessionDraftMsgIdRef.current = result.assistantMessage.id;
+        setLatestProgram(safe);
+        console.log("[Program committed to state]", {
+          programName: safe.programName,
+          messageId: safe.messageId,
+          dayCount: safe.days.length,
+          systemSaved: result.systemSaved,
+          extractedFrom,
+        });
       }
     }
 

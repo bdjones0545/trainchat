@@ -28,7 +28,9 @@ function formatTime(dateStr: string) {
 // Renders plain-text content with markdown-like formatting
 function RichContent({ text }: { text: string }) {
   const rendered = useMemo(() => {
-    const lines = text.split("\n");
+    // Normalize line endings so code-fence detection works on \r\n content
+    const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    const lines = normalized.split("\n");
     const elements: React.ReactNode[] = [];
     let i = 0;
 
@@ -39,6 +41,46 @@ function RichContent({ text }: { text: string }) {
       if (line.trim() === "") {
         elements.push(<div key={`space-${i}`} className="h-2" />);
         i++;
+        continue;
+      }
+
+      // ── Code block (``` ... ```) ─────────────────────────────────────────
+      // Intercept fenced code blocks before they fall through to plain-text rendering.
+      // JSON blocks that contain a valid program structure are suppressed entirely —
+      // the program is shown in the right panel, not in the chat bubble.
+      if (line.trimStart().startsWith("```")) {
+        const lang = line.trimStart().slice(3).trim().toLowerCase();
+        const blockLines: string[] = [];
+        i++;
+        // Collect lines until we find the closing fence
+        while (i < lines.length && !lines[i].trimStart().startsWith("```")) {
+          blockLines.push(lines[i]);
+          i++;
+        }
+        i++; // skip the closing ```
+
+        const blockContent = blockLines.join("\n");
+
+        if (lang === "json" || lang === "") {
+          // Try to parse: if it's a valid program structure, suppress rendering.
+          // The program lives in the sidebar — we never want raw JSON in the chat bubble.
+          try {
+            const parsed = JSON.parse(blockContent);
+            if (parsed?.days && Array.isArray(parsed.days) && parsed.days.length > 0) {
+              // Suppress: this is a program JSON block — it is shown in the right panel
+              continue;
+            }
+          } catch {
+            // Not valid JSON — fall through to render as code
+          }
+        }
+
+        // For all other code blocks (or non-program JSON), render as a monospace block
+        elements.push(
+          <pre key={`code-${i}`} className="text-[10px] bg-muted/50 border border-border rounded p-2 overflow-x-auto font-mono my-1 whitespace-pre-wrap break-all">
+            {blockContent}
+          </pre>
+        );
         continue;
       }
 

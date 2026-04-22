@@ -1,0 +1,93 @@
+We still have a program-generation interception bug.
+
+Observed behavior:
+When the user asks for a program, the assistant still renders raw fenced JSON in the chat bubble instead of treating the result as a committed program state update.
+
+Important:
+A previous race-condition fix improved state propagation, but the screenshot proves there is still an earlier pipeline issue:
+the structured program result is not being fully intercepted before raw assistant content is rendered.
+
+GOAL
+Trace and fix the full program-generation message lifecycle so valid generated programs are:
+1. detected
+2. parsed
+3. normalized
+4. committed to state
+5. rendered as program/system UI
+instead of raw JSON chat text
+
+DO NOT change prompts or model assignments.
+This is an interception / state / rendering fix only.
+
+INVESTIGATION TASKS
+
+1. Trace the exact flow for a “create program” turn:
+- outgoing user message
+- AI response stream
+- complete event payload
+- assistantMessage.content
+- assistantMessage.structuredData
+- any parser / validator
+- commit step
+- chat render step
+
+2. Add targeted debug logs for a single program-generation turn:
+- whether structuredData exists
+- what keys it contains
+- whether the “valid program object” check passes
+- whether commitLatestProgram() fires
+- whether active program updates
+- whether saved programs updates
+- whether chat renderer is still rendering raw assistant content after commit
+
+3. Verify whether this path is using:
+- complete event structuredData
+- raw assistant content fallback
+- a separate guest/signed-in generation branch
+- multiple program generation handlers
+
+4. Identify whether the bug is one of these:
+A. structuredData missing
+B. structuredData present but validator fails
+C. commit happens but renderer still shows raw JSON
+D. different generation path bypasses commit logic entirely
+
+FIX REQUIREMENTS
+
+5. If structuredData is missing but raw content is valid JSON:
+- add a safe fallback parse path on complete
+- detect valid program JSON from assistantMessage.content
+- normalize and commit it exactly like structuredData
+- only do this for valid program-generation responses
+- do not broadly parse all assistant messages
+
+6. If structuredData exists but validator fails:
+- inspect the validator and align it with the actual normalized program schema
+- make the check robust, not brittle
+- validation should be based on the real program contract, not one narrow formatting assumption
+
+7. If commit succeeds but raw JSON is still rendered:
+- add a render guard so program-generation assistant messages do not display raw fenced JSON
+- instead render the appropriate program-created/system state UI
+- or suppress raw content when the message already produced a committed program object
+
+8. If there are multiple generation paths:
+- unify them so all valid program-generation responses go through the same commit + render handling pipeline
+
+SUCCESS CRITERIA
+
+After fix:
+- asking for a program does NOT show raw JSON in chat
+- the generated program becomes the active program
+- sidebar / active programs update correctly
+- program-generation turns are rendered as proper app state results, not fenced JSON text
+- behavior is consistent across all generation entry points
+
+DELIVERABLES
+Report:
+- exact root cause found
+- exact file(s) changed
+- whether structuredData was missing or mishandled
+- whether a raw-content fallback parser was added
+- whether chat rendering suppression/branching was added
+- confirmation that program requests no longer show raw JSON
