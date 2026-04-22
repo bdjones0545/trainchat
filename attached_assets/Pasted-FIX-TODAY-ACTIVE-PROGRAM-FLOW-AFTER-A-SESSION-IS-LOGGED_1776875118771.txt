@@ -1,0 +1,204 @@
+FIX “TODAY” ACTIVE PROGRAM FLOW — AFTER A SESSION IS LOGGED, AUTOMATICALLY ADVANCE THE TODAY CARD TO THE NEXT AVAILABLE SESSION
+
+CONTEXT:
+In Active Programs under the Today tab, when the current session is logged/completed, the UI correctly shows:
+- Session logged
+- Session logged today
+
+However, it does NOT advance the Today card to the next available session.
+This creates a dead-end feeling and makes the app look stuck after the user finishes a workout.
+
+Expected behavior:
+Once today’s session is logged, the Today surface should resolve to the NEXT most relevant actionable session instead of staying frozen on the already completed one.
+
+This should feel like:
+- “Great, that one is done.”
+- “Here is what’s next.”
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make the Today tab automatically move from a logged/completed session to the next available relevant session instead of continuing to center the already completed one.
+
+==================================================
+TASK 1 — AUDIT TODAY CARD RESOLUTION LOGIC
+==================================================
+
+Trace how the Today tab currently determines which session to display.
+
+Audit:
+- what source of truth is used
+- whether it only looks at calendar day
+- whether it prefers the most recent session even if completed
+- whether it has logic for “next actionable session”
+- whether it is using active session state too aggressively
+
+Return:
+
+[TodayResolverAudit] {
+  focusMode,
+  resolverFunction,
+  currentDate,
+  currentDisplayedSessionId,
+  currentDisplayedSessionStatus,
+  nextAvailableSessionId,
+  resolverRule,
+  bugSource
+}
+
+==================================================
+TASK 2 — DEFINE TODAY RESOLUTION PRIORITY
+==================================================
+
+Update the Today resolver to use a priority order like this:
+
+1. If there is an in-progress session for today → show that
+2. Else if there is an unlogged actionable session for today → show that
+3. Else if today’s session was just logged/completed → advance to the next actionable session in the current week
+4. Else if no more actionable sessions remain this week → show a clean “today complete / next up” state with the next scheduled session
+5. Never keep the already completed session as the main Today card unless explicitly showing a post-log confirmation state for a short moment
+
+==================================================
+TASK 3 — ADD A SHORT POST-LOG CONFIRMATION WINDOW
+==================================================
+
+Optional but recommended:
+After a session is logged, show the “Session logged” success state briefly (for example 1–2 seconds), then transition the Today card to the next available session.
+
+This gives the user:
+- positive completion feedback
+- but avoids the UI getting stuck on the completed card
+
+Keep it smooth and premium.
+
+==================================================
+TASK 4 — RESOLVE THE “NEXT AVAILABLE SESSION” CORRECTLY
+==================================================
+
+The next session should be:
+- in the same focus mode
+- in the same active training system
+- in the same current week if one remains
+- otherwise the next chronological/logical session
+
+Do NOT:
+- jump to another focus
+- jump to a future week unnecessarily if this week still has actionable sessions
+- resurface a completed session
+
+==================================================
+TASK 5 — HANDLE END-OF-WEEK CASE CLEANLY
+==================================================
+
+If the user has completed the final actionable session of the current week:
+
+Do NOT leave Today stuck on the completed session.
+
+Instead show a clean state such as:
+- “This week’s sessions are complete”
+- “Next up: Week 2 / Day 1”
+- or a week-complete card if week advancement has occurred
+
+This should still feel like forward momentum.
+
+==================================================
+TASK 6 — KEEP SESSION LOGGING AND TODAY RESOLUTION SEPARATE
+==================================================
+
+Do not solve this by faking session status.
+
+The session should still remain correctly logged/completed in history/state.
+
+Only the Today resolver should change what it chooses to surface after completion.
+
+In other words:
+- session truth stays correct
+- Today display becomes next-action oriented
+
+==================================================
+TASK 7 — FIX BUTTON STATES AFTER COMPLETION
+==================================================
+
+Once a session is logged and Today advances:
+- “Session logged today” should not stay attached to the completed card forever in Today
+- the new Today card should show the correct next actions:
+  - Start Session
+  - Check In
+  - Adjust
+  - etc.
+- if showing a week-complete state, actions should be appropriate for that state
+
+==================================================
+TASK 8 — ADD AUDIT LOGGING
+==================================================
+
+Add logs:
+
+[TodayAdvanceAudit] {
+  focusMode,
+  completedSessionId,
+  completedDayNumber,
+  previousTodaySessionId,
+  nextTodaySessionId,
+  nextTodayWeekNumber,
+  nextTodayStatus,
+  advancedSuccessfully
+}
+
+[TodayResolverAudit] {
+  focusMode,
+  displayedSessionId,
+  displayedStatus,
+  sourceRule
+}
+
+We need proof that the Today card moves forward after logging.
+
+==================================================
+TASK 9 — VALIDATION
+==================================================
+
+Test all of these:
+
+1. Strength:
+- open Today
+- log current session
+- confirm brief success state
+- confirm Today advances to next actionable strength session
+
+2. Speed:
+- same validation
+
+3. Mobility:
+- same validation
+
+4. End-of-week case:
+- log final session of the week
+- confirm Today shows week-complete / next-up state instead of staying on the completed session
+
+5. Refresh after logging:
+- confirm Today still resolves to the correct next session
+- confirm no stale completed card remains as primary Today card
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. root cause of why Today stayed on the completed session
+2. what resolver logic was changed
+3. how the post-log transition now works
+4. how next actionable session is selected
+5. validation results for Strength / Speed / Mobility + end-of-week case
+
+==================================================
+FINAL STANDARD
+==================================================
+
+After a user logs a session in Active Programs under Today, the UI should not get stuck on the completed session.
+
+It should:
+- briefly confirm completion
+- then advance the Today card to the next relevant actionable session
+- or show a clean week-complete / next-up state if no sessions remain
