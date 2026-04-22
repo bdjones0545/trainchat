@@ -105,17 +105,19 @@ export default function ShareMomentModal({ moment, onClose }: Props) {
   const canNativeShare = typeof navigator !== "undefined" && "share" in navigator;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-end sm:justify-center">
+      {/* Backdrop — always tappable to close */}
+      <div
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        onClick={onClose}
+      />
 
-      {/* Sheet */}
-      <div className="relative w-full max-w-sm mx-4 mb-4 sm:mb-0 bg-card border border-border rounded-2xl overflow-hidden shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-3">
+      {/* Sheet — constrained to viewport, scrollable inside */}
+      <div className="relative w-full max-w-sm mx-4 mb-4 sm:mb-0 flex flex-col bg-card border border-border rounded-2xl shadow-2xl"
+        style={{ maxHeight: "90dvh", maxHeight: "90vh" }}
+      >
+        {/* Header — always visible at top, never scrolls away */}
+        <div className="flex-shrink-0 flex items-center justify-between px-5 pt-5 pb-3 border-b border-border/50">
           <div>
             <div className="text-sm font-semibold text-foreground">Share this moment</div>
             <div className="text-[11px] text-muted-foreground mt-0.5">
@@ -124,36 +126,39 @@ export default function ShareMomentModal({ moment, onClose }: Props) {
           </div>
           <button
             onClick={onClose}
-            className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+            className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+            aria-label="Close"
           >
-            <X size={14} />
+            <X size={16} />
           </button>
         </div>
 
-        {/* Card preview */}
-        <div className="flex justify-center px-5 pb-5">
-          <div
-            style={{
-              borderRadius: 20,
-              overflow: "hidden",
-              boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
-            }}
-          >
-            <ShareMomentCard ref={cardRef} moment={moment} />
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto overscroll-contain">
+          {/* Card preview */}
+          <div className="flex justify-center px-5 pt-5 pb-5">
+            <div
+              style={{
+                borderRadius: 20,
+                overflow: "hidden",
+                boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+              }}
+            >
+              <ShareMomentCard ref={cardRef} moment={moment} />
+            </div>
+          </div>
+
+          {/* Caption text */}
+          <div className="mx-5 mb-4 px-3 py-3 bg-background rounded-xl border border-border">
+            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+              Caption
+            </div>
+            <p className="text-[12px] text-foreground leading-relaxed">{moment.captionText}</p>
           </div>
         </div>
 
-        {/* Caption text */}
-        <div className="mx-5 mb-4 px-3 py-3 bg-background rounded-xl border border-border">
-          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-            Caption
-          </div>
-          <p className="text-[12px] text-foreground leading-relaxed">{moment.captionText}</p>
-        </div>
-
-        {/* Actions */}
-        <div className="px-5 pb-5 grid grid-cols-3 gap-2.5">
-          {/* Save image */}
+        {/* Actions — always visible at bottom, never scrolls away */}
+        <div className="flex-shrink-0 px-5 pb-5 pt-3 border-t border-border/50 grid grid-cols-3 gap-2.5">
           <button
             onClick={handleSaveImage}
             disabled={exporting}
@@ -165,7 +170,6 @@ export default function ShareMomentModal({ moment, onClose }: Props) {
             </span>
           </button>
 
-          {/* Copy caption */}
           <button
             onClick={handleCopyCaption}
             className="flex flex-col items-center gap-1.5 py-3 px-2 bg-muted hover:bg-muted/80 rounded-xl transition-colors"
@@ -180,7 +184,6 @@ export default function ShareMomentModal({ moment, onClose }: Props) {
             </span>
           </button>
 
-          {/* Share sheet (mobile) / fallback */}
           {canNativeShare ? (
             <button
               onClick={handleNativeShare}

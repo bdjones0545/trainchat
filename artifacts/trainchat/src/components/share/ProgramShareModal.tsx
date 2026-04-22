@@ -153,15 +153,20 @@ export default function ProgramShareModal({ program, onClose }: Props) {
   const canNativeShare = typeof navigator !== "undefined" && "share" in navigator;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-end sm:justify-center">
+      {/* Backdrop — always tappable to close */}
+      <div
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        onClick={onClose}
+      />
 
-      <div className="relative w-full max-w-sm mx-4 mb-4 sm:mb-0 bg-card border border-border rounded-2xl overflow-hidden shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-3">
+      {/* Sheet — constrained to viewport, scrollable inside */}
+      <div
+        className="relative w-full max-w-sm mx-4 mb-4 sm:mb-0 flex flex-col bg-card border border-border rounded-2xl shadow-2xl"
+        style={{ maxHeight: "90dvh", maxHeight: "90vh" } as React.CSSProperties}
+      >
+        {/* Header — always visible at top, never scrolls away */}
+        <div className="flex-shrink-0 flex items-center justify-between px-5 pt-5 pb-3 border-b border-border/50">
           <div>
             <div className="text-sm font-semibold text-foreground">Share your program</div>
             <div className="text-[11px] text-muted-foreground mt-0.5">
@@ -170,68 +175,72 @@ export default function ProgramShareModal({ program, onClose }: Props) {
           </div>
           <button
             onClick={onClose}
-            className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+            className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+            aria-label="Close"
           >
-            <X size={14} />
+            <X size={16} />
           </button>
         </div>
 
-        {/* Card preview */}
-        <div className="flex justify-center px-5 pb-5">
-          {loading ? (
-            <div
-              style={{ width: 320, minHeight: 320 }}
-              className="flex flex-col items-center justify-center gap-3 rounded-[20px] border border-border bg-muted/30"
-            >
-              <Loader2 className="w-5 h-5 animate-spin text-primary" />
-              <span className="text-[11px] text-muted-foreground font-medium">Building your card…</span>
-            </div>
-          ) : error ? (
-            <div
-              style={{ width: 320, minHeight: 120 }}
-              className="flex flex-col items-center justify-center gap-3 rounded-[20px] border border-red-500/20 bg-red-500/5"
-            >
-              <span className="text-[11px] text-red-400 font-medium">{error}</span>
-              <button
-                onClick={() => {
-                  setError(null);
-                  setLoading(true);
-                }}
-                className="text-[10px] font-semibold text-primary hover:text-primary/80 transition-colors"
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto overscroll-contain">
+          {/* Card preview */}
+          <div className="flex justify-center px-5 pt-5 pb-5">
+            {loading ? (
+              <div
+                style={{ width: 320, minHeight: 280 }}
+                className="flex flex-col items-center justify-center gap-3 rounded-[20px] border border-border bg-muted/30"
               >
-                Try again
-              </button>
+                <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                <span className="text-[11px] text-muted-foreground font-medium">Building your card…</span>
+              </div>
+            ) : error ? (
+              <div
+                style={{ width: 320, minHeight: 120 }}
+                className="flex flex-col items-center justify-center gap-3 rounded-[20px] border border-red-500/20 bg-red-500/5"
+              >
+                <span className="text-[11px] text-red-400 font-medium">{error}</span>
+                <button
+                  onClick={() => {
+                    setError(null);
+                    setLoading(true);
+                  }}
+                  className="text-[10px] font-semibold text-primary hover:text-primary/80 transition-colors"
+                >
+                  Try again
+                </button>
+              </div>
+            ) : card ? (
+              <div
+                style={{
+                  borderRadius: 20,
+                  overflow: "hidden",
+                  boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+                }}
+              >
+                <ProgramShareCard
+                  ref={cardRef}
+                  card={card}
+                  focusMode={program.focusMode ?? "strength"}
+                />
+              </div>
+            ) : null}
+          </div>
+
+          {/* Caption */}
+          {card && !loading && (
+            <div className="mx-5 mb-4 px-3 py-3 bg-background rounded-xl border border-border">
+              <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                Caption
+              </div>
+              <p className="text-[12px] text-foreground leading-relaxed whitespace-pre-line">{card.caption}</p>
             </div>
-          ) : card ? (
-            <div
-              style={{
-                borderRadius: 20,
-                overflow: "hidden",
-                boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
-              }}
-            >
-              <ProgramShareCard
-                ref={cardRef}
-                card={card}
-                focusMode={program.focusMode ?? "strength"}
-              />
-            </div>
-          ) : null}
+          )}
         </div>
 
-        {/* Caption */}
+        {/* Actions — always visible at bottom, never scrolls away */}
         {card && !loading && (
-          <div className="mx-5 mb-4 px-3 py-3 bg-background rounded-xl border border-border">
-            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-              Caption
-            </div>
-            <p className="text-[12px] text-foreground leading-relaxed whitespace-pre-line">{card.caption}</p>
-          </div>
-        )}
-
-        {/* Actions */}
-        {card && !loading && (
-          <div className="px-5 pb-5 grid grid-cols-3 gap-2.5">
+          <div className="flex-shrink-0 px-5 pb-5 pt-3 border-t border-border/50 grid grid-cols-3 gap-2.5">
             <button
               onClick={handleSaveImage}
               disabled={exporting}
@@ -280,6 +289,18 @@ export default function ProgramShareModal({ program, onClose }: Props) {
                 </span>
               </button>
             )}
+          </div>
+        )}
+
+        {/* Loading state — placeholder actions */}
+        {loading && (
+          <div className="flex-shrink-0 px-5 pb-5 pt-3 border-t border-border/50 grid grid-cols-3 gap-2.5">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="h-14 rounded-xl bg-muted/40 animate-pulse"
+              />
+            ))}
           </div>
         )}
       </div>
