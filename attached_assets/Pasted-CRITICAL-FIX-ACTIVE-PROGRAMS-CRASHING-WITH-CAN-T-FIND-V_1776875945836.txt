@@ -1,0 +1,123 @@
+CRITICAL FIX — ACTIVE PROGRAMS CRASHING WITH “CAN'T FIND VARIABLE: REACT”
+
+CONTEXT:
+Active Programs is now crashing with the runtime error:
+
+"Can't find variable: React"
+
+This happens when navigating into Active Programs.
+The app loads the error boundary instead of the panel.
+
+This is a blocking regression and must be fixed immediately.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Find and fix the missing React reference causing Active Programs to crash, without introducing any regressions to the Today/Week/Block/History views.
+
+==================================================
+TASK 1 — TRACE THE CRASH TO THE EXACT COMPONENT
+==================================================
+
+Audit the Active Programs entry path and find the exact file/component that triggers:
+
+"Can't find variable: React"
+
+Likely causes to check:
+- JSX being used in a file without importing React where required by the build/runtime
+- React namespace reference used explicitly (e.g. React.useMemo, React.Fragment, ReactNode typing, etc.) without importing React
+- a recently added helper returning JSX in a non-React-scoped file
+- a generated component or modal moved into a file missing the import
+
+Return:
+- exact file
+- exact line(s)
+- exact symbol/reference that is failing
+
+==================================================
+TASK 2 — FIX THE MISSING REACT IMPORT / REFERENCE
+==================================================
+
+Apply the minimal correct fix.
+
+Examples:
+- add `import React from "react";`
+- or replace `React.useMemo` / `React.useState` with direct named imports if that is the project convention
+- or replace `React.Fragment` with fragment shorthand if appropriate
+- or update the file to match the project’s JSX runtime expectations
+
+Do NOT do a broad global change.
+Fix the actual failing source cleanly.
+
+==================================================
+TASK 3 — AUDIT RECENTLY TOUCHED ACTIVE PROGRAM FILES
+==================================================
+
+Because this appeared after recent Today resolver / logging work, inspect all recently touched files related to:
+
+- Active Programs
+- Today / This Week / Block / History
+- right sidebar / Live Program panel
+- modal or card components rendered in that flow
+
+Look for any other places where:
+- React is referenced but not imported
+- JSX helpers are defined in utility files without the proper runtime/import setup
+
+Fix any additional obvious occurrences now so this doesn’t reappear one screen later.
+
+==================================================
+TASK 4 — VERIFY BUILD / RUNTIME COMPATIBILITY
+==================================================
+
+After the fix:
+- restart web app
+- restart API if needed
+- confirm Active Programs opens without hitting the error boundary
+- confirm no new compile/runtime errors appear
+
+==================================================
+TASK 5 — REGRESSION TEST ACTIVE PROGRAM SURFACES
+==================================================
+
+Validate all these screens after the fix:
+
+1. Today
+2. This Week
+3. Block
+4. History
+5. Right sidebar / Live Program panel
+6. Session log modal
+7. Refine/program command area
+
+Confirm they all render and no “React” variable crash appears anywhere.
+
+==================================================
+TASK 6 — ADD A QUICK SAFETY AUDIT
+==================================================
+
+Search the relevant frontend codebase for patterns like:
+- `React.`
+- `React.Fragment`
+- `ReactNode`
+- JSX-returning helpers in non-component files
+
+Confirm they are all correctly imported or using the project’s current JSX runtime conventions.
+
+==================================================
+TASK 7 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. exact root cause file and line
+2. exact fix applied
+3. any additional React import/reference issues found
+4. confirmation that Active Programs now loads
+5. validation results for Today / Week / Block / History
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Active Programs must load normally again with no “Can't find variable: React” runtime error, and the fix should be minimal, clean, and regression-safe.

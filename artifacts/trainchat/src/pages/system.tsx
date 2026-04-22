@@ -573,9 +573,9 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditC
   });
 
   // ── Brief post-log flash state: shows "Session logged" for 1.5s then resolves ──
-  const [justLoggedFlash, setJustLoggedFlash] = React.useState(false);
-  const prevLoggedRef = React.useRef(false);
-  React.useEffect(() => {
+  const [justLoggedFlash, setJustLoggedFlash] = useState(false);
+  const prevLoggedRef = useRef(false);
+  useEffect(() => {
     if (sessionLoggedToday && !prevLoggedRef.current) {
       setJustLoggedFlash(true);
       const t = setTimeout(() => setJustLoggedFlash(false), 1500);
