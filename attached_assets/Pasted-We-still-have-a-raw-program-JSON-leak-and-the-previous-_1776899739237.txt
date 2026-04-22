@@ -1,0 +1,72 @@
+We still have a raw program JSON leak, and the previous guest-start.tsx fix did not affect the currently visible screen.
+
+This means there is still another assistant-message render path in the app that bypasses the shared program artifact cleanup/suppression contract.
+
+GOAL
+Find the exact component/file rendering the visible assistant bubble on this screen and patch that path to use the shared extractProgramArtifact.ts contract.
+
+IMPORTANT
+Do not assume the path is guest-start.tsx or MessageBubble.tsx.
+Trace the actual render tree for the visible screen.
+
+TASKS
+
+1. Identify every component that can render assistant messages across the app.
+Search for:
+- MessageBubble
+- AssistantMessage
+- RichContent
+- markdown/code/pre renderers
+- chat message list renderers
+- streaming/optimistic message renderers
+
+2. Build a map:
+- file path
+- screen/page that uses it
+- whether it renders raw message.content
+- whether it already uses extractProgramData / stripProgramJson
+
+3. For the exact currently visible screen, trace:
+- page component
+- message list component
+- assistant bubble component
+- final code/pre/text renderer
+
+4. Add temporary logs at each candidate render layer:
+- component name
+- message id
+- role
+- first 80 chars of content
+- extractProgramData result?
+- stripProgramJson applied?
+- raw content still rendered?
+
+5. Once the true path is found, patch it using the same shared contract:
+- detect with extractProgramData
+- strip with stripProgramJson
+- suppress raw program artifact text from rendering
+
+6. Apply the fix at the highest safe level in that render path:
+If a message resolves to a valid program artifact, do not allow raw body rendering for that message.
+
+7. Verify whether the leak is happening from:
+- live streaming state
+- optimistic local state
+- persisted state
+- guest flow
+- authenticated flow
+
+SUCCESS CRITERIA
+
+After fix:
+- the exact screen shown no longer renders raw program JSON
+- all assistant message renderers that can display program artifacts are mapped and known
+- the visible render path uses the shared extractor contract
+- no unidentified assistant bubble path remains that bypasses suppression
+
+DELIVERABLES
+Report:
+- exact file/component that was still leaking
+- all assistant-message rendering components found
+- which ones were already patched vs unpatched
+- confirmation that the screen shown no longer displays raw JSON

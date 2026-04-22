@@ -3,7 +3,7 @@ import { Share2 } from "lucide-react";
 import SystemUpdateCard from "./SystemUpdateCard";
 import BuildSummaryCard from "./BuildSummaryCard";
 import { buildShareMoment, type ShareMoment } from "@/types/share-moments";
-import { extractProgramData, stripProgramJson } from "@/lib/extractProgramArtifact";
+import { extractProgramData, stripProgramJson, isProgramFragment } from "@/lib/extractProgramArtifact";
 
 interface Message {
   id: number;
@@ -69,10 +69,23 @@ function RichContent({ text }: { text: string }) {
             const parsed = JSON.parse(blockContent);
             if (parsed?.days && Array.isArray(parsed.days) && parsed.days.length > 0) {
               // Suppress: this is a program JSON block — it is shown in the right panel
+              console.log("[RichContent] Suppressing valid program JSON block");
               continue;
             }
           } catch {
-            // Not valid JSON — fall through to render as code
+            // JSON.parse failed — still suppress if content looks like program JSON.
+            // This handles truncated/malformed backend responses (token-limit failures)
+            // where the JSON is incomplete and cannot be parsed normally.
+          }
+          // Belt-and-suspenders: suppress even when JSON is malformed/truncated,
+          // if the block has enough program-specific keys to be unmistakably program data.
+          if (
+            blockContent.includes('"programName"') ||
+            (blockContent.includes('"days"') && blockContent.includes('"exercises"')) ||
+            (blockContent.includes('"sets"') && blockContent.includes('"reps"') && blockContent.includes('"dayNumber"'))
+          ) {
+            console.log("[RichContent] Suppressing malformed/truncated program JSON block", { blockLen: blockContent.length, lang });
+            continue;
           }
         }
 
@@ -224,22 +237,29 @@ export default function MessageBubble({ message, onViewProgram, onShowChange, on
   const isSessionLogged = !isUser && parsed.type === "session_logged";
 
   // ── MESSAGE-LEVEL PROGRAM-ARTIFACT SUPPRESSION ───────────────────────────
-  // Use the shared extractor (same contract as chat.tsx commit/restore paths).
-  // Detect program artifacts from BOTH structuredData and raw content so bare
-  // JSON (no code fence), fenced ```json, and fenced ``` are all caught here,
-  // before any content is passed down to RichContent's line-parser.
+  // Two-tier detection so both valid and truncated/malformed programs are caught.
+  //
+  // Tier 1 (extractProgramData): fully parsed + valid program → suppress + show in panel
+  // Tier 2 (isProgramFragment):  truncated/malformed fence detected → suppress only,
+  //   do NOT show in panel (JSON was incomplete, nothing safe to parse)
   const programArtifact = !isUser
     ? extractProgramData(message.structuredData, message.content)
     : null;
-  const isMessageProgramArtifact = programArtifact !== null;
+  const hasValidProgram = programArtifact !== null;
+  // Only run fragment detection when the valid-program path missed (performance)
+  const hasFragmentProgram = !isUser && !hasValidProgram
+    ? isProgramFragment(message.content)
+    : false;
+  const isMessageProgramArtifact = hasValidProgram || hasFragmentProgram;
 
   // isInitialBuild: structuredData-only (needs _buildMeta flag from backend)
   const isInitialBuild = !isUser && parsed.type === "program_build";
-  // hasProgram: structuredData says "program" OR the shared extractor found one in content
-  const hasProgram = !isUser && (parsed.type === "program" || (isMessageProgramArtifact && !isInitialBuild));
+  // hasProgram: only when we have a FULLY parsed program (not a truncated fragment)
+  const hasProgram = !isUser && (parsed.type === "program" || (hasValidProgram && !isInitialBuild));
 
   // Strip the JSON blob from content before rendering — leaves conversational
   // text (e.g. "Here's your program!") but removes the raw JSON in every format.
+  // stripProgramJson now handles truncated/partial fences too.
   const displayContent = isMessageProgramArtifact
     ? stripProgramJson(message.content)
     : message.content;
@@ -249,10 +269,12 @@ export default function MessageBubble({ message, onViewProgram, onShowChange, on
       messageId: message.id,
       hasStructuredData: !!message.structuredData,
       parsedType: parsed.type,
+      hasValidProgram,
+      hasFragmentProgram,
       isMessageProgramArtifact,
-      extractedFrom: isMessageProgramArtifact
+      extractedFrom: hasValidProgram
         ? (message.structuredData ? "structuredData" : "content_fallback")
-        : "none",
+        : hasFragmentProgram ? "fragment_heuristic" : "none",
       suppressionApplied: isMessageProgramArtifact,
       contentLengthBefore: message.content.length,
       contentLengthAfter: displayContent.length,

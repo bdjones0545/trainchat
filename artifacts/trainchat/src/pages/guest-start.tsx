@@ -5,7 +5,7 @@ import { GUEST_CONFIG } from "@/lib/guestConfig";
 import { STORAGE_KEYS, logRouteDecision, readOnboardingComplete, readDeviceId, type UserMode } from "@/lib/routing";
 import { GuestPaywallModal } from "@/components/GuestPaywallModal";
 import logoSrc from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
-import { stripProgramJson, extractProgramData } from "@/lib/extractProgramArtifact";
+import { stripProgramJson, extractProgramData, isProgramFragment } from "@/lib/extractProgramArtifact";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -54,8 +54,9 @@ function loadLocalHistory(): ChatMessage[] {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed.map((msg: ChatMessage) => {
-      if (msg.role === "assistant" && extractProgramData(null, msg.content)) {
-        return { ...msg, content: stripProgramJson(msg.content) };
+      if (msg.role === "assistant") {
+        const needsStrip = !!extractProgramData(null, msg.content) || isProgramFragment(msg.content);
+        if (needsStrip) return { ...msg, content: stripProgramJson(msg.content) };
       }
       return msg;
     });
@@ -133,7 +134,7 @@ function parseInline(text: string): React.ReactNode {
 }
 
 function AssistantMessage({ content }: { content: string }) {
-  const isProgram = !!extractProgramData(null, content);
+  const isProgram = !!extractProgramData(null, content) || isProgramFragment(content);
   const displayContent = isProgram ? stripProgramJson(content) : content;
   console.log("[GuestChat] AssistantMessage render suppression check:", { isProgram, originalLen: content.length, displayLen: displayContent.length });
   const lines = displayContent.split("\n");
@@ -534,10 +535,13 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
       setMessageCount(newCount);
 
       const rawResponse: string = data.response ?? "";
-      const cleanedResponse = data.guestProgram
+      const responseHasProgram = !!data.guestProgram
+        || !!extractProgramData(null, rawResponse)
+        || isProgramFragment(rawResponse);
+      const cleanedResponse = responseHasProgram
         ? stripProgramJson(rawResponse)
         : rawResponse;
-      console.log("[GuestChat] Program render suppression check:", { hadProgram: !!data.guestProgram, rawLen: rawResponse.length, cleanLen: cleanedResponse.length });
+      console.log("[GuestChat] Program render suppression check:", { hadProgram: !!data.guestProgram, responseHasProgram, rawLen: rawResponse.length, cleanLen: cleanedResponse.length });
       const assistantMsg: ChatMessage = { role: "assistant", content: cleanedResponse };
       const updated = [...newMessages, assistantMsg];
       setMessages(updated);
