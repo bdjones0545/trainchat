@@ -208,7 +208,21 @@ router.post("/share-moments/program-card", requireAuth, async (req: any, res): P
 
     let card: ProgramCardResult;
     try {
-      card = JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      // Field-level validation: ensure required top-level string fields are
+      // present and non-empty before using the AI response. Valid JSON with
+      // missing or blank fields falls back rather than reaching the UI as undefined.
+      const hasRequiredFields =
+        parsed &&
+        typeof parsed.title === "string" && parsed.title.trim().length > 0 &&
+        typeof parsed.caption === "string" && parsed.caption.trim().length > 0 &&
+        typeof parsed.tagline === "string" && parsed.tagline.trim().length > 0;
+      if (!hasRequiredFields) {
+        logger.warn("[ProgramCard] AI response missing required fields — using fallback");
+        card = buildFallbackProgramCard(programName, daysPerWeek, focusMode ?? "strength", day1);
+      } else {
+        card = parsed;
+      }
     } catch {
       logger.warn("[ProgramCard] Failed to parse AI response, using fallback");
       card = buildFallbackProgramCard(programName, daysPerWeek, focusMode ?? "strength", day1);

@@ -790,7 +790,20 @@ async function callDirectionsAI(
 
     const data = (await response.json()) as { choices: { message: { content: string } }[] };
     const raw = data.choices[0]?.message?.content ?? "{}";
-    return JSON.parse(raw) as DirectionsResponse;
+    const parsed = JSON.parse(raw) as DirectionsResponse;
+
+    // Field-level validation: a valid response must either skip directions
+    // (shouldSkipDirections + directEditRequest) or provide a non-empty
+    // directions array. If neither holds, fall back rather than passing
+    // undefined fields downstream.
+    const isSkip = parsed?.shouldSkipDirections === true && typeof parsed.directEditRequest === "string" && parsed.directEditRequest.trim().length > 0;
+    const hasDirections = Array.isArray(parsed?.directions) && parsed.directions.length > 0;
+    if (!isSkip && !hasDirections) {
+      logger.warn("[Directions] AI response missing required fields — using fallback");
+      return buildFallbackDirections(userRequest, targetContext);
+    }
+
+    return parsed;
   } catch (err) {
     logger.error({ err }, "Failed to generate directions with AI");
     return null;

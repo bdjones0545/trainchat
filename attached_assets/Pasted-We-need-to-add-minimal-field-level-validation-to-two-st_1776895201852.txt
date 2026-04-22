@@ -1,0 +1,140 @@
+We need to add minimal field-level validation to two structured output surfaces:
+
+- DIRECTIONS (lib/directions-service.ts)
+- SHARE_MOMENTS (routes/share-moments.ts)
+
+Context:
+Both currently:
+- use response_format: { type: "json_object" } ✔
+- use JSON.parse with try/catch ✔
+
+But neither performs field-level validation after parsing.
+
+This creates a silent failure risk:
+- The model can return valid JSON with wrong/missing field names
+- JSON.parse succeeds
+- Invalid shape is passed downstream
+- UI receives undefined values
+
+GOAL
+Add minimal, non-invasive field validation to both surfaces.
+
+Do NOT redesign anything.
+Do NOT rewrite prompts.
+Do NOT change model usage.
+Do NOT change output structure.
+
+Just ensure the returned object has required fields before using it.
+
+---
+
+## PART 1 — DIRECTIONS VALIDATION
+
+Target file:
+- lib/directions-service.ts
+
+After JSON.parse(raw), before returning:
+
+Add a validation check for required fields.
+
+Expected structure (based on current usage):
+- directions: string[] (non-empty array)
+
+Validation rules:
+- parsed must exist
+- parsed.directions must exist
+- parsed.directions must be an array
+- parsed.directions.length > 0
+
+If validation fails:
+→ fall back to existing fallbackDirections() (or equivalent existing fallback)
+
+Do NOT throw.
+Do NOT crash.
+Use existing fallback pattern.
+
+Example (conceptual, adapt to codebase):
+
+if (
+  !parsed ||
+  !Array.isArray(parsed.directions) ||
+  parsed.directions.length === 0
+) {
+  return fallbackDirections(input);
+}
+
+---
+
+## PART 2 — SHARE MOMENTS VALIDATION
+
+Target file:
+- routes/share-moments.ts
+
+After JSON.parse(raw), before returning:
+
+Validate required top-level fields.
+
+Expected structure:
+- title: string
+- caption: string
+- tagline: string
+
+Optional but nice to validate:
+- phases (array)
+- dayPreview (object)
+
+Minimum validation:
+- parsed.title is a non-empty string
+- parsed.caption is a non-empty string
+- parsed.tagline is a non-empty string
+
+If validation fails:
+→ fall back to buildFallbackProgramCard() (existing fallback)
+
+Example:
+
+if (
+  !parsed ||
+  typeof parsed.title !== "string" ||
+  !parsed.title.trim() ||
+  typeof parsed.caption !== "string" ||
+  !parsed.caption.trim() ||
+  typeof parsed.tagline !== "string" ||
+  !parsed.tagline.trim()
+) {
+  return buildFallbackProgramCard(input);
+}
+
+---
+
+## REQUIREMENTS
+
+- Keep changes minimal and surgical
+- Do not alter successful flows
+- Do not change output format
+- Do not change UI expectations
+- Do not remove existing try/catch
+- Do not remove response_format
+- Do not introduce new dependencies
+
+---
+
+## AFTER IMPLEMENTATION REPORT
+
+Provide:
+
+- files changed
+- exact validation checks added (high-level summary)
+- confirmation no other logic was touched
+- confirmation fallbacks were reused (not recreated)
+- compile/build status
+
+---
+
+## SUCCESS CRITERIA
+
+- DIRECTIONS cannot return undefined or malformed directions
+- SHARE_MOMENTS cannot return missing title/caption/tagline
+- invalid model output safely falls back
+- no behavioral regression for valid outputs
+- system remains stable and consistent
