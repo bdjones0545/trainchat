@@ -572,6 +572,29 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditC
     retry: false,
   });
 
+  // ── Brief post-log flash state: shows "Session logged" for 1.5s then resolves ──
+  const [justLoggedFlash, setJustLoggedFlash] = React.useState(false);
+  const prevLoggedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (sessionLoggedToday && !prevLoggedRef.current) {
+      setJustLoggedFlash(true);
+      const t = setTimeout(() => setJustLoggedFlash(false), 1500);
+      prevLoggedRef.current = true;
+      return () => clearTimeout(t);
+    }
+    if (!sessionLoggedToday) {
+      prevLoggedRef.current = false;
+      setJustLoggedFlash(false);
+    }
+  }, [sessionLoggedToday]);
+
+  // ── If the backend has advanced past the completed session, clear the "logged" badge ──
+  // isAdvancedFromCompleted means the API returned the NEXT session, not the completed one.
+  // Show "Session logged" only during the 1.5s flash or if backend hasn't advanced yet.
+  const effectiveSessionLoggedToday = justLoggedFlash ||
+    (sessionLoggedToday && !today?.isAdvancedFromCompleted && !today?.isWeekComplete);
+  const effectiveSessionInProgress = today?.isAdvancedFromCompleted ? false : sessionInProgress;
+
   // Dev logging: ActiveProgramSource — pairs with [LiveProgramSidebarSource] in chat.tsx
   // to make sidebar/Today divergence immediately visible in the browser console.
   useEffect(() => {
@@ -580,7 +603,27 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditC
       source: "db_active_program",
       sessionId: today.id ?? null,
       sessionLabel: today.label ?? null,
+      isAdvancedFromCompleted: today.isAdvancedFromCompleted ?? false,
+      isWeekComplete: today.isWeekComplete ?? false,
       day1Exercises: (today.exercises ?? []).map((e: { name: string }) => e.name),
+    });
+    console.log("[TodayResolverAudit]", {
+      focusMode,
+      displayedSessionId: today.id ?? null,
+      displayedStatus: today.isWeekComplete
+        ? "week_complete"
+        : today.isAdvancedFromCompleted
+          ? "next_after_completion"
+          : sessionLoggedToday
+            ? "completed"
+            : sessionInProgress
+              ? "in_progress"
+              : "not_started",
+      sourceRule: today.isWeekComplete
+        ? "week_complete_after_final_session"
+        : today.isAdvancedFromCompleted
+          ? "advanced_from_completed"
+          : "day_of_week_match_or_first",
     });
   }, [today]);
 
@@ -641,13 +684,53 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditC
 
   const sessionFocusBullets = coachingNotesToBullets(today.coachingNotes ?? "");
 
+  // ── Week-complete state — all sessions in this week are done ─────────────────
+  if (today.isWeekComplete) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-2xl bg-gradient-to-br from-green-500/10 via-green-500/5 to-transparent border border-green-500/20 p-6 text-center">
+          <div className="w-14 h-14 rounded-full bg-green-500/15 border border-green-500/20 flex items-center justify-center mx-auto mb-4">
+            <CheckCircle2 className="w-7 h-7 text-green-400" />
+          </div>
+          <p className="text-xs font-semibold text-green-400 uppercase tracking-wider mb-1">This week is complete</p>
+          <h2 className="text-xl font-bold text-foreground mb-2">Great work this week</h2>
+          <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+            You've finished all sessions for the current week. Rest up and come back strong.
+          </p>
+          {today.nextWeekNumber && (
+            <div className="inline-flex items-center gap-2 rounded-xl bg-primary/10 border border-primary/20 px-4 py-2.5">
+              <Calendar className="w-3.5 h-3.5 text-primary" />
+              <span className="text-sm font-semibold text-primary">
+                Next up: Week {today.nextWeekNumber}{today.nextWeekLabel ? ` — ${today.nextWeekLabel}` : ""}
+              </span>
+            </div>
+          )}
+        </div>
+        {!checkedInToday && onCheckIn && (
+          <button
+            onClick={onCheckIn}
+            className="w-full flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-all"
+          >
+            <Activity className="w-4 h-4" />
+            Log a readiness check-in
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // ── Label for the hero card: "Today's Session" or "Next Up" ─────────────────
+  const heroLabel = today.isAdvancedFromCompleted
+    ? "Next Up"
+    : `${dayOfWeekLabel}'s Session`;
+
   return (
     <div className="space-y-4">
       {/* Session hero — action-first */}
       <div className={`rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/20 p-5 transition-all duration-500 ${sessionHighlight}`}>
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">{dayOfWeekLabel}'s Session</p>
+            <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">{heroLabel}</p>
             <h2 className="text-xl font-bold text-foreground leading-tight">{today.label}</h2>
             {today.emphasis && <p className="text-sm text-muted-foreground mt-1">{today.emphasis}</p>}
             {highlightedIds.sessions.has(today.id) && (
@@ -692,12 +775,12 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditC
 
         {/* Primary CTAs — inline in hero so they're visible immediately */}
         <div className="flex gap-2">
-          {sessionLoggedToday ? (
+          {effectiveSessionLoggedToday ? (
             <div className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-green-500/10 border border-green-500/20 px-4 py-2.5">
               <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
               <span className="text-xs font-bold text-green-400">Session logged</span>
             </div>
-          ) : sessionInProgress ? (
+          ) : effectiveSessionInProgress ? (
             <button
               onClick={onLogSession}
               className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground px-4 py-2.5 text-xs font-bold hover:bg-primary/90 active:scale-[0.98] transition-all"
@@ -780,9 +863,11 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditC
             ))}
           </div>
           {/* Finish session nudge — always visible after exercises */}
-          {!sessionLoggedToday && (
+          {!effectiveSessionLoggedToday && (
             <div className="px-5 py-4 border-t border-border bg-muted/20 flex items-center justify-between gap-3">
-              <p className="text-xs text-muted-foreground">Done with today's session?</p>
+              <p className="text-xs text-muted-foreground">
+                {today.isAdvancedFromCompleted ? "Done with this session?" : "Done with today's session?"}
+              </p>
               <button
                 onClick={onLogSession}
                 className="flex items-center gap-1.5 text-xs font-semibold text-primary border border-primary/30 bg-primary/5 hover:bg-primary/10 rounded-lg px-3 py-1.5 transition-all"
@@ -3764,6 +3849,21 @@ export default function SystemPage() {
   const sessionLoggedToday = serverSessionStatus === "completed";
   const sessionInProgress = serverSessionStatus === "in_progress";
 
+  // ── Parent-level today data — used to derive effective CTA states for action bar ──
+  const { data: todayDataParent } = useQuery({
+    queryKey: ["training-system-today", focusMode],
+    queryFn: () => fetchToday(focusMode),
+    retry: false,
+    staleTime: 10000,
+    enabled: !!activeSystemResolved,
+  });
+  // Mirrors the same logic in TodayView: if the backend has advanced past the completed
+  // session, don't show "Session logged today" in the bottom bar for the next session.
+  const effectiveSessionLoggedToday = sessionLoggedToday &&
+    !todayDataParent?.isAdvancedFromCompleted &&
+    !todayDataParent?.isWeekComplete;
+  const effectiveSessionInProgress = todayDataParent?.isAdvancedFromCompleted ? false : sessionInProgress;
+
   // ── Unified start-session handler: persists to backend ───────────────────
   async function handleStartSession() {
     try {
@@ -4520,12 +4620,17 @@ export default function SystemPage() {
             </button>
           )}
           {/* Primary session CTA — state-driven: not_started → in_progress → completed */}
-          {sessionLoggedToday ? (
+          {todayDataParent?.isWeekComplete ? (
+            <div className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-green-500/10 border border-green-500/20 px-4 py-2.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+              <span className="text-xs font-bold text-green-400">This week is complete</span>
+            </div>
+          ) : effectiveSessionLoggedToday ? (
             <div className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-green-500/10 border border-green-500/20 px-4 py-2.5">
               <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
               <span className="text-xs font-bold text-green-400">Session logged today</span>
             </div>
-          ) : sessionInProgress ? (
+          ) : effectiveSessionInProgress ? (
             <button
               onClick={() => { setFeedbackSessionLabel(undefined); setShowSessionFeedback(true); }}
               className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground px-4 py-2.5 text-xs font-bold hover:bg-primary/90 active:scale-[0.98] transition-all"
@@ -4719,28 +4824,34 @@ export default function SystemPage() {
           sessionLabel={feedbackSessionLabel}
           onClose={() => setShowSessionFeedback(false)}
           onSubmitted={() => {
-            // Mark session as completed on the server, then refresh all related queries
+            // Mark session as completed on the server, then refresh all related queries.
+            // IMPORTANT: training-system-today must refetch AFTER the complete call resolves
+            // so the backend's new resolver sees the completed row and advances to the next session.
             customFetch("/api/active-session/complete", {
               method: "POST",
               body: JSON.stringify({ focusMode }),
               headers: { "Content-Type": "application/json" },
             })
-              .then(() => queryClient.invalidateQueries({ queryKey: ["active-session", focusMode] }))
+              .then(() => {
+                queryClient.invalidateQueries({ queryKey: ["active-session", focusMode] });
+                // Now safe to refetch today — backend will advance to next session
+                queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+                queryClient.invalidateQueries({ queryKey: ["training-system-today", focusMode] });
+                console.log("[TodayAdvanceAudit] complete call resolved — refetching training-system-today", { focusMode });
+              })
               .catch(() => {});
             queryClient.invalidateQueries({ queryKey: ["insights"] });
-            queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
             queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
             queryClient.invalidateQueries({ queryKey: ["training-system-weeks"] });
             queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
             queryClient.invalidateQueries({ queryKey: ["training-system-block-completion", focusMode] });
             queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
             queryClient.invalidateQueries({ queryKey: ["agent-memory"] });
-            // Delayed re-invalidation: allows server-side auto-advance to complete first
+            // Delayed re-invalidation: ensures any server-side cascading state settles
             setTimeout(() => {
               queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
               queryClient.invalidateQueries({ queryKey: ["training-system-weeks"] });
               queryClient.invalidateQueries({ queryKey: ["training-system-block-completion", focusMode] });
-              queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
             }, 2500);
           }}
         />

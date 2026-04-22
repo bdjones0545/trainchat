@@ -7,6 +7,7 @@ import {
   sessionExercises,
   userProfilesTable,
   sessionLogsTable,
+  activeSessionsTable,
 } from "@workspace/db";
 import { eq, and, desc, gte } from "drizzle-orm";
 import type { UserProfile } from "@workspace/db";
@@ -527,6 +528,10 @@ export async function getTodaySession(userId: number, focusMode?: string | null)
   if (!currentWeek) return null;
 
   const dayOfWeek = new Date().getDay();
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const resolvedFocus = (focusMode === "strength" || focusMode === "speed" || focusMode === "mobility")
+    ? focusMode
+    : "strength";
 
   const sessions = await db
     .select()
@@ -538,13 +543,128 @@ export async function getTodaySession(userId: number, focusMode?: string | null)
 
   if (!todaySession) return null;
 
+  // ── Check if today's session is already completed in active_sessions ────────
+  const [completedRow] = await db
+    .select()
+    .from(activeSessionsTable)
+    .where(
+      and(
+        eq(activeSessionsTable.userId, userId),
+        eq(activeSessionsTable.sessionDate, todayStr),
+        eq(activeSessionsTable.focusMode, resolvedFocus),
+        eq(activeSessionsTable.status, "completed"),
+      )
+    )
+    .limit(1);
+
+  let targetSession = todaySession;
+  let isAdvancedFromCompleted = false;
+  let isWeekComplete = false;
+  let nextWeekNumber: number | null = null;
+  let nextWeekLabel: string | null = null;
+
+  if (completedRow) {
+    // ── Today's session is done — advance to next actionable session in this week
+    const nextSession = sessions.find((s) => s.orderIndex > todaySession.orderIndex) ?? null;
+
+    if (nextSession) {
+      targetSession = nextSession;
+      isAdvancedFromCompleted = true;
+
+      console.log("[TodayAdvanceAudit]", JSON.stringify({
+        focusMode: resolvedFocus,
+        completedSessionId: todaySession.id,
+        completedSessionLabel: todaySession.label,
+        completedDayNumber: todaySession.orderIndex,
+        previousTodaySessionId: todaySession.id,
+        nextTodaySessionId: nextSession.id,
+        nextTodaySessionLabel: nextSession.label,
+        nextTodayWeekNumber: currentWeek.weekNumber,
+        nextTodayStatus: "not_started",
+        advancedSuccessfully: true,
+      }));
+    } else {
+      // ── No more sessions this week — find the next week info ─────────────────
+      isWeekComplete = true;
+
+      const allWeeks = await db
+        .select()
+        .from(trainingWeeks)
+        .where(eq(trainingWeeks.trainingPhaseId, currentPhase.id))
+        .orderBy(trainingWeeks.orderIndex);
+
+      const currentWeekIdx = allWeeks.findIndex((w) => w.id === currentWeek.id);
+      const nextWeek = currentWeekIdx >= 0 ? (allWeeks[currentWeekIdx + 1] ?? null) : null;
+
+      nextWeekNumber = nextWeek?.weekNumber ?? null;
+      nextWeekLabel = nextWeek?.label ?? null;
+
+      console.log("[TodayAdvanceAudit]", JSON.stringify({
+        focusMode: resolvedFocus,
+        completedSessionId: todaySession.id,
+        completedDayNumber: todaySession.orderIndex,
+        previousTodaySessionId: todaySession.id,
+        nextTodaySessionId: null,
+        nextTodayWeekNumber: nextWeekNumber,
+        nextTodayStatus: "week_complete",
+        advancedSuccessfully: false,
+        isWeekComplete: true,
+      }));
+
+      const exercises = await db
+        .select()
+        .from(sessionExercises)
+        .where(eq(sessionExercises.trainingSessionId, todaySession.id))
+        .orderBy(sessionExercises.orderIndex);
+
+      console.log("[TodayResolverAudit]", JSON.stringify({
+        focusMode: resolvedFocus,
+        displayedSessionId: todaySession.id,
+        displayedStatus: "week_complete",
+        sourceRule: "week_complete_after_final_session",
+        nextWeekNumber,
+      }));
+
+      return {
+        ...todaySession,
+        exercises,
+        currentWeek,
+        currentPhase,
+        isAdvancedFromCompleted: false,
+        isWeekComplete: true,
+        nextWeekNumber,
+        nextWeekLabel,
+      };
+    }
+  }
+
   const exercises = await db
     .select()
     .from(sessionExercises)
-    .where(eq(sessionExercises.trainingSessionId, todaySession.id))
+    .where(eq(sessionExercises.trainingSessionId, targetSession.id))
     .orderBy(sessionExercises.orderIndex);
 
-  return { ...todaySession, exercises, currentWeek, currentPhase };
+  console.log("[TodayResolverAudit]", JSON.stringify({
+    focusMode: resolvedFocus,
+    displayedSessionId: targetSession.id,
+    displayedStatus: isAdvancedFromCompleted ? "next_after_completion" : (completedRow ? "completed" : "not_started"),
+    sourceRule: isAdvancedFromCompleted
+      ? "advanced_from_completed"
+      : sessions.find((s) => s.dayOfWeek === dayOfWeek)
+        ? "day_of_week_match"
+        : "first_session_fallback",
+  }));
+
+  return {
+    ...targetSession,
+    exercises,
+    currentWeek,
+    currentPhase,
+    isAdvancedFromCompleted,
+    isWeekComplete: false,
+    nextWeekNumber: null,
+    nextWeekLabel: null,
+  };
 }
 
 export async function getCurrentWeek(userId: number, weekNumber?: number, focusMode?: string | null) {
