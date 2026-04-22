@@ -1,0 +1,113 @@
+We completed Step 2.
+
+Now complete Step 3 only:
+Migrate the main generation surfaces to the new flagship model while keeping the rest of the system unchanged.
+
+Important context:
+OpenAI’s current official model guidance recommends:
+- gpt-5.4 for important general-purpose, agentic, and coding work
+- gpt-5.4-mini for smaller faster workloads
+
+For this step, we are upgrading the most important generation paths only.
+
+GOAL
+Move these roles from gpt-4o to gpt-5.4:
+- CORE
+- GUEST_RESPONSE
+- PROGRAM_GENERATION
+
+Do not migrate any other roles yet.
+
+WHY THESE THREE
+These are the highest-leverage surfaces:
+- CORE = main TrainChat intelligence / primary chat loop
+- GUEST_RESPONSE = guest-facing conversational output
+- PROGRAM_GENERATION = actual program creation flow
+
+We want to modernize the most important product outputs first while keeping edit, fallback, and utility services stable until later steps.
+
+REQUIREMENTS
+
+1. Update the centralized model config so that only these roles change:
+- CORE → "gpt-5.4"
+- GUEST_RESPONSE → "gpt-5.4"
+- PROGRAM_GENERATION → "gpt-5.4"
+
+2. Do not change these roles yet:
+- ROUTING
+- EDIT_ENGINE
+- EDIT_INTENT
+- DIRECTIONS
+- EXERCISE_FALLBACK
+- SWAP_BACKSTOP
+- SHARE_MOMENTS
+
+3. Verify the following files are using the shared constants correctly:
+- lib/ai.ts → CORE
+- lib/guestChat.ts → GUEST_RESPONSE
+- lib/guestGenerate.ts → PROGRAM_GENERATION
+
+If any of these files are still hardcoded or using the wrong shared role, fix that wiring.
+
+4. Do not rewrite prompts unless absolutely necessary for compatibility.
+The purpose of Step 3 is model migration, not prompt redesign.
+
+5. Preserve current product behavior as much as possible:
+- same feature flow
+- same structured outputs
+- same validation
+- same tool usage
+- same routing decisions outside of the model change
+
+6. Add light migration comments in the config noting:
+- these roles were upgraded first because they are the highest-value generation surfaces
+- edit and fallback services remain isolated for later validation
+
+7. Validate carefully for output drift in these three areas:
+A. CORE CHAT
+- still behaves like the TrainChat agent
+- still handles conversation flow correctly
+- no weird over-explaining or loss of specificity
+- no broken structured assumptions
+
+B. GUEST RESPONSE
+- still produces compelling guest-facing responses
+- still fits current UI expectations
+- does not become too verbose, robotic, or salesy unless already intended
+
+C. PROGRAM GENERATION
+- still produces clean usable program structures
+- no schema drift
+- no JSON shape regressions
+- no change that breaks downstream rendering
+
+8. If these paths use structured JSON, schemas, or validators:
+- preserve them
+- do not weaken validation
+- only add minimal parsing safeguards if the new model output reveals an actual issue
+
+9. Do not perform Step 4 or Step 5 yet.
+Specifically do not migrate:
+- edit-engine
+- edit-intent-service
+- directions-service
+- harder-easier-fallback
+- swap-backstop-service
+- share-moments
+
+10. After implementation, report back with:
+- exact files changed
+- the new model mapping table
+- confirmation that only CORE, GUEST_RESPONSE, and PROGRAM_GENERATION moved to gpt-5.4
+- whether any parsing or validation changes were needed
+- whether compile/build passed cleanly
+- whether any noticeable output drift was found in quick validation
+
+SUCCESS CRITERIA
+- CORE uses gpt-5.4
+- GUEST_RESPONSE uses gpt-5.4
+- PROGRAM_GENERATION uses gpt-5.4
+- everything else stays where it currently is
+- app compiles cleanly
+- no intentional logic rewrites
+- system is ready for Step 4

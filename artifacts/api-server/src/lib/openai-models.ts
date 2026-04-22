@@ -7,8 +7,12 @@
  */
 
 export const OPENAI_MODELS = {
-  /** Primary model for the core AI chat/generation loop (lib/ai.ts) */
-  CORE: "gpt-4o",
+  /**
+   * Primary model for the core AI chat/generation loop (lib/ai.ts).
+   * Upgraded to gpt-4.1 in Step 3 — highest-value generation surface.
+   * Edit and fallback services remain on gpt-4o pending later validation.
+   */
+  CORE: "gpt-4.1",
 
   /**
    * Lightweight routing/intent detection for guest chat.
@@ -17,11 +21,19 @@ export const OPENAI_MODELS = {
    */
   ROUTING: "gpt-4.1-mini",
 
-  /** Full response generation inside guest chat */
-  GUEST_RESPONSE: "gpt-4o",
+  /**
+   * Full response generation inside guest chat.
+   * Upgraded to gpt-4.1 in Step 3 — highest-value generation surface.
+   * Edit and fallback services remain on gpt-4o pending later validation.
+   */
+  GUEST_RESPONSE: "gpt-4.1",
 
-  /** Program generation for guest (unauthenticated) users */
-  PROGRAM_GENERATION: "gpt-4o",
+  /**
+   * Program generation for guest (unauthenticated) users.
+   * Upgraded to gpt-4.1 in Step 3 — highest-value generation surface.
+   * Edit and fallback services remain on gpt-4o pending later validation.
+   */
+  PROGRAM_GENERATION: "gpt-4.1",
 
   /** Applies structured edit plans to the training system */
   EDIT_ENGINE: "gpt-4o",
