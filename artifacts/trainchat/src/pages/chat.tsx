@@ -374,15 +374,43 @@ export default function Chat() {
       ? transformSystemToProgram(activeSystem.name, activeSystem.overarchingGoal, weekData)
       : null;
 
+  // ── Unsaved-draft gate ─────────────────────────────────────────────────────
+  // When the user generates a new program in a session that already has an active
+  // DB program, we have a registered draft (sessionDraftMsgIdRef.current !== null)
+  // that has NOT yet been saved (isSaved = false).  In this window the new draft
+  // must take priority over the old DB program — otherwise the "old program wins"
+  // bug manifests: the top bar and right panel show the pre-existing program and
+  // completely ignore the newly generated one.
+  //
+  // This flag is ALSO true when the user explicitly started a new-build session
+  // via handleNewConversation (isNewBuildSession=true), but we keep both gates
+  // because isNewBuildSession is only ever set via the "New Program" button —
+  // it is never set for in-session program-replacement requests.
+  const hasUnsavedDraft = sessionDraftMsgIdRef.current !== null && !isSaved;
+
   // Single authoritative resolver — the ONLY place display source/program are decided.
   // Never compute source or program inline elsewhere; always call resolveProgramState.
   //
-  // activeSystem arg is the already-derived DB program, nulled out during a new build
-  // so the panel shows a clean slate while the AI is streaming a replacement.
+  // activeSystem arg is nulled when:
+  //  (a) isNewBuildSession — user clicked "New Program", blank slate desired
+  //  (b) hasUnsavedDraft   — a new program was just generated and is not yet saved;
+  //                          the draft must win over the old DB program
   const { source: displayProgramSource, program: displayProgram } = resolveProgramState({
-    activeSystem: hasActiveSystem && !isNewBuildSession ? dbSystemProgram : null,
+    activeSystem: hasActiveSystem && !isNewBuildSession && !hasUnsavedDraft ? dbSystemProgram : null,
     latestProgram,
     sessionDraftMsgId: sessionDraftMsgIdRef.current,
+  });
+
+  console.log("[top bar source chosen]", {
+    hasActiveSystem,
+    isNewBuildSession,
+    hasUnsavedDraft,
+    isSaved,
+    sessionDraftMsgId: sessionDraftMsgIdRef.current,
+    latestProgramName: latestProgram?.programName ?? null,
+    dbSystemProgramName: dbSystemProgram?.programName ?? null,
+    displayProgramSource,
+    displayProgramName: displayProgram?.programName ?? null,
   });
 
   // The program is "in system" if explicitly saved this session OR if
@@ -400,19 +428,20 @@ export default function Chat() {
     if (!import.meta.env.DEV) return;
 
     const { source: programSource, program: resolvedProgram } = resolveProgramState({
-      activeSystem: hasActiveSystem && !isNewBuildSession ? dbSystemProgram : null,
+      activeSystem: hasActiveSystem && !isNewBuildSession && !hasUnsavedDraft ? dbSystemProgram : null,
       latestProgram,
       sessionDraftMsgId: sessionDraftMsgIdRef.current,
     });
 
     // ── ASSERTION 1: Ghost draft ───────────────────────────────────────────
-    // latestProgram must not coexist with a FULLY LOADED active DB system.
-    // Exception: when hasActiveSystem=true but dbSystemProgram=null (weekData
-    // is still loading), latestProgram serves as a bridge — this is intentional
-    // and should NOT trigger this assertion.
-    if (hasActiveSystem && dbSystemProgram && latestProgram) {
+    // latestProgram must not coexist with a FULLY LOADED active DB system UNLESS
+    // it is an unsaved draft from this session (hasUnsavedDraft).
+    // Exception A: weekData still loading (dbSystemProgram=null) — bridge window.
+    // Exception B: hasUnsavedDraft=true — the user just generated a new program
+    //   and it should display instead of the old DB program until saved/cancelled.
+    if (hasActiveSystem && dbSystemProgram && latestProgram && !hasUnsavedDraft) {
       console.error(
-        "[STATE VIOLATION] Ghost draft detected — latestProgram is non-null while dbSystemProgram is ready. " +
+        "[STATE VIOLATION] Ghost draft detected — latestProgram is non-null while dbSystemProgram is ready and there is no unsaved draft. " +
         "The messages effect should have cleared it when dbSystemProgram became available.",
         { activeSystemId: activeSystem?.id, latestProgramName: latestProgram.programName, dbProgramName: dbSystemProgram.programName }
       );
@@ -468,7 +497,7 @@ export default function Chat() {
       resolvedLabel: resolvedProgram?.programName ?? null,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasActiveSystem, activeSystem?.id, dbSystemProgram, latestProgram, isNewBuildSession, messages.length]);
+  }, [hasActiveSystem, activeSystem?.id, dbSystemProgram, latestProgram, isNewBuildSession, hasUnsavedDraft, isSaved, messages.length]);
 
   // FIX 7: fail-safe — fires ONCE on mount; if auth is still unresolved after 4s,
   // force the agent shell to render so the user is never stuck on a spinner.
@@ -670,14 +699,37 @@ export default function Chat() {
 
   useEffect(() => {
     // When the DB system is fully ready (weekData loaded → dbSystemProgram available),
-    // the database is the canonical source of truth. Clear the chat draft so the
-    // right panel transitions to the live system.
+    // the database is the canonical source of truth. Clear the chat draft UNLESS the
+    // draft is a freshly generated program that has not yet been saved to the DB.
+    //
+    // hasUnsavedDraft = sessionDraftMsgIdRef.current !== null && !isSaved
+    //
+    // When hasUnsavedDraft is true the user just requested a new program (either in a
+    // fresh session or replacing an existing one). The new draft must win over the old
+    // DB program until the backend saves it (systemSaved=true → isSaved=true) or the
+    // session is abandoned.
     //
     // IMPORTANT: We do NOT clear when hasActiveSystem=true but dbSystemProgram=null
     // (i.e. weekData is still loading). In that transient window we keep latestProgram
     // visible so the sidebar is never blank between "system saved" and "weekData ready".
+    const _hasUnsavedDraft = sessionDraftMsgIdRef.current !== null && !isSaved;
+
     if (hasActiveSystem && dbSystemProgram) {
-      // DB system is fully loaded — consume the stream flag and drop the draft.
+      if (_hasUnsavedDraft) {
+        // New program draft in progress — keep it visible; don't let the old DB
+        // program overwrite the freshly generated one.
+        console.log("[db system overwrite detected?]", {
+          blocked: true,
+          reason: "hasUnsavedDraft",
+          sessionDraftMsgId: sessionDraftMsgIdRef.current,
+          isSaved,
+          latestProgramName: latestProgram?.programName ?? null,
+          dbSystemProgramName: dbSystemProgram.programName,
+        });
+        return;
+      }
+      // DB system is fully loaded and there is no unsaved draft.
+      // Drop any stale draft and transition to live DB-canonical state.
       streamJustFinishedRef.current = false;
       setLatestProgram(null);
       console.log("[Active program updated]", {
@@ -759,7 +811,7 @@ export default function Chat() {
       setLatestProgram(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, hasActiveSystem, dbSystemProgram]);
+  }, [messages, hasActiveSystem, dbSystemProgram, isSaved]);
 
   // Auto-open the right panel exactly ONCE on load when the user already has a
   // program (active DB system or a program in chat history). This ensures returning
@@ -904,12 +956,21 @@ export default function Chat() {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
     }
 
-    // During a new build session: strip old program identity from the UI context
-    // so the backend cannot inject the old program name into the AI system prompt.
+    // Strip old program identity from the UI context when:
+    //  (a) isNewBuildSession — explicit new-program session started via "New Program" button
+    //  (b) hasUnsavedDraft  — user is generating a new program in an existing session and
+    //                         has not saved yet; the old program should not pollute the prompt
+    const _ctxHideOldProgram = isNewBuildSession || hasUnsavedDraft;
+    console.log("[active program id set]", {
+      _ctxHideOldProgram,
+      isNewBuildSession,
+      hasUnsavedDraft,
+      activeSystemId: activeSystem?.id ?? null,
+    });
     const chatUIContext = {
       page: "chat",
-      activeProgramId: isNewBuildSession ? null : (activeSystem?.id ?? null),
-      activeProgramName: isNewBuildSession ? null : ((activeSystem as any)?.programName ?? null),
+      activeProgramId: _ctxHideOldProgram ? null : (activeSystem?.id ?? null),
+      activeProgramName: _ctxHideOldProgram ? null : ((activeSystem as any)?.programName ?? null),
       // Signal backend to use only this conversation's history for intent routing
       newBuildSession: isNewBuildSession || undefined,
       // Active focus mode — routes to the correct programming engine on the backend
@@ -970,14 +1031,32 @@ export default function Chat() {
             exercises: Array.isArray(d.exercises) ? d.exercises : [],
           })) : [],
         };
+
+        console.log("[Program normalized]", {
+          programName: safe.programName,
+          messageId: safe.messageId,
+          dayCount: safe.days.length,
+          splitType: (safe as any).splitType ?? null,
+          firstDayName: safe.days[0]?.name ?? null,
+        });
+
+        // Register draft BEFORE setting latestProgram so hasUnsavedDraft flips
+        // to true in the same synchronous batch — preventing any intermediate render
+        // where latestProgram is set but the hasUnsavedDraft gate is still false.
         sessionDraftMsgIdRef.current = msg.id;
+        // Reset isSaved: this is a new draft, not yet persisted to the DB.
+        // Without this, a previous successful save (isSaved=true) would keep
+        // hasUnsavedDraft=false and allow the old DB program to overwrite this draft.
+        setIsSaved(false);
         setLatestProgram(safe);
+
         console.log("[Program committed to state]", {
           programName: safe.programName,
           messageId: safe.messageId,
           dayCount: safe.days.length,
           systemSaved: result.systemSaved,
           extractedFrom,
+          hasUnsavedDraftAfterCommit: true,
         });
       }
     }
@@ -1066,10 +1145,13 @@ export default function Chat() {
           setIsNewBuildSession(false);
         }
       }
-      // Vibe edit mutated the DB system — clear the chat draft so the
-      // right panel switches to showing the live DB-backed program
+      // Vibe edit mutated the DB system — clear the chat draft and the session
+      // draft ref so the right panel transitions to showing the live DB-backed program.
+      // Without clearing sessionDraftMsgIdRef the hasUnsavedDraft gate would stay true
+      // and continue blocking the DB program from being shown.
       if (result.systemEdit?.applied) {
         setLatestProgram(null);
+        sessionDraftMsgIdRef.current = null;
       }
       // After a new program build: switch to Program tab to show the result.
       // Also open the panel (mutation_applied) so the user sees their new program.

@@ -1,0 +1,93 @@
+We now know the real remaining issue is not just raw JSON rendering.
+
+Problem:
+When the user requests a new program (example: “Design a 4-day strength training system for me”), the assistant returns a valid-looking new program artifact, but the app does NOT actually commit that new program as the active/current program.
+
+Evidence:
+- the top bar still shows the old program (example: 3-Day Soccer Performance Program)
+- the new assistant output is a different program (example: 4-Day Intensification Strength Block)
+- therefore the new program artifact is not winning as the committed active state
+
+GOAL
+Find why valid program artifacts are not becoming the active committed program and fix the commit pipeline.
+
+IMPORTANT
+Do not change AI prompts.
+Do not change models.
+Do not change generation behavior.
+This is a state/validation/commit/source-of-truth fix only.
+
+INVESTIGATION TASKS
+
+1. Trace the full commit pipeline for a generated program:
+- assistant response received
+- extractProgramData called
+- extracted artifact shape logged
+- commit validation check
+- normalize step
+- latestProgram set
+- savedPrograms updated
+- active/selected program id updated
+- top bar / right panel source of truth
+
+2. Add targeted logs for one program request:
+- [Program extracted] with programName and day count
+- [Program passed commit validation?]
+- [Program normalized]
+- [latestProgram set]
+- [savedPrograms updated]
+- [active program id set]
+- [top bar source chosen]
+- [db system overwrite detected?]
+
+3. Check whether the extractor and the commit validator use the same schema assumptions.
+I suspect they do not.
+
+Specifically inspect:
+- does extractProgramData accept the returned artifact?
+- does commitLatestProgram or equivalent reject it?
+- does normalization require fields not guaranteed by the extractor?
+- is day count / split / block structure causing rejection?
+
+4. Check whether old persisted state is overwriting new draft state after commit.
+Examples:
+- refetch restores old active system
+- selector prefers dbSystemProgram over latestProgram too early
+- selected program id is never moved to the new draft
+- active header reads only from DB instead of draft/live merged state
+
+5. Check whether the “active program” top bar and right panel are reading from the same source as the commit path.
+They may not be.
+
+REQUIRED FIX
+
+6. Unify the commit contract:
+A generated program that passes extractProgramData should go through one normalization + commit path and become the active program if valid.
+Do not let render detection and commit validation use different definitions of “valid program” unless absolutely necessary.
+
+7. Ensure a newly generated valid program becomes the selected/active program immediately.
+Not just saved somewhere.
+The user asked for a new 4-day program — that should become the active system in the UI.
+
+8. Prevent old persisted program state from immediately overriding the newly committed draft unless the DB-hydrated version is the same program or a newer canonical version of it.
+
+9. Preserve existing fallbacks and existing data model.
+Do not redesign the app.
+Fix the inconsistency in commit/source-of-truth logic.
+
+SUCCESS CRITERIA
+
+After fix:
+- asking for a 4-day program commits that 4-day program as the active program
+- top bar updates to the new program title
+- right panel / saved programs reflect the new program
+- old active programs do not override the new one incorrectly
+- extractor, validator, and commit path are consistent
+
+DELIVERABLES
+Report:
+- exact root cause
+- exact file(s) changed
+- whether commit validation and extractor were mismatched
+- whether DB state was overwriting draft state
+- confirmation that a newly requested 4-day program now becomes the active committed program
