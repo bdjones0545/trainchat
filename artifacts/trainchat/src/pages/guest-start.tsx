@@ -55,8 +55,16 @@ function loadLocalHistory(): ChatMessage[] {
     if (!Array.isArray(parsed)) return [];
     return parsed.map((msg: ChatMessage) => {
       if (msg.role === "assistant") {
+        // Strip raw artifact JSON that may have been stored before the
+        // suppression contract was in place (old data migration path).
         const needsStrip = !!extractProgramData(null, msg.content) || isProgramFragment(msg.content);
-        if (needsStrip) return { ...msg, content: stripProgramJson(msg.content) };
+        if (needsStrip) {
+          const stripped = stripProgramJson(msg.content);
+          // If stripping left nothing (message was only the JSON block), replace
+          // with a safe placeholder so the bubble is never blank on reload.
+          const safe = stripped.trim() || "Program generated — see your saved program above.";
+          return { ...msg, content: safe };
+        }
       }
       return msg;
     });
@@ -135,7 +143,12 @@ function parseInline(text: string): React.ReactNode {
 
 function AssistantMessage({ content }: { content: string }) {
   const isProgram = !!extractProgramData(null, content) || isProgramFragment(content);
-  const displayContent = isProgram ? stripProgramJson(content) : content;
+  const stripped = isProgram ? stripProgramJson(content) : content;
+  // Defensive: if suppression left nothing visible (old data or edge case),
+  // never render a blank bubble — show a safe generic placeholder instead.
+  const displayContent = (isProgram && !stripped.trim())
+    ? "Program generated — see your saved program above."
+    : stripped;
   console.log("[GuestChat] AssistantMessage render suppression check:", { isProgram, originalLen: content.length, displayLen: displayContent.length });
   const lines = displayContent.split("\n");
 
@@ -535,13 +548,35 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
       setMessageCount(newCount);
 
       const rawResponse: string = data.response ?? "";
-      const responseHasProgram = !!data.guestProgram
-        || !!extractProgramData(null, rawResponse)
-        || isProgramFragment(rawResponse);
-      const cleanedResponse = responseHasProgram
-        ? stripProgramJson(rawResponse)
-        : rawResponse;
-      console.log("[GuestChat] Program render suppression check:", { hadProgram: !!data.guestProgram, responseHasProgram, rawLen: rawResponse.length, cleanLen: cleanedResponse.length });
+
+      // ── Artifact state machine — Case A / B / C ───────────────────────────
+      // CASE A: backend returned a valid structured program (data.guestProgram set)
+      // CASE B: response looks like a truncated/malformed program (fragment heuristic)
+      // CASE C: normal conversational response — render as-is
+      const isValidCommit = !!(data.guestProgram?.days?.length);
+      const isFragment = !isValidCommit && (!!extractProgramData(null, rawResponse) || isProgramFragment(rawResponse));
+      const responseHasProgram = isValidCommit || isFragment;
+      let cleanedResponse = responseHasProgram ? stripProgramJson(rawResponse) : rawResponse;
+
+      // Never leave a blank bubble — if stripping removed all visible text, insert
+      // a context-appropriate fallback so the user always sees something useful.
+      if (responseHasProgram && !cleanedResponse.trim()) {
+        if (isValidCommit) {
+          // CASE A: program committed to panel, no surrounding conversational text
+          cleanedResponse = "Your program is ready — see the panel above.";
+        } else {
+          // CASE B: fragment/truncated — do NOT commit, show retry guidance
+          cleanedResponse = "I started building your program, but the response was cut off. Please try again.";
+        }
+      }
+
+      console.log("[GuestChat] Artifact state machine:", {
+        caseLabel: isValidCommit ? "CASE_A_valid_program" : isFragment ? "CASE_B_fragment" : "CASE_C_no_program",
+        hadGuestProgram: !!data.guestProgram,
+        responseHasProgram,
+        rawLen: rawResponse.length,
+        cleanLen: cleanedResponse.length,
+      });
       const assistantMsg: ChatMessage = { role: "assistant", content: cleanedResponse };
       const updated = [...newMessages, assistantMsg];
       setMessages(updated);

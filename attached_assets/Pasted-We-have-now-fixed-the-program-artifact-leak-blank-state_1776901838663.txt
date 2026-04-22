@@ -1,0 +1,183 @@
+We have now fixed the program-artifact leak/blank-state bug in the main chat flow by implementing a proper artifact pipeline:
+
+- shared extraction contract
+- valid artifact commit
+- fragment suppression
+- fallback UI for truncated artifacts
+- raw artifact stripping before render/storage
+- explicit Case A / B / C handling
+
+Now run a focused audit across the rest of the app for anywhere this same architectural bug class could still exist.
+
+GOAL
+Find every place in the app where AI output may be both:
+1. rendered as assistant/chat text
+and/or
+2. converted into structured app state / UI artifacts
+
+Then verify those surfaces follow the same safe contract.
+
+THIS IS NOT A GENERAL CODE AUDIT.
+This is a targeted AI artifact/render/state audit.
+
+TARGET BUG CLASS
+We want to find any place where the app could still do one of these:
+- render raw structured AI output directly
+- suppress artifact text without committing valid state
+- commit valid artifact state but still render raw source payload
+- persist raw artifact JSON into local/session storage
+- fail open on truncated/malformed artifact output
+- use one extractor for commit and a different one for render/storage
+- have separate guest/authenticated/optimistic/rehydration paths with inconsistent handling
+
+AUDIT SCOPE
+
+Search for all AI output surfaces and classify them into:
+A. Pure conversational text
+B. Structured artifact output
+C. Structured output that may mutate state
+D. Structured output that may populate UI panels/cards/modals
+E. Streaming/temporary/optimistic assistant message paths
+F. Persisted message history reload paths
+
+LOOK SPECIFICALLY FOR
+
+1. Assistant message renderers
+Any component that renders assistant content, including:
+- MessageBubble
+- AssistantMessage
+- RichContent
+- markdown renderers
+- code/pre renderers
+- stream renderers
+- optimistic local renderers
+- restored history renderers
+
+For each one, report:
+- file path
+- screen/page
+- does it render raw message.content?
+- does it already use extractProgramArtifact/shared extractor?
+- can it bypass suppression?
+
+2. Structured output handlers
+Any place AI returns structured data such as:
+- programs
+- edits/refinements
+- exercise swaps
+- directions
+- share moments/cards
+- system/history/adaptation artifacts
+- forecasts or any generated panel data
+
+For each one, report:
+- file path
+- artifact type
+- how structured data is extracted
+- whether malformed/truncated content is handled
+- whether valid artifact commit and render are aligned
+- whether raw assistant payload can still leak
+
+3. Persistence paths
+Any place assistant responses are stored in:
+- localStorage
+- session state
+- DB-backed chat history
+- optimistic message state
+
+For each one, report:
+- whether raw artifact JSON could be stored
+- whether cleanup occurs before persistence
+- whether reload/rehydration uses the same shared extractor contract
+
+4. State commit paths
+Any place valid structured AI output becomes app state.
+
+For each one, verify:
+- valid full artifact → commit
+- fragment/truncated artifact → no commit
+- fallback UI/message exists
+- no hidden blank state
+- no mismatch between suppression heuristic and commit validator
+
+5. Fragment risk
+Any place where a truncated or malformed AI artifact could still:
+- render raw
+- be silently swallowed
+- produce a blank assistant message
+- block commit with no user feedback
+
+REQUIRED CONTRACT TO CHECK
+
+For every structured-output surface, verify whether it follows this model:
+
+CASE A — valid artifact
+- detect
+- validate
+- normalize
+- commit/use state
+- suppress raw artifact text
+
+CASE B — fragment/truncated artifact
+- detect as fragment
+- do NOT commit invalid data
+- suppress raw artifact text
+- show visible fallback/retry message
+
+CASE C — normal text
+- render normally
+
+Anything that does not fit this should be flagged.
+
+IMPORTANT
+
+Do not make broad speculative refactors.
+Audit first.
+Only make immediate fixes if you find:
+- a confirmed raw artifact leak
+- a confirmed blank-state path
+- a confirmed suppression/commit mismatch
+- a confirmed persistence leak of raw artifact content
+
+DELIVERABLES
+
+Produce a report with these sections:
+
+1. ALL AI OUTPUT SURFACES
+Table:
+- file
+- screen
+- artifact type
+- current handling status
+- risk level (high/medium/low)
+
+2. CONFIRMED SAFE SURFACES
+List surfaces already using the correct shared contract.
+
+3. CONFIRMED RISK SURFACES
+For each:
+- exact bug class
+- why it is vulnerable
+- whether it is render-only, commit-only, persistence-only, or multi-path
+
+4. DUPLICATED EXTRACTION LOGIC
+List any places still not using the shared extraction/strip helpers.
+
+5. PERSISTENCE RISKS
+List any localStorage/session/DB message persistence paths that may still store raw artifact output.
+
+6. PRIORITIZED FIX PLAN
+- P0 = confirmed user-facing leak/blank-state/invalid commit risk
+- P1 = likely artifact/render inconsistency
+- P2 = cleanup/unification opportunities
+
+7. OPTIONAL SAFE FIXES
+If any issue is trivial and clearly correct to fix immediately, do so and report exactly what changed.
+
+SUCCESS CRITERIA
+At the end of this audit we should know:
+- every assistant message render path
+- every structured artifact path
+- every persistence path
+- whether any other surfaces can still suffer the same artifact suppression / commit / render mismatch
+- the exact next fixes in priority order
