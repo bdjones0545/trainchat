@@ -1,0 +1,213 @@
+FIX RIGHT-PANEL “LOG SESSION” FLOW — OPEN THE SESSION LOG MODAL INSTEAD OF SILENTLY MARKING THE SESSION LOGGED
+
+CONTEXT:
+There is a critical UX bug in the right sidebar / Live Program panel.
+
+Current bad behavior:
+- when the user taps “Log Session” from the right panel
+- the session log modal does NOT open
+- the system immediately marks the session as logged
+- the user never gets to enter:
+  - how the session went
+  - duration
+  - difficulty
+  - pain/discomfort
+  - post-session feeling
+  - enjoyment
+  - optional notes
+
+This breaks the whole session feedback loop and adaptation pipeline.
+
+The intended behavior is:
+- tapping “Log Session” should open the same session log modal/flow used elsewhere
+- user completes the feedback form
+- only after submission should the session be marked logged/completed
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make the right-panel “Log Session” button open the session logging modal first, and only mark the session complete after the user submits the log.
+
+==================================================
+TASK 1 — TRACE THE RIGHT-PANEL LOG SESSION ACTION
+==================================================
+
+Audit the full path when the user taps “Log Session” from the right sidebar / Live Program panel.
+
+Trace:
+- which component/button triggers it
+- whether it calls a direct complete-session mutation
+- whether it bypasses the log modal state entirely
+- whether it differs from the working log-session flow used elsewhere in the app
+
+Return:
+
+[RightPanelLogAudit] {
+  sourceComponent,
+  currentHandler,
+  opensModal,
+  directlyCompletesSession,
+  differsFromWorkingFlow,
+  bugSource
+}
+
+==================================================
+TASK 2 — IDENTIFY THE WORKING SESSION LOG FLOW
+==================================================
+
+Find the session logging flow that already works correctly elsewhere in the app.
+
+Identify:
+- modal component name
+- modal open state
+- payload required to initialize it
+- submit handler
+- completion handler
+
+We want the right panel to reuse the same flow, not invent a parallel shortcut.
+
+==================================================
+TASK 3 — CHANGE “LOG SESSION” TO OPEN THE MODAL
+==================================================
+
+Update the right-panel “Log Session” button so that it:
+- opens the session log modal
+- passes the correct session context:
+  - trainingSystemId
+  - focusMode
+  - week number / week id
+  - session id
+  - day number
+  - session label/title if needed
+
+It must NOT:
+- directly complete the session
+- directly mark the session logged
+- skip the user feedback form
+
+==================================================
+TASK 4 — ONLY COMPLETE SESSION AFTER MODAL SUBMIT
+==================================================
+
+The actual completion/logging mutation should only run after the user submits the session log form.
+
+Flow must be:
+
+1. user taps “Log Session”
+2. session log modal opens
+3. user enters feedback
+4. user taps submit
+5. session is marked logged/completed
+6. UI refreshes correctly
+
+Do not allow the right-panel button to bypass steps 2–4.
+
+==================================================
+TASK 5 — KEEP FOCUS + SESSION SCOPING CORRECT
+==================================================
+
+The right-panel log modal must remain fully scoped by:
+- focusMode
+- trainingSystemId
+- exact session/day
+
+Do not introduce:
+- wrong-focus logging
+- week-wide logging
+- future-session contamination
+- stale modal data from another session
+
+==================================================
+TASK 6 — PRESERVE ADAPTATION / FEEDBACK PIPELINE
+==================================================
+
+Make sure the modal submit continues to capture and persist:
+- completion status
+- duration
+- difficulty
+- pain/discomfort
+- post-session feeling
+- enjoyment
+- notes
+
+And make sure the existing adaptation / memory / system-adjustment logic still fires after submit.
+
+The right-panel flow should be a true entry point into the same feedback pipeline, not a simplified alternate route.
+
+==================================================
+TASK 7 — ADD AUDIT LOGGING
+==================================================
+
+Add logs:
+
+[RightPanelLogModalAudit] {
+  focusMode,
+  trainingSystemId,
+  weekNumber,
+  sessionId,
+  dayNumber,
+  modalOpened,
+  directCompletionBlocked
+}
+
+[RightPanelLogSubmitAudit] {
+  focusMode,
+  trainingSystemId,
+  weekNumber,
+  sessionId,
+  dayNumber,
+  feedbackSubmitted,
+  completionTriggered
+}
+
+We need proof that:
+- tapping the button opens the modal
+- completion only happens after submit
+
+==================================================
+TASK 8 — VALIDATION
+==================================================
+
+Test all of these:
+
+1. Strength
+- tap “Log Session” in the right panel
+- confirm modal opens
+- fill it out
+- submit
+- confirm only then does the session show logged
+
+2. Speed
+- same validation
+
+3. Mobility
+- same validation
+
+4. Dismiss / cancel case
+- tap “Log Session”
+- close the modal without submitting
+- confirm the session is NOT marked logged
+
+5. Refresh after submit
+- confirm the session remains logged
+- confirm no sibling sessions are affected
+
+==================================================
+TASK 9 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. root cause of why the right-panel button bypassed the modal
+2. what handler was changed
+3. how the working modal flow was reused
+4. confirmation that completion now only happens on submit
+5. validation results for Strength / Speed / Mobility + cancel case
+
+==================================================
+FINAL STANDARD
+==================================================
+
+When the user taps “Log Session” from the right sidebar / Live Program panel, the session log modal must open first.
+
+The session must not be marked logged until the user actually submits the session feedback form.
