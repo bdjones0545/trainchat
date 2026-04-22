@@ -314,6 +314,15 @@ export default function Chat() {
     staleTime: 30000,
   });
 
+  // Debug log when the saved program library changes
+  useEffect(() => {
+    if (!me) return;
+    console.log("[Saved programs count]", {
+      total: programLibrary.length,
+      names: programLibrary.map((p: any) => p.name ?? p.programName ?? "(unnamed)"),
+    });
+  }, [programLibrary, me]);
+
   const { data: weekData, isLoading: weekDataLoading } = useQuery({
     // Include activeSystem.id AND focusMode so React Query creates distinct cache entries
     // per focus lane — prevents stale exercises from another focus leaking in.
@@ -396,13 +405,15 @@ export default function Chat() {
     });
 
     // ── ASSERTION 1: Ghost draft ───────────────────────────────────────────
-    // latestProgram must never coexist with an active DB system —
-    // the messages effect clears it when hasActiveSystem = true.
-    if (hasActiveSystem && latestProgram) {
+    // latestProgram must not coexist with a FULLY LOADED active DB system.
+    // Exception: when hasActiveSystem=true but dbSystemProgram=null (weekData
+    // is still loading), latestProgram serves as a bridge — this is intentional
+    // and should NOT trigger this assertion.
+    if (hasActiveSystem && dbSystemProgram && latestProgram) {
       console.error(
-        "[STATE VIOLATION] Ghost draft detected — latestProgram is non-null while activeSystem exists. " +
-        "The messages effect should have cleared it.",
-        { activeSystemId: activeSystem?.id, latestProgramName: latestProgram.programName }
+        "[STATE VIOLATION] Ghost draft detected — latestProgram is non-null while dbSystemProgram is ready. " +
+        "The messages effect should have cleared it when dbSystemProgram became available.",
+        { activeSystemId: activeSystem?.id, latestProgramName: latestProgram.programName, dbProgramName: dbSystemProgram.programName }
       );
     }
 
@@ -657,16 +668,33 @@ export default function Chat() {
   }, [hasActiveSystem]);
 
   useEffect(() => {
-    // When the user has an active DB training system, the database is the
-    // source of truth. Clear any stale chat-derived program so the right panel
-    // shows the live system via dbSystemProgram instead of old message history.
-    if (hasActiveSystem) {
-      // Consume the stream flag so it can't ghost on a future state change
+    // When the DB system is fully ready (weekData loaded → dbSystemProgram available),
+    // the database is the canonical source of truth. Clear the chat draft so the
+    // right panel transitions to the live system.
+    //
+    // IMPORTANT: We do NOT clear when hasActiveSystem=true but dbSystemProgram=null
+    // (i.e. weekData is still loading). In that transient window we keep latestProgram
+    // visible so the sidebar is never blank between "system saved" and "weekData ready".
+    if (hasActiveSystem && dbSystemProgram) {
+      // DB system is fully loaded — consume the stream flag and drop the draft.
       streamJustFinishedRef.current = false;
       setLatestProgram(null);
+      console.log("[Active program updated]", {
+        source: "live",
+        activeSystemId: activeSystem?.id,
+        programName: dbSystemProgram.programName,
+      });
       return;
     }
 
+    // If hasActiveSystem but weekData is still loading (dbSystemProgram null),
+    // keep whatever draft is showing — this effect will re-run when dbSystemProgram
+    // becomes available (it is in the dependency array below).
+    if (hasActiveSystem && !dbSystemProgram) {
+      return;
+    }
+
+    // ── No active DB system — draft path ─────────────────────────────────────
     const programMessages = messages.filter((m) => {
       if (m.role !== "assistant" || !m.structuredData) return false;
       try {
@@ -686,6 +714,10 @@ export default function Chat() {
       if (streamJustFinishedRef.current) {
         streamJustFinishedRef.current = false;
         sessionDraftMsgIdRef.current = last.id;
+        console.log("[Program generated]", {
+          messageId: last.id,
+          sessionDraftMsgId: sessionDraftMsgIdRef.current,
+        });
       }
 
       // ── GHOST PREVENTION ─────────────────────────────────────────────────
@@ -709,6 +741,12 @@ export default function Chat() {
             };
             setLatestProgram(safe);
             setIsSaved(false);
+            console.log("[Program committed to state]", {
+              programName: safe.programName,
+              messageId: safe.messageId,
+              dayCount: safe.days.length,
+            });
+            console.log("[Saved programs count]", programMessages.length);
           } catch {
             // ignore malformed JSON
           }
@@ -724,7 +762,8 @@ export default function Chat() {
       // ghost programs visible when switching between conversations.)
       setLatestProgram(null);
     }
-  }, [messages, hasActiveSystem]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, hasActiveSystem, dbSystemProgram]);
 
   // Auto-open the right panel exactly ONCE on load when the user already has a
   // program (active DB system or a program in chat history). This ensures returning
@@ -898,7 +937,58 @@ export default function Chat() {
     console.log("[ThinkingStateAudit] finalResponseCommitted", {
       outcomeType: result.outcomeType,
       assistantMsgId: result.assistantMessage?.id,
+      systemSaved: result.systemSaved,
     });
+
+    // ── IMMEDIATE PROGRAM COMMIT ──────────────────────────────────────────────
+    // If the assistant message contains a valid program in structuredData, commit
+    // it directly to latestProgram NOW — before the messages query refetches.
+    // This ensures the sidebar is NEVER blank between "stream complete" and
+    // "weekData loaded". The guard (sessionDraftMsgIdRef) prevents ghost programs.
+    //
+    // Validation: output must have programName + days + exercises to be treated
+    // as a valid program object, not just rendered as chat text.
+    if (
+      result.assistantMessage?.structuredData &&
+      result.assistantMessage?.id
+    ) {
+      try {
+        const rawData = JSON.parse(result.assistantMessage.structuredData);
+        const isValidProgram =
+          rawData &&
+          rawData._type !== "system_edit" &&
+          rawData._type !== "fail_safe" &&
+          typeof rawData.programName === "string" &&
+          Array.isArray(rawData.days) &&
+          rawData.days.length > 0 &&
+          rawData.days.every((d: any) => Array.isArray(d.exercises));
+
+        if (isValidProgram) {
+          const parsed = rawData as ProgramStructure;
+          const safe: ProgramStructure = {
+            ...parsed,
+            messageId: result.assistantMessage.id,
+            days: parsed.days.map((d) => ({
+              ...d,
+              exercises: Array.isArray(d.exercises) ? d.exercises : [],
+            })),
+          };
+          // Register this message as the authoritative session draft
+          sessionDraftMsgIdRef.current = result.assistantMessage.id;
+          setLatestProgram(safe);
+          console.log("[Program generated]", safe.programName);
+          console.log("[Program committed to state]", {
+            programName: safe.programName,
+            messageId: safe.messageId,
+            dayCount: safe.days.length,
+            systemSaved: result.systemSaved,
+          });
+        }
+      } catch {
+        // ignore malformed JSON
+      }
+    }
+
     // Signal the messages effect that a new message just arrived via streaming.
     // If that message contains program structuredData it will be registered as
     // the session draft (sessionDraftMsgIdRef) so the sidebar can display it.
