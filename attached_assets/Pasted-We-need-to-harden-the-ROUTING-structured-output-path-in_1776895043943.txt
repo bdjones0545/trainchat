@@ -1,0 +1,74 @@
+We need to harden the ROUTING structured output path in TrainChat.
+
+Context:
+The post-migration validation sweep found that the routing/extractProgramJSON path in guestChat.ts is the only structured JSON call in the codebase that does NOT enforce:
+response_format: { type: "json_object" }
+
+Right now it relies on:
+- prompt instruction telling the model to return pure JSON
+- markdown fence stripping regex
+- JSON.parse
+- temperature: 0
+
+That may work most of the time, but it is unnecessary structural risk, especially since every other structured JSON surface already uses response_format.
+
+GOAL
+Fix the ROUTING path so it is structurally consistent with the rest of the codebase.
+
+TARGET
+- guestChat.ts
+- specifically the extractProgramJSON routing / structured JSON generation call
+
+REQUIRED CHANGE
+Add:
+response_format: { type: "json_object" }
+
+to the OpenAI call used for the routing / extractProgramJSON structured output.
+
+REQUIREMENTS
+
+1. Keep this fix surgical.
+Do not rewrite the routing system.
+Do not redesign prompts.
+Do not change model assignments.
+Do not change business logic.
+Do not change downstream branching.
+
+2. Preserve the existing prompt and parsing flow as much as possible.
+The main goal is API-level JSON enforcement.
+
+3. After adding response_format, review the existing post-processing logic.
+If markdown fence stripping is now redundant, do NOT aggressively remove it unless you are certain it is safe.
+Prefer stability over cleanup.
+It is acceptable to leave the existing cleanup in place as a defensive layer.
+
+4. Preserve existing JSON.parse / try-catch behavior.
+We still want safe handling if the model returns something unexpected or the API call fails.
+
+5. Verify the function still returns the exact same shape expected downstream.
+No enum drift.
+No renamed keys.
+No structural changes to the returned object contract.
+
+6. Validate that this fix does not affect:
+- guest chat response generation
+- routing branch selection
+- downstream program generation flow
+- fallback behavior
+
+7. If there are multiple structured routing calls in guestChat.ts, ensure the correct one is updated.
+Only patch the call identified in the audit as extractProgramJSON.
+
+8. After implementation, report:
+- exact file(s) changed
+- whether only one line / one call site was updated
+- whether any cleanup was intentionally left in place for safety
+- whether compile/build passed cleanly
+
+SUCCESS CRITERIA
+- ROUTING structured output now uses response_format: { type: "json_object" }
+- no behavior redesign
+- no prompt rewrite
+- no model changes
+- build passes
+- routing path is now consistent with the rest of the structured JSON codebase

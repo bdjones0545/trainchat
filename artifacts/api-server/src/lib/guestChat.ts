@@ -161,6 +161,7 @@ ${assistantText.slice(0, 2000)}`;
         messages: [{ role: "user", content: extractionPrompt }],
         max_tokens: 1200,
         temperature: 0,
+        response_format: { type: "json_object" },
       }),
     });
 
