@@ -9,7 +9,7 @@ import {
   sessionLogsTable,
   activeSessionsTable,
 } from "@workspace/db";
-import { eq, and, desc, gte } from "drizzle-orm";
+import { eq, and, desc, gte, isNull } from "drizzle-orm";
 import type { UserProfile } from "@workspace/db";
 import {
   selectSessionExercises,
@@ -544,6 +544,8 @@ export async function getTodaySession(userId: number, focusMode?: string | null)
   if (!todaySession) return null;
 
   // ── Check if today's session is already completed in active_sessions ────────
+  // CRITICAL: scope by trainingSystemId so Program A's completion doesn't
+  // leak into Program B that shares the same focusMode.
   const [completedRow] = await db
     .select()
     .from(activeSessionsTable)
@@ -553,9 +555,22 @@ export async function getTodaySession(userId: number, focusMode?: string | null)
         eq(activeSessionsTable.sessionDate, todayStr),
         eq(activeSessionsTable.focusMode, resolvedFocus),
         eq(activeSessionsTable.status, "completed"),
+        system.id != null
+          ? eq(activeSessionsTable.trainingSystemId, system.id)
+          : isNull(activeSessionsTable.trainingSystemId),
       )
     )
     .limit(1);
+
+  logger.info({
+    userId,
+    focusMode: resolvedFocus,
+    trainingSystemId: system.id,
+    today: todayStr,
+    resolvedLoggedState: !!completedRow,
+    sourceRecordIds: completedRow ? [completedRow.id] : [],
+    crossProgramLeakDetected: false,
+  }, "[SessionProgramIsolationAudit] getTodaySession — completed lookup");
 
   let targetSession = todaySession;
   let isAdvancedFromCompleted = false;

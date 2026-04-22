@@ -3888,9 +3888,15 @@ export default function SystemPage() {
     completedAt?: string;
   }
 
+  const activeSystemId = activeSystemResolved?.id ?? null;
+
   const { data: activeSessionData, refetch: refetchActiveSession } = useQuery<ActiveSessionData>({
-    queryKey: ["active-session", focusMode],
-    queryFn: () => customFetch<ActiveSessionData>(`/api/active-session?focus=${encodeURIComponent(focusMode)}`),
+    queryKey: ["active-session", focusMode, activeSystemId],
+    queryFn: () => {
+      const params = new URLSearchParams({ focus: focusMode });
+      if (activeSystemId != null) params.set("trainingSystemId", String(activeSystemId));
+      return customFetch<ActiveSessionData>(`/api/active-session?${params.toString()}`);
+    },
     enabled: !!activeSystemResolved,
     staleTime: 0,
   });
@@ -3920,11 +3926,14 @@ export default function SystemPage() {
     try {
       await customFetch("/api/active-session/start", {
         method: "POST",
-        body: JSON.stringify({ focusMode }),
+        body: JSON.stringify({
+          focusMode,
+          ...(activeSystemId != null ? { trainingSystemId: activeSystemId } : {}),
+        }),
         headers: { "Content-Type": "application/json" },
       });
       refetchActiveSession();
-      queryClient.invalidateQueries({ queryKey: ["active-session", focusMode] });
+      queryClient.invalidateQueries({ queryKey: ["active-session", focusMode, activeSystemId] });
     } catch {
       // Non-fatal — UI still usable
     }
@@ -4881,11 +4890,14 @@ export default function SystemPage() {
             // so the backend's new resolver sees the completed row and advances to the next session.
             customFetch("/api/active-session/complete", {
               method: "POST",
-              body: JSON.stringify({ focusMode }),
+              body: JSON.stringify({
+                focusMode,
+                ...(activeSystemId != null ? { trainingSystemId: activeSystemId } : {}),
+              }),
               headers: { "Content-Type": "application/json" },
             })
               .then(() => {
-                queryClient.invalidateQueries({ queryKey: ["active-session", focusMode] });
+                queryClient.invalidateQueries({ queryKey: ["active-session", focusMode, activeSystemId] });
                 // Now safe to refetch today — backend will advance to next session
                 queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
                 queryClient.invalidateQueries({ queryKey: ["training-system-today", focusMode] });

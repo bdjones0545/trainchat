@@ -76,6 +76,8 @@ interface Props {
   isSaved?: boolean;
   isPremium?: boolean;
   hasActiveSystem?: boolean;
+  /** Training system ID — used for program-scoped session isolation */
+  trainingSystemId?: number;
   /** Saved program ID — used for progression tracking */
   savedProgramId?: number;
   /** Training goal — used for goal-differentiated progression */
@@ -603,6 +605,7 @@ function ProgramTab({
   isSaving,
   isSaved,
   isPremium,
+  trainingSystemId,
   savedProgramId,
   trainingGoal,
   changeTargets,
@@ -827,8 +830,12 @@ function ProgramTab({
   }
 
   const { data: activeSessionData, refetch: refetchActiveSession } = useQuery<ActiveSessionData>({
-    queryKey: ["active-session", panelFocusMode],
-    queryFn: () => customFetch<ActiveSessionData>(`/api/active-session?focus=${encodeURIComponent(panelFocusMode)}`),
+    queryKey: ["active-session", panelFocusMode, trainingSystemId ?? null],
+    queryFn: () => {
+      const params = new URLSearchParams({ focus: panelFocusMode });
+      if (trainingSystemId != null) params.set("trainingSystemId", String(trainingSystemId));
+      return customFetch<ActiveSessionData>(`/api/active-session?${params.toString()}`);
+    },
     enabled: !!isPremium && !!isSaved,
     staleTime: 0,
   });
@@ -878,14 +885,14 @@ function ProgramTab({
   });
 
   const startSessionMutation = useMutation({
-    mutationFn: (data: { savedProgramId?: number; dayNumber?: number; focusMode?: string }) =>
+    mutationFn: (data: { trainingSystemId?: number; savedProgramId?: number; dayNumber?: number; focusMode?: string }) =>
       customFetch<ActiveSessionData>("/api/active-session/start", {
         method: "POST",
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
       setLocalMode("active");
-      queryClient.invalidateQueries({ queryKey: ["active-session", panelFocusMode] });
+      queryClient.invalidateQueries({ queryKey: ["active-session", panelFocusMode, trainingSystemId ?? null] });
     },
   });
 
@@ -896,6 +903,7 @@ function ProgramTab({
 
     if (serverStatus === "not_started") {
       startSessionMutation.mutate({
+        trainingSystemId: trainingSystemId ?? undefined,
         savedProgramId: savedProgramId ?? undefined,
         dayNumber: dayNum,
         focusMode: panelFocusMode,
@@ -946,12 +954,21 @@ function ProgramTab({
         completedDayNum,
         savedProgramId: savedProgramId ?? null,
       });
+      console.log("[SessionProgramWriteAudit]", {
+        focusMode: panelFocusMode,
+        trainingSystemId: trainingSystemId ?? null,
+        completedDayNum,
+        writeSucceeded: true,
+      });
       customFetch("/api/active-session/complete", {
         method: "POST",
-        body: JSON.stringify({ focusMode: panelFocusMode }),
+        body: JSON.stringify({
+          focusMode: panelFocusMode,
+          ...(trainingSystemId != null ? { trainingSystemId } : {}),
+        }),
       })
         .then(() => {
-          queryClient.invalidateQueries({ queryKey: ["active-session", panelFocusMode] });
+          queryClient.invalidateQueries({ queryKey: ["active-session", panelFocusMode, trainingSystemId ?? null] });
         })
         .catch(() => {});
 
@@ -2447,6 +2464,7 @@ export default function LiveProgramPanel({
   isSaved,
   isPremium = false,
   hasActiveSystem = false,
+  trainingSystemId,
   savedProgramId,
   trainingGoal,
   newChangeSignal = 0,
@@ -2701,6 +2719,7 @@ export default function LiveProgramPanel({
             isSaving={isSaving}
             isSaved={isSaved}
             isPremium={isPremium}
+            trainingSystemId={trainingSystemId}
             savedProgramId={savedProgramId}
             trainingGoal={trainingGoal}
             changeTargets={changeTargets}

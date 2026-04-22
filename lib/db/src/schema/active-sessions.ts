@@ -1,9 +1,11 @@
 import { pgTable, serial, integer, timestamp, text, date } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
+import { trainingSystems } from "./training-system";
 
 export const activeSessionsTable = pgTable("active_sessions", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  trainingSystemId: integer("training_system_id").references(() => trainingSystems.id, { onDelete: "cascade" }),
   savedProgramId: integer("saved_program_id"),
   dayNumber: integer("day_number"),
   sessionDate: date("session_date").notNull(),
