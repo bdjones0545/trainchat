@@ -1,0 +1,231 @@
+CRITICAL FIX — RIGHT SIDEBAR SESSION LOGGING IS MARKING ALL SESSIONS AS LOGGED INSTEAD OF ONLY THE CURRENT SESSION
+
+CONTEXT:
+There is a severe session-state bug in the right sidebar / Live Program panel.
+
+Current bad behavior:
+- when the user logs one session from the right sidebar
+- the UI marks all sessions in that week as “Session logged!”
+- and sometimes sessions in following weeks also appear logged
+
+This is a trust-breaking issue.
+Logging must be scoped ONLY to the specific session that was completed.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make session logging update only the intended session instance, never sibling sessions in the same week and never future weeks.
+
+==================================================
+TASK 1 — TRACE THE SESSION LOGGING PATH END TO END
+==================================================
+
+Audit the full path when a session is logged from the right sidebar / Live Program panel.
+
+Trace:
+- which UI action triggers it
+- what payload is sent
+- whether the payload includes:
+  - trainingSystemId
+  - focusMode
+  - week number / week id
+  - session id
+  - day index / session index
+  - session date if applicable
+- what backend route handles it
+- what DB rows get updated
+- what frontend query cache gets invalidated/refreshed
+
+Return:
+
+[SessionLogScopeAudit] {
+  sourceSurface,
+  trainingSystemIdSent,
+  focusModeSent,
+  weekIdSent,
+  sessionIdSent,
+  sessionDateSent,
+  backendRoute,
+  dbRowsUpdated,
+  queryKeysInvalidated,
+  bugSource
+}
+
+==================================================
+TASK 2 — IDENTIFY THE ROOT SCOPE LEAK
+==================================================
+
+Find exactly why all sessions are being marked as logged.
+
+Likely causes to check:
+- update query scoped only by trainingSystemId, not sessionId
+- frontend computed “logged” state based on week-level summary instead of session-level state
+- same session completion flag reused for all sessions in a week
+- missing unique session instance identifier
+- future sessions inheriting logged state from a broad condition
+
+Determine whether the leak is:
+- backend update scope
+- frontend render logic
+- cache invalidation/refetch logic
+- shared session-state key
+- a combination
+
+==================================================
+TASK 3 — REQUIRE UNIQUE SESSION-INSTANCE TARGETING
+==================================================
+
+Logging a session must target exactly one session instance.
+
+The logging path must use a specific identifier set such as:
+- trainingSystemId
+- focusMode
+- weekId or weekNumber
+- sessionId
+- sessionDate / current occurrence if needed
+
+Do NOT allow “mark logged” actions that only know:
+- trainingSystemId
+or
+- current week
+without a session-level target
+
+==================================================
+TASK 4 — FIX BACKEND UPDATE SCOPE
+==================================================
+
+On the backend, ensure the log-session mutation updates ONLY:
+- the intended session
+- the intended week
+- the intended occurrence
+
+Never apply a broad update like:
+- all sessions in current week
+- all sessions matching day label
+- all sessions in future weeks
+- all sessions in active program
+
+Add guardrails so the mutation cannot complete if the request does not uniquely identify the session.
+
+==================================================
+TASK 5 — FIX FRONTEND LOGGED-STATE RENDERING
+==================================================
+
+Audit how “Session logged!” is rendered in the right panel.
+
+Make sure that UI state is based on:
+- the actual logged/completed state of that exact session
+
+Do NOT derive “logged” from:
+- any week-level status
+- generic block status
+- any active session object that is too broad
+- shared truthy state reused by sibling cards
+
+Each session card must independently determine whether it is logged.
+
+==================================================
+TASK 6 — FIX CACHE INVALIDATION / QUERY KEYS
+==================================================
+
+Audit query keys used by:
+- right sidebar / Live Program panel
+- Active Program views
+- week/session completion queries
+
+Make sure cache invalidation and refetch are session-aware and focus-aware.
+
+If needed, update query keys to include:
+- focusMode
+- trainingSystemId
+- weekId / weekNumber
+- sessionId
+
+Do not let one successful log mutate or visually refresh all sibling sessions into a logged state.
+
+==================================================
+TASK 7 — PREVENT FUTURE-WEEK CONTAMINATION
+==================================================
+
+Future weeks must never show “Session logged!” unless that specific future session has actually been completed.
+
+Add an explicit guard:
+- current session completion must not propagate to future-week session cards
+- future weeks should remain neutral until reached/logged
+
+If needed, distinguish:
+- session template
+- scheduled session instance
+- completed session instance
+
+==================================================
+TASK 8 — ADD AUDIT LOGGING
+==================================================
+
+Add logs:
+
+[SessionLogWriteAudit] {
+  trainingSystemId,
+  focusMode,
+  requestedWeek,
+  requestedSessionId,
+  updatedSessionIds,
+  updatedWeekNumbers,
+  updatedRowCount
+}
+
+[SessionLogRenderAudit] {
+  focusMode,
+  trainingSystemId,
+  weekNumber,
+  sessionId,
+  isLogged,
+  renderSource
+}
+
+We need to prove only one session is being written and rendered as logged.
+
+==================================================
+TASK 9 — VALIDATION
+==================================================
+
+Run these tests:
+
+1. In Strength:
+- log Day 1 in Week 1
+- confirm only Day 1 of Week 1 shows logged
+- Day 2 / Day 3 / Day 4 remain unlogged
+- Week 2+ remains unlogged
+
+2. In Speed:
+- log one session
+- confirm sibling sessions in the same week do not inherit logged state
+- future weeks remain untouched
+
+3. In Mobility:
+- log one session
+- confirm only that session card changes
+
+4. Refresh page:
+- confirm correct session remains logged
+- no additional sessions become logged after rehydrate
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. root cause of the over-broad logging behavior
+2. what backend scope was fixed
+3. what frontend logged-state logic was fixed
+4. what query/cache scope was fixed
+5. validation results for Strength / Speed / Mobility
+
+==================================================
+FINAL STANDARD
+==================================================
+
+When the user logs a session from the right sidebar / Live Program panel, ONLY that exact session should show as logged.
+
+No sibling sessions in the same week and no sessions in future weeks should ever be marked logged unless they were explicitly completed.
