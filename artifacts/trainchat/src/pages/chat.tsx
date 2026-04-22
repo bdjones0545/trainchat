@@ -999,6 +999,7 @@ export default function Chat() {
         shareMomentTimeoutRef.current = setTimeout(() => {
           const sys = activeSystem as any;
           const prog = latestProgram;
+          const d1 = prog?.days?.[0];
           const moment = buildShareMoment({
             type: "PROGRAM_GENERATED",
             programName: sys?.name ?? prog?.programName,
@@ -1009,8 +1010,18 @@ export default function Chat() {
             daysPerWeek: prog?.days?.length ?? sys?.weeklyFrequency,
             weekNumber: prog?.weekNumber ?? 1,
             blockLabel: prog?.blockLabel ?? undefined,
-            currentDayName: prog?.days?.[0]?.name ?? undefined,
+            currentDayName: d1?.name ?? undefined,
             blockLength: 4,
+            day1: d1
+              ? {
+                  name: d1.name,
+                  exercises: (d1.exercises ?? []).map((ex: any) => ({
+                    name: ex.name,
+                    sets: typeof ex.sets === "number" ? ex.sets : undefined,
+                    reps: ex.reps ?? undefined,
+                  })),
+                }
+              : undefined,
           });
           setPendingShareMoment(moment);
         }, 2000);
@@ -1032,18 +1043,29 @@ export default function Chat() {
           if (shareMomentTimeoutRef.current) clearTimeout(shareMomentTimeoutRef.current);
           shareMomentTimeoutRef.current = setTimeout(() => {
             const sys = activeSystem as any;
-            const prog = latestProgram ?? dbSystemProgram;
+            const prog = (latestProgram ?? dbSystemProgram) as any;
+            const d1 = prog?.days?.[0];
             const moment = buildShareMoment({
               type: "AGENT_ADJUSTMENT",
               programName: sys?.name,
               trainingStyle: sys?.trainingStyle ?? sys?.overarchingGoal,
               changeSummary: result.systemEdit!.changeSummary,
               triggerSource: "agent_adjustment",
-              splitType: (prog as any)?.splitType ?? sys?.trainingStyle,
-              daysPerWeek: (prog as any)?.days?.length ?? sys?.weeklyFrequency,
-              weekNumber: (prog as any)?.weekNumber ?? undefined,
-              blockLabel: (prog as any)?.blockLabel ?? undefined,
-              currentDayName: (prog as any)?.days?.[0]?.name ?? undefined,
+              splitType: prog?.splitType ?? sys?.trainingStyle,
+              daysPerWeek: prog?.days?.length ?? sys?.weeklyFrequency,
+              weekNumber: prog?.weekNumber ?? undefined,
+              blockLabel: prog?.blockLabel ?? undefined,
+              currentDayName: d1?.name ?? undefined,
+              day1: d1
+                ? {
+                    name: d1.name,
+                    exercises: (d1.exercises ?? []).map((ex: any) => ({
+                      name: ex.name,
+                      sets: typeof ex.sets === "number" ? ex.sets : undefined,
+                      reps: ex.reps ?? undefined,
+                    })),
+                  }
+                : undefined,
             });
             setPendingShareMoment(moment);
           }, 1500);

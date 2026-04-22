@@ -1,0 +1,160 @@
+We need to revise the Shareable Moments card again.
+
+The block-based version is better than the old one, but it still feels too abstract and not social enough. Instead of emphasizing training blocks as the main content, the share card should primarily display the actual Day 1 program.
+
+CORE CHANGE
+Replace the “training block” section as the main visual focus with a “Day 1 Program” preview.
+
+NEW GOAL
+The share card should feel like:
+- “Look what I created with the TrainChat Agent”
+- and then immediately show the first training day in a clean, premium, screenshot-worthy format
+
+WHY
+Users are much more likely to share:
+- an actual workout day
+than
+- abstract block labels like W1 / W2 / W3 / W4
+
+We want the card to feel specific, real, and valuable at a glance.
+
+WHAT TO CHANGE
+
+1. KEEP THE TOP OF THE CARD
+Keep:
+- TRAINCHAT AGENT badge
+- “Look what I created with the TrainChat Agent”
+- dynamic program title/subtitle
+
+2. REPLACE THE BLOCK SECTION
+Remove the training block chips as the primary section.
+
+Instead, add a section titled something like:
+- DAY 1 PROGRAM
+- TODAY’S SESSION
+- DAY 1 PREVIEW
+
+This section should render the actual first day of the program from live data.
+
+3. SHOW DAY 1 WORKOUT CONTENT
+Display Day 1 in a premium compact format.
+
+Preferred structure:
+- Day title (example: Lower Body Strength, Upper Power, Full Body 1, Speed + Strength)
+- Then list the first 3–5 exercises from Day 1
+- If available, include set/rep info in a compact way
+
+Example:
+DAY 1 PROGRAM
+Lower Body Strength
+- Trap Bar Deadlift — 4x5
+- Rear Foot Elevated Split Squat — 3x8
+- DB RDL — 3x10
+- Med Ball Scoop Toss — 3x5
+- Sled March — 3 rounds
+
+If the session has more than 5 exercises:
+- show first 4 or 5
+- then add a final row like:
+  + 3 more exercises
+This keeps the card clean.
+
+4. MAKE DAY 1 THE HERO CONTENT
+The Day 1 program preview should be the centerpiece of the card, more important than the small stat boxes.
+
+The user should instantly understand:
+- this is a real custom program
+- this is the first day
+- TrainChat Agent built it
+
+5. KEEP A SMALL PROGRAM SNAPSHOT
+Below or beside the Day 1 preview, keep 2–3 compact stat tiles only, such as:
+- 2x / week
+- Full Body
+- 4 weeks
+
+Do not let these overpower the Day 1 workout preview.
+
+6. DATA PRIORITY
+Use live program data.
+
+Priority:
+- actual Day 1 title
+- actual Day 1 exercise list
+- actual set/rep scheme if available
+- actual program title
+- actual frequency/style/block length
+
+Do not use placeholder workout text if real data exists.
+
+7. FALLBACK LOGIC
+If Day 1 is unavailable, then fallback in this order:
+- currently selected day
+- first day in the active week
+- first available training day in the program
+
+If exercise prescription is missing:
+- show exercise names only
+
+If day title is missing:
+- use “Day 1”
+
+If only partial exercise info exists:
+- still render what is available cleanly
+
+No null, undefined, or broken empty states.
+
+8. VISUAL DESIGN DIRECTION
+Keep the premium dark sports-tech aesthetic, but redesign the middle section to support a workout preview.
+
+Design direction for the Day 1 section:
+- clean titled panel inside the card
+- strong hierarchy
+- exercise list rows with subtle separators
+- exercise name in strong text
+- sets/reps smaller and secondary
+- high readability for screenshots
+- no clutter
+- no tiny unreadable text
+
+This should feel like something a user would genuinely post to Instagram story or send to a friend.
+
+9. CAPTION UPDATE
+Update the generated caption to match the new card.
+
+Examples:
+- “Look what I created with the TrainChat Agent — here’s Day 1.”
+- “Built my first training day with the TrainChat Agent.”
+- “Custom Day 1 program created with the TrainChat Agent.”
+- “TrainChat Agent mapped out my Day 1 session.”
+
+Make caption dynamic when possible using program/day data.
+
+10. OPTIONAL SECONDARY INFO
+If there is room, include a subtle footer line like:
+- Custom AI Coaching
+- Personalized by TrainChat Agent
+- Built from my goals
+
+But do not bring back the generic quote box.
+
+11. IMPLEMENTATION REQUIREMENTS
+Please:
+- locate the current Shareable Moments component
+- replace the block-focused section with a Day 1 workout preview
+- wire it to live active program data
+- keep save image / copy text / share working
+- ensure mobile screenshot quality is excellent
+- keep text large enough to read in a saved image
+- keep export layout balanced and uncluttered
+
+12. SUCCESS CRITERIA
+The new share card should:
+- clearly say this was created with the TrainChat Agent
+- show the actual Day 1 program
+- feel more real and valuable than a block overview
+- look premium enough that someone would actually share it
+- use live data and safe fallbacks
+- avoid generic filler content
+
+Implement the redesign directly.

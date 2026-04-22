@@ -11,6 +11,17 @@ export interface ShareMetric {
   value: string;
 }
 
+export interface ShareDay1Exercise {
+  name: string;
+  sets?: number;
+  reps?: string;
+}
+
+export interface ShareDay1 {
+  name?: string;
+  exercises: ShareDay1Exercise[];
+}
+
 export interface ShareMoment {
   type: ShareMomentType;
   title: string;
@@ -21,13 +32,14 @@ export interface ShareMoment {
   programName?: string;
   trainingStyle?: string;
   triggerSource: string;
-  /** Extended fields for rich card rendering */
   splitType?: string;
   daysPerWeek?: number;
   weekNumber?: number;
   blockLabel?: string;
   currentDayName?: string;
   blockLength?: number;
+  /** Day 1 program data for the hero workout preview */
+  day1?: ShareDay1;
 }
 
 export function buildShareMoment(params: {
@@ -43,13 +55,14 @@ export function buildShareMoment(params: {
   exercisesUpdated?: number;
   sessionsUpdated?: number;
   triggerSource?: string;
-  /** Extended params */
   splitType?: string;
   daysPerWeek?: number;
   weekNumber?: number;
   blockLabel?: string;
   currentDayName?: string;
   blockLength?: number;
+  /** Day 1 full data */
+  day1?: ShareDay1;
 }): ShareMoment {
   const {
     type,
@@ -70,11 +83,13 @@ export function buildShareMoment(params: {
     blockLabel,
     currentDayName,
     blockLength,
+    day1,
   } = params;
 
   const effectiveDays = daysPerWeek ?? weeklyFrequency;
   const freqLabel = effectiveDays ? `${effectiveDays}-day` : "";
   const progLabel = programName ?? trainingStyle ?? "training program";
+  const day1Title = day1?.name ?? currentDayName;
 
   switch (type) {
     case "PROGRAM_GENERATED": {
@@ -82,21 +97,18 @@ export function buildShareMoment(params: {
       const subtitle = programName
         ?? ([freqLabel, style].filter(Boolean).join(" ") || "Custom training program");
 
-      const captionParts: string[] = [];
-      if (freqLabel && style) {
-        captionParts.push(`Built my ${freqLabel} ${style} block with the TrainChat Agent.`);
-      } else if (freqLabel) {
-        captionParts.push(`Built my ${freqLabel} training block with the TrainChat Agent.`);
-      } else {
-        captionParts.push("Built my training program with the TrainChat Agent.");
-      }
+      const caption = day1Title
+        ? `Look what I created with the TrainChat Agent — here's Day 1: ${day1Title}.`
+        : style
+          ? `Built my ${[freqLabel, style].filter(Boolean).join(" ")} program with the TrainChat Agent.`
+          : "Built my training program with the TrainChat Agent.";
 
       return {
         type,
         title: "Look what I created with the TrainChat Agent",
         subtitle: subtitle.charAt(0).toUpperCase() + subtitle.slice(1),
         metrics: [],
-        captionText: captionParts[0],
+        captionText: caption,
         programName,
         trainingStyle,
         triggerSource,
@@ -104,8 +116,9 @@ export function buildShareMoment(params: {
         daysPerWeek: effectiveDays,
         weekNumber: weekNumber ?? blockWeek,
         blockLabel,
-        currentDayName,
+        currentDayName: day1Title,
         blockLength: blockLength ?? 4,
+        day1,
       };
     }
 
@@ -133,7 +146,8 @@ export function buildShareMoment(params: {
         daysPerWeek: effectiveDays,
         weekNumber: blockWeek ?? weekNumber,
         blockLabel,
-        currentDayName,
+        currentDayName: day1Title,
+        day1,
       };
     }
 
@@ -157,6 +171,7 @@ export function buildShareMoment(params: {
         daysPerWeek: effectiveDays,
         weekNumber: blockWeek ?? weekNumber,
         blockLabel: blockName ?? blockLabel,
+        day1,
       };
     }
 
@@ -179,6 +194,7 @@ export function buildShareMoment(params: {
         splitType,
         daysPerWeek: effectiveDays,
         blockLabel: blockName ?? blockLabel,
+        day1,
       };
     }
 
@@ -202,7 +218,8 @@ export function buildShareMoment(params: {
         daysPerWeek: effectiveDays,
         weekNumber: blockWeek ?? weekNumber,
         blockLabel,
-        currentDayName,
+        currentDayName: day1Title,
+        day1,
       };
     }
 
