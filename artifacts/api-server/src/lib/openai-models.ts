@@ -10,8 +10,12 @@ export const OPENAI_MODELS = {
   /** Primary model for the core AI chat/generation loop (lib/ai.ts) */
   CORE: "gpt-4o",
 
-  /** Lightweight routing/intent detection for guest chat */
-  ROUTING: "gpt-4o-mini",
+  /**
+   * Lightweight routing/intent detection for guest chat.
+   * Intentionally isolated for fast, low-cost intent detection — this role
+   * was migrated first as the safest, lowest-risk test path for model upgrades.
+   */
+  ROUTING: "gpt-4.1-mini",
 
   /** Full response generation inside guest chat */
   GUEST_RESPONSE: "gpt-4o",
