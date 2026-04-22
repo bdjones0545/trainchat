@@ -1,0 +1,122 @@
+We completed Step 3.
+
+Now complete Step 4 only:
+Migrate the structured edit layer to the newer flagship model while keeping fallback and share utilities unchanged.
+
+CURRENT STATE
+The model config currently maps:
+- CORE → gpt-4.1
+- ROUTING → gpt-4.1-mini
+- GUEST_RESPONSE → gpt-4.1
+- PROGRAM_GENERATION → gpt-4.1
+- EDIT_ENGINE → gpt-4o
+- EDIT_INTENT → gpt-4o
+- DIRECTIONS → gpt-4o
+- EXERCISE_FALLBACK → gpt-4o
+- SWAP_BACKSTOP → gpt-4o
+- SHARE_MOMENTS → gpt-4o
+
+GOAL
+Upgrade the structured edit layer only:
+- EDIT_ENGINE → gpt-4.1
+- EDIT_INTENT → gpt-4.1
+- DIRECTIONS → gpt-4.1
+
+Do not change any other roles in this step.
+
+WHY THESE THREE
+These belong together logically:
+- EDIT_INTENT decides what kind of edit the user wants
+- EDIT_ENGINE applies the edit to the program
+- DIRECTIONS generates exercise instruction content tied to the edited result
+
+They are behavior-sensitive but core to product quality, so we want them upgraded together before touching utility/fallback surfaces.
+
+REQUIREMENTS
+
+1. Update only these model constants in the centralized model config:
+- EDIT_ENGINE
+- EDIT_INTENT
+- DIRECTIONS
+
+Set each of them to:
+- "gpt-4.1"
+
+2. Keep these roles unchanged:
+- CORE
+- ROUTING
+- GUEST_RESPONSE
+- PROGRAM_GENERATION
+- EXERCISE_FALLBACK
+- SWAP_BACKSTOP
+- SHARE_MOMENTS
+
+3. Verify wiring in these files:
+- lib/edit-engine.ts → EDIT_ENGINE
+- lib/edit-intent-service.ts → EDIT_INTENT
+- lib/directions-service.ts → DIRECTIONS
+
+If any file is not using the centralized constant correctly, fix the wiring.
+Do not hardcode model names.
+
+4. Do not rewrite prompts unless absolutely necessary for compatibility.
+This step is a model migration, not a prompt redesign.
+
+5. Preserve all existing validators, schemas, parsing, and business rules.
+Especially protect:
+- structured edit intent outputs
+- edit action shape
+- mutation plans
+- any JSON parsing or schema validation
+- downstream program rendering assumptions
+
+6. Add light migration comments in the shared model config explaining:
+- these services were grouped because they form the structured edit layer
+- fallback and backstop services remain isolated for Step 5
+
+7. Validate carefully for behavioral drift:
+A. EDIT_INTENT
+- still classifies edit requests correctly
+- still returns expected structured intent/action shape
+- no enum drift
+- no malformed JSON
+
+B. EDIT_ENGINE
+- still applies edits safely
+- no schema drift
+- no missing fields
+- no unintended mutation logic changes
+
+C. DIRECTIONS
+- still produces useful, concise exercise instructions
+- does not become overly verbose
+- still fits current UI expectations
+
+8. Add minimal non-invasive hardening only if needed:
+- if parsing is already robust, preserve it
+- if the new model reveals a weak point in validation, tighten that exact spot only
+- do not redesign the whole flow
+
+9. Do not do Step 5 yet.
+Specifically do not migrate:
+- lib/harder-easier-fallback.ts
+- lib/swap-backstop-service.ts
+- routes/share-moments.ts
+
+10. After implementation, report:
+- exact files changed
+- updated model mapping table
+- confirmation that only EDIT_ENGINE, EDIT_INTENT, and DIRECTIONS moved
+- whether any parser/schema hardening was needed
+- whether compile/build passed cleanly
+- whether any noticeable output drift appeared in quick validation
+
+SUCCESS CRITERIA
+- EDIT_ENGINE uses gpt-4.1
+- EDIT_INTENT uses gpt-4.1
+- DIRECTIONS uses gpt-4.1
+- all earlier migrated roles remain unchanged
+- fallback/backstop/share roles remain unchanged
+- app compiles cleanly
+- structured edit flows stay intact
+- system is ready for Step 5

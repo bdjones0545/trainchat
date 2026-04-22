@@ -35,14 +35,26 @@ export const OPENAI_MODELS = {
    */
   PROGRAM_GENERATION: "gpt-4.1",
 
-  /** Applies structured edit plans to the training system */
-  EDIT_ENGINE: "gpt-4o",
+  /**
+   * Applies structured edit plans to the training system.
+   * Upgraded to gpt-4.1 in Step 4 — part of the structured edit layer.
+   * Fallback and backstop services remain on gpt-4o pending Step 5.
+   */
+  EDIT_ENGINE: "gpt-4.1",
 
-  /** Classifies natural-language edit intent into a machine-readable plan */
-  EDIT_INTENT: "gpt-4o",
+  /**
+   * Classifies natural-language edit intent into a machine-readable plan.
+   * Upgraded to gpt-4.1 in Step 4 — part of the structured edit layer.
+   * Fallback and backstop services remain on gpt-4o pending Step 5.
+   */
+  EDIT_INTENT: "gpt-4.1",
 
-  /** Generates exercise directions / coaching cues */
-  DIRECTIONS: "gpt-4o",
+  /**
+   * Generates exercise directions / coaching cues.
+   * Upgraded to gpt-4.1 in Step 4 — part of the structured edit layer.
+   * Fallback and backstop services remain on gpt-4o pending Step 5.
+   */
+  DIRECTIONS: "gpt-4.1",
 
   /** Fallback resolver for harder/easier progressions */
   EXERCISE_FALLBACK: "gpt-4o",
