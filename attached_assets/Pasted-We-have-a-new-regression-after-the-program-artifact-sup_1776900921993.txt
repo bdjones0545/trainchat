@@ -1,0 +1,88 @@
+We have a new regression after the program-artifact suppression fixes.
+
+Current behavior:
+- asking for a program no longer shows raw JSON
+- but the assistant response is now blank
+- and the Live Program panel still says “Ready to build”
+- so the program is not propagating/committing
+
+This means suppression is now happening, but commit/render of the program artifact is still failing or being bypassed.
+
+GOAL
+Separate “suppress raw artifact text” from “commit valid program to live state” so valid programs propagate, while malformed fragments are suppressed safely without producing a blank dead-end UI.
+
+IMPORTANT
+Do not change prompts or models.
+This is a commit/state/render contract fix.
+
+INVESTIGATION TASKS
+
+1. Trace one program request end-to-end and log these checkpoints:
+- raw assistant content received
+- structuredData present?
+- extractProgramData success?
+- isProgramFragment true/false?
+- suppression applied?
+- commit attempted?
+- commit succeeded?
+- latestProgram set?
+- live panel source chosen?
+- why Live Program stayed empty?
+
+2. Determine whether the current message is being classified as:
+- valid full program
+- fragment
+- neither
+
+3. Verify whether suppression is being triggered by isProgramFragment while commit requires extractProgramData.
+If yes, that mismatch is the regression.
+
+REQUIRED FIX
+
+4. Make the state machine explicit:
+
+CASE A — valid full program
+- suppress raw artifact text
+- commit program to latest/live draft state
+- render live program UI
+
+CASE B — fragment/truncated program
+- suppress raw artifact text
+- do NOT commit invalid data
+- show a visible fallback assistant message instead of a blank bubble
+  Example:
+  “I started building your program, but the response was cut off. Please try again.”
+  or reuse an existing retry/fallback UX if one exists
+
+CASE C — normal non-program content
+- render normally
+
+5. Do not allow this state:
+- suppression applied
+- no assistant fallback text
+- no program committed
+That is exactly the broken blank-screen behavior we now see.
+
+6. If backend structuredData extraction is failing for valid full programs, identify why.
+Check whether:
+- extraction is failing because of truncation
+- parseable full JSON is being misclassified as fragment
+- the frontend commit path depends too narrowly on structuredData instead of the shared extractor result
+
+7. Ensure the Live Program panel can use the same validated extracted program object that triggered suppression, not only backend structuredData, when appropriate and safe.
+
+SUCCESS CRITERIA
+
+After fix:
+- valid program requests populate the Live Program panel
+- raw JSON stays suppressed
+- malformed/truncated program responses do not show raw JSON
+- malformed/truncated cases show a visible fallback message, not an empty bubble
+- there is no path where content is hidden and nothing useful appears
+
+DELIVERABLES
+Report:
+- exact classification of the current failing case
+- exact file(s) changed
+- whether suppression/commit mismatch was the root cause
+- confirmation that valid programs now propagate and invalid fragments fail gracefully
