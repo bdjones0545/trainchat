@@ -1,0 +1,259 @@
+FIX LOADING / THINKING STATES — ONLY SHOW BUILD ANIMATION FOR REAL PROGRAM BUILDS, USE DIFFERENT WORKING STATES FOR Q&A / EDITS / ANALYSIS
+
+CONTEXT:
+Right now, when the user asks a normal question like:
+- “How do I fix reoccurring hamstring strains?”
+the system correctly answers the question and does NOT build a program.
+
+However, during processing it still shows the BUILD animation / build-progress UI:
+- “Working on it”
+- “Applying changes”
+- “Saving your program”
+- “Assigning sessions & exercises…”
+
+That is incorrect and confusing.
+
+The build animation should appear ONLY when the system is actually building or rebuilding a program.
+Other actions should have their own status UI.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make loading / thinking states accurately reflect the actual action being performed:
+- builds show build animation
+- edits show edit/update animation
+- question-answering shows analysis / response animation
+- non-build actions never show “saving your program” or “assigning sessions & exercises”
+
+==================================================
+TASK 1 — AUDIT ALL PROCESSING / LOADING STATE TYPES
+==================================================
+
+Find where the chat UI decides which “working” state to show during assistant processing.
+
+Trace:
+- loading state source
+- message type / intent source
+- whether it is currently defaulting to build mode too often
+- where the “Working on it / Applying changes / Saving your program” card is generated
+- where the animated status line (“Assigning sessions & exercises…”) is generated
+
+Return:
+
+[LoadingStateAudit] {
+  userMessage,
+  resolvedIntent,
+  currentUiStateType,
+  currentStatusCardType,
+  currentAnimatedLine,
+  bugSource
+}
+
+==================================================
+TASK 2 — DEFINE DISTINCT ACTION STATE TYPES
+==================================================
+
+Create explicit UI state types for at least:
+
+1. build_program
+2. edit_program
+3. answer_question
+4. analyze_or_explain
+5. logging_or_checkin
+6. general_chat
+
+Examples:
+
+build_program
+- Working on it
+- Reading your request
+- Designing your structure
+- Assigning sessions & exercises
+- Saving your program
+
+edit_program
+- Working on it
+- Reading your request
+- Applying changes
+- Updating your program
+
+answer_question / analyze_or_explain
+- Thinking this through
+- Reviewing your question
+- Preparing an answer
+
+logging_or_checkin
+- Reviewing your feedback
+- Updating your training context
+
+general_chat
+- Thinking
+- Preparing response
+
+==================================================
+TASK 3 — TIE UI STATE TO RESOLVED INTENT, NOT JUST “ASSISTANT IS WORKING”
+==================================================
+
+The loading UI must be selected from the actual resolved action/intent.
+
+Examples:
+- BUILD_PROGRAM / START_NEW_PROGRAM → build_program state
+- EDIT_PROGRAM / REFOCUS / ADD_EXERCISE / SWAP_EXERCISE → edit_program state
+- COACHING_GUIDANCE / QUESTION / EXPLANATION / GENERAL_ADVICE → answer_question or analyze_or_explain state
+- CHECKIN / SESSION_LOG / READINESS → logging_or_checkin state
+
+Do NOT let all assistant processing fall into the build-program UI by default.
+
+==================================================
+TASK 4 — BUILD ANIMATION MUST BE RESERVED FOR REAL BUILDS ONLY
+==================================================
+
+Only show program-build-specific copy such as:
+- “Assigning sessions & exercises…”
+- “Saving your program”
+- “Building your system”
+- anything implying a program artifact is being created
+
+when the system is actually:
+- building a new program
+- rebuilding/replacing a program
+- materializing a new structured program artifact
+
+Never show this for:
+- questions
+- explanations
+- general coaching guidance
+- advice
+- education
+- clarification
+
+==================================================
+TASK 5 — ADD A QUESTION / ANALYSIS WORKING STATE
+==================================================
+
+For questions like:
+- “How do I fix reoccurring hamstring strains?”
+- “What causes knee pain on squats?”
+- “What should I do if I’m stiff after sprinting?”
+
+Use a different state such as:
+
+Card title:
+Thinking it through
+
+Subtext:
+Reviewing your question and preparing the best answer.
+
+Animated lines examples:
+- Reviewing your question…
+- Organizing the key factors…
+- Preparing a concise answer…
+
+This should feel intelligent, but not like a program is being built.
+
+==================================================
+TASK 6 — ADD AN EDIT / PROGRAM-CHANGE STATE
+==================================================
+
+For real program edits, use a distinct state such as:
+
+Card title:
+Updating your program
+
+Steps:
+- Reading your request
+- Applying changes
+- Saving updates
+
+Animated lines examples:
+- Rebalancing this session…
+- Updating your exercises…
+- Saving your changes…
+
+This should feel different from full builds.
+
+==================================================
+TASK 7 — KEEP THE UX POLISHED AND CONSISTENT
+==================================================
+
+The user should be able to infer what the system is doing from the loading state.
+
+Examples:
+- If it’s answering → looks like answering
+- If it’s editing → looks like editing
+- If it’s building → looks like building
+
+Do not make the UI feel random or overly busy.
+Keep the visual design consistent; only the semantics and copy should change.
+
+==================================================
+TASK 8 — ADD AUDIT LOGGING
+==================================================
+
+Add logs:
+
+[AssistantUiStateAudit] {
+  userMessage,
+  resolvedIntent,
+  uiStateType,
+  statusCardTitle,
+  animatedLineType
+}
+
+We need proof that the UI state now matches the actual action type.
+
+==================================================
+TASK 9 — VALIDATION
+==================================================
+
+Test these exact cases:
+
+1. Ask a normal question
+- “How do I fix reoccurring hamstring strains?”
+Expected:
+- no build animation
+- question/analysis state only
+
+2. Build a new program
+- “Design a 4-day strength program”
+Expected:
+- full build animation
+
+3. Edit a program
+- “Make day 2 shorter”
+Expected:
+- update/edit animation, not build animation
+
+4. Check-in / log flow
+- submit feedback
+Expected:
+- check-in/logging state, not build animation
+
+5. General chat
+- “What do you think about this plan?”
+Expected:
+- answer/analyze state
+
+==================================================
+TASK 10 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. current bug source
+2. new UI state types added
+3. how state selection is now tied to resolved intent
+4. example loading copy for build / edit / question / logging
+5. validation results
+
+==================================================
+FINAL STANDARD
+==================================================
+
+The user should never see program-build UI unless the system is actually building a program.
+
+Questions should look like thinking/analysis.
+Edits should look like updating.
+Builds should look like building.
+
+The loading state must match the real function being performed.
