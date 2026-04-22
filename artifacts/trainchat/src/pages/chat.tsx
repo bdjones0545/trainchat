@@ -43,6 +43,7 @@ import CoachMemoryPanel from "@/components/chat/CoachMemoryPanel";
 import { useStreamMessage } from "@/hooks/useStreamMessage";
 import { clearAuthState, markOnboardingComplete, logRouteDecision, readDeviceId, readOnboardingComplete } from "@/lib/routing";
 import { resolveProgramState } from "@/lib/resolveProgramState";
+import { extractProgramData } from "@/lib/extractProgramArtifact";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 import ShareMomentPrompt from "@/components/share/ShareMomentPrompt";
 import ShareMomentModal from "@/components/share/ShareMomentModal";
@@ -695,39 +696,11 @@ export default function Chat() {
     }
 
     // ── No active DB system — draft path ─────────────────────────────────────
-    // Helper: try to extract a program data object from a message.
-    // Primary source: structuredData (pre-extracted by backend).
-    // Fallback: content field (in case backend extraction failed — raw JSON in code fence).
-    function extractProgramFromMessage(m: typeof messages[number]): ProgramStructure | null {
-      // Source 1: structuredData
-      if (m.structuredData) {
-        try {
-          const data = JSON.parse(m.structuredData);
-          if (data?._type === "system_edit" || data?._type === "fail_safe") return null;
-          if (data?.days && Array.isArray(data.days) && data.days.length > 0) return data;
-        } catch { /* fall through */ }
-      }
-      // Source 2: content code-fence fallback (backend extraction failed but JSON is in text)
-      if (m.content) {
-        const normalized = m.content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-        const fenceMatch = normalized.match(/```\s*json\s*\n([\s\S]*?)\n\s*```/i)
-          ?? normalized.match(/```\n([\s\S]*?)\n\s*```/);
-        if (fenceMatch) {
-          try {
-            const data = JSON.parse(fenceMatch[1]);
-            if (data?.days && Array.isArray(data.days) && data.days.length > 0 &&
-                data._type !== "system_edit" && data._type !== "fail_safe") {
-              return data;
-            }
-          } catch { /* not valid JSON */ }
-        }
-      }
-      return null;
-    }
-
+    // Use the shared extractor (same contract as MessageBubble render suppression
+    // and handleSend immediate commit — one contract, no drift).
     const programMessages = messages.filter((m) => {
       if (m.role !== "assistant") return false;
-      return extractProgramFromMessage(m) !== null;
+      return extractProgramData(m.structuredData, m.content) !== null;
     });
 
     if (programMessages.length > 0) {
@@ -751,15 +724,15 @@ export default function Chat() {
       // (or the same conversation after a DB reset) must NOT populate
       // the sidebar — that is the "ghost program" bug this block fixes.
       if (sessionDraftMsgIdRef.current !== null && sessionDraftMsgIdRef.current === last.id) {
-        const programData = extractProgramFromMessage(last);
+        const programData = extractProgramData(last.structuredData, last.content);
         if (programData) {
-          const parsed = programData as ProgramStructure;
+          const parsed = programData as unknown as ProgramStructure;
           const safe: ProgramStructure = {
             ...parsed,
             // Stamp the source message ID so resolveProgramState and the assertion
             // layer can verify this draft came from the registered session message.
             messageId: last.id,
-            days: Array.isArray(parsed.days) ? parsed.days.map((d) => ({
+            days: Array.isArray(parsed.days) ? parsed.days.map((d: any) => ({
               ...d,
               exercises: Array.isArray(d.exercises) ? d.exercises : [],
             })) : [],
@@ -964,101 +937,40 @@ export default function Chat() {
     });
 
     // ── IMMEDIATE PROGRAM COMMIT ──────────────────────────────────────────────
-    // If the assistant message contains a valid program, commit it directly to
-    // latestProgram NOW — before the messages query refetches. This ensures the
-    // sidebar is NEVER blank between "stream complete" and "weekData loaded".
-    // The guard (sessionDraftMsgIdRef) prevents ghost programs from old sessions.
-    //
-    // Two sources are tried in order:
-    //  1. result.assistantMessage.structuredData (primary — already extracted by backend)
-    //  2. result.assistantMessage.content (fallback — in case extraction failed on backend
-    //     due to CRLF, fence variant, etc. The program JSON is still in the raw content.)
+    // Uses the shared extractProgramData contract (same as MessageBubble render
+    // suppression and messages-effect restore). One extraction path, no drift.
     if (result.assistantMessage?.id) {
-      let rawData: any = null;
-      let extractedFrom = "none";
-
-      // Source 1: structuredData (pre-extracted by backend)
-      if (result.assistantMessage.structuredData) {
-        try {
-          rawData = JSON.parse(result.assistantMessage.structuredData);
-          extractedFrom = "structuredData";
-        } catch {
-          // malformed — fall through to content
-        }
-      }
-
-      // Source 2: fallback — extract from raw content (code fence or bare JSON)
-      if (!rawData && result.assistantMessage.content) {
-        const normalizedContent = result.assistantMessage.content
-          .replace(/\r\n/g, "\n")
-          .replace(/\r/g, "\n");
-        // Try code fence first (flexible: ```json, ```JSON, ``` json, etc.)
-        const fenceMatch = normalizedContent.match(/```\s*json\s*\n([\s\S]*?)\n\s*```/i)
-          ?? normalizedContent.match(/```\n([\s\S]*?)\n\s*```/);
-        if (fenceMatch) {
-          try {
-            rawData = JSON.parse(fenceMatch[1]);
-            extractedFrom = "content_fence";
-          } catch {
-            // ignore
-          }
-        }
-        // Last resort: largest {...} object in content
-        if (!rawData) {
-          const bareMatch = normalizedContent.match(/(\{[\s\S]{50,}\})\s*$/);
-          if (bareMatch) {
-            try {
-              rawData = JSON.parse(bareMatch[1]);
-              extractedFrom = "content_bare_json";
-            } catch {
-              // ignore
-            }
-          }
-        }
-      }
+      const msg = result.assistantMessage;
+      const rawData = extractProgramData(msg.structuredData, msg.content ?? "");
+      const extractedFrom = rawData
+        ? (msg.structuredData ? "structuredData" : "content_fallback")
+        : "none";
 
       let sdKeys = "none";
-      if (result.assistantMessage.structuredData) {
-        try { sdKeys = Object.keys(JSON.parse(result.assistantMessage.structuredData)).join(","); } catch { sdKeys = "parse_error"; }
+      if (msg.structuredData) {
+        try { sdKeys = Object.keys(JSON.parse(msg.structuredData)).join(","); } catch { sdKeys = "parse_error"; }
       }
       console.log("[Program generated]", {
-        assistantMsgId: result.assistantMessage.id,
-        hasStructuredData: !!result.assistantMessage.structuredData,
+        assistantMsgId: msg.id,
+        hasStructuredData: !!msg.structuredData,
         structuredDataKeys: sdKeys,
         extractedFrom,
         rawDataDays: rawData?.days?.length ?? null,
         rawDataProgramName: rawData?.programName ?? null,
+        isValidProgram: rawData !== null,
       });
 
-      // Validate: must be a real program object (not a system_edit or fail_safe token)
-      const isValidProgram =
-        rawData &&
-        rawData._type !== "system_edit" &&
-        rawData._type !== "fail_safe" &&
-        typeof rawData.programName === "string" &&
-        Array.isArray(rawData.days) &&
-        rawData.days.length > 0;
-
-      console.log("[Program generated] validator", {
-        isValidProgram,
-        hasType: rawData?._type ?? null,
-        hasProgramName: typeof rawData?.programName === "string",
-        hasDays: Array.isArray(rawData?.days),
-        dayCount: rawData?.days?.length ?? 0,
-      });
-
-      if (isValidProgram) {
-        const parsed = rawData as ProgramStructure;
+      if (rawData) {
+        const parsed = rawData as unknown as ProgramStructure;
         const safe: ProgramStructure = {
           ...parsed,
-          messageId: result.assistantMessage.id,
-          days: parsed.days.map((d: any) => ({
+          messageId: msg.id,
+          days: Array.isArray(parsed.days) ? parsed.days.map((d: any) => ({
             ...d,
             exercises: Array.isArray(d.exercises) ? d.exercises : [],
-          })),
+          })) : [],
         };
-        // Register this message as the authoritative session draft
-        sessionDraftMsgIdRef.current = result.assistantMessage.id;
+        sessionDraftMsgIdRef.current = msg.id;
         setLatestProgram(safe);
         console.log("[Program committed to state]", {
           programName: safe.programName,

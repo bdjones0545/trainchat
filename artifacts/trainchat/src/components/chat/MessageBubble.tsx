@@ -3,6 +3,7 @@ import { Share2 } from "lucide-react";
 import SystemUpdateCard from "./SystemUpdateCard";
 import BuildSummaryCard from "./BuildSummaryCard";
 import { buildShareMoment, type ShareMoment } from "@/types/share-moments";
+import { extractProgramData, stripProgramJson } from "@/lib/extractProgramArtifact";
 
 interface Message {
   id: number;
@@ -219,10 +220,44 @@ export default function MessageBubble({ message, onViewProgram, onShowChange, on
   const isUser = message.role === "user";
   const parsed = parseStructuredData(message.structuredData);
   const isSystemEdit = !isUser && parsed.type === "system_edit";
-  const hasProgram = !isUser && parsed.type === "program";
-  const isInitialBuild = !isUser && parsed.type === "program_build";
   const isBlockComplete = !isUser && parsed.type === "block_completed";
   const isSessionLogged = !isUser && parsed.type === "session_logged";
+
+  // ── MESSAGE-LEVEL PROGRAM-ARTIFACT SUPPRESSION ───────────────────────────
+  // Use the shared extractor (same contract as chat.tsx commit/restore paths).
+  // Detect program artifacts from BOTH structuredData and raw content so bare
+  // JSON (no code fence), fenced ```json, and fenced ``` are all caught here,
+  // before any content is passed down to RichContent's line-parser.
+  const programArtifact = !isUser
+    ? extractProgramData(message.structuredData, message.content)
+    : null;
+  const isMessageProgramArtifact = programArtifact !== null;
+
+  // isInitialBuild: structuredData-only (needs _buildMeta flag from backend)
+  const isInitialBuild = !isUser && parsed.type === "program_build";
+  // hasProgram: structuredData says "program" OR the shared extractor found one in content
+  const hasProgram = !isUser && (parsed.type === "program" || (isMessageProgramArtifact && !isInitialBuild));
+
+  // Strip the JSON blob from content before rendering — leaves conversational
+  // text (e.g. "Here's your program!") but removes the raw JSON in every format.
+  const displayContent = isMessageProgramArtifact
+    ? stripProgramJson(message.content)
+    : message.content;
+
+  if (!isUser) {
+    console.log("[Program render suppression check]", {
+      messageId: message.id,
+      hasStructuredData: !!message.structuredData,
+      parsedType: parsed.type,
+      isMessageProgramArtifact,
+      extractedFrom: isMessageProgramArtifact
+        ? (message.structuredData ? "structuredData" : "content_fallback")
+        : "none",
+      suppressionApplied: isMessageProgramArtifact,
+      contentLengthBefore: message.content.length,
+      contentLengthAfter: displayContent.length,
+    });
+  }
 
   // Determine if a session log is "wow" worthy (meaningful adaptation signal)
   const sessionLogIsWow = isSessionLogged && (() => {
@@ -292,7 +327,7 @@ export default function MessageBubble({ message, onViewProgram, onShowChange, on
         ) : (
           /* Standard assistant bubble for all non-edit messages */
           <div className="max-w-[90%] px-4 py-3 rounded-2xl rounded-tl-sm bg-card border border-border text-foreground">
-            <RichContent text={message.content} />
+            <RichContent text={displayContent} />
 
             {/* Build summary card — shown for new initial program builds */}
             {isInitialBuild && (

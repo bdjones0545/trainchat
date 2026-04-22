@@ -1,0 +1,90 @@
+We still have one remaining raw-program-render bug.
+
+Observed behavior:
+Program generation no longer only appears as fenced ```json blocks. It is now still rendering as a bare/preformatted JSON block inside the assistant chat bubble.
+
+This means the previous code-fence interceptor fixed fenced JSON suppression, but the app still allows valid program artifacts to render as raw code/text through another rendering branch.
+
+GOAL
+Add a message-level program-artifact suppression layer so valid generated programs never render as raw JSON in chat, regardless of format.
+
+Important:
+Do not change prompts.
+Do not change model config.
+Do not change backend AI generation.
+This is a frontend render/interception fix only.
+
+INVESTIGATE
+
+1. Trace the full assistant message render path in MessageBubble.tsx / RichContent:
+- raw markdown/string path
+- fenced code block path
+- bare JSON / preformatted block path
+- any syntax-highlight or <pre> rendering path
+- any branch that bypasses the line-parser loop
+
+2. Confirm whether the current suppression only applies to fenced code blocks.
+The screenshot suggests bare JSON is still falling into a generic code/pre renderer.
+
+REQUIRED FIX
+
+3. Add a message-level artifact detection step before raw assistant content is rendered.
+
+For each assistant message:
+- inspect structuredData first
+- if missing, inspect content
+- detect whether the message contains a valid program object
+- reuse existing program extraction logic if possible (do not duplicate inconsistent logic)
+
+If the message resolves to a valid program artifact:
+- suppress raw JSON/code rendering for that assistant bubble
+- allow the program to exist only in the right panel / active program UI
+- optionally render nothing or a compact “Program created” system-style placeholder, depending on current UX pattern
+
+4. Make detection format-agnostic.
+It must work for:
+- fenced ```json blocks
+- fenced ``` blocks without language
+- bare JSON object content
+- preformatted code-style content
+- any assistant message content that parses to a valid program object
+
+5. Reuse one shared helper if possible:
+Example idea:
+- extractProgramFromMessage(message)
+used by:
+- immediate commit
+- messages effect
+- message render suppression
+
+The important part is:
+one program extraction contract, not multiple drifting versions.
+
+6. Keep non-program code rendering intact.
+If a message contains real code or non-program JSON, it should still render normally.
+Only suppress messages that validate as actual program artifacts.
+
+7. Add debug logs temporarily:
+- [Program render suppression check]
+- message id
+- structuredData present?
+- extracted from structuredData or content?
+- valid program artifact?
+- suppression applied?
+
+SUCCESS CRITERIA
+
+After fix:
+- asking for a program does not show raw JSON in chat in any format
+- valid program messages are suppressed at the message level
+- right panel / active program still updates correctly
+- non-program code blocks still render normally
+- one shared extraction contract is used across commit + restore + render suppression
+
+DELIVERABLES
+Report:
+- exact render path causing the leak
+- exact file(s) changed
+- whether suppression was moved from block-level to message-level
+- whether a shared extractor was reused
+- confirmation that raw program JSON no longer appears in chat
