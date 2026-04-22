@@ -56,14 +56,26 @@ export const OPENAI_MODELS = {
    */
   DIRECTIONS: "gpt-4.1",
 
-  /** Fallback resolver for harder/easier progressions */
-  EXERCISE_FALLBACK: "gpt-4o",
+  /**
+   * Fallback resolver for harder/easier progressions.
+   * Migrated last (Step 5) — utility/fallback surface.
+   * Completes the first full model modernization pass.
+   */
+  EXERCISE_FALLBACK: "gpt-4.1",
 
-  /** Last-resort exercise swap when the local graph has no match */
-  SWAP_BACKSTOP: "gpt-4o",
+  /**
+   * Last-resort exercise swap when the local graph has no match.
+   * Migrated last (Step 5) — utility/fallback surface.
+   * Completes the first full model modernization pass.
+   */
+  SWAP_BACKSTOP: "gpt-4.1",
 
-  /** Generates captions and summaries for share moments */
-  SHARE_MOMENTS: "gpt-4o",
+  /**
+   * Generates captions and summaries for share moments.
+   * Migrated last (Step 5) — utility/fallback surface.
+   * Completes the first full model modernization pass.
+   */
+  SHARE_MOMENTS: "gpt-4.1",
 } as const;
 
 export type OpenAIModelKey = keyof typeof OPENAI_MODELS;

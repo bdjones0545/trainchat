@@ -1,0 +1,110 @@
+We completed Step 4.
+
+Now complete Step 5 only:
+Migrate the remaining utility/fallback surfaces to the newer shared model layer and finish the initial OpenAI migration pass.
+
+CURRENT STATE
+The model config currently maps:
+- CORE → gpt-4.1
+- ROUTING → gpt-4.1-mini
+- GUEST_RESPONSE → gpt-4.1
+- PROGRAM_GENERATION → gpt-4.1
+- EDIT_ENGINE → gpt-4.1
+- EDIT_INTENT → gpt-4.1
+- DIRECTIONS → gpt-4.1
+- EXERCISE_FALLBACK → gpt-4o
+- SWAP_BACKSTOP → gpt-4o
+- SHARE_MOMENTS → gpt-4o
+
+GOAL
+Upgrade the final three remaining roles:
+- EXERCISE_FALLBACK → gpt-4.1
+- SWAP_BACKSTOP → gpt-4.1
+- SHARE_MOMENTS → gpt-4.1
+
+Do not change anything else in this step.
+
+WHY THESE THREE
+These are the remaining non-core utility surfaces:
+- EXERCISE_FALLBACK = harder/easier and fallback swap logic
+- SWAP_BACKSTOP = last-resort exercise replacement safety layer
+- SHARE_MOMENTS = share caption / summary generation
+
+These are important, but they are lower-risk to migrate last because they are not the main conversational or structured edit spine.
+
+REQUIREMENTS
+
+1. Update only these model constants in the centralized model config:
+- EXERCISE_FALLBACK
+- SWAP_BACKSTOP
+- SHARE_MOMENTS
+
+Set each to:
+- "gpt-4.1"
+
+2. Keep all other roles unchanged:
+- CORE
+- ROUTING
+- GUEST_RESPONSE
+- PROGRAM_GENERATION
+- EDIT_ENGINE
+- EDIT_INTENT
+- DIRECTIONS
+
+3. Verify wiring in these files:
+- lib/harder-easier-fallback.ts → EXERCISE_FALLBACK
+- lib/swap-backstop-service.ts → SWAP_BACKSTOP
+- routes/share-moments.ts → SHARE_MOMENTS
+
+If any file is not using the shared constant correctly, fix it.
+Do not hardcode model IDs.
+
+4. Do not rewrite prompts unless absolutely necessary for compatibility.
+This step is migration only, not prompt redesign.
+
+5. Preserve existing behavior:
+A. EXERCISE_FALLBACK
+- still returns sensible harder/easier alternatives
+- still respects exercise family and movement logic
+- no malformed JSON or schema drift
+
+B. SWAP_BACKSTOP
+- still provides safe valid last-resort exercise replacements
+- still behaves conservatively
+- no broken shape assumptions
+
+C. SHARE_MOMENTS
+- still generates concise, usable share captions/summaries
+- does not become bloated, awkward, or overly verbose
+- still fits current UI/social share expectations
+
+6. Preserve all existing validation/parsing.
+If there is already try/catch or JSON validation, keep it.
+Only add minimal hardening if an actual issue appears.
+
+7. Add a small migration comment in the shared model config explaining:
+- these were migrated last because they are utility/fallback surfaces
+- this completes the first full model modernization pass
+
+8. After implementation, run a final verification pass:
+- no remaining gpt-4o roles should exist in the model config
+- all OpenAI roles should now be centralized and updated
+- compile/build should pass cleanly
+- no hardcoded model strings should exist outside the shared config file
+
+9. Deliver a final report with:
+- exact files changed
+- final model mapping table
+- confirmation that EXERCISE_FALLBACK, SWAP_BACKSTOP, and SHARE_MOMENTS were the only roles changed in Step 5
+- whether any parser/validation hardening was needed
+- whether compile/build passed
+- confirmation that the initial migration pass is complete
+
+SUCCESS CRITERIA
+- EXERCISE_FALLBACK uses gpt-4.1
+- SWAP_BACKSTOP uses gpt-4.1
+- SHARE_MOMENTS uses gpt-4.1
+- all roles are now centralized and migrated
+- no gpt-4o roles remain in active config
+- app compiles cleanly
+- first-pass OpenAI migration is complete
