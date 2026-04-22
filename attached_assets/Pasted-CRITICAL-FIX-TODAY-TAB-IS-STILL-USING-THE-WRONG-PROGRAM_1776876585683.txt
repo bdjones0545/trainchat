@@ -1,0 +1,226 @@
+CRITICAL FIX — TODAY TAB IS STILL USING THE WRONG PROGRAM / WRONG SESSION SOURCE INSTEAD OF THE CURRENT ACTIVE PROGRAM
+
+CONTEXT:
+The bug is still present.
+
+Observed mismatch:
+- Live Program / right sidebar shows the real current active program and current day
+- Today tab in Active Programs shows a different session with different exercises
+- both are in the same focus (Strength), so this is not just cross-focus bleed
+- Today is still resolving from stale or incorrect program/session state
+
+This is a severe trust-breaking issue.
+The Today tab must use the exact same active training system source of truth as the Live Program panel.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Force the Today tab to resolve ONLY from the canonical active training system for the active focus, and never from stale cached session data, old derived workout data, or alternate program state.
+
+==================================================
+TASK 1 — TRACE THE LIVE PROGRAM SOURCE VS TODAY SOURCE AGAIN
+==================================================
+
+For the SAME focus mode, print and compare:
+
+1. Live Program panel source
+2. Today tab source
+
+For each, log:
+- trainingSystemId
+- trainingSystemName
+- week number
+- day number
+- session title
+- exercise names
+- query key
+- endpoint
+- resolver function
+- source type (db_active / cached / derived / local / legacy)
+
+Add logs:
+
+[TodayVsLiveSourceAudit] {
+  focusMode,
+  liveTrainingSystemId,
+  liveProgramName,
+  liveWeekNumber,
+  liveDayNumber,
+  liveSessionTitle,
+  liveExerciseNames,
+  todayTrainingSystemId,
+  todayProgramName,
+  todayWeekNumber,
+  todayDayNumber,
+  todaySessionTitle,
+  todayExerciseNames,
+  sourceMismatch
+}
+
+We need proof of the exact divergence.
+
+==================================================
+TASK 2 — FIND THE LEGACY / STALE TODAY RESOLVER
+==================================================
+
+Identify where Today is still getting its session from.
+
+Likely causes:
+- old “today workout” resolver
+- stale local state
+- cached session plan not tied to active trainingSystemId
+- session history fallback
+- previous active system in memory
+- derived day/session calculation independent of the active program query
+
+Find the exact function and file responsible.
+
+==================================================
+TASK 3 — MAKE TODAY DERIVE DIRECTLY FROM CANONICAL ACTIVE PROGRAM
+==================================================
+
+For a given focusMode, Today must follow this rule:
+
+1. fetch canonical active training system from DB
+2. read the current active week/day/session from that exact training system
+3. render the session directly from that system
+4. never independently select another session/program
+
+Do NOT let Today:
+- compute its own alternate program
+- read a different session store
+- use “most recent” anything
+- use a leftover local session plan
+- use a legacy today-workout structure if DB active program exists
+
+==================================================
+TASK 4 — REQUIRE trainingSystemId LOCKING IN TODAY
+==================================================
+
+The Today surface must be explicitly locked to:
+- focusMode
+- active trainingSystemId
+
+If Live Program says active trainingSystemId = X,
+Today must also use X.
+
+If Today resolves anything else:
+- reject it in dev
+- log it as a mismatch
+
+==================================================
+TASK 5 — REMOVE ANY STALE SESSION PLAN CACHE
+==================================================
+
+Audit Today tab for:
+- local derived exercise plan state
+- stale session cache
+- memoized old program data
+- old “exercise plan” structures not keyed by trainingSystemId
+
+Any session/exercise plan shown in Today must be keyed by:
+- focusMode
+- trainingSystemId
+- week number
+- day/session id
+
+If not, fix it.
+
+==================================================
+TASK 6 — FIX QUERY KEYS / CACHE IDENTITY
+==================================================
+
+Ensure Today queries are scoped with enough identity.
+
+They should include at minimum:
+- focusMode
+- trainingSystemId
+- current week/day if relevant
+
+If Today is using a broad key like:
+- ["today-session"]
+or
+- ["active-program", focusMode]
+without trainingSystemId identity
+fix that now.
+
+Also invalidate/refetch correctly after:
+- build
+- refine
+- focus switch
+- active system change
+- reset
+- session logging
+- program replacement
+
+==================================================
+TASK 7 — ADD A HARD DEV GUARD
+==================================================
+
+Add a dev/runtime guard:
+
+If:
+Today.trainingSystemId !== LiveProgram.trainingSystemId
+for the same focus
+
+Then:
+- emit a critical console/log warning
+- optionally render a dev-only warning
+- never silently ignore this mismatch
+
+Add log:
+
+[ActiveProgramMismatchAudit] {
+  focusMode,
+  liveTrainingSystemId,
+  liveProgramName,
+  todayTrainingSystemId,
+  todayProgramName,
+  mismatchDetected,
+  blockedLegacyResolver
+}
+
+==================================================
+TASK 8 — VALIDATION
+==================================================
+
+Test this exact scenario:
+
+1. Open Strength
+2. Open Live Program panel
+3. Note program name, session title, and first 3 exercises
+4. Open Today
+5. Confirm Today shows the exact same current session from the same trainingSystemId
+
+Repeat for:
+- Speed
+- Mobility
+
+Also test after:
+- refine program
+- switch focus away and back
+- refresh page
+- log a session
+- build a new program in the same focus
+
+Today and Live Program must stay in sync through all of it.
+
+==================================================
+TASK 9 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. exact file/function where Today was still resolving from the wrong source
+2. exact source mismatch found in logs
+3. what was changed so Today now uses canonical active training system data
+4. what query/cache identity fixes were made
+5. validation results for Strength / Speed / Mobility
+
+==================================================
+FINAL STANDARD
+==================================================
+
+For any focus mode, the Today tab and the Live Program panel must resolve from the same active training system and the same current session.
+
+The Today tab must never show a different program or different exercises than the current active program for that focus.

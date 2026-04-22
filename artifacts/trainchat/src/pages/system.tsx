@@ -553,6 +553,8 @@ interface TodayViewProps {
   sessionLoggedToday?: boolean;
   sessionInProgress?: boolean;
   checkedInToday?: boolean;
+  /** Active training system ID — locks the Today query key to the current program */
+  activeSystemId?: number | null;
 }
 
 function coachingNotesToBullets(notes: string, max = 3): string[] {
@@ -564,12 +566,17 @@ function coachingNotesToBullets(notes: string, max = 3): string[] {
   return parts.slice(0, max);
 }
 
-function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditComplete, onLogSession, onCheckIn, onStartSession, sessionLoggedToday, sessionInProgress, checkedInToday }: TodayViewProps) {
+function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditComplete, onLogSession, onCheckIn, onStartSession, sessionLoggedToday, sessionInProgress, checkedInToday, activeSystemId }: TodayViewProps) {
   const { focusMode } = useFocusMode();
+  // ── Query key includes activeSystemId so Today ALWAYS refetches when the active
+  // program changes. Without this, React Query serves the old program's cache
+  // even after a new program is built or the user switches focus lanes.
   const { data: today, isLoading, error } = useQuery({
-    queryKey: ["training-system-today", focusMode],
+    queryKey: ["training-system-today", focusMode, activeSystemId ?? null],
     queryFn: () => fetchToday(focusMode),
     retry: false,
+    staleTime: 0,
+    enabled: activeSystemId !== undefined,
   });
 
   // ── Brief post-log flash state: shows "Session logged" for 1.5s then resolves ──
@@ -599,14 +606,57 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditC
   // to make sidebar/Today divergence immediately visible in the browser console.
   useEffect(() => {
     if (!import.meta.env.DEV || !today) return;
+
+    const todaySystemId = (today as any).trainingSystemId ?? null;
+    const mismatch = activeSystemId != null && todaySystemId != null && todaySystemId !== activeSystemId;
+
     console.log("[ActiveProgramSource]", {
       source: "db_active_program",
       sessionId: today.id ?? null,
       sessionLabel: today.label ?? null,
+      todayTrainingSystemId: todaySystemId,
+      activeSystemId: activeSystemId ?? null,
       isAdvancedFromCompleted: today.isAdvancedFromCompleted ?? false,
       isWeekComplete: today.isWeekComplete ?? false,
       day1Exercises: (today.exercises ?? []).map((e: { name: string }) => e.name),
     });
+
+    // [TodayVsLiveSourceAudit] — prints whenever Today data loads, lets you compare
+    // against the [FocusSidebarAudit] log from the Live Program panel.
+    console.log("[TodayVsLiveSourceAudit]", {
+      focusMode,
+      todayTrainingSystemId: todaySystemId,
+      activeSystemIdFromParent: activeSystemId ?? null,
+      todaySessionId: today.id ?? null,
+      todaySessionLabel: today.label ?? null,
+      todayWeekNumber: (today as any).currentWeek?.weekNumber ?? null,
+      todayExerciseNames: (today.exercises ?? []).map((e: { name: string }) => e.name),
+      todayStatus: today.isWeekComplete
+        ? "week_complete"
+        : today.isAdvancedFromCompleted
+          ? "next_after_completion"
+          : sessionLoggedToday ? "completed" : sessionInProgress ? "in_progress" : "not_started",
+    });
+
+    // Mismatch guard — if Today is showing a different system than the canonical active one
+    if (mismatch) {
+      console.error("[ActiveProgramMismatchAudit] MISMATCH DETECTED", {
+        focusMode,
+        activeSystemId,
+        todayTrainingSystemId: todaySystemId,
+        todaySessionLabel: today.label ?? null,
+        mismatchDetected: true,
+        blockedLegacyResolver: false,
+      });
+    } else {
+      console.log("[ActiveProgramMismatchAudit]", {
+        focusMode,
+        activeSystemId: activeSystemId ?? null,
+        todayTrainingSystemId: todaySystemId,
+        mismatchDetected: false,
+      });
+    }
+
     console.log("[TodayResolverAudit]", {
       focusMode,
       displayedSessionId: today.id ?? null,
@@ -625,7 +675,7 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditC
           ? "advanced_from_completed"
           : "day_of_week_match_or_first",
     });
-  }, [today]);
+  }, [today, activeSystemId]);
 
   if (isLoading) return <ViewSkeleton />;
   if (error) {
@@ -3850,11 +3900,12 @@ export default function SystemPage() {
   const sessionInProgress = serverSessionStatus === "in_progress";
 
   // ── Parent-level today data — used to derive effective CTA states for action bar ──
+  // Key includes activeSystem.id so this refetches when the active program changes.
   const { data: todayDataParent } = useQuery({
-    queryKey: ["training-system-today", focusMode],
+    queryKey: ["training-system-today", focusMode, activeSystemResolved?.id ?? null],
     queryFn: () => fetchToday(focusMode),
     retry: false,
-    staleTime: 10000,
+    staleTime: 0,
     enabled: !!activeSystemResolved,
   });
   // Mirrors the same logic in TodayView: if the backend has advanced past the completed
@@ -4559,6 +4610,7 @@ export default function SystemPage() {
                     sessionLoggedToday={sessionLoggedToday}
                     sessionInProgress={sessionInProgress}
                     checkedInToday={!!readinessToday}
+                    activeSystemId={activeSystem?.id ?? null}
                   />
                 </div>
               )}

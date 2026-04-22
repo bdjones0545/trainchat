@@ -98,15 +98,30 @@ router.get("/training-system/today", requireAuth, async (req, res): Promise<void
     const todaySession = await getTodaySession(userId, focusMode);
 
     if (process.env.NODE_ENV !== "production" && todaySession) {
+      const activeSystemForAudit = await getActiveTrainingSystem(userId, focusMode);
+      const mismatch = !!activeSystemForAudit &&
+        !!(todaySession as any).trainingSystemId &&
+        (todaySession as any).trainingSystemId !== activeSystemForAudit.id;
       console.log("[BuildAudit:TodaySource]", JSON.stringify({
         systemId: (todaySession as any).trainingSystemId ?? null,
+        activeSystemId: activeSystemForAudit?.id ?? null,
+        mismatch,
         sessionId: todaySession.id,
         sessionLabel: todaySession.label,
         dayOfWeek: todaySession.dayOfWeek,
         todayDow: new Date().getDay(),
         matchedByDow: todaySession.dayOfWeek === new Date().getDay(),
+        isAdvancedFromCompleted: (todaySession as any).isAdvancedFromCompleted ?? false,
+        isWeekComplete: (todaySession as any).isWeekComplete ?? false,
         exercises: (todaySession.exercises ?? []).map((e: { name: string }) => e.name),
       }));
+      if (mismatch) {
+        console.error("[CRITICAL:TodaySystemMismatch]", {
+          expected: activeSystemForAudit?.id,
+          got: (todaySession as any).trainingSystemId,
+          focusMode,
+        });
+      }
     }
 
     res.json(todaySession ?? null);
