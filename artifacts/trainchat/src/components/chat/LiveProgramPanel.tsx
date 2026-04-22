@@ -827,8 +827,8 @@ function ProgramTab({
   }
 
   const { data: activeSessionData, refetch: refetchActiveSession } = useQuery<ActiveSessionData>({
-    queryKey: ["active-session"],
-    queryFn: () => customFetch<ActiveSessionData>("/api/active-session"),
+    queryKey: ["active-session", panelFocusMode],
+    queryFn: () => customFetch<ActiveSessionData>(`/api/active-session?focus=${encodeURIComponent(panelFocusMode)}`),
     enabled: !!isPremium && !!isSaved,
     staleTime: 0,
   });
@@ -842,25 +842,50 @@ function ProgramTab({
   const [sessionCompleting, setSessionCompleting] = useState(false);
   const [sessionResult, setSessionResult] = useState<{ progressions: string[] } | null>(null);
 
-  // Derived 4-state mode for the session banner UI
+  // Derived 4-state mode for the session banner UI.
+  // IMPORTANT: serverStatus is scoped to the specific expanded day — we compare
+  // activeSessionData.dayNumber to the expanded day's dayNumber so that completing
+  // Day 1 never marks Day 2, Day 3, etc. as "Session logged!".
   type SessionMode = "idle" | "resume" | "active" | "completed";
   function getSessionMode(): SessionMode {
-    if (localMode === "completed" || serverStatus === "completed") return "completed";
+    const serverDayNum = activeSessionData?.dayNumber ?? null;
+    const expandedDayNum =
+      expandedDay !== null
+        ? (program?.days[expandedDay]?.dayNumber ?? expandedDay + 1)
+        : null;
+    // Server status only applies to this exact day — null dayNumber means no
+    // specific day was recorded (legacy rows), so we allow it through.
+    const serverMatchesDay =
+      serverDayNum === null || expandedDayNum === null || serverDayNum === expandedDayNum;
+
+    // localMode: always scoped to the currently expanded day (reset on day switch)
+    if (localMode === "completed") return "completed";
+    if (serverStatus === "completed" && serverMatchesDay) return "completed";
     if (localMode === "active") return "active";
-    if (serverStatus === "in_progress") return "resume";
+    if (serverStatus === "in_progress" && serverMatchesDay) return "resume";
     return "idle";
   }
   const sessionMode = getSessionMode();
 
+  console.log("[SessionLogRenderAudit]", {
+    focusMode: panelFocusMode,
+    expandedDay,
+    expandedDayNum: expandedDay !== null ? (program?.days[expandedDay]?.dayNumber ?? expandedDay + 1) : null,
+    serverStatus,
+    serverDayNum: activeSessionData?.dayNumber ?? null,
+    localMode,
+    resolvedSessionMode: sessionMode,
+  });
+
   const startSessionMutation = useMutation({
-    mutationFn: (data: { savedProgramId?: number; dayNumber?: number }) =>
+    mutationFn: (data: { savedProgramId?: number; dayNumber?: number; focusMode?: string }) =>
       customFetch<ActiveSessionData>("/api/active-session/start", {
         method: "POST",
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
       setLocalMode("active");
-      queryClient.invalidateQueries({ queryKey: ["active-session"] });
+      queryClient.invalidateQueries({ queryKey: ["active-session", panelFocusMode] });
     },
   });
 
@@ -873,6 +898,7 @@ function ProgramTab({
       startSessionMutation.mutate({
         savedProgramId: savedProgramId ?? undefined,
         dayNumber: dayNum,
+        focusMode: panelFocusMode,
       });
     } else {
       // Already in_progress on the server — just transition local mode
@@ -910,10 +936,22 @@ function ProgramTab({
       setSessionResult(result);
       setLocalMode("completed");
 
-      // Persist completed status to server
-      customFetch("/api/active-session/complete", { method: "POST" })
+      // Persist completed status to server — include focusMode so the correct
+      // focus-lane session is marked complete (not always "strength").
+      const completedDayNum = expandedDay !== null
+        ? (program?.days[expandedDay]?.dayNumber ?? expandedDay + 1)
+        : null;
+      console.log("[SessionLogWriteAudit]", {
+        focusMode: panelFocusMode,
+        completedDayNum,
+        savedProgramId: savedProgramId ?? null,
+      });
+      customFetch("/api/active-session/complete", {
+        method: "POST",
+        body: JSON.stringify({ focusMode: panelFocusMode }),
+      })
         .then(() => {
-          queryClient.invalidateQueries({ queryKey: ["active-session"] });
+          queryClient.invalidateQueries({ queryKey: ["active-session", panelFocusMode] });
         })
         .catch(() => {});
 
