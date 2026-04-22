@@ -1,0 +1,127 @@
+REMOVE REDUNDANT TOP-LEVEL LOG / CHAT BUTTONS FROM THE RIGHT SIDEBAR LIVE PROGRAM PANEL
+
+CONTEXT:
+In the right sidebar / Live Program panel, directly under the program summary there are currently two top-level buttons:
+- Log
+- Chat
+
+These are no longer needed there.
+
+Why:
+- session-level logging already exists inside each session/day card
+- program refinement / agent command already exists lower in the panel
+- the top-level buttons create clutter and ambiguity
+- “Log” at the program-summary level can imply logging the whole program instead of a specific session
+
+We want to simplify the panel and remove these redundant actions.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Remove the top-level Log and Chat buttons from the Live Program panel summary area while preserving:
+- session-level logging inside each session/day card
+- refine/program command functionality lower in the panel
+- clean spacing and visual hierarchy
+
+==================================================
+TASK 1 — FIND THE SUMMARY ACTION ROW
+==================================================
+
+Locate the component/render block in the Live Program panel that displays the top-level:
+- Log button
+- Chat button
+
+Audit:
+- component/file name
+- whether these buttons are wired to anything unique
+- whether removing them affects any required flow
+
+==================================================
+TASK 2 — REMOVE THE TOP-LEVEL LOG BUTTON
+==================================================
+
+Remove the summary-level Log button from the program header/summary section.
+
+Important:
+- do NOT remove session-level “Log Session” actions inside the day/session cards
+- those are still the correct place for session logging
+
+==================================================
+TASK 3 — REMOVE THE TOP-LEVEL CHAT BUTTON
+==================================================
+
+Remove the summary-level Chat button from that same row.
+
+Important:
+- do NOT remove the existing “Refine this program” / command-agent input lower in the panel
+- that remains the correct place for program-level chat/refinement
+
+==================================================
+TASK 4 — CLEAN UP SPACING / LAYOUT
+==================================================
+
+After removing the two buttons:
+- rebalance spacing in the summary section
+- make sure there isn’t an awkward empty gap
+- keep the panel feeling premium and intentional
+
+The summary should flow cleanly into:
+- program metadata
+- refine section
+- session cards
+
+==================================================
+TASK 5 — VERIFY NO FUNCTIONAL REGRESSION
+==================================================
+
+Confirm all of these still work:
+
+- session-level logging from each day/session card
+- refine/program command input
+- right-panel program browsing
+- program history / changes / adapted tabs
+
+Removing the summary-level Log/Chat buttons must not break any real flow.
+
+==================================================
+TASK 6 — OPTIONAL UX POLISH
+==================================================
+
+If needed, slightly strengthen the visual hierarchy of:
+- the “Refine this program” section
+or
+- the first session card
+
+so the next obvious action remains clear after the buttons are removed.
+
+Keep this subtle.
+
+==================================================
+TASK 7 — VALIDATION
+==================================================
+
+Test:
+1. Open Live Program panel
+2. Confirm top-level Log and Chat buttons are gone
+3. Confirm session-level log still exists in each session card
+4. Confirm refine/program command input still works
+5. Confirm no empty/awkward layout remains
+
+==================================================
+TASK 8 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. where the top-level Log/Chat buttons were removed from
+2. confirmation that session-level logging remains intact
+3. confirmation that program refine/chat remains intact
+4. any spacing/layout cleanup applied
+
+==================================================
+FINAL STANDARD
+==================================================
+
+The Live Program panel should no longer show redundant top-level Log and Chat buttons in the program summary area.
+
+Logging should remain session-specific, and program-level refinement should remain in the dedicated refine/agent command area.
