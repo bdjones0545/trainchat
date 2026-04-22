@@ -1,0 +1,242 @@
+CRITICAL FIX — SESSION COMPLETION IS LEAKING ACROSS DIFFERENT PROGRAMS BY DAY NUMBER (DAY 1 IN ONE PROGRAM IS MARKING DAY 1 IN OTHER PROGRAMS AS LOGGED)
+
+CONTEXT:
+There is a severe program-isolation bug in the Live Program / saved program system.
+
+Observed bad behavior:
+- user logs Day 1 in one program
+- other saved programs also show Day 1 as logged
+- even future created programs can inherit a logged Day 1 state
+
+This means session completion is being keyed too broadly, likely by:
+- day number only
+- or focus + day number
+- or another non-program-specific identifier
+
+This is a critical trust-breaking bug.
+
+Session completion must be scoped to the exact program/session instance, not shared across programs just because they both have a “Day 1”.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Make session logged/completed state fully isolated per program, per focus, per week, per session instance — never shared across other programs with the same day number.
+
+==================================================
+TASK 1 — TRACE THE SESSION COMPLETION STORAGE MODEL
+==================================================
+
+Audit exactly how a session is currently stored/retrieved as “logged” or “completed”.
+
+Trace:
+- database table(s)
+- storage keys / identifiers
+- request payload for start/complete/log
+- render-time lookup logic
+
+Check whether completion state is currently keyed by anything like:
+- userId + dayNumber
+- userId + focusMode + dayNumber
+- userId + sessionDate only
+- generic active session state reused across programs
+
+Return:
+
+[SessionIsolationAudit] {
+  storageTable,
+  identifierFields,
+  trainingSystemIdIncluded,
+  focusModeIncluded,
+  weekIncluded,
+  dayNumberIncluded,
+  sessionIdIncluded,
+  bugSource
+}
+
+==================================================
+TASK 2 — IDENTIFY THE OVER-BROAD KEY
+==================================================
+
+Find the exact reason why Day 1 state leaks across programs.
+
+Likely causes:
+- completion lookup only keyed by dayNumber
+- active session table missing trainingSystemId
+- render logic checking “completed day 1” instead of “completed session instance in program X”
+- session completion state reused from a broad global/focus-level row
+
+Return the exact root cause.
+
+==================================================
+TASK 3 — REQUIRE PROGRAM-SCOPED SESSION IDENTITY
+==================================================
+
+Session completion must be tied to the exact program/session instance.
+
+Required identity should include at minimum:
+- userId
+- trainingSystemId
+- focusMode
+- week number / week id
+- day number or session id
+- session date / occurrence if needed
+
+The key principle:
+Day 1 in Program A is NOT the same as Day 1 in Program B.
+
+==================================================
+TASK 4 — FIX BACKEND WRITE SCOPE
+==================================================
+
+When writing session completion/log state:
+- write against the exact trainingSystemId
+- exact week
+- exact day/session
+- exact focus
+
+Do NOT write any record that can later be interpreted as “all Day 1 sessions for this user”.
+
+Add backend guards so a completion write is rejected if trainingSystemId is missing.
+
+==================================================
+TASK 5 — FIX BACKEND READ / LOOKUP SCOPE
+==================================================
+
+When determining whether a session is logged:
+- lookup must include trainingSystemId
+- focusMode
+- week/day/session context
+
+Do NOT allow render-time logic to infer completion from a broad row like:
+- completedDayNumber = 1
+or
+- activeSession.dayNumber = 1
+
+Completion must be resolved against the currently displayed program only.
+
+==================================================
+TASK 6 — FIX FRONTEND RENDER SCOPING
+==================================================
+
+Audit all places where “Session logged!” / completed state is rendered, including:
+- Live Program panel
+- saved program cards
+- current active program
+- today/week/block views if applicable
+
+Make sure the UI checks:
+- displayed trainingSystemId
+- displayed week/day/session
+against
+- completion data for that exact program/session only
+
+Do NOT let a logged state render just because the day number matches.
+
+==================================================
+TASK 7 — FIX QUERY KEYS / CACHE IDENTITY
+==================================================
+
+Audit React Query / cache keys used for:
+- active session
+- completed session lookup
+- logged session state
+- program panel render state
+
+Ensure keys are scoped with enough identity, including:
+- focusMode
+- trainingSystemId
+- week/day/session where needed
+
+No broad cache bucket like:
+- ["active-session", focusMode]
+if it is reused across multiple programs in the same focus without program identity.
+
+==================================================
+TASK 8 — ADD DATA MIGRATION / LEGACY SAFETY
+==================================================
+
+If old rows exist that are too broad (for example keyed only by day number/focus), decide how to handle them safely.
+
+Options:
+- ignore legacy broad rows when trainingSystemId is absent
+- treat them as non-authoritative
+- migrate them if safe
+- or clear/reset them if they are invalid
+
+The main goal:
+legacy data must not continue contaminating new programs.
+
+==================================================
+TASK 9 — ADD AUDIT LOGGING
+==================================================
+
+Add logs:
+
+[SessionProgramIsolationAudit] {
+  userId,
+  focusMode,
+  trainingSystemId,
+  weekNumber,
+  dayNumber,
+  sessionId,
+  resolvedLoggedState,
+  sourceRecordIds,
+  crossProgramLeakDetected
+}
+
+[SessionProgramWriteAudit] {
+  userId,
+  focusMode,
+  trainingSystemId,
+  weekNumber,
+  dayNumber,
+  sessionId,
+  writeSucceeded
+}
+
+We need proof that session state is now fully isolated by program.
+
+==================================================
+TASK 10 — VALIDATION
+==================================================
+
+Run this exact test:
+
+1. Build Program A in Strength
+2. Log Day 1 in Program A
+3. Open another saved Strength program (Program B)
+4. Confirm its Day 1 is NOT logged
+5. Create a new future Strength program (Program C)
+6. Confirm its Day 1 is NOT logged
+
+Repeat same pattern for:
+- Speed
+- Mobility
+
+Also test:
+- refresh page
+- reopen app
+- switch focuses
+- switch saved programs
+
+Logged state must stay attached only to the program/session that was actually completed.
+
+==================================================
+TASK 11 — OUTPUT REQUIRED
+==================================================
+
+Return:
+1. exact root cause of the cross-program leak
+2. what backend write/read scope was changed
+3. what frontend render/cache scope was changed
+4. how legacy broad rows are handled
+5. validation results for Strength / Speed / Mobility
+
+==================================================
+FINAL STANDARD
+==================================================
+
+Logging Day 1 in one program must never mark Day 1 as logged in any other saved program or future-created program.
+
+Session completion must be fully isolated to the exact program/session instance that was completed.
