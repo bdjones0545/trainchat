@@ -1,0 +1,78 @@
+We need a broad audit of the edit-language / intent-resolution system, not one-off fixes.
+
+Problem:
+Specific commands like “Reduce ground contact time” are being interpreted too generically (for example as shorten/reduce-volume), which means the edit system is not consistently prioritizing the true target property of the command.
+
+GOAL
+Audit the full edit semantic system so performance-quality commands, duration commands, volume commands, pain commands, and constraint commands are clearly separated and routed to the correct transformation bundles.
+
+SCOPE
+
+Audit these layers:
+1. intent classification
+2. intent-family grouping
+3. competing-intent priority rules
+4. transformation bundle selection
+5. synonym/slang coverage
+6. mode-specific interpretation (strength vs speed vs mobility)
+
+LOOK FOR
+
+1. Commands where a generic action verb (“reduce”, “increase”, “more”, “less”) is overpowering the real target concept
+Examples:
+- reduce ground contact time
+- be more reactive
+- more elastic
+- make this shorter
+- lighter on the joints
+- more decel
+- less hamstring load
+
+2. Missing semantic families for sports/performance language
+Potential families:
+- reactivity / elastic bias
+- speed mechanics
+- COD / deceleration
+- fatigue reduction
+- session shortening
+- volume reduction
+- pain modification
+- tissue resilience
+- unilateral bias
+- trunk/core emphasis
+
+3. Overlapping families that should be split apart
+Example:
+- shorten block
+vs
+- reduce ground contact time
+These should not share the same transformation by default
+
+4. Weak synonym coverage
+Look for missing language like:
+- springier
+- snappier
+- more pop
+- quicker contacts
+- less amortization
+- more punch
+- bounce
+- lighter on the ground
+
+5. Transformation mismatch
+Find places where the chosen action bundle does not match the semantics of the request.
+
+DELIVERABLES
+
+Return:
+1. Current semantic families found
+2. Missing semantic families
+3. Commands likely to be misrouted today
+4. Priority conflicts in intent resolution
+5. Recommended taxonomy improvements
+6. P0 / P1 / P2 fix list
+
+IMPORTANT
+Do not yet rewrite everything.
+Audit first.
+Only patch something immediately if it is an obvious, high-confidence misrouting bug.

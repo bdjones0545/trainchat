@@ -34,6 +34,7 @@ export type IntentFamily =
   | "conditioning_focus"
   | "power_explosive_focus"
   | "speed_focus"
+  | "reactive_focus"
   | "athletic_performance_focus"
   | "fatigue_management"
   | "recovery_focus"
@@ -99,6 +100,8 @@ export type TransformationChangeType =
   | "swap_to_progression"
   | "swap_to_regression"
   | "add_velocity_intent"
+  | "swap_to_reactive_drill"
+  | "add_reactive_emphasis"
   | "add_prep_block"
   | "add_mobility_work"
   | "remove_aggravating_pattern"
@@ -287,8 +290,8 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
   {
     family: "session_reduction",
     patterns: [
-      /\b(shorten (this )?session|cut (this )?session|remove (some )?exercises?|fewer exercises?)\b/i,
-      /\b(reduce.{0,20}exercises?|trim (this )?session|simplify (this )?session)\b/i,
+      /\b(shorten (this )?(session|block|day|workout)|cut (this )?(session|block|day)|remove (some )?exercises?|fewer exercises?)\b/i,
+      /\b(reduce.{0,20}exercises?|trim (this )?(session|block)|simplify (this )?(session|block))\b/i,
       /\b(take out|cut out|remove).{0,20}(exercises?|work|movements?)\b/i,
     ],
   },
@@ -366,6 +369,37 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
       // "make it more for power" — casual "for X" phrasing
       /\bmake\s+(?:this|it|the\s+program|my\s+program)\s+(?:more\s+)?(?:for\s+)?(?:power|explosiveness?|explosive)\b/i,
       /\b(?:more|geared)\s+(?:toward[s]?\s+|for\s+)?(?:power|explosiveness?|explosive\s+(?:work|training))\b/i,
+    ],
+  },
+
+  // ── Reactive / Stiffness / Ground Contact Focus ───────────────────────────
+  // IMPORTANT: Must appear BEFORE speed_focus and decrease_volume so that
+  // reactive-quality commands like "reduce ground contact time" are never
+  // routed to generic shortening or volume-reduction transformations.
+  {
+    family: "reactive_focus",
+    patterns: [
+      // Ground contact / contact time — the core trigger phrase
+      /\b(ground.?contact.?time|contact.?time)\b/i,
+      /\b(reduce|improve|lower|shorten|decrease|minimize|less).{0,25}(contact.?time|ground.?contact)\b/i,
+      // Reactivity
+      /\b(more reactive|be (more )?reactive|improve.{0,15}reactivity|reactive training|reactivity)\b/i,
+      // Stiffness
+      /\b(improve|increase|add|more|build).{0,20}(tendon )?stiffness\b/i,
+      // Elasticity / elastic quality
+      /\b(more elastic|improve.{0,15}elasticity|elastic.?strength|elastic bias|elastic.?quality|more elasticity)\b/i,
+      // Spring / springiness
+      /\b(more spring|springier|spring.?like|improve.{0,15}spring(iness)?)\b/i,
+      // Amortization reduction
+      /\b(less amortization|reduce amortization|amortization phase|minimize amortization)\b/i,
+      // Quicker / faster contacts
+      /\b(quicker (off the floor|contacts?)|faster contacts?|quick contacts?)\b/i,
+      // Bounce / bounce quality
+      /\b(more bounce|improve.{0,10}bounce|bouncy|less.{0,10}sink)\b/i,
+      // Reactive strength / stiffness training terms
+      /\b(reactive strength index|ankle stiffness|leg stiffness|pliometric stiffness)\b/i,
+      // "off the floor" speed cue
+      /\b(off the floor (faster|quicker)|quicker.{0,15}off the floor)\b/i,
     ],
   },
 
@@ -568,6 +602,44 @@ export interface IntentFamilyResult {
   debugInfo: Record<string, unknown>;
 }
 
+// ─── Competing Family Guard ────────────────────────────────────────────────────
+//
+// For reactive/performance-quality intents, detect if the raw message also
+// matches a generic reduction/shortening family that could have fired instead.
+// This prevents silent misclassification of performance commands as volume cuts.
+
+const REDUCTION_FAMILY_GUARD_PATTERNS: { family: IntentFamily; patterns: RegExp[] }[] = [
+  {
+    family: "decrease_volume",
+    patterns: [
+      /\b(reduce|lower|cut|decrease).{0,20}(volume|sets?|total work|workload)\b/i,
+    ],
+  },
+  {
+    family: "reduce_time",
+    patterns: [
+      /\b(shorter workouts?|shorter sessions?|less time|make (this|it).{0,20}shorter)\b/i,
+      /\b(compress|tighten|trim).{0,20}(session|workout|program|down)\b/i,
+    ],
+  },
+  {
+    family: "session_reduction",
+    patterns: [
+      /\b(shorten (this )?(session|block|day|workout)|cut (this )?(session|block|day)|remove (some )?exercises?|fewer exercises?)\b/i,
+      /\b(reduce.{0,20}exercises?|trim (this )?(session|block)|simplify (this )?(session|block))\b/i,
+    ],
+  },
+];
+
+function detectRejectedCompetingFamily(lower: string): IntentFamily | undefined {
+  for (const { family, patterns } of REDUCTION_FAMILY_GUARD_PATTERNS) {
+    if (patterns.some((p) => p.test(lower))) {
+      return family;
+    }
+  }
+  return undefined;
+}
+
 export function normalizeToIntentFamily(message: string): IntentFamilyResult {
   const lower = message.toLowerCase().trim();
 
@@ -575,6 +647,12 @@ export function normalizeToIntentFamily(message: string): IntentFamilyResult {
     const matched = patterns.filter((p) => p.test(lower));
     if (matched.length > 0) {
       const targetScope = resolveTargetScope(lower);
+
+      // Guard: if the resolved family is a performance-quality intent, detect
+      // any competing reduction/shortening families that could have fired instead
+      // and log them as explicitly rejected.
+      const rejectedCompetingFamily = detectRejectedCompetingFamily(lower);
+
       const result: IntentFamilyResult = {
         family,
         confidence: matched.length >= 2 ? "high" : "medium",
@@ -584,6 +662,7 @@ export function normalizeToIntentFamily(message: string): IntentFamilyResult {
         debugInfo: {
           patternMatchCount: matched.length,
           firstMatch: matched[0].source.slice(0, 80),
+          rejectedCompetingFamily: rejectedCompetingFamily ?? null,
         },
       };
 
@@ -594,8 +673,9 @@ export function normalizeToIntentFamily(message: string): IntentFamilyResult {
           confidence: result.confidence,
           targetScope: result.targetScope,
           scopeSource: result.scopeSource,
+          rejectedCompetingFamily: rejectedCompetingFamily ?? null,
         },
-        "[IntentFamilyEngine] Family resolved",
+        `[IntentResolution] raw="${message.slice(0, 80)}" → resolved=${family.toUpperCase()} | rejected=${rejectedCompetingFamily ? rejectedCompetingFamily.toUpperCase() : "none"}`,
       );
 
       return result;
@@ -956,6 +1036,35 @@ const TRANSFORMATION_BUNDLES: Record<IntentFamily, TransformationBundle> = {
     ],
     aiDirective: "SPEED FOCUS: Add acceleration or max velocity work at session start. Reduce fatigue-heavy accessories that compromise speed quality. Add speed-support lifting (low reps, explosive intent). Protect movement quality over volume.\n\nIDENTITY UPDATE REQUIRED: You MUST also produce an update_session change that refreshes the session's `label` and `emphasis` to reflect its new speed identity. Example label: 'Lower Speed + Power — Acceleration Development'. Example emphasis: 'Sprint mechanics, acceleration-deceleration quality, and velocity-support strength'. Adapt to the actual body region. Do NOT leave the original label and emphasis unchanged.",
     scopeGuidance: "Add speed work early in sessions. Protect from excessive fatigue.",
+  },
+
+  reactive_focus: {
+    intentFamily: "reactive_focus",
+    minimumStructuralChanges: 2,
+    primaryChanges: [
+      { type: "swap_to_reactive_drill", description: "Add or swap toward drills that train short contact time and stiffness (ankle pogo jumps, hurdle hops, reactive drop jumps, single-leg reactive hops)", countAs: 1 },
+      { type: "add_reactive_emphasis", description: "Add cues to relevant exercises emphasizing minimal ground contact, stiff ankle/knee mechanics, and elastic rebound", countAs: 1 },
+      { type: "add_explosive_opener", description: "Add low-amplitude reactive work early in session (ankle pogo, reactive hops) before fatigue accumulates", countAs: 1 },
+    ],
+    secondaryChanges: [
+      { type: "add_velocity_intent", description: "Add speed/velocity cues to sprint-adjacent movements", countAs: 1 },
+      { type: "reduce_accessories", description: "Trim high-fatigue accessories that compromise reactive CNS quality", countAs: 1 },
+    ],
+    antiPatterns: [
+      "Do NOT reduce sets, rest, or total volume as the default response to reactive/stiffness commands",
+      "Do NOT interpret 'contact time', 'ground contact', or 'stiffness' as a session duration or scheduling command",
+      "Do NOT route reactive commands to SHORTEN_BLOCK, REDUCE_VOLUME, REDUCE_REST, or DeLoad transformations",
+      "Do NOT add endurance-style circuit density that degrades reactive quality",
+      "Do NOT shorten the block structure unless the user explicitly asks for a shorter session",
+      "Do NOT confuse 'more spring / elastic' with 'more hypertrophy or volume'",
+    ],
+    validationRules: [
+      "At least 1 reactive drill (pogo hop, hurdle hop, reactive drop jump, ankle stiffness drill, or equivalent) must be added or existing explosive work must be upgraded toward reactive/short-contact mechanics",
+      "At least 1 coaching cue emphasizing short ground contact, stiff ankle/knee mechanics, or elastic rebound must be present",
+      "Sets and rest must NOT decrease from baseline unless explicitly part of the reactive quality strategy",
+    ],
+    aiDirective: "REACTIVE / STIFFNESS FOCUS — GROUND CONTACT TIME OPTIMIZATION:\n\nThis is a PERFORMANCE QUALITY instruction, NOT a volume or duration reduction. Do NOT reduce sets, rest, or overall block length as a default action.\n\nRequired changes:\n1. DRILL SELECTION: Add or swap toward exercises that build reactive stiffness and short contact time: ankle pogo jumps, hurdle hops, reactive drop jumps, single-leg reactive hops, or band-resisted ankle stiffness drills. Replace any slow, amortization-heavy plyometrics (e.g., deep box jumps, slow depth drops) with quick, stiff-contact alternatives.\n2. COACHING EMPHASIS: Add cues to relevant exercises emphasizing 'minimal ground contact time', 'stiff ankle/knee on landing', 'think of the ground as hot', 'elastic rebound — not absorbed', 'short, sharp contacts'.\n3. STRUCTURE PRESERVATION: Preserve overall session structure, set counts, and rest periods. Only modify rest or sets if it directly serves reactive quality (e.g., longer rest between reactive sets to protect CNS quality).\n4. EXERCISE UPGRADE: Where appropriate, swap a slow-tempo accessory for a reactive alternative (e.g., slow calf raise → pogo jump progression; slow box step-up → reactive single-leg hop).\n\nIDENTITY UPDATE REQUIRED: You MUST produce an update_session change that refreshes the session label and emphasis. Example label: 'Lower Power — Reactive Stiffness + Ground Contact Optimization'. Example emphasis: 'Short contact mechanics, tendon stiffness, elastic force expression, and reactive lower-body development'. Adapt to the actual body region. Do NOT leave the original label and emphasis unchanged.",
+    scopeGuidance: "Apply to sessions with lower-body or plyometric content. Add reactive drills early in session (pre-fatigue). Preserve primary lifting structure.",
   },
 
   athletic_performance_focus: {
@@ -1582,6 +1691,7 @@ export interface IntentFamilyDebugLog {
   validationResult?: ValidationResult;
   clarificationBypassed?: boolean;
   matchedPatterns?: string[];
+  rejectedCompetingFamily?: IntentFamily;
 }
 
 export function logIntentFamilyDebug(log: IntentFamilyDebugLog): void {
@@ -1596,9 +1706,10 @@ export function logIntentFamilyDebug(log: IntentFamilyDebugLog): void {
       validationResult: log.validationResult,
       clarificationBypassed: log.clarificationBypassed ?? false,
       matchedPatterns: log.matchedPatterns ?? [],
+      rejectedCompetingFamily: log.rejectedCompetingFamily ?? null,
       requestPreview: log.originalRequest.slice(0, 120),
     },
-    `[IntentFamilyEngine] ${log.normalizedFamily.toUpperCase()} → ${log.targetScope} (${log.confidence}) via ${log.chosenPath}`,
+    `[IntentResolution] raw="${log.originalRequest.slice(0, 80)}" → resolved=${log.normalizedFamily.toUpperCase()} | rejected=${log.rejectedCompetingFamily ? log.rejectedCompetingFamily.toUpperCase() : "none"} | bundle=${log.transformationBundle} | scope=${log.targetScope} (${log.confidence}) via ${log.chosenPath}`,
   );
 }
 
@@ -1699,6 +1810,7 @@ export function bridgeToSpecialistIntent(family: IntentFamily): FamilyBridgeResu
 
     case "power_explosive_focus":
     case "speed_focus":
+    case "reactive_focus":
       return {
         specialistIntent: "BIAS_SHIFT",
         biasTarget: "power",
@@ -1799,6 +1911,7 @@ export function runIntentFamilyPipeline(
     transformationBundle: familyResult.family,
     minimumStructuralChanges: bundle.minimumStructuralChanges,
     matchedPatterns: familyResult.matchedPatterns,
+    rejectedCompetingFamily: familyResult.debugInfo.rejectedCompetingFamily as IntentFamily | undefined,
   });
 
   return { familyResult, bundle, bridge, promptDirective };
