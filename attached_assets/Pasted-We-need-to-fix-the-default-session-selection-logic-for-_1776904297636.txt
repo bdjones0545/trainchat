@@ -1,0 +1,61 @@
+We need to fix the default session selection logic for newly generated programs.
+
+Problem:
+A newly generated program is currently opening based on day-of-week / “Today” mapping, which can cause a fresh program to start on Day 3 or another later day.
+That is incorrect for a brand-new build.
+
+Goal:
+Any newly generated program should always default to Day 1 on first load.
+
+Correct behavior:
+- New program created → active session defaults to Day 1
+- Existing program with prior usage/history can still use weekday/history-based selection
+- But a fresh build should never initially open on Day 2/3/4 just because of the calendar day
+
+Requirements:
+
+1. Find where the active session/day is chosen for the Live Program panel and Today view.
+
+2. Separate these two cases:
+   A. Freshly generated/newly activated program
+   B. Existing previously used program
+
+3. For case A (new build):
+   - force initial selected day/session to Day 1
+   - ignore weekday-based auto-selection on first activation
+   - ignore stale selected-day state from previous program
+
+4. For case B (existing program):
+   - preserve current logic if appropriate:
+     - weekday mapping
+     - last selected day
+     - history/check-in aware selection
+   - only if that program is not a brand-new build
+
+5. Add/verify a clear signal for “new build just created”, such as:
+   - new program id activated
+   - unsaved draft just committed
+   - first-open flag
+   - no prior session history for this program
+
+6. Reset any carried-over selectedDay / selectedSession state when a new program becomes active.
+A newly generated program should not inherit selection state from the previous program.
+
+7. Success criteria:
+   - generate a new 4-day plan on Wednesday → program opens on Day 1
+   - switching back to an older existing program can still use its own selection/history logic
+   - no stale day index carries across programs
+   - Today tab / Live Program remain consistent after first-open initialization
+
+8. Add temporary debug logs:
+   - [ProgramActivation]
+   - program id
+   - isNewBuild?
+   - selected day before reset
+   - selected day after reset
+   - selection source: day1_default / weekday / history / persisted
+
+Deliverables:
+- exact root cause
+- exact file(s) changed
+- confirmation that new programs always open on Day 1 first
