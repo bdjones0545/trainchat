@@ -1,0 +1,71 @@
+We need to improve the transition from consultation to generation in the main agent flow.
+
+Problem:
+The agent is asking good questions and giving thoughtful framing, but it stays in consultative mode too long before actually generating the program.
+
+Observed behavior:
+The user provides enough information to begin a safe first draft, but the agent keeps explaining the approach instead of entering build mode and generating.
+
+GOAL
+Create a clear “build threshold” so the agent knows when it has enough information to stop consulting and start building.
+
+DESIRED UX
+
+The flow should feel like:
+1. understand the request
+2. collect minimum critical constraints
+3. explicitly say “I have enough to build”
+4. generate the program
+
+The agent should not remain in planning/explaining mode once uncertainty is low enough to produce a reasonable safe draft.
+
+IMPLEMENTATION TASKS
+
+1. Define a minimum viable build threshold for program creation.
+For example, enough to start building may include:
+- primary goal
+- age or population context if relevant
+- rough training background / readiness
+- equipment access
+- any major safety constraints if present
+
+2. Once the threshold is met:
+- stop asking broad exploratory questions
+- stop writing long setup explanations
+- switch to BUILD mode
+
+3. Add an explicit transition response pattern:
+Example:
+“Got it — I have enough to start building. I’m putting together your plan now.”
+
+Then immediately generate the draft.
+
+4. Move non-essential refinement questions to after the first build.
+Examples:
+- preference nuances
+- optional exercise substitutions
+- minor programming style choices
+
+These should become post-build refinement opportunities, not blockers.
+
+5. Add a guard against over-consulting:
+If the system has already gathered enough information for a safe first draft, prefer generation over another advisory message.
+
+6. Keep safety logic intact.
+If a true blocker exists (medical red flag, missing essential equipment info, impossible request), the agent can still ask before building.
+But normal uncertainty should not delay generation unnecessarily.
+
+7. Add debug logging:
+[BuildThreshold]
+- current known inputs
+- threshold met? true/false
+- reason building started or held
+- missing blocker fields if any
+
+SUCCESS CRITERIA
+
+- after enough info is provided, the agent clearly transitions into build mode
+- the user sees a “starting build now” moment
+- fewer overlong advisory responses before generation
+- safety remains intact
+- refinement can still happen after the first draft
