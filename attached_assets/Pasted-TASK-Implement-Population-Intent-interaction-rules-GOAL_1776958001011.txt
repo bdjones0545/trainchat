@@ -1,0 +1,169 @@
+TASK: Implement Population × Intent interaction rules.
+
+GOAL:
+Now that we have:
+- mode-aware intent resolution
+- special considerations
+- population detection/profile
+
+we need a deterministic interaction layer that modifies transformation behavior based on population.
+
+This should make the same intent family behave differently depending on who the program is for.
+
+----------------------------------------
+1. CREATE interaction-rules.ts
+----------------------------------------
+
+Export:
+
+interface InteractionRuleResult {
+  allowed: boolean;
+  modifiedBundle?: Partial<TransformationBundle>;
+  notes?: string[];
+  reason?: string;
+}
+
+export function applyPopulationIntentRules(
+  population: PopulationContext,
+  intentFamily: IntentFamily,
+  mode: FocusMode,
+  bundle: TransformationBundle
+): InteractionRuleResult
+
+----------------------------------------
+2. CORE PRINCIPLE
+----------------------------------------
+
+Intent is NOT rejected by default.
+Instead:
+- allow
+- soften
+- redirect
+- constrain
+depending on population
+
+Priority:
+special considerations > population > intent bundle defaults
+
+----------------------------------------
+3. IMPLEMENT HIGH-VALUE RULES
+----------------------------------------
+
+A. ACTIVE_OLDER_ADULT
+
+- power_explosive_focus:
+  allowed = true
+  redirect toward faster intent / lighter dynamic intent
+  NOT true explosive loading or high-impact plyo
+
+- increase_difficulty:
+  allowed = true
+  cap by moderate progression only
+  no max-effort / no aggressive jumps in load
+
+- shorten_session:
+  allowed = true
+  preserve movement balance
+  remove lowest-priority fatigue, not essential structure
+
+B. BEGINNER
+
+- more_explosive / reactive_focus:
+  allowed = partially
+  reduce complexity
+  bias toward simple fast intent drills, not advanced plyo or chaotic work
+
+- harder:
+  allowed = true
+  increase only one variable at a time
+  avoid complexity jumps
+
+C. ATHLETIC
+
+- more_explosive / reactive / cod_decel:
+  allowed fully
+  can increase neural demand
+  preserve key performance outputs when shortening
+
+- shorter_session:
+  trim lower-priority accessories first, preserve primary outputs
+
+D. JOINT_SENSITIVE
+
+- harder / more_explosive:
+  allowed only if joint-friendly substitutions preserved
+  redirect away from aggravating movement options
+
+- posterior_chain_emphasis:
+  allow, but use joint-friendly hinge/pull options
+
+E. DETRAINED
+
+- harder:
+  soften to small volume/intensity increase
+  avoid large fatigue spikes
+
+- shorten_session:
+  okay, but preserve foundational patterns
+
+----------------------------------------
+4. ADD RULES FOR THESE INTENT FAMILIES
+----------------------------------------
+
+At minimum cover:
+- increase_difficulty
+- decrease_difficulty
+- shorten_session
+- power_explosive_focus
+- reactive_focus
+- cod_decel_focus
+- unilateral_emphasis
+- posterior_chain_emphasis
+- trunk_core_emphasis
+- recovery_focus
+
+----------------------------------------
+5. INTEGRATION
+----------------------------------------
+
+Before final transformation bundle executes:
+- run applyPopulationIntentRules(...)
+- modify bundle as needed
+- log the result in dev mode
+
+----------------------------------------
+6. DEBUG LOG
+----------------------------------------
+
+[PopulationIntentRule]
+{
+  population,
+  mode,
+  intentFamily,
+  allowed,
+  modified,
+  reason
+}
+
+----------------------------------------
+7. SUCCESS CRITERIA
+----------------------------------------
+
+Examples:
+
+- “more explosive” for ACTIVE_OLDER_ADULT strength
+  → faster intent / safer power bias, not true explosive loading
+
+- “more reactive” for BEGINNER speed
+  → simpler reactive drills, not chaotic/high-skill plyo
+
+- “shorter” for ATHLETIC speed
+  → preserve primary speed outputs, trim low-priority work
+
+- “harder” for DETRAINED strength
+  → small progression, not major load jump
+
+- “more posterior chain” for JOINT_SENSITIVE strength
+  → hinge/pull bias with joint-friendly exercise selection
+
+END TASK

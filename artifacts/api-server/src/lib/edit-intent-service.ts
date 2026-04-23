@@ -18,6 +18,8 @@ import { buildSwapContext, getProgressions, findExerciseByName, getSwapCandidate
 import { resolveSafeSwapBackstop } from "./swap-backstop-service";
 import { resolveHarderEasierFallback } from "./harder-easier-fallback";
 import { runIntentFamilyPipeline, logIntentFamilyDebug, type IntentFamilyPipelineResult } from "./intent-family-engine";
+import { detectPopulation } from "./population-engine";
+import { applyPopulationIntentRules, appendPopulationNotesToDirective } from "./interaction-rules";
 import {
   classifyExerciseFamily,
   getExerciseFamilySchema,
@@ -3677,6 +3679,28 @@ export async function interpretEditRequest(
     }, systemFocusMode);
 
     intentFamilyDirective = intentFamilyPipelineResult.promptDirective;
+
+    // ── Population × Intent Interaction Rules ─────────────────────────────
+    // Deterministic modifier: adjusts the AI directive based on who the
+    // program is for. GENERAL_ADULT → no change. Others → constrain/redirect.
+    try {
+      const editPopulationCtx = detectPopulation(userRequest, null);
+      const interactionResult = applyPopulationIntentRules(
+        editPopulationCtx,
+        intentFamilyPipelineResult.familyResult.family,
+        systemFocusMode ?? "strength",
+        intentFamilyPipelineResult.bundle,
+      );
+      if (interactionResult.notes?.length) {
+        intentFamilyDirective = appendPopulationNotesToDirective(
+          intentFamilyDirective,
+          interactionResult,
+        );
+      }
+    } catch (popErr) {
+      // Non-fatal — interaction rules are enhancement only
+      logger.warn({ popErr }, "[PopulationIntentRule] Failed to apply population intent rules — proceeding without modification");
+    }
 
     logIntentFamilyDebug({
       originalRequest: userRequest,
