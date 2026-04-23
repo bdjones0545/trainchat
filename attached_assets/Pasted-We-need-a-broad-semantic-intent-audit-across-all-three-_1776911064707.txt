@@ -1,0 +1,154 @@
+We need a broad semantic-intent audit across all three training modes:
+
+- Strength
+- Speed / Footwork
+- Mobility
+
+Problem:
+The system is now strong enough architecturally that the next major risk is semantic misrouting. Certain edit commands are being interpreted too generically or without enough mode awareness.
+
+Example:
+“Reduce ground contact time” was treated like a shortening/volume-reduction request instead of a speed/reactivity request.
+
+GOAL
+Audit and improve the intent-language system across all three modes so user commands are interpreted according to:
+1. the actual target property of the command
+2. the active training mode
+3. the correct transformation bundle
+
+THIS IS NOT A ONE-PHRASE FIX
+We want a mode-aware semantic taxonomy.
+
+AUDIT SCOPE
+
+Audit these layers:
+1. intent classification
+2. intent-family grouping
+3. competing-intent priority rules
+4. transformation bundle selection
+5. synonym/slang coverage
+6. mode-specific interpretation
+
+DO THIS FOR ALL THREE MODES:
+- Strength
+- Speed / Footwork
+- Mobility
+
+KEY PRINCIPLE
+
+Generic verbs like:
+- reduce
+- increase
+- more
+- less
+- lighter
+- heavier
+- shorter
+
+must not overpower the actual target property.
+
+The system should prioritize:
+TARGET PROPERTY > GENERIC ACTION VERB
+
+Examples:
+- “reduce ground contact time” → speed/reactivity
+- “lighter on the joints” → mobility or joint-friendly modification
+- “more explosive” → power/speed bias depending on mode
+- “shorter session” → duration/volume reduction
+
+DELIVERABLES
+
+1. CURRENT SEMANTIC FAMILIES BY MODE
+List current intent families and where they apply well vs poorly.
+
+2. MISSING OR UNDERDEFINED FAMILIES
+Potential examples:
+- reactivity / elasticity
+- speed mechanics
+- COD / decel
+- fatigue reduction
+- session shortening
+- joint-friendly
+- stability / positional control
+- trunk/core emphasis
+- hypertrophy bias
+- resilience / tissue loading
+- mobility restoration
+- ROM / end-range control
+
+3. MISROUTING RISKS
+Find commands likely to be misrouted today.
+
+Include examples for each mode.
+
+STRENGTH examples:
+- more explosive
+- heavier
+- lower fatigue
+- more unilateral
+- more hypertrophy
+- easier on my back
+- more posterior chain
+- shorter lift
+
+SPEED examples:
+- reduce ground contact time
+- more reactive
+- more elastic
+- more acceleration
+- less braking
+- more decel
+- quicker contacts
+- lighter on the ground
+
+MOBILITY examples:
+- open my hips
+- easier on my joints
+- more restorative
+- more range
+- less aggressive
+- more stability
+- less stiffness
+- shorter mobility flow
+
+4. PRIORITY CONFLICTS
+Identify where commands can be misread because the system prioritizes the wrong feature.
+Example:
+- “reduce ground contact time” → interpreted as shorten block
+We want to identify conflicts like that across all modes.
+
+5. TRANSFORMATION BUNDLE MISMATCHES
+For each semantic family, determine whether the applied transformation actually matches the meaning.
+Examples:
+- reactivity should not default to trimming sets
+- mobility restoration should not become generic volume reduction
+- joint-friendly should not equal simple deload unless explicitly requested
+
+6. SYNONYM / SLANG COVERAGE
+Add likely natural-language variants for each mode.
+Examples:
+- springier, snappier, more pop
+- less beat up, easier on my knees
+- open up, loosen up, feel better
+- more punch, more drive, more stable
+
+7. RECOMMENDED TAXONOMY
+Propose a clean mode-aware semantic taxonomy:
+- family name
+- valid modes
+- example phrases
+- transformation bundle
+
+8. PRIORITIZED FIX LIST
+Return:
+- P0 = obvious high-confidence misrouting risks
+- P1 = likely family gaps
+- P2 = quality improvements / synonym coverage
+
+IMPORTANT
+Audit first.
+Do not do a giant rewrite yet.
+Only patch something immediately if it is a clear, high-confidence bug.
+
+SUCCESS CRITERIA
+At the end, we should have a clear plan for a mode-aware semantic intent system across strength, speed, and mobility.
