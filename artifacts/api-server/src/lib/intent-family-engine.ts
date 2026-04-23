@@ -44,6 +44,12 @@ export type IntentFamily =
   | "mobility_support"
   | "rom_restoration_focus"
   | "tissue_stiffness_focus"
+  | "tendon_resilience_focus"
+  | "end_range_control_focus"
+  | "mobility_flow_focus"
+  | "unilateral_emphasis"
+  | "posterior_chain_emphasis"
+  | "trunk_core_emphasis"
   | "injury_modification"
   | "joint_friendly_modification"
   | "equipment_constraint"
@@ -117,7 +123,13 @@ export type TransformationChangeType =
   | "add_tolerance_work"
   | "swap_to_equipment_available"
   | "update_session_emphasis"
-  | "update_week_focus";
+  | "update_week_focus"
+  | "add_tendon_prep"
+  | "add_end_range_strength"
+  | "add_flow_sequence"
+  | "add_unilateral_work"
+  | "add_posterior_chain"
+  | "add_core_stability";
 
 export interface TransformationChange {
   type: TransformationChangeType;
@@ -205,6 +217,25 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
       /\b(joint.?friendly|low.?impact|easy on the joints|protect my joints|joint.?safe|soft on)\b/i,
       /\b(no barbell|avoid barbell|barbell.{0,15}aggravat).{0,20}(knee|shoulder|back|hip)\b/i,
       /\b(arthritis|tendinitis|tendinopathy|bursitis)\b/i,
+    ],
+  },
+
+  // ── Tendon Resilience Focus ───────────────────────────────────────────────
+  // IMPORTANT: Must appear BEFORE injury_modification is bypassed BUT AFTER it
+  // so that explicit pain language routes to injury_modification first.
+  // Tendon resilience is load management WITHOUT pain — no injury accommodation needed.
+  {
+    family: "tendon_resilience_focus",
+    patterns: [
+      /\b(protect\s+(my\s+)?(tendons?|Achilles|patellar\s+tendon|elbow\s+tendon|hamstring\s+tendon))\b/i,
+      /\b(reduce\s+tendon\s+(load|stress|strain|demand|volume|frequency))\b/i,
+      /\b(easier\s+on\s+(my\s+)?(Achilles|patellar(\s+tendon)?|tendons?|elbow(\s+tendon)?))\b/i,
+      /\b(less\s+(Achilles|patellar|tendon)(\s+tendon)?\s+(stress|load|strain|demand|pressure))\b/i,
+      /\b(more\s+tendon.?friendly|tendon.?friendly\s+(sessions?|work|training|program|exercises?))\b/i,
+      /\b(tendon\s+(health|resilience|conditioning|prep|care|protection|management))\b/i,
+      /\b(Achilles.?friendly|patellar.?friendly|elbow.?friendly)\b/i,
+      /\b(reduce\s+(plyometric|jump|landing|reactive)\s+(volume|load|demand|stress|frequency)\b)/i,
+      /\b(less\s+(plyometric|reactive\s+contact|tendon\s+aggravating)\s+(work|training|volume|load))\b/i,
     ],
   },
 
@@ -487,6 +518,60 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
     ],
   },
 
+  // ── Unilateral Emphasis ───────────────────────────────────────────────────
+  // Must appear AFTER strength_focus (to allow strength framing) and BEFORE
+  // hypertrophy_focus so that explicit single-leg/split-stance language is
+  // caught as a programming bias shift rather than a generic variation.
+  {
+    family: "unilateral_emphasis",
+    patterns: [
+      /\b(more\s+unilateral|unilateral\s+(emphasis|focus|bias|work|training|dominant))\b/i,
+      /\b(more\s+single.?leg\s+(work|training|exercises?|movements?)|single.?leg\s+(focus|bias|emphasis))\b/i,
+      /\b(more\s+one.?leg(ged)?\s+(work|training|movements?)|one.?legged\s+(focus|training|work))\b/i,
+      /\b(less\s+bilateral|fewer\s+bilateral|reduce\s+bilateral|more\s+split\s+stance)\b/i,
+      /\b(split.?stance\s+(emphasis|focus|bias|work|training))\b/i,
+      /\b(unilateral\s+(lower|upper)\s+(emphasis|focus|bias|work|training))\b/i,
+      /\b(single.?arm\s+(work|focus|training|emphasis|bias))\b/i,
+    ],
+  },
+
+  // ── Posterior Chain Emphasis ───────────────────────────────────────────────
+  // Must appear AFTER strength_focus and BEFORE hypertrophy_focus so that
+  // explicit posterior chain / hinge / glute / hamstring language is caught here
+  // rather than being routed to generic hypertrophy or pulling-only bundles.
+  {
+    family: "posterior_chain_emphasis",
+    patterns: [
+      /\b(more\s+posterior\s+chain|posterior\s+chain\s+(emphasis|focus|bias|work|training))\b/i,
+      /\b(more\s+hamstrings?|more\s+hamstring\s+(work|training|emphasis|volume))\b/i,
+      /\b(more\s+glutes?|glute\s+(emphasis|focus|work|training|dominant|bias))\b/i,
+      /\b(more\s+hinge|hinge.?dominant|hinge\s+(emphasis|focus|work|training|bias))\b/i,
+      /\b(more\s+(RDL|Romanian\s+deadlift|hip\s+hinge\s+work|deadlift\s+variation))\b/i,
+      /\b(backside\s+(emphasis|focus|work|training)|back\s+of\s+(the\s+)?body\s+(emphasis|focus))\b/i,
+      /\b(hip\s+extension\s+(focus|emphasis|bias|work)|glute.?ham\s+(emphasis|focus|work))\b/i,
+      /\b(more\s+pulling|pulling\s+(emphasis|focus|bias|dominant)|pull.?dominant)\b/i,
+      /\b(hamstring\s+(dominant|emphasis|focus|bias)|posterior\s+focused)\b/i,
+    ],
+  },
+
+  // ── Trunk / Core Emphasis ─────────────────────────────────────────────────
+  // Valid across strength, speed, and mobility modes but must appear BEFORE
+  // hypertrophy_focus so "more core" and "anti-rotation" language does not fall
+  // into generic accessory / hypertrophy filler logic.
+  {
+    family: "trunk_core_emphasis",
+    patterns: [
+      /\bmore\s+core\b/i,
+      /\b(more\s+(trunk|core)\s+(work|training|stability|control|stiffness|strength|emphasis|focus))\b/i,
+      /\b(more\s+(anti.?rotation|anti.?extension|anti.?flexion|anti.?lateral\s+flexion))\b/i,
+      /\b(trunk\s+(stability|stiffness|control|strength|emphasis|focus|bias)|core\s+(emphasis|focus|bias|dominant))\b/i,
+      /\b(midline\s+(stability|control|stiffness)|pillar\s+(strength|stability|work))\b/i,
+      /\b(more\s+core\s+(control|stiffness|bracing|dominant|stability|anti.?rotation))\b/i,
+      /\b(more\s+planks?|plank\s+(variations?|progressions?|work)|core.?focused\s+(session|block|work))\b/i,
+      /\b(positional\s+(trunk|core)\s+(control|strength|stability))\b/i,
+    ],
+  },
+
   // ── Hypertrophy Focus ─────────────────────────────────────────────────────
   {
     family: "hypertrophy_focus",
@@ -495,6 +580,26 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
       /\b(more muscle|build (more )?muscle|muscle building|add (muscle|mass|size))\b/i,
       /\b(bodybuilding (style|focus)|more isolation|more accessory work)\b/i,
       /\b(time under tension|pump|muscle size|mass building)\b/i,
+    ],
+  },
+
+  // ── End-Range Control Focus (Mobility mode) ───────────────────────────────
+  // IMPORTANT: Must appear BEFORE rom_restoration_focus so that PAILs/RAILs,
+  // "end-range control", and "own the position" language is caught here rather
+  // than being routed to the passive ROM restoration bundle.
+  // End-range control = active isometric strength at end range (PAILs/RAILs).
+  // ROM restoration = gaining passive range. They are distinct families.
+  {
+    family: "end_range_control_focus",
+    patterns: [
+      /\b(end.?range\s+(control|strength|stability|capacity|work|loading|isometric))\b/i,
+      /\b(PAILs|RAILs|PAILs\s+(and|&)\s+RAILs|progressive\s+angular\s+isometric|regressive\s+angular\s+isometric)\b/i,
+      /\b(own\s+(the|my)\s+(position|range|end.?range|deep\s+position|end\s+position))\b/i,
+      /\b(stronger\s+(in|at)\s+(the\s+)?end.?range|strength\s+(in|at)\s+(the\s+)?end.?range)\b/i,
+      /\b(active\s+(end.?range\s+(control|strength|work|loading)|range\s+control))\b/i,
+      /\b(functional\s+range\s+conditioning|FRC\s+(work|protocol|method|training))\b/i,
+      /\b(isometric\s+(at|in)\s+(the\s+)?end.?range|end.?range\s+isometric(s)?)\b/i,
+      /\b(positional\s+(ownership|control|strength)|loaded\s+end.?range)\b/i,
     ],
   },
 
@@ -542,6 +647,25 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
       /\b(feel stuck|stuck in.{0,15}(hips?|shoulders?|back)|stiff.{0,15}(hips?|back|thoracic|ankles?))\b/i,
       /\b(hips?|back|thoracic|ankles?|shoulders?|knees?).{0,20}(is|are)\s+stiff\b/i,
       /\b(loaded (stretching|stretch)|contract.?relax|PNF (stretch|work|sequences?))\b/i,
+    ],
+  },
+
+  // ── Mobility Flow Focus ───────────────────────────────────────────────────
+  // IMPORTANT: Must appear BEFORE mobility_support and BEFORE recovery_focus
+  // in the mobility domain so that flow/continuity language is not routed to
+  // the generic "add mobility work" bundle or the restorative recovery bundle.
+  // Mobility flow = continuous linked movement sequences (structural reorganization).
+  // Recovery focus = lower intensity / restoration. These are distinct families.
+  {
+    family: "mobility_flow_focus",
+    patterns: [
+      /\b(mobility\s+flow|movement\s+flow|flowing\s+(mobility|movement\s+sequence|practice))\b/i,
+      /\b(connective\s+movement|connected\s+mobility|connected\s+movement\s+sequence)\b/i,
+      /\b(continuous\s+(mobility\s+)?flow|integrated\s+mobility\s+sequence)\b/i,
+      /\b(smoother\s+(mobility|transitions?|movement\s+flow|sequencing|practice))\b/i,
+      /\b(less\s+segmented\s+(mobility|practice|session)|linked\s+mobility\s+(sequence|work))\b/i,
+      /\b(kinetic\s+chain\s+flow|flow\s+sequence\s+(work|training|protocol))\b/i,
+      /\b(more\s+integrated\s+(movement\s+)?sequence|ground.?based\s+flow)\b/i,
     ],
   },
 
@@ -763,6 +887,34 @@ const MODE_PRIORITY_PATTERNS: Record<FocusMode, ModePriorityEntry[]> = {
       ],
       reason: "Speed mode: COD/agility/decel requests must be classified as change-of-direction work, not routed to barbell power bundle",
     },
+    {
+      family: "tendon_resilience_focus",
+      patterns: [
+        // Protect / manage specific tendons — in speed context always = load management, NOT injury rehab
+        /\b(protect\s+(my\s+)?(tendons?|Achilles|patellar(\s+tendon)?|elbow(\s+tendon)?))\b/i,
+        /\b(reduce\s+tendon\s+(load|stress|strain|demand|volume|frequency))\b/i,
+        /\b(easier\s+on\s+(my\s+)?(Achilles|patellar(\s+tendon)?|tendons?|elbow(\s+tendon)?))\b/i,
+        /\b(less\s+(Achilles|patellar|tendon)(\s+tendon)?\s+(stress|load|strain|demand|pressure))\b/i,
+        /\b(more\s+tendon.?friendly|tendon.?friendly)\b/i,
+        /\b(Achilles.?friendly|patellar.?friendly)\b/i,
+        /\b(tendon\s+(health|resilience|conditioning|prep|care|protection|management))\b/i,
+      ],
+      reason: "Speed mode: tendon protection/load-management phrases = tendon_resilience_focus (manage plyometric load, swap to eccentrics/isometrics) — NOT injury_modification (no pain/injury language) and NOT joint_friendly or recovery_focus",
+    },
+    {
+      family: "trunk_core_emphasis",
+      patterns: [
+        /\bmore\s+core\b/i,
+        // Trunk stiffness / bracing in speed context = sprint/COD mechanics transfer
+        /\b(trunk\s+stiffness|core\s+stiffness|bracing\s+(for\s+)?(speed|sprint|COD|cutting|decel))\b/i,
+        /\b(anti.?rotation\s+(for\s+)?(speed|sprint|COD|cutting)|core\s+(for\s+)?(speed|sprint|COD))\b/i,
+        /\b(more\s+anti.?rotation|more\s+anti.?extension|midline\s+(stability|control|stiffness))\b/i,
+        /\b(trunk\s+(stability|control|emphasis|focus|work)\s*(for\s+)?(speed|sprint|cutting|COD|mechanics)?)\b/i,
+        /\b(core\s+(emphasis|focus|dominant|control|stability)\s*(for\s+)?(speed|sprint|cutting)?)\b/i,
+        /\b(pillar\s+(strength|stability|work))\b/i,
+      ],
+      reason: "Speed mode: trunk/core stability = trunk_core_emphasis (stiffness and bracing for sprint/COD transfer mechanics), NOT generic session_expansion or accessory filler",
+    },
   ],
 
   // ── MOBILITY MODE ────────────────────────────────────────────────────────────
@@ -795,9 +947,60 @@ const MODE_PRIORITY_PATTERNS: Record<FocusMode, ModePriorityEntry[]> = {
         /\b(unlock\s+(my\s+)?(hips?|shoulders?|thoracic|ankles?|spine))\b/i,
         // "CARs" / controlled articular rotations — always ROM restoration
         /\bCARs?\b/i,
-        /\b(controlled\s+articular\s+rotations?|joint\s+circle|end.range\s+(control|strength|loading))\b/i,
+        /\b(controlled\s+articular\s+rotations?|joint\s+circle)\b/i,
       ],
       reason: "Mobility mode: depth/range challenge and CAR-style phrases = ROM restoration (range challenge), not generic difficulty progression",
+    },
+    {
+      family: "end_range_control_focus",
+      patterns: [
+        // PAILs / RAILs — always end-range strength work, never passive ROM restoration
+        /\b(PAILs|RAILs|PAILs\s+(and|&)\s+RAILs|progressive\s+angular\s+isometric|regressive\s+angular\s+isometric)\b/i,
+        // "Own the position / range" — active positional ownership
+        /\b(own\s+(the|my)\s+(position|range|end.?range|deep\s+position|end\s+position))\b/i,
+        // Stronger at end range — active, not passive
+        /\b(stronger\s+(in|at)\s+(the\s+)?end.?range|strength\s+(in|at)\s+(the\s+)?end.?range)\b/i,
+        // End-range control / strength / stability
+        /\b(end.?range\s+(control|strength|stability|capacity|work|loading|isometric))\b/i,
+        // Active range control
+        /\b(active\s+(end.?range\s+(control|strength|work|loading)|range\s+control))\b/i,
+        // FRC (Functional Range Conditioning) — active system
+        /\b(functional\s+range\s+conditioning|FRC\s+(work|protocol|method|training))\b/i,
+        // End-range isometrics
+        /\b(isometric\s+(at|in)\s+(the\s+)?end.?range|end.?range\s+isometric(s)?)\b/i,
+        // Positional ownership / loaded end range
+        /\b(positional\s+(ownership|control|strength)|loaded\s+end.?range)\b/i,
+      ],
+      reason: "Mobility mode: PAILs/RAILs, end-range control/strength, positional ownership = end_range_control_focus (active isometric strength at end range) — NOT rom_restoration_focus (passive range acquisition) — these are distinct families",
+    },
+    {
+      family: "mobility_flow_focus",
+      patterns: [
+        // "more flow" — unambiguous in mobility context
+        /\bmore\s+flow\b/i,
+        // Mobility/movement flow
+        /\b(mobility\s+flow|movement\s+flow|flowing\s+(mobility|movement|practice))\b/i,
+        // Smoother mobility / transitions
+        /\b(smoother\s+(mobility|transitions?|sequencing|movement\s+flow|practice))\b/i,
+        // Connective / integrated sequences
+        /\b(connective\s+movement|connected\s+mobility|continuous\s+(mobility\s+)?flow)\b/i,
+        /\b(integrated\s+mobility\s+sequence|linked\s+mobility|less\s+segmented\s+(mobility|practice))\b/i,
+      ],
+      reason: "Mobility mode: 'more flow', 'smoother mobility flow', 'connective movement', 'continuous flow' = mobility_flow_focus (linked continuous movement sequences) — NOT recovery_focus (restorative/yin/lower-intensity) — these are structurally distinct requests",
+    },
+    {
+      family: "trunk_core_emphasis",
+      patterns: [
+        /\bmore\s+core\b/i,
+        // Positional trunk control in mobility context
+        /\b(positional\s+(trunk|core)\s+(control|strength|stability))\b/i,
+        /\b(trunk\s+(stability|control|strength|focus|emphasis|work))\b/i,
+        /\b(core\s+(control|stability|dominant|emphasis|focus|positional\s+strength))\b/i,
+        /\b(more\s+anti.?rotation|more\s+anti.?extension|midline\s+(stability|control))\b/i,
+        /\b(more\s+(trunk|core)\s+(work|training|stability|control|strength))\b/i,
+        /\b(pillar\s+(strength|stability)|deadbug|bird.?dog|hollow\s+body\s+(hold|work))\b/i,
+      ],
+      reason: "Mobility mode: trunk/core emphasis = trunk_core_emphasis (positional trunk control, deadbug/bird-dog/hollow body) — NOT generic session_expansion and NOT accessory filler",
     },
   ],
 
@@ -815,6 +1018,47 @@ const MODE_PRIORITY_PATTERNS: Record<FocusMode, ModePriorityEntry[]> = {
         /\b(rate\s+of\s+force|first\s+step\s+power|ballistic\s+(work|training))\b/i,
       ],
       reason: "Strength mode: explosive/power requests stay in power_explosive_focus (barbell-first bundle), not routed to speed-mode reactive bundles",
+    },
+    {
+      family: "unilateral_emphasis",
+      patterns: [
+        /\b(more\s+unilateral|unilateral\s+(emphasis|focus|bias|work|training|dominant))\b/i,
+        /\b(more\s+single.?leg\s+(work|training|exercises?|movements?)|single.?leg\s+(focus|bias|emphasis))\b/i,
+        /\b(more\s+one.?leg(ged)?\s+(work|training|movements?)|one.?legged\s+(focus|training|work))\b/i,
+        /\b(less\s+bilateral|fewer\s+bilateral|reduce\s+bilateral|more\s+split\s+stance)\b/i,
+        /\b(split.?stance\s+(emphasis|focus|bias|work|training))\b/i,
+        /\b(unilateral\s+(lower|upper)\s+(emphasis|focus|bias|work|training))\b/i,
+        /\b(single.?arm\s+(work|focus|training|emphasis|bias))\b/i,
+      ],
+      reason: "Strength mode: single-leg/unilateral/split-stance language = unilateral_emphasis (systematic programming bias shift) — NOT generic exercise variation or add_exercise",
+    },
+    {
+      family: "posterior_chain_emphasis",
+      patterns: [
+        /\b(more\s+posterior\s+chain|posterior\s+chain\s+(emphasis|focus|bias|work|training))\b/i,
+        /\b(more\s+hamstrings?|more\s+hamstring\s+(work|training|emphasis|volume))\b/i,
+        /\b(more\s+glutes?|glute\s+(emphasis|focus|work|training|dominant|bias))\b/i,
+        /\b(more\s+hinge|hinge.?dominant|hinge\s+(emphasis|focus|work|training|bias))\b/i,
+        /\b(more\s+(RDL|Romanian\s+deadlift|hip\s+hinge\s+work))\b/i,
+        /\b(backside\s+(emphasis|focus|work|training)|hip\s+extension\s+(focus|emphasis|bias))\b/i,
+        /\b(more\s+pulling|pulling\s+(emphasis|focus|bias|dominant)|pull.?dominant)\b/i,
+        /\b(hamstring\s+(dominant|emphasis|focus|bias)|glute.?ham\s+(emphasis|focus|work))\b/i,
+      ],
+      reason: "Strength mode: posterior chain / hamstring / glute / hinge / pulling emphasis = posterior_chain_emphasis (hinge/glute/hamstring bias shift) — NOT generic hypertrophy and NOT pulling-only or generic variation",
+    },
+    {
+      family: "trunk_core_emphasis",
+      patterns: [
+        /\bmore\s+core\b/i,
+        /\b(more\s+(trunk|core)\s+(work|training|stability|control|stiffness|strength|emphasis|focus))\b/i,
+        /\b(more\s+(anti.?rotation|anti.?extension|anti.?flexion|anti.?lateral\s+flexion))\b/i,
+        /\b(trunk\s+(stability|stiffness|control|strength|emphasis|focus|bias))\b/i,
+        /\b(core\s+(emphasis|focus|bias|dominant|stiffness|control|stability))\b/i,
+        /\b(midline\s+(stability|control|stiffness)|pillar\s+(strength|stability|work))\b/i,
+        /\b(more\s+core\s+(control|stiffness|bracing|dominant|stability|anti.?rotation))\b/i,
+        /\b(more\s+planks?|plank\s+(variations?|progressions?|work)|core.?focused)\b/i,
+      ],
+      reason: "Strength mode: trunk/core stability = trunk_core_emphasis (anti-rotation/anti-extension under load, carries, Pallof press) — NOT generic session_expansion or accessory filler",
     },
   ],
 };
@@ -1556,6 +1800,168 @@ const TRANSFORMATION_BUNDLES: Record<IntentFamily, TransformationBundle> = {
     scopeGuidance: "Add tissue prep to the beginning of all relevant sessions. If a standalone mobility session, build around stiffness reduction sequencing (tissue prep → passive holds → active control).",
   },
 
+  tendon_resilience_focus: {
+    intentFamily: "tendon_resilience_focus",
+    minimumStructuralChanges: 1,
+    primaryChanges: [
+      { type: "add_tendon_prep", description: "Add tendon-specific preparation and progressive loading work (isometric holds 30–45s, slow eccentrics 4–6s lowering, submaximal tempo contacts) targeting the identified tendon or highest-demand regional movement", countAs: 1 },
+      { type: "replace_exercise", description: "Swap tendon-aggravating exercises (high-volume plyometrics, aggressive reactive contacts, depth jumps, high-frequency bouncing) with tendon-friendlier alternatives (slow eccentrics, isometric pauses, lower contact-frequency reactive work)", countAs: 1 },
+    ],
+    secondaryChanges: [
+      { type: "reduce_density", description: "Reduce contact-intensive volume or reactive drill density to lower cumulative tendon stress without eliminating all tendon-loading", countAs: 1 },
+      { type: "add_prep_block", description: "Add a structured tendon warm-up block (isometrics, slow tempo movements) before the session's highest-demand work", countAs: 1 },
+    ],
+    antiPatterns: [
+      "Do NOT default to injury_modification (remove exercises, work around pain) — tendon resilience requests do NOT imply pain or injury; they are load management requests",
+      "Do NOT remove all plyometric or reactive content by default — reduce volume and contact frequency first, then rebuild progressively; maintain some tendon-loading stimulus",
+      "Do NOT apply generic joint_friendly modifications (lower-impact exercises) as the primary response — tendon resilience is about load management and progressive conditioning, not joint protection from impact",
+      "Do NOT add coaching notes alone — structural changes to exercise selection or loading parameters are required",
+      "Do NOT reduce session identity or the day's training theme — preserve the session character while managing tendon load",
+    ],
+    validationRules: [
+      "At least 1 exercise substitution, contact reduction, or structured tendon prep addition is required",
+      "Changes must specifically address tendon load or tendon-aggravating movement patterns — not generic difficulty reduction",
+      "Session identity must be preserved — this is load management, not injury accommodation",
+    ],
+    aiDirective: "TENDON RESILIENCE FOCUS: The user wants to protect tendon health or reduce tendon stress — this is a LOAD MANAGEMENT request, NOT an injury modification.\n\nRequired changes:\n1. TENDON IDENTIFICATION: Identify the target tendon from context (Achilles = calf/ankle work, patellar = knee extension loading, proximal hamstring = hip hinge loading, elbow = pressing/gripping). If unspecified, assess the session's highest-demand movements.\n2. LOAD MANAGEMENT: Replace or reduce high-tendon-stress exercises (reactive contacts, high-frequency plyometrics, depth jumps) with tendon-friendlier alternatives:\n   • Slow eccentrics: 4–6s lowering phase (e.g., slow eccentric calf raise, slow eccentric hamstring curl)\n   • Isometric holds: 30–45s at comfortable tension (e.g., isometric calf holds in plantarflexion, isometric wall sit for patellar)\n   • Lower contact frequency: reduce jumps/bounds per set, increase rest between contacts\n3. TENDON PREP BLOCK: Add a brief isometric tendon warm-up (2–3 sets × 30–45s) before the session's highest-demand work — this primes the tendon for load without aggravating it.\n4. PROGRESSIVE PRINCIPLE: Tendons adapt to load progressively — the goal is to maintain training stimulus while reducing rate and magnitude of load. Do NOT eliminate all tendon-loading; reduce and rebuild.\n\nIDENTITY UPDATE REQUIRED: Produce an update_session change. Example label: 'Speed Training — Tendon-Resilient Build'. Example emphasis: 'Progressive speed development with managed tendon load through eccentric control, isometric preparation, and reduced contact frequency'.",
+    scopeGuidance: "Apply to sessions with the highest tendon-stress exercises. Preserve overall training identity and volume where possible.",
+  },
+
+  end_range_control_focus: {
+    intentFamily: "end_range_control_focus",
+    minimumStructuralChanges: 1,
+    primaryChanges: [
+      { type: "add_end_range_strength", description: "Add active end-range isometric strength work: PAILs (Progressive Angular Isometric Loading — contract INTO the stretch at 20-100% effort) and RAILs (Regressive Angular Isometric Loading — contract AWAY from the stretch at max effort) at the identified joint/position", countAs: 1 },
+      { type: "replace_exercise", description: "Swap passive-only stretching or generic ROM holds toward active end-range loading exercises (loaded end-range holds with active muscular engagement, positional isometrics, FRC-style active CARs)", countAs: 1 },
+    ],
+    secondaryChanges: [
+      { type: "add_mobility_work", description: "Add controlled articular rotations (CARs) at the target joint — 3–5 slow reps maximizing active range expression with muscular engagement throughout the arc — to develop active range ownership before loading end-range positions", countAs: 1 },
+      { type: "add_tolerance_work", description: "Add progressive isometric holds at end-range with increasing duration or increasing force output over sessions", countAs: 1 },
+    ],
+    antiPatterns: [
+      "Do NOT collapse into rom_restoration_focus — ROM restoration is about gaining passive range; end-range control is about strengthening and actively owning the range you already have — they are distinct goals",
+      "Do NOT add more passive holds or long static stretching as the primary response — this request is explicitly about ACTIVE CONTRACTION and isometric strength at end range",
+      "Do NOT add generic mobility or flexibility work without emphasizing the active contraction and positional ownership component",
+      "Do NOT ignore the active strength element — PAILs/RAILs require genuine muscular contraction, not passive position-holding",
+      "Do NOT confuse PAILs/RAILs with PNF contract-relax — they are different: PAILs/RAILs are isometric holds at end range for strength development, not neurological inhibition for range gains",
+    ],
+    validationRules: [
+      "At least 1 active end-range strength exercise must be structurally added (PAILs, RAILs, end-range isometric hold with engagement, loaded end-range position)",
+      "Added work must include an active muscular contraction component — passive holds alone are insufficient",
+      "Target region must be specified — do not add generic unlabeled 'end-range work'",
+    ],
+    aiDirective: "END-RANGE CONTROL FOCUS: The user wants to develop strength and active control at the end of their range of motion — this is ACTIVE END-RANGE STRENGTH TRAINING, NOT passive stretching or ROM restoration.\n\nRequired changes:\n1. POSITION IDENTIFICATION: Identify the target joint/position from context (hips at 90/90 end range, shoulder in full overhead position, ankle at max dorsiflexion, etc.).\n2. PAILs / RAILs PROTOCOL (primary):\n   • Enter passive end-range position → hold passively for 1–2 min (accumulate range)\n   • PAILs: gradually contract the muscles that would take you FURTHER into the stretch (push INTO the floor/resistance) — start at 20% effort, build to 100% over 20s\n   • RAILs: contract the muscles that pull the joint OUT of the stretch (lift/pull AWAY from the end position) — max effort for 20s\n   • Rest → repeat 2–3 rounds\n3. ACTIVE CARs: Add controlled articular rotations — 3–5 slow reps at the target joint, actively expressing maximum range in every direction. These prepare the nervous system for end-range loading.\n4. LOADED END-RANGE HOLDS: If PAILs/RAILs are unfamiliar, use loaded end-range isometrics: hold a position at full end-range with active muscular engagement (not passive sink) for 30–60s with light resistance (band, weight).\n\nIDENTITY UPDATE REQUIRED: Produce an update_session change. Example label: 'Mobility — End-Range Strength & Control'. Example emphasis: 'Active positional ownership through PAILs/RAILs protocols and end-range isometric loading at target joints'.",
+    scopeGuidance: "Add as a focused 10–20 minute block within or following passive mobility work. Passive range first to access the position, then active contraction to own it.",
+  },
+
+  mobility_flow_focus: {
+    intentFamily: "mobility_flow_focus",
+    minimumStructuralChanges: 1,
+    primaryChanges: [
+      { type: "add_flow_sequence", description: "Add or design a continuous linked mobility sequence (e.g., ground-based flow: lying → seated → kneeling → standing; hip flow: pigeon → frog → deep squat → active hip CAR; spinal wave: floor through spinal articulation to standing; beast-to-crab flow integrating spine, hips, and shoulders)", countAs: 1 },
+      { type: "replace_exercise", description: "Replace segmented isolated stretches with multi-joint continuous movement sequences that link postures through active transitions (e.g., from pigeon → rotate into thread-the-needle → seated twist → roll to standing)", countAs: 1 },
+    ],
+    secondaryChanges: [
+      { type: "update_session_emphasis", description: "Update session structure from isolated-hold format to flowing-sequence format: reduce instruction density between exercises, cue breath-guided transitions, reduce hold durations slightly and increase transition repetitions", countAs: 1 },
+      { type: "add_mobility_work", description: "Add connective flow exercises that link the session's key movement themes into a continuous practice", countAs: 1 },
+    ],
+    antiPatterns: [
+      "Do NOT default to recovery_focus or restorative logic — mobility flow is about connected movement sequences, NOT lower intensity or deloading",
+      "Do NOT collapse into generic mobility_support (add mobility exercises) — mobility flow is about the STRUCTURE and CONTINUITY of movement, not simply adding more mobility work",
+      "Do NOT add isolated single-joint stretches as the primary response — the request is specifically about CONTINUOUS, LINKED, multi-joint sequences",
+      "Do NOT reduce total session content — this is a structural reorganization toward flow, not simplification or volume reduction",
+      "Do NOT add coaching notes about 'flowing between exercises' without actually restructuring the exercise sequence to be physically linked",
+    ],
+    validationRules: [
+      "At least 1 continuous multi-joint movement sequence must be structurally added or created from existing exercises",
+      "Transitions between movements must be described as active and connected — not 'rest, then move to next station'",
+      "Session emphasis must be updated to reflect the linked/continuous character of the updated work",
+    ],
+    aiDirective: "MOBILITY FLOW FOCUS: The user wants connected, continuous mobility sequences rather than segmented isolated exercises — this is a STRUCTURAL REORGANIZATION request.\n\nRequired changes:\n1. SEQUENCE DESIGN: Identify 3–6 existing or new exercises that can be linked into a continuous ground-based or standing flow. Common flow structures:\n   • Ground flow: lying → supine twist → seated → kneeling → standing (breath-guided transitions)\n   • Hip flow: pigeon → frog → deep squat → hip CAR → lateral lunge → reverse lunge\n   • Spinal wave: floor press-up → child's pose → cat-cow → beast → kneeling → standing\n   • Shoulder/upper body flow: thread-the-needle → open book → quadruped reach → downward dog → arm circles\n2. TRANSITION DESIGN: Each exercise should EXIT into the next through an active transition — not 'stand up and walk to next station'. Describe the transition explicitly.\n3. BREATH INTEGRATION: Cue breath-guided pacing — inhale to open/prepare, exhale to deepen/transition. This is what gives mobility flow its 'flow' quality.\n4. RESTRUCTURE FORMAT: Reorganize the session exercises into a flowing sequence. Reduce hold durations to 30–45s per position (vs 2–5 min isolated holds). Increase transition repetitions. Remove stopping points between exercises.\n\nIDENTITY UPDATE REQUIRED: Produce an update_session change. Example label: 'Mobility Flow — Integrated Movement Sequence'. Example emphasis: 'Continuous linked multi-joint movement flow with active transitions and breath-guided pacing'.",
+    scopeGuidance: "Restructure the target session(s) from isolated-exercise format into a continuous flowing sequence. Can be applied to the full session or to a major block within it.",
+  },
+
+  unilateral_emphasis: {
+    intentFamily: "unilateral_emphasis",
+    minimumStructuralChanges: 1,
+    primaryChanges: [
+      { type: "add_unilateral_work", description: "Add or substitute toward unilateral lower body and/or upper body exercises appropriate to the session's movement theme: single-leg deadlifts, Bulgarian split squats, reverse lunges, single-arm rows, single-arm press variations", countAs: 1 },
+      { type: "replace_exercise", description: "Replace bilateral exercises with unilateral alternatives that preserve the movement pattern and intent: barbell squat → Bulgarian split squat or barbell reverse lunge; barbell RDL → single-leg RDL or B-stance RDL; two-arm cable row → single-arm cable row", countAs: 1 },
+    ],
+    secondaryChanges: [
+      { type: "add_accessories", description: "Add targeted unilateral accessory work addressing lateral stability, single-leg hip strength, or unilateral loading asymmetries (Copenhagen plank, single-leg hip thrust, lateral step-up, single-arm carry)", countAs: 1 },
+      { type: "update_session_emphasis", description: "Update session label/emphasis to reflect unilateral bias", countAs: 0 },
+    ],
+    antiPatterns: [
+      "Do NOT remove all bilateral exercises — preserve at least one bilateral anchor per session to maintain absolute load expression and inter-limb coordination (often the main lift stays bilateral; accessories shift unilateral)",
+      "Do NOT collapse into generic exercise_swap or exercise variation — this is a SYSTEMATIC BIAS SHIFT across the session, not a one-off swap",
+      "Do NOT add generic 'single-leg work' without identifying which movement pattern to shift (lower push: squat; lower pull: hinge; upper push: press; upper pull: row)",
+      "Do NOT reduce total training volume — replace bilateral work with unilateral at equivalent total load (both legs/arms combined)",
+      "Do NOT treat unilateral exercises as light accessory filler — load them appropriately (typically 50–60% per limb for lower, higher for upper)",
+    ],
+    validationRules: [
+      "At least 1 bilateral exercise replaced or supplemented with a unilateral alternative",
+      "Replacement must preserve the movement pattern intent (squat pattern stays squat pattern, hinge stays hinge, row stays row)",
+      "At least 1 bilateral anchor must remain in the session",
+    ],
+    aiDirective: "UNILATERAL EMPHASIS: The user wants to shift training bias toward single-limb work — this is a SYSTEMATIC PROGRAMMING BIAS SHIFT, not a one-off exercise swap.\n\nRequired changes:\n1. PATTERN IDENTIFICATION: Identify the session's primary movement patterns (lower push: squat; lower pull: hinge; upper push: press; upper pull: row/pull). Apply unilateral bias to 2–3 patterns per session.\n2. SUBSTITUTION LOGIC — Match the movement pattern:\n   • Lower push: Barbell Back Squat → Bulgarian Split Squat, Barbell Reverse Lunge, or Barbell Step-Up\n   • Lower pull: Barbell RDL → Single-Leg RDL (bilateral loading), B-Stance RDL (asymmetric loading)\n   • Upper push: Barbell Bench → Single-Arm DB Press, or keep bilateral bench and shift accessories\n   • Upper pull: Two-Arm Cable Row → Single-Arm Cable Row; Lat Pulldown → Single-Arm Lat Pulldown\n3. BILATERAL ANCHOR RULE: Keep at least one bilateral exercise (often the session's primary lift) to preserve absolute load expression and prevent inter-limb coordination loss. The anchor stays; the accessory tier shifts unilateral.\n4. LOADING PRINCIPLE: Unilateral lower body loads at 50–60% of bilateral load per limb. Upper body unilateral loads at higher fraction. Do not default to bodyweight or underpowered alternatives.\n\nIDENTITY UPDATE REQUIRED: Produce an update_session change. Example label: 'Strength — Unilateral Emphasis Block'. Example emphasis: 'Single-limb loading bias for asymmetry correction, lateral stability development, and sport-specific unilateral strength'.",
+    scopeGuidance: "Apply to targeted sessions. If program-wide, shift the accessory tier first across all days. If a single session, shift 1–2 main movements and all accessories toward unilateral.",
+  },
+
+  posterior_chain_emphasis: {
+    intentFamily: "posterior_chain_emphasis",
+    minimumStructuralChanges: 1,
+    primaryChanges: [
+      { type: "add_posterior_chain", description: "Add or bias toward posterior chain exercises (Romanian deadlifts, single-leg RDL, hip thrusts, barbell glute bridges, GHD work, Nordic hamstring curls, back extensions, cable pull-throughs, glute-ham raises)", countAs: 1 },
+      { type: "replace_exercise", description: "Replace anterior-chain dominant exercises (quad-dominant squats, leg press, leg extension, knee flexion accessories) with posterior-chain alternatives (hip hinge patterns, glute/hamstring emphasis exercises)", countAs: 1 },
+    ],
+    secondaryChanges: [
+      { type: "add_accessories", description: "Add targeted glute/hamstring accessory work (hip thrusts, glute bridges, Nordic curls, hamstring curls, face pulls, cable pull-throughs, banded clamshells) as posterior chain supplementation", countAs: 1 },
+      { type: "update_session_emphasis", description: "Update session emphasis to reflect posterior chain / hinge-dominant bias", countAs: 0 },
+    ],
+    antiPatterns: [
+      "Do NOT remove all anterior chain or quad work — shift emphasis, not eliminate; a posterior chain bias session still has some knee-dominant work for balance",
+      "Do NOT collapse into generic hypertrophy_focus — posterior chain emphasis is about the hinge/glute/hamstring movement cluster specifically, not general muscle building",
+      "Do NOT collapse into generic 'more pulling' if the context is lower posterior chain — upper back pulling (rows, pull-ups) is NOT the primary target unless explicitly requested",
+      "Do NOT add only bodyweight glute bridges if the session already has heavy loaded exercises — match the loading context and intensity level",
+      "Do NOT reduce session identity to generic back work — maintain movement pattern diversity while shifting emphasis",
+    ],
+    validationRules: [
+      "At least 1 posterior chain exercise (hip hinge, glute, or hamstring pattern) must be structurally added or substituted",
+      "Changes must specifically target the hip hinge, glute, or hamstring movement pattern — not upper back pulling only",
+      "Session identity (the day's primary training focus) must be preserved",
+    ],
+    aiDirective: "POSTERIOR CHAIN EMPHASIS: The user wants to shift training bias toward the posterior chain — this means HINGE, GLUTE, and HAMSTRING dominant work, NOT generic upper body pulling.\n\nRequired changes:\n1. PATTERN PRIORITIZATION: Assess the current movement balance. Identify what is most underrepresented in the posterior chain: hip hinge loading, glute isolation, or hamstring volume.\n2. EXERCISE ADDITIONS by pattern:\n   Hip hinge: Romanian deadlift (RDL), single-leg RDL, stiff-leg deadlift, good morning, cable pull-through, hex bar deadlift.\n   Glute dominant: barbell hip thrust, banded hip thrust, glute bridge, 45-degree back extension (rounded back), hip abduction.\n   Hamstring: Nordic hamstring curl, lying/seated leg curl, GHD hamstring curl, hamstring walkout, Swiss ball leg curl.\n3. SUBSTITUTIONS: Swap quad-dominant accessories (leg press, leg extension, goblet squat accessories) with hip/hamstring alternatives where logical.\n4. UPPER BODY PULLING (if 'more pulling' language used): Add rowing variations as upper posterior chain complement (cable row, DB row, Pendlay row, face pull) — but do not let upper pulling dominate if the request context is lower posterior chain emphasis.\n\nIDENTITY UPDATE REQUIRED: Produce an update_session change. Example label: 'Strength — Posterior Chain Emphasis'. Example emphasis: 'Hip hinge, glute, and hamstring dominant loading with posterior chain bias across all movement tiers'.",
+    scopeGuidance: "Apply to targeted session(s). If program-wide, shift accessories first across all days. If a single session, shift 1–2 main movements and all accessories toward posterior chain.",
+  },
+
+  trunk_core_emphasis: {
+    intentFamily: "trunk_core_emphasis",
+    minimumStructuralChanges: 1,
+    primaryChanges: [
+      { type: "add_core_stability", description: "Add structured trunk stability work appropriate to the active mode: anti-rotation (Pallof press, Copenhagen plank), anti-extension (ab wheel rollout, RKC plank, weighted hollow body), anti-flexion (suitcase carry, lateral plank), or positional isometrics (deadbug, bird-dog, hollow body hold)", countAs: 1 },
+      { type: "replace_exercise", description: "Replace generic accessory work with targeted trunk stability exercises relevant to the session's movement context and active training mode", countAs: 1 },
+    ],
+    secondaryChanges: [
+      { type: "add_accessories", description: "Add core-focused accessories as a dedicated trunk stability block: carries (farmer, suitcase, overhead), anti-rotation presses, plank progressions, rotational work appropriate to the mode", countAs: 1 },
+      { type: "update_session_emphasis", description: "Update session label/emphasis to reflect trunk/core emphasis", countAs: 0 },
+    ],
+    antiPatterns: [
+      "Do NOT add crunches or sit-ups as the primary response — trunk stability emphasis means anti-movement isometric control and bracing, NOT spinal flexion exercises",
+      "Do NOT reduce this to generic 'core accessory filler' (random ab exercises) — this requires STRUCTURED trunk stability programming with specific anti-movement patterns",
+      "Do NOT collapse into generic session_expansion — trunk_core_emphasis requires exercises specifically targeting spinal stability, anti-rotation, or anti-extension patterns",
+      "Do NOT ignore mode context: Strength = trunk stability under heavy load (carries, Pallof press, heavy planks, ab wheel); Speed = trunk stiffness and bracing for sprint/COD transfer (anti-rotation during decel, standing Pallof, rapid bracing drills); Mobility = positional trunk control (deadbug, bird-dog, hollow body, breath-locked IAP holds)",
+      "Do NOT add generic planks without progressive loading or variation — if adding planks, progress them (weighted, ring planks, plank with perturbation, RKC plank cues)",
+    ],
+    validationRules: [
+      "At least 1 structured trunk stability exercise must be added (anti-rotation, anti-extension, anti-flexion, or positional isometric)",
+      "Added exercises must specifically target trunk stability — not generic abdominal exercises (avoid crunches as the sole or primary response)",
+      "Mode context must be respected: Strength = load-bearing stability; Speed = transfer-specific bracing; Mobility = positional control",
+    ],
+    aiDirective: "TRUNK/CORE EMPHASIS: The user wants structured trunk stability work — this is ANTI-MOVEMENT ISOMETRIC CONTROL, not generic abdominal exercises.\n\nMode-specific implementation:\n\nSTRENGTH MODE — Trunk stability under load:\n  Anti-extension: ab wheel rollout, RKC plank (posterior pelvic tilt under tension), weighted hollow body (plate on chest), heavy plank (vest/plate).\n  Anti-rotation: Pallof press (cable or band, standing/half-kneeling/kneeling), Copenhagen plank (adductor + lateral trunk), single-arm carries.\n  Anti-flexion: suitcase carry (one-sided), single-arm overhead carry, lateral plank with hip drop.\n  Full integration: Farmer's carry, trap bar carry — pillar stability under bilateral load.\n\nSPEED MODE — Trunk stability for sprint/COD transfer:\n  Rapid bracing: reactive Pallof press (partner perturbation or sudden load), standing anti-rotation holds with hip load.\n  Deceleration trunk: single-leg Pallof press, lateral bound to plank hold, anti-rotation during decel drills.\n  Sprint posture: hollow body holds (sprint body position isometric), standing anti-extension with hip flexor drive.\n\nMOBILITY MODE — Positional trunk control:\n  Deadbug (extending opposite arm/leg from hollow body base), bird-dog (quadruped reach with spinal neutral).\n  Hollow body hold (2–3 sets × 20–30s): full exhale → brace → tuck ribs → hold.\n  Breath-locked IAP: exhale fully → brace → hold position while breathing shallowly (teaches intra-abdominal pressure and spinal control).\n  Bear crawl hold, quadruped hold with reach — positional isometrics.\n\nIDENTITY UPDATE REQUIRED: Produce an update_session change with mode-specific label. Examples: 'Strength — Pillar Stability Block' / 'Speed — Trunk Transfer Training' / 'Mobility — Positional Core Control'. Adapt emphasis to actual mode and exercises selected.",
+    scopeGuidance: "Add trunk stability work as a dedicated block — either at session start (potentiation/warm-up) or at the end (accessory tier). In Strength mode, carry work integrates naturally with main training. In Speed/Mobility, add as a standalone block of 10–15 minutes.",
+  },
+
   injury_modification: {
     intentFamily: "injury_modification",
     minimumStructuralChanges: 1,
@@ -1967,6 +2373,10 @@ export interface TransformationResult {
   onlyTextChanges?: boolean;
 }
 
+export function getTransformationBundle(family: IntentFamily): TransformationBundle {
+  return TRANSFORMATION_BUNDLES[family];
+}
+
 export function validateTransformationResult(
   result: TransformationResult,
 ): ValidationResult {
@@ -2265,6 +2675,33 @@ export function bridgeToSpecialistIntent(family: IntentFamily): FamilyBridgeResu
           family,
           direction: family === "exercise_progression" ? "progression" : "regression",
         },
+      };
+
+    case "tendon_resilience_focus":
+      return {
+        specialistIntent: "PAIN_ADJUSTMENT",
+        supplementalData: { family, isTendonLoadManagement: true },
+      };
+
+    case "end_range_control_focus":
+    case "mobility_flow_focus":
+      return {
+        specialistIntent: "RECOVERY_SHIFT",
+        supplementalData: { family, isMobilitySpecific: true },
+      };
+
+    case "unilateral_emphasis":
+    case "posterior_chain_emphasis":
+      return {
+        specialistIntent: "BIAS_SHIFT",
+        biasTarget: "strength",
+        supplementalData: { family },
+      };
+
+    case "trunk_core_emphasis":
+      return {
+        specialistIntent: "BIAS_SHIFT",
+        supplementalData: { family, isCrossMode: true },
       };
 
     case "clarification_required":
