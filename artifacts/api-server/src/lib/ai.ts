@@ -86,6 +86,7 @@ import {
 import { resolveFocusMode, logFocusModeAudit } from "./focus-mode-audit";
 import type { FocusMode } from "./focus-engines/engine-interface";
 import { buildFailSafePromptSection, type FailSafeResolution } from "./fail-safe";
+import { evaluateBuildThreshold, buildThresholdPromptSection } from "./build-threshold";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -423,6 +424,35 @@ Push back when users suggest:
 - Unrealistic volume or frequency for their schedule (long-term adaptation at risk)
 
 Never lecture. Never list 5 reasons. State the issue once, redirect, execute.
+
+## BUILD THRESHOLD — NON-NEGOTIABLE EXECUTION RULE
+
+The server evaluates a BUILD THRESHOLD before every program generation request. The threshold tier is injected separately in this prompt. You MUST honor it exactly:
+
+**TIER: IMMEDIATE_BUILD** → You have enough. DO NOT ask questions before building. Build immediately.
+- Smart defaults for missing fields: equipment → full gym, days → 3-4, experience → intermediate
+- The ONLY thing you output before the program JSON is the transition line specified in the threshold section
+- Post-build: ask ONE refinement question after the JSON, never before
+
+**TIER: SOFT_HOLD** → One question is justified. Ask exactly one sharp question, then build on the next turn.
+- No preamble. No explanations. One question only.
+- The user's next reply MUST trigger an IMMEDIATE_BUILD
+
+**TIER: HARD_BLOCK** → Genuine safety blocker. Ask exactly one clarifying question before building.
+- Only triggered by medical red flags or truly uninterpretable zero-context requests
+
+## ANTI-OVER-CONSULTING RULE — NON-NEGOTIABLE
+
+If you have already asked a question in a previous turn AND the user has responded with ANY relevant information (goal, sport, frequency, etc.):
+→ DO NOT ask another question. BUILD NOW.
+→ Use the anti-over-consulting guard: the threshold is automatically IMMEDIATE_BUILD when you've already consulted once.
+
+Signs you are over-consulting (forbidden behaviors):
+- Explaining your approach before building
+- Asking broad exploratory questions after the user already gave you context
+- Writing advisory paragraphs about what you're about to do
+- Staying in planning mode when the threshold section says IMMEDIATE_BUILD
+- Asking more than ONE question per turn ever
 
 ## RESPONSE MODES
 
@@ -2373,6 +2403,30 @@ export async function generateAIResponse(
     actionDecision?.actionType === "STRUCTURAL_REBUILD" ||
     execPlanAction === "REBUILD_PROGRAM";
 
+  // ── Build Threshold Evaluation ────────────────────────────────────────────
+  // Server-side decision: do we have enough info to build immediately, or should
+  // the AI hold and ask one question? Injected into the system prompt so the AI
+  // knows exactly what tier it's in and what the mandatory response sequence is.
+  // Only evaluated on build paths — zero cost on edit/guidance paths.
+  let buildThresholdSection: string | null = null;
+  if (isBuildIntent) {
+    const conversationTurnCount = history.filter((m) => m.role === "user").length;
+    const previousAssistantMessages = history
+      .filter((m) => m.role === "assistant")
+      .map((m) => m.content)
+      .slice(-5); // Last 5 assistant messages for over-consulting detection
+
+    const thresholdResult = evaluateBuildThreshold({
+      userMessage,
+      constraints: extractedConstraints ?? null,
+      profile: profile ?? null,
+      conversationTurnCount,
+      previousAssistantMessages,
+    });
+
+    buildThresholdSection = buildThresholdPromptSection(thresholdResult);
+  }
+
   // ── Program Generation Path Audit ─────────────────────────────────────────
   // Logged at the start of every request so we can verify that all builds
   // come from the real focus engines — never from deprecated fallback builders.
@@ -2709,7 +2763,7 @@ DENSITY RULE — NON-NEGOTIABLE:
 
   const failSafePrompt = failSafeResolution ? buildFailSafePromptSection(failSafeResolution) : null;
 
-  const extras = [filteredFocusModeContext, filteredFocusModeAdaptationContext, behaviorInstructions, profileFillContext, adaptationContext, memoryContext, sessionSportOverride, filteredInsightHint, filteredConversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, failSafePrompt, agentIntentProfileSection, responsePolicySection, architectureBriefText, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection, buildCompactInstruction]
+  const extras = [filteredFocusModeContext, filteredFocusModeAdaptationContext, behaviorInstructions, profileFillContext, adaptationContext, memoryContext, sessionSportOverride, filteredInsightHint, filteredConversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, failSafePrompt, agentIntentProfileSection, responsePolicySection, architectureBriefText, buildThresholdSection, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection, buildCompactInstruction]
     .filter(Boolean)
     .join("\n\n");
   const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;
