@@ -1,0 +1,79 @@
+We need to fix focus selection inside the right sidebar / Live Program panel.
+
+Problem:
+The right sidebar is no longer allowing selection between different focuses (Strength / Speed / Mobility). It appears to be locked to the currently active focus mode instead of behaving like a selectable focus-aware program browser.
+
+Observed behavior:
+- The sidebar shows a single active focus (example: Mobility)
+- The user cannot switch between focuses from within the sidebar
+- This makes the Live Program panel effectively single-focus and removes expected navigation
+
+GOAL
+Restore selectable focus switching inside the right sidebar / Live Program panel.
+
+CORRECT BEHAVIOR
+Inside the sidebar, the user should be able to:
+- select Strength
+- select Speed
+- select Mobility
+
+and see the corresponding program/view state for that focus.
+
+This sidebar focus selector should not become non-interactive just because the app has a current global focus mode.
+
+INVESTIGATION TASKS
+
+1. Trace the right sidebar / Live Program panel focus state.
+Find:
+- where the displayed focus is sourced from
+- whether the sidebar has its own selectedFocus state
+- whether it now incorrectly reads only global focusMode
+- where the tab/pill click handlers are defined
+
+2. Check whether the focus pills/buttons are:
+- actually wired to state updates
+- disabled accidentally
+- filtered out by conditional rendering
+- overwritten by a derived active focus value on every render
+
+3. Identify whether the regression came from:
+- shared active mode state being forced into the sidebar
+- a query/filter only returning the current focus
+- loss of local sidebar focus state
+- a prop being removed or ignored
+
+REQUIRED FIX
+
+4. Restore a selectable sidebar focus state.
+The sidebar should have a real source of truth for which focus is currently being viewed.
+
+Expected behavior:
+- clicking Strength shows Strength program view
+- clicking Speed shows Speed program view
+- clicking Mobility shows Mobility program view
+
+5. If needed, separate:
+- global app focusMode
+from
+- sidebar selectedFocus
+
+The sidebar can initialize from the active focus, but must remain user-selectable.
+
+6. Preserve current program content and routing behavior.
+This is a focus-selection/navigation fix, not a generation fix.
+
+7. Add temporary debug logs:
+[SidebarFocus]
+- current global focus
+- current sidebar focus
+- click target
+- resulting displayed focus
+- whether panel content was filtered by focus
+
+SUCCESS CRITERIA
+
+- Strength / Speed / Mobility are all selectable in the right sidebar
+- clicking each one updates the sidebar content correctly
+- the sidebar is not locked to one focus
+- global focus mode and sidebar browsing state no longer fight each other
+- no regression in program rendering
