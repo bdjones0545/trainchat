@@ -2363,6 +2363,9 @@ export async function generateAIResponse(
   // programs using the correct weekly rhythm, session identities, CNS flow
   // sequencing, and sport-specific overlays BEFORE selecting exercises.
   let architectureBriefText: string | null = null;
+  // Captured inside the strength build block so the token budget and compact
+  // instruction can scale with the detected day count.
+  let _strengthDaysForBudget: number | null = null;
   const isBuildIntent =
     intentResult?.type === "CREATE_PROGRAM" ||
     intentResult?.type === "START_NEW_PROGRAM" ||
@@ -2398,6 +2401,7 @@ export async function generateAIResponse(
     // Settings precedence: explicit prompt constraints → agentSettings profile defaults → null
     // This ensures profile-saved preferences fill the gap when the user's message is silent.
     const days = extractedConstraints?.daysPerWeek ?? metaDays ?? agentSettings?.training.daysPerWeek ?? null;
+    _strengthDaysForBudget = days;
     const sport = extractSportFromRequest(userMessage, extractedConstraints?.sportFocus ?? agentSettings?.training.sport ?? null);
     const goal = extractedConstraints?.primaryGoal ?? agentSettings?.training.goal ?? null;
 
@@ -2629,11 +2633,45 @@ export async function generateAIResponse(
     memoryNamespaceUsed: focusMode,
   });
 
-  // ── Build-path output compaction instruction ──────────────────────────────
-  // Injects a directive to keep notes/intent fields brief on build paths.
-  // Reduces output tokens by 15-25%, directly cutting generation time.
+  // ── Skeleton generation compact instruction ────────────────────────────────
+  // Pass 1 skeleton: forces token-disciplined JSON output on all build paths.
+  // Replaces the old single-sentence "OUTPUT COMPACTION" note with a strict
+  // field-level compaction contract, directly cutting truncation risk for
+  // 4–5 day programs with 6+ exercises per session.
+  function buildSkeletonCompactInstruction(days: number | null): string {
+    const dayStr = days ? `${days}-day` : "full";
+    return `## PASS 1 — SKELETON GENERATION (TOKEN-DISCIPLINE MODE)
+This is the skeleton pass. Output COMPACT, COMPLETE JSON ONLY.
+
+HARD OUTPUT RULES — NO EXCEPTIONS:
+- Return valid JSON only. No markdown outside the fence. No prose. No explanations.
+- Start with \`\`\`json. End with \`\`\`. Nothing outside these fences.
+- COMPLETE the FULL ${dayStr} program. Do NOT omit any session or exercise.
+- If you run low on budget: shorten text → never drop exercises or structural fields.
+
+FIELD COMPACTION — STRICT LIMITS:
+- "description": ≤12 words  (e.g. "Upper/lower split for athletic strength development")
+- "progressionStrategy": ≤10 words  (e.g. "Add 5 lbs weekly to primary lifts")
+- "focus" (day): ≤4 words  (e.g. "Lower Power + Squat")
+- "notes" (exercise): ≤5 words OR RPE cue only  (e.g. "RPE 7" / "Explosive intent" / "Tempo 3-1-1")
+- "notes" (day-level): OMIT — do not include
+- "intent" field: OMIT — do not include this field at all
+
+FIELDS TO INCLUDE PER EXERCISE: name, classification, sets, reps, rest, notes (short)
+FIELDS TO OMIT PER EXERCISE: intent, rationale, coaching_cue, explanation
+
+WHAT TO NEVER INCLUDE:
+- Coaching paragraphs or rationale
+- Repeated instructions or block summaries
+- Long session descriptions
+- Any field not in the schema above
+
+DENSITY RULE — NON-NEGOTIABLE:
+- Every session: minimum 6 strength exercises (primary + secondary + unilateral + trunk)
+- Do not drop below 6 exercises to save tokens — shorten notes instead`;
+  }
   const buildCompactInstruction = isBuildIntent
-    ? `## OUTPUT COMPACTION — BUILD PATH\nKeep all exercise notes and intent fields to 1 sentence max. Do not add rationale paragraphs. JSON only, no extra prose after the code block.`
+    ? buildSkeletonCompactInstruction(_strengthDaysForBudget)
     : null;
 
   // ── Build-path prompt pruning ──────────────────────────────────────────────
@@ -2803,15 +2841,28 @@ export async function generateAIResponse(
     // ── TOKEN BUDGET — TIGHTENED FOR BUILD PATHS ───────────────────────────
     // Previous budgets (3600 / 2800) were far too generous. At ~60 tokens/sec,
     // 3600 max = up to 60s generation time. Typical programs need 1600-2200 tokens:
-    //   3-day × 7 exercises × 80 tokens = ~1680 tokens + overhead = ~1900
-    //   5-day × 7 exercises × 80 tokens = ~2800 tokens + overhead = ~3100
-    // Speed / mobility are 3-4 days → 2600 is sufficient.
-    // Strength can be 5-day → keep 2800 but instruct compact notes.
     // Edit paths are surgical (patch + 1 program) → 2800 is plenty.
+    // Speed / mobility are 3-4 days → 2600 / 2200 is sufficient.
+    // Strength uses a day-count-scaled compact skeleton budget (below).
+    // ── Strength skeleton budget: scaled by day count ─────────────────────
+    // Compact skeleton format: ~35 tokens/exercise, 6 exercises/session,
+    // plus per-session overhead (~25) and program metadata (~120).
+    // Formula: 120 + days × (6 × 35 + 25) = 120 + days × 235
+    //   3-day → 825 needed; budget 1600 (headroom for longer exercise names)
+    //   4-day → 1060 needed; budget 2000
+    //   5-day → 1295 needed; budget 2400
+    //   Unknown/null → conservative 2000
+    const _strengthBudget = (() => {
+      const d = _strengthDaysForBudget;
+      if (!d) return 2000;
+      if (d >= 5) return 2400;
+      if (d >= 4) return 2000;
+      return 1600; // 3-day
+    })();
     const maxTokens = actionDecision?.recommendedMaxTokens
       ?? ((focusMode === "speed") && isBuildIntent ? 2600
         : (focusMode === "mobility") && isBuildIntent ? 2200
-        : (focusMode === "strength") && isBuildIntent ? 2000
+        : (focusMode === "strength") && isBuildIntent ? _strengthBudget
         : isBuildIntent ? 2000
         : editContext !== null || intentResult?.type === "ADJUST_FOR_PAIN" || intentResult?.type === "ADJUST_FOR_READINESS" ? 2800
         : 2000);
@@ -2860,6 +2911,27 @@ export async function generateAIResponse(
       },
       "[BuildLatency] Primary OpenAI call completed"
     );
+
+    // ── Skeleton generation size audit ────────────────────────────────────
+    if (isBuildIntent && process.env.NODE_ENV !== "production") {
+      const outputChars = cleanContent.length;
+      const exerciseCount = structuredData?.days?.reduce((sum, d) => sum + (d.exercises?.length ?? 0), 0) ?? 0;
+      const dayCount = structuredData?.days?.length ?? 0;
+      console.log("[SkeletonGenerationAudit]", JSON.stringify({
+        focusMode,
+        strengthDaysDetected: _strengthDaysForBudget,
+        maxTokensBudget: maxTokens,
+        outputChars,
+        outputCharsPerSession: dayCount > 0 ? Math.round(outputChars / dayCount) : 0,
+        skeletonSucceeded: structuredData !== null,
+        dayCount,
+        exerciseCount,
+        exercisesPerSession: dayCount > 0 ? (exerciseCount / dayCount).toFixed(1) : "n/a",
+        truncated: truncated ?? false,
+        enrichmentInvoked: false,
+        fragmentFallbackCount: 0,
+      }));
+    }
 
     // ── Truncation recovery — one retry with a compact token budget ───────
     // If the initial build response was detected as truncated (missing closing

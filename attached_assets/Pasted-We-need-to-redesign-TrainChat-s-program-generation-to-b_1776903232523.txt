@@ -1,0 +1,123 @@
+We need to redesign TrainChat’s program generation to be token-efficient and scalable.
+
+Problem:
+The current one-pass generation is too verbose. Now that sessions contain at least 6 strength exercises, the response is sometimes getting cut off, which creates truncated JSON and fragment fallback behavior.
+
+Goal:
+Refactor program generation so it produces reliable full programs with lower token usage and better scalability.
+
+DESIGN DIRECTION
+
+Move from a single verbose generation pass to a lean structured generation architecture.
+
+NEW GENERATION MODEL
+
+PASS 1 — PROGRAM SKELETON
+Generate only the minimum structured data required to build and render the program.
+
+PASS 1 should include:
+- programName
+- short description
+- splitType
+- daysPerWeek
+- blockLengthWeeks
+- short progressionStrategy
+- days[]
+  - dayNumber
+  - name
+  - focus
+  - exercises[]
+    - name
+    - sets
+    - reps
+    - rest
+    - category
+    - short notes
+
+PASS 1 should NOT include:
+- long paragraphs
+- full exercise rationale
+- repeated coaching explanations
+- detailed block writeups
+- verbose weekly explanations
+- long session summaries
+
+All string fields should be compact and UI-friendly.
+
+EXAMPLES OF COMPACT FIELDS
+- description: max 1 sentence
+- progressionStrategy: max 1 sentence
+- focus: short phrase
+- notes: very short cue like "RPE 7" or "Explosive intent"
+
+PASS 2 — OPTIONAL ENRICHMENT
+Create a separate optional enrichment path for:
+- longer exercise directions
+- expanded coaching cues
+- deeper rationale
+- share copy
+- block summaries
+
+This pass should run only when needed, not during the main full-program build.
+
+IMPLEMENTATION TASKS
+
+1. Refactor the main program generation prompt so it requests compact JSON only.
+
+2. Explicitly instruct the model:
+- no markdown
+- no code fences
+- no prose outside JSON
+- no long descriptions
+- no duplicate explanations
+- one-sentence max for text fields
+- keep output concise and structured
+
+3. Add hard token-discipline rules in the system prompt:
+- prioritize complete valid JSON over explanation
+- if token budget becomes tight, shorten notes/descriptions rather than dropping exercises
+- never omit required structure
+- brevity is preferred over elaboration
+
+4. Update the JSON schema / validator if needed so it supports the lean format cleanly.
+
+5. Preserve current architecture rules:
+- at least 6 strength exercises per session
+- canonical flow order
+- density fill behavior
+- day identity
+- neural demand constraints
+- valid structured output enforcement
+
+6. Create a separate enrichment prompt/function for later use.
+This should take an already-built program or one session and return optional richer text only when requested by the UI.
+
+7. Keep backward compatibility where reasonable, but prioritize reliable completion over verbose output.
+
+PROMPT REQUIREMENTS FOR PASS 1
+
+The new generation prompt should strongly instruct:
+
+- Return valid JSON only
+- Keep all text compact
+- Use short field values
+- No repeated rationale
+- No code fences
+- No markdown
+- No introductory text
+- Complete the full program structure first
+- If brevity is needed, reduce wording, not exercises
+
+8. Add debug logging:
+- approximate output size
+- whether skeleton generation succeeded
+- whether enrichment was invoked
+- fragment fallback count
+
+SUCCESS CRITERIA
+
+- full 4-day programs with 6+ exercises per session complete reliably
+- truncation risk drops significantly
+- main generation remains fast
+- program structure quality stays high
+- richer coaching text can still be added later through enrichment
