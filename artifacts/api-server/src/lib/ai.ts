@@ -63,6 +63,7 @@ import {
   scoreSpeedSessionDepth,
   classifySpeedGenerationFailure,
   detectIncompleteBuildResponse,
+  auditSpeedFlowOrder,
   type SpeedBleedAuditResult,
   type SpeedSessionDepthAudit,
 } from "./focus-engines/speed-engine";
@@ -4043,6 +4044,34 @@ Output the corrected program JSON and a brief calm confirmation.`;
                 passed: s.passed,
               })),
             }));
+
+            // ── Speed Flow Order Audit ────────────────────────────────────────
+            // Classifies each exercise into its canonical slot and checks that
+            // the session follows the correct order of operations:
+            // activation → sprint_prep → speed_primary → reactive_plyo
+            // → cod_footwork → speed_endurance → resilience_finish
+            const flowAuditResults = auditSpeedFlowOrder(
+              expandedDays as Array<{ name?: string; exercises?: Array<{ name: string }> }>
+            );
+            console.log("[SpeedFlowAudit]", JSON.stringify({
+              sessions: flowAuditResults.map((r) => ({
+                session: r.sessionName,
+                canonicalOrder: r.canonicalOrder,
+                violations: r.violations,
+                isOrderCorrect: r.isOrderCorrect,
+              })),
+            }));
+
+            // Log any flow violations as warnings so they surface in dev logs
+            const flowViolations = flowAuditResults.flatMap((r) =>
+              r.violations.map((v) => `${r.sessionName}: ${v}`)
+            );
+            if (flowViolations.length > 0) {
+              logger.warn(
+                { flowViolations },
+                "[SpeedFlowAudit] Flow order violations detected in generated speed sessions"
+              );
+            }
           }
         }
       }
