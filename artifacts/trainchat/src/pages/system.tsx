@@ -62,6 +62,7 @@ import { clearAuthState } from "@/lib/routing";
 import { useFocusMode } from "@/hooks/useFocusMode";
 import { FOCUS_MODE_CONFIGS, type FocusModeConfig } from "@/lib/focusModeConfig";
 import type { FocusMode } from "@/lib/focusMode";
+import { deriveSpeedSlotFromName, mapSpeedSlotToRole } from "@/lib/learn-exercise";
 import { getQuickCommands, recordQuickCommandSelection } from "@/lib/quickCommands";
 import TopNav from "@/components/layout/TopNav";
 import MobileSlideLayout, { type SlidePanel } from "@/components/layout/MobileSlideLayout";
@@ -311,20 +312,47 @@ function ExerciseCard({ exercise, index, sessionLabel, highlightedIds, onEdit, o
     conditioning:"bg-green-500/10 text-green-400 border-green-500/20",
     recovery:    "bg-blue-500/10 text-blue-400 border-blue-500/20",
     finisher:    "bg-red-500/10 text-red-400 border-red-500/20",
+    skill:       "bg-violet-500/10 text-violet-400 border-violet-500/20",
+    prep:        "bg-teal-500/10 text-teal-400 border-teal-500/20",
   };
+
+  // Derive the effective display category deterministically.
+  // For speed mode, when the DB category is "accessory" (legacy or missing
+  // classification), attempt to recover the correct slot from the exercise name.
+  const effectiveCategory = (() => {
+    if (exerciseCardFocusMode === "speed") {
+      const slot = deriveSpeedSlotFromName(exercise.name);
+      if (slot) {
+        const role = mapSpeedSlotToRole(slot);
+        if (role === "PREP")         return "prep";
+        if (role === "PRIMARY")      return "primary";
+        if (role === "POWER")        return "power";
+        if (role === "SKILL")        return "skill";
+        if (role === "CONDITIONING") return "conditioning";
+        if (role === "ACCESSORY")    return "finisher";
+      }
+      // Speed mode: remap neutral DB values to coach labels
+      if (exercise.category === "activation") return "prep";
+      if (exercise.category === "secondary")  return "skill";
+    }
+    return exercise.category as string;
+  })();
+
   const categoryLabel: Record<string, string> = {
     warmup:       "Warm-Up",
     activation:   "Activation",
+    prep:         "Prep",
     power:        "Power",
     primary:      "Primary",
     secondary:    "Secondary",
+    skill:        "Skill",
     accessory:    "Accessory",
     trunk:        "Trunk",
     conditioning: "Conditioning",
     recovery:     "Recovery",
     finisher:     "Finisher",
   };
-  const colorClass = categoryColors[exercise.category] ?? categoryColors.accessory;
+  const colorClass = categoryColors[effectiveCategory] ?? categoryColors.accessory;
 
   const quickMutation = useMutation({
     mutationFn: ({ req, chip }: { req: string; chip: string }) => {
@@ -399,7 +427,7 @@ function ExerciseCard({ exercise, index, sessionLabel, highlightedIds, onEdit, o
             <div className="flex items-center gap-2 flex-wrap mb-1.5">
               <span className="font-semibold text-sm text-foreground">{exercise.name}</span>
               <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border ${colorClass}`}>
-                {categoryLabel[exercise.category] ?? exercise.category}
+                {categoryLabel[effectiveCategory] ?? effectiveCategory}
               </span>
               {highlightedIds.has(exercise.id) && (
                 <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20 flex-shrink-0 animate-pulse">

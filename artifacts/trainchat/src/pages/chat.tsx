@@ -125,6 +125,7 @@ function transformSystemToProgram(
         reps: ex.reps ?? "10",
         rest: ex.rest ?? "60s",
         notes: ex.notes ?? undefined,
+        category: ex.category ?? undefined,
       })),
       notes: session.coachingNotes ?? undefined,
     })),

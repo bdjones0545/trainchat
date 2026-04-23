@@ -74,8 +74,14 @@ function rolePillStyle(role: ExerciseRole): string {
   switch (role) {
     case "PRIMARY":
       return "bg-primary/15 text-primary border-primary/30";
+    case "SECONDARY":
+      return "bg-amber-600/15 text-amber-500 border-amber-600/30";
     case "POWER":
       return "bg-amber-500/15 text-amber-400 border-amber-500/30";
+    case "PREP":
+      return "bg-teal-500/15 text-teal-400 border-teal-500/30";
+    case "SKILL":
+      return "bg-violet-500/15 text-violet-400 border-violet-500/30";
     case "TRUNK":
       return "bg-indigo-500/15 text-indigo-400 border-indigo-500/30";
     case "ACCESSORY":
@@ -86,6 +92,14 @@ function rolePillStyle(role: ExerciseRole): string {
       return "bg-teal-500/15 text-teal-400 border-teal-500/30";
     default:
       return "bg-accent text-muted-foreground border-border";
+  }
+}
+
+function roleLabel(role: ExerciseRole): string {
+  switch (role) {
+    case "PREP":    return "Prep";
+    case "SKILL":   return "Skill";
+    default:        return role ?? "";
   }
 }
 
@@ -104,7 +118,7 @@ function LearnExerciseHeader({ exerciseName, role, movementFamily, onClose }: Le
               <span
                 className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold tracking-[0.1em] border uppercase ${rolePillStyle(role)}`}
               >
-                {role}
+                {roleLabel(role)}
               </span>
             )}
           </div>

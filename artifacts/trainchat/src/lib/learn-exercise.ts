@@ -12,6 +12,8 @@ export type ExerciseRole =
   | "PRIMARY"
   | "SECONDARY"
   | "POWER"
+  | "PREP"
+  | "SKILL"
   | "TRUNK"
   | "ACCESSORY"
   | "CONDITIONING"
@@ -44,6 +46,54 @@ export interface LearnExerciseContext {
   programTitle?: string | null;
   sport?: string | null;
   goal?: string | null;
+}
+
+// ─── Speed / Footwork slot patterns (client-side mirror of speed-engine.ts) ───
+// Used to derive ExerciseRole deterministically from exercise name when the
+// AI-output classification field is absent.
+
+const CLIENT_SPEED_SLOT_PATTERNS: Array<{ slot: string; pattern: RegExp }> = [
+  { slot: "activation",        pattern: /ankle.stiff(?:ness)?(?:.prep)?|hip.hinge.march|single.leg.hip.hinge/i },
+  { slot: "sprint_prep",       pattern: /wall.march|wall.drive|a.skip|b.skip|march.to.skip|march.to.run|build.up.run|build.?up.run|speed.ladder.in.out|linear.ladder(?!.*reactive)|ladder.in.out/i },
+  { slot: "speed_primary",     pattern: /falling.start|flying.(?:20|30|40|start)|block.start|kneeling.start|sled.sprint|t.drill|5.10.5|l.drill|box.drill|505.drill|wicket.run/i },
+  { slot: "reactive_plyo",     pattern: /stiffness.hop|pogo.hop|lateral.hurdle.hop|single.leg.stiffness|countermovement.jump|single.leg.decel|linear.bound|alternating.bound|lateral.bound|skater.jump/i },
+  { slot: "cod_footwork",      pattern: /ickey.shuffle|lateral.ladder|carioca|zigzag.hop|mirror.drill|drop.step.decel|crossover.step|shadow.footwork|reactive.(?:ladder|agility|cone)|reactive.drill/i },
+  { slot: "speed_endurance",   pattern: /repeat.(?:30|40|60)m.sprint|tempo.run|150m.speed.endurance|assault.bike.sprint/i },
+  { slot: "resilience_finish", pattern: /nordic|isometric.hamstring|isometric.ham(?:string)?|copenhagen|straight.leg.calf|calf.march|jump.squat|trap.bar.jump|power.clean/i },
+];
+
+/**
+ * Detects the canonical Speed / Footwork flow slot for a given exercise name.
+ * Returns null if the name does not match any speed slot.
+ */
+export function deriveSpeedSlotFromName(name: string): string | null {
+  const match = CLIENT_SPEED_SLOT_PATTERNS.find((p) => p.pattern.test(name));
+  return match?.slot ?? null;
+}
+
+/**
+ * Maps a speed flow slot string to the corresponding ExerciseRole badge.
+ *
+ * Speed slot → display role mapping (coach-like labels):
+ *   activation        → PREP
+ *   sprint_prep       → PREP
+ *   speed_primary     → PRIMARY
+ *   reactive_plyo     → POWER
+ *   cod_footwork      → SKILL
+ *   speed_endurance   → CONDITIONING
+ *   resilience_finish → ACCESSORY
+ */
+export function mapSpeedSlotToRole(slot: string): ExerciseRole {
+  switch (slot) {
+    case "activation":        return "PREP";
+    case "sprint_prep":       return "PREP";
+    case "speed_primary":     return "PRIMARY";
+    case "reactive_plyo":     return "POWER";
+    case "cod_footwork":      return "SKILL";
+    case "speed_endurance":   return "CONDITIONING";
+    case "resilience_finish": return "ACCESSORY";
+    default:                  return null;
+  }
 }
 
 // ─── Internal category system ─────────────────────────────────────────────────
@@ -500,6 +550,88 @@ export function mapRole(classification?: string | null): ExerciseRole {
   return null;
 }
 
+/**
+ * Derives an ExerciseRole deterministically from context, without relying on
+ * AI classification output. Resolution order:
+ *   1. Explicit classification string (if provided)
+ *   2. Speed slot derived from exercise name via canonical slot patterns
+ *   3. DB category field (activation, power, primary, secondary, trunk, conditioning, finisher)
+ *   4. null (caller decides how to handle absence)
+ *
+ * In dev mode, logs the resolution path for debugging.
+ */
+export function deriveRole(
+  exerciseName: string,
+  opts?: {
+    classification?: string | null;
+    slot?: string | null;
+    dbCategory?: string | null;
+  },
+): ExerciseRole {
+  const { classification, slot, dbCategory } = opts ?? {};
+
+  // 1. Explicit AI classification string
+  const fromClassification = mapRole(classification);
+  if (fromClassification) {
+    if (import.meta.env.DEV) {
+      console.log("[ExerciseClassification] exercise=%s | slot=%s | mode=classification | role=%s | fallback=false",
+        exerciseName, slot ?? "<none>", fromClassification);
+    }
+    return fromClassification;
+  }
+
+  // 2. Speed slot — either explicitly passed or derived from name
+  const resolvedSlot = slot ?? deriveSpeedSlotFromName(exerciseName);
+  if (resolvedSlot) {
+    const fromSlot = mapSpeedSlotToRole(resolvedSlot);
+    if (fromSlot) {
+      if (import.meta.env.DEV) {
+        console.log("[ExerciseClassification] exercise=%s | slot=%s | mode=slot | role=%s | fallback=%s",
+          exerciseName, resolvedSlot, fromSlot, !slot ? "true (name-derived)" : "false");
+      }
+      return fromSlot;
+    }
+  }
+
+  // 3. DB category
+  if (dbCategory) {
+    const fromDb = mapDbCategoryToRole(dbCategory);
+    if (fromDb) {
+      if (import.meta.env.DEV) {
+        console.log("[ExerciseClassification] exercise=%s | slot=%s | mode=db-category | role=%s | fallback=true",
+          exerciseName, resolvedSlot ?? "<none>", fromDb);
+      }
+      return fromDb;
+    }
+  }
+
+  if (import.meta.env.DEV) {
+    console.log("[ExerciseClassification] exercise=%s | slot=%s | mode=none | role=null | fallback=true",
+      exerciseName, resolvedSlot ?? "<none>");
+  }
+  return null;
+}
+
+/**
+ * Maps a DB category string (from training_session_exercises.category) to
+ * the corresponding ExerciseRole for badge display.
+ */
+export function mapDbCategoryToRole(category: string): ExerciseRole {
+  switch (category) {
+    case "warmup":      return "SUPPORT";
+    case "activation":  return "PREP";
+    case "power":       return "POWER";
+    case "primary":     return "PRIMARY";
+    case "secondary":   return "SECONDARY";
+    case "trunk":       return "TRUNK";
+    case "conditioning":return "CONDITIONING";
+    case "recovery":    return "SUPPORT";
+    case "finisher":    return "ACCESSORY";
+    case "accessory":   return "ACCESSORY";
+    default:            return null;
+  }
+}
+
 export function buildWhyFallback(
   exerciseName: string,
   context?: LearnExerciseContext | null,
@@ -541,12 +673,20 @@ export function buildAskCoachPrompts(exerciseName: string): string[] {
 /**
  * Main factory — turns raw exercise row data into a fully-enriched
  * LearnExerciseData object with coaching intelligence.
+ *
+ * Role resolution priority:
+ *   1. Explicit classification string from AI output (if present)
+ *   2. Speed slot — either explicitly provided or derived from exercise name
+ *   3. DB category string (if available via opts.dbCategory)
+ *   4. null (no badge shown)
  */
 export function buildLearnExerciseData(
   exerciseName: string,
   opts?: {
     exerciseNotes?: string;
     classification?: string;
+    slot?: string;
+    dbCategory?: string;
     dayFocus?: string;
     programGoal?: string;
     context?: LearnExerciseContext;
@@ -554,7 +694,11 @@ export function buildLearnExerciseData(
 ): LearnExerciseData {
   const category = detectCategory(exerciseName);
   const catData = CATEGORY_DATA[category];
-  const role = mapRole(opts?.classification);
+  const role = deriveRole(exerciseName, {
+    classification: opts?.classification,
+    slot: opts?.slot,
+    dbCategory: opts?.dbCategory,
+  });
   const ctx = opts?.context;
 
   return {

@@ -1467,10 +1467,57 @@ export interface ChatProgram {
   blockMetadata?: BlockMetadata | null;
 }
 
+// ─── Speed / Footwork canonical slot patterns ─────────────────────────────────
+// Mirror of FLOW_SLOT_PATTERNS in speed-engine.ts — kept here so the server-side
+// classifier can derive category from exercise name without importing the engine.
+const SPEED_SLOT_PATTERNS: Array<{ slot: string; pattern: RegExp }> = [
+  { slot: "activation",        pattern: /ankle.stiff(?:ness)?(?:.prep)?|hip.hinge.march|single.leg.hip.hinge/i },
+  { slot: "sprint_prep",       pattern: /wall.march|wall.drive|a.skip|b.skip|march.to.skip|march.to.run|build.up.run|build.?up.run|speed.ladder.in.out|linear.ladder(?!.*reactive)|ladder.in.out/i },
+  { slot: "speed_primary",     pattern: /falling.start|flying.(?:20|30|40|start)|block.start|kneeling.start|sled.sprint|t.drill|5.10.5|l.drill|box.drill|505.drill|wicket.run/i },
+  { slot: "reactive_plyo",     pattern: /stiffness.hop|pogo.hop|lateral.hurdle.hop|single.leg.stiffness|countermovement.jump|single.leg.decel|linear.bound|alternating.bound|lateral.bound|skater.jump/i },
+  { slot: "cod_footwork",      pattern: /ickey.shuffle|lateral.ladder|carioca|zigzag.hop|mirror.drill|drop.step.decel|crossover.step|shadow.footwork|reactive.(?:ladder|agility|cone)|reactive.drill/i },
+  { slot: "speed_endurance",   pattern: /repeat.(?:30|40|60)m.sprint|tempo.run|150m.speed.endurance|assault.bike.sprint/i },
+  { slot: "resilience_finish", pattern: /nordic|isometric.hamstring|isometric.ham(?:string)?|copenhagen|straight.leg.calf|calf.march|jump.squat|trap.bar.jump|power.clean/i },
+];
+
+/**
+ * Derives a DB ExerciseCategory deterministically from the exercise name
+ * using the canonical Speed / Footwork flow-spine slot patterns.
+ * Returns null if the exercise name does not match any speed slot.
+ */
+function deriveSpeedCategoryFromName(exerciseName: string): ExerciseCategory | null {
+  const match = SPEED_SLOT_PATTERNS.find((p) => p.pattern.test(exerciseName));
+  if (!match) return null;
+  switch (match.slot) {
+    case "activation":        return "activation";
+    case "sprint_prep":       return "activation";
+    case "speed_primary":     return "primary";
+    case "reactive_plyo":     return "power";
+    case "cod_footwork":      return "secondary";
+    case "speed_endurance":   return "conditioning";
+    case "resilience_finish": return "finisher";
+    default:                  return null;
+  }
+}
+
 // Maps the AI's exercise classification string to the DB category enum.
+// When classification is missing, falls back to deterministic name-based
+// slot detection (speed exercises) before defaulting to accessory.
 // Order of checks matters — most specific first.
-function mapClassificationToCategory(classification?: string): ExerciseCategory {
-  if (!classification) return "accessory";
+function mapClassificationToCategory(classification?: string, exerciseName?: string): ExerciseCategory {
+  if (!classification) {
+    // Deterministic fallback: derive from exercise name via speed slot patterns
+    if (exerciseName) {
+      const derived = deriveSpeedCategoryFromName(exerciseName);
+      if (derived) {
+        if (process.env.NODE_ENV !== "production") {
+          console.log("[ExerciseClassification] name=%s | classification=<missing> | derived=%s | fallback=name-based", exerciseName, derived);
+        }
+        return derived;
+      }
+    }
+    return "accessory";
+  }
   const c = classification.toLowerCase();
 
   // Warm-up / prep
@@ -1519,7 +1566,11 @@ function mapClassificationToCategory(classification?: string): ExerciseCategory 
     return "recovery";
 
   // Safe fallback: if the classification string suggests a single movement pattern,
-  // treat as secondary (conservative — don't inflate to primary)
+  // treat as accessory — but first try name-based speed detection
+  if (exerciseName) {
+    const derived = deriveSpeedCategoryFromName(exerciseName);
+    if (derived) return derived;
+  }
   return "accessory";
 }
 
@@ -1730,7 +1781,7 @@ export async function createTrainingSystemFromProgram(
       // Classify then sort into proper training-flow order
       const classifiedExercises = progressedExercises.map((ex) => ({
         ...ex,
-        category: mapClassificationToCategory(ex.classification),
+        category: mapClassificationToCategory(ex.classification, ex.name),
       }));
       const exercises = sortExercisesByCategory(classifiedExercises);
 
@@ -1963,7 +2014,7 @@ export async function upsertTrainingSystemFromProgram(
       // Classify then sort into proper training-flow order
       const classifiedExercises = progressedExercises.map((ex) => ({
         ...ex,
-        category: mapClassificationToCategory(ex.classification),
+        category: mapClassificationToCategory(ex.classification, ex.name),
       }));
       const exercises = sortExercisesByCategory(classifiedExercises);
 

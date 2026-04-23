@@ -1924,9 +1924,11 @@ function ProgramTab({
                               else exerciseRefs.current.delete(ex.name);
                             }}
                             onClick={() => {
+                              const exAny = ex as Record<string, unknown>;
                               const exData = buildLearnExerciseData(ex.name, {
                                 exerciseNotes: ex.notes,
-                                classification: (ex as Record<string, unknown>).classification as string | undefined,
+                                classification: exAny.classification as string | undefined,
+                                dbCategory: exAny.category as string | undefined,
                                 dayFocus: day.focus,
                                 programGoal: trainingGoal ?? undefined,
                                 context: {
@@ -1971,9 +1973,11 @@ function ProgramTab({
                               {/* Learn Exercise trigger */}
                               <ExerciseLearnButton
                                 onClick={() => {
+                                  const exAny2 = ex as Record<string, unknown>;
                                   const exData = buildLearnExerciseData(ex.name, {
                                     exerciseNotes: ex.notes,
-                                    classification: (ex as Record<string, unknown>).classification as string | undefined,
+                                    classification: exAny2.classification as string | undefined,
+                                    dbCategory: exAny2.category as string | undefined,
                                     dayFocus: day.focus,
                                     programGoal: trainingGoal ?? undefined,
                                     context: {
