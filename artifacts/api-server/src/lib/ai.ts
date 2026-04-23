@@ -2647,28 +2647,29 @@ HARD OUTPUT RULES — NO EXCEPTIONS:
 - Return valid JSON only. No markdown outside the fence. No prose. No explanations.
 - Start with \`\`\`json. End with \`\`\`. Nothing outside these fences.
 - COMPLETE the FULL ${dayStr} program. Do NOT omit any session or exercise.
-- If you run low on budget: shorten text → never drop exercises or structural fields.
+- If you run low on budget: shorten or omit optional text fields → never drop exercises.
 
 FIELD COMPACTION — STRICT LIMITS:
-- "description": ≤12 words  (e.g. "Upper/lower split for athletic strength development")
-- "progressionStrategy": ≤10 words  (e.g. "Add 5 lbs weekly to primary lifts")
+- "description": ≤8 words  (e.g. "Upper/lower strength split")
+- "progressionStrategy": ≤6 words OR OMIT if needed  (e.g. "Add 5 lbs weekly")
 - "focus" (day): ≤4 words  (e.g. "Lower Power + Squat")
-- "notes" (exercise): ≤5 words OR RPE cue only  (e.g. "RPE 7" / "Explosive intent" / "Tempo 3-1-1")
+- "notes" (exercise): ≤4 words OR RPE only  (e.g. "RPE 7" / "Explosive" / "Tempo 3-1-1")
 - "notes" (day-level): OMIT — do not include
 - "intent" field: OMIT — do not include this field at all
+- "classification" field: OMIT — do not include in skeleton
 
-FIELDS TO INCLUDE PER EXERCISE: name, classification, sets, reps, rest, notes (short)
-FIELDS TO OMIT PER EXERCISE: intent, rationale, coaching_cue, explanation
+FIELDS TO INCLUDE PER EXERCISE: name, sets, reps, rest, notes (short, optional)
+FIELDS TO OMIT PER EXERCISE: classification, intent, rationale, coaching_cue, explanation
 
 WHAT TO NEVER INCLUDE:
 - Coaching paragraphs or rationale
 - Repeated instructions or block summaries
-- Long session descriptions
+- Long session descriptions or names
 - Any field not in the schema above
 
 DENSITY RULE — NON-NEGOTIABLE:
 - Every session: minimum 6 strength exercises (primary + secondary + unilateral + trunk)
-- Do not drop below 6 exercises to save tokens — shorten notes instead`;
+- Do not drop below 6 exercises to save tokens — omit optional text fields instead`;
   }
   const buildCompactInstruction = isBuildIntent
     ? buildSkeletonCompactInstruction(_strengthDaysForBudget)
@@ -2845,18 +2846,21 @@ DENSITY RULE — NON-NEGOTIABLE:
     // Speed / mobility are 3-4 days → 2600 / 2200 is sufficient.
     // Strength uses a day-count-scaled compact skeleton budget (below).
     // ── Strength skeleton budget: scaled by day count ─────────────────────
-    // Compact skeleton format: ~35 tokens/exercise, 6 exercises/session,
-    // plus per-session overhead (~25) and program metadata (~120).
-    // Formula: 120 + days × (6 × 35 + 25) = 120 + days × 235
-    //   3-day → 825 needed; budget 1600 (headroom for longer exercise names)
-    //   4-day → 1060 needed; budget 2000
-    //   5-day → 1295 needed; budget 2400
-    //   Unknown/null → conservative 2000
+    // Real observed output (from SkeletonGenerationAudit logs):
+    //   4-day program: ~7500 chars before truncation at 2000-token budget
+    //   At ~4 chars/token → ~1875 tokens needed for 4 days × 6 exercises
+    //   Real per-exercise cost ≈ 78 tokens (name + sets/reps/rest/notes + overhead)
+    //   Per-session cost ≈ 78 × 6 + 50 overhead ≈ 518 tokens
+    //   Formula: 100 + days × 518
+    //     3-day → 1654 needed; budget 1600 (prior builds suggest 3-day fits)
+    //     4-day → 2172 needed; budget 2600 (25% headroom)
+    //     5-day → 2690 needed; budget 3200 (19% headroom)
+    //     Unknown/null → conservative 2600 (assume 4-day)
     const _strengthBudget = (() => {
       const d = _strengthDaysForBudget;
-      if (!d) return 2000;
-      if (d >= 5) return 2400;
-      if (d >= 4) return 2000;
+      if (!d) return 2600;
+      if (d >= 5) return 3200;
+      if (d >= 4) return 2600;
       return 1600; // 3-day
     })();
     const maxTokens = actionDecision?.recommendedMaxTokens
@@ -2933,16 +2937,17 @@ DENSITY RULE — NON-NEGOTIABLE:
       }));
     }
 
-    // ── Truncation recovery — one retry with a compact token budget ───────
+    // ── Truncation recovery — fresh retry with raised token budget ────────
     // If the initial build response was detected as truncated (missing closing
-    // braces, unbalanced JSON depth, or no closing code fence), retry once with
-    // a reduced token ceiling. Reducing maxTokens forces OpenAI to be more
-    // concise and avoid hitting its own context boundaries.
+    // braces, unbalanced JSON depth, or no closing code fence), retry ONCE from
+    // scratch with a larger budget (40% increase) and an ultra-compact instruction.
+    // NOTE: do NOT append the partial response as context — that wastes input tokens
+    // on a half-built JSON that the model can't sensibly continue. Start fresh.
     if (isBuildIntent && truncated === true && structuredData === null) {
-      const truncationRetryBudget = Math.floor(maxTokens * 0.85);
+      const truncationRetryBudget = Math.min(Math.floor(maxTokens * 1.4), 4000);
       logger.warn(
         { originalBudget: maxTokens, retryBudget: truncationRetryBudget },
-        "[TruncationRetry] Truncated build output detected — retrying with compact token budget"
+        "[TruncationRetry] Truncated build output detected — retrying with raised token budget"
       );
       if (process.env.NODE_ENV !== "production") {
         console.log("[TruncationRetry]", JSON.stringify({
@@ -2950,14 +2955,15 @@ DENSITY RULE — NON-NEGOTIABLE:
           originalBudget: maxTokens,
           retryBudget: truncationRetryBudget,
           retrying: true,
+          strategy: "fresh-retry-raised-budget",
         }));
       }
       try {
-        // Append a targeted completion instruction so the AI knows to resume and close the JSON
+        // Fresh retry: same prompt + ultra-compact override appended as a user turn.
+        // Do NOT include the partial truncated response — it uses input tokens without helping.
         const truncationRetryMessages = [
           ...baseMessages,
-          { role: "assistant" as const, content: cleanContent },
-          { role: "user" as const, content: "Your response was cut off. Return COMPLETE JSON. Ensure closing braces." },
+          { role: "user" as const, content: "COMPACT JSON ONLY. Output the complete program. Omit all optional text. Name + sets + reps + rest only per exercise." },
         ];
         const retryResult = await callOpenAI(truncationRetryMessages, truncationRetryBudget);
         if (retryResult.structuredData) {

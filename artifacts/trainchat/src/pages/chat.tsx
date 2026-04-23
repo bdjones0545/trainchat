@@ -1075,10 +1075,29 @@ export default function Chat() {
         });
       } else if (isFragment) {
         // ── CASE B: fragment/truncated — do NOT commit, fallback text shown by MessageBubble ──
-        console.warn("[Program fragment — no commit]", {
+        const fragmentContent = msg.content ?? "";
+        const fragmentChars = fragmentContent.length;
+        // Estimate day count from how many "dayNumber" keys appear in the partial JSON
+        const dayNumberMatches = (fragmentContent.match(/"dayNumber"\s*:/g) ?? []).length;
+        // Estimate exercise count from "name" key occurrences inside the fragment
+        const exerciseNameMatches = (fragmentContent.match(/"name"\s*:/g) ?? []).length;
+        // Classify likely failure source
+        const likelyFailureSource =
+          fragmentChars < 2000 ? "severely_truncated_check_budget" :
+          fragmentChars < 5000 ? "moderately_truncated_budget_marginal" :
+          "nearly_complete_boundary_overflow";
+        console.warn("[FragmentFallback]", {
           assistantMsgId: msg.id,
-          reason: "extractProgramData returned null but isProgramFragment detected program content",
+          estimatedDayCount: dayNumberMatches,
+          estimatedExercisesInFragment: exerciseNameMatches,
+          exercisesPerDay: dayNumberMatches > 0 ? (exerciseNameMatches / dayNumberMatches).toFixed(1) : "n/a",
+          responseCharCount: fragmentChars,
+          estimatedTokensUsed: Math.round(fragmentChars / 4),
+          likelyFailureSource,
           action: "suppression_applied_no_commit_fallback_text_shown_in_bubble",
+          recommendation: fragmentChars < 5000
+            ? "increase maxTokensBudget or tighten skeleton field compaction"
+            : "response nearly complete — retry budget +20% may be sufficient",
         });
       }
       // CASE C: no program content — nothing to do, normal render
