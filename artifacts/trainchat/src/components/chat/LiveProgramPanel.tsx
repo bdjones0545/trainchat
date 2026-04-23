@@ -2575,6 +2575,21 @@ export default function LiveProgramPanel({
   isWeekDataLoading = false,
 }: Props) {
   const { focusMode } = useFocusMode();
+
+  // ── Sidebar-local focus selection ─────────────────────────────────────────
+  // The sidebar maintains its OWN selectedFocus so the user can browse any
+  // focus lane (Strength / Speed / Mobility) without being locked to the global
+  // focusMode.  It initialises from the global focus but can diverge freely.
+  const [sidebarFocus, setSidebarFocus] = useState<FocusMode>(focusMode);
+
+  // Keep sidebarFocus in sync when the global focus changes from OUTSIDE the
+  // sidebar (e.g. user switches via the top bar or onboarding).
+  useEffect(() => {
+    console.log("[SidebarFocus] global focusMode changed →", focusMode, "| syncing sidebarFocus from", sidebarFocus);
+    setSidebarFocus(focusMode);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusMode]);
+
   const [activeTab, setActiveTab] = useState<Tab>("program");
   const [hasUnseenChange, setHasUnseenChange] = useState(false);
 
@@ -2700,28 +2715,37 @@ export default function LiveProgramPanel({
           <div className="flex items-center justify-center gap-1.5 pb-2 px-3">
             {(["strength", "speed", "mobility"] as const).map((mode) => {
               const cfg = getFocusModeConfig(mode);
-              const isActive = focusMode === mode;
+              // ── Use LOCAL sidebarFocus (not global focusMode) for isActive ──
+              const isActive = sidebarFocus === mode;
               const hasProgram = activeFocusModes[mode];
               return (
                 <button
                   key={mode}
                   onClick={() => {
-                    if (!hasProgram) return;
-                    onFocusModeChange(mode);
+                    // All three pills are always clickable — no hasProgram guard.
+                    console.log(
+                      "[SidebarFocus] pill clicked:", mode,
+                      "| global focusMode:", focusMode,
+                      "| prev sidebarFocus:", sidebarFocus,
+                      "| hasProgram:", hasProgram,
+                      "| resulting displayed focus →", mode,
+                      "| content filtered by focus:", hasProgram ? "yes (program exists)" : "no program yet"
+                    );
+                    setSidebarFocus(mode);
+                    if (onFocusModeChange) onFocusModeChange(mode);
                     setPanelSwitchConfirm(cfg.theme.confirmLabel);
                     if (panelSwitchTimerRef.current) clearTimeout(panelSwitchTimerRef.current);
                     panelSwitchTimerRef.current = setTimeout(() => setPanelSwitchConfirm(null), 2200);
                   }}
-                  disabled={!hasProgram}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold transition-all duration-200 select-none ${
                     isActive
                       ? `${cfg.theme.pillActiveClass} shadow-sm`
                       : hasProgram
                       ? `${cfg.theme.inactiveClass} bg-muted/30`
-                      : "text-muted-foreground/30 bg-transparent cursor-default"
+                      : "text-muted-foreground/30 bg-muted/10 hover:text-muted-foreground/50 hover:bg-muted/20"
                   }`}
                   style={isActive ? cfg.theme.pillGlow : undefined}
-                  title={hasProgram ? `Switch to ${cfg.label}` : `No ${cfg.label} program yet`}
+                  title={hasProgram ? `Switch to ${cfg.label}` : `${cfg.label} — no program yet`}
                 >
                   <FocusIcon mode={mode} className="w-3 h-3 flex-shrink-0" />
                   <span>{cfg.shortLabel === "Speed" ? "Speed" : cfg.label}</span>
@@ -2733,9 +2757,10 @@ export default function LiveProgramPanel({
             })}
           </div>
 
-          {/* Active mode banner */}
+          {/* Active mode banner — uses sidebarFocus so it reflects the pill
+               the user clicked, not just the global focusMode */}
           {(() => {
-            const activeCfg = getFocusModeConfig(focusMode);
+            const activeCfg = getFocusModeConfig(sidebarFocus);
             return panelSwitchConfirm ? (
               <div className="flex items-center justify-center pb-2 animate-in fade-in duration-200">
                 <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-semibold ${activeCfg.theme.badgeClass}`}>
@@ -2746,7 +2771,7 @@ export default function LiveProgramPanel({
             ) : (
               <div className={`flex items-start gap-2 px-4 py-2.5 border-t border-border/30 ${activeCfg.theme.bgTintClass}`}>
                 <span className={`mt-0.5 flex-shrink-0 p-1.5 rounded-lg bg-current/10`}>
-                  <FocusIcon mode={focusMode} className={`w-3 h-3 ${activeCfg.theme.iconColorClass}`} />
+                  <FocusIcon mode={sidebarFocus} className={`w-3 h-3 ${activeCfg.theme.iconColorClass}`} />
                 </span>
                 <div className="flex-1 min-w-0">
                   <p className={`text-[10px] font-bold uppercase tracking-wide leading-none ${activeCfg.theme.iconColorClass}`}>
