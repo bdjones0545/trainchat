@@ -1,0 +1,77 @@
+We still have a new-build Day 1 consistency bug, now visible in Strength mode.
+
+Observed behavior:
+For a newly generated strength program:
+- Today view shows one Day 1 session (example: Lower Strength + Squat)
+- Live Program / Program tab shows a different Day 1 session (example: Lower Strength + Hinge)
+
+This means the new-build override is partially working, but different views are still resolving “Day 1” from different sources or sort orders.
+
+GOAL
+Make Day 1 resolution consistent across all views for a newly generated program.
+
+CORRECT BEHAVIOR
+For a new build:
+- Today
+- Live Program
+- Program tab
+must all resolve to the exact same Day 1 session object.
+
+This should be based on one canonical source of truth.
+
+INVESTIGATION TASKS
+
+1. Trace how each view resolves the first session for a new strength build:
+- Today view (/system)
+- Live Program panel
+- Program tab / session cards
+
+2. Log for the active new build:
+- trainingSystemId
+- session ids
+- dayNumber
+- orderIndex
+- session name
+- selection source
+for each view
+
+3. Identify whether there is a mismatch in:
+- sorting by dayNumber vs orderIndex
+- stale cached program data
+- transformed/adapted session arrays
+- server-normalized vs client-normalized ordering
+- using different session collections entirely
+
+4. Create one canonical “first session” rule for new builds:
+Prefer:
+- lowest orderIndex if available
+- otherwise lowest dayNumber
+- otherwise first stable session in canonical program order
+
+5. Ensure every view uses the same canonical resolver for new builds.
+Do not let Today and Live Program each invent their own Day 1 logic.
+
+6. If necessary, add a shared helper such as:
+getCanonicalFirstSession(program)
+
+and use it in:
+- LiveProgramPanel / ProgramTab
+- Today new-build override path
+- any other new-build first-session selection path
+
+7. Add debug logs:
+[CanonicalDay1]
+- trainingSystemId
+- chosen session id
+- chosen session name
+- dayNumber
+- orderIndex
+- caller/view
+
+SUCCESS CRITERIA
+
+- Generate a new strength program
+- Today and Live Program both show the same Day 1 session
+- No mismatch between “Lower Strength + Squat” and “Lower Strength + Hinge”
+- New-build session identity is consistent across views
+- Existing non-new-build behavior remains unchanged
