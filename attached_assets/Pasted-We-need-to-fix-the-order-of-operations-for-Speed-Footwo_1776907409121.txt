@@ -1,0 +1,64 @@
+We need to fix the order of operations for Speed / Footwork mode.
+
+Problem:
+The current sequence does not reflect a true speed-session flow. Support/prehab work and lower-priority elements can appear too early, while highest-speed and highest-skill work is not consistently front-loaded.
+
+Example issue:
+A session can begin with Nordic hamstring curls before flying runs, then place repeated sprint work after multiple plyometric contacts. That is not the desired neural order for a speed / footwork day.
+
+GOAL
+Create a dedicated canonical flow spine for Speed / Footwork mode so exercises are sequenced in the correct order of operations.
+
+DESIRED SPEED / FOOTWORK FLOW
+
+1. Tissue prep / activation
+2. Sprint prep / build-up
+3. Highest-speed / highest-skill output
+   - acceleration
+   - max velocity
+   - sprint exposure
+4. Reactive / plyometric work
+5. Change of direction / footwork
+6. Capacity or lower-priority speed endurance if programmed
+7. Tissue resilience / accessory finish
+   - nordics
+   - calf/foot
+   - groin/adductor
+   - low-fatigue support work
+
+RULES
+
+- Never place hamstring resilience / nordic-type work before the main speed output unless the session is explicitly rehab-oriented
+- Main sprint exposure should happen before major plyometric and footwork fatigue accumulates
+- Footwork/COD should not bury or replace true speed output when the day is tagged speed
+- Lower-priority accessory work should sit later in the session
+- Preserve intent-specific flexibility, but enforce the overall neural order
+
+IMPLEMENTATION TASKS
+
+1. Find where the canonical flow / slot ordering is defined for Speed / Footwork mode.
+2. Create a dedicated Speed / Footwork ordering map instead of reusing strength-style or generic ordering.
+3. Re-rank likely block categories into a correct sequence, such as:
+   - prep
+   - sprint_prep
+   - speed_primary
+   - reactive_plyo
+   - cod_footwork
+   - speed_endurance_optional
+   - resilience_finish
+4. Ensure specific exercise families map correctly:
+   - flying runs / accelerations / resisted runs → speed_primary
+   - hurdle hops / bounds → reactive_plyo
+   - ickey shuffle / ladder / COD drills → cod_footwork
+   - nordics / calf / hamstring tissue work → resilience_finish
+5. Verify generated sessions still remain coherent and do not exceed intended fatigue.
+6. Add a debug log for generated speed sessions:
+   [SpeedFlowAudit]
+   showing ordered categories and selected exercises
+
+SUCCESS CRITERIA
+
+- Speed / Footwork sessions begin with actual speed-development logic
+- Highest neural output work happens early
+- Support/prehab work moves later unless explicitly required otherwise
+- Session order matches real performance training principles
