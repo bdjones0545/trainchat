@@ -611,6 +611,7 @@ function ProgramTab({
   trainingGoal,
   changeTargets,
   newChangeSignal,
+  newProgramSignal = 0,
   pendingChangeHint,
   lastChangeSummary,
   onSendMessage,
@@ -621,6 +622,9 @@ function ProgramTab({
   const [expandedDay, setExpandedDay] = useState<number | null>(0);
   const prevProgramRef = useRef<ProgramStructure | null>(null);
   const pinnedProgramKey = useRef<string | null>(null);
+  /** Set to true when a brand-new build just fired — forces Day 1 on next pin. */
+  const newBuildPendingRef = useRef(false);
+  const prevNewProgramSignalRef = useRef(0);
   const [animatedKeys, setAnimatedKeys] = useState<Map<string, DiffType>>(new Map());
   const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1114,19 +1118,71 @@ function ProgramTab({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expandedDay]);
 
-  // Pin expanded day to today's session on initial program load and after each new build.
+  // When a brand-new program build is confirmed (newProgramSignal fires), mark a
+  // pending-new-build flag and invalidate the pin so the next effect run always
+  // lands on Day 1 instead of the current weekday session.
+  useEffect(() => {
+    if (newProgramSignal > 0 && newProgramSignal !== prevNewProgramSignalRef.current) {
+      const prevSignal = prevNewProgramSignalRef.current;
+      prevNewProgramSignalRef.current = newProgramSignal;
+      newBuildPendingRef.current = true;
+      // Invalidate the pin so the pinning effect below re-runs for the new program.
+      pinnedProgramKey.current = null;
+      console.log("[ProgramActivation]", JSON.stringify({
+        event: "newProgramSignal",
+        programId: trainingSystemId ?? null,
+        programName: program?.programName ?? null,
+        isNewBuild: true,
+        selectedDayBefore: expandedDay,
+        prevSignal,
+        nextSignal: newProgramSignal,
+        note: "new build detected — will force Day 1 on next pin",
+      }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newProgramSignal]);
+
+  // Pin expanded day to today's session on initial program load and after each program change.
   // Uses dayOfWeek preserved in the ProgramDay by transformSystemToProgram.
   // Falls back to Day 1 (index 0) when today has no scheduled session.
+  // EXCEPTION: brand-new builds always start at Day 1, regardless of the current weekday.
   useEffect(() => {
     if (!program) return;
-    const key = `${program.programName}::${program.days?.length ?? 0}`;
+    const key = `${trainingSystemId ?? ""}::${program.programName}::${program.days?.length ?? 0}`;
     if (pinnedProgramKey.current === key) return;
     pinnedProgramKey.current = key;
-    const todayDow = new Date().getDay();
-    const idx = (program.days ?? []).findIndex((d) => d.dayOfWeek === todayDow);
-    setExpandedDay(idx >= 0 ? idx : 0);
+
+    const isNewBuild = newBuildPendingRef.current;
+    newBuildPendingRef.current = false;
+
+    let selectedIdx: number;
+    let selectionSource: string;
+
+    if (isNewBuild) {
+      // Brand-new program — always open on Day 1, ignore calendar.
+      selectedIdx = 0;
+      selectionSource = "day1_default";
+    } else {
+      // Existing program — use weekday-matching with Day 1 fallback.
+      const todayDow = new Date().getDay();
+      const weekdayIdx = (program.days ?? []).findIndex((d) => d.dayOfWeek === todayDow);
+      selectedIdx = weekdayIdx >= 0 ? weekdayIdx : 0;
+      selectionSource = weekdayIdx >= 0 ? "weekday" : "day1_default";
+    }
+
+    console.log("[ProgramActivation]", JSON.stringify({
+      event: "pinDay",
+      programId: trainingSystemId ?? null,
+      programName: program.programName,
+      isNewBuild,
+      selectedDayBefore: expandedDay,
+      selectedDayAfter: selectedIdx,
+      selectionSource,
+    }));
+
+    setExpandedDay(selectedIdx);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [program?.programName, program?.days?.length]);
+  }, [program?.programName, program?.days?.length, trainingSystemId]);
 
   useEffect(() => {
     const prev = prevProgramRef.current;
@@ -2758,6 +2814,7 @@ export default function LiveProgramPanel({
             trainingGoal={trainingGoal}
             changeTargets={changeTargets}
             newChangeSignal={newChangeSignal}
+            newProgramSignal={newProgramSignal}
             pendingChangeHint={pendingChangeHint}
             lastChangeSummary={lastChangeSummary}
             blockMetadata={blockMetadata}
