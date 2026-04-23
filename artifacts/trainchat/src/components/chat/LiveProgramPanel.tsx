@@ -625,6 +625,18 @@ function ProgramTab({
   /** Set to true when a brand-new build just fired — forces Day 1 on next pin. */
   const newBuildPendingRef = useRef(false);
   const prevNewProgramSignalRef = useRef(0);
+  /**
+   * Tracks the programSource value from the previous render.
+   * Used to detect the "draft → live" transition after a new build is saved
+   * and weekData finishes loading, so we can re-pin to the DB-canonical first session.
+   */
+  const prevProgramSourceRef = useRef<string>(programSource);
+  /**
+   * Set to true when a new-build pin was made against a draft (latestProgram).
+   * When the program source transitions draft→live, we reset pinnedProgramKey
+   * so the pin effect re-runs with the DB-canonical (orderIndex-sorted) first session.
+   */
+  const newBuildPinnedFromDraftRef = useRef(false);
   const [animatedKeys, setAnimatedKeys] = useState<Map<string, DiffType>>(new Map());
   const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1118,6 +1130,30 @@ function ProgramTab({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expandedDay]);
 
+  // Detect "draft → live" transition for new builds.
+  // When a new program is saved, the panel initially shows `latestProgram` (AI stream order)
+  // while weekData loads from the DB. Once weekData arrives, `programSource` switches
+  // from "draft" → "live". If we previously pinned from a draft, reset the pin key so
+  // the pin effect re-runs and locks on the DB-canonical (orderIndex-sorted) first session —
+  // which is the same session the Today view resolves via forceDay1/sessions[0].
+  useEffect(() => {
+    const prev = prevProgramSourceRef.current;
+    prevProgramSourceRef.current = programSource;
+    if (prev === "draft" && programSource === "live" && newBuildPinnedFromDraftRef.current) {
+      newBuildPinnedFromDraftRef.current = false;
+      // Reset pin key AND re-arm newBuild flag so the pin effect runs again
+      // with the DB-canonical (orderIndex-sorted) program instead of the AI draft.
+      pinnedProgramKey.current = null;
+      newBuildPendingRef.current = true;
+      console.log("[CanonicalDay1]", JSON.stringify({
+        event: "draft_to_live_repin",
+        trainingSystemId: trainingSystemId ?? null,
+        note: "draft→live transition for new build — re-arming pin to DB-canonical Day 1",
+      }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [programSource]);
+
   // When a brand-new program build is confirmed (newProgramSignal fires), mark a
   // pending-new-build flag and invalidate the pin so the next effect run always
   // lands on Day 1 instead of the current weekday session.
@@ -1159,9 +1195,36 @@ function ProgramTab({
     let selectionSource: string;
 
     if (isNewBuild) {
-      // Brand-new program — always open on Day 1, ignore calendar.
-      selectedIdx = 0;
-      selectionSource = "day1_default";
+      // Brand-new program — always open on the canonical Day 1.
+      // Sort by dayNumber ascending to find the true first training day, regardless
+      // of the order the AI streamed sessions or how the array is arranged.
+      // This matches the backend getTodaySession forceDay1 logic (sessions[0] by orderIndex).
+      const days = program.days ?? [];
+      const sortedByDayNumber = [...days].sort((a, b) => (a.dayNumber ?? 999) - (b.dayNumber ?? 999));
+      const canonicalFirst = sortedByDayNumber[0];
+      const canonicalIdx = canonicalFirst ? days.indexOf(canonicalFirst) : 0;
+      selectedIdx = canonicalIdx >= 0 ? canonicalIdx : 0;
+      selectionSource = "day1_canonical";
+
+      // If currently showing a draft (latestProgram / AI stream order), mark that
+      // we pinned from a draft so the draft→live transition can re-pin to the DB
+      // canonical order when weekData finishes loading.
+      if (programSource === "draft") {
+        newBuildPinnedFromDraftRef.current = true;
+      }
+
+      console.log("[CanonicalDay1]", JSON.stringify({
+        caller: "LiveProgramPanel",
+        event: "new_build_pin",
+        trainingSystemId: trainingSystemId ?? null,
+        chosenSessionId: null,
+        chosenSessionName: days[selectedIdx]?.name ?? null,
+        dayNumber: days[selectedIdx]?.dayNumber ?? null,
+        selectedIdx,
+        programSource,
+        totalDays: days.length,
+        dayOrder: days.map((d) => ({ name: d.name, dayNumber: d.dayNumber })),
+      }));
     } else {
       // Existing program — use weekday-matching with Day 1 fallback.
       const todayDow = new Date().getDay();
@@ -1182,7 +1245,7 @@ function ProgramTab({
 
     setExpandedDay(selectedIdx);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [program?.programName, program?.days?.length, trainingSystemId]);
+  }, [program?.programName, program?.days?.length, trainingSystemId, programSource]);
 
   useEffect(() => {
     const prev = prevProgramRef.current;

@@ -769,6 +769,21 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditC
       todayDow: new Date().getDay(),
       sessionDow: (today as any).dayOfWeek ?? null,
     }));
+
+    // [CanonicalDay1] — emitted only for new builds so both Today and LiveProgramPanel
+    // resolution can be compared in the same log stream.
+    if (forceDay1) {
+      console.log("[CanonicalDay1]", JSON.stringify({
+        caller: "TodayView",
+        event: "forceDay1_resolved",
+        trainingSystemId: activeSystemId ?? null,
+        chosenSessionId: today.id ?? null,
+        chosenSessionName: today.label ?? null,
+        orderIndex: (today as any).orderIndex ?? null,
+        dayOfWeek: (today as any).dayOfWeek ?? null,
+        selectionSource: "db_orderIndex_0",
+      }));
+    }
   }, [today, activeSystemId, forceDay1]);
 
   if (isLoading) return <ViewSkeleton />;
