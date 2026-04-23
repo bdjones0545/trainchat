@@ -1,0 +1,71 @@
+We need to fix older-adult strength generation so safety adjustments do not collapse the session into an under-dosed build.
+
+Problem:
+For an active 69-year-old strength user, the generated session became too light / too sparse (example: only 2 exercises visible in the session). The system is likely over-correcting for age and losing minimum useful session density.
+
+GOAL
+Keep older-adult strength training safe and joint-friendly, but still produce a complete, productive session.
+
+CORRECT BEHAVIOR
+For an active older adult:
+- use safer exercise selection
+- use moderate rep ranges
+- manage fatigue conservatively
+- preserve joint-friendly movement patterns
+BUT still maintain a complete session structure
+
+Age should affect:
+- exercise choice
+- loading style
+- volume/fatigue
+- progression
+NOT reduce the session to an underbuilt 2-exercise plan unless there is a true rehab/hard-block context
+
+TASKS
+
+1. Trace how age / older-adult context is currently affecting strength generation.
+Find:
+- where age modifies constraints
+- whether a safety bundle is overriding density/session structure
+- whether older adult logic is bypassing the 6-exercise minimum or replacing the normal architecture
+
+2. Add a guard:
+For active older-adult strength users (not hard-block medical cases), preserve a minimum complete-session architecture.
+
+Target:
+- generally 5–6 meaningful exercises
+- still joint-friendly
+- still manageable
+- no aggressive loading required
+
+3. Distinguish:
+A. active older adult seeking strength
+B. frail / rehab / hard medical blocker
+A should still get a real strength session.
+B can be more restricted or blocked.
+
+4. Update the age-aware logic so it modifies:
+- rep range toward moderate
+- exercise selection toward supported/joint-friendly patterns
+- fatigue/cns load downward
+- progression conservatively
+without collapsing the session to a minimal shell
+
+5. Preserve your existing density/session architecture rules where possible.
+If older-adult logic currently disables density fill or replaces it, fix that.
+
+6. Add debug logs:
+[OlderAdultStrength]
+- userAge
+- activeOlderAdult? true/false
+- medicalBlock? true/false
+- exercise count
+- densityFill triggered? true/false
+- reason for any reduced density
+
+SUCCESS CRITERIA
+
+- an active 69-year-old requesting strength gets a safe but complete session
+- session is not reduced to only 2 exercises unless there is a true blocker
+- older-adult safety logic and density logic coexist correctly
+- exercise selection remains joint-friendly and realistic

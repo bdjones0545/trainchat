@@ -46,6 +46,7 @@ export interface SpecialConsiderationContext {
   hasNeurologicalFactors: boolean;
   hasJointSensitivity: boolean;
   hasFrailtyFactors: boolean;
+  isActiveOlderAdult: boolean;
   goalContext: string | null;
   notes: string[];
 }
@@ -123,6 +124,33 @@ const OLDER_ADULT_SIGNALS = [
   /\b(72|73|74|75|76|77|78|79|80|81|82|83|84|85|86|87|88|89|90)\s*(year|yr)s?\s*old\b/i,
   /\b(over\s*(60|65|70|75|80))\b/i,
   /\bpost.?menopausal\b/i,
+];
+
+// Signals that indicate the older adult is CURRENTLY ACTIVE / already training.
+// These must be current-state signals, NOT aspirational goals.
+// Important: do NOT include "strength training" or "strength program" — those are goal signals, not activity signals.
+const ACTIVE_OLDER_ADULT_SIGNALS = [
+  // Explicit active/training identity
+  /\b(i[''']?m\s+active|i\s+am\s+active|currently\s+active|still\s+active)\b/i,
+  // Direct current training statements
+  /\b(i\s+(train|workout|work\s*out|exercise|lift|gym)\b)/i,
+  /\b(i[''']?ve\s+been\s+(training|working\s*out|exercising|lifting))\b/i,
+  /\b(i\s+currently\s+(train|workout|work\s*out|exercise|lift))\b/i,
+  /\b(i\s*(go|hit)\s*(to\s*)?the\s*gym)\b/i,
+  // Training history/frequency signals
+  /\b(years?\s*of\s*(training|lifting|working\s*out))\b/i,
+  /\b(trained\s*(for|over|more\s*than)\s*\d+\s*year)\b/i,
+  /\b(train\s+\d+\s*(days?|times?)\s*(a|per)\s*week)\b/i,
+  /\b(still\s+(training|lifting|working\s*out|exercising|going\s*to\s*the\s*gym))\b/i,
+  // Sport participation (current, not aspirational)
+  /\b(i\s+play\s+(pickleball|golf|tennis|basketball|padel|volleyball|softball|soccer|hockey|lacrosse|badminton))\b/i,
+  /\b(recreational\s*(athlete|runner|cyclist|swimmer|player))\b/i,
+  /\b(i[''']?m\s+a\s+(runner|cyclist|swimmer|golfer|tennis player|hiker))\b/i,
+  // Explicit fitness status
+  /\b(not\s*(sedentary|frail|out\s*of\s*shape|inactive))\b/i,
+  /\b(good\s*(shape|condition)|reasonably\s*(fit|active)|fairly\s*(fit|active)|stay\s*(fit|active))\b/i,
+  // Frequency patterns
+  /\b(regular\s*(exerciser|gym.?goer|trainer))\b/i,
 ];
 
 const MOBILITY_LIMITATIONS_SIGNALS = [
@@ -243,6 +271,12 @@ export function detectSpecialConsiderations(
     olderAdultScore += 2;
   }
 
+  // ── Detect active older adult ─────────────────────────────────────────────
+  const isActiveOlderAdult =
+    olderAdultScore > 0 &&
+    ACTIVE_OLDER_ADULT_SIGNALS.some(p => p.test(combined)) &&
+    frailtyScore === 0;
+
   // ── Check mobility limitations signals ────────────────────────────────────
   for (const pattern of MOBILITY_LIMITATIONS_SIGNALS) {
     const match = combined.match(pattern);
@@ -285,6 +319,7 @@ export function detectSpecialConsiderations(
       hasNeurologicalFactors: false,
       hasJointSensitivity: false,
       hasFrailtyFactors: false,
+      isActiveOlderAdult: false,
       goalContext: null,
       notes: [],
     };
@@ -354,7 +389,13 @@ export function detectSpecialConsiderations(
   if (neurologicalScore > 0) notes.push("Neurological signals — reduce coordination demands, bias toward supported patterns");
   if (balanceFallRiskScore > 0) notes.push("Balance/fall risk — minimize unsupported balance challenges, support-aware selections");
   if (frailtyScore > 0) notes.push("Frailty/deconditioning — tolerance-first, low density, confidence building");
-  if (olderAdultScore > 0) notes.push("Older adult — bias toward strength-for-function, chair-supported options, conservative progression");
+  if (olderAdultScore > 0) {
+    if (isActiveOlderAdult && frailtyScore === 0) {
+      notes.push("Active older adult — complete strength session with joint-friendly selections, full movement balance, 5–6 exercises, conservative loading");
+    } else {
+      notes.push("Older adult — bias toward strength-for-function, joint-friendly options, conservative progression");
+    }
+  }
   if (mobilityScore > 0) notes.push("Mobility limitations — simplify transitions, avoid floor-to-standing unless safe");
   if (jointScore > 0) notes.push("Joint sensitivity — lower-impact options, avoid excessive joint loading");
 
@@ -367,10 +408,30 @@ export function detectSpecialConsiderations(
         triggeredCategories,
         totalScore,
         matchedSignals: uniqueSignals,
+        isActiveOlderAdult,
       },
     },
     "[SpecialConsiderationsEngine] Special considerations detected"
   );
+
+  // ── OlderAdultStrength debug log ─────────────────────────────────────────────
+  if (olderAdultScore > 0 && goalContext === "strength") {
+    const medicalBlock = balanceFallRiskScore > 0 || frailtyScore > 0 || parkinsonScore > 0 || neurologicalScore > 0;
+    logger.info(
+      {
+        olderAdultStrength: {
+          isActiveOlderAdult,
+          medicalBlock,
+          frailtyFactors: frailtyScore > 0,
+          balanceFallRisk: balanceFallRiskScore > 0,
+          jointSensitivity: jointScore > 0,
+          severity,
+          expectedExerciseTarget: (isActiveOlderAdult && !medicalBlock) ? "5-6 complete session" : "4-5 conservative",
+        },
+      },
+      "[OlderAdultStrength] Older adult strength request classified"
+    );
+  }
 
   return {
     detected: true,
@@ -382,6 +443,7 @@ export function detectSpecialConsiderations(
     hasNeurologicalFactors: parkinsonScore > 0 || neurologicalScore > 0,
     hasJointSensitivity: jointScore > 0,
     hasFrailtyFactors: frailtyScore > 0,
+    isActiveOlderAdult,
     goalContext,
     notes,
   };
@@ -477,10 +539,21 @@ function buildGoalLensInstructions(ctx: SpecialConsiderationContext): string {
     case "strength":
       if (ctx.primaryType === "parkinsons") {
         lines.push("Goal = Strength → Apply through Parkinson's lens: functional strength patterns (sit-to-stand, supported squat/hinge, wall-supported pressing), stable base, postural control emphasis. No max-effort, no unstable surfaces, no Olympic derivatives.");
-      } else if (ctx.primaryType === "older_adult") {
-        lines.push("Goal = Strength → Apply through older adult lens: strength-for-function format. Chair-supported strength, step patterns, hinge to hip height, controlled carries. Conservative loading. Functional transfer over max strength.");
+      } else if (ctx.isActiveOlderAdult && ctx.primaryType === "older_adult" && !ctx.hasFrailtyFactors && !ctx.hasBalanceFallRisk && !ctx.hasNeurologicalFactors) {
+        lines.push("Goal = Strength → ACTIVE OLDER ADULT STRENGTH FORMAT:");
+        lines.push("This user is an active older adult who trains regularly. Build a COMPLETE strength session — not a minimal or chair-based shell.");
+        lines.push("- Preserve full movement balance: bilateral squat pattern, bilateral hinge, upper push, upper pull, unilateral lower, trunk");
+        lines.push("- 5–6 working exercises per session. Do NOT reduce to 2–3 exercises.");
+        lines.push("- Joint-friendly exercise selection (goblet squat / box squat / trap bar deadlift / step-up / dumbbell press / cable row) — not chair-supported defaults");
+        lines.push("- Rep ranges: 8–12 primary, 10–15 accessory. Not 1–6 strength ranges.");
+        lines.push("- 2–3 working sets per exercise. RPE 6–7. Sessions feel complete and productive.");
+        lines.push("- Remove explosive B-block (no power cleans, box jumps, bounds). Replace with controlled power-endurance (band work, tempo step-up, controlled tempo squat).");
+        lines.push("- Progression: conservative — build over weeks, not sessions.");
+        lines.push("**KEY DISTINCTION:** This is NOT a frailty session or a rehab session. It is a real strength training session with age-appropriate, joint-friendly modifications.");
+      } else if (ctx.primaryType === "older_adult" && !ctx.hasFrailtyFactors) {
+        lines.push("Goal = Strength → Apply through older adult lens: strength-for-function format. Joint-friendly selections, step patterns, controlled hinge, carries, push and pull patterns. Conservative loading. 4–5 exercises per session. Functional transfer over max strength.");
       } else if (ctx.hasFrailtyFactors) {
-        lines.push("Goal = Strength → Apply through frailty lens: movement reacclimation strength. Very conservative loading, 2 working sets per pattern, RPE 4–5 max. Session should feel manageable and repeatable, not challenging.");
+        lines.push("Goal = Strength → Apply through frailty lens: movement reacclimation strength. Very conservative loading, 2 working sets per pattern, RPE 4–5 max. Session should feel manageable and repeatable, not challenging. Chair-supported options appropriate.");
       } else {
         lines.push("Goal = Strength → Apply through special considerations lens: lower complexity, stability-first strength patterns. Supported when appropriate. Conservative progression. Quality over load.");
       }
@@ -517,21 +590,37 @@ function buildSafetyRules(ctx: SpecialConsiderationContext): string {
   rules.push("\n### MANDATORY SAFETY RULES — SPECIAL CONSIDERATIONS MODE:");
   rules.push("The following rules are non-negotiable in this mode. They OVERRIDE the standard athletic programming defaults.");
   rules.push("");
-  rules.push("**UNIVERSAL SPECIAL CONSIDERATIONS RULES:**");
-  rules.push("- Prioritize stability and support over challenge or novelty");
-  rules.push("- Prefer lower complexity movements over technical demands");
-  rules.push("- Reduce coordination demands unless clearly appropriate for this user");
-  rules.push("- Minimize fall risk in every exercise choice");
-  rules.push("- Use conservative volume: 2–3 working sets per pattern, not 4–5");
-  rules.push("- Use conservative intensity: RPE 4–6, never max effort");
-  rules.push("- Slower progression: weekly or bi-weekly, not session-to-session");
-  rules.push("- Fewer exercises per session: 4–6 maximum, not 8–10");
-  rules.push("- Simple transitions between movements — no complex flow sequences");
-  rules.push("- Reduce unnecessary novelty — repeatable patterns build confidence");
-  rules.push("- NO explosive or reactive work unless clearly appropriate");
-  rules.push("- NO max-effort loading or PR-oriented prescriptions");
-  rules.push("- NO dense fatigue-driven circuits by default");
-  rules.push("- Emphasize movement quality, tolerance, confidence, and repeatability over all else");
+
+  if (ctx.isActiveOlderAdult && ctx.primaryType === "older_adult" && !ctx.hasFrailtyFactors && !ctx.hasBalanceFallRisk && !ctx.hasNeurologicalFactors) {
+    rules.push("**ACTIVE OLDER ADULT RULES** (training-experienced — complete session format):");
+    rules.push("- Exercise selection: joint-friendly movements first — trap bar deadlift over conventional, goblet/box squat over barbell back squat, dumbbell press over heavy barbell overhead, step-up over Bulgarian split squat with load");
+    rules.push("- Rep ranges: moderate strength — 8–12 for primary lifts, 10–15 for accessory. Heavy 1–6 rep ranges NOT used.");
+    rules.push("- Volume: 2–3 working sets per exercise. Manageable total volume, not athletic volume.");
+    rules.push("- Session density: 5–6 working exercises per session — a COMPLETE session, not a minimal shell. Preserve movement balance (push/pull/hinge/squat/unilateral/trunk).");
+    rules.push("- NO explosive or plyometric work (box jumps, power cleans, bounds, Olympic lifts)");
+    rules.push("- NO max-effort loading or PR-oriented prescriptions");
+    rules.push("- NO fast-tempo or reactive drills");
+    rules.push("- Progression: conservative — load increases bi-weekly, not session-to-session");
+    rules.push("- Maintain full movement balance: the NSCA B-block explosive work is removed, but A/C/D/E/F structure (push, pull, hinge, squat, unilateral, trunk) is PRESERVED");
+    rules.push("- RPE ceiling: 6–7 — sessions should feel challenging but manageable and repeatable");
+    rules.push("- Transitions: straightforward, no complex flow sequences");
+  } else {
+    rules.push("**UNIVERSAL SPECIAL CONSIDERATIONS RULES:**");
+    rules.push("- Prioritize stability and support over challenge or novelty");
+    rules.push("- Prefer lower complexity movements over technical demands");
+    rules.push("- Reduce coordination demands unless clearly appropriate for this user");
+    rules.push("- Minimize fall risk in every exercise choice");
+    rules.push("- Use conservative volume: 2–3 working sets per pattern, not 4–5");
+    rules.push("- Use conservative intensity: RPE 4–6, never max effort");
+    rules.push("- Slower progression: weekly or bi-weekly, not session-to-session");
+    rules.push("- Fewer exercises per session: 4–6 for frail/sedentary users; 5–6 for active older adults");
+    rules.push("- Simple transitions between movements — no complex flow sequences");
+    rules.push("- Reduce unnecessary novelty — repeatable patterns build confidence");
+    rules.push("- NO explosive or reactive work unless clearly appropriate");
+    rules.push("- NO max-effort loading or PR-oriented prescriptions");
+    rules.push("- NO dense fatigue-driven circuits by default");
+    rules.push("- Emphasize movement quality, tolerance, confidence, and repeatability over all else");
+  }
   rules.push("");
 
   if (ctx.hasNeurologicalFactors || ctx.primaryType === "parkinsons") {
@@ -682,6 +771,29 @@ export function buildSpecialConsiderationsContext(
 
   if (!ctx.detected) return "";
 
+  // ── OlderAdultStrength prompt-build log ────────────────────────────────────
+  if (ctx.primaryType === "older_adult") {
+    const isActiveStrengthPath = ctx.isActiveOlderAdult && ctx.goalContext === "strength" && !ctx.hasFrailtyFactors && !ctx.hasBalanceFallRisk && !ctx.hasNeurologicalFactors;
+    logger.info(
+      {
+        olderAdultStrength: {
+          isActiveOlderAdult: ctx.isActiveOlderAdult,
+          goalContext: ctx.goalContext,
+          medicalBlock: ctx.hasFrailtyFactors || ctx.hasBalanceFallRisk || ctx.hasNeurologicalFactors,
+          frailtyFactors: ctx.hasFrailtyFactors,
+          balanceFallRisk: ctx.hasBalanceFallRisk,
+          neurologicalFactors: ctx.hasNeurologicalFactors,
+          jointSensitivity: ctx.hasJointSensitivity,
+          severity: ctx.severity,
+          activeStrengthPath: isActiveStrengthPath,
+          exerciseCountTarget: isActiveStrengthPath ? "5-6 (complete session)" : "4-5 (conservative)",
+          densityFillTriggered: isActiveStrengthPath,
+        },
+      },
+      "[OlderAdultStrength] Prompt builder — path selected"
+    );
+  }
+
   const archetype = selectArchetype(ctx);
   const archetypeDescription = ARCHETYPE_DESCRIPTIONS[archetype];
 
@@ -695,8 +807,12 @@ export function buildSpecialConsiderationsContext(
   lines.push(`**Severity:** ${ctx.severity}`);
   lines.push(`**Signals matched:** ${ctx.matchedSignals.join(", ")}`);
   lines.push("");
-  lines.push(`**Session archetype:** ${archetype.replace(/_/g, " ")}`);
-  lines.push(`${archetypeDescription}`);
+  const isActiveStrengthPath = ctx.isActiveOlderAdult && ctx.goalContext === "strength" && !ctx.hasFrailtyFactors && !ctx.hasBalanceFallRisk && !ctx.hasNeurologicalFactors;
+  lines.push(`**Session archetype:** ${isActiveStrengthPath ? "active older adult strength" : archetype.replace(/_/g, " ")}`);
+  lines.push(isActiveStrengthPath
+    ? "Complete strength session for an active older adult — joint-friendly exercise selection, full movement balance (push/pull/hinge/squat/unilateral/trunk), moderate rep ranges (8–12), 5–6 working exercises. Conservative loading and no explosive work. NOT a chair-based or minimal session."
+    : archetypeDescription
+  );
 
   if (ctx.notes.length > 0) {
     lines.push("");
@@ -707,7 +823,12 @@ export function buildSpecialConsiderationsContext(
   }
 
   lines.push("");
-  lines.push("**OVERRIDE RULE:** Standard athletic programming defaults (power first, high complexity, NSCA athletic structure, explosive B-block, etc.) are SUSPENDED for this user. Apply the special considerations framework below instead.");
+  const isActiveStrengthOverride = ctx.isActiveOlderAdult && ctx.goalContext === "strength" && !ctx.hasFrailtyFactors && !ctx.hasBalanceFallRisk && !ctx.hasNeurologicalFactors;
+  if (isActiveStrengthOverride) {
+    lines.push("**MODIFICATION RULE:** This is an ACTIVE OLDER ADULT strength session. The explosive B-block is SUSPENDED (no plyometrics, no Olympic lifts). The movement balance structure (push/pull/hinge/squat/unilateral/trunk) IS PRESERVED. Build 5–6 working exercises.");
+  } else {
+    lines.push("**OVERRIDE RULE:** Standard athletic programming defaults (power first, high complexity, NSCA athletic structure, explosive B-block, etc.) are SUSPENDED for this user. Apply the special considerations framework below instead.");
+  }
   lines.push("════════════════════════════════════════════════════════════");
 
   // Safety rules
@@ -725,43 +846,82 @@ export function buildSpecialConsiderationsContext(
 
   // Session structure for special considerations
   lines.push("\n### SPECIAL CONSIDERATIONS SESSION STRUCTURE:");
-  lines.push("Replace the standard A→B→C→D→E→F athletic session structure with this safer structure:");
-  lines.push("");
-  lines.push("**A — GENTLE PREP / ACTIVATION** (Always first)");
-  lines.push("Seated or supported activation. Gentle joint mobility, breathing, light band or bodyweight activation. Nothing demanding. 2–3 movements, 1 set each.");
-  lines.push("");
-  lines.push("**B — FUNCTIONAL STRENGTH ANCHOR** (Main work — 2–3 movements)");
-  lines.push("The session's primary functional pattern. Selected from the archetype: sit-to-stand, supported hinge, step pattern, press, pull. 2–3 sets × 8–12 reps (or tolerated). RPE 4–6.");
-  lines.push("");
-  lines.push("**C — BALANCE / GAIT / STABILITY** (Include when relevant)");
-  lines.push("Supported balance work, gait drills, weight shift patterns. Only what the user can safely execute with available support. 2–3 sets.");
-  lines.push("");
-  lines.push("**D — TRUNK / POSTURE** (Functional, not aesthetic)");
-  lines.push("Seated trunk rotation, supported anti-extension, posture hold, breathing with bracing. 2 sets. Simple and clear.");
-  lines.push("");
-  lines.push("**E — OPTIONAL FINISHER** (Only if session density allows)");
-  lines.push("Gentle cool-down mobility or easy conditioning (walking, seated cycle). Never mandatory. Only if tolerated.");
-  lines.push("");
-  lines.push("**TOTAL EXERCISES:** 4–6 per session. Never more than 8.");
-  lines.push("**SESSION DURATION:** 30–45 minutes is appropriate. Not 60–75 minutes of athletic volume.");
-  lines.push("**DO NOT include:**");
-  lines.push("- Explosive B-block (jumps, throws, Olympic derivatives)");
-  lines.push("- Complex unilateral loaded patterns without support");
-  lines.push("- High-rep conditioning circuits");
-  lines.push("- Any exercise that creates meaningful fall risk");
+
+  const isActiveStrength = ctx.isActiveOlderAdult && ctx.goalContext === "strength" && !ctx.hasFrailtyFactors && !ctx.hasBalanceFallRisk && !ctx.hasNeurologicalFactors;
+
+  if (isActiveStrength) {
+    lines.push("Active older adult — use this COMPLETE STRENGTH SESSION structure:");
+    lines.push("");
+    lines.push("**A — PREP / ACTIVATION** (2–3 movements, 1 set each)");
+    lines.push("Light joint mobility and muscle activation. Glute bridge, band pull-apart, hip circles, or light cardio. Nothing demanding.");
+    lines.push("");
+    lines.push("**B — PRIMARY LOWER BODY STRENGTH** (bilateral pattern — 2–3 sets × 8–12)");
+    lines.push("Goblet squat, box squat, trap bar deadlift, leg press, or hip thrust. Joint-friendly bilateral selection.");
+    lines.push("");
+    lines.push("**C — SECONDARY LOWER BODY / UNILATERAL** (2–3 sets × 10–12 each side)");
+    lines.push("Step-up, reverse lunge, kickstand RDL, split squat, or single-leg press. Controlled tempo.");
+    lines.push("");
+    lines.push("**D — UPPER PUSH** (2–3 sets × 10–12)");
+    lines.push("Dumbbell incline press, machine chest press, landmine press, or cable chest press.");
+    lines.push("");
+    lines.push("**E — UPPER PULL** (2–3 sets × 10–12)");
+    lines.push("Cable row, lat pulldown, dumbbell row, face pull, or band pull-apart as accessory.");
+    lines.push("");
+    lines.push("**F — TRUNK / ANTI-ROTATION** (2 sets)");
+    lines.push("Pallof press, dead bug, bird dog, or modified plank. Core stability emphasis.");
+    lines.push("");
+    lines.push("**TOTAL WORKING EXERCISES:** 5–6. A complete, balanced session. NOT 2–3.");
+    lines.push("**SESSION DURATION:** 45–55 minutes — appropriate for an active older adult.");
+    lines.push("**REMOVE:** Explosive B-block (box jumps, power cleans, bounds). NO max-loading.");
+    lines.push("**PRESERVE:** Full movement balance (bilateral lower, unilateral lower, upper push, upper pull, trunk).");
+    lines.push("**DENSITY FILL IS ACTIVE:** Fill the session to 5-6 exercises. Do not stop at 2-3.");
+  } else {
+    lines.push("Replace the standard A→B→C→D→E→F athletic session structure with this safer structure:");
+    lines.push("");
+    lines.push("**A — GENTLE PREP / ACTIVATION** (Always first)");
+    lines.push("Seated or supported activation. Gentle joint mobility, breathing, light band or bodyweight activation. Nothing demanding. 2–3 movements, 1 set each.");
+    lines.push("");
+    lines.push("**B — FUNCTIONAL STRENGTH ANCHOR** (Main work — 2–3 movements)");
+    lines.push("The session's primary functional pattern. Selected from the archetype: sit-to-stand, supported hinge, step pattern, press, pull. 2–3 sets × 8–12 reps (or tolerated). RPE 4–6.");
+    lines.push("");
+    lines.push("**C — BALANCE / GAIT / STABILITY** (Include when relevant)");
+    lines.push("Supported balance work, gait drills, weight shift patterns. Only what the user can safely execute with available support. 2–3 sets.");
+    lines.push("");
+    lines.push("**D — TRUNK / POSTURE** (Functional, not aesthetic)");
+    lines.push("Seated trunk rotation, supported anti-extension, posture hold, breathing with bracing. 2 sets. Simple and clear.");
+    lines.push("");
+    lines.push("**E — OPTIONAL FINISHER** (Only if session density allows)");
+    lines.push("Gentle cool-down mobility or easy conditioning (walking, seated cycle). Never mandatory. Only if tolerated.");
+    lines.push("");
+    lines.push("**TOTAL EXERCISES:** 4–6 per session. Never more than 8.");
+    lines.push("**SESSION DURATION:** 30–45 minutes is appropriate. Not 60–75 minutes of athletic volume.");
+    lines.push("**DO NOT include:**");
+    lines.push("- Explosive B-block (jumps, throws, Olympic derivatives)");
+    lines.push("- Complex unilateral loaded patterns without support");
+    lines.push("- High-rep conditioning circuits");
+    lines.push("- Any exercise that creates meaningful fall risk");
+  }
 
   // Pre-output validation for this mode
   lines.push("\n### PRE-OUTPUT VALIDATION — SPECIAL CONSIDERATIONS MODE:");
   lines.push("Before outputting the program, verify:");
   lines.push("☑ No explosive or reactive exercises (jumps, bounds, throws) in the program");
   lines.push("☑ No max-effort prescriptions or PR language");
-  lines.push("☑ Session exercise count is 4–8, not 9–12");
-  lines.push("☑ Volume is conservative: 2–3 working sets per pattern");
+  if (isActiveStrength) {
+    lines.push("☑ Session has 5–6 working exercises — a complete, balanced session (NOT 2–3 exercises)");
+    lines.push("☑ Movement balance preserved: bilateral lower, unilateral lower, upper push, upper pull, trunk");
+    lines.push("☑ Rep ranges are 8–12 primary / 10–15 accessory — NOT heavy 1–6 rep ranges");
+    lines.push("☑ No chair-supported framing unless user specifically requested it");
+    lines.push("☑ Density fill was applied — session is complete, not minimal");
+  } else {
+    lines.push("☑ Session exercise count is 4–6 (frail/sedentary), not 9–12");
+    lines.push("☑ Volume is conservative: 2–3 working sets per pattern");
+    lines.push("☑ Session should feel achievable and confidence-building, not exhausting");
+    lines.push("☑ The program does NOT look like a standard athletic program with a 'be careful' note appended — it must be structurally different");
+  }
   lines.push("☑ All balance-demanding exercises have stated support options");
   lines.push("☑ No high-coordination multi-step movement sequences");
-  lines.push("☑ Session should feel achievable and confidence-building, not exhausting");
   lines.push("☑ Language in day names, notes, and intent fields reflects calm, conservative, functional coaching");
-  lines.push("☑ The program does NOT look like a standard athletic program with a 'be careful' note appended — it must be structurally different");
 
   return lines.join("\n");
 }
@@ -849,22 +1009,34 @@ export function validateSpecialConsiderationsOutput(
   }
 
   // Check session density (too many exercises per day)
+  const isActiveStrengthCtx = ctx.isActiveOlderAdult && ctx.goalContext === "strength" && !ctx.hasFrailtyFactors && !ctx.hasBalanceFallRisk && !ctx.hasNeurologicalFactors;
+  const maxAllowedExercises = isActiveStrengthCtx ? 9 : 8;
+  const warningThreshold = isActiveStrengthCtx ? 8 : 6;
+
   for (const day of program.days) {
     const nonPrepExercises = day.exercises.filter(
       e => e.classification !== "Prep"
     );
-    if (nonPrepExercises.length > 8) {
+    if (nonPrepExercises.length > maxAllowedExercises) {
       return {
         passed: false,
-        reason: `Session has ${nonPrepExercises.length} exercises — too many for special considerations mode. Reduce to 4–6 working exercises per session.`,
+        reason: `Session has ${nonPrepExercises.length} exercises — too many even for ${isActiveStrengthCtx ? "active older adult" : "special considerations"} mode. Reduce to ${isActiveStrengthCtx ? "6–7" : "4–6"} working exercises.`,
         isWarning: false,
       };
     }
-    if (nonPrepExercises.length > 6) {
+    if (nonPrepExercises.length > warningThreshold) {
       return {
         passed: true,
-        reason: `Session has ${nonPrepExercises.length} exercises — slightly high for special considerations. Consider reducing.`,
+        reason: `Session has ${nonPrepExercises.length} exercises — slightly high for ${isActiveStrengthCtx ? "active older adult" : "special considerations"} mode. Consider reducing.`,
         isWarning: true,
+      };
+    }
+    // For active older adults — also log if session is too sparse
+    if (isActiveStrengthCtx && nonPrepExercises.length < 4) {
+      return {
+        passed: false,
+        reason: `Session has only ${nonPrepExercises.length} working exercises — too sparse for an active older adult strength session. Target 5–6 exercises. Density fill should have been applied.`,
+        isWarning: false,
       };
     }
   }
