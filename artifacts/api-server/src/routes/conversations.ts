@@ -760,6 +760,7 @@ Keep it helpful and intelligent, never promotional.`;
         }
       : null,
     uiContext: nonStreamUiCtx,
+    focusMode: nonStreamFocusMode,
   });
 
   logger.info(
@@ -1170,7 +1171,7 @@ Keep it helpful and intelligent, never promotional.`;
 
     // Write pending clarification state so the next reply can resume the correct intent
     if (intentResult.type === "EDIT_PROGRAM" || intentResult.type === "ADJUST_FOR_PAIN" || intentResult.type === "ADJUST_FOR_READINESS") {
-      const familyResult = normalizeToIntentFamily(parsed.data.content);
+      const familyResult = normalizeToIntentFamily(parsed.data.content, nonStreamFocusMode);
       writePendingClarification({
         conversationId: params.data.id,
         userId,
@@ -2465,6 +2466,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         }
       : null,
     uiContext: streamUIContext,
+    focusMode: streamFocusMode,
   });
 
   logger.info(
@@ -2750,7 +2752,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
     // Write pending clarification state so the next reply can resume the correct intent
     if (intentResult.type === "EDIT_PROGRAM" || intentResult.type === "ADJUST_FOR_PAIN" || intentResult.type === "ADJUST_FOR_READINESS") {
-      const familyResult = normalizeToIntentFamily(parsed.data.content);
+      const familyResult = normalizeToIntentFamily(parsed.data.content, streamFocusMode);
       writePendingClarification({
         conversationId: params.data.id, userId,
         targetProgramId: activeSystem?.id ?? null,

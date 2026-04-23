@@ -3669,11 +3669,12 @@ export async function interpretEditRequest(
       acc + (phase.weeks ?? []).reduce((wacc: number, week: any) =>
         wacc + (week.sessions ?? []).filter((s: any) => !s.isRestDay).length, 0), 0);
     const targetSessionLabel = targetContext?.type === "session" ? targetContext.label : undefined;
+    const systemFocusMode = (system.focusMode ?? (system.metadata as any)?.focusMode) as import("./focus-engines/engine-interface").FocusMode | undefined;
 
     intentFamilyPipelineResult = runIntentFamilyPipeline(userRequest, {
       dayCount: sessionCount,
       sessionLabel: targetSessionLabel,
-    });
+    }, systemFocusMode);
 
     intentFamilyDirective = intentFamilyPipelineResult.promptDirective;
 

@@ -18,6 +18,7 @@
  */
 
 import { logger } from "./logger";
+import type { FocusMode } from "./focus-engines/engine-interface";
 
 // ─── Intent Families ──────────────────────────────────────────────────────────
 
@@ -702,6 +703,122 @@ export interface IntentFamilyResult {
   debugInfo: Record<string, unknown>;
 }
 
+// ─── Mode-Aware Priority Patterns ─────────────────────────────────────────────
+//
+// These patterns run BEFORE the global FAMILY_PATTERNS when a focusMode is known.
+// They resolve known ambiguities where the same phrase means different things
+// depending on the active training domain (Speed / Mobility / Strength).
+//
+// Layering rule:
+//   1. Mode-specific pre-pass (below) — fires first when mode is known
+//   2. Global FAMILY_PATTERNS — existing universal classification
+//   3. Fallback → clarification_required
+//
+// Each entry documents WHY the mode override is needed (reason field).
+
+interface ModePriorityEntry {
+  family: IntentFamily;
+  patterns: RegExp[];
+  reason: string;
+}
+
+const MODE_PRIORITY_PATTERNS: Record<FocusMode, ModePriorityEntry[]> = {
+  // ── SPEED MODE ──────────────────────────────────────────────────────────────
+  // Key conflict zones in Speed:
+  //   "quickness" globally → power_explosive_focus; in Speed → footwork_rhythm_focus
+  //   "more pop" / "lighter on ground" → must always mean reactive quality, not load change
+  //   COD/agility phrases → cod_decel_focus, never barbell-power bundle
+  speed: [
+    {
+      family: "reactive_focus",
+      patterns: [
+        // "lighter on the ground/floor" and raw "lighter on feet" — in speed, always reactive
+        /\blighter\s+on\s+(my\s+)?(feet|the\s+(ground|floor))\b/i,
+        // Snappy / pop / crisp — reactive quality cues
+        /\b(more pop|pop off|snappier|crisp(er)? contacts?)\b/i,
+        // Quicker off the floor / faster contacts — reactive
+        /\b(quick(er)?\s+off\s+the\s+(floor|ground)|faster\s+contacts?)\b/i,
+      ],
+      reason: "Speed mode: 'more pop', 'lighter on the ground', 'snappy' always = reactive quality — not load reduction or general difficulty change",
+    },
+    {
+      family: "footwork_rhythm_focus",
+      patterns: [
+        // "quickness" in speed mode = footwork (globally it hits power_explosive_focus)
+        /\bquickness\b/i,
+        // Explicit footwork / foot-speed cues
+        /\b(foot\s+speed|foot\s+coordination|quick(er)?\s+feet|faster\s+feet|ladder\s+(work|drills?)|footwork)\b/i,
+        // Lateral movement cues
+        /\b(lateral\s+(shuffle|speed|quickness|movement)|shuffle\s+(patterns?|steps?|drills?))\b/i,
+      ],
+      reason: "Speed mode: quickness/footwork/ladder phrases = footwork_rhythm_focus, not power_explosive_focus",
+    },
+    {
+      family: "cod_decel_focus",
+      patterns: [
+        // COD / agility / decel — in speed, always change-of-direction domain
+        /\b(change\s+of\s+direction|better\s+agility|agility\s+(drills?|work|training)|decel\w*|cutting\s+(ability|work|drills?)|cut\s+faster|sharper\s+cuts?)\b/i,
+        // COD drill names
+        /\b(T.?drill|505\s+drill|pro.?agility|5.?10.?5|COD\s+(work|training|drills?))\b/i,
+      ],
+      reason: "Speed mode: COD/agility/decel requests must be classified as change-of-direction work, not routed to barbell power bundle",
+    },
+  ],
+
+  // ── MOBILITY MODE ────────────────────────────────────────────────────────────
+  // Key conflict zones in Mobility:
+  //   "more restorative" / "yin style" globally → may not match anything → clarification_required
+  //   "deeper stretch/holds" → rom_restoration_focus (range challenge), not generic increase_difficulty
+  //   "less intense" in mobility → recovery_focus (slower holds), not barbell load reduction
+  mobility: [
+    {
+      family: "recovery_focus",
+      patterns: [
+        // "More restorative" / yin-style — recovery focus with mobility guard
+        /\b(more\s+restorative|restorative\s+(session|flow|practice|work)|yin\s+(style|approach|focus|session))\b/i,
+        // "Softer session", "gentler flow" — mobility recovery language
+        /\b(soften\s+(it|this|the\s+practice)|gentler\s+(session|flow|work|practice))\b/i,
+        // "Less intense session/flow" — in mobility means slower holds, not load reduction
+        /\b(less\s+intense\s+(session|flow|sequence|practice)|dial\s+(it|this)\s+back\s+(a\s+bit)?)\b/i,
+        // "Easier on my body" — mobility context = restorative, not lighter weights
+        /\b(easier\s+on\s+my\s+(body|joints?|muscles?|system))\b/i,
+      ],
+      reason: "Mobility mode: restorative/yin/gentler requests = recovery_focus (bundle has mobility guard preventing volume removal, not barbell deload)",
+    },
+    {
+      family: "rom_restoration_focus",
+      patterns: [
+        // Depth / range challenge — in mobility means push range further
+        /\b(more\s+depth|deeper\s+(stretch|holds?|into\s+(the\s+)?pose|position)|further\s+into\s+(the\s+)?range)\b/i,
+        /\b(push\s+(the\s+)?range|challenge\s+(my|the)\s+(range|flexibility|mobility)|more\s+depth\s+in)\b/i,
+        // Unlock / open language — strongly ROM in any mode but particularly targeted in mobility
+        /\b(unlock\s+(my\s+)?(hips?|shoulders?|thoracic|ankles?|spine))\b/i,
+        // "CARs" / controlled articular rotations — always ROM restoration
+        /\bCARs?\b/i,
+        /\b(controlled\s+articular\s+rotations?|joint\s+circle|end.range\s+(control|strength|loading))\b/i,
+      ],
+      reason: "Mobility mode: depth/range challenge and CAR-style phrases = ROM restoration (range challenge), not generic difficulty progression",
+    },
+  ],
+
+  // ── STRENGTH MODE ────────────────────────────────────────────────────────────
+  // Strength mode currently has strong global coverage.
+  // The pre-pass here only guards a few phrases that could misfire if future
+  // pattern additions create conflicts.
+  strength: [
+    {
+      family: "power_explosive_focus",
+      patterns: [
+        // Keep explosive/power firmly in power_explosive in strength context
+        // (guards against future reactive/speed patterns accidentally stealing these)
+        /\b(more\s+explosive|more\s+power|add\s+(power|explosiveness|plyometrics?))\b/i,
+        /\b(rate\s+of\s+force|first\s+step\s+power|ballistic\s+(work|training))\b/i,
+      ],
+      reason: "Strength mode: explosive/power requests stay in power_explosive_focus (barbell-first bundle), not routed to speed-mode reactive bundles",
+    },
+  ],
+};
+
 // ─── Competing Family Guard ────────────────────────────────────────────────────
 //
 // For reactive/performance-quality intents, detect if the raw message also
@@ -740,9 +857,67 @@ function detectRejectedCompetingFamily(lower: string): IntentFamily | undefined 
   return undefined;
 }
 
-export function normalizeToIntentFamily(message: string): IntentFamilyResult {
+/**
+ * Normalize a user message to a stable IntentFamily.
+ *
+ * @param message    The raw user message.
+ * @param focusMode  Optional. The active training mode (strength / speed / mobility).
+ *                   When supplied, a mode-specific priority pre-pass runs first,
+ *                   resolving ambiguous phrases that mean different things across modes.
+ *                   Callers that do not yet supply focusMode continue to use global patterns.
+ */
+export function normalizeToIntentFamily(message: string, focusMode?: FocusMode): IntentFamilyResult {
   const lower = message.toLowerCase().trim();
 
+  // ── LAYER 1: Mode-specific priority pre-pass ────────────────────────────────
+  // When focusMode is known, run mode-specific patterns BEFORE the global list.
+  // These resolve known ambiguities (e.g. "quickness" in speed = footwork, not power;
+  // "more restorative" in mobility = recovery, not a generic deload).
+  if (focusMode) {
+    const modePriorities = MODE_PRIORITY_PATTERNS[focusMode];
+    for (const { family, patterns, reason } of modePriorities) {
+      const matched = patterns.filter((p) => p.test(lower));
+      if (matched.length > 0) {
+        const targetScope = resolveTargetScope(lower);
+        const rejectedCompetingFamily = detectRejectedCompetingFamily(lower);
+
+        const result: IntentFamilyResult = {
+          family,
+          confidence: matched.length >= 2 ? "high" : "medium",
+          matchedPatterns: matched.map((p) => p.source.slice(0, 60)),
+          targetScope: targetScope.scope,
+          scopeSource: targetScope.source,
+          debugInfo: {
+            patternMatchCount: matched.length,
+            firstMatch: matched[0].source.slice(0, 80),
+            rejectedCompetingFamily: rejectedCompetingFamily ?? null,
+            matchedBy: "mode-specific",
+            focusMode,
+          },
+        };
+
+        logger.debug(
+          {
+            rawCommand: message.slice(0, 120),
+            focusMode,
+            matchedFamily: family,
+            matchedBy: "mode-specific",
+            competingFamilyRejected: rejectedCompetingFamily ?? null,
+            confidence: result.confidence,
+            modeReason: reason,
+          },
+          `[IntentResolution] focusMode=${focusMode} raw="${message.slice(0, 80)}" → MODE-SPECIFIC=${family.toUpperCase()}`,
+        );
+
+        return result;
+      }
+    }
+  }
+
+  // ── LAYER 2: Global pattern matching (existing behavior) ────────────────────
+  // Runs when mode is absent OR when no mode-specific pattern matched.
+  // This preserves full backward compatibility for call sites that do not yet
+  // supply focusMode.
   for (const { family, patterns } of FAMILY_PATTERNS) {
     const matched = patterns.filter((p) => p.test(lower));
     if (matched.length > 0) {
@@ -763,34 +938,45 @@ export function normalizeToIntentFamily(message: string): IntentFamilyResult {
           patternMatchCount: matched.length,
           firstMatch: matched[0].source.slice(0, 80),
           rejectedCompetingFamily: rejectedCompetingFamily ?? null,
+          matchedBy: "global",
+          focusMode: focusMode ?? null,
         },
       };
 
       logger.debug(
         {
-          originalMessage: message.slice(0, 120),
-          resolvedFamily: family,
+          rawCommand: message.slice(0, 120),
+          focusMode: focusMode ?? null,
+          matchedFamily: family,
+          matchedBy: "global",
+          competingFamilyRejected: rejectedCompetingFamily ?? null,
           confidence: result.confidence,
-          targetScope: result.targetScope,
-          scopeSource: result.scopeSource,
-          rejectedCompetingFamily: rejectedCompetingFamily ?? null,
         },
-        `[IntentResolution] raw="${message.slice(0, 80)}" → resolved=${family.toUpperCase()} | rejected=${rejectedCompetingFamily ? rejectedCompetingFamily.toUpperCase() : "none"}`,
+        `[IntentResolution] raw="${message.slice(0, 80)}" → GLOBAL=${family.toUpperCase()} | mode=${focusMode ?? "none"}`,
       );
 
       return result;
     }
   }
 
-  // No match — clarification required
+  // ── LAYER 3: No match — clarification required ──────────────────────────────
   const targetScope = resolveTargetScope(lower);
+  logger.debug(
+    {
+      rawCommand: message.slice(0, 120),
+      focusMode: focusMode ?? null,
+      matchedFamily: "clarification_required",
+      matchedBy: "fallback",
+    },
+    `[IntentResolution] raw="${message.slice(0, 80)}" → NO MATCH | mode=${focusMode ?? "none"}`,
+  );
   return {
     family: "clarification_required",
     confidence: "low",
     matchedPatterns: [],
     targetScope: targetScope.scope,
     scopeSource: targetScope.source,
-    debugInfo: { noMatch: true },
+    debugInfo: { noMatch: true, matchedBy: "fallback", focusMode: focusMode ?? null },
   };
 }
 
@@ -2104,8 +2290,9 @@ export interface IntentFamilyPipelineResult {
 export function runIntentFamilyPipeline(
   message: string,
   programContext?: { dayCount?: number; sessionLabel?: string },
+  focusMode?: FocusMode,
 ): IntentFamilyPipelineResult {
-  const familyResult = normalizeToIntentFamily(message);
+  const familyResult = normalizeToIntentFamily(message, focusMode);
   const bundle = TRANSFORMATION_BUNDLES[familyResult.family];
   const bridge = bridgeToSpecialistIntent(familyResult.family);
   const promptDirective = buildIntentFamilyPromptDirective(familyResult, programContext);

@@ -1,0 +1,194 @@
+We completed Phase 2:
+- normalizeToIntentFamily() is now mode-aware
+- known speed/mobility misroutes are improved
+
+Now implement Phase 3.
+
+GOAL
+Add the next set of semantic families identified in the audit so the edit-language system becomes more complete across:
+- Strength
+- Speed / Footwork
+- Mobility
+
+Add these 6 first-class families:
+
+1. tendon_resilience_focus
+Primary mode:
+- speed / footwork
+
+Meaning:
+- protect my tendons
+- reduce tendon load
+- easier on my Achilles
+- less patellar tendon stress
+- more tendon-friendly
+
+Desired behavior:
+- bias away from tendon-aggravating contacts when appropriate
+- preserve session identity where possible
+- do NOT default to generic injury_modification unless explicit pain/injury language is present
+
+2. end_range_control_focus
+Primary mode:
+- mobility
+
+Meaning:
+- more end-range control
+- own the position
+- stronger in the end range
+- PAILs / RAILs
+- active range control
+
+Desired behavior:
+- bias toward active end-range control work
+- emphasize positional ownership / isometric strength at end range
+- do NOT collapse into generic rom_restoration_focus
+
+3. mobility_flow_focus
+Primary mode:
+- mobility
+
+Meaning:
+- more flow
+- smoother mobility flow
+- connective movement
+- integrated mobility sequence
+- less segmented mobility
+
+Desired behavior:
+- bias toward linked / continuous mobility sequences
+- do NOT collapse into generic recovery_focus or lower-intensity logic
+
+4. unilateral_emphasis
+Primary mode:
+- strength
+
+Meaning:
+- more single-leg work
+- more unilateral
+- more one-leg work
+- less bilateral
+- more split stance
+
+Desired behavior:
+- increase unilateral bias without deleting all bilateral anchors
+- bias substitutions/additions toward unilateral lower and unilateral upper where appropriate
+
+5. posterior_chain_emphasis
+Primary mode:
+- strength
+
+Meaning:
+- more posterior chain
+- more hamstrings
+- more glutes
+- more pulling
+- more hinge
+- backside emphasis
+
+Desired behavior:
+- bias toward hinge / pull / glute / hamstring emphasis
+- preserve the day’s main identity
+- do NOT reduce this to generic hypertrophy or generic pulling only
+
+6. trunk_core_emphasis
+Valid modes:
+- strength
+- speed
+- mobility
+
+Meaning:
+- more core
+- more trunk
+- more trunk stability
+- more anti-rotation
+- more anti-extension
+- more core control
+
+Desired behavior:
+- strength: trunk strength / stability
+- speed: trunk stiffness / control relevant to sprint/COD mechanics
+- mobility: positional trunk control
+- do NOT reduce this to generic filler accessory logic
+
+IMPLEMENTATION RULES
+
+1. Add each as a true semantic family, not a one-off regex patch.
+
+For each family define:
+- family name
+- valid modes
+- trigger phrases / synonyms
+- anti-collision / exclusion rules
+- intended transformation bundle behavior
+
+2. Preserve mode-awareness.
+A phrase should only route into a family where that family makes sense for the current mode, unless there is a very strong general interpretation.
+
+3. Add anti-collision guards.
+Examples:
+- tendon_resilience_focus should not default to injury_modification unless explicit pain/injury wording exists
+- end_range_control_focus should not collapse into rom_restoration_focus
+- mobility_flow_focus should not collapse into recovery_focus
+- unilateral_emphasis should not collapse into generic variation
+- posterior_chain_emphasis should not collapse into generic pulling only
+- trunk_core_emphasis should not collapse into accessory filler
+
+4. Preserve existing Phase 2 behavior when none of these families match.
+
+5. Keep existing debug logging and extend if needed:
+[IntentResolution]
+- rawCommand
+- focusMode
+- matchedFamily
+- matchedBy
+- competingFamilyRejected
+
+VALIDATION CASES
+
+Speed:
+- protect my tendons
+- reduce tendon load
+- more tendon-friendly
+- easier on my Achilles
+
+Mobility:
+- more end-range control
+- own the position
+- stronger in the end range
+- more flow
+- smoother mobility flow
+- connective movement
+
+Strength:
+- more single-leg work
+- more unilateral
+- more posterior chain
+- more hamstrings
+- more glutes
+- more core
+- more anti-rotation
+
+Cross-mode:
+- “more core” in strength vs mobility
+- “more flow” in mobility should not hit recovery_focus
+- “protect my tendons” in speed should not default to injury rehab
+- “more unilateral” should remain stable outside strength unless explicitly supported
+
+DELIVERABLES
+
+Return:
+1. exact files changed
+2. family names added
+3. phrase coverage added for each family
+4. anti-collision rules added
+5. sample routing / validation results
+6. whether any existing family behavior changed
+
+SUCCESS CRITERIA
+
+- all 6 P1 families exist
+- they are mode-aware
+- they do not collapse into generic families by default
+- known audit phrases now resolve correctly
+- existing Phase 2 behavior remains stable

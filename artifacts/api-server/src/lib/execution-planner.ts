@@ -18,6 +18,7 @@
 import { normalizeToIntentFamily, type IntentFamily } from "./intent-family-engine";
 import { type ProgramStructure } from "./ai";
 import { logger } from "./logger";
+import type { FocusMode } from "./focus-engines/engine-interface";
 
 // ─── Execution Action Types ───────────────────────────────────────────────────
 
@@ -82,6 +83,7 @@ export async function buildExecutionPlan({
   program,
   pendingClarification,
   uiContext,
+  focusMode,
 }: {
   message: string;
   userId: string;
@@ -89,6 +91,7 @@ export async function buildExecutionPlan({
   program: ProgramStructure | null;
   pendingClarification: PendingClarificationContext | null;
   uiContext?: Record<string, unknown> | null;
+  focusMode?: FocusMode;
 }): Promise<ExecutionPlan> {
   // ── STEP 0: Button signal override ─────────────────────────────────────────
   // Right-panel buttons send an explicit button signal via uiContext.
@@ -190,7 +193,7 @@ export async function buildExecutionPlan({
   }
 
   // ── STEP 2: Resolve intent family ──────────────────────────────────────────
-  const intentResult = normalizeToIntentFamily(message);
+  const intentResult = normalizeToIntentFamily(message, focusMode);
   const intent = intentResult.family;
 
   // ── STEP 3: Resolve target scope ──────────────────────────────────────────
