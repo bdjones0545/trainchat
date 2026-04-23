@@ -43,3 +43,67 @@ EMAIL_SUPPORT_TO = "Bryan.jones@trainchat.ai"
 
 [userenv.production]
 ADMIN_SECRET = "eeb65552cd109f4d4c0e2115728b58620a66c018f8a8751adb359e2585dab641"
+
+[[ports]]
+localPort = 8080
+externalPort = 8080
+
+[[ports]]
+localPort = 8082
+externalPort = 6800
+
+[[ports]]
+localPort = 8083
+externalPort = 3003
+
+[[ports]]
+localPort = 8085
+externalPort = 3002
+
+[[ports]]
+localPort = 8086
+externalPort = 4200
+
+[[ports]]
+localPort = 8087
+externalPort = 8099
+
+[[ports]]
+localPort = 8088
+externalPort = 5173
+
+[[ports]]
+localPort = 8090
+externalPort = 80
+
+[[ports]]
+localPort = 8091
+externalPort = 9000
+
+[[ports]]
+localPort = 8095
+externalPort = 6000
+
+[[ports]]
+localPort = 25530
+externalPort = 3001
+
+[[ports]]
+localPort = 25531
+externalPort = 3000
+
+[[ports]]
+localPort = 25532
+externalPort = 8000
+
+[[ports]]
+localPort = 25533
+externalPort = 8008
+
+[[ports]]
+localPort = 25534
+externalPort = 8081
+
+[[ports]]
+localPort = 25535
+externalPort = 5000

@@ -1,0 +1,80 @@
+We need to fix block-edit intent interpretation for performance-quality commands.
+
+Problem:
+The command “Reduce ground contact time” was interpreted as a generic shortening / volume reduction command. The system reduced sets and rest across exercises, which is not the intended meaning.
+
+Correct meaning:
+“Reduce ground contact time” is a speed-performance / reactive-quality instruction, not a duration or volume instruction.
+
+GOAL
+Create a distinct intent path for reactive / stiffness / ground-contact optimization commands so they modify exercise selection, progression, and coaching emphasis instead of blindly shortening the block.
+
+EXPECTED INTERPRETATION
+
+Commands like:
+- reduce ground contact time
+- be more reactive
+- improve stiffness
+- quicker off the floor
+- faster contacts
+- more elastic
+- more spring
+- less amortization
+
+should map to a dedicated intent family such as:
+- INCREASE_REACTIVITY
+- ELASTIC_BIAS
+- REDUCE_GROUND_CONTACT_TIME
+
+NOT to:
+- SHORTEN_BLOCK
+- REDUCE_VOLUME
+- REDUCE_REST
+- DELoad
+unless the user explicitly asks for those
+
+IMPLEMENTATION TASKS
+
+1. Update the intent / family classification layer so “reduce ground contact time” resolves to a reactive-performance intent, not a shortening intent.
+
+2. Add synonym coverage for:
+- reactive
+- stiffness
+- elastic
+- spring
+- quicker contacts
+- ground contact
+- off the floor
+- bounce
+- less amortization
+
+3. Define the correct transformation behavior for this intent:
+- preserve overall session/block structure by default
+- bias toward drills that improve stiffness/reactivity
+- swap or upgrade exercises where appropriate
+- adjust notes/cues to emphasize short contact mechanics
+- only reduce sets/rest if explicitly part of the intended reactivity strategy, not as the default action
+
+4. Add a guard:
+If the parsed command references a performance quality (reactivity, contact time, stiffness, elasticity), do not route it to generic “shorter / lower volume” transformations.
+
+5. Add debug logs:
+[IntentResolution]
+- raw command
+- resolved intent family
+- rejected competing family (if any)
+- chosen transformation bundle
+
+6. Add test cases for:
+- “Reduce ground contact time”
+- “Be more reactive”
+- “Make this more elastic”
+- “Shorten this block”
+to ensure these resolve to different actions
+
+SUCCESS CRITERIA
+
+- “Reduce ground contact time” no longer trims the block by default
+- it instead applies a reactive / stiffness / elastic bias
+- “Shorten this block” still performs the current volume/duration reduction behavior
+- semantic performance commands and duration commands are clearly separated
