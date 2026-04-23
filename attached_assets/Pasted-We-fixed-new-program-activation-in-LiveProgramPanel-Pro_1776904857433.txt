@@ -1,0 +1,71 @@
+We fixed new-program activation in LiveProgramPanel / ProgramTab so brand-new programs open on Day 1.
+
+However, the Today section of the active program still uses weekday-based mapping and is ignoring the new-build override.
+
+Observed behavior:
+- Live Program panel opens new build on Day 1 correctly
+- Today tab still shows a weekday-mapped session (for example Wednesday → Day 3)
+- This creates inconsistent session selection across the app
+
+GOAL
+Make the Today section honor the same “new build starts on Day 1” rule as LiveProgramPanel.
+
+IMPORTANT
+Do not change prompts or generation.
+This is a session-selection / state-consistency fix only.
+
+TASKS
+
+1. Find the selector logic used by the Today section / active program dashboard.
+Trace exactly where it determines:
+- current session
+- session title
+- day index
+- weekday label
+
+2. Identify why it is not using the same new-build signal / state as ProgramTab.
+Likely causes:
+- separate weekday-based selector
+- stale persisted currentDay
+- missing newProgramSignal / unsaved-draft awareness
+- duplicated selection logic
+
+3. Apply the same split behavior used in ProgramTab:
+
+CASE A — new build just created
+- Today view should select Day 1
+- ignore weekday/calendar mapping
+- ignore stale previous session selection
+- selectionSource = "day1_default"
+
+CASE B — existing/resumed program
+- preserve current weekday/history-based logic as appropriate
+
+4. Reuse the same source of truth where possible.
+Do not create another divergent selector if the logic can be shared.
+
+5. Reset any carried-over current session / selected day state when a new program becomes active so Today does not inherit the previous program’s weekday mapping.
+
+6. Add temporary debug logs:
+[TodayProgramActivation]
+- program id
+- isNewBuild?
+- selected day before
+- selected day after
+- selectionSource: day1_default / weekday / history / persisted
+
+SUCCESS CRITERIA
+
+- Generate a new 4-day program on Wednesday
+- Live Program panel shows Day 1
+- Today tab also shows Day 1
+- Switching to an older existing program can still use its prior logic
+- No stale session index carries across programs
+- Session selection is consistent across Today and Live Program
+
+DELIVERABLES
+Report:
+- exact file(s) changed
+- exact root cause
+- whether Today had separate duplicated selection logic
+- confirmation that Today now honors the Day 1 default for new builds

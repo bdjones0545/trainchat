@@ -111,11 +111,34 @@ async function fetchWeeksList(focusMode?: string) {
     : "/api/training-system/weeks";
   return customFetch<any>(url);
 }
-async function fetchToday(focusMode?: string) {
-  const url = focusMode
-    ? `/api/training-system/today?focus=${encodeURIComponent(focusMode)}`
-    : "/api/training-system/today";
-  return customFetch<any>(url);
+const NEW_BUILD_SIGNAL_KEY = "trainchat_new_build_signal";
+const NEW_BUILD_SIGNAL_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+/** Returns true if a fresh new-build signal exists in localStorage. */
+function consumeNewBuildSignal(): boolean {
+  try {
+    const raw = localStorage.getItem(NEW_BUILD_SIGNAL_KEY);
+    if (!raw) return false;
+    const { ts } = JSON.parse(raw) as { ts: number };
+    const isRecent = Date.now() - ts < NEW_BUILD_SIGNAL_TTL_MS;
+    if (isRecent) {
+      localStorage.removeItem(NEW_BUILD_SIGNAL_KEY);
+      return true;
+    }
+    // Stale signal — clean it up
+    localStorage.removeItem(NEW_BUILD_SIGNAL_KEY);
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+async function fetchToday(focusMode?: string, forceDay1 = false) {
+  const params = new URLSearchParams();
+  if (focusMode) params.set("focus", focusMode);
+  if (forceDay1) params.set("forceDay1", "1");
+  const qs = params.toString();
+  return customFetch<any>(`/api/training-system/today${qs ? `?${qs}` : ""}`);
 }
 async function initializeSystem() {
   return customFetch<any>("/api/training-system/initialize", { method: "POST" });
@@ -568,16 +591,44 @@ function coachingNotesToBullets(notes: string, max = 3): string[] {
 
 function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditComplete, onLogSession, onCheckIn, onStartSession, sessionLoggedToday, sessionInProgress, checkedInToday, activeSystemId }: TodayViewProps) {
   const { focusMode } = useFocusMode();
+
+  // ── New-build detection: read cross-page localStorage signal ─────────────
+  // When a brand-new program is saved on the chat page, it writes
+  // "trainchat_new_build_signal" to localStorage. TodayView reads and
+  // immediately consumes (deletes) this flag so only the FIRST load after
+  // a new build gets Day 1 — subsequent navigations use normal weekday logic.
+  const [forceDay1, setForceDay1] = useState<boolean>(() => {
+    // Eagerly read on first render — handles both fresh mount and SPA navigation.
+    return consumeNewBuildSignal();
+  });
+
+  // Re-check when activeSystemId changes (new program became active while
+  // the system page was already mounted, e.g. after a focus-mode switch).
+  useEffect(() => {
+    const signal = consumeNewBuildSignal();
+    if (signal) {
+      setForceDay1(true);
+    }
+  }, [activeSystemId]);
+
   // ── Query key includes activeSystemId so Today ALWAYS refetches when the active
   // program changes. Without this, React Query serves the old program's cache
   // even after a new program is built or the user switches focus lanes.
   const { data: today, isLoading, error } = useQuery({
-    queryKey: ["training-system-today", focusMode, activeSystemId ?? null],
-    queryFn: () => fetchToday(focusMode),
+    queryKey: ["training-system-today", focusMode, activeSystemId ?? null, forceDay1],
+    queryFn: () => fetchToday(focusMode, forceDay1),
     retry: false,
     staleTime: 0,
     enabled: activeSystemId !== undefined,
   });
+
+  // After a forceDay1 fetch resolves, reset the flag so the next navigation
+  // to this page uses normal weekday logic (not another Day 1 override).
+  useEffect(() => {
+    if (forceDay1 && today !== undefined) {
+      setForceDay1(false);
+    }
+  }, [forceDay1, today]);
 
   // ── Brief post-log flash state: shows "Session logged" for 1.5s then resolves ──
   const [justLoggedFlash, setJustLoggedFlash] = useState(false);
@@ -675,7 +726,22 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditC
           ? "advanced_from_completed"
           : "day_of_week_match_or_first",
     });
-  }, [today, activeSystemId]);
+
+    // [TodayProgramActivation] — emitted on every Today data load so you can trace
+    // whether Day 1 or weekday-mapping was used and where the signal came from.
+    console.log("[TodayProgramActivation]", JSON.stringify({
+      programId: activeSystemId ?? null,
+      isNewBuild: forceDay1,
+      selectedDayAfter: today.id ?? null,
+      selectedDayLabel: today.label ?? null,
+      selectedDayOrderIndex: (today as any).orderIndex ?? null,
+      selectionSource: forceDay1 ? "day1_default" : (
+        today.isAdvancedFromCompleted ? "history" : "weekday"
+      ),
+      todayDow: new Date().getDay(),
+      sessionDow: (today as any).dayOfWeek ?? null,
+    }));
+  }, [today, activeSystemId, forceDay1]);
 
   if (isLoading) return <ViewSkeleton />;
   if (error) {

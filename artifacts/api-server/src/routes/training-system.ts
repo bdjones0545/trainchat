@@ -95,7 +95,10 @@ router.get("/training-system/today", requireAuth, async (req, res): Promise<void
   try {
     const userId = req.session.userId!;
     const focusMode = typeof req.query.focus === "string" ? req.query.focus : null;
-    const todaySession = await getTodaySession(userId, focusMode);
+    // forceDay1=1 is sent by the client immediately after a brand-new program is saved.
+    // It overrides weekday-based selection and returns the first session (Day 1).
+    const forceDay1 = req.query.forceDay1 === "1";
+    const todaySession = await getTodaySession(userId, focusMode, forceDay1);
 
     if (process.env.NODE_ENV !== "production" && todaySession) {
       const activeSystemForAudit = await getActiveTrainingSystem(userId, focusMode);

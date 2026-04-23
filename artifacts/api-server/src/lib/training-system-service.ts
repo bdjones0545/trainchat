@@ -509,7 +509,7 @@ export function dbSystemToProgramStructure(
   };
 }
 
-export async function getTodaySession(userId: number, focusMode?: string | null) {
+export async function getTodaySession(userId: number, focusMode?: string | null, forceDay1 = false) {
   const system = await getActiveTrainingSystem(userId, focusMode);
   if (!system || !system.currentPhaseId) return null;
 
@@ -539,7 +539,17 @@ export async function getTodaySession(userId: number, focusMode?: string | null)
     .where(eq(trainingSessions.trainingWeekId, currentWeek.id))
     .orderBy(trainingSessions.orderIndex);
 
-  const todaySession = sessions.find((s) => s.dayOfWeek === dayOfWeek) ?? sessions[0] ?? null;
+  // Brand-new build: always return Day 1 (first session by orderIndex), ignore weekday mapping.
+  // forceDay1 is set by the client immediately after a new program is saved and cleared
+  // on first acknowledgement — so subsequent loads revert to normal weekday logic.
+  const todaySession = forceDay1
+    ? (sessions[0] ?? null)
+    : (sessions.find((s) => s.dayOfWeek === dayOfWeek) ?? sessions[0] ?? null);
+
+  if (forceDay1 && sessions[0]) {
+    logger.info({ userId, systemId: system.id, resolvedFocus, sessionId: sessions[0].id, sessionLabel: sessions[0].label },
+      "[TodaySession:forceDay1] Returning Day 1 for new build");
+  }
 
   if (!todaySession) return null;
 

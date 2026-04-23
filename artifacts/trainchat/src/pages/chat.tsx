@@ -1179,6 +1179,17 @@ export default function Chat() {
       // After a new program build: switch to Program tab to show the result.
       // Also open the panel (mutation_applied) so the user sees their new program.
       if (result.systemSaved) {
+        // Write a cross-page signal so the Today view (system page) also knows
+        // a brand-new program was just built and should default to Day 1 instead
+        // of the weekday-mapped session. The system page reads and clears this flag.
+        try {
+          localStorage.setItem(
+            "trainchat_new_build_signal",
+            JSON.stringify({ ts: Date.now() })
+          );
+        } catch {
+          // localStorage unavailable (private browsing etc.) — non-fatal
+        }
         setNewProgramSignal((n) => n + 1);
         setRightPanelOpen(true);
         setMobilePanel("right");
