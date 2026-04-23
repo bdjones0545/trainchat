@@ -21,6 +21,8 @@
 import { logger } from "./logger";
 import type { ExtractedConstraints } from "./intent";
 import type { UserProfile } from "./training-intelligence";
+import { detectPopulation, buildPopulationPromptSection } from "./population-engine";
+import type { PopulationContext } from "./population-engine";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -48,6 +50,7 @@ export interface BuildThresholdResult {
   startReason: string | null;
   holdReason: string | null;
   transitionMessage: string | null;
+  populationCtx: PopulationContext;
 }
 
 // ─── Medical / Safety Red-Flag Detector ──────────────────────────────────────
@@ -159,6 +162,9 @@ export function evaluateBuildThreshold({
   const populationContext = detectPopulationContext(userMessage, constraints, profile);
   const seasonContext = constraints?.seasonContext ?? null;
 
+  // Population detection — deterministic, uses message + constraints
+  const populationCtx = detectPopulation(userMessage, constraints);
+
   const { flag: hasSafetyFlag, reason: safetyFlagReason } = detectHardMedicalFlag(
     userMessage,
     profile?.injuries ?? "",
@@ -190,6 +196,7 @@ export function evaluateBuildThreshold({
       startReason: null,
       holdReason: safetyFlagReason ?? "Medical flag detected",
       transitionMessage: null,
+      populationCtx,
     };
 
     logger.info(
@@ -220,6 +227,7 @@ export function evaluateBuildThreshold({
       startReason: null,
       holdReason: "Zero context — no goal, sport, or training intent detected",
       transitionMessage: null,
+      populationCtx,
     };
 
     logger.info(
@@ -259,6 +267,7 @@ export function evaluateBuildThreshold({
       startReason,
       holdReason: null,
       transitionMessage: buildTransitionMessage(knownInputs),
+      populationCtx,
     };
 
     logger.info(
@@ -309,6 +318,7 @@ export function evaluateBuildThreshold({
       startReason,
       holdReason: null,
       transitionMessage: buildTransitionMessage(knownInputs),
+      populationCtx,
     };
 
     logger.info(
@@ -319,6 +329,7 @@ export function evaluateBuildThreshold({
         missingNonBlockers,
         startReason,
         conversationTurnCount,
+        population: populationCtx.type,
       },
       "[BuildThreshold] IMMEDIATE_BUILD — threshold met, proceeding to generation"
     );
@@ -341,6 +352,7 @@ export function evaluateBuildThreshold({
       startReason: null,
       holdReason: "Has intent but goal direction is unclear — asking one clarifying question first",
       transitionMessage: null,
+      populationCtx,
     };
 
     logger.info(
@@ -371,6 +383,7 @@ export function evaluateBuildThreshold({
     startReason: "Fallback: building with general fitness defaults to avoid over-consulting loop",
     holdReason: null,
     transitionMessage: buildTransitionMessage(knownInputs),
+    populationCtx,
   };
 
   logger.info(
@@ -430,6 +443,13 @@ export function buildThresholdPromptSection(result: BuildThresholdResult): strin
   lines.push(`- Season Context: ${result.knownInputs.seasonContext ?? "none"}`);
   lines.push(`- Safety Flag: ${result.knownInputs.hasSafetyFlag ? `YES — ${result.knownInputs.safetyFlagReason}` : "none"}`);
   lines.push(``);
+
+  // Inject compact population section (skipped for GENERAL_ADULT — no change from default)
+  const populationSection = buildPopulationPromptSection(result.populationCtx);
+  if (populationSection) {
+    lines.push(populationSection);
+    lines.push(``);
+  }
 
   if (result.tier === "IMMEDIATE_BUILD") {
     lines.push(`### ✅ THRESHOLD MET — BUILD NOW`);

@@ -1,0 +1,237 @@
+TASK: Implement a Population Layer that sits alongside Special Considerations and influences program generation across Strength, Speed, and Mobility modes.
+
+GOAL:
+Introduce 6 high-impact populations that modify (NOT replace) program logic:
+- active_older_adult
+- beginner
+- general_adult (default)
+- athletic
+- joint_sensitive
+- detrained
+
+This layer must be deterministic, lightweight, and fully compatible with existing systems (intent engine, special-considerations-engine, validators, and program builders).
+
+----------------------------------------
+1. CREATE population-engine.ts
+----------------------------------------
+
+Export:
+
+type PopulationType =
+  | "ACTIVE_OLDER_ADULT"
+  | "BEGINNER"
+  | "GENERAL_ADULT"
+  | "ATHLETIC"
+  | "JOINT_SENSITIVE"
+  | "DETRAINED";
+
+interface PopulationContext {
+  type: PopulationType;
+  confidence: number;
+  signals: string[];
+}
+
+export function detectPopulation(
+  message: string,
+  constraints?: ConstraintContract
+): PopulationContext
+
+----------------------------------------
+2. DETECTION LOGIC (ORDERED PRIORITY)
+----------------------------------------
+
+PRIORITY MATTERS — first match wins unless overridden by stronger signal.
+
+1. ACTIVE_OLDER_ADULT
+IF:
+  constraints.userAge >= 60
+AND:
+  message contains ANY:
+    "active", "train", "lifting", "gym", "play", "sports", "still working out"
+AND NOT:
+  frailty, fall risk, neurological flags
+→ ACTIVE_OLDER_ADULT
+
+2. BEGINNER
+IF message contains:
+  "new to training", "never trained", "just starting", "beginner"
+→ BEGINNER
+
+3. DETRAINED
+IF message contains:
+  "getting back into", "haven’t trained in", "out of shape", "returning"
+→ DETRAINED
+
+4. ATHLETIC
+IF message contains:
+  "athlete", "sport", "football", "basketball", "soccer", "track", "performance"
+→ ATHLETIC
+
+5. JOINT_SENSITIVE
+IF message contains:
+  "bad knees", "knee pain", "back pain", "shoulder issues", "joint pain"
+AND NOT severe medical flags
+→ JOINT_SENSITIVE
+
+6. GENERAL_ADULT (DEFAULT)
+Fallback if none matched
+
+----------------------------------------
+3. POPULATION PROFILE MAP
+----------------------------------------
+
+Create:
+
+interface PopulationProfile {
+  exerciseBias: string[];
+  volumeTarget: number;
+  intensityCap?: string;
+  fatigueTolerance: "low" | "moderate" | "high";
+  complexity: "low" | "moderate" | "high";
+  progressionRate: "slow" | "moderate" | "fast";
+  notes: string[];
+}
+
+export const POPULATION_PROFILES: Record<PopulationType, PopulationProfile>
+
+----------------------------------------
+DEFINE PROFILES:
+
+ACTIVE_OLDER_ADULT:
+- exerciseBias: joint-friendly compound + unilateral + machine-supported
+- volumeTarget: 5–6
+- intensityCap: RPE 6–7
+- fatigueTolerance: moderate
+- complexity: moderate
+- progressionRate: slow
+- notes:
+  - preserve full movement balance
+  - no explosive work
+  - no max effort
+
+BEGINNER:
+- exerciseBias: simple patterns (goblet, hinge, push, pull)
+- volumeTarget: 4–5
+- fatigueTolerance: low
+- complexity: low
+- progressionRate: slow
+- notes:
+  - prioritize technique
+  - avoid overload complexity
+
+GENERAL_ADULT:
+- exerciseBias: balanced
+- volumeTarget: 5–7
+- fatigueTolerance: moderate
+- complexity: moderate
+- progressionRate: moderate
+
+ATHLETIC:
+- exerciseBias: compound + power + unilateral + elastic
+- volumeTarget: 6–8
+- fatigueTolerance: high
+- complexity: high
+- progressionRate: fast
+- notes:
+  - allow power/speed integration
+  - higher neural demand allowed
+
+JOINT_SENSITIVE:
+- exerciseBias: joint-friendly substitutions (trap bar, DB, cables)
+- volumeTarget: 4–6
+- fatigueTolerance: moderate
+- complexity: moderate
+- progressionRate: slow
+- notes:
+  - avoid aggravating positions
+  - maintain training effect without pain
+
+DETRAINED:
+- exerciseBias: general patterns, moderate simplicity
+- volumeTarget: 4–5
+- fatigueTolerance: low-moderate
+- complexity: low-moderate
+- progressionRate: slow
+- notes:
+  - rebuild tolerance
+  - avoid early fatigue spikes
+
+----------------------------------------
+4. INTEGRATION POINTS
+----------------------------------------
+
+A. In build-threshold.ts
+Inject population context into system prompt:
+
+"POPULATION_CONTEXT:
+ type: {population.type}
+ constraints: {profile summary}
+ This MUST shape exercise selection, volume, and intensity."
+
+----------------------------------------
+
+B. In program builders (strength/speed/mobility engines):
+
+Use PopulationProfile to:
+- cap total exercises
+- adjust exercise selection pools
+- adjust intensity (RPE, reps)
+- adjust progression speed
+- adjust complexity (remove advanced variations if needed)
+
+----------------------------------------
+
+C. In validator:
+
+Add:
+
+IF population === ACTIVE_OLDER_ADULT:
+  FAIL if exercises < 4
+  WARN if > 7
+
+IF population === BEGINNER:
+  WARN if complexity too high
+
+IF population === ATHLETIC:
+  WARN if session too simple
+
+----------------------------------------
+5. RULES (CRITICAL)
+----------------------------------------
+
+- Population modifies programs — it NEVER replaces mode logic
+- Special considerations OVERRIDE population (medical > population)
+- Do NOT increase token usage (no AI prompt expansion beyond 3–4 lines)
+- Detection must be deterministic (no AI classification)
+- Default must remain GENERAL_ADULT if unclear
+
+----------------------------------------
+6. DEBUG LOGGING
+----------------------------------------
+
+Add:
+
+[PopulationEngine]
+{
+  type,
+  confidence,
+  signals,
+  appliedProfile,
+  mode
+}
+
+----------------------------------------
+EXPECTED RESULT
+----------------------------------------
+
+Programs should now adapt like:
+
+69 active → full structured strength session (not rehab-lite)
+Beginner → simplified, lower complexity
+Athlete → higher intensity + power integration
+Joint-sensitive → same structure, different exercise selection
+Detrained → reduced volume + slower progression
+
+----------------------------------------
+END TASK
+----------------------------------------

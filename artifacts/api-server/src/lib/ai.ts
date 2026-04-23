@@ -87,6 +87,7 @@ import { resolveFocusMode, logFocusModeAudit } from "./focus-mode-audit";
 import type { FocusMode } from "./focus-engines/engine-interface";
 import { buildFailSafePromptSection, type FailSafeResolution } from "./fail-safe";
 import { evaluateBuildThreshold, buildThresholdPromptSection } from "./build-threshold";
+import { detectPopulation, buildPopulationPromptSection, validatePopulationOutput } from "./population-engine";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -2221,7 +2222,15 @@ export async function generateAIResponse(
   // This avoids running the router twice and ensures consistent engine decisions.
   const routingDecision = resolveRoutingDecision(userMessage, profile ?? null);
 
+  // ── Population Detection ──────────────────────────────────────────────────
+  // Deterministic — uses live message + extracted constraints. No AI cost.
+  // Special considerations override population; population modifies defaults.
+  const populationCtx = detectPopulation(userMessage, extractedConstraints ?? null);
+  const populationSection = buildPopulationPromptSection(populationCtx);
+
   const basePrompt = await buildSystemPrompt(profile ?? null, userMessage, routingDecision);
+  // Append the compact population section (empty for GENERAL_ADULT)
+  const enrichedBasePrompt = populationSection ? basePrompt + populationSection : basePrompt;
 
   // ── Intent-driven context building ───────────────────────────────────────
   // Use the pre-classified intent result from the router instead of re-detecting.
@@ -2766,7 +2775,7 @@ DENSITY RULE — NON-NEGOTIABLE:
   const extras = [filteredFocusModeContext, filteredFocusModeAdaptationContext, behaviorInstructions, profileFillContext, adaptationContext, memoryContext, sessionSportOverride, filteredInsightHint, filteredConversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, failSafePrompt, agentIntentProfileSection, responsePolicySection, architectureBriefText, buildThresholdSection, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection, buildCompactInstruction]
     .filter(Boolean)
     .join("\n\n");
-  const systemPrompt = extras ? `${basePrompt}\n\n${extras}` : basePrompt;
+  const systemPrompt = extras ? `${enrichedBasePrompt}\n\n${extras}` : enrichedBasePrompt;
 
   // ── Build Performance Guard ────────────────────────────────────────────────
   // Warn if the system prompt is unusually large for a build request.
@@ -3862,6 +3871,29 @@ Output the corrected program JSON and a brief calm confirmation.`;
         logger.info(
           { injuredRegion: routingDecision.returnFromInjury.injuredRegion },
           "[ReturnFromInjuryValidator] Safety validation passed cleanly",
+        );
+      }
+    }
+
+    // ── Population Output Validation ───────────────────────────────────────
+    // Lightweight deterministic check — no retry, warn/fail only in logs.
+    // Special considerations already handled above; this catches non-SC paths.
+    if (structuredData && isBuildIntent && !routingDecision.specialConsiderations.detected) {
+      const allExercises = structuredData.days.flatMap((d: { exercises: { name: string }[] }) => d.exercises);
+      const avgPerDay = structuredData.days.length > 0
+        ? allExercises.length / structuredData.days.length
+        : allExercises.length;
+      const repExercises = allExercises.slice(0, Math.ceil(avgPerDay)); // first day as representative sample
+      const popValidation = validatePopulationOutput(populationCtx, repExercises);
+      if (!popValidation.passed || popValidation.isWarning) {
+        logger.warn(
+          { population: populationCtx.type, reason: popValidation.reason, passed: popValidation.passed, isWarning: popValidation.isWarning },
+          "[PopulationValidator] Population constraint check",
+        );
+      } else {
+        logger.info(
+          { population: populationCtx.type, exerciseCount: repExercises.length },
+          "[PopulationValidator] Population validation passed",
         );
       }
     }
