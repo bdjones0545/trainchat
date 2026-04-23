@@ -1,0 +1,98 @@
+We need to fix exercise classification cleanly and deterministically.
+
+Problem:
+After moving to the lean two-pass skeleton, the AI no longer returns a classification field in Pass 1.
+That is correct for token efficiency.
+However, the UI is now defaulting many or all exercises to ACCESSORY because classification is missing downstream.
+
+Goal:
+Restore clean, reliable classification without re-adding classification to the AI output.
+
+Important:
+Do NOT put classification back into the model prompt/output.
+Do NOT increase token usage.
+Classification should now be derived deterministically from the existing architecture/slot system.
+
+CORE RULE
+Classification must be computed from the exercise’s canonical slot / functional role, not guessed from missing AI text fields.
+
+IMPLEMENTATION PLAN
+
+1. Find where exercise classification / badge labeling is currently sourced for the UI.
+Identify:
+- where classification is read
+- where ACCESSORY becomes the fallback
+- which components/screens use it
+
+2. Add a deterministic mapper, something like:
+- mapSlotToClassification(slot)
+or
+- deriveClassificationFromSlot(slot, mode)
+
+3. Use the existing canonical flow slot as the source of truth.
+
+For SPEED / FOOTWORK mode, use a mapping like:
+
+activation        -> prep
+sprint_prep       -> prep
+speed_primary     -> primary
+reactive_plyo     -> power
+cod_footwork      -> skill
+speed_endurance   -> conditioning
+resilience_finish -> accessory
+
+For STRENGTH mode, map your existing strength slots similarly based on current architecture.
+Examples:
+power / explosive           -> power
+primary strength lift       -> primary
+secondary strength          -> secondary
+unilateral                  -> unilateral
+trunk                       -> trunk
+accessory / filler / finish -> accessory
+
+4. If the app already stores slot/source metadata on exercises or blocks, use that directly.
+Do not invent a second competing source of truth.
+
+5. Only use ACCESSORY as a true final fallback when no slot/role can be determined.
+It should not be the default for valid speed drills like:
+- A-Skip
+- Falling Start
+- Stiffness Hops
+- Ickey Shuffle
+
+6. Apply this classification consistently across:
+- Today view
+- Live Program panel
+- any exercise cards
+- any quick action / detail surfaces that show the badge
+
+7. Keep naming clean and coach-like.
+Examples of acceptable badge labels:
+- Prep
+- Primary
+- Power
+- Skill
+- Conditioning
+- Accessory
+- Secondary
+- Unilateral
+- Trunk
+
+8. Add a small debug log in dev mode:
+[ExerciseClassification]
+- exercise name
+- mode
+- slot
+- derived classification
+- fallback used? true/false
+
+SUCCESS CRITERIA
+
+After the fix:
+- A-Skip is not labeled ACCESSORY
+- Falling Start is not labeled ACCESSORY
+- Stiffness Hops is not labeled ACCESSORY
+- Ickey Shuffle is not labeled ACCESSORY
+- Nordic / resilience finish can still be ACCESSORY when appropriate
+- classification is deterministic and no longer dependent on AI output
+- token usage stays unchanged
