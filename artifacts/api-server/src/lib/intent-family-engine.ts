@@ -35,10 +35,14 @@ export type IntentFamily =
   | "power_explosive_focus"
   | "speed_focus"
   | "reactive_focus"
+  | "cod_decel_focus"
+  | "footwork_rhythm_focus"
   | "athletic_performance_focus"
   | "fatigue_management"
   | "recovery_focus"
   | "mobility_support"
+  | "rom_restoration_focus"
+  | "tissue_stiffness_focus"
   | "injury_modification"
   | "joint_friendly_modification"
   | "equipment_constraint"
@@ -102,6 +106,10 @@ export type TransformationChangeType =
   | "add_velocity_intent"
   | "swap_to_reactive_drill"
   | "add_reactive_emphasis"
+  | "add_decel_drill"
+  | "add_footwork_drill"
+  | "add_rom_holds"
+  | "add_tissue_release"
   | "add_prep_block"
   | "add_mobility_work"
   | "remove_aggravating_pattern"
@@ -363,7 +371,7 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
     patterns: [
       /\b(more explosive|more power|add (power|explosiveness|explosive work|plyometrics?))\b/i,
       /\b(explosive.?focused|power.?focused|jump (higher|training)|plyometric)\b/i,
-      /\b(more pop|first step|acceleration|change of direction|quickness)\b/i,
+      /\b(first step|acceleration|quickness)\b/i,
       /\b(faster and more powerful|faster.{0,20}powerful|power (output|development))\b/i,
       /\b(speed.?strength|rate of force|reactive strength|ballistic)\b/i,
       // "make it more for power" — casual "for X" phrasing
@@ -400,6 +408,47 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
       /\b(reactive strength index|ankle stiffness|leg stiffness|pliometric stiffness)\b/i,
       // "off the floor" speed cue
       /\b(off the floor (faster|quicker)|quicker.{0,15}off the floor)\b/i,
+      // Snappy / crisp / light-on-ground synonyms
+      /\b(snappier|more snap|snap(py)? (off|from) the (ground|floor))\b/i,
+      /\b(lighter on the (ground|floor)|light.?foot(ed)?|light on (my|the) feet)\b/i,
+      /\b(crisp(er)? contacts?|more crisp|crisp.?(off|from) the (ground|floor))\b/i,
+      /\b(pop off the (ground|floor)|more pop.{0,15}(ground|landing|off))\b/i,
+    ],
+  },
+
+  // ── COD / Deceleration Focus ──────────────────────────────────────────────
+  // IMPORTANT: Must appear BEFORE power_explosive_focus so that decel/COD-specific
+  // commands like "more decel", "better agility", "change of direction" are not
+  // routed to the power/barbell explosive bundle.
+  {
+    family: "cod_decel_focus",
+    patterns: [
+      /\b(more decel|better deceleration|decel mechanics|deceleration training|decel drills?)\b/i,
+      /\b(improve.{0,20}deceleration|decel.?to.?re.?accel|re.?acceleration from stop)\b/i,
+      /\b(change of direction|change.?direction|cutting ability|plant and cut|planted cut|cutting mechanics)\b/i,
+      /\b(less braking|improve braking|braking mechanics|brake faster|stop faster)\b/i,
+      /\b(stop and go|stop.?start speed|lateral stop|hard stop|absorb (the )?impact)\b/i,
+      /\b(T.?drill|L.?drill|505 drill|5.?10.?5|pro.?agility drill|agility cone drill)\b/i,
+      /\b(decel strength|landing mechanics|penultimate step|hip sink on decel)\b/i,
+      /\b(better agility|improve agility|agility drills?|agility training|agility work)\b/i,
+      /\b(COD work|COD training|COD drills?)\b/i,
+    ],
+  },
+
+  // ── Footwork / Rhythm Focus ───────────────────────────────────────────────
+  // IMPORTANT: Must appear BEFORE speed_focus so that footwork and rhythm commands
+  // like "more footwork", "quicker feet", "faster feet" are captured here
+  // rather than being routed to the generic sprint/acceleration speed bundle.
+  {
+    family: "footwork_rhythm_focus",
+    patterns: [
+      /\b(more footwork|better footwork|improve.{0,15}footwork|footwork drills?|footwork work)\b/i,
+      /\b(quicker feet|faster feet|quick feet|faster.?foot(work)?|quicker.?foot(work)?)\b/i,
+      /\b(ladder work|ladder drills?|speed ladder|agility ladder|ladder patterns?)\b/i,
+      /\b(foot speed|foot coordination|foot contact quality|foot rhythm)\b/i,
+      /\b(rhythm (training|drills?|work|patterns?)|timing (work|drills?)|coordination drills?)\b/i,
+      /\b(shuffle (patterns?|drills?|steps?)|lateral shuffle|Ickey shuffle|in.?and.?out drill)\b/i,
+      /\b(cone touch(es)?|box drill footwork|shadow footwork|mirror drill)\b/i,
     ],
   },
 
@@ -448,13 +497,64 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
     ],
   },
 
+  // ── ROM / Range Restoration Focus (Mobility mode) ─────────────────────────
+  // Covers the most common Mobility mode edit commands for range of motion.
+  // IMPORTANT: Must appear BEFORE mobility_support so specific joint-range phrases
+  // like "hip mobility work", "ankle mobility", "open up my hips" are caught here
+  // rather than the generic mobility_support bundle.
+  // Must also appear BEFORE decrease_difficulty so "less aggressive" mobility phrases
+  // are not routed to generic difficulty reduction.
+  {
+    family: "rom_restoration_focus",
+    patterns: [
+      /\b(more range|restore.{0,20}(range|ROM)|gain.{0,15}range|increase.{0,15}(ROM|range of motion)|better range)\b/i,
+      // "open up my hips" / "open my hips" / "open up the shoulders" — handles both "open [up] [my/the] [bodypart]"
+      // Note: ((?:my|the)\s+)? — must include the trailing \s+ to consume space before bodypart
+      /\bopen\s+(up\s+)?((?:my|the)\s+)?(hips?|shoulders?|thoracic|chest|ankles?|spine|back)\b/i,
+      /\b(loosen (up|my|the)|feel less tight|unlock.{0,20}(hips?|shoulders?|ankles?|thoracic|spine))\b/i,
+      /\b(restore.{0,20}(flexibility|range|mobility|movement))\b/i,
+      /\b(less (restricted|restriction)|more freedom.{0,15}(joint|movement|hip|shoulder))\b/i,
+      /\b(hip (opening|opener|mobility work|capsule work|flexor work))\b/i,
+      /\b(thoracic (mobility|extension|rotation|work|opener))\b/i,
+      /\b(ankle (mobility|dorsiflexion|flexibility|freedom))\b/i,
+      /\b(shoulder (opener|capsule work|mobility focus))\b/i,
+      // "less aggressive on the stretching" — trailing \w* ensures "stretching" is matched beyond the "stretch" stem
+      /\b(less aggressive.{0,30}stretch\w*)\b/i,
+      /\b(less aggressive.{0,30}(program|session|mobility|flow))\b/i,
+    ],
+  },
+
+  // ── Tissue Stiffness Focus (Mobility mode) ────────────────────────────────
+  // Covers stiffness, tightness, and tissue-release requests.
+  // IMPORTANT: Must appear BEFORE mobility_support so that specific stiffness
+  // and tissue-release phrases are not routed to the generic mobility bundle.
+  // Must also appear BEFORE decrease_difficulty so stiffness complaints are not
+  // routed to generic difficulty reduction.
+  {
+    family: "tissue_stiffness_focus",
+    patterns: [
+      /\b(less stiffness|reduce stiffness|improve.{0,15}stiffness|feel less stiff|too stiff)\b/i,
+      /\b(chronic (tightness|stiffness)|morning stiffness|post.training (tightness|stiffness))\b/i,
+      /\b(tissue (release|work|rolling|therapy)|myofascial (release|work)|foam roll(ing)?)\b/i,
+      /\b(release (tension|tightness)|reduce (tension|tightness))\b/i,
+      // "stiff [bodypart]" and "[bodypart] is/are stiff" (reversed word order)
+      /\b(feel stuck|stuck in.{0,15}(hips?|shoulders?|back)|stiff.{0,15}(hips?|back|thoracic|ankles?))\b/i,
+      /\b(hips?|back|thoracic|ankles?|shoulders?|knees?).{0,20}(is|are)\s+stiff\b/i,
+      /\b(loaded (stretching|stretch)|contract.?relax|PNF (stretch|work|sequences?))\b/i,
+    ],
+  },
+
   // ── Mobility Support ─────────────────────────────────────────────────────
+  // Generic mobility/flexibility additions. Must appear AFTER rom_restoration_focus
+  // and tissue_stiffness_focus so more-specific range/stiffness patterns fire first.
   {
     family: "mobility_support",
     patterns: [
       /\b(add (mobility|flexibility|stretching|warm.?up|prep|activation|cool.?down))\b/i,
       /\b(more mobility|mobility work|flexibility work|movement prep)\b/i,
+      // "tight hips" (adjective first) AND "hips are tight" (noun first)
       /\b(tight (hips?|hamstrings?|shoulders?|back|ankles?|thoracic))\b/i,
+      /\b(hips?|hamstrings?|shoulders?|back|ankles?|thoracic).{0,15}(is|are)\s+tight\b/i,
       /\b(improve (flexibility|mobility|range of motion|movement quality))\b/i,
     ],
   },
@@ -1067,6 +1167,60 @@ const TRANSFORMATION_BUNDLES: Record<IntentFamily, TransformationBundle> = {
     scopeGuidance: "Apply to sessions with lower-body or plyometric content. Add reactive drills early in session (pre-fatigue). Preserve primary lifting structure.",
   },
 
+  cod_decel_focus: {
+    intentFamily: "cod_decel_focus",
+    minimumStructuralChanges: 2,
+    primaryChanges: [
+      { type: "add_decel_drill", description: "Add deceleration or COD drill (braking sprint, 505 drill, T-drill, controlled lateral cut, single-leg decel landing, plant-and-cut sequence)", countAs: 1 },
+      { type: "swap_to_reactive_drill", description: "Swap existing sprint or plyo work toward COD-appropriate alternatives (reactive cone drill, lateral stop, mirror drill)", countAs: 1 },
+      { type: "add_explosive_opener", description: "Add a COD warm-up primer post warm-up (short cone touches, mirror footwork, directional reaction drill)", countAs: 1 },
+    ],
+    secondaryChanges: [
+      { type: "increase_rest", description: "Extend rest between COD efforts to preserve movement quality and decision speed", countAs: 1 },
+      { type: "reduce_accessories", description: "Trim high-fatigue accessories that compromise COD sharpness", countAs: 1 },
+    ],
+    antiPatterns: [
+      "Do NOT respond to a COD/decel request with barbell power lifting (power clean, trap bar jump) as the primary change",
+      "Do NOT prescribe rep-range strength work as the primary response to a deceleration or change-of-direction request",
+      "Do NOT confuse deceleration training with max-effort plyometric jumps — COD is about force absorption and re-direction, not peak vertical production",
+      "Do NOT reduce session volume as the default response to a COD-improvement request",
+      "Do NOT route COD requests to session_reduction or decrease_volume transformations",
+    ],
+    validationRules: [
+      "At least 1 COD-specific drill must be added or upgraded (T-drill, L-drill, 505, braking sprint, single-leg decel landing, controlled cut, mirror drill)",
+      "At least 2 structural changes total required",
+      "Changes must address deceleration mechanics, directional change, or force absorption — not just general explosiveness",
+    ],
+    aiDirective: "COD / DECELERATION FOCUS: This is a change-of-direction and braking mechanics request — NOT a general explosiveness or power request.\n\nRequired changes:\n1. DRILL SELECTION: Add or swap toward COD-specific drills: T-drill, L-drill, 505 drill, 5-10-5, braking sprints, single-leg decel landing, controlled lateral cuts, plant-and-cut sequences, or mirror drills. These train force absorption, penultimate step mechanics, and re-acceleration from a stop.\n2. STRUCTURE: Place COD work early in session (post warm-up, before fatigue accumulates). Prescribe full recovery between efforts — quality over quantity.\n3. COACHING CUES: Add cues for 'low center of gravity on decel', 'hip sink to absorb braking force', 'stiff ankle on re-direction', 'penultimate step loading', 'eyes up on the cut', 'drive through the ground on re-acceleration'.\n4. REST: Extend rest between COD reps (30–90s depending on drill intensity) to preserve decision-making speed and movement quality.\n\nIDENTITY UPDATE REQUIRED: Produce an update_session change. Example label: 'Speed + COD — Deceleration Mechanics'. Example emphasis: 'Change of direction quality, braking force absorption, and re-acceleration from deceleration positions'.",
+    scopeGuidance: "Apply to sessions with speed or agility content. Place COD work post warm-up, before heavy conditioning. Preserve existing sprint and plyometric structure.",
+  },
+
+  footwork_rhythm_focus: {
+    intentFamily: "footwork_rhythm_focus",
+    minimumStructuralChanges: 1,
+    primaryChanges: [
+      { type: "add_footwork_drill", description: "Add ladder, footwork, or rhythm drills (speed ladder patterns, Ickey shuffle, in-and-out, lateral shuffle, cone touches, shadow footwork, mirror drill)", countAs: 1 },
+      { type: "add_explosive_opener", description: "Add a footwork primer at session start as a coordination warm-up (low-CNS ladder or footwork pattern)", countAs: 1 },
+    ],
+    secondaryChanges: [
+      { type: "add_reactive_emphasis", description: "Add foot contact quality cues to existing speed or plyometric work", countAs: 1 },
+      { type: "reduce_accessories", description: "Reduce heavy accessories if footwork quality is the primary goal and session is already full", countAs: 1 },
+    ],
+    antiPatterns: [
+      "Do NOT respond to footwork/rhythm requests with barbell strength work",
+      "Do NOT respond with long sprint-distance work (30m, 40m sprints) for a footwork/coordination request",
+      "Do NOT confuse footwork with plyometric power — footwork is about rhythm, timing, and coordination, not peak force production",
+      "Do NOT reduce session volume as the default response to a footwork-improvement request",
+      "Do NOT route footwork requests to speed_focus sprint bundles",
+    ],
+    validationRules: [
+      "At least 1 footwork or rhythm drill must be structurally added (ladder pattern, shuffle, box drill, mirror drill, or equivalent)",
+      "Drills must target foot contact quality, coordination, or timing — not maximal speed or power output",
+    ],
+    aiDirective: "FOOTWORK / RHYTHM FOCUS: This is a coordination, timing, and foot contact quality request — NOT a max-speed sprint request.\n\nRequired changes:\n1. DRILL SELECTION: Add speed ladder patterns (in-out, Ickey shuffle, lateral, 2-in-1-out), cone touches, shadow footwork, box drill, lateral shuffle, or mirror drills. Volume is LOW — 3–5 sets of 10–20 seconds at high coordination effort.\n2. PLACEMENT: Add footwork as a warm-up block before primary speed work, or as a standalone early-session block.\n3. COACHING CUES: 'Light on the feet', 'precise foot placement', 'stay on the balls of your feet', 'maintain upright posture through the pattern', 'rhythm over raw speed'.\n4. REST: 30–60s between footwork sets (lower CNS demand than sprints or COD drills).\n\nIDENTITY UPDATE REQUIRED: Produce an update_session change. Example label: 'Speed + Footwork — Rhythm and Coordination'. Example emphasis: 'Foot contact quality, neuromuscular timing, and coordination speed under speed demands'.",
+    scopeGuidance: "Add footwork drills to the beginning of speed sessions or as a dedicated coordination block. Preserve all existing primary sprint and COD work.",
+  },
+
   athletic_performance_focus: {
     intentFamily: "athletic_performance_focus",
     minimumStructuralChanges: 2,
@@ -1131,12 +1285,14 @@ const TRANSFORMATION_BUNDLES: Record<IntentFamily, TransformationBundle> = {
     antiPatterns: [
       "Do NOT keep the same intensity and call it recovery",
       "Do NOT add high-intensity work to a recovery session",
+      "MOBILITY MODE GUARD: Do NOT remove exercises from a Mobility program as the default response to 'more restorative' — Mobility sessions are already low-load. In a Mobility context, 'more restorative' means longer holds, slower pacing, breathing integration, and yin-style work — NOT cutting exercises from a flow that may already be 30–45 minutes",
+      "MOBILITY MODE GUARD: Do NOT apply volume reduction (remove_exercise, remove_sets) to a program that is already a mobility/restoration session — reduce intensity and pace instead, not structural content",
     ],
     validationRules: [
       "Intensity or volume must decrease",
       "At least 1 real workload reduction or recovery addition",
     ],
-    aiDirective: "RECOVERY FOCUS: Reduce intensity and volume. Add low-intensity movement or restoration work. If a recovery day, convert to movement quality / mobility focus. Preserve basic movement patterns at very low intensity.\n\nIDENTITY UPDATE REQUIRED: You MUST also produce an update_session change that refreshes the session's `label` and `emphasis` to reflect its new recovery identity. Example label: 'Active Recovery — Movement Quality'. Example emphasis: 'Low-intensity tissue restoration, mobility work, and CNS readiness preparation'. Adapt to the actual body region. Do NOT leave the original label and emphasis unchanged.",
+    aiDirective: "RECOVERY FOCUS: Reduce intensity and volume. Add low-intensity movement or restoration work. If a recovery day, convert to movement quality / mobility focus. Preserve basic movement patterns at very low intensity.\n\nMOBILITY MODE NOTE: If the active program is a Mobility program, 'more restorative' does NOT mean removing exercises. Instead: extend hold durations, reduce contraction demands (PAILs % down), shift toward parasympathetic holds and breathing integration, add recovery-flow style work (yin holds, breathing sequences). The session stays intact — it becomes softer and slower, not shorter.\n\nIDENTITY UPDATE REQUIRED: You MUST also produce an update_session change that refreshes the session's `label` and `emphasis` to reflect its new recovery identity. Example label: 'Active Recovery — Movement Quality'. Example emphasis: 'Low-intensity tissue restoration, mobility work, and CNS readiness preparation'. Adapt to the actual body region. Do NOT leave the original label and emphasis unchanged.",
     scopeGuidance: "Apply to the targeted session(s). Do not compromise performance sessions.",
   },
 
@@ -1159,6 +1315,59 @@ const TRANSFORMATION_BUNDLES: Record<IntentFamily, TransformationBundle> = {
     ],
     aiDirective: "MOBILITY SUPPORT: Add structured mobility/activation work. Identify the target region (hips, thoracic, ankles, shoulders) and add appropriate exercises. Add a proper warm-up block or cool-down if missing. Exercises must appear in the program — coaching notes alone are insufficient.",
     scopeGuidance: "Add to the beginning (prep/activation) or end (cooldown) of targeted sessions.",
+  },
+
+  rom_restoration_focus: {
+    intentFamily: "rom_restoration_focus",
+    minimumStructuralChanges: 1,
+    primaryChanges: [
+      { type: "add_rom_holds", description: "Add passive range restoration holds (2–5 min per position) targeting the specified joint or region", countAs: 1 },
+      { type: "add_mobility_work", description: "Add CARs (controlled articular rotations) for the target joint — 3–5 slow reps per direction — as both diagnostic and training tool", countAs: 1 },
+      { type: "replace_exercise", description: "Swap appropriate exercises toward longer-hold passive or active range work for the target region", countAs: 1 },
+    ],
+    secondaryChanges: [
+      { type: "add_prep_block", description: "Add a structured joint-specific range restoration block", countAs: 1 },
+      { type: "add_tolerance_work", description: "Add PNF contract-relax sequences to accelerate passive range gains", countAs: 1 },
+    ],
+    antiPatterns: [
+      "Do NOT remove exercises from the session as the default response to a range-of-motion request — ADD appropriate ROM work",
+      "Do NOT reduce volume or total session content — ROM restoration requires targeted additions, not less work",
+      "Do NOT add generic unspecified stretches without targeting the stated joint region",
+      "Do NOT add strength-biased loading (sets/reps/load) as the primary response to a range or opening request",
+      "Do NOT confuse ROM restoration with joint-friendly modification — this is about gaining range, not reducing load",
+    ],
+    validationRules: [
+      "At least 1 passive or active range exercise must be structurally added (hip CARs, 90/90 holds, PNF stretches, thoracic extensions, ankle distraction, pigeon stretch, sleeper stretch, etc.)",
+      "Added exercises must target the specified body region or default to hips/thoracic if region is unspecified",
+      "Coaching notes alone are insufficient — exercises must appear structurally in the program",
+    ],
+    aiDirective: "ROM / RANGE RESTORATION FOCUS: The user wants to restore or improve range of motion at a specific joint or generally.\n\nRequired changes:\n1. JOINT IDENTIFICATION: Identify the target region from context (hips, shoulders, thoracic, ankles, etc.). If 'open up' or 'loosen up' with no specifics, default to hip mobility as the most common unaddressed restriction.\n2. EXERCISE SELECTION: Add passive range restoration holds (2–5 min per position), CARs (3–5 slow controlled articular rotations), and/or PNF contract-relax (10s contract at 30% effort → deep exhale release, repeat 3–5x).\n   Hip examples: 90/90 hip stretch, pigeon pose, frog stretch, hip CARs, hip PAILs/RAILs, couch stretch.\n   Shoulder examples: sleeper stretch, wall slides, shoulder CARs, banded distraction, doorway chest stretch.\n   Thoracic examples: thoracic foam roll extension, open book stretch, thoracic CARs, quadruped T-spine rotation.\n   Ankle examples: ankle CAR, banded ankle distraction, wall ankle stretch, heel drop stretch.\n3. STRUCTURE: Add as a dedicated restoration block (5–15 min) at the start of session or as a standalone mobility day.\n4. PROGRESSION PRINCIPLE: Passive range first (long holds, relaxed), then active control (CARs, light end-range contraction) once passive range is accessible — never train control beyond available range.\n\nIDENTITY UPDATE REQUIRED: Produce an update_session change. Example label: 'Hip Mobility — Range Restoration'. Example emphasis: 'Passive joint range restoration, capsule work, and progressive ROM development through targeted holds and CARs'.",
+    scopeGuidance: "Add to the beginning of relevant sessions as a priority restoration block. Do not remove existing work — this is additive. If standalone mobility session, build the session around ROM restoration.",
+  },
+
+  tissue_stiffness_focus: {
+    intentFamily: "tissue_stiffness_focus",
+    minimumStructuralChanges: 1,
+    primaryChanges: [
+      { type: "add_tissue_release", description: "Add tissue preparation work (foam rolling protocol, lacrosse ball work, or loaded stretching) targeting the identified chronic stiffness regions", countAs: 1 },
+      { type: "add_prep_block", description: "Add a systematic tissue prep / stiffness reduction block at session start", countAs: 1 },
+      { type: "add_mobility_work", description: "Add contract-relax (PNF) or dynamic mobility sequences to address the identified stiffness pattern", countAs: 1 },
+    ],
+    secondaryChanges: [
+      { type: "add_rom_holds", description: "Add sustained passive holds (2–3 min) to the stiff region after tissue prep to lock in new length", countAs: 1 },
+    ],
+    antiPatterns: [
+      "Do NOT remove exercises as the default response to a stiffness complaint — ADD tissue prep and release work",
+      "Do NOT confuse tissue stiffness with injury modification — stiffness without reported pain means add targeted prep, not remove load",
+      "Do NOT add generic stretches without addressing the identified stiff region specifically",
+      "Do NOT reduce total session volume as the default response — stiffness reduction requires progressive targeted loading, not deloading",
+    ],
+    validationRules: [
+      "At least 1 tissue prep or release exercise must be structurally added (foam rolling protocol, lacrosse ball work, loaded stretching, or PNF contract-relax sequence)",
+      "Work must target the specified or inferred stiff region",
+    ],
+    aiDirective: "TISSUE STIFFNESS FOCUS: The user is experiencing chronic tightness or stiffness and wants targeted relief — this is NOT a volume reduction request.\n\nRequired changes:\n1. REGION IDENTIFICATION: Identify the stiff area from context (hips, thoracic, quads, hamstrings, calves, etc.). If general, prioritize hip flexors and thoracic spine.\n2. TISSUE PREP SEQUENCE: Add foam rolling or lacrosse ball protocol (60–90s per site, 2–3 sites). Add loaded stretching (weighted holds at comfortable end-range: 1–2 min per position). Add contract-relax sequences (10s isometric contraction at 30% → full exhale release, repeat 3–5x).\n3. STRUCTURE: Place tissue prep at session start (5–10 min) as its own block before active mobility work.\n4. PROGRESSION PRINCIPLE: Acute tissue prep reduces session stiffness; consistent loaded stretching changes chronic tissue state. Frame as a multi-session protocol — results build over weeks.\n\nIDENTITY UPDATE REQUIRED: Produce an update_session change. Example label: 'Mobility — Tissue Stiffness Reduction'. Example emphasis: 'Systematic tissue prep, loaded stretching, and contract-relax sequences targeting chronic stiffness patterns'.",
+    scopeGuidance: "Add tissue prep to the beginning of all relevant sessions. If a standalone mobility session, build around stiffness reduction sequencing (tissue prep → passive holds → active control).",
   },
 
   injury_modification: {

@@ -1,0 +1,140 @@
+We completed the P0 semantic family fixes.
+
+Now implement Phase 2:
+
+GOAL
+Make the intent engine mode-aware by allowing normalizeToIntentFamily() to consider the active focus mode:
+- Strength
+- Speed / Footwork
+- Mobility
+
+Right now the foundational issue is:
+normalizeToIntentFamily() only sees the raw message, so the same phrase is classified the same way regardless of mode.
+We need to preserve existing behavior where possible, while enabling mode-specific routing when mode context is available.
+
+IMPORTANT
+This is a targeted architecture improvement.
+Do not do a giant rewrite.
+Do not break current call sites.
+Add mode-awareness safely and incrementally.
+
+PHASE 2 OBJECTIVES
+
+1. Add an optional focusMode parameter to normalizeToIntentFamily()
+Suggested shape:
+- "strength"
+- "speed"
+- "mobility"
+
+If mode is missing:
+- preserve current behavior as closely as possible
+- use existing global logic as fallback
+
+2. Thread focusMode into the key call sites where it is already known.
+Examples likely include:
+- main chat / active mode context
+- speed mode edit flows
+- mobility mode edit flows
+- block/program command surfaces
+
+3. Introduce mode-aware family prioritization.
+The key principle:
+TARGET PROPERTY + MODE should beat generic phrase matching.
+
+Examples:
+- “more explosive” in strength ≠ “more explosive” in speed
+- “lighter” in mobility ≠ “lighter” in strength
+- “more restorative” in mobility should not hit generic recovery volume removal
+- “faster feet” in speed should prioritize footwork/rhythm
+- “open my hips” in mobility should prioritize ROM restoration
+
+4. Do NOT duplicate the whole intent engine three times.
+Instead, create a clean layered approach:
+
+Suggested approach:
+A. global/common patterns
+B. mode-specific boost / override layer
+C. final fallback to generic logic
+
+5. Add mode-aware priority rules for the known conflict areas.
+At minimum, ensure these are resolved correctly when mode is present:
+
+SPEED:
+- cod_decel_focus
+- footwork_rhythm_focus
+- reactive_focus
+- speed_focus
+- prevent power_explosive_focus from stealing COD requests
+
+MOBILITY:
+- rom_restoration_focus
+- tissue_stiffness_focus
+- restorative / recovery interpretation
+- prevent generic increase_difficulty / recovery_focus misroutes
+
+STRENGTH:
+- keep current behavior stable unless mode-specific family clearly applies
+- do not regress existing strong coverage
+
+6. Add explicit mode-aware anti-collisions.
+Examples:
+- “better change of direction” in speed should not hit explosive/barbell logic
+- “more restorative” in mobility should not default to removing volume
+- “more intense” in mobility should not become barbell/intensity progression
+- “lighter on the ground” in speed should not become generic easier/lower load
+
+7. Add debug logging in dev mode:
+[IntentResolution]
+- rawCommand
+- focusMode
+- matchedFamily
+- matchedBy (global / mode-specific / fallback)
+- competingFamilyRejected
+- confidence if available
+
+8. Keep downstream transformation bundle wiring intact unless needed.
+This phase is about choosing the correct family more intelligently, not redesigning every bundle.
+
+9. Add tests / validation cases.
+At minimum cover:
+
+SPEED
+- more decel
+- better change of direction
+- more footwork
+- faster feet
+- lighter on the ground
+- snappier
+
+MOBILITY
+- open my hips
+- more range
+- less stiffness
+- more restorative
+- more intense
+
+STRENGTH
+- more explosive
+- lower fatigue
+- more unilateral
+- more posterior chain
+- shorter lift
+
+For each, verify mode-specific routing where applicable.
+
+IMPLEMENTATION PREFERENCE
+
+Preferred design:
+- normalizeToIntentFamily(message, focusMode?)
+- a mode-aware pre-pass or priority layer
+- then existing generic logic
+- no breaking API changes for callers that do not yet supply mode
+
+SUCCESS CRITERIA
+
+- focusMode can be passed into normalizeToIntentFamily()
+- mode-aware routing works for known misroute cases
+- existing callers without focusMode still work
+- no giant duplicated intent engine
+- logs clearly show when mode changed the outcome
+- system is ready for P1 family expansion next
