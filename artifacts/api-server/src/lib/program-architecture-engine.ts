@@ -87,6 +87,8 @@ export type MovementPattern =
 export interface CNSBlock {
   role: "prep" | "power" | "primary" | "secondary" | "unilateral" | "trunk" | "finisher";
   description: string;
+  /** Set to "density_fill" when the block was added by the post-slot density fill pass. */
+  source?: "density_fill";
 }
 
 export interface SessionArchitecture {
@@ -120,6 +122,169 @@ export interface WeeklyArchitecture {
   movementAllocation: MovementAllocation;
   weeklyRhythm: string;
   recoveryNotes: string;
+}
+
+// ─── Density Fill Engine ─────────────────────────────────────────────────────
+//
+// Ensures every session reaches the minimum strength exercise density of 6.
+// Runs after the initial CNS flow is processed and slot exercises are applied.
+//
+// "Strength exercises" for counting purposes:
+//   primary, secondary, unilateral, trunk, finisher roles.
+//   Excluded: prep (warm-up/mobility) and power (explosive/plyometric blocks).
+//
+// Fill priority:
+//   1. Unilateral lower/upper (if missing)
+//   2. Trunk anti-rotation/anti-extension/carry (if missing)
+//   3. Secondary pattern complement (if missing)
+//   4. Low-fatigue hypertrophy accessory
+//
+// Hard rules enforced:
+//   • Hard cap: MAX 7 strength exercises per session
+//   • No second high-neural fill if 2+ high-demand blocks already exist
+//   • All fills use low/moderate fatigue-cost descriptions
+//   • All fills tagged source: "density_fill"
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DENSITY_FILL_STRENGTH_ROLES = new Set<CNSBlock["role"]>([
+  "primary", "secondary", "unilateral", "trunk", "finisher",
+]);
+const DENSITY_MIN = 6;
+const DENSITY_MAX = 7;
+
+// CNS flow canonical role order for correct insertion positioning
+const DENSITY_ROLE_ORDER: CNSBlock["role"][] = [
+  "prep", "power", "primary", "secondary", "unilateral", "trunk", "finisher",
+];
+
+function densityInsertInFlow(flow: CNSBlock[], newBlock: CNSBlock): CNSBlock[] {
+  const newRoleIdx = DENSITY_ROLE_ORDER.indexOf(newBlock.role);
+  let insertAt = flow.length;
+  for (let i = flow.length - 1; i >= 0; i--) {
+    if (DENSITY_ROLE_ORDER.indexOf(flow[i].role) <= newRoleIdx) {
+      insertAt = i + 1;
+      break;
+    }
+    if (i === 0) insertAt = 0;
+  }
+  const result = [...flow];
+  result.splice(insertAt, 0, newBlock);
+  return result;
+}
+
+function countDensityHighNeural(flow: CNSBlock[]): number {
+  // Primary lifts + power blocks both carry high CNS cost for this check
+  return flow.filter(b => b.role === "primary" || b.role === "power").length;
+}
+
+function runDensityFill(
+  flow: CNSBlock[],
+  patterns: MovementPattern[],
+  neuralDemand: NeuralDemand,
+  sel: SlotExerciseSelection,
+  blockArchetype: string,
+  sessionIdentity: string,
+): CNSBlock[] {
+  const getStrengthCount = () => flow.filter(b => DENSITY_FILL_STRENGTH_ROLES.has(b.role)).length;
+
+  if (getStrengthCount() >= DENSITY_MIN) return flow;
+
+  const initialCount = getStrengthCount();
+  const addedExercises: string[] = [];
+
+  const isLowerDay = patterns.some(p => ["squat", "hinge", "unilateral_lower"].includes(p));
+  const isHingeDay = patterns.includes("hinge") && !patterns.includes("squat");
+  const isUpperDay = patterns.some(p => ["upper_push", "upper_pull"].includes(p));
+  const isRotational = patterns.includes("rotational");
+  const isDeload = blockArchetype === "REBUILD_DELOAD";
+
+  while (getStrengthCount() < DENSITY_MIN && getStrengthCount() < DENSITY_MAX) {
+    const highNeuralCount = countDensityHighNeural(flow);
+    const hasUnilateral = flow.some(b => b.role === "unilateral");
+    const hasTrunk = flow.some(b => b.role === "trunk");
+    const hasSecondary = flow.some(b => b.role === "secondary");
+
+    // ── Priority 1: Unilateral lower or upper ──────────────────────────────
+    if (!hasUnilateral && (isLowerDay || isUpperDay)) {
+      const description = isLowerDay
+        ? (isDeload
+          ? `DENSITY FILL — Deload unilateral: ${sel.unilateral_lower} at bodyweight or very light load (3 × 6 each side) — positional quality, no strength stimulus.`
+          : `DENSITY FILL — Unilateral ${isHingeDay ? "posterior chain" : "lower"}: ${sel.unilateral_lower_alt || sel.unilateral_lower} (3 × 8–10 each side) — single-leg stability and asymmetry exposure, moderate load, quality-first.`)
+        : `DENSITY FILL — Unilateral upper: Single-arm dumbbell row (3 × 8–10 each side) — unilateral upper pulling, scapular positional control, match session pull intent.`;
+      const block: CNSBlock = { role: "unilateral", description, source: "density_fill" };
+      flow = densityInsertInFlow(flow, block);
+      addedExercises.push(`[unilateral] ${description.slice(0, 60)}`);
+      continue;
+    }
+
+    // ── Priority 2: Trunk anti-rotation / anti-extension / carry ──────────
+    if (!hasTrunk) {
+      const description = isDeload
+        ? `DENSITY FILL — Deload trunk: Dead bug (3 × 8) + 90/90 breathing (2 × 5 breaths per side) — restorative and parasympathetic, not high-tension abdominal work.`
+        : isRotational
+          ? `DENSITY FILL — Trunk anti-rotation: ${sel.trunk_anti_rotation} (3 × 10 each side) — braced spine, resist rotation to build rotational power transfer.`
+          : `DENSITY FILL — Trunk integrity: ${sel.trunk_anti_extension} (anti-extension) + ${sel.trunk_anti_rotation} (anti-rotation) — 2–3 sets each. Low fatigue cost, structural session close.`;
+      const block: CNSBlock = { role: "trunk", description, source: "density_fill" };
+      flow = densityInsertInFlow(flow, block);
+      addedExercises.push(`[trunk] ${description.slice(0, 60)}`);
+      continue;
+    }
+
+    // ── Priority 3: Secondary pattern complement ───────────────────────────
+    if (!hasSecondary) {
+      let description: string;
+      if (patterns.includes("squat")) {
+        description = isDeload
+          ? `DENSITY FILL — Deload secondary hinge: ${sel.bilateral_hinge_strength} at 50–60% (3 × 5) — posterior chain movement quality, no load accumulation.`
+          : `DENSITY FILL — Secondary hinge: ${sel.bilateral_hinge_strength} — posterior chain complement on squat day (3 × 8–10 @ moderate load, RPE 6–7).`;
+      } else if (isHingeDay) {
+        description = isDeload
+          ? `DENSITY FILL — Deload secondary squat: ${sel.unilateral_lower} at bodyweight (3 × 6 each side) — frontal-chain movement quality only.`
+          : `DENSITY FILL — Secondary squat complement: ${sel.unilateral_lower} (3 × 8–10 each side) — frontal-chain balance after hinge primary, low-moderate load.`;
+      } else if (patterns.includes("upper_push")) {
+        description = `DENSITY FILL — Secondary pull: ${sel.upper_pull_secondary} (3–4 × 10–12) — horizontal pull to balance pressing volume and protect scapular health.`;
+      } else {
+        description = `DENSITY FILL — Secondary push: ${sel.upper_push_secondary} (3 × 10–12) — pressing complement to primary pulling session, horizontal pattern balance.`;
+      }
+      const block: CNSBlock = { role: "secondary", description, source: "density_fill" };
+      flow = densityInsertInFlow(flow, block);
+      addedExercises.push(`[secondary] ${description.slice(0, 60)}`);
+      continue;
+    }
+
+    // ── Priority 4: Low-fatigue hypertrophy accessory ──────────────────────
+    // Do not add another high-neural block if 2+ already exist and day is high-demand
+    if (highNeuralCount >= 2 && neuralDemand === "high") break;
+
+    let description: string;
+    if (isLowerDay) {
+      description = isDeload
+        ? `DENSITY FILL — Deload accessory: Seated leg curl or banded hip extension (2 × 12) — tissue quality at zero CNS cost.`
+        : `DENSITY FILL — Low-fatigue hypertrophy accessory: Hip Thrust or Nordic Hamstring Curl (3 × 12–15) — posterior chain volume accumulation, low neural demand, high tissue stimulus.`;
+    } else if (isUpperDay) {
+      description = isDeload
+        ? `DENSITY FILL — Deload upper accessory: Face pull (2 × 15) + band external rotation (2 × 15) — shoulder structural care and joint health.`
+        : `DENSITY FILL — Low-fatigue upper accessory: Face Pull (3 × 15) + Lateral Raise (3 × 12) — shoulder structural health and volume. Low neural demand, high joint transfer.`;
+    } else {
+      description = `DENSITY FILL — Loaded carry accessory: ${sel.positional_support ? `${sel.positional_support} or ` : ""}Suitcase Carry (3 × 30m each side) — trunk under fatigue, lateral stability, and structural resilience.`;
+    }
+    const block: CNSBlock = { role: "finisher", description, source: "density_fill" };
+    flow = densityInsertInFlow(flow, block);
+    addedExercises.push(`[finisher] ${description.slice(0, 60)}`);
+  }
+
+  const finalCount = getStrengthCount();
+  if (addedExercises.length > 0) {
+    console.log("[Density Fill Triggered]", JSON.stringify({
+      sessionIdentity,
+      blockArchetype,
+      initialCount,
+      finalCount,
+      exercisesAdded: addedExercises,
+    }));
+  }
+
+  return flow;
 }
 
 // ─── Standard CNS flow ───────────────────────────────────────────────────────
@@ -3570,8 +3735,22 @@ export function buildArchitectureBrief(
   }
 
   const sessionLines = arch.sessions.map((s) => {
-    const processedFlow = s.cnsFlow.map((b) => overlayBlockWithSlot(b, s.emphasizedPatterns, s.neuralDemand, s.dayNumber));
-    const flowRoles = processedFlow.map((b) => `[${b.role.toUpperCase()}] ${b.description}`).join("\n    ");
+    let processedFlow = s.cnsFlow.map((b) => overlayBlockWithSlot(b, s.emphasizedPatterns, s.neuralDemand, s.dayNumber));
+
+    // ── Density Fill Validation ───────────────────────────────────────────────
+    // Post-slot validation: ensure every session has at least 6 strength
+    // exercises (primary + secondary + unilateral + trunk + finisher roles).
+    // Runs after slot-exercise injection so fills can reference locked selections.
+    processedFlow = runDensityFill(
+      processedFlow,
+      s.emphasizedPatterns,
+      s.neuralDemand,
+      slotSelection,
+      blockSelection.archetypeId,
+      s.identity,
+    );
+
+    const flowRoles = processedFlow.map((b) => `[${b.role.toUpperCase()}]${b.source === "density_fill" ? " [DENSITY FILL]" : ""} ${b.description}`).join("\n    ");
     const sportLine = s.sportNotes ? `\n  SPORT OVERLAY: ${s.sportNotes}` : "";
 
     // Audit slot layout for each session
@@ -3800,7 +3979,7 @@ Only AFTER the above architecture is locked, select exercises that:
 2. Follow the CNS flow sequence (prep → power → primary → secondary → unilateral → trunk)
 3. Use the coaching cue standard: POSITION + INTENT + TRANSFER (not muscle cues)
 4. Vary exercises across sessions — no repeated primary lifts
-5. Minimum 5 meaningful exercises per session (6–8 optimal for full sessions)
+5. Minimum 6 strength exercises per session (primary + secondary + unilateral + trunk + accessories; 6–7 is the target range — the density fill has already enforced this in the architecture brief above)
 6. Exercise sets/reps/load must reflect the BLOCK TYPE and WEEK ROLE:
    - Accumulation block: 3–5 sets × 8–15 reps, RPE 7–8
    - Intensification block: 3–5 sets × 3–6 reps, RPE 8–9
