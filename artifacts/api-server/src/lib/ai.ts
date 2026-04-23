@@ -4053,13 +4053,24 @@ Output the corrected program JSON and a brief calm confirmation.`;
             const flowAuditResults = auditSpeedFlowOrder(
               expandedDays as Array<{ name?: string; exercises?: Array<{ name: string }> }>
             );
+            const reclassifiedTotal = flowAuditResults.reduce(
+              (acc, r) => acc + r.orderedSlots.filter((s) => s.reclassified).length, 0
+            );
             console.log("[SpeedFlowAudit]", JSON.stringify({
               sessions: flowAuditResults.map((r) => ({
                 session: r.sessionName,
                 canonicalOrder: r.canonicalOrder,
+                reclassified: r.orderedSlots
+                  .filter((s) => s.reclassified)
+                  .map((s) => ({
+                    exercise: s.exerciseName,
+                    from: s.originalClassification,
+                    to: s.finalSlot,
+                  })),
                 violations: r.violations,
                 isOrderCorrect: r.isOrderCorrect,
               })),
+              totalReclassified: reclassifiedTotal,
             }));
 
             // Log any flow violations as warnings so they surface in dev logs

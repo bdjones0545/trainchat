@@ -253,23 +253,31 @@ CRITICAL SPEED SESSION RULES:
 - Week 4 (Deload): 50% volume, mechanics review, no max intent
 
 CANONICAL SPEED / FOOTWORK FLOW SPINE — MANDATORY ORDER OF OPERATIONS:
-1. ACTIVATION / CNS PRIMER (low-fatigue prep only): ankle stiffness prep, isometric hamstring holds, single-leg hip hinge march, short-lever activation work. 5–10 min. NO Nordic curls here — they are resilience work, not activation.
-2. SPRINT PREP / BUILD-UP (acceleration warm-up series): A-walks → Wall March → A-Skip → Build-Up Runs → gradual speed ramp. 10 min.
+1. ACTIVATION / CNS PRIMER — dynamic movement primers ONLY, low fatigue: ankle stiffness prep, single-leg hip hinge march. 5 min.
+   ⛔ PROHIBITED here: Isometric Hamstring Hold, Nordic Hamstring Curl, Copenhagen Hold — these are resilience finishers, not warm-up work.
+2. SPRINT PREP / BUILD-UP — acceleration warm-up + TYPE A patterning footwork (technical, rhythmic, closed-skill):
+   A-walks → Wall March → A-Skip → Build-Up Runs + Speed Ladder In-Out / Linear Ladder. 10 min.
+   TYPE A footwork (A-Skip, Wall March, Speed Ladder In-Out) belongs HERE in slot 2, NOT in slot 5.
 3. PRIMARY SPEED OUTPUT — highest neural demand, done while fully fresh:
    - Acceleration: falling starts, resisted sprints, drive-phase work (0–30m)
    - Max Velocity: flying sprints, wicket runs (30–60m)
    - Sprint Exposure: max-intent sprint efforts, 4–6 per session, full recovery
 4. REACTIVE / PLYOMETRIC: stiffness hops, lateral hurdle hops, bounds, pogo hops — after sprint work, NOT before. 24–40 contacts total.
-5. CHANGE OF DIRECTION / FOOTWORK: COD drills (T-drill, 5-10-5, L-drill), ladder patterns (Ickey shuffle, lateral ladder), footwork rhythm work — sits after plyometric/reactive block.
-6. SPEED ENDURANCE (optional, only if programmed): tempo runs, repeat 30m sprints, incomplete recovery intervals — lower-priority, late in session.
-7. RESILIENCE FINISH (always last): Nordic hamstring curl, Copenhagen hip adductor, calf march, groin/adductor tissue work, low-fatigue accessory support. These are FINISHERS — never placed before sprint output.
+5. CHANGE OF DIRECTION / FOOTWORK — TYPE B reactive/chaotic footwork (open-skill, decision-based):
+   COD drills (T-drill already used in slot 3), Ickey Shuffle, Lateral Ladder, Mirror Drill, Carioca, Reactive Cone Drill. Sits after plyometric block.
+   ⛔ Do NOT place patterning/technical footwork (A-Skip, Wall March, basic ladder) here — those belong in slot 2.
+6. SPEED ENDURANCE (optional, only if programmed): tempo runs, repeat 30m sprints, incomplete recovery intervals.
+7. RESILIENCE FINISH (ALWAYS LAST — non-negotiable):
+   Nordic Hamstring Curl, Isometric Hamstring Hold, Copenhagen Hip Adductor / Copenhagen Hold, Straight-Leg Calf March, groin/adductor tissue work.
+   Any exercise involving static tension for hamstrings, calves, or adductors goes here. NEVER before sprint output.
 
-RULES ENFORCED:
-- Nordic curls and hamstring resilience work MUST sit in slot 7 (resilience finish), NEVER before the main speed output
-- Sprint and plyometric work MUST happen before COD/footwork fatigue accumulates
-- Footwork/COD must not replace true speed output when the day is tagged speed
-- Speed endurance and lower-priority accessory work ALWAYS later in session
-- This order is non-negotiable unless the session is explicitly rehab-oriented
+FOOTWORK CLASSIFICATION RULE:
+- Rhythmic / patterning footwork (technical, closed-skill) → slot 2 SPRINT PREP: A-Skip, Wall March, Speed Ladder In-Out, Linear Ladder
+- Reactive / chaotic footwork (open-skill, decision-based) → slot 5 COD/FOOTWORK: Mirror Drill, Ickey Shuffle, Reactive Cone, Lateral Ladder, Carioca
+
+ISOMETRIC / STATIC TENSION RULE:
+- ANY exercise with isometric, Nordic, Copenhagen, or static hamstring/calf/adductor tension → slot 7 RESILIENCE FINISH
+- Includes: Nordic Hamstring Curl, Isometric Hamstring Hold, Copenhagen Hold, Copenhagen Hip Adductor, Straight-Leg Calf March
 
 AGENT COACHING LANGUAGE in Speed mode:
 - Reference speed qualities: ground contact time, stride rate, elasticity, COD angle, drive phase, front-side mechanics, reactive decision time
@@ -333,11 +341,11 @@ export function buildSpeedArchitectureBrief(
   // CANONICAL FLOW: activation → sprint prep → speed primary → reactive/plyo → COD/footwork → [speed endurance] → resilience finish
   // Nordic curls and heavy eccentrics ALWAYS last — they are resilience finishers, never pre-sprint prep
   const allDayLabels = [
-    `Day 1 — Acceleration Development: [ACTIVATION] Ankle Stiffness Prep + Isometric Hamstring Hold → [SPRINT PREP] Wall March/A-Skip/Build-Up warm-up → [SPEED PRIMARY] Falling Start 4–6×20–30m (2–4 min rest, 95–100% intent) → [REACTIVE/PLYO] Stiffness Hops/Pogo Hops (24–30 contacts, 90s) → [FOOTWORK] Speed Ladder finisher → [RESILIENCE FINISH] Nordic Hamstring Curl (3×6)`,
-    `Day 2 — Reactive Footwork + Deceleration: [ACTIVATION] Single-Leg Hip Hinge March + Ankle Stiffness Prep → [SPRINT PREP] March-to-Skip-to-Run warm-up → [SPEED PRIMARY] T-Drill or 5-10-5 (4–6 efforts, full recovery) → [REACTIVE/PLYO] Single-Leg Decel Landing (3×5 each) → [FOOTWORK] Ickey Shuffle/Lateral Ladder → [RESILIENCE FINISH] Copenhagen Hip Adductor + Straight-Leg Calf March`,
-    `Day 3 — Elastic Output + Speed Endurance: [ACTIVATION] Ankle Stiffness Prep + Isometric Hamstring Hold → [SPRINT PREP] Flying Build-Up warm-up → [SPEED PRIMARY] Flying 20m Sprint 3–5×(4 min rest, 95–100%) → [REACTIVE/PLYO] Lateral Hurdle Hops + Linear Bounding (24–40 contacts, 90s–3 min) → [SPEED ENDURANCE] Repeat 30m Sprint 4–6×(60–90s) → [FOOTWORK] Carioca → [RESILIENCE FINISH] Nordic Hamstring Curl (3×5)`,
-    `Day 4 — Max Velocity + Footwork: [ACTIVATION] Ankle Stiffness Prep + Single-Leg Hip Hinge March → [SPRINT PREP] A-Skip/B-Skip/Build-Up warm-up → [SPEED PRIMARY] Flying 20m Sprint 4–6×(4–6 min rest, 100% intent) → [REACTIVE/PLYO] Countermovement Jump to Sprint (3×3) → [FOOTWORK] Speed Ladder Lateral + Zigzag Hops → [RESILIENCE FINISH] Isometric Hamstring Hold (2×30s)`,
-    `Day 5 — COD + Acceleration Contrast: [ACTIVATION] Ankle Stiffness Prep + Isometric Hamstring Hold → [SPRINT PREP] A-Skip/Wall March warm-up → [SPEED PRIMARY] Falling Start (3×20m, 3 min rest) + Box Jump contrast (3×4) → [REACTIVE/PLYO] Lateral Bound + Alternating Bounds (24 contacts) → [COD/FOOTWORK] L-Drill/Drop-Step Decel (4–6 efforts) → [RESILIENCE FINISH] Nordic Hamstring Curl (3×6) + Copenhagen Hip Adductor`,
+    `Day 1 — Acceleration Development: [ACTIVATION] Ankle Stiffness Prep → [SPRINT PREP + TYPE A FOOTWORK] Wall March/A-Skip/Speed Ladder In-Out/Build-Up → [SPEED PRIMARY] Falling Start 4–6×20–30m (2–4 min rest, 95–100% intent) → [REACTIVE/PLYO] Stiffness Hops/Pogo Hops (24–30 contacts, 90s) → [COD/TYPE B FOOTWORK] Ickey Shuffle → [RESILIENCE FINISH] Nordic Hamstring Curl (3×6)`,
+    `Day 2 — Reactive Footwork + Deceleration: [ACTIVATION] Single-Leg Hip Hinge March → [SPRINT PREP + TYPE A FOOTWORK] A-Skip/March-to-Skip-to-Run/Linear Ladder → [SPEED PRIMARY] T-Drill or 5-10-5 (4–6 efforts, full recovery) → [REACTIVE/PLYO] Single-Leg Decel Landing (3×5 each) → [COD/TYPE B FOOTWORK] Mirror Drill/Lateral Ladder → [RESILIENCE FINISH] Copenhagen Hip Adductor + Straight-Leg Calf March`,
+    `Day 3 — Elastic Output + Speed Endurance: [ACTIVATION] Ankle Stiffness Prep → [SPRINT PREP + TYPE A FOOTWORK] A-Skip/Build-Up Runs → [SPEED PRIMARY] Flying 20m Sprint 3–5×(4 min rest, 95–100%) → [REACTIVE/PLYO] Lateral Hurdle Hops + Linear Bounding (24–40 contacts, 90s–3 min) → [COD/TYPE B FOOTWORK] Carioca → [SPEED ENDURANCE] Repeat 30m Sprint 4–6×(60–90s) → [RESILIENCE FINISH] Nordic Hamstring Curl (3×5) + Isometric Hamstring Hold (2×30s)`,
+    `Day 4 — Max Velocity + Footwork: [ACTIVATION] Ankle Stiffness Prep → [SPRINT PREP + TYPE A FOOTWORK] A-Skip/B-Skip/Build-Up Runs/Speed Ladder In-Out → [SPEED PRIMARY] Flying 20m Sprint 4–6×(4–6 min rest, 100% intent) → [REACTIVE/PLYO] Countermovement Jump to Sprint (3×3) → [COD/TYPE B FOOTWORK] Zigzag Hops/Drop-Step Decel → [RESILIENCE FINISH] Isometric Hamstring Hold (2×30s)`,
+    `Day 5 — COD + Acceleration Contrast: [ACTIVATION] Single-Leg Hip Hinge March → [SPRINT PREP + TYPE A FOOTWORK] Wall March/A-Skip → [SPEED PRIMARY] Falling Start (3×20m, 3 min rest) + Sled Sprint contrast → [REACTIVE/PLYO] Lateral Bound + Alternating Bounds (24 contacts) → [COD/TYPE B FOOTWORK] L-Drill/Ickey Shuffle (4–6 efforts) → [RESILIENCE FINISH] Nordic Hamstring Curl (3×6) + Copenhagen Hip Adductor`,
   ];
 
   const dayPlans = allDayLabels.slice(0, sessionCount);
@@ -354,22 +362,27 @@ CRITICAL BUILD CONSTRAINTS:
 3. CNS ORDER — speed and plyometric work ALWAYS first after warm-up. Never after heavy lifting.
 4. REST — max-intent sprints: 2–6 min; plyometrics: 90s–3 min; COD: 1.5–3 min; footwork: 30–60s.
 5. VOLUME — sprint efforts: 4–6 max per session; plyometric contacts: 24–40 total.
-6. RESILIENCE WORK ORDERING — Nordic Hamstring Curl, Copenhagen Hip Adductor, Straight-Leg Calf March, and all heavy eccentric/tendon work are RESILIENCE FINISHERS. They go in the LAST slot of every session, AFTER all sprinting, plyometric, and COD work is complete. Placing them before sprint output violates the neural order.
+6. RESILIENCE WORK ORDERING — Nordic Hamstring Curl, Isometric Hamstring Hold, Copenhagen Hip Adductor, Copenhagen Hold, Straight-Leg Calf March, and ALL static-tension / heavy eccentric work for hamstrings, calves, or adductors are RESILIENCE FINISHERS (slot 7). They go LAST in every session, AFTER all sprinting, plyometric, and COD work. Isometric holds are NOT activation — do not place them in slot 1 or 2.
 
 CANONICAL FLOW SPINE (mandatory slot sequence):
-  [1] ACTIVATION → [2] SPRINT PREP → [3] SPEED PRIMARY → [4] REACTIVE/PLYO → [5] COD/FOOTWORK → [6] SPEED ENDURANCE (if programmed) → [7] RESILIENCE FINISH
+  [1] ACTIVATION → [2] SPRINT PREP + TYPE A FOOTWORK → [3] SPEED PRIMARY → [4] REACTIVE/PLYO → [5] COD/TYPE B FOOTWORK → [6] SPEED ENDURANCE (if programmed) → [7] RESILIENCE FINISH
 
 SESSION ROTATION — follow this day structure:
 ${dayPlans.join("\n")}
 
 APPROVED EXERCISE VOCABULARY BY SLOT:
-[ACTIVATION] Ankle Stiffness Prep, Isometric Hamstring Hold, Single-Leg Hip Hinge March — low-fatigue CNS primers only
-[SPRINT PREP] Wall March, Wall Drive, A-Skip, B-Skip, March to Skip to Run, Build-Up Run
+[ACTIVATION] Ankle Stiffness Prep, Single-Leg Hip Hinge March — dynamic, low-fatigue CNS primers ONLY
+  ⛔ NOT HERE: Isometric Hamstring Hold, Nordic Curl, Copenhagen Hold (→ slot 7)
+[SPRINT PREP + TYPE A FOOTWORK] Wall March, Wall Drive, A-Skip, B-Skip, March to Skip to Run, Build-Up Run, Speed Ladder In-Out, Linear Ladder
+  TYPE A = technical/rhythmic/closed-skill footwork — belongs in warm-up, not in slot 5
 [SPEED PRIMARY] Acceleration: Falling Start, Kneeling Start, Sled Sprint, Block Start / Max Velocity: Flying 20m Sprint, Wicket Run, Flying Start Sprint / COD: 5-10-5, L-Drill, T-Drill, 505 Drill
 [REACTIVE/PLYO] Stiffness Hops, Lateral Hurdle Hops, Skater Jump, Linear Bounding, Pogo Hops, Countermovement Jump to Sprint, Lateral Bound, Alternating Bounds, Single-Leg Decel Landing
-[COD/FOOTWORK] Speed Ladder In-Out, Ickey Shuffle, Lateral Ladder, Carioca, Zigzag Hops, Mirror Drill, Drop-Step Decel
+[COD/TYPE B FOOTWORK] Ickey Shuffle, Lateral Ladder, Carioca, Zigzag Hops, Mirror Drill, Drop-Step Decel, Reactive Cone Drill, Crossover Step
+  TYPE B = reactive/chaotic/open-skill footwork — sits after plyometric block
+  ⛔ NOT HERE: A-Skip, Wall March, Speed Ladder In-Out (→ slot 2)
 [SPEED ENDURANCE] Repeat 30m Sprint, Tempo Run, 150m Speed Endurance Run, Assault Bike Sprint
-[RESILIENCE FINISH] Nordic Hamstring Curl, Copenhagen Hip Adductor, Straight-Leg Calf March, Isometric Hamstring Hold (volume), Backpedal Sprint (low-load decel close-out)`.trim();
+[RESILIENCE FINISH] Nordic Hamstring Curl, Isometric Hamstring Hold, Copenhagen Hip Adductor, Copenhagen Hold, Straight-Leg Calf March
+  STATIC TENSION RULE: ANY isometric/static exercise for hamstrings, calves, or adductors → slot 7. No exceptions.`.trim();
 }
 
 // ─── Speed Response Contract ──────────────────────────────────────────────────
@@ -384,46 +397,53 @@ export function buildSpeedResponseContract(sessionCount: number): string {
       "name": "Day 1 — Acceleration Development",
       "exercises": [
         {
-          "name": "Isometric Hamstring Hold",
+          "name": "Ankle Stiffness Prep",
           "sets": 2,
-          "reps": "30s each leg",
+          "reps": "20 contacts",
           "rest": "45s",
-          "notes": "Tissue prep — posterior chain activation before sprint work, long-lever hamstring tension"
+          "notes": "ACTIVATION — dynamic CNS primer, stiff ankle response, low fatigue. Primes ground contact quality for sprint work ahead."
         },
         {
           "name": "Wall March",
           "sets": 3,
           "reps": "10 contacts",
           "rest": "60s",
-          "notes": "Drive phase mechanics — tall spine, aggressive knee drive, dorsiflexed foot, sharp arm action"
+          "notes": "SPRINT PREP — drive phase mechanics, tall spine, aggressive knee drive, dorsiflexed foot, sharp arm action"
         },
         {
           "name": "A-Skip",
           "sets": 3,
           "reps": "20m",
           "rest": "60s",
-          "notes": "Sprint mechanics warm-up — synchronized knee drive and arm swing, rhythm and timing"
+          "notes": "SPRINT PREP (TYPE A footwork) — synchronized knee drive and arm swing, rhythm and timing. Belongs here in warm-up, not in COD slot."
         },
         {
           "name": "Falling Start",
           "sets": 5,
           "reps": "1 effort × 20m",
           "rest": "3 min",
-          "notes": "Primary acceleration work — 95–100% intent every rep, lean to breaking point, aggressive first step. Full recovery required"
+          "notes": "SPEED PRIMARY — 95–100% intent every rep, lean to breaking point, aggressive first step. Done fresh before any reactive fatigue. Full recovery required."
         },
         {
           "name": "Stiffness Hops",
           "sets": 3,
           "reps": "10 contacts",
           "rest": "90s",
-          "notes": "Elastic support — short ground contact, stiff ankle, vertical force. Stop if contact quality or rhythm drops"
+          "notes": "REACTIVE/PLYO — short ground contact, stiff ankle, vertical force. After sprint work. Stop if contact quality or rhythm drops."
         },
         {
-          "name": "Speed Ladder In-Out",
+          "name": "Ickey Shuffle",
           "sets": 4,
           "reps": "1 length",
           "rest": "45s",
-          "notes": "Footwork finisher — sharp contacts, stay light, crisp rhythm. Prioritize quality over speed"
+          "notes": "COD/FOOTWORK (TYPE B) — reactive footwork pattern, sharp contacts, stay light. Sits after plyometric block."
+        },
+        {
+          "name": "Nordic Hamstring Curl",
+          "sets": 3,
+          "reps": "5 reps",
+          "rest": "90s",
+          "notes": "RESILIENCE FINISH — eccentric hamstring load, posterior chain tissue resilience. ALWAYS last. Never before sprint work."
         }
       ]
     }`;
@@ -496,13 +516,17 @@ ${day1Example}
 SESSION DEPTH: Every session MUST contain 5–7 exercises. Never fewer than 5.
 
 CANONICAL SPEED FLOW SPINE — SESSION SLOT ORDER (required in sequence, never reordered):
-  1: ACTIVATION / CNS PRIMER (1–2 ex): low-fatigue activation ONLY — e.g., Ankle Stiffness Prep, Isometric Hamstring Hold, Single-Leg Hip Hinge March. ⛔ NO Nordic curls here — they are resilience finishers, not warm-up work.
-  2: SPRINT PREP / BUILD-UP (1–2 ex): acceleration warm-up series — e.g., Wall March, A-Skip, March to Skip to Run, Build-Up Run. Gradual speed ramp before max-intent work.
-  3: SPEED PRIMARY — highest neural output, done while fully fresh (1–2 ex, max-intent): e.g., Falling Start, Flying 20m Sprint, T-Drill, 5-10-5. Sprint exposure MUST happen before any plyometric or footwork fatigue accumulates.
-  4: REACTIVE / PLYOMETRIC (1 ex): after sprint work — e.g., Stiffness Hops, Lateral Hurdle Hops, Linear Bounding, Pogo Hops, Single-Leg Decel Landing. 24–40 contacts total.
-  5: COD / FOOTWORK (1 ex): sits after plyometric block — e.g., Speed Ladder In-Out, Ickey Shuffle, L-Drill, Mirror Drill, Carioca. Lower CNS demand.
-  6: SPEED ENDURANCE (optional, 1 ex, only if programmed): e.g., Repeat 30m Sprint tempo, Tempo Run, Assault Bike Sprint. Lower-priority, late in session.
-  7: RESILIENCE FINISH (1–2 ex, ALWAYS LAST): Nordic Hamstring Curl, Copenhagen Hip Adductor, Straight-Leg Calf March, groin/adductor tissue work. These are session finishers. ⛔ NEVER placed before sprint output unless session is explicitly rehab-oriented.
+  1: ACTIVATION / CNS PRIMER (1 ex): dynamic movement primers ONLY — Ankle Stiffness Prep, Single-Leg Hip Hinge March.
+     ⛔ PROHIBITED: Isometric Hamstring Hold, Nordic Curl, Copenhagen Hold — these are resilience finishers, not activation.
+  2: SPRINT PREP + TYPE A FOOTWORK (1–2 ex): acceleration warm-up + closed-skill patterning — Wall March, A-Skip, March to Skip to Run, Build-Up Run, Speed Ladder In-Out, Linear Ladder.
+     TYPE A footwork (technical, rhythmic, patterning) lives HERE — not in slot 5.
+  3: SPEED PRIMARY (1–2 ex, max-intent, done fresh): Falling Start, Flying 20m Sprint, T-Drill, 5-10-5. Sprint exposure BEFORE any plyometric or COD fatigue.
+  4: REACTIVE / PLYOMETRIC (1 ex): Stiffness Hops, Lateral Hurdle Hops, Linear Bounding, Pogo Hops, Single-Leg Decel Landing. 24–40 contacts.
+  5: COD / TYPE B FOOTWORK (1 ex): reactive/open-skill footwork — Ickey Shuffle, Mirror Drill, Carioca, Reactive Cone Drill, Lateral Ladder, Drop-Step Decel.
+     ⛔ Do NOT put A-Skip, Wall March, or basic Speed Ladder here — those are slot 2.
+  6: SPEED ENDURANCE (optional, 1 ex): Repeat 30m Sprint, Tempo Run, Assault Bike Sprint. Only if programmed.
+  7: RESILIENCE FINISH (1–2 ex, ALWAYS LAST): Nordic Hamstring Curl, Isometric Hamstring Hold, Copenhagen Hip Adductor, Copenhagen Hold, Straight-Leg Calf March.
+     ⛔ ANY static-tension exercise for hamstrings / calves / adductors → slot 7. NEVER before speed_primary.
 
 Minimums by type: Acceleration/Max Velocity/Reactive/Elastic → min 5, target 6. Speed Endurance/Return-to-Speed → min 4–5.
 
@@ -1041,10 +1065,11 @@ export interface SpeedSessionDepthScore {
   passed: boolean;
 }
 
-// ACTIVATION terms: low-fatigue CNS primers that are valid early in session
-const TISSUE_PREP_TERMS = /isometric|ankle.stiff|hip.hinge.march|wall.march|wall.drive|a.skip|b.skip|march.to.skip|build.up.run/i;
-// RESILIENCE FINISH terms: Nordic curls, Copenhagen, calf work — must sit last in session
-const RESILIENCE_FINISH_TERMS = /nordic|copenhagen.hip|straight.leg.calf|calf.march/i;
+// ACTIVATION terms: dynamic, low-fatigue CNS primers valid early in session.
+// ⛔ NOT isometric holds — Isometric Hamstring Hold, Nordic, Copenhagen are resilience finishers.
+const TISSUE_PREP_TERMS = /ankle.stiff|hip.hinge.march|single.leg.hip.hinge|wall.march|wall.drive|a.skip|b.skip|march.to.skip|build.up.run/i;
+// RESILIENCE FINISH terms: static-tension / heavy eccentric work — must sit last in session
+const RESILIENCE_FINISH_TERMS = /nordic|isometric.ham|isometric\s+hamstring|copenhagen(?:.hip)?|straight.leg.calf|calf.march/i;
 const PRIMARY_SPEED_TERMS = /sprint|falling.start|flying|block.start|kneeling.start|t.drill|5.10.5|l.drill|box.drill|505|skater.jump|countermovement.jump|depth.drop|lateral.bound|bounding/i;
 const SECONDARY_SUPPORT_TERMS = /stiffness.hop|pogo|lateral.hurdle|skater|alternating.bound|mirror.drill|reactive|single.leg.decel|hip.lock.decel|jump.squat|trap.bar.jump|power.clean/i;
 const FOOTWORK_TRUNK_TERMS = /ladder|carioca|zigzag|shuffle|lateral.shuffle|back.pedal|drop.step/i;
@@ -1098,23 +1123,49 @@ export function scoreSpeedSessionDepth(
 
 /**
  * Canonical slot classification patterns for the Speed / Footwork flow spine.
- * Order of operations: activation → sprint_prep → speed_primary → reactive_plyo
- *                      → cod_footwork → speed_endurance → resilience_finish
+ *
+ * FOOTWORK SPLIT:
+ *   TYPE A — Technical/Patterning footwork (rhythmic, closed-skill) → sprint_prep (slot 2)
+ *            e.g. A-Skip, Wall March, Speed Ladder In-Out, Linear Ladder
+ *   TYPE B — Reactive/Chaotic footwork (open-skill, COD, decel) → cod_footwork (slot 5)
+ *            e.g. Reactive Ladder, Mirror Drill, Drop-Step Decel, Ickey Shuffle
+ *
+ * ISOMETRIC RULE:
+ *   Any static-tension exercise for hamstrings, calves, or adductors → resilience_finish (slot 7)
+ *   Nordic Hamstring Curl, Isometric Hamstring Hold, Copenhagen Hold → NEVER in activation or sprint_prep.
  */
 const FLOW_SLOT_PATTERNS: Array<{ slot: string; order: number; pattern: RegExp }> = [
-  { slot: "activation",        order: 1, pattern: /ankle.stiff|hip.hinge.march|isometric.ham|isometric\s+hamstring\s+hold/i },
-  { slot: "sprint_prep",       order: 2, pattern: /wall.march|wall.drive|a.skip|b.skip|march.to.skip|build.up.run|build.?up/i },
+  // Slot 1 — ACTIVATION: low-fatigue, dynamic movement primers only
+  // ⛔ NO isometric holds, NO Nordic curls — those are resilience finishers
+  { slot: "activation",        order: 1, pattern: /ankle.stiff(?:ness)?(?:.prep)?|hip.hinge.march|single.leg.hip.hinge/i },
+  // Slot 2 — SPRINT PREP: acceleration warm-up series + TYPE A patterning footwork
+  { slot: "sprint_prep",       order: 2, pattern: /wall.march|wall.drive|a.skip|b.skip|march.to.skip|march.to.run|build.up.run|build.?up.run|speed.ladder.in.out|linear.ladder(?!.*reactive)|ladder.in.out/i },
+  // Slot 3 — SPEED PRIMARY: max-intent sprint/COD output — done while fully fresh
   { slot: "speed_primary",     order: 3, pattern: /falling.start|flying.(?:20|30|40|start)|block.start|kneeling.start|sled.sprint|t.drill|5.10.5|l.drill|box.drill|505.drill|wicket.run/i },
+  // Slot 4 — REACTIVE / PLYOMETRIC: after sprint work
   { slot: "reactive_plyo",     order: 4, pattern: /stiffness.hop|pogo.hop|lateral.hurdle.hop|single.leg.stiffness|countermovement.jump|single.leg.decel|linear.bound|alternating.bound|lateral.bound|skater.jump/i },
-  { slot: "cod_footwork",      order: 5, pattern: /ickey.shuffle|speed.ladder|lateral.ladder|linear.ladder|carioca|zigzag.hop|mirror.drill|drop.step.decel|crossover.step|shadow.footwork/i },
+  // Slot 5 — COD / FOOTWORK: TYPE B reactive/chaotic footwork — after plyometric block
+  { slot: "cod_footwork",      order: 5, pattern: /ickey.shuffle|lateral.ladder|carioca|zigzag.hop|mirror.drill|drop.step.decel|crossover.step|shadow.footwork|reactive.(?:ladder|agility|cone)|reactive.drill/i },
+  // Slot 6 — SPEED ENDURANCE: optional, lower-priority, always late in session
   { slot: "speed_endurance",   order: 6, pattern: /repeat.(?:30|40|60)m.sprint|tempo.run|150m.speed.endurance|assault.bike.sprint/i },
-  { slot: "resilience_finish", order: 7, pattern: /nordic|copenhagen.hip|straight.leg.calf|calf.march|jump.squat|trap.bar.jump|power.clean/i },
+  // Slot 7 — RESILIENCE FINISH: always last — Nordic, isometrics, Copenhagen, calf tissue work
+  { slot: "resilience_finish", order: 7, pattern: /nordic|isometric.hamstring|isometric.ham(?:string)?|copenhagen|straight.leg.calf|calf.march|jump.squat|trap.bar.jump|power.clean/i },
 ];
+
+/**
+ * Hard guard: exercises that must ALWAYS be classified as resilience_finish,
+ * regardless of what FLOW_SLOT_PATTERNS matched first.
+ * Catches any static-tension exercise for hamstrings, calves, or adductors
+ * that might slip through the primary pattern.
+ */
+const RESILIENCE_HARD_GUARD = /nordic|isometric.ham|isometric\s+hamstring|copenhagen(?:.hip)?(?:.adductor)?|straight.leg.calf|calf.march(?:ing)?/i;
 
 export interface SpeedFlowSlotEntry {
   exerciseName: string;
-  detectedSlot: string;
+  originalClassification: string;
+  finalSlot: string;
   slotOrder: number;
+  reclassified: boolean;
 }
 
 export interface SpeedFlowAuditResult {
@@ -1126,9 +1177,9 @@ export interface SpeedFlowAuditResult {
 }
 
 /**
- * Classifies each exercise in a session into its canonical flow slot and
+ * Classifies each exercise in a session into its canonical flow slot, applies
+ * the resilience hard guard (reclassifying misplaced isometrics/Nordics), and
  * checks whether the session follows the correct Speed / Footwork order of operations.
- * Emits violations when resilience work (e.g. Nordic curls) appears before sprint output.
  */
 export function auditSpeedFlowOrder(
   sessions: Array<{ name?: string; exercises?: Array<{ name: string }> }>,
@@ -1139,37 +1190,56 @@ export function auditSpeedFlowOrder(
 
     const orderedSlots: SpeedFlowSlotEntry[] = exercises.map((ex) => {
       const match = FLOW_SLOT_PATTERNS.find((p) => p.pattern.test(ex.name));
+      const originalClassification = match?.slot ?? "unclassified";
+      const originalOrder = match?.order ?? 99;
+
+      // Apply hard guard: if this exercise contains static-tension resilience patterns,
+      // force it to resilience_finish regardless of initial classification
+      const needsReclassify = RESILIENCE_HARD_GUARD.test(ex.name) && originalClassification !== "resilience_finish";
+      const finalSlot = needsReclassify ? "resilience_finish" : originalClassification;
+      const slotOrder = needsReclassify ? 7 : originalOrder;
+
       return {
         exerciseName: ex.name,
-        detectedSlot: match?.slot ?? "unclassified",
-        slotOrder: match?.order ?? 99,
+        originalClassification,
+        finalSlot,
+        slotOrder,
+        reclassified: needsReclassify,
       };
     });
 
-    const canonicalOrder = orderedSlots.map((e) => `[${e.detectedSlot}] ${e.exerciseName}`);
+    const canonicalOrder = orderedSlots.map((e) =>
+      e.reclassified
+        ? `[${e.finalSlot}⚡reclassified from ${e.originalClassification}] ${e.exerciseName}`
+        : `[${e.finalSlot}] ${e.exerciseName}`
+    );
 
-    // Detect ordering violations: look for resilience_finish slots appearing before speed_primary
+    // Detect ordering violations using finalSlot
     const violations: string[] = [];
-    let highestSpeedPrimaryIndex = -1;
-    let highestReactivePlyoIndex = -1;
+    let firstSpeedPrimaryIndex = -1;
+    let firstReactivePlyoIndex = -1;
     orderedSlots.forEach((entry, idx) => {
-      if (entry.detectedSlot === "speed_primary") highestSpeedPrimaryIndex = idx;
-      if (entry.detectedSlot === "reactive_plyo") highestReactivePlyoIndex = idx;
+      if (entry.finalSlot === "speed_primary" && firstSpeedPrimaryIndex === -1) firstSpeedPrimaryIndex = idx;
+      if (entry.finalSlot === "reactive_plyo" && firstReactivePlyoIndex === -1) firstReactivePlyoIndex = idx;
     });
 
     orderedSlots.forEach((entry, idx) => {
-      if (entry.detectedSlot === "resilience_finish") {
-        if (highestSpeedPrimaryIndex === -1 || idx < highestSpeedPrimaryIndex) {
-          violations.push(`[ORDER VIOLATION] "${entry.exerciseName}" (resilience_finish) appears before speed_primary work`);
+      // Hard guard: resilience_finish must never appear before speed_primary
+      if (entry.finalSlot === "resilience_finish") {
+        if (firstSpeedPrimaryIndex === -1 || idx < firstSpeedPrimaryIndex) {
+          const note = entry.reclassified ? ` (reclassified from ${entry.originalClassification})` : "";
+          violations.push(`[ORDER VIOLATION] "${entry.exerciseName}"${note} (resilience_finish) appears before speed_primary — must be last in session`);
         }
       }
-      if (entry.detectedSlot === "reactive_plyo") {
-        if (highestSpeedPrimaryIndex !== -1 && idx < highestSpeedPrimaryIndex) {
+      // reactive_plyo must come after speed_primary
+      if (entry.finalSlot === "reactive_plyo") {
+        if (firstSpeedPrimaryIndex !== -1 && idx < firstSpeedPrimaryIndex) {
           violations.push(`[ORDER VIOLATION] "${entry.exerciseName}" (reactive_plyo) appears before speed_primary — sprint exposure must come first`);
         }
       }
-      if (entry.detectedSlot === "cod_footwork") {
-        if (highestReactivePlyoIndex !== -1 && idx < highestReactivePlyoIndex) {
+      // cod_footwork must come after reactive_plyo
+      if (entry.finalSlot === "cod_footwork") {
+        if (firstReactivePlyoIndex !== -1 && idx < firstReactivePlyoIndex) {
           violations.push(`[ORDER VIOLATION] "${entry.exerciseName}" (cod_footwork) appears before reactive_plyo block`);
         }
       }
