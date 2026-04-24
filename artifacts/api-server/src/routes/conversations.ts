@@ -5,7 +5,7 @@ import { CreateConversationBody, GetConversationParams, DeleteConversationParams
 import { requireAuth } from "../middlewares/auth";
 import { generateAIResponse, type ProgramStructure, validateProgramAgainstConstraints } from "../lib/ai";
 import { getLastMonthlyPlan } from "../lib/program-architecture-engine";
-import { classifyIntent, logIntentSummary, extractConstraints, type IntentResult, type ExtractedConstraints } from "../lib/intent";
+import { classifyIntent, logIntentSummary, extractConstraints, detectSport, type IntentResult, type ExtractedConstraints } from "../lib/intent";
 import { extractAgentIntentProfile } from "../lib/language-system";
 import { auditLanguageInterpretation } from "../lib/language-audit";
 import { resolveResponsePolicy, type ResponsePolicy, type ResponsePolicyContext } from "../lib/response-policy-engine";
@@ -780,6 +780,30 @@ Keep it helpful and intelligent, never promotional.`;
   let extractedConstraints: ExtractedConstraints | null = null;
   if (intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM") {
     extractedConstraints = extractConstraints(parsed.data.content);
+
+    // ── Sport inheritance: if the user didn't mention a sport in this message,
+    // carry forward the sport from the currently active program or system.
+    // Scenario: "give me a 3-day strength program" after a football speed session
+    // should produce a Football Strength program, not a generic one.
+    if (extractedConstraints.sportFocus === null) {
+      const contextText = [
+        (activeSystem as any)?.name ?? "",
+        (activeSystem as any)?.overarchingGoal ?? "",
+        latestStructuredProgram?.programName ?? "",
+        latestStructuredProgram?.description ?? "",
+      ].filter(Boolean).join(" ").toLowerCase();
+      if (contextText.trim()) {
+        const inheritedSport = detectSport(contextText);
+        if (inheritedSport) {
+          extractedConstraints = { ...extractedConstraints, sportFocus: inheritedSport };
+          logger.info(
+            { inheritedSport, source: activeSystem ? "activeSystem" : "latestProgram" },
+            "[ConstraintExtraction] Inherited sportFocus from active program context"
+          );
+        }
+      }
+    }
+
     logger.info(
       {
         daysPerWeek: extractedConstraints.daysPerWeek,
@@ -2441,6 +2465,28 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   let extractedConstraints: ExtractedConstraints | null = null;
   if (intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM") {
     extractedConstraints = extractConstraints(parsed.data.content);
+
+    // ── Sport inheritance: carry forward sport from the active program context
+    // if the user didn't mention a sport in this specific message.
+    if (extractedConstraints.sportFocus === null) {
+      const contextText = [
+        (activeSystem as any)?.name ?? "",
+        (activeSystem as any)?.overarchingGoal ?? "",
+        latestStructuredProgram?.programName ?? "",
+        latestStructuredProgram?.description ?? "",
+      ].filter(Boolean).join(" ").toLowerCase();
+      if (contextText.trim()) {
+        const inheritedSport = detectSport(contextText);
+        if (inheritedSport) {
+          extractedConstraints = { ...extractedConstraints, sportFocus: inheritedSport };
+          logger.info(
+            { inheritedSport, source: activeSystem ? "activeSystem" : "latestProgram" },
+            "[SSE/ConstraintExtraction] Inherited sportFocus from active program context"
+          );
+        }
+      }
+    }
+
     logger.info(
       {
         daysPerWeek: extractedConstraints.daysPerWeek,

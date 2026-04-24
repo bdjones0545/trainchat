@@ -248,6 +248,11 @@ export default function Chat() {
    * Auto-resets after 5s as a safety net.
    */
   const streamJustFinishedRef = useRef(false);
+  // Tracks the system ID of the most recently saved program so the messages
+  // effect can avoid clearing latestProgram before activeSystem has refetched
+  // to the new system. Without this, the sidebar briefly shows the OLD DB
+  // program after a new one is saved (isSaved=true but weekData not yet updated).
+  const justSavedSystemIdRef = useRef<number | null>(null);
   // Right-panel auto-open guard: opens panel once on load if user already has a program.
   // Prevents the panel from re-opening after conversational (non-mutation) messages.
   const hasAutoOpenedPanelRef = useRef(false);
@@ -729,6 +734,25 @@ export default function Chat() {
         });
         return;
       }
+
+      // ── Sidebar propagation guard ─────────────────────────────────────────
+      // After a new program is saved (isSaved=true), the training-system-active
+      // query is refetching asynchronously. Until activeSystem.id updates to the
+      // new system, dbSystemProgram still reflects the OLD program. Guard against
+      // this window by keeping latestProgram visible until the refetch completes.
+      if (justSavedSystemIdRef.current !== null) {
+        if (activeSystem?.id !== justSavedSystemIdRef.current) {
+          // activeSystem hasn't caught up yet — keep showing the new draft
+          console.log("[Sidebar propagation guard] blocking clear — waiting for activeSystem refetch", {
+            expectedSystemId: justSavedSystemIdRef.current,
+            currentSystemId: activeSystem?.id,
+          });
+          return;
+        }
+        // activeSystem has updated to the new system ID — clear the guard ref
+        justSavedSystemIdRef.current = null;
+      }
+
       // DB system is fully loaded and there is no unsaved draft.
       // Drop any stale draft and transition to live DB-canonical state.
       streamJustFinishedRef.current = false;
@@ -1180,6 +1204,12 @@ export default function Chat() {
       queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
 
       if (result.systemSaved) {
+        // Record the newly saved system ID before flipping isSaved=true.
+        // The messages effect reads this to avoid clearing latestProgram while
+        // the training-system-active query is still refetching to the new system.
+        if (result.systemId) {
+          justSavedSystemIdRef.current = result.systemId;
+        }
         setIsSaved(true);
         // New program was successfully saved — the build session is complete.
         // Clear the new-build flag so subsequent edits work normally against
