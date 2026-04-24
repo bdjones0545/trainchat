@@ -571,7 +571,7 @@ router.post("/auth/forgot-password", async (req, res): Promise<void> => {
 
       // Build reset URL — use the app's public URL or fall back to a safe default
       const appUrl = process.env.APP_URL
-        ?? (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "https://trainchat.ai");
+        ?? (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "https://www.trainchat.ai");
       const resetUrl = `${appUrl}/reset-password?token=${rawToken}`;
 
       await sendPasswordResetEmail({

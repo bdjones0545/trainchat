@@ -131,8 +131,8 @@ function userLayout(preheader: string, body: string): string {
     <!-- Footer -->
     <div style="text-align:center;margin-top:28px">
       <p style="color:#475569;font-size:12px;line-height:1.6;margin:0">
-        You received this email because you have a TrainChat account.<br>
-        <a href="https://trainchat.ai" style="color:#38bdf8;text-decoration:none">trainchat.ai</a>
+        You received this email because you created a TrainChat account.<br>
+        <a href="https://www.trainchat.ai" style="color:#38bdf8;text-decoration:none">www.trainchat.ai</a>
       </p>
     </div>
   </div>
@@ -251,51 +251,71 @@ function buildUserConfirmationBody(payload: SupportEmailPayload): string {
     </p>
 
     <div style="text-align:center">
-      ${ctaButton("Open TrainChat", "https://trainchat.ai")}
+      ${ctaButton("Open TrainChat", "https://www.trainchat.ai")}
     </div>`;
 }
 
 // ── Welcome email body ────────────────────────────────────────────────────────
 
 function buildWelcomeBody(payload: WelcomeEmailPayload): string {
-  const firstName = payload.name?.split(" ")[0] ?? "there";
+  const rawFirst = payload.name?.trim().split(" ")[0];
+  const firstName = rawFirst && rawFirst.toLowerCase() !== "there" ? rawFirst : "there";
   return `
-    <h2 style="margin:0 0 8px;color:#f1f5f9;font-size:22px;font-weight:800">Welcome to TrainChat, ${escapeHtml(firstName)}.</h2>
+    <p style="margin:0 0 4px;color:#38bdf8;font-size:13px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase">Your AI coach is ready.</p>
+    <h2 style="margin:0 0 6px;color:#f1f5f9;font-size:24px;font-weight:800;line-height:1.25">Let's build something real.</h2>
     <p style="margin:0 0 24px;color:#94a3b8;font-size:15px;line-height:1.65">
-      Your AI coach is ready. TrainChat builds intelligent, personalised training programs that adapt to how you train — whether you're chasing strength, performance, or just consistency.
+      Welcome to TrainChat, ${escapeHtml(firstName)}.
+    </p>
+
+    <p style="margin:0 0 16px;color:#cbd5e1;font-size:15px;line-height:1.7">
+      This isn't a workout app.<br>
+      This is your AI training system — built to adapt to you in real time.
+    </p>
+
+    <p style="margin:0 0 24px;color:#94a3b8;font-size:14px;line-height:1.7">
+      Whether you're chasing strength, performance, consistency, or just a smarter way to train, TrainChat helps you build and evolve your program like a high-level coach would.
     </p>
 
     <div style="margin-bottom:28px">
-      <p style="margin:0 0 14px;color:#f1f5f9;font-size:14px;font-weight:600">Here's how to get started:</p>
+      <p style="margin:0 0 14px;color:#f1f5f9;font-size:14px;font-weight:600">How to start:</p>
       <table style="width:100%;border-collapse:collapse">
         <tr>
-          <td style="padding:10px 12px;background:#0f172a;border-radius:8px 8px 0 0;border-bottom:1px solid #1e293b">
-            <span style="color:#38bdf8;font-weight:700;font-size:13px">1 · </span>
-            <span style="color:#e2e8f0;font-size:13px">Chat with your coach to build your first program</span>
+          <td style="padding:12px 14px;background:#0f172a;border-radius:8px 8px 0 0;border-bottom:1px solid #1e293b;vertical-align:top">
+            <span style="color:#38bdf8;font-weight:700;font-size:13px">1 &nbsp;</span>
+            <strong style="color:#e2e8f0;font-size:13px">Open the agent</strong><br>
+            <span style="color:#64748b;font-size:12px;line-height:1.5">Tell it what you want. Example: "Build me a 3-day strength program."</span>
           </td>
         </tr>
         <tr>
-          <td style="padding:10px 12px;background:#0f172a;border-bottom:1px solid #1e293b">
-            <span style="color:#38bdf8;font-weight:700;font-size:13px">2 · </span>
-            <span style="color:#e2e8f0;font-size:13px">Complete your training profile so the AI tailors your plan</span>
+          <td style="padding:12px 14px;background:#0f172a;border-bottom:1px solid #1e293b;vertical-align:top">
+            <span style="color:#38bdf8;font-weight:700;font-size:13px">2 &nbsp;</span>
+            <strong style="color:#e2e8f0;font-size:13px">Vibe code your system</strong><br>
+            <span style="color:#64748b;font-size:12px;line-height:1.5">Ask for changes. Adjust exercises, goals, days, equipment, injuries, or focus areas.</span>
           </td>
         </tr>
         <tr>
-          <td style="padding:10px 12px;background:#0f172a;border-radius:0 0 8px 8px">
-            <span style="color:#38bdf8;font-weight:700;font-size:13px">3 · </span>
-            <span style="color:#e2e8f0;font-size:13px">Explore Settings → Billing when you're ready to upgrade</span>
+          <td style="padding:12px 14px;background:#0f172a;border-radius:0 0 8px 8px;vertical-align:top">
+            <span style="color:#38bdf8;font-weight:700;font-size:13px">3 &nbsp;</span>
+            <strong style="color:#e2e8f0;font-size:13px">Refine over time</strong><br>
+            <span style="color:#64748b;font-size:12px;line-height:1.5">Every input helps shape a smarter training system around you.</span>
           </td>
         </tr>
       </table>
     </div>
 
-    <div style="text-align:center;margin-bottom:28px">
-      ${ctaButton("Start coaching →", "https://trainchat.ai")}
+    <div style="margin-bottom:28px">
+      <a href="https://www.trainchat.ai" style="display:block;width:100%;box-sizing:border-box;background:#38bdf8;color:#0f172a;font-weight:700;font-size:15px;padding:16px 24px;border-radius:10px;text-decoration:none;letter-spacing:0.01em;text-align:center">Start building my system</a>
     </div>
+
+    <p style="margin:0 0 20px;color:#64748b;font-size:13px;line-height:1.6;font-style:italic">
+      P.S. Most users can build their first program in under 30 seconds.
+    </p>
 
     <p style="margin:0;color:#475569;font-size:13px;line-height:1.6;border-top:1px solid #334155;padding-top:20px">
       Questions? Reply to this email or use the <strong style="color:#64748b">Help</strong> menu inside TrainChat.<br>
-      We're here to help you build the system that gets results.
+      We're here to help you build the system that gets results.<br><br>
+      <strong style="color:#94a3b8">TrainChat</strong><br>
+      <span style="color:#64748b">Your AI training system.</span>
     </p>`;
 }
 
@@ -339,9 +359,9 @@ async function deliver(msg: {
  * Welcome email sent once when a new account is created.
  */
 export async function sendWelcomeEmail(payload: WelcomeEmailPayload): Promise<SendResult> {
-  const html = userLayout("Your AI coach is ready — let's build your system.", buildWelcomeBody(payload));
+  const html = userLayout("Your AI coach is ready. Start building your training system now.", buildWelcomeBody(payload));
   return deliver(
-    { to: payload.email, subject: "Welcome to TrainChat — your AI coach is ready", html },
+    { to: payload.email, subject: "Welcome to TrainChat — Build your system", html },
     "welcome",
   );
 }
