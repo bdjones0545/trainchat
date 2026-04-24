@@ -1,0 +1,164 @@
+Audit and fix TrainChat’s program context persistence + Live Program sidebar propagation.
+
+Current bug:
+1. I created a Speed / Footwork program for football.
+2. Then I created a Strength program.
+3. The Strength program did not inherit that the athlete/program context was football.
+4. The Live Program right sidebar also did not update immediately after the new program was created. I had to close and reopen the sidebar before the correct program appeared.
+
+Goal:
+TrainChat must behave like one continuous training agent, not separate stateless generators. If the user establishes a sport/context once, future strength, speed, mobility, recovery, and refinement requests should inherit that context unless the user explicitly changes it.
+
+Fix requirements:
+
+1. Add/verify a persistent Training Context layer
+Create or extend a shared context object that can store:
+- sport
+- position
+- primaryGoal
+- trainingFocus
+- experienceLevel
+- equipmentAccess
+- injuryConstraints
+- activeProgramId
+- latestProgramId
+- latestProgramType
+
+This context should be updated any time a program is created, refined, or selected.
+
+2. Sport/context inheritance
+When generating a new program, the planner must resolve context in this order:
+
+explicit user input > current active program context > saved training context > inferred profile context > fallback default
+
+Example:
+- User first asks for “speed program for football”
+- sport should become football
+- Later user asks “make me a 3-day strength program”
+- strength generation must receive sport=football unless the user says otherwise
+
+3. Cross-domain program awareness
+Strength, speed, mobility, and recovery generation should all share the same athlete identity/context.
+
+A strength program created after a football speed program should not be generic. It should be labeled and built as football strength, such as:
+- “3-Day Football Strength Intensification”
+- “Football Strength — Force Production Focus”
+- “Strength program supporting acceleration, COD, contact tolerance, and lower-body power”
+
+4. Program label/title fix
+Update generated program titles/cards so inherited sport context appears visibly when present.
+
+If sport exists and program type is strength:
+title should include sport + strength focus.
+
+If sport exists and program type is speed:
+title should include sport + speed/acceleration focus.
+
+Do not show generic labels when sport context exists.
+
+5. Right sidebar propagation bug
+Fix the Live Program sidebar so it updates immediately when a program is created, selected, rebuilt, or refined.
+
+Search for places where the sidebar depends on stale props, local state, or only hydrates on mount.
+
+The sidebar should subscribe to the current active program from a single source of truth.
+
+After successful program creation:
+- setActiveProgram(newProgram)
+- update latestProgram/currentProgram state
+- invalidate/refetch active program query if React Query is used
+- update any sidebar/store state immediately
+- ensure the Live Program panel receives the new program without requiring close/reopen
+
+6. Query/cache invalidation
+If using TanStack Query, after save/create/refine/select program, invalidate or update:
+- activeProgram
+- programs
+- savedPrograms
+- programHistory
+- programVersions
+- liveProgram
+- currentUser/context if relevant
+
+Prefer optimistic cache update when possible so the UI updates instantly.
+
+7. Prevent stale closure/state bugs
+Audit useEffect dependencies and callbacks related to:
+- selectedProgram
+- activeProgram
+- liveProgram
+- currentProgram
+- programPreview
+- programCard
+- rightSidebar
+- programTab
+
+Make sure the sidebar is not initialized from props once and then disconnected.
+
+Bad pattern:
+const [localProgram, setLocalProgram] = useState(programFromProps)
+
+Good pattern:
+useEffect(() => {
+  if (activeProgram?.id) setLocalProgram(activeProgram)
+}, [activeProgram?.id, activeProgram?.updatedAt])
+
+8. Add a context merge helper
+Implement a helper similar to:
+
+resolveTrainingContext({
+  userInput,
+  activeProgram,
+  savedTrainingContext,
+  userProfile
+})
+
+It should return the final merged context and include debug-safe metadata like:
+{
+  sportSource: "explicit" | "activeProgram" | "savedContext" | "profile" | "default"
+}
+
+Do not expose raw debug JSON to the user.
+
+9. Add validation/audit logging
+Add development-only logs that confirm:
+- detected/inherited sport
+- source of sport
+- generated program type
+- new activeProgramId
+- sidebar received activeProgramId
+
+Example:
+[TrainingContext] sport=football source=activeProgram
+[ProgramCreate] created strength program id=abc123 title="3-Day Football Strength Intensification"
+[LiveProgram] activeProgram synced id=abc123
+
+10. Acceptance tests/manual validation
+After changes, test this exact flow:
+
+Flow A:
+- Ask: “Create a speed and acceleration program for football”
+- Confirm generated program title includes football
+- Ask: “Now make me a 3-day strength intensification program”
+- Confirm strength program inherits football
+- Confirm title/card includes football
+- Confirm exercise selection supports football strength qualities
+- Confirm Live Program sidebar updates immediately without closing/reopening
+
+Flow B:
+- Ask: “Actually make this for basketball instead”
+- Confirm context updates to basketball
+- Confirm future programs inherit basketball, not football
+
+Flow C:
+- Select an older saved football program
+- Confirm active context updates to football
+- Create mobility/recovery plan
+- Confirm it inherits football context
+
+Important:
+Do not break anonymous/guest program generation.
+Do not break saved programs.
+Do not overwrite explicit user input with stale context.
+Explicit user input always wins.
+The result should make TrainChat feel like one persistent agent that remembers the athlete identity across program types.
