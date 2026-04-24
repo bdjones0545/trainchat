@@ -1,0 +1,114 @@
+Audit and fix the TrainChat welcome email for new signups.
+
+Goal:
+Make the welcome email fully on-brand, clean, trustworthy, mobile-friendly, and ensure every public-facing link points to:
+
+https://www.trainchat.ai
+
+Do not use:
+- https://trainchat.ai
+- TrainChat.ai as a raw URL
+- efficiencystrengthtraining.com tracking links
+- long /ls/click tracking links in visible email content
+
+Tasks:
+
+1. Find the signup/welcome email template
+Search for:
+- "Welcome to TrainChat"
+- "Your AI coach is ready"
+- "Start coaching"
+- "trainchat.ai"
+- "efficiencystrengthtraining.com"
+- "/ls/click"
+
+2. Replace the current welcome email copy with this:
+
+Subject:
+Welcome to TrainChat — Build your system
+
+Preview text:
+Your AI coach is ready. Start building your training system now.
+
+Body:
+
+Your AI coach is ready.
+
+Let’s build something real.
+
+Welcome to TrainChat, {{firstName}}.
+
+This isn’t a workout app.
+This is your AI training system — built to adapt to you in real time.
+
+Whether you're chasing strength, performance, consistency, or just a smarter way to train, TrainChat helps you build and evolve your program like a high-level coach would.
+
+How to start:
+
+1. Open the agent
+Tell it what you want.
+Example: “Build me a 3-day strength program.”
+
+2. Vibe code your system
+Ask for changes.
+Adjust exercises, goals, days, equipment, injuries, or focus areas.
+
+3. Refine over time
+Every input helps shape a smarter training system around you.
+
+Start building:
+https://www.trainchat.ai
+
+Questions?
+Reply to this email or use the Help menu inside TrainChat.
+
+We’re here to help you build the system that gets results.
+
+TrainChat
+Your AI training system.
+
+P.S. Most users can build their first program in under 30 seconds.
+
+3. CTA requirements:
+- Primary CTA text should be: Start building my system
+- CTA href must be exactly: https://www.trainchat.ai
+- Any footer/homepage link must also be exactly: https://www.trainchat.ai
+- No raw long tracking links should appear in the email body.
+- If tracking is required by the mail provider, make sure the visible link and button still display www.trainchat.ai.
+
+4. Branding requirements:
+- Use “TrainChat” exactly.
+- Use “www.trainchat.ai” for visible URLs.
+- Avoid generic phrases like “start coaching” unless used as supporting copy.
+- Use the phrase “Your AI training system.”
+- Include the vibe-coding positioning: “Vibe code your system.”
+
+5. Mobile formatting requirements:
+- Use a proper HTML email template.
+- Button should be full-width or highly tappable on mobile.
+- Avoid long unbroken URLs in the main content if possible.
+- Plain-text fallback should still use https://www.trainchat.ai.
+- Make sure spacing between sections is clean.
+
+6. Sender/footer cleanup:
+- Confirm the From name is “TrainChat”.
+- If possible, send from a TrainChat domain email rather than an Efficiency Strength Training email.
+- Footer should not expose efficiencystrengthtraining.com links.
+- Footer should say:
+  You received this email because you created a TrainChat account.
+  https://www.trainchat.ai
+
+7. Test:
+- Create or send a test welcome email to verify:
+  - Subject is correct
+  - CTA opens https://www.trainchat.ai
+  - Footer link opens https://www.trainchat.ai
+  - No visible efficiencystrengthtraining.com links
+  - No visible long click-tracking links
+  - Email looks clean on mobile
+  - First name personalization works, with fallback to “there” if firstName is missing
+
+Return:
+- The file(s) changed
+- The before/after link values
+- Confirmation that all welcome email links resolve to https://www.trainchat.ai
