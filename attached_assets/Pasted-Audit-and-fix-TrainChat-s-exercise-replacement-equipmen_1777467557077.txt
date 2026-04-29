@@ -1,0 +1,91 @@
+Audit and fix TrainChat’s exercise replacement + equipment availability system.
+
+Problem:
+When the user says “I don’t have a belt squat,” the agent replies that it applied the change, but the Live Program still shows Belt Squat. This is a trust-breaking mutation failure.
+
+Also, Belt Squat appears too frequently in generated programs even though many gyms do not have a belt squat machine.
+
+Goals:
+1. If a user says they do not have a piece of equipment, the agent must:
+   - Detect the equipment constraint
+   - Add it to the user/session/program constraints
+   - Replace all matching exercises in the active program
+   - Verify the replacement actually happened before replying
+   - Never say “applied the change” unless the saved program no longer contains the unavailable exercise
+
+2. Belt Squat should not be treated as a common/default exercise.
+   - Mark Belt Squat as SPECIALTY_EQUIPMENT or LOW_AVAILABILITY
+   - Do not select it unless:
+     a. the user explicitly says they have access to it, or
+     b. the facility/equipment profile includes it
+   - Prefer common substitutes first.
+
+Required fix:
+
+Create or update an equipment availability layer.
+
+For Belt Squat:
+- equipmentAvailability: "specialty"
+- defaultAllowed: false
+- requiresExplicitAccess: true
+- unavailableSynonyms:
+  - "no belt squat"
+  - "don’t have a belt squat"
+  - "dont have belt squat"
+  - "my gym doesn't have belt squat"
+  - "no belt squat machine"
+
+When Belt Squat is unavailable, replacement priority should be:
+1. Back Squat
+2. Front Squat
+3. Goblet Squat
+4. Leg Press
+5. Safety Bar Squat
+6. Hack Squat
+7. Bulgarian Split Squat
+8. Dumbbell Split Squat
+9. Step-Up
+10. Trap Bar Deadlift if squat pattern replacement is acceptable
+
+Mutation verification:
+After applying the replacement, run a post-mutation audit:
+- Scan the active program JSON for the removed exercise name and equipment aliases
+- If Belt Squat still exists anywhere, return a repair attempt instead of a success message
+- Retry replacement once using the safest common substitute
+- If still unresolved, tell the user:
+  “I found Belt Squat still in the plan, so I’m not going to pretend it updated. Pick one: back squat, front squat, goblet squat, or leg press.”
+
+Agent response rule:
+Never respond with:
+“I processed your request and applied the change”
+unless the saved active program snapshot confirms the exercise was removed.
+
+Update the chat response to be specific:
+Instead of generic:
+“I processed your request and applied the change.”
+
+Use:
+“Got it — I removed Belt Squat and replaced it with [replacement]. I’ll avoid Belt Squat unless you tell me your gym has one.”
+
+Also update the exercise selection engine:
+- Penalize specialty equipment by default
+- Belt Squat should receive a strong availability penalty unless explicitly available
+- Add a “common gym equipment bias” for first-time users and anonymous users
+- Default lower-body strength selections should favor commonly available movements:
+  - squat variations
+  - dumbbell split squats
+  - trap bar deadlifts
+  - Romanian deadlifts
+  - leg press only when machines are allowed
+  - step-ups
+  - lunges
+
+Validation tests:
+1. Generate a 2-day golf strength program with no equipment profile.
+   - Belt Squat should not appear.
+2. Generate a program, then send: “I don’t have a belt squat.”
+   - Belt Squat should be removed from the active program.
+   - Chat response must name the replacement.
+3. Check the Live Program panel immediately after mutation.
+   - It must reflect the replacement without refresh.
+4. Add a regression test that fails if the agent says the change was applied while the banned exercise remains in the active program.
