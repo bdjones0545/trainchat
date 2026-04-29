@@ -21,6 +21,7 @@
 
 import type { EditPlan, EditChange } from "./edit-intent-service";
 import type { SystemSnapshot } from "./change-log-service";
+import type { IntentFamily } from "./intent-family-engine";
 
 // ─── Public types ──────────────────────────────────────────────────────────────
 
@@ -468,5 +469,162 @@ export function verifyMutation(
       missingCount:  cvs.filter((cv) => cv.missingChanges.length > 0).length,
       unclearCount:  cvs.filter((cv) => cv.isUnclear).length,
     },
+  };
+}
+
+// ─── Constraint Compliance Verifier ───────────────────────────────────────────
+//
+// Verifies that a post-mutation snapshot satisfies the user's active constraints.
+// Called AFTER verifyMutation() to provide a second layer of semantic validation.
+//
+// Checks:
+//   1. Banned equipment is absent from all exercises in the post-mutation snapshot
+//   2. Pain-constrained movements do not appear in the snapshot
+//   3. Required exercises (positively requested) are present
+//
+// Returns a compact result — does NOT re-query the DB.
+
+export interface ConstraintComplianceInput {
+  intentFamily: IntentFamily;
+  afterSnapshot: SystemSnapshot;
+  bannedEquipment?: string[];          // equipment that must not appear
+  bannedExercisePatterns?: string[];   // regex strings for movements to exclude
+  requiredExercises?: string[];        // exercise names that must appear
+  painBodyRegions?: string[];          // body regions with pain constraints
+}
+
+export interface ConstraintViolation {
+  rule: string;
+  detail: string;
+  entityId?: number;
+  exerciseName?: string;
+}
+
+export interface ConstraintComplianceResult {
+  compliant: boolean;
+  violations: ConstraintViolation[];
+  checkedRules: string[];
+  summary: string;
+}
+
+export function verifyConstraintCompliance(
+  input: ConstraintComplianceInput,
+): ConstraintComplianceResult {
+  const {
+    afterSnapshot,
+    bannedEquipment = [],
+    bannedExercisePatterns = [],
+    requiredExercises = [],
+    painBodyRegions = [],
+  } = input;
+
+  const violations: ConstraintViolation[] = [];
+  const checkedRules: string[] = [];
+
+  const exerciseEntries = Object.values(afterSnapshot.exercises);
+
+  // ── Rule 1: Banned equipment check ─────────────────────────────────────────
+  if (bannedEquipment.length > 0) {
+    checkedRules.push(`banned_equipment: [${bannedEquipment.join(", ")}]`);
+    for (const entry of exerciseEntries) {
+      const name = normStr(entry?.name ?? "");
+      const equipmentField = normStr(entry?.equipment ?? "");
+      for (const banned of bannedEquipment) {
+        const bannedNorm = banned.toLowerCase().trim();
+        if (
+          name.includes(bannedNorm) ||
+          equipmentField.includes(bannedNorm)
+        ) {
+          violations.push({
+            rule: "banned_equipment",
+            detail: `Exercise "${entry?.name ?? "unknown"}" uses banned equipment: ${banned}`,
+            entityId: typeof entry?.id === "number" ? entry.id : undefined,
+            exerciseName: String(entry?.name ?? ""),
+          });
+        }
+      }
+    }
+  }
+
+  // ── Rule 2: Banned movement pattern check ──────────────────────────────────
+  if (bannedExercisePatterns.length > 0) {
+    checkedRules.push(`banned_patterns: [${bannedExercisePatterns.join(", ")}]`);
+    for (const entry of exerciseEntries) {
+      const name = normStr(entry?.name ?? "");
+      for (const pattern of bannedExercisePatterns) {
+        try {
+          const re = new RegExp(pattern, "i");
+          if (re.test(name)) {
+            violations.push({
+              rule: "banned_movement_pattern",
+              detail: `Exercise "${entry?.name ?? "unknown"}" matches banned pattern: ${pattern}`,
+              entityId: typeof entry?.id === "number" ? entry.id : undefined,
+              exerciseName: String(entry?.name ?? ""),
+            });
+          }
+        } catch {
+          // Silently skip malformed regex patterns — don't crash verification
+        }
+      }
+    }
+  }
+
+  // ── Rule 3: Pain body region check ─────────────────────────────────────────
+  // If a user has pain in a region, exercises targeting that region should be
+  // reviewed. This is a soft check — we flag, not hard-fail.
+  if (painBodyRegions.length > 0) {
+    checkedRules.push(`pain_body_regions: [${painBodyRegions.join(", ")}]`);
+    const painKeywordMap: Record<string, string[]> = {
+      knee: ["lunge", "squat", "leg press", "step up", "bulgarian", "jump"],
+      hip: ["hip thrust", "hip hinge", "rdl", "deadlift", "good morning"],
+      shoulder: ["overhead press", "lateral raise", "upright row", "behind the neck"],
+      "lower back": ["good morning", "deadlift", "back extension", "hyperextension"],
+      elbow: ["curl", "tricep", "close grip bench", "skull crusher"],
+    };
+
+    for (const region of painBodyRegions) {
+      const keywords = painKeywordMap[region.toLowerCase()] ?? [];
+      for (const entry of exerciseEntries) {
+        const name = normStr(entry?.name ?? "");
+        for (const kw of keywords) {
+          if (name.includes(kw)) {
+            violations.push({
+              rule: "pain_region_conflict",
+              detail: `Exercise "${entry?.name ?? "unknown"}" targets pain region "${region}" — confirm this is appropriate`,
+              entityId: typeof entry?.id === "number" ? entry.id : undefined,
+              exerciseName: String(entry?.name ?? ""),
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // ── Rule 4: Required exercises present check ───────────────────────────────
+  if (requiredExercises.length > 0) {
+    checkedRules.push(`required_exercises: [${requiredExercises.join(", ")}]`);
+    const presentNames = exerciseEntries.map((e) => normStr(e?.name ?? ""));
+    for (const required of requiredExercises) {
+      const requiredNorm = required.toLowerCase().trim();
+      const found = presentNames.some((name) => name.includes(requiredNorm));
+      if (!found) {
+        violations.push({
+          rule: "required_exercise_missing",
+          detail: `Required exercise "${required}" is not present in the post-mutation snapshot`,
+          exerciseName: required,
+        });
+      }
+    }
+  }
+
+  const compliant = violations.length === 0;
+
+  return {
+    compliant,
+    violations,
+    checkedRules,
+    summary: compliant
+      ? `Constraint compliance verified: ${checkedRules.length} rule${checkedRules.length === 1 ? "" : "s"} passed, 0 violations`
+      : `Constraint violations: ${violations.length} violation${violations.length === 1 ? "" : "s"} across ${checkedRules.length} rule${checkedRules.length === 1 ? "" : "s"} — ${violations.map((v) => v.rule).join(", ")}`,
   };
 }

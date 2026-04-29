@@ -70,6 +70,12 @@ export type IntentFamily =
   | "greeting"
   // ── Fresh build request — always REBUILD_PROGRAM, ignores active program ──
   | "new_program_request"
+  // ── Training State Families ───────────────────────────────────────────────
+  | "readiness_low"
+  | "missed_sessions_reentry"
+  | "environment_temporary_switch"
+  | "sport_context_update"
+  | "exercise_dislike_or_preference"
   | "clarification_required";
 
 // ─── Target Scopes ────────────────────────────────────────────────────────────
@@ -244,7 +250,7 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
     family: "equipment_constraint",
     patterns: [
       /\b(only|just).{0,20}(have|got|access to).{0,30}(dumbbells?|bands?|resistance bands?|kettlebells?|bodyweight|cables?|machines?)\b/i,
-      /\b(no barbell|no rack|no squat rack|no bench press|home gym|hotel gym|limited equipment|minimal equipment|no weights?|no gym)\b/i,
+      /\b(no barbell|no rack|no squat rack|no bench press|home gym|limited equipment|minimal equipment|no weights?|no gym)\b/i,
       /\b(without.{0,15}(barbell|squat rack|bench|machine|cable))\b/i,
       /\b(dumbbell.?only|bodyweight.?only|bands?.?only|kettlebell.?only)\b/i,
       // Belt Squat specific — specialty machine not found at most gyms
@@ -769,6 +775,97 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
       /\b(reduce|lower|cut|decrease).{0,20}(volume|sets?|total work|workload)\b/i,
       /\b(too much volume|too many sets?|too much work|too much accessory)\b/i,
       /\b(volume is too (high|much)|less total work|lower total volume)\b/i,
+    ],
+  },
+
+  // ── Readiness Low / Low Energy Today ─────────────────────────────────────
+  // Distinct from fatigue_management (which is about cumulative overtraining).
+  // Readiness_low is TODAY's signal — tired right now, didn't sleep, low energy.
+  // → Convert today's session to lower-intensity version, NOT rebuild the program.
+  {
+    family: "readiness_low",
+    patterns: [
+      /\b(i.?m (tired|exhausted|wiped out|drained|low energy|feeling off|not feeling it|sluggish|run down|worn out))\b/i,
+      /\b(didn.?t (sleep|sleep well|get enough sleep)|bad night.?s? sleep|poor sleep|low sleep)\b/i,
+      /\b(low energy (today|right now|tonight|this morning)?|energy is (low|down|off|not there))\b/i,
+      /\b(not feeling (it|great|good|my best|well|up to it|100|100%))\b/i,
+      /\b(feeling (off|flat|heavy|sluggish|blah|rough|run down|beat up today))\b/i,
+      /\b(low (hrv|readiness|recovery score|body battery)|hrv (is|looks|shows) (low|bad|poor|down))\b/i,
+      /\b(didn.?t recover|didn.?t recover well|poor recovery|bad recovery today)\b/i,
+      /\b(struggling (to|with) (motivation|energy|getting started|this today))\b/i,
+      /\b(just going through the motions|low motivation today|can.?t get going today)\b/i,
+    ],
+  },
+
+  // ── Missed Sessions Re-entry ───────────────────────────────────────────────
+  // User is returning after a break — needs reduced spike in intensity/volume.
+  // → Reentry deload: reduce intensity, resume progression gradually.
+  {
+    family: "missed_sessions_reentry",
+    patterns: [
+      /\b(missed (a week|two weeks|a month|several weeks|some sessions?|a few sessions?|training))\b/i,
+      /\b(haven.?t (trained|worked out|exercised|lifted|been to the gym) (in|for) (a few|a couple|several|10|two|three|four|one|a) (days?|weeks?|months?))\b/i,
+      /\b(coming back (after|from) (a break|time off|being sick|injury|a layoff|two weeks|a month|vacation))\b/i,
+      /\b(getting back (into it|into training|back to training|back to the gym|after a break))\b/i,
+      /\b(took (a break|time off|two weeks off|a month off|some time off))\b/i,
+      /\b(been (out|away|off) for (a week|a few weeks|two weeks|a month|a while))\b/i,
+      /\b(returning (to training|after|from) (a break|rest|injury|travel|vacation|time off))\b/i,
+      /\b(restarting|re.?entering|resuming (training|the program|my program|working out))\b/i,
+      /\b(start back|start fresh|ease back in|ease back into)\b/i,
+    ],
+  },
+
+  // ── Environment Temporary Switch ─────────────────────────────────────────
+  // User is in a DIFFERENT environment TODAY — hotel, home, traveling.
+  // Temporary by default — does NOT permanently rewrite the program.
+  // Distinct from equipment_constraint which is persistent.
+  {
+    family: "environment_temporary_switch",
+    patterns: [
+      /\b(i.?m (traveling|at a hotel|at the hotel|on the road|away|out of town|on a trip|at home today|working from home))\b/i,
+      /\b(hotel (gym|workout|training)|at a hotel gym today)\b/i,
+      /\b(traveling (this week|today|for work|for a few days|for a trip))\b/i,
+      /\b(away (from home|this week|for a few days|on a trip|for work))\b/i,
+      /\b(just for today.{0,30}(hotel|home|travel|limited)|today.{0,20}only.{0,20}(hotel|home|travel))\b/i,
+      /\b(training (at home|from home) (today|this week|temporarily|for now))\b/i,
+      /\b(working out (at home|at the hotel|in my room|with limited equipment) today)\b/i,
+      /\b(can.?t (get to|make it to|access|use) (the gym|my gym) today)\b/i,
+      /\b(stuck (at a hotel|at home|without a gym|with no gym) (today|tonight|this week))\b/i,
+    ],
+  },
+
+  // ── Sport Context Update ──────────────────────────────────────────────────
+  // User is declaring or updating their sport/activity context.
+  // → Update sport-specific emphasis, exercise selection, and coaching cues.
+  {
+    family: "sport_context_update",
+    patterns: [
+      /\b(i (play|do|compete in|train for|am a|am an|play competitive|play recreational|am playing))\s+(golf|football|soccer|basketball|baseball|tennis|hockey|volleyball|rugby|swimming|cycling|running|track|wrestling|bjj|jiu.?jitsu|mma|boxing|lacrosse|cricket|squash|padel|pickleball|rowing|triathlon|cross.?fit|olympic lifting)\b/i,
+      /\b(this (is|program is) for\s+(golf|football|soccer|basketball|baseball|tennis|hockey|volleyball|rugby|swimming|cycling|running|track|wrestling|bjj|mma|boxing|lacrosse))\b/i,
+      /\b(i.?m a\s+(golfer|footballer|soccer player|basketball player|baseball player|tennis player|hockey player|volleyball player|rugby player|swimmer|cyclist|runner|wrestler|boxer|lacrosse player|rower|triathlete))\b/i,
+      /\b(training for\s+(golf|football|soccer|basketball|baseball|tennis|hockey|volleyball|rugby|a race|a marathon|a triathlon|a competition|a tournament|a season|a match))\b/i,
+      /\b(my sport is|i box|i row|i cycle|i swim|i run track|i play golf|i play tennis|i wrestle|i do bjj|i do mma)\b/i,
+      /\b(athletic (context|focus|bias).{0,20}(golf|football|soccer|basketball|tennis|hockey|rugby|swimming|cycling|running|boxing|wrestling|mma|lacrosse))\b/i,
+    ],
+  },
+
+  // ── Exercise Dislike / Preference ────────────────────────────────────────
+  // User dislikes or prefers a specific exercise or type of equipment.
+  // Distinct from exercise_swap (which is "swap X for Y") and
+  // equipment_constraint (which is "I don't have X").
+  // → Store preference, replace disliked exercise if present.
+  {
+    family: "exercise_dislike_or_preference",
+    patterns: [
+      /\b(i (hate|dislike|can.?t stand|don.?t like|really dislike|loathe|despise|avoid|am not a fan of))\s+(lunges?|deadlifts?|squats?|burpees?|running|cardio|bench press|push.?ups?|pull.?ups?|planks?|sit.?ups?|crunches?|barbell|dumbbells?|machines?|cables?)\b/i,
+      /\b(hate|dislike|don.?t like|not a fan of|can.?t stand)\s+(doing\s+)?(lunges?|deadlifts?|squats?|burpees?|running|cardio|bench|push.?ups?|pull.?ups?|planks?|sit.?ups?)\b/i,
+      /\b(prefer\s+(not|to avoid|to skip)\s+(lunges?|deadlifts?|squats?|burpees?|running|cardio|barbell|machines?|cables?))\b/i,
+      /\b(i prefer\s+(machines?|dumbbells?|cables?|barbells?|bodyweight|free weights?|resistance bands?))\b/i,
+      /\b(i like\s+(machines?|dumbbells?|cables?|barbells?|bodyweight|free weights?|resistance bands?)\s+(better|more|over|instead))\b/i,
+      /\b(no\s+(lunges?|deadlifts?|squats?|burpees?|bench press|running|cardio)\s+(please|for me|in (the|my) program))\b/i,
+      /\b(take out\s+(all\s+)?(the\s+)?(lunges?|deadlifts?|squats?|burpees?|bench press|running|planks?)\s+(from|in)\s+(the|my)\s+program)\b/i,
+      /\b(i.?d rather (not|avoid)\s+(do|doing)\s+(lunges?|deadlifts?|squats?|burpees?|running|bench press|planks?))\b/i,
+      /\b(remove\s+(all\s+)?(lunges?|deadlifts?|squats?|burpees?|planks?|sit.?ups?)\s+from (the|my) program)\b/i,
     ],
   },
 
@@ -2273,6 +2370,135 @@ RULES:
     scopeGuidance: "Apply to the specified session only. Protect primary compound movements.",
   },
 
+  // ── Readiness Low ──────────────────────────────────────────────────────────
+  readiness_low: {
+    intentFamily: "readiness_low",
+    minimumStructuralChanges: 1,
+    primaryChanges: [
+      { type: "remove_sets", description: "Reduce set counts on accessories by 1", countAs: 1 },
+      { type: "remove_exercise", description: "Remove the highest-demand exercise from today's session", countAs: 1 },
+      { type: "increase_rest", description: "Extend rest periods to reduce neural demand", countAs: 1 },
+    ],
+    secondaryChanges: [
+      { type: "swap_to_regression", description: "Swap primary lift to a lower-complexity regression", countAs: 1 },
+      { type: "reduce_density", description: "Remove supersets or density blocks for today", countAs: 1 },
+    ],
+    antiPatterns: [
+      "Do NOT rebuild the entire program — today's session only",
+      "Do NOT remove all exercises — keep a productive session",
+      "Do NOT add high-intensity or new complex movements",
+      "Do NOT affect future sessions — future weeks stay unchanged",
+    ],
+    validationRules: [
+      "Today's session must have reduced volume, intensity, or neural demand",
+      "Future sessions must remain unchanged",
+      "At least 1 workload reduction required",
+    ],
+    aiDirective: "READINESS LOW: The user is tired or low-energy TODAY. Convert today's session to a lower-intensity version. Remove 1 accessory. Reduce sets by 1 on compound lifts. Extend rest. Keep the session useful but reduce total demand. Do NOT affect future sessions — this is a TODAY-only adjustment.\n\nIDENTITY UPDATE REQUIRED: Update the session label and emphasis to reflect the lower-demand intent. Example label: 'Lower Body — Readiness-Adjusted'. Example emphasis: 'Reduced-demand session preserving movement quality with lowered intensity for recovery'. Adapt to the actual body region.",
+    scopeGuidance: "Apply to today's session ONLY. Do not affect other sessions or future weeks.",
+  },
+
+  // ── Missed Sessions Re-Entry ───────────────────────────────────────────────
+  missed_sessions_reentry: {
+    intentFamily: "missed_sessions_reentry",
+    minimumStructuralChanges: 1,
+    primaryChanges: [
+      { type: "remove_sets", description: "Reduce sets by 1–2 across all compound lifts", countAs: 1 },
+      { type: "remove_exercise", description: "Remove 1–2 highest-volume accessories", countAs: 1 },
+      { type: "swap_to_regression", description: "Regress primary lifts to reduce injury risk on first session back", countAs: 1 },
+    ],
+    secondaryChanges: [
+      { type: "increase_rest", description: "Extend rest periods — nervous system is less conditioned", countAs: 1 },
+      { type: "reduce_density", description: "Remove density blocks for the first week back", countAs: 1 },
+    ],
+    antiPatterns: [
+      "Do NOT resume at previous intensity immediately — risk of injury and excessive soreness",
+      "Do NOT rebuild the entire program — apply a re-entry deload to the next 1–2 sessions",
+      "Do NOT over-reduce — the user should still feel like they trained",
+    ],
+    validationRules: [
+      "Volume must be reduced relative to normal session",
+      "Primary movement patterns must be preserved at lower intensity",
+      "At least 1 regression or set reduction required",
+    ],
+    aiDirective: "MISSED SESSIONS RE-ENTRY: User is returning after a break. Apply a re-entry deload to the immediate session(s). Reduce volume by ~30%. Reduce weights/intensity on primary lifts. Keep all primary movement patterns but remove 1–2 accessories. Extend rest. Resume normal progression from the next week. Acknowledge the break and reassure about the plan to ramp back up.\n\nIDENTITY UPDATE REQUIRED: Update the session label to indicate re-entry status. Example label: 'Upper Body — Re-Entry (Reduced Load)'. Example emphasis: 'Gradual re-entry after break — preserved movement patterns at reduced intensity to manage DOMS and rebuild work capacity'.",
+    scopeGuidance: "Apply to the next 1–2 sessions. Resume full progression from the following week.",
+  },
+
+  // ── Environment Temporary Switch ──────────────────────────────────────────
+  environment_temporary_switch: {
+    intentFamily: "environment_temporary_switch",
+    minimumStructuralChanges: 1,
+    primaryChanges: [
+      { type: "swap_to_equipment_available", description: "Swap all exercises to hotel/home-available alternatives (dumbbells, bodyweight, bands)", countAs: 1 },
+      { type: "replace_exercise", description: "Replace machine or barbell exercises with bodyweight/dumbbell equivalents", countAs: 1 },
+    ],
+    secondaryChanges: [
+      { type: "update_session_emphasis", description: "Update session emphasis to reflect temporary environment", countAs: 0 },
+    ],
+    antiPatterns: [
+      "Do NOT permanently rewrite the user's program — this is a temporary session adaptation only",
+      "Do NOT remove entire movement categories — find bodyweight/dumbbell equivalents",
+      "Do NOT ask clarifying questions — assume hotel or home gym with dumbbells and bodyweight",
+    ],
+    validationRules: [
+      "All exercises must be executable without specialty equipment",
+      "Barbell exercises must be replaced with dumbbell or bodyweight alternatives",
+      "Permanent program structure must remain unchanged",
+    ],
+    aiDirective: "ENVIRONMENT TEMPORARY SWITCH: The user is training somewhere without their usual gym today (hotel, home, traveling). Adapt TODAY's session to available equipment. Assume: dumbbells, resistance bands, bodyweight, and possibly a pull-up bar. Swap barbell exercises to dumbbell equivalents, machines to bodyweight/dumbbell work. Preserve movement patterns and session structure.\n\nCRITICAL: This is a TEMPORARY adaptation for today only. Do NOT permanently modify the program structure. The user returns to their normal environment after this session. In your response, acknowledge the environment and confirm the temporary nature of the adaptation.",
+    scopeGuidance: "Apply to today's session ONLY. Permanent program structure stays unchanged.",
+  },
+
+  // ── Sport Context Update ───────────────────────────────────────────────────
+  sport_context_update: {
+    intentFamily: "sport_context_update",
+    minimumStructuralChanges: 0,
+    primaryChanges: [
+      { type: "update_session_emphasis", description: "Update session emphasis to reflect sport context", countAs: 0 },
+      { type: "replace_exercise", description: "Swap exercises to sport-specific alternatives where appropriate", countAs: 1 },
+    ],
+    secondaryChanges: [
+      { type: "add_exercise", description: "Add sport-specific movement work if missing", countAs: 1 },
+    ],
+    antiPatterns: [
+      "Do NOT rebuild the entire program without confirmation",
+      "Do NOT ignore the user's current goal when applying sport bias",
+      "Do NOT remove primary strength work unless the sport context makes it clearly inappropriate",
+    ],
+    validationRules: [
+      "Sport context must be stored for future program generation",
+      "If program exists, exercise selection must be re-oriented toward sport demands",
+    ],
+    aiDirective: "SPORT CONTEXT UPDATE: The user has declared or updated their sport/activity context. Acknowledge the sport. If a program exists, review the current exercise selection and update where appropriate — add sport-relevant movements, adjust emphasis, and re-orient session coaching cues toward sport demands. Store the sport context for future program generation. If the change is significant enough to warrant a rebuild, ask the user — otherwise adjust in place.",
+    scopeGuidance: "Update sport context globally. Adjust the active program's emphasis and exercise selection where appropriate without full rebuild.",
+  },
+
+  // ── Exercise Dislike / Preference ─────────────────────────────────────────
+  exercise_dislike_or_preference: {
+    intentFamily: "exercise_dislike_or_preference",
+    minimumStructuralChanges: 0,
+    primaryChanges: [
+      { type: "replace_exercise", description: "Replace the disliked exercise with a suitable alternative preserving the movement pattern", countAs: 1 },
+      { type: "remove_exercise", description: "Remove the disliked exercise if no equivalent is needed", countAs: 1 },
+    ],
+    secondaryChanges: [
+      { type: "update_session_emphasis", description: "Note preference in session coaching cues", countAs: 0 },
+    ],
+    antiPatterns: [
+      "Do NOT remove the entire movement pattern unless the user explicitly asks",
+      "Do NOT replace the disliked exercise with another version of the same movement if the user generically dislikes the movement",
+      "Do NOT repeatedly program the disliked exercise in future sessions",
+    ],
+    validationRules: [
+      "Disliked exercise must be absent from the session after mutation",
+      "Movement pattern must be preserved with an alternative",
+      "Preference must be noted for future program generation",
+    ],
+    aiDirective: "EXERCISE DISLIKE OR PREFERENCE: The user has expressed a dislike for a specific exercise or a preference for equipment/style. If the disliked exercise appears in the current program, replace it with a suitable alternative that preserves the movement pattern. If they prefer a certain equipment style (e.g., dumbbells over barbells), shift appropriate exercises accordingly. Store the preference for future program generation.\n\nRULE: Do NOT remove the movement pattern entirely — replace, don't delete. Exception: if the user says 'no lunges at all, ever', then remove the pattern and explain the trade-off.",
+    scopeGuidance: "Apply to all instances of the disliked exercise in the current program. Store preference for future generations.",
+  },
+
   clarification_required: {
     intentFamily: "clarification_required",
     minimumStructuralChanges: 0,
@@ -2710,6 +2936,37 @@ export function bridgeToSpecialistIntent(family: IntentFamily): FamilyBridgeResu
       return {
         specialistIntent: "BIAS_SHIFT",
         supplementalData: { family, isCrossMode: true },
+      };
+
+    case "readiness_low":
+      return {
+        specialistIntent: "RECOVERY_SHIFT",
+        supplementalData: { family, isReadinessAdjustment: true, temporaryToday: true },
+      };
+
+    case "missed_sessions_reentry":
+      return {
+        specialistIntent: "RECOVERY_SHIFT",
+        supplementalData: { family, isReentryDeload: true },
+      };
+
+    case "environment_temporary_switch":
+      return {
+        specialistIntent: "EQUIPMENT_ADJUSTMENT",
+        supplementalData: { family, isTemporaryEnvironment: true },
+      };
+
+    case "sport_context_update":
+      return {
+        specialistIntent: "BIAS_SHIFT",
+        biasTarget: "athletic",
+        supplementalData: { family, isSportContextUpdate: true },
+      };
+
+    case "exercise_dislike_or_preference":
+      return {
+        specialistIntent: "EXERCISE_SWAP",
+        supplementalData: { family, isPreferenceUpdate: true },
       };
 
     case "clarification_required":

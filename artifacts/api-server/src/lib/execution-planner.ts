@@ -15,7 +15,14 @@
 //
 // ======================================================
 
-import { normalizeToIntentFamily, type IntentFamily } from "./intent-family-engine";
+import {
+  normalizeToIntentFamily,
+  getTransformationBundle,
+  buildIntentFamilyPromptDirective,
+  type IntentFamily,
+  type IntentFamilyResult,
+} from "./intent-family-engine";
+import { classifyAdjustmentIntent, type AdjustmentIntentClassification } from "./adjustment-intent-classifier";
 import { type ProgramStructure } from "./ai";
 import { logger } from "./logger";
 import type { FocusMode } from "./focus-engines/engine-interface";
@@ -636,10 +643,236 @@ function inferExerciseCategory(message: string): string {
   return "general";
 }
 
-// ─── Mutation Family Guard ────────────────────────────────────────────────────
+// ─── Adjustment Execution Planner ────────────────────────────────────────────
 //
-// Returns true for intent families that map to a structural mutation
-// rather than guidance or no-op.
+// Richer entry point for the Adjustment Intent Family Engine + Execution Planner.
+// Calls classifyAdjustmentIntent() → resolves scope → builds a full plan with:
+//
+//   - action          — what to do (APPLY_MUTATION, ASK_CLARIFICATION, etc.)
+//   - target          — which scope (session, program, exercise)
+//   - mutationPlan    — specific mutation type + parameters
+//   - constraintsToPersist — constraints to save to user profile
+//   - uiUpdateRequired — whether the UI should refresh
+//   - verificationRequired — whether mutation-verifier should run
+//   - responseMode    — how to construct the response message
+//   - fallbackPlan    — what to do if mutation fails
+//   - classification  — the full AdjustmentIntentClassification result
+
+export type ResponseMode =
+  | "specific_verified"   // confirmed change — use per-family template
+  | "specific_partial"    // some changes confirmed — honest partial response
+  | "failure"             // mutation failed — never claim success
+  | "clarification"       // need more info before acting
+  | "guidance_only"       // informational, no mutation
+  | "context_stored";     // preference/context stored, may or may not mutate
+
+export interface AdjustmentMutationPlan {
+  mutationType: AdjustmentIntentClassification["mutationType"];
+  targetScope: string;
+  intentFamily: IntentFamily;
+  aiDirective: string;
+  scopeGuidance: string;
+  safetyFlags: AdjustmentIntentClassification["safetyFlags"];
+  extractedEntities: AdjustmentIntentClassification["extractedEntities"];
+  persistenceType: AdjustmentIntentClassification["persistenceType"];
+}
+
+export interface AdjustmentFallbackPlan {
+  action: "retry_with_clarification" | "partial_apply" | "noop_with_explanation";
+  message: string;
+}
+
+export interface AdjustmentExecutionPlan {
+  action: ExecutionAction;
+  target: ExecutionScope;
+  mutationPlan: AdjustmentMutationPlan | null;
+  constraintsToPersist: Record<string, unknown>;
+  uiUpdateRequired: boolean;
+  verificationRequired: boolean;
+  responseMode: ResponseMode;
+  fallbackPlan: AdjustmentFallbackPlan;
+  classification: AdjustmentIntentClassification;
+  promptDirective: string;
+  reasoning: string;
+}
+
+export function planAdjustmentExecution({
+  message,
+  activeProgram,
+  focusMode,
+}: {
+  message: string;
+  activeProgram: ProgramStructure | null;
+  focusMode?: FocusMode;
+}): AdjustmentExecutionPlan {
+  const classification = classifyAdjustmentIntent(message, focusMode);
+  const {
+    intentFamily,
+    confidence,
+    targetScope,
+    extractedEntities,
+    persistenceType,
+    mutationType,
+    requiresClarification,
+    clarificationQuestion,
+    safetyFlags,
+    familyResult,
+  } = classification;
+
+  // ── Clarification required ────────────────────────────────────────────────
+  if (requiresClarification || intentFamily === "clarification_required") {
+    return {
+      action: "ASK_CLARIFICATION",
+      target: { type: null },
+      mutationPlan: null,
+      constraintsToPersist: {},
+      uiUpdateRequired: false,
+      verificationRequired: false,
+      responseMode: "clarification",
+      fallbackPlan: {
+        action: "retry_with_clarification",
+        message: clarificationQuestion ?? "Could you give me more detail?",
+      },
+      classification,
+      promptDirective: "",
+      reasoning: `Clarification required for family: ${intentFamily} (confidence: ${confidence})`,
+    };
+  }
+
+  // ── Pure guidance / informational families ────────────────────────────────
+  const guidanceFamilies: IntentFamily[] = [
+    "program_safety_question",
+    "program_explanation_question",
+    "coaching_question",
+    "greeting",
+    "new_program_request",
+  ];
+  if (guidanceFamilies.includes(intentFamily)) {
+    return {
+      action: intentFamily === "new_program_request" ? "REBUILD_PROGRAM" : "GUIDANCE",
+      target: { type: null },
+      mutationPlan: null,
+      constraintsToPersist: {},
+      uiUpdateRequired: false,
+      verificationRequired: false,
+      responseMode: "guidance_only",
+      fallbackPlan: { action: "noop_with_explanation", message: "No changes were needed." },
+      classification,
+      promptDirective: "",
+      reasoning: `Guidance-only family: ${intentFamily}`,
+    };
+  }
+
+  // ── Scope resolution ──────────────────────────────────────────────────────
+  const scope = resolveScope(message);
+  const resolvedScope: ExecutionScope =
+    scope.type != null
+      ? scope
+      : activeProgram?.days?.length
+        ? { type: "session", dayIndex: 0 }
+        : { type: "program" };
+
+  // ── Transformation bundle → prompt directive ──────────────────────────────
+  const bundle = getTransformationBundle(intentFamily);
+  const dayCount = activeProgram?.days?.length;
+  const sessionLabel =
+    dayCount && resolvedScope.dayIndex != null
+      ? (activeProgram?.days?.[resolvedScope.dayIndex]?.name)
+      : undefined;
+
+  const promptDirective = buildIntentFamilyPromptDirective(familyResult, {
+    dayCount,
+    sessionLabel,
+  });
+
+  // ── Constraint persistence ────────────────────────────────────────────────
+  const constraintsToPersist: Record<string, unknown> = {};
+
+  if (persistenceType === "permanent" || persistenceType === "context_update") {
+    if (extractedEntities.targetExercise && intentFamily === "exercise_dislike_or_preference") {
+      constraintsToPersist.dislikedExercises = [extractedEntities.targetExercise];
+      constraintsToPersist.preferenceDirection = extractedEntities.preferenceDirection;
+    }
+    if (extractedEntities.targetSport && intentFamily === "sport_context_update") {
+      constraintsToPersist.sport = extractedEntities.targetSport;
+    }
+    if (extractedEntities.targetEquipment && intentFamily === "equipment_constraint") {
+      constraintsToPersist.bannedEquipment = [extractedEntities.targetEquipment];
+    }
+    if (intentFamily === "injury_modification" || intentFamily === "joint_friendly_modification") {
+      if (extractedEntities.targetBodyRegion) {
+        constraintsToPersist.painConstraints = [extractedEntities.targetBodyRegion];
+      }
+    }
+  }
+
+  // ── UI update needed? ─────────────────────────────────────────────────────
+  const uiUpdateRequired =
+    mutationType !== "store_context" && mutationType !== "none" && persistenceType !== "none";
+
+  // ── Verification needed? ──────────────────────────────────────────────────
+  // uiUpdateRequired already excludes store_context and none mutations
+  const verificationRequired = uiUpdateRequired;
+
+  // ── Response mode ─────────────────────────────────────────────────────────
+  const responseMode: ResponseMode =
+    persistenceType === "context_update" || persistenceType === "none"
+      ? "context_stored"
+      : "specific_verified";
+
+  // ── Fallback plan ─────────────────────────────────────────────────────────
+  const fallbackPlan: AdjustmentFallbackPlan =
+    confidence === "low"
+      ? {
+          action: "retry_with_clarification",
+          message: "I wasn't sure what you meant — could you tell me more about what you'd like to change?",
+        }
+      : {
+          action: "noop_with_explanation",
+          message: "I wasn't able to apply the change. Your program is unchanged — let me know if you'd like to try again.",
+        };
+
+  // ── Mutation plan ─────────────────────────────────────────────────────────
+  const mutationPlan: AdjustmentMutationPlan = {
+    mutationType,
+    targetScope,
+    intentFamily,
+    aiDirective: bundle?.aiDirective ?? "",
+    scopeGuidance: bundle?.scopeGuidance ?? "",
+    safetyFlags,
+    extractedEntities,
+    persistenceType,
+  };
+
+  logger.debug(
+    {
+      intentFamily,
+      confidence,
+      mutationType,
+      persistenceType,
+      targetScope,
+      resolvedScope,
+      safetyFlags,
+      uiUpdateRequired,
+      verificationRequired,
+    },
+    "[AdjustmentExecutionPlanner] Plan built"
+  );
+
+  return {
+    action: "APPLY_MUTATION",
+    target: resolvedScope,
+    mutationPlan,
+    constraintsToPersist,
+    uiUpdateRequired,
+    verificationRequired,
+    responseMode,
+    fallbackPlan,
+    classification,
+    promptDirective,
+    reasoning: `IntentFamily: ${intentFamily} (confidence: ${confidence}), Mutation: ${mutationType}, Persistence: ${persistenceType}, Safety: [${safetyFlags.join(", ")}]`,
+  };
+}
 
 function isMutationFamily(family: IntentFamily): boolean {
   const mutationFamilies: IntentFamily[] = [
@@ -665,6 +898,12 @@ function isMutationFamily(family: IntentFamily): boolean {
     // Day-level progression/regression — always APPLY_MUTATION, never clarify
     "day_progression",
     "day_regression",
+    // Training state families — adjust in place
+    "readiness_low",
+    "missed_sessions_reentry",
+    "environment_temporary_switch",
+    "sport_context_update",
+    "exercise_dislike_or_preference",
   ];
 
   return mutationFamilies.includes(family);
