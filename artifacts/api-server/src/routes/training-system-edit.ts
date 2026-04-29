@@ -37,6 +37,10 @@ import { z } from "zod/v4";
 import { logger } from "../lib/logger";
 import { createEditAdjustmentEvent } from "../lib/system-adjustment-service";
 import { acquireFailSafeEditLock, logFailSafeAudit, resolveFailSafeState } from "../lib/fail-safe";
+import {
+  writeAuditReceipt,
+  deriveVerificationStatus,
+} from "../lib/mutation-audit-receipt-service";
 
 // ─── Diff computation ─────────────────────────────────────────────────────────
 
@@ -456,6 +460,32 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       scope: editPlan.scope,
       changeSummary: editResult.changeSummary,
       appliedCount: editResult.appliedCount,
+    }).catch(() => {});
+
+    // ── Mutation Audit Receipt — immutable per-adjustment record ───────────────
+    // Fire-and-forget. A write failure MUST NOT break the response.
+    writeAuditReceipt({
+      userId,
+      trainingSystemId: activeSystem.id,
+      changeLogId: changeLogId,
+      userRequest,
+      intentFamily: editPlan.intent,
+      beforeSnapshot: editResult.beforeSnapshot,
+      afterSnapshot: editResult.afterSnapshot,
+      persistedConstraints: [],
+      verificationStatus: deriveVerificationStatus(
+        editResult.appliedCount,
+        editResult.skippedCount,
+      ),
+      responseShown: editResult.changeSummary ?? null,
+      source: (source as "chat" | "edit_panel" | "quick_command" | "checkin" | "agent") ?? "edit_panel",
+      focusMode: auditSystemFocus,
+      metadata: {
+        scope: editPlan.scope,
+        appliedCount: editResult.appliedCount,
+        skippedCount: editResult.skippedCount,
+        changedIds: editResult.changedIds,
+      },
     }).catch(() => {});
 
     // 6. Compute structured diff from before/after snapshots

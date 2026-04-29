@@ -29,6 +29,7 @@ import activeSessionRouter from "./active-session";
 import shareMomentsRouter from "./share-moments";
 import systemAdjustmentsRouter from "./system-adjustments";
 import clearMemoryRouter from "./clear-memory";
+import mutationAuditReceiptsRouter from "./mutation-audit-receipts";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -72,5 +73,6 @@ router.use(activeSessionRouter);
 router.use(shareMomentsRouter);
 router.use(systemAdjustmentsRouter);
 router.use(clearMemoryRouter);
+router.use(mutationAuditReceiptsRouter);
 
 export default router;
