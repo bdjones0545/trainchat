@@ -77,7 +77,7 @@ export const globalLearningEventsTable = pgTable("global_learning_events", {
 
   // Which routing path handled this interaction
   routeUsed: text("route_used", {
-    enum: ["deterministic", "openai", "library_progression", "rule_based"],
+    enum: ["deterministic", "openai", "library_progression", "rule_based", "structured_intent"],
   }),
 
   // Classified intent label (e.g. "ADJUST_DIFFICULTY")

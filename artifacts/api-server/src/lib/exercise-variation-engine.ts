@@ -85,6 +85,13 @@ interface ExerciseMeta {
    * slot, encouraging build-over-build rotation within equivalents.
    */
   equivalenceCluster?: string;
+  /**
+   * True if this exercise requires specialty equipment not found in most gyms.
+   * Specialty exercises are excluded from program generation by default.
+   * They are only selected if the user explicitly confirms equipment access.
+   * Example: Belt Squat requires a belt squat machine.
+   */
+  specialtyEquipment?: boolean;
 }
 
 /** Scoring context passed per build. */
@@ -501,7 +508,8 @@ function hasEquipment(exerciseName: string, equipmentLevel: string): boolean {
 const PHASE_EXERCISE_AFFINITY: Record<string, number> = {
   // ── Bilateral Squat — Phase Expressions ───────────────────────────────────
   // Establish: teachable, stable, moderate complexity
-  "establish:Belt Squat":                                   2.0,
+  // Belt Squat excluded — specialty machine not found in most gyms.
+  "establish:Belt Squat":                                   -5.0,
   "establish:Safety Bar Squat":                             1.5,
   "establish:Goblet Squat (heavy)":                         1.5,
   "establish:Heel-Elevated Goblet Squat":                   1.0,
@@ -526,7 +534,8 @@ const PHASE_EXERCISE_AFFINITY: Record<string, number> = {
   "intensify:Tempo Back Squat (3-1-1)":                     1.0,
 
   // Deload: low axial load, joint-friendly, technique maintenance only
-  "deload:Belt Squat":                                      2.5,
+  // Belt Squat excluded — specialty machine not found in most gyms.
+  "deload:Belt Squat":                                      -5.0,
   "deload:Goblet Squat (heavy)":                            2.5,
   "deload:Heel-Elevated Goblet Squat":                      2.0,
   "deload:Box Squat":                                       1.5,
@@ -1599,10 +1608,12 @@ const BILATERAL_SQUAT_POOL: ExerciseMeta[] = [
   { name: "Trap Bar Deadlift (squat-mode, low handles)", sportTags: ["football", "rugby", "hockey", "basketball"], intentTags: ["strength", "power"], neuralDemand: "high", fatigueCost: "high" },
   { name: "Zercher Squat", sportTags: ["wrestling", "mma", "football"], intentTags: ["strength", "stability"], neuralDemand: "high", fatigueCost: "high" },
   { name: "Hatfield Squat", sportTags: ["football", "rugby", "powerlifting"], intentTags: ["strength", "power"], neuralDemand: "high", fatigueCost: "high" },
-  // ── Movement Equivalents (new) ──────────────────────────────────────────────
-  // Belt squat: same bilateral squat pattern, zero spinal compression — excellent
-  // alternative when axial loading needs to rotate out for recovery or sport reasons.
-  { name: "Belt Squat", sportTags: ["football", "rugby", "powerlifting"], intentTags: ["strength", "hypertrophy"], neuralDemand: "high", fatigueCost: "moderate", equivalenceCluster: "bilateral-squat" },
+  // ── Movement Equivalents (specialty equipment) ────────────────────────────────
+  // Belt squat: excellent alternative but requires a belt squat machine — specialty
+  // equipment not found in most gyms. Marked specialtyEquipment: true so it is
+  // excluded from default program generation. Only selected when the user explicitly
+  // confirms their gym has one.
+  { name: "Belt Squat", sportTags: ["football", "rugby", "powerlifting"], intentTags: ["strength", "hypertrophy"], neuralDemand: "high", fatigueCost: "moderate", equivalenceCluster: "bilateral-squat", specialtyEquipment: true },
   // Tempo Back Squat: same pattern as Back Squat but with deliberate eccentric
   // tempo (3-second down, 1-second pause, 1-second up) — hypertrophy and positional
   // strength emphasis without adding new loading modalities.
@@ -2184,13 +2195,19 @@ function getLowerPowerPool(sport: string | null, neuralDemand: "high" | "moderat
   return LOWER_POWER_POOL;
 }
 
-function getBilateralSquatPool(sport: string | null, goal: string | null): ExerciseMeta[] {
+function getBilateralSquatPool(sport: string | null, goal: string | null, allowSpecialtyEquipment?: boolean): ExerciseMeta[] {
   const s = sport?.toLowerCase() ?? "";
   const g = goal?.toLowerCase() ?? "";
-  if (s.includes("basketball") || s.includes("volleyball")) return BILATERAL_SQUAT_JOINT_FRIENDLY;
-  if (g.includes("strength") || g.includes("powerlifting")) return BILATERAL_SQUAT_STRENGTH_FOCUS;
-  if (g.includes("hypertrophy") || g.includes("bodybuilding")) return BILATERAL_SQUAT_HYPERTROPHY_FOCUS;
-  return BILATERAL_SQUAT_POOL;
+
+  // Specialty equipment (e.g. Belt Squat machine) is excluded by default.
+  // Only include specialty exercises when the caller explicitly opts in.
+  const specialtyFilter = (pool: ExerciseMeta[]) =>
+    allowSpecialtyEquipment ? pool : pool.filter((e) => !e.specialtyEquipment);
+
+  if (s.includes("basketball") || s.includes("volleyball")) return specialtyFilter(BILATERAL_SQUAT_JOINT_FRIENDLY);
+  if (g.includes("strength") || g.includes("powerlifting")) return specialtyFilter(BILATERAL_SQUAT_STRENGTH_FOCUS);
+  if (g.includes("hypertrophy") || g.includes("bodybuilding")) return specialtyFilter(BILATERAL_SQUAT_HYPERTROPHY_FOCUS);
+  return specialtyFilter(BILATERAL_SQUAT_POOL);
 }
 
 function getBilateralHingePool(sport: string | null, goal: string | null, lowFatigue?: boolean): ExerciseMeta[] {

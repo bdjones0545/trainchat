@@ -247,6 +247,14 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
       /\b(no barbell|no rack|no squat rack|no bench press|home gym|hotel gym|limited equipment|minimal equipment|no weights?|no gym)\b/i,
       /\b(without.{0,15}(barbell|squat rack|bench|machine|cable))\b/i,
       /\b(dumbbell.?only|bodyweight.?only|bands?.?only|kettlebell.?only)\b/i,
+      // Belt Squat specific — specialty machine not found at most gyms
+      /\bno\s+belt.?squat\b/i,
+      /\bdon.?t\s+have\s+(a\s+)?belt.?squat\b/i,
+      /\bdont\s+have\s+(a\s+)?belt.?squat\b/i,
+      /\bmy\s+gym\s+doesn.?t\s+have\s+(a\s+)?belt.?squat\b/i,
+      /\bno\s+belt.?squat\s+machine\b/i,
+      /\bwithout\s+(a\s+)?belt.?squat\b/i,
+      /\bcan.?t\s+(do|use|access)\s+(a\s+)?belt.?squat\b/i,
     ],
   },
 

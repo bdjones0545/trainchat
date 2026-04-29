@@ -1501,6 +1501,7 @@ ${profile.sportFocus ? `- Sport / Activity Focus: ${profile.sportFocus}` : ""}
 ${profile.exercisePreferences ? `- Exercise Preferences: ${profile.exercisePreferences}` : ""}
 ${profile.exercisesToAvoid ? `- Exercises to Avoid (NEVER program these): ${profile.exercisesToAvoid}` : ""}
 ${homeGymConstraintBlock}
+${SPECIALTY_EQUIPMENT_CONSTRAINT_BLOCK}
 ${routingHint}${reEntryContext}${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${conditioningContext}${powerSpeedContext}${sportContext}${periodizationContext}${mobilityContext}${specialConsiderationsContext}${specialConsiderationsClarification}${returnFromInjuryContext}${returnFromInjuryClarification}`;
 }
 
@@ -1556,6 +1557,28 @@ PROGRAM TITLE AND ACKNOWLEDGMENT:
 - Title the program with "Home Gym" prefix (e.g., "Home Gym Strength Program — 3-Day")
 - In your response, acknowledge the home gym constraint: "Built this around home gym equipment — no pull-up bar, box, barbell, or machines assumed."`;
 }
+
+// ─── Specialty Equipment Constraint ───────────────────────────────────────────
+// Belt Squat and other specialty machines are NOT standard commercial gym
+// equipment. They must never appear in programs by default. This block is
+// always injected into the system prompt regardless of equipment level.
+const SPECIALTY_EQUIPMENT_CONSTRAINT_BLOCK = `
+
+## SPECIALTY EQUIPMENT — MANDATORY CONSTRAINT [HARD RULE — NON-NEGOTIABLE]
+
+Some exercises require specialty machines that are NOT present in most gyms.
+You MUST NEVER select these exercises unless the user has explicitly stated they have the specific machine.
+
+**NEVER SELECT by default:**
+- Belt Squat → requires a belt squat machine (rare, specialty gym equipment)
+  - Instead use: Back Squat, Front Squat, Goblet Squat, Leg Press, or Safety Bar Squat
+- Pendulum Squat → requires a pendulum squat machine
+  - Instead use: Leg Press, Hack Squat (machine), or Front Squat
+- Reverse Hyper → requires a reverse hyper machine
+  - Instead use: 45° Back Extension, Good Morning, or Romanian Deadlift
+
+If the user does not explicitly mention having this equipment, treat it as unavailable.
+Do NOT ask — simply use the listed alternatives.`;
 
 function buildSpecialConsiderationsClarificationHint(question: string | null): string {
   if (!question) return "";

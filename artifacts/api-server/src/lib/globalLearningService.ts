@@ -40,7 +40,7 @@ export type { GlobalLearningEventType };
 export interface LearningEventPayload {
   userId?: number;
   eventType: GlobalLearningEventType;
-  routeUsed?: "deterministic" | "openai" | "library_progression" | "rule_based";
+  routeUsed?: "deterministic" | "openai" | "library_progression" | "rule_based" | "structured_intent";
   intentType?: string;
   editSubtype?: string;
   programGoal?: string;

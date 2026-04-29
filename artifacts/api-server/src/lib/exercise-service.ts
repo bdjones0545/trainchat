@@ -67,6 +67,9 @@ const SPECIALTY_EQUIPMENT_BLOCKLIST = [
   "rings",
   "trx",
   "med_ball",
+  // Belt squat machine: specialty equipment not found in most gyms.
+  // Requires explicit user confirmation ("my gym has a belt squat") to be allowed.
+  "belt_squat_machine",
 ];
 
 /**

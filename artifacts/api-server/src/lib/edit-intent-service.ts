@@ -17,6 +17,11 @@ import { auditLanguageInterpretation } from "./language-audit";
 import { buildSwapContext, getProgressions, findExerciseByName, getSwapCandidates } from "./exercise-service";
 import { resolveSafeSwapBackstop } from "./swap-backstop-service";
 import { resolveHarderEasierFallback } from "./harder-easier-fallback";
+import {
+  detectsBeltSquatUnavailable,
+  findBeltSquatsInSystem,
+  pickBeltSquatReplacement,
+} from "./belt-squat-constraint";
 import { runIntentFamilyPipeline, logIntentFamilyDebug, type IntentFamilyPipelineResult } from "./intent-family-engine";
 import { detectPopulation } from "./population-engine";
 import { applyPopulationIntentRules, appendPopulationNotesToDirective } from "./interaction-rules";
@@ -3047,6 +3052,77 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
     }
   }
 
+  // ── Belt Squat unavailability — program-wide removal ─────────────────────
+  // High-priority handler: fires before generic equipment constraint.
+  // Scans the ENTIRE program for Belt Squat and replaces every occurrence.
+  // Never responds with a success message unless real replace_exercise changes exist.
+  if (detectsBeltSquatUnavailable(lower) || detectsBeltSquatUnavailable(userRequest)) {
+    const beltSquatInstances = findBeltSquatsInSystem(system);
+    const changes: EditChange[] = [];
+    const replacementUsed = new Map<number, string>(); // sessionId → replacement name chosen
+
+    for (const instance of beltSquatInstances) {
+      // Pick the best replacement for this session (avoid duplicates within the session)
+      const sessionExNames: string[] = [];
+      for (const phase of system.phases ?? []) {
+        for (const week of phase.weeks ?? []) {
+          for (const session of week.sessions ?? []) {
+            if (session.id === instance.sessionId) {
+              for (const ex of session.exercises ?? []) {
+                if (ex.id !== instance.exerciseId) sessionExNames.push(ex.name);
+              }
+            }
+          }
+        }
+      }
+      // Use the same replacement for the same session if we already picked one
+      const replacement =
+        replacementUsed.get(instance.sessionId) ??
+        pickBeltSquatReplacement(sessionExNames);
+      replacementUsed.set(instance.sessionId, replacement);
+
+      changes.push({
+        type: "replace_exercise",
+        id: instance.exerciseId,
+        replacement: {
+          name: replacement,
+          category: instance.category,
+          sets: instance.sets,
+          reps: instance.reps,
+          rest: instance.rest,
+          notes: `Substituted for Belt Squat — belt squat machine not available`,
+        },
+        reason: `Belt Squat removed (equipment unavailable) → replaced with ${replacement}`,
+      });
+    }
+
+    if (changes.length === 0) {
+      // Belt Squat not found anywhere — give an honest "already clean" response
+      return {
+        intent: "equipment_constraint",
+        scope: "system",
+        changeSummary: "Belt Squat was already removed from your program. I'll avoid including it unless you tell me your gym has one.",
+        changes: [],
+      };
+    }
+
+    // Build the change summary with the actual replacement name(s)
+    const replacementNames = [...new Set(replacementUsed.values())];
+    const replacementLabel =
+      replacementNames.length === 1
+        ? replacementNames[0]
+        : replacementNames.slice(0, 2).join(" / ");
+    const instanceCount = changes.length;
+    const plural = instanceCount > 1 ? `${instanceCount} instances of ` : "";
+
+    return {
+      intent: "belt_squat_equipment_constraint",
+      scope: "system",
+      changeSummary: `Got it — I removed ${plural}Belt Squat and replaced it with ${replacementLabel}. I'll avoid Belt Squat unless you tell me your gym has one.`,
+      changes,
+    };
+  }
+
   // ── Equipment constraint ──
   if (lower.match(/dumbbell|hotel gym|home gym|no barbell|only have|limited equipment|travel/)) {
     const changes: EditChange[] = [];
@@ -3345,6 +3421,13 @@ export function classifyEditRequest(
       );
       return { route: "DETERMINISTIC", reason: "phase_known_intent_transformation" };
     }
+  }
+
+  // ── Rule 7: Belt Squat unavailability → DETERMINISTIC ────────────────────
+  // "I don't have a belt squat", "no belt squat", etc. map to a program-wide
+  // replacement pass. Always DETERMINISTIC — no OpenAI needed.
+  if (detectsBeltSquatUnavailable(userRequest)) {
+    return { route: "DETERMINISTIC", reason: "belt_squat_unavailable" };
   }
 
   // ── Everything else → AGENT ───────────────────────────────────────────────

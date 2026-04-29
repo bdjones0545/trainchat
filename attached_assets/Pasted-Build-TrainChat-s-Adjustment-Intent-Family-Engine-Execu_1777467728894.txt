@@ -1,0 +1,384 @@
+Build TrainChat’s Adjustment Intent Family Engine + Execution Planner.
+
+Purpose:
+The agent must respond to real-world training adjustments through one consistent pipeline:
+
+Detect user adjustment → classify intent family → update constraints → mutate active program → verify mutation → update UI → respond specifically.
+
+Core rule:
+The agent must never say a change was applied unless the active saved program snapshot confirms the mutation.
+
+Create/upgrade these layers:
+
+1. Adjustment Intent Family Engine
+
+Add stable intent families for real training adjustment scenarios:
+
+EQUIPMENT_UNAVAILABLE
+Example inputs:
+- “I don’t have a belt squat”
+- “No barbell”
+- “Only dumbbells”
+- “Hotel gym”
+- “Home workout only”
+
+PAIN_OR_INJURY
+Example inputs:
+- “My knee hurts”
+- “Shoulder pain”
+- “Low back is tight”
+- “Elbow hurts when pressing”
+
+DIFFICULTY_TOO_HARD
+Example inputs:
+- “This is too hard”
+- “Make it easier”
+- “I can’t do this exercise”
+
+DIFFICULTY_TOO_EASY
+Example inputs:
+- “This is too easy”
+- “Make it harder”
+- “I need more intensity”
+
+TIME_CONSTRAINT
+Example inputs:
+- “I only have 30 minutes”
+- “Shorten this”
+- “Make it quick”
+
+GOAL_SHIFT
+Example inputs:
+- “I want more power”
+- “Focus more on hypertrophy”
+- “Make this more athletic”
+- “I want strength instead”
+
+SPORT_CONTEXT_UPDATE
+Example inputs:
+- “I play golf”
+- “This is for football”
+- “I need this for pickleball”
+- “I box”
+
+EXERCISE_DISLIKE_OR_PREFERENCE
+Example inputs:
+- “I hate lunges”
+- “I don’t like deadlifts”
+- “I prefer machines”
+- “I like dumbbells better”
+
+READINESS_LOW
+Example inputs:
+- “I’m tired”
+- “Low energy today”
+- “Didn’t sleep”
+- “I feel beat up”
+
+MISSED_SESSIONS_REENTRY
+Example inputs:
+- “I missed a week”
+- “I haven’t trained in 10 days”
+- “I’m coming back after a break”
+
+ENVIRONMENT_TEMPORARY_SWITCH
+Example inputs:
+- “I’m traveling”
+- “I’m at a hotel gym today”
+- “I’m training at home today”
+
+VOLUME_ADJUSTMENT
+Example inputs:
+- “Add more volume”
+- “Less leg work”
+- “More upper body”
+- “Reduce sets”
+
+SPECIFIC_EXERCISE_REQUEST
+Example inputs:
+- “Add bench press”
+- “Use trap bar deadlift”
+- “Can we include sled pushes?”
+
+2. Classification Output Shape
+
+Every classified adjustment should return:
+
+{
+  intentFamily,
+  confidence,
+  targetScope,
+  extractedEntities,
+  persistenceType,
+  mutationType,
+  requiresClarification,
+  clarificationQuestion,
+  safetyFlags
+}
+
+Definitions:
+
+targetScope:
+- current_exercise
+- current_day
+- current_week
+- full_program
+- future_generations
+
+persistenceType:
+- temporary_today
+- active_program_only
+- persistent_user_preference
+- persistent_equipment_constraint
+- persistent_pain_constraint
+
+mutationType:
+- replace_exercise
+- regress_exercise
+- progress_exercise
+- reduce_volume
+- increase_volume
+- restructure_day
+- update_goal_bias
+- update_sport_context
+- convert_equipment_profile
+- reentry_deload
+- guidance_only
+
+3. Execution Planner
+
+Create a central function:
+
+planAdjustmentExecution({
+  message,
+  activeProgram,
+  userProfile,
+  currentConstraints,
+  intentFamilyResult
+})
+
+It should return:
+
+{
+  action,
+  target,
+  mutationPlan,
+  constraintsToPersist,
+  uiUpdateRequired,
+  verificationRequired,
+  responseMode,
+  fallbackPlan
+}
+
+Actions:
+- APPLY_MUTATION
+- ASK_CLARIFICATION
+- GUIDANCE_ONLY
+- REBUILD_PROGRAM
+- TEMPORARY_SESSION_ADJUSTMENT
+- NO_OP
+
+4. Decision Rules
+
+EQUIPMENT_UNAVAILABLE:
+- Persist unavailable equipment.
+- Replace matching exercises immediately.
+- Re-score future exercise selection.
+- Verify banned equipment/exercise no longer appears.
+- If broad environment is given, convert whole program/day to available equipment.
+
+PAIN_OR_INJURY:
+- Never diagnose.
+- Detect joint/region + aggravating pattern.
+- Apply pain-safe substitutions.
+- Reduce intensity if needed.
+- Ask clarification only if location or severity is unclear.
+- Add disclaimer-style coaching language without sounding medical.
+
+DIFFICULTY_TOO_HARD:
+- Regress variation first.
+- Then reduce load/reps/sets.
+- Preserve movement pattern.
+
+DIFFICULTY_TOO_EASY:
+- Progress variation first.
+- Then increase reps/load/sets.
+- Preserve recovery limits.
+
+TIME_CONSTRAINT:
+- Remove accessories first.
+- Superset compatible movements if safe.
+- Preserve main movement categories.
+- Do not delete warm-up/mobility entirely.
+
+GOAL_SHIFT:
+- If minor, adjust bias inside active program.
+- If major, ask whether to rebuild or adjust future weeks.
+- Example: hypertrophy → power may require block restructure.
+
+SPORT_CONTEXT_UPDATE:
+- Update sport context.
+- Modify exercise selection and emphasis.
+- Preserve current training goal unless user explicitly changes it.
+
+EXERCISE_DISLIKE_OR_PREFERENCE:
+- Store preference.
+- Replace disliked exercise if currently present.
+- Do not remove entire movement pattern unless user asks.
+
+READINESS_LOW:
+- Convert today to lower-intensity version.
+- Reduce neural demand and volume.
+- Keep session useful.
+
+MISSED_SESSIONS_REENTRY:
+- Generate re-entry adjustment.
+- Reduce spike in intensity/volume.
+- Resume progression gradually.
+
+ENVIRONMENT_TEMPORARY_SWITCH:
+- Treat as temporary_today by default.
+- Do not permanently rewrite program unless user says so.
+
+VOLUME_ADJUSTMENT:
+- Adjust sets first.
+- Then accessories.
+- Preserve program balance.
+
+SPECIFIC_EXERCISE_REQUEST:
+- Insert requested exercise into the correct slot.
+- Remove or downshift conflicting exercise if needed.
+- Verify requested exercise appears after mutation.
+
+5. Mutation Verification Layer
+
+Create:
+
+verifyMutation({
+  beforeProgram,
+  afterProgram,
+  mutationPlan,
+  constraints
+})
+
+It should check:
+- Removed exercises are actually gone
+- Banned equipment is not present
+- Requested exercises are present
+- Volume changes happened
+- Time target is respected approximately
+- Pain constraints are respected
+- UI state receives the updated program
+
+Return:
+
+{
+  success,
+  failures,
+  repairPlan,
+  safeToRespondSuccess
+}
+
+If success is false:
+- Retry repair once.
+- If still false, respond transparently.
+- Never send generic success.
+
+6. Response Rules
+
+Bad response:
+“I processed your request and applied the change.”
+
+Replace with specific confirmations:
+
+Equipment:
+“Got it — I removed Belt Squat and replaced it with Goblet Squat. I’ll avoid Belt Squat unless you tell me your gym has one.”
+
+Pain:
+“Got it — I adjusted today to reduce knee stress and swapped deep knee-flexion work for a more controlled option.”
+
+Time:
+“Done — I shortened today to about 30 minutes by trimming accessories while keeping the main strength work.”
+
+Readiness:
+“Got it — I lowered today’s intensity and volume so you can still train without forcing a high-output day.”
+
+Failure:
+“I tried to update it, but Belt Squat is still showing in the saved plan, so I’m not going to pretend it changed. Pick one: goblet squat, leg press, front squat, or split squat.”
+
+7. UI Sync Requirements
+
+After every successful mutation:
+- Invalidate/refetch active training system query
+- Invalidate/refetch active program query
+- Update Live Program panel immediately
+- Add change log entry
+- Show right-panel highlight
+- Add undo toast when appropriate
+
+8. Regression Tests
+
+Add tests for:
+
+1. “I don’t have a belt squat”
+Expected:
+- EQUIPMENT_UNAVAILABLE
+- Belt Squat removed
+- Replacement appears
+- Response names replacement
+
+2. “My knee hurts”
+Expected:
+- PAIN_OR_INJURY
+- Knee-dominant stress reduced
+- No medical diagnosis
+
+3. “I only have 30 minutes”
+Expected:
+- TIME_CONSTRAINT
+- Accessories reduced
+- Main movement pattern preserved
+
+4. “I’m tired today”
+Expected:
+- READINESS_LOW
+- Today becomes lower demand
+- Future weeks unchanged
+
+5. “I’m at a hotel gym today”
+Expected:
+- ENVIRONMENT_TEMPORARY_SWITCH
+- Temporary adjustment only
+- Persistent program unchanged unless confirmed
+
+6. “Add trap bar deadlift”
+Expected:
+- SPECIFIC_EXERCISE_REQUEST
+- Trap bar deadlift appears
+- Conflicting hinge adjusted
+
+7. “Make this harder”
+Expected:
+- DIFFICULTY_TOO_EASY
+- Progression applied safely
+
+8. “I hate lunges”
+Expected:
+- EXERCISE_DISLIKE_OR_PREFERENCE
+- Lunges removed if present
+- Preference persisted
+
+9. Failed mutation test:
+Force a failed replacement and verify:
+- Agent does not claim success
+- Repair attempt runs
+- Transparent failure response appears
+
+Deliverables:
+- Updated intent family engine
+- Execution planner
+- Constraint persistence
+- Mutation verification
+- UI sync after mutation
+- Specific response templates
+- Regression tests
