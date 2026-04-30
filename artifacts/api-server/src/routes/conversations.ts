@@ -62,6 +62,8 @@ import {
   logFailSafeAudit,
   acquireFailSafeEditLock,
 } from "../lib/fail-safe";
+import { buildActionContract, type ActionContract } from "../lib/action-contract";
+import { enforceActionContract, buildContractPromptDirective, type TurnOutcome } from "../lib/action-contract-enforcer";
 
 const router: IRouter = Router();
 
@@ -743,6 +745,32 @@ Keep it helpful and intelligent, never promotional.`;
     // Intentionally silent — language/policy layer is observability + enrichment only
   }
 
+  // ── ACTION CONTRACT — Central binding contract for this turn ─────────────────
+  // Built before the execution planner so it governs the entire turn.
+  // The contract determines what the agent is allowed/forbidden to do and what
+  // response type it must produce. The enforcer checks compliance after the turn.
+  let actionContract: ActionContract | null = null;
+  let contractDirective = "";
+  try {
+    actionContract = buildActionContract(
+      parsed.data.content,
+      hasAnyProgram,
+      intentResult.type,
+    );
+    contractDirective = buildContractPromptDirective(actionContract);
+  } catch (contractErr) {
+    logger.warn({ contractErr }, "[ActionContract] Failed to build contract — proceeding without enforcement");
+  }
+
+  // Mutable turn outcome — updated as the handler progresses
+  const turnOutcome: TurnOutcome = {
+    mutationApplied: false,
+    constraintPersisted: false,
+    clarificationAsked: false,
+    programRebuilt: false,
+    verificationStatus: "not_applicable",
+  };
+
   // ── EXECUTION PLANNER — Central single-brain routing decision ─────────────
   // Converts message + program state + pending clarification into one plan.
   // All downstream routing is driven by plan.action.
@@ -762,6 +790,11 @@ Keep it helpful and intelligent, never promotional.`;
     uiContext: nonStreamUiCtx,
     focusMode: nonStreamFocusMode,
   });
+
+  // Sync clarification outcome to turnOutcome
+  if (execPlan.action === "ASK_CLARIFICATION") {
+    turnOutcome.clarificationAsked = true;
+  }
 
   logger.info(
     {
@@ -1748,7 +1781,9 @@ Keep it helpful and intelligent, never promotional.`;
   // engine before calling the AI. The AI then gets the already-transformed program
   // and just writes the coach confirmation — no structural guesswork needed.
   let preTransformedProgram: ProgramStructure | null = currentProgram;
-  let transformHint: string | null = null;
+  // Prepend the action contract directive to any transform hints so it takes
+  // effect at the AI layer as the first behavioral instruction.
+  let transformHint: string | null = contractDirective || null;
 
   if (execPlan.action === "REBUILD_PROGRAM" && currentProgram) {
     const meta = intentResult.metadata as {
@@ -1777,7 +1812,8 @@ Keep it helpful and intelligent, never promotional.`;
     try {
       const result = transformProgram(currentProgram, transformRequest);
       preTransformedProgram = result.program;
-      transformHint = buildTransformPromptHint(result.log);
+      const splitHint = buildTransformPromptHint(result.log);
+      transformHint = transformHint ? `${transformHint}\n\n${splitHint}` : splitHint;
       logger.info(
         {
           transformType,
@@ -2058,6 +2094,14 @@ Keep it helpful and intelligent, never promotional.`;
       systemSaved = true;
       autoSavedSystemId = savedSystem.id;
 
+      // ── Action Contract TurnOutcome tracking ────────────────────────────────
+      if (isNewProgramBuild) {
+        turnOutcome.programRebuilt = true;
+      } else {
+        turnOutcome.mutationApplied = true;
+        turnOutcome.verificationStatus = "verified";
+      }
+
       if (nonStreamFocusMode === "speed" || nonStreamFocusMode === "mobility") {
         logger.info(
           {
@@ -2144,6 +2188,18 @@ Keep it helpful and intelligent, never promotional.`;
     stripeStorage.incrementMessageCount(userId).catch(() => {});
   }
 
+  // ── Action Contract Enforcement ────────────────────────────────────────────
+  // Build the audit receipt and check compliance. Non-fatal — enforcement
+  // is observability + guard, not a hard gate that breaks the response.
+  let auditReceipt = null;
+  if (actionContract) {
+    try {
+      auditReceipt = enforceActionContract(actionContract, turnOutcome);
+    } catch (enforceErr) {
+      logger.warn({ enforceErr }, "[ActionContract] Enforcer failed — non-fatal");
+    }
+  }
+
   res.json({
     userMessage: {
       id: userMessage.id,
@@ -2178,6 +2234,7 @@ Keep it helpful and intelligent, never promotional.`;
     },
     systemSaved,
     systemId: autoSavedSystemId,
+    auditReceipt,
   });
 });
 
@@ -2461,6 +2518,28 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     logger.warn({ langErrSSE }, "[SSE/ResponsePolicy] Language/policy resolution failed — continuing without it");
   }
 
+  // ── ACTION CONTRACT (SSE path) — Central binding contract for this turn ────
+  let actionContractSSE: ActionContract | null = null;
+  let contractDirectiveSSE = "";
+  try {
+    actionContractSSE = buildActionContract(
+      parsed.data.content,
+      hasAnyProgram,
+      intentResult.type,
+    );
+    contractDirectiveSSE = buildContractPromptDirective(actionContractSSE);
+  } catch (contractErrSSE) {
+    logger.warn({ contractErrSSE }, "[ActionContract/SSE] Failed to build contract — proceeding without enforcement");
+  }
+
+  const turnOutcomeSSE: TurnOutcome = {
+    mutationApplied: false,
+    constraintPersisted: false,
+    clarificationAsked: false,
+    programRebuilt: false,
+    verificationStatus: "not_applicable",
+  };
+
   // ── Constraint Extraction ─────────────────────────────────────────────────
   let extractedConstraints: ExtractedConstraints | null = null;
   if (intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM") {
@@ -2569,6 +2648,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     systemEditVal?: { applied: boolean };
     changeLogIdVal?: number;
     outcomeTypeVal?: "mutation_applied" | "clarification_needed" | "conversation_only" | "true_failure";
+    auditReceiptVal?: unknown;
   }) {
     const outcomeType: "mutation_applied" | "clarification_needed" | "conversation_only" | "true_failure" =
       opts.outcomeTypeVal ?? "conversation_only";
@@ -2603,6 +2683,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       systemId: opts.systemIdVal,
       systemEdit: opts.systemEditVal,
       changeLogId: opts.changeLogIdVal,
+      auditReceipt: opts.auditReceiptVal ?? null,
     };
   }
 
@@ -3297,7 +3378,13 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   }
 
   let preTransformedProgram: ProgramStructure | null = currentProgram;
-  let transformHint: string | null = null;
+  // Prepend contract directive so it governs the AI layer in the streaming path.
+  let transformHint: string | null = contractDirectiveSSE || null;
+
+  // Sync clarification outcome to SSE turnOutcome
+  if (execPlan.action === "ASK_CLARIFICATION") {
+    turnOutcomeSSE.clarificationAsked = true;
+  }
 
   if (execPlan.action === "REBUILD_PROGRAM" && currentProgram) {
     const meta = intentResult.metadata as { targetSplit?: string; targetDays?: number | null; targetGoalShift?: string | null } | undefined;
@@ -3306,7 +3393,8 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     try {
       const result = transformProgram(currentProgram, transformRequest);
       preTransformedProgram = result.program;
-      transformHint = buildTransformPromptHint(result.log);
+      const splitHintSSE = buildTransformPromptHint(result.log);
+      transformHint = transformHint ? `${transformHint}\n\n${splitHintSSE}` : splitHintSSE;
     } catch (err) {
       logger.error({ err }, "[ConversationRouter:stream] Split transform failed — falling back to AI-only");
     }
@@ -3537,6 +3625,14 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       systemSaved = true;
       autoSavedSystemId = savedSystem.id;
 
+      // ── Action Contract TurnOutcome tracking (SSE path) ─────────────────────
+      if (isNewProgramBuildSSE) {
+        turnOutcomeSSE.programRebuilt = true;
+      } else {
+        turnOutcomeSSE.mutationApplied = true;
+        turnOutcomeSSE.verificationStatus = "verified";
+      }
+
       if (streamFocusMode === "speed" || streamFocusMode === "mobility") {
         logger.info(
           {
@@ -3637,11 +3733,22 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     "[PipelineLatencyAudit] SSE request completed"
   );
 
+  // ── Action Contract Enforcement (SSE path) ────────────────────────────────
+  let auditReceiptSSE = null;
+  if (actionContractSSE) {
+    try {
+      auditReceiptSSE = enforceActionContract(actionContractSSE, turnOutcomeSSE);
+    } catch (enforceErrSSE) {
+      logger.warn({ enforceErrSSE }, "[ActionContract/SSE] Enforcer failed — non-fatal");
+    }
+  }
+
   done(buildCompleteEvent({
     userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo,
     intentResultVal: intentResult, systemSavedVal: systemSaved, systemIdVal: autoSavedSystemId,
     changeLogIdVal: changeLogId,
     outcomeTypeVal: systemSaved ? "mutation_applied" : "conversation_only",
+    auditReceiptVal: auditReceiptSSE,
   }));
 });
 
