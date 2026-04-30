@@ -2650,6 +2650,8 @@ export default function Chat() {
                     stageHistory={stream.state.stageHistory}
                     actionType={stream.state.actionType}
                     stageNarration={stream.state.stageNarration || undefined}
+                    microReasons={stream.state.microReasons}
+                    safetyMode={stream.state.safetyMode}
                   />
                 )}
 

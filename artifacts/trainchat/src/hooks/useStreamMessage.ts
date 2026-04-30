@@ -118,6 +118,15 @@ export interface CompleteEvent {
   } | null;
 }
 
+export interface MicroReasonsEvent {
+  type: "micro_reasons";
+  /** Coach-voiced reasons pre-computed from persisted constraints, sport, and equipment. */
+  reasons: string[];
+  safeToShow: boolean;
+  /** True when the turn involves pain/safety constraints — drives PAIN_OR_SAFETY modal mode. */
+  safetyMode: boolean;
+}
+
 export interface StreamErrorEvent {
   type: "error";
   message: string;
@@ -126,7 +135,7 @@ export interface StreamErrorEvent {
   isAnonymous?: boolean;
 }
 
-export type StreamEvent = AcknowledgedEvent | StageEvent | CompleteEvent | StreamErrorEvent;
+export type StreamEvent = AcknowledgedEvent | StageEvent | MicroReasonsEvent | CompleteEvent | StreamErrorEvent;
 
 // ─── Stream state ─────────────────────────────────────────────────────────────
 
@@ -146,6 +155,10 @@ export interface StreamState {
   intentType: string | undefined;
   /** Action type (PROGRAM_GENERATION, STRUCTURAL_REBUILD, DIRECT_MUTATION, SESSION_ADJUSTMENT). */
   actionType: string | undefined;
+  /** Coach-voiced micro-reasons from persisted constraints — pre-computed early in the stream. */
+  microReasons: string[];
+  /** True when the turn involves pain/safety constraints — drives PAIN_OR_SAFETY modal mode. */
+  safetyMode: boolean;
   error: string | null;
   /** Set to true when error is a PAYWALL 402 — triggers upgrade modal in Chat. */
   paywallTriggered: boolean;
@@ -237,6 +250,8 @@ const INITIAL_STATE: StreamState = {
   stageHistory: [],
   intentType: undefined,
   actionType: undefined,
+  microReasons: [],
+  safetyMode: false,
   error: null,
   paywallTriggered: false,
   paywallIsAnonymous: false,
@@ -266,6 +281,8 @@ export function useStreamMessage(): UseStreamMessageResult {
         stageHistory: [],
         intentType: undefined,
         actionType: undefined,
+        microReasons: [],
+        safetyMode: false,
         error: null,
         paywallTriggered: false,
         paywallIsAnonymous: false,
@@ -361,6 +378,13 @@ export function useStreamMessage(): UseStreamMessageResult {
                   ...s,
                   phase: "acknowledged",
                   acknowledgment: event.text,
+                }));
+
+              } else if (event.type === "micro_reasons") {
+                setState((s) => ({
+                  ...s,
+                  microReasons: event.safeToShow ? event.reasons : [],
+                  safetyMode: event.safetyMode,
                 }));
 
               } else if (event.type === "stage") {

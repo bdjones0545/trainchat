@@ -1,37 +1,78 @@
 /**
- * AgentThinking — Premium in-place build progress card.
+ * AgentThinking — Conversational agent progress card.
  *
  * Design goals:
- *  - Single card that updates in-place (not multiple bubbles)
- *  - TrainChat logo as the visual core with subtle glow pulse
- *  - Full step list visible upfront: completed ✓ | active ● | pending ○
- *  - Fast builds: card still feels smooth even if only 1–2 steps show
- *  - Mobile-first, compact, no layout jumps
- *
- * Steps are derived from the REAL pipeline stages — no fake delays,
- * no invented stages. Every step maps to an actual server BuildStage.
- *
- * Action type mapping:
- *   Build:   PROGRAM_GENERATION, STRUCTURAL_REBUILD, REBUILD_PROGRAM
- *   Edit:    DIRECT_MUTATION, SESSION_ADJUSTMENT, APPLY_MUTATION
- *   Q&A:     GUIDANCE
- *   Other:   ASK_CLARIFICATION, NO_OP
- *
- * The UI state must always match the actual server action — never show
- * program-build copy for question-answering or editing.
+ *  - Mode derived from real actionType + safetyMode — never fabricated.
+ *  - Stage checklist with completed ✓ / active ● / pending ○ states.
+ *  - Feedback line combines stageNarration + microReason via combineNarrationAndReasons().
+ *  - Max 1 microReason per stage, max 3 per stream. No duplicates. No internal terms.
+ *  - Failure states show honest coach-voiced messages.
+ *  - Mobile-first, compact, no layout jumps, no scrolling.
  */
 
+import { useRef } from "react";
 import type { BuildStage } from "@/hooks/useStreamMessage";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 
+// ─── Modal Mode ───────────────────────────────────────────────────────────────
+
+export type AgentMode =
+  | "BUILD"
+  | "UPDATE"
+  | "GUIDANCE"
+  | "PAIN_OR_SAFETY"
+  | "REBUILD";
+
+interface ModeConfig {
+  header: string;
+  subheader: string;
+}
+
+const MODE_CONFIG: Record<AgentMode, ModeConfig> = {
+  BUILD: {
+    header: "Building your training system",
+    subheader: "Creating your program",
+  },
+  UPDATE: {
+    header: "Updating your program",
+    subheader: "Applying your adjustment",
+  },
+  GUIDANCE: {
+    header: "Thinking through your question",
+    subheader: "No program changes yet",
+  },
+  PAIN_OR_SAFETY: {
+    header: "Adjusting with care",
+    subheader: "Keeping the session useful and joint-friendly",
+  },
+  REBUILD: {
+    header: "Rebuilding your training system",
+    subheader: "Creating a new structure",
+  },
+};
+
+function deriveMode(actionType?: string, safetyMode?: boolean): AgentMode {
+  if (safetyMode) return "PAIN_OR_SAFETY";
+  switch (actionType) {
+    case "PROGRAM_GENERATION":
+      return "BUILD";
+    case "STRUCTURAL_REBUILD":
+    case "REBUILD_PROGRAM":
+      return "REBUILD";
+    case "DIRECT_MUTATION":
+    case "SESSION_ADJUSTMENT":
+    case "APPLY_MUTATION":
+      return "UPDATE";
+    case "GUIDANCE":
+    case "ASK_CLARIFICATION":
+    case "NO_OP":
+      return "GUIDANCE";
+    default:
+      return "BUILD";
+  }
+}
+
 // ─── Step sequences (tied to real BuildStage pipeline) ────────────────────────
-//
-// Each action type maps to a curated subset of stages with accurate microcopy.
-// "loading" is intentionally omitted from most sequences — it's a server-internal
-// transition that would look like a duplicate of "understanding" to the user.
-//
-// IMPORTANT: Non-build actions (GUIDANCE, ASK_CLARIFICATION, NO_OP) must NEVER
-// show steps like "Saving your program" or "Assigning sessions & exercises".
 
 interface BuildStep {
   stage: BuildStage;
@@ -39,79 +80,59 @@ interface BuildStep {
 }
 
 const STEP_SEQUENCES: Record<string, BuildStep[]> = {
-
-  // ── Program BUILD actions ─────────────────────────────────────────────────
-  // Full build: new program from scratch.
   PROGRAM_GENERATION: [
-    { stage: "understanding", label: "Reading your goal" },
-    { stage: "classifying",   label: "Selecting block type" },
-    { stage: "planning",      label: "Mapping weekly structure" },
-    { stage: "applying",      label: "Assigning sessions & exercises" },
-    { stage: "validating",    label: "Validating your system" },
-    { stage: "saving",        label: "Finalizing your program" },
+    { stage: "understanding", label: "Understanding your goal" },
+    { stage: "classifying",   label: "Choosing the right structure" },
+    { stage: "planning",      label: "Mapping weekly layout" },
+    { stage: "applying",      label: "Selecting exercises" },
+    { stage: "validating",    label: "Checking constraints" },
+    { stage: "saving",        label: "Saving your program" },
   ],
-  // Legacy: full architectural restructure.
   STRUCTURAL_REBUILD: [
-    { stage: "understanding", label: "Reading your request" },
+    { stage: "understanding", label: "Understanding your request" },
     { stage: "planning",      label: "Restructuring your split" },
     { stage: "applying",      label: "Rebuilding your program" },
-    { stage: "saving",        label: "Saving your program" },
+    { stage: "saving",        label: "Saving updates" },
   ],
-  // New execPlan action: structural rebuild.
   REBUILD_PROGRAM: [
-    { stage: "understanding", label: "Reading your request" },
+    { stage: "understanding", label: "Understanding your request" },
     { stage: "planning",      label: "Restructuring your split" },
     { stage: "applying",      label: "Rebuilding your program" },
-    { stage: "saving",        label: "Saving your program" },
+    { stage: "saving",        label: "Saving updates" },
   ],
-
-  // ── Program EDIT actions ──────────────────────────────────────────────────
-  // Legacy: atomic surgical edit.
   DIRECT_MUTATION: [
     { stage: "applying", label: "Applying the change" },
-    { stage: "saving",   label: "Saving your changes" },
+    { stage: "saving",   label: "Saving updates" },
   ],
-  // Legacy: session-scoped adjustment.
   SESSION_ADJUSTMENT: [
     { stage: "applying", label: "Applying modifications" },
-    { stage: "saving",   label: "Saving your changes" },
+    { stage: "saving",   label: "Saving updates" },
   ],
-  // New execPlan action: targeted edit or adjustment.
   APPLY_MUTATION: [
-    { stage: "understanding", label: "Reading your request" },
+    { stage: "understanding", label: "Understanding your request" },
     { stage: "applying",      label: "Updating your program" },
-    { stage: "saving",        label: "Saving your changes" },
+    { stage: "saving",        label: "Saving updates" },
   ],
-
-  // ── Q&A / GUIDANCE actions ────────────────────────────────────────────────
-  // Coaching questions, explanations, general advice — no program mutation.
   GUIDANCE: [
     { stage: "understanding", label: "Reviewing your question" },
     { stage: "classifying",   label: "Organizing the key factors" },
     { stage: "applying",      label: "Preparing the best answer" },
   ],
-
-  // ── Clarification ─────────────────────────────────────────────────────────
   ASK_CLARIFICATION: [
     { stage: "understanding", label: "Reviewing your request" },
     { stage: "applying",      label: "Working out what to ask" },
   ],
-
-  // ── No-op / general chat ──────────────────────────────────────────────────
   NO_OP: [
     { stage: "understanding", label: "Reading your message" },
     { stage: "applying",      label: "Preparing a response" },
   ],
 };
 
-// Default steps used only when actionType is unknown/unresolved.
-// Intentionally neutral — no program-build language.
 const DEFAULT_STEPS: BuildStep[] = [
-  { stage: "understanding", label: "Reading your request" },
+  { stage: "understanding", label: "Understanding your request" },
   { stage: "applying",      label: "Working on a response" },
 ];
 
-// Numeric priority for each BuildStage — used for completed/active/pending math
 const STAGE_ORDER: Record<BuildStage, number> = {
   understanding: 1,
   loading:       1.5,
@@ -123,30 +144,7 @@ const STAGE_ORDER: Record<BuildStage, number> = {
   complete:      7,
 };
 
-// ─── Card title per action type ───────────────────────────────────────────────
-
-function getCardTitle(actionType?: string): string {
-  switch (actionType) {
-    // Build
-    case "PROGRAM_GENERATION": return "Building your system";
-    case "STRUCTURAL_REBUILD":  return "Rebuilding your program";
-    case "REBUILD_PROGRAM":     return "Rebuilding your program";
-    // Edit
-    case "DIRECT_MUTATION":     return "Applying your change";
-    case "SESSION_ADJUSTMENT":  return "Modifying your session";
-    case "APPLY_MUTATION":      return "Updating your program";
-    // Q&A / Guidance
-    case "GUIDANCE":            return "Thinking it through";
-    // Clarification
-    case "ASK_CLARIFICATION":   return "One quick question";
-    // No-op
-    case "NO_OP":               return "Working on it";
-    // Unknown — neutral default, never shows program-build language
-    default:                    return "Working on it";
-  }
-}
-
-// ─── Step status logic ────────────────────────────────────────────────────────
+// ─── Step status ──────────────────────────────────────────────────────────────
 
 type StepStatus = "completed" | "active" | "pending";
 
@@ -156,19 +154,37 @@ function getStepStatus(
   currentStage: BuildStage | null,
 ): StepStatus {
   if (!currentStage) {
-    return stepIndex === 0 ? "active" : "pending";
+    return "pending";
   }
-
   const step = steps[stepIndex];
   const nextStep = steps[stepIndex + 1];
-
   const currentOrder = STAGE_ORDER[currentStage];
   const stepOrder    = STAGE_ORDER[step.stage];
   const nextOrder    = nextStep ? STAGE_ORDER[nextStep.stage] : 8;
-
   if (currentOrder >= nextOrder) return "completed";
   if (currentOrder >= stepOrder) return "active";
   return "pending";
+}
+
+// ─── Feedback line combiner ───────────────────────────────────────────────────
+
+/**
+ * Combines the current stage narration and a single micro-reason into
+ * one coach-voiced feedback line. Pure function — no internal terms, no jargon.
+ */
+export function combineNarrationAndReasons({
+  stageNarration,
+  microReason,
+}: {
+  stageNarration?: string;
+  microReason?: string;
+}): string {
+  const narration = stageNarration?.trim();
+  const reason    = microReason?.trim();
+  if (narration && reason) return `${narration} — ${reason}`;
+  if (narration) return narration;
+  if (reason) return reason;
+  return "Working through your request\u2026";
 }
 
 // ─── Step row ─────────────────────────────────────────────────────────────────
@@ -217,8 +233,16 @@ interface Props {
   stageLabel: string;
   stageHistory: string[];
   actionType?: string;
-  /** Coach-voiced narration for the active stage — updated progressively from server. */
+  /** Coach-voiced narration for the active stage — from server SSE. */
   stageNarration?: string;
+  /** Pre-computed micro-reasons from persisted constraints — max 3, already safe-to-show. */
+  microReasons?: string[];
+  /** True when the turn involves pain/safety constraints. */
+  safetyMode?: boolean;
+  /** True when the stream ended with a verification failure. */
+  verificationFailed?: boolean;
+  /** True when the stream ended with a generic failure. */
+  streamFailed?: boolean;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -228,13 +252,37 @@ export default function AgentThinking({
   buildStage,
   actionType,
   stageNarration,
+  microReasons = [],
+  safetyMode = false,
+  verificationFailed = false,
+  streamFailed = false,
 }: Props) {
   const steps = STEP_SEQUENCES[actionType ?? ""] ?? DEFAULT_STEPS;
-  const title = getCardTitle(actionType);
+  const mode = deriveMode(actionType, safetyMode);
+  const { header, subheader } = MODE_CONFIG[mode];
   const isActiveStage = buildStage !== null && buildStage !== "complete";
 
+  // Track which micro-reasons have been consumed — one per completed/active stage.
+  // usedCountRef advances each time the active stage changes, revealing the next reason.
+  const usedCountRef = useRef<number>(0);
+  const prevStageRef = useRef<BuildStage | null>(null);
+  if (buildStage !== prevStageRef.current) {
+    prevStageRef.current = buildStage;
+    if (buildStage && buildStage !== "complete") {
+      usedCountRef.current = Math.min(usedCountRef.current + 1, microReasons.length);
+    }
+  }
+  // Show the most recently "unlocked" reason (index = usedCountRef - 1)
+  const currentMicroReason =
+    usedCountRef.current > 0 ? microReasons[usedCountRef.current - 1] : undefined;
+
+  const feedbackLine = combineNarrationAndReasons({
+    stageNarration,
+    microReason: currentMicroReason,
+  });
+
   return (
-    <div className="flex items-start gap-3 mb-4">
+    <div className="flex items-start gap-3 mb-4" data-testid="agent-thinking-card">
       <style>{`
         @keyframes ping-soft {
           0%, 100% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb, 99 102 241) / 0); }
@@ -262,17 +310,16 @@ export default function AgentThinking({
         />
       </div>
 
-      {/* Single in-place card */}
+      {/* Card */}
       <div
-        className="bg-card border border-border/80 rounded-2xl rounded-tl-sm overflow-hidden max-w-[270px] w-full"
+        className="bg-card border border-border/80 rounded-2xl rounded-tl-sm overflow-hidden max-w-[280px] w-full"
         style={{
           animation: isActiveStage ? "card-glow-pulse 2.4s ease-in-out infinite" : undefined,
           borderColor: isActiveStage ? "rgba(var(--primary-rgb, 99 102 241) / 0.22)" : undefined,
         }}
       >
-        {/* Card header */}
+        {/* ── Header ──────────────────────────────────────────────────────── */}
         <div className="px-4 pt-3 pb-2.5 flex items-start gap-2.5">
-          {/* Logo with ambient glow */}
           <div className="relative flex-shrink-0 mt-0.5">
             {isActiveStage && (
               <div
@@ -288,9 +335,20 @@ export default function AgentThinking({
           </div>
 
           <div className="min-w-0">
-            <p className="text-[12px] font-semibold text-foreground leading-none">{title}</p>
+            <p
+              className="text-[12px] font-semibold text-foreground leading-none"
+              data-testid="agent-thinking-header"
+            >
+              {header}
+            </p>
+            <p
+              className="text-[10px] text-muted-foreground/60 mt-0.5 leading-snug"
+              data-testid="agent-thinking-subheader"
+            >
+              {subheader}
+            </p>
             {acknowledgment && (
-              <p className="text-[10px] text-muted-foreground mt-1 leading-snug line-clamp-2">
+              <p className="text-[10px] text-muted-foreground/50 mt-1 leading-snug line-clamp-2">
                 {acknowledgment}
               </p>
             )}
@@ -300,8 +358,8 @@ export default function AgentThinking({
         {/* Separator */}
         <div className="mx-4 border-t border-border/40 mb-2.5" />
 
-        {/* Step list */}
-        <div className="px-4 pb-3.5 space-y-2.5">
+        {/* ── Step checklist ───────────────────────────────────────────────── */}
+        <div className="px-4 pb-3 space-y-2.5" data-testid="agent-thinking-steps">
           {steps.map((step, i) => (
             <StepRow
               key={step.stage + i}
@@ -311,14 +369,37 @@ export default function AgentThinking({
           ))}
         </div>
 
-        {/* Stage narration — coaching voice text, updates with each stage */}
-        {isActiveStage && stageNarration && (
+        {/* ── Failure states ───────────────────────────────────────────────── */}
+        {verificationFailed && (
           <div
             className="mx-4 mb-3.5 border-t border-border/30 pt-2.5 animate-in fade-in duration-300"
-            key={stageNarration}
+            data-testid="agent-thinking-verification-failed"
+          >
+            <p className="text-[10.5px] text-amber-600 dark:text-amber-400 leading-snug">
+              I caught a mismatch before saving, so I'm not going to pretend it updated.
+            </p>
+          </div>
+        )}
+        {streamFailed && !verificationFailed && (
+          <div
+            className="mx-4 mb-3.5 border-t border-border/30 pt-2.5 animate-in fade-in duration-300"
+            data-testid="agent-thinking-stream-failed"
+          >
+            <p className="text-[10.5px] text-muted-foreground/70 leading-snug">
+              I couldn't finish that update cleanly. Try again or ask me to simplify the change.
+            </p>
+          </div>
+        )}
+
+        {/* ── Feedback line (narration + micro-reason) ─────────────────────── */}
+        {isActiveStage && !verificationFailed && !streamFailed && (
+          <div
+            className="mx-4 mb-3.5 border-t border-border/30 pt-2.5 animate-in fade-in duration-300"
+            key={feedbackLine}
+            data-testid="agent-thinking-feedback"
           >
             <p className="text-[10.5px] text-muted-foreground/70 leading-snug italic">
-              {stageNarration}
+              {feedbackLine}
             </p>
           </div>
         )}

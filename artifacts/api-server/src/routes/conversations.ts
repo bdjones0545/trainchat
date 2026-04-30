@@ -2734,6 +2734,29 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     userMessageHint: parsed.data.content.slice(0, 120),
   };
 
+  // Emit micro-reasons early in the stream — computed from persisted constraints,
+  // sport context, and equipment profile already available. The client uses these
+  // to build the conversational feedback line during the active build.
+  {
+    const _earlyMicroResult = buildMicroReasons({
+      goal: extractedConstraints?.primaryGoal ?? null,
+      sport: extractedConstraints?.sportFocus ?? hardConstraintsSSE.sport,
+      equipmentProfile: extractedConstraints?.equipmentLevel ?? null,
+      hardConstraints: hardConstraintsSSE,
+    });
+    const _isSafetyTurn =
+      _narrationCtx.hasPain ||
+      (actionContractSSE?.safetyMode ?? false) ||
+      execPlan.intentFamily === "injury_modification" ||
+      execPlan.intentFamily === "joint_friendly_modification";
+    emit({
+      type: "micro_reasons",
+      reasons: _earlyMicroResult.safeToShow ? _earlyMicroResult.reasons : [],
+      safeToShow: _earlyMicroResult.safeToShow,
+      safetyMode: _isSafetyTurn,
+    });
+  }
+
   // Emit classifying stage — intent and action type are now known
   emit(buildStageEvent("classifying", intentResult.type, execPlan.action, _narrationCtx));
 
