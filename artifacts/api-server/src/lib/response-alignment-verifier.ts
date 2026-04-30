@@ -21,6 +21,7 @@
 
 import type { NarrationContext } from "./stage-narration";
 import type { ProgramStructure } from "./ai";
+import type { HardConstraints } from "./constraint-memory";
 
 // ─── Public Types ─────────────────────────────────────────────────────────────
 
@@ -36,7 +37,9 @@ export type AlignmentIssueType =
   /** Narration signalled a mutation action but the outcome type was conversation-only */
   | "narration_outcome_mismatch"
   /** AI text explicitly names an exercise as removed/added, but structuredData disagrees */
-  | "exercise_claim_mismatch";
+  | "exercise_claim_mismatch"
+  /** Program contains an exercise or equipment that was previously marked unavailable */
+  | "persisted_constraint_violation";
 
 export interface AlignmentIssue {
   type: AlignmentIssueType;
@@ -70,6 +73,8 @@ export interface AlignmentCheckInput {
   // ── User requirements ───────────────────────────────────────────────────
   /** Extracted per-turn constraints (may be null for non-build intents) */
   extractedConstraints: { daysPerWeek?: number | null } | null;
+  /** Hard constraints loaded from persisted user memory (optional — skips check when absent) */
+  hardConstraints?: HardConstraints | null;
 }
 
 export interface AlignmentCheckResult {
@@ -282,6 +287,38 @@ function checkExerciseClaimMismatch(input: AlignmentCheckInput): AlignmentIssue 
   };
 }
 
+function checkPersistedConstraintViolation(input: AlignmentCheckInput): AlignmentIssue | null {
+  if (!input.structuredData) return null;
+  if (!input.hardConstraints) return null;
+
+  const { bannedItems } = input.hardConstraints;
+  if (bannedItems.length === 0) return null;
+
+  // Only check when we actually generated a program (build or mutation)
+  if (!isBuildAction(input.action) && !isMutationAction(input.action)) return null;
+
+  const violations: string[] = [];
+  for (const day of input.structuredData.days) {
+    for (const exercise of day.exercises) {
+      const nameLower = exercise.name.toLowerCase();
+      for (const banned of bannedItems) {
+        const bannedLower = banned.toLowerCase();
+        if (nameLower.includes(bannedLower) || bannedLower.includes(nameLower)) {
+          violations.push(`"${exercise.name}" (banned: "${banned}")`);
+        }
+      }
+    }
+  }
+
+  if (violations.length === 0) return null;
+
+  return {
+    type: "persisted_constraint_violation",
+    severity: "critical",
+    detail: `Program contains previously banned items: ${violations.join(", ")}.`,
+  };
+}
+
 // ─── Repair Text ─────────────────────────────────────────────────────────────
 
 function buildRepairContent(
@@ -331,6 +368,16 @@ function buildRepairContent(
     );
   }
 
+  if (critical.type === "persisted_constraint_violation") {
+    // Extract the first banned item mentioned for a personalised message
+    const match = critical.detail.match(/banned: "([^"]+)"/);
+    const item = match ? match[1] : "a previously excluded item";
+    return (
+      `I built your program but noticed it included ${item}, which you've previously told me isn't available. ` +
+      `Let me fix that — ask me to rebuild and I'll keep ${item} out.`
+    );
+  }
+
   // Fallback for any other critical issue
   return (
     `Something didn't align between what I planned and what was saved. ` +
@@ -370,6 +417,9 @@ export function verifyResponseAlignment(
 
   const exerciseMismatch = checkExerciseClaimMismatch(input);
   if (exerciseMismatch) issues.push(exerciseMismatch);
+
+  const constraintViolation = checkPersistedConstraintViolation(input);
+  if (constraintViolation) issues.push(constraintViolation);
 
   // Sort: critical first
   issues.sort((a, b) => {

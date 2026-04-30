@@ -37,6 +37,13 @@ import { buildStageEvent, type BuildStage } from "../lib/build-pipeline";
 import type { NarrationContext } from "../lib/stage-narration";
 import { verifyResponseAlignment } from "../lib/response-alignment-verifier";
 import {
+  persistConstraintsFromTurn,
+  loadHardConstraints,
+  buildConstraintEnforcementDirective,
+  validateAgainstHardConstraints,
+  type HardConstraints,
+} from "../lib/constraint-memory";
+import {
   writePendingClarification,
   getActivePendingClarification,
   resolvePendingClarification,
@@ -610,6 +617,10 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
   const allowMemory = isPro && agentSettings.behavior.memoryPersonalization;
   const allowInsights = agentSettings.behavior.proactiveInsights;
 
+  // Hard constraints from persisted memory — enforced for ALL users regardless of plan tier.
+  let hardConstraintsNonSSE: HardConstraints = { bannedItems: [], dislikedItems: [], painRegions: [], sport: null };
+  let constraintDirectiveNonSSE: string | null = null;
+
   if (isPro) {
     const _sessionFocusMode = resolveFocusMode((req.body as any)?.uiContext?.focusMode ?? null);
     const [adaptation, memories] = await Promise.all([
@@ -627,6 +638,15 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
       syncMemoriesFromData(userId).catch(() => {});
       extractMemoriesFromMessage(userId, userMessage.content).catch(() => {});
     }
+
+    // Extract hard constraints from the already-loaded memories (no extra DB call)
+    hardConstraintsNonSSE = loadHardConstraints(allowMemory ? memories : []);
+    constraintDirectiveNonSSE = buildConstraintEnforcementDirective(hardConstraintsNonSSE);
+  } else {
+    // For non-Pro users: lightweight constraint memory load for hard constraint enforcement
+    const constraintMemories = await listMemories(userId).catch(() => []);
+    hardConstraintsNonSSE = loadHardConstraints(constraintMemories);
+    constraintDirectiveNonSSE = buildConstraintEnforcementDirective(hardConstraintsNonSSE);
   }
 
   // Agent-driven conversion hint for free/starter users
@@ -796,6 +816,13 @@ Keep it helpful and intelligent, never promotional.`;
   // Sync clarification outcome to turnOutcome
   if (execPlan.action === "ASK_CLARIFICATION") {
     turnOutcome.clarificationAsked = true;
+  }
+
+  // Persist constraint signals from this turn (fire-and-forget — non-fatal)
+  if (execPlan.intentFamily) {
+    persistConstraintsFromTurn(userId, parsed.data.content, execPlan.intentFamily).catch((err: unknown) => {
+      logger.warn({ err }, "[ConstraintMemory] persistConstraintsFromTurn failed — non-fatal");
+    });
   }
 
   logger.info(
@@ -1785,7 +1812,13 @@ Keep it helpful and intelligent, never promotional.`;
   let preTransformedProgram: ProgramStructure | null = currentProgram;
   // Prepend the action contract directive to any transform hints so it takes
   // effect at the AI layer as the first behavioral instruction.
+  // Prepend persisted hard constraints so they are enforced absolutely.
   let transformHint: string | null = contractDirective || null;
+  if (constraintDirectiveNonSSE) {
+    transformHint = transformHint
+      ? `${constraintDirectiveNonSSE}\n\n${transformHint}`
+      : constraintDirectiveNonSSE;
+  }
 
   if (execPlan.action === "REBUILD_PROGRAM" && currentProgram) {
     const meta = intentResult.metadata as {
@@ -2015,6 +2048,17 @@ Keep it helpful and intelligent, never promotional.`;
       logger.info(
         { programName: structuredData.programName, days: structuredData.days.length },
         "[ConstraintValidation] Program passed constraint validation"
+      );
+    }
+  }
+
+  // ── Hard constraint validation against persisted memory ───────────────────
+  if (structuredData) {
+    const hardViolations = validateAgainstHardConstraints(structuredData, hardConstraintsNonSSE);
+    if (hardViolations.length > 0) {
+      logger.warn(
+        { violations: hardViolations.map((v) => ({ exercise: v.exerciseName, type: v.violationType, constraint: v.matchedConstraint })) },
+        "[ConstraintMemory] Hard constraint violations detected in generated program"
       );
     }
   }
@@ -2405,6 +2449,10 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   const allowMemory = isPro && agentSettings.behavior.memoryPersonalization;
   const allowInsights = agentSettings.behavior.proactiveInsights;
 
+  // Hard constraints from persisted memory — enforced for ALL users regardless of plan tier.
+  let hardConstraintsSSE: HardConstraints = { bannedItems: [], dislikedItems: [], painRegions: [], sport: null };
+  let constraintDirectiveSSE2: string | null = null;
+
   if (isPro) {
     const _sessionFocusMode = resolveFocusMode((req.body as any)?.uiContext?.focusMode ?? null);
     const [adaptation, memories] = await Promise.all([
@@ -2421,6 +2469,15 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       syncMemoriesFromData(userId).catch(() => {});
       extractMemoriesFromMessage(userId, userMessage.content).catch(() => {});
     }
+
+    // Extract hard constraints from the already-loaded memories (no extra DB call)
+    hardConstraintsSSE = loadHardConstraints(allowMemory ? memories : []);
+    constraintDirectiveSSE2 = buildConstraintEnforcementDirective(hardConstraintsSSE);
+  } else {
+    // For non-Pro users: lightweight constraint memory load for hard constraint enforcement
+    const constraintMemories = await listMemories(userId).catch(() => []);
+    hardConstraintsSSE = loadHardConstraints(constraintMemories);
+    constraintDirectiveSSE2 = buildConstraintEnforcementDirective(hardConstraintsSSE);
   }
 
   // ── Neural Graph Context (streaming path) ─────────────────────────────────
@@ -3404,11 +3461,24 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
   let preTransformedProgram: ProgramStructure | null = currentProgram;
   // Prepend contract directive so it governs the AI layer in the streaming path.
+  // Prepend persisted hard constraints so they are enforced absolutely.
   let transformHint: string | null = contractDirectiveSSE || null;
+  if (constraintDirectiveSSE2) {
+    transformHint = transformHint
+      ? `${constraintDirectiveSSE2}\n\n${transformHint}`
+      : constraintDirectiveSSE2;
+  }
 
   // Sync clarification outcome to SSE turnOutcome
   if (execPlan.action === "ASK_CLARIFICATION") {
     turnOutcomeSSE.clarificationAsked = true;
+  }
+
+  // Persist constraint signals from this turn (fire-and-forget — non-fatal)
+  if (execPlan.intentFamily) {
+    persistConstraintsFromTurn(userId, parsed.data.content, execPlan.intentFamily).catch((err: unknown) => {
+      logger.warn({ err }, "[ConstraintMemory] persistConstraintsFromTurn failed — non-fatal");
+    });
   }
 
   if (execPlan.action === "REBUILD_PROGRAM" && currentProgram) {
@@ -3567,6 +3637,17 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           }
         }
       }
+    }
+  }
+
+  // ── Hard constraint validation against persisted memory ───────────────────
+  if (structuredData) {
+    const hardViolations = validateAgainstHardConstraints(structuredData, hardConstraintsSSE);
+    if (hardViolations.length > 0) {
+      logger.warn(
+        { violations: hardViolations.map((v) => ({ exercise: v.exerciseName, type: v.violationType, constraint: v.matchedConstraint })) },
+        "[ConstraintMemory] Hard constraint violations detected in SSE-generated program"
+      );
     }
   }
 
@@ -3760,6 +3841,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       extractedConstraints: extractedConstraints
         ? { daysPerWeek: extractedConstraints.daysPerWeek }
         : null,
+      hardConstraints: hardConstraintsSSE,
     });
 
     if (!_alignResult.passed) {
