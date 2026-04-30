@@ -64,6 +64,7 @@ import { resolveFocusMode } from "../lib/focus-mode-audit";
 import { logFocusModeAudit } from "../lib/focus-mode-audit";
 import { generateCoachReasoning, goalToFocusMode, type FocusMode } from "../lib/coach-reasoning-engine";
 import { buildMicroReasons } from "../lib/micro-reasoning";
+import { buildConfidenceLine } from "../lib/confidence-signal";
 import {
   resolveFailSafeState,
   applyFailSafeConstraints,
@@ -1681,7 +1682,17 @@ Keep it helpful and intelligent, never promotional.`;
         currentWeekNumber: directCurrentWeek,
         targetExerciseNames: directTargetNames,
       });
-      const coachingContent = directImpact.coachResponse;
+      const coachingContentRaw = directImpact.coachResponse;
+      const _mutationConfidenceLine = buildConfidenceLine({
+        hardConstraints: hardConstraintsNonSSE,
+        equipmentProfile: extractedConstraints?.equipmentLevel ?? null,
+        safetyMode: actionContract?.safetyMode ?? false,
+        verificationResult: directVerification,
+        actionType: "mutation",
+      });
+      const coachingContent = _mutationConfidenceLine
+        ? `${coachingContentRaw} ${_mutationConfidenceLine}`
+        : coachingContentRaw;
 
       const systemEditData = {
         _type: "system_edit" as const,
@@ -2170,6 +2181,22 @@ Keep it helpful and intelligent, never promotional.`;
       _coachReasoning: _buildCoachReasoning,
       _microReasons: _microReasonResult.safeToShow ? _microReasonResult.reasons : [],
     };
+  }
+
+  // ── Confidence signal — builds only ───────────────────────────────────────
+  // Append a short closing sentence confirming program-constraint alignment.
+  // Only fires when the AI produced a structured program (structuredData != null).
+  if (structuredData) {
+    const _buildConfidenceLine = buildConfidenceLine({
+      hardConstraints: hardConstraintsNonSSE,
+      equipmentProfile: extractedConstraints?.equipmentLevel ?? null,
+      safetyMode: actionContract?.safetyMode ?? false,
+      verificationResult: null,
+      actionType: "build",
+    });
+    if (_buildConfidenceLine) {
+      aiContent = `${aiContent} ${_buildConfidenceLine}`;
+    }
   }
 
   const [assistantMessage] = await db.insert(messagesTable).values({
@@ -3133,11 +3160,22 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       }
     }
 
-    const saveContent = saveSuccess
+    const _saveProgramBaseContent = saveSuccess
       ? `Your program "${programToSave!.programName}" has been saved to your training system. You can access it anytime from the Program panel.`
       : programToSave
         ? `I wasn't able to save your program due to a system error. Your program hasn't been saved. Please try again in a moment.`
         : `There's no program ready to save yet. Once I've built your training program, you can ask me to save it and I'll add it to your system.`;
+    const saveContent = (() => {
+      if (!saveSuccess) return _saveProgramBaseContent;
+      const _cl = buildConfidenceLine({
+        hardConstraints: hardConstraintsSSE,
+        equipmentProfile: extractedConstraints?.equipmentLevel ?? null,
+        safetyMode: _isSafetyTurn,
+        verificationResult: null,
+        actionType: "build",
+      });
+      return _cl ? `${_saveProgramBaseContent} ${_cl}` : _saveProgramBaseContent;
+    })();
 
     const [assistantMessage] = await db.insert(messagesTable).values({
       conversationId: params.data.id, role: "assistant", content: saveContent,
@@ -3452,7 +3490,17 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         currentWeekNumber: streamCurrentWeek,
         targetExerciseNames: streamTargetNames,
       });
-      const coachingContent = streamImpact.coachResponse;
+      const coachingContentRaw = streamImpact.coachResponse;
+      const _sseConfidenceLine = buildConfidenceLine({
+        hardConstraints: hardConstraintsSSE,
+        equipmentProfile: extractedConstraints?.equipmentLevel ?? null,
+        safetyMode: _isSafetyTurn,
+        verificationResult: streamVerification,
+        actionType: "mutation",
+      });
+      const coachingContent = _sseConfidenceLine
+        ? `${coachingContentRaw} ${_sseConfidenceLine}`
+        : coachingContentRaw;
 
       const systemEditData = {
         _type: "system_edit" as const,
