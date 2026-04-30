@@ -812,6 +812,7 @@ Keep it helpful and intelligent, never promotional.`;
       : null,
     uiContext: nonStreamUiCtx,
     focusMode: nonStreamFocusMode,
+    hardConstraints: hardConstraintsNonSSE,
   });
 
   // Sync clarification outcome to turnOutcome
@@ -1896,6 +1897,21 @@ Keep it helpful and intelligent, never promotional.`;
     logger.warn({ err }, "[NeuralGraph] Failed to load neural profile — proceeding without bias");
   }
 
+  // ── Constraint reinforcement shortcut (non-SSE) ───────────────────────────
+  // When the execution planner detected a restated constraint that the active
+  // program already satisfies, override transformHint with the reinforcement
+  // directive so the AI acknowledges instead of asking a question.
+  if (execPlan.constraintReinforcement) {
+    transformHint = execPlan.constraintReinforcement.promptDirective;
+    logger.info(
+      {
+        constraintLabel: execPlan.constraintReinforcement.constraintLabel,
+        alreadyPersisted: execPlan.constraintReinforcement.alreadyPersisted,
+      },
+      "[ConstraintReinforcement:NonSSE] Injecting reinforcement directive — no mutation will run"
+    );
+  }
+
   // ── Clarification loop guard (non-SSE) ────────────────────────────────────
   {
     const _recentAsstMsgsNS = await db
@@ -2728,6 +2744,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       : null,
     uiContext: streamUIContext,
     focusMode: streamFocusMode,
+    hardConstraints: hardConstraintsSSE,
   });
 
   logger.info(
@@ -3586,6 +3603,18 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     } catch (err) {
       logger.error({ err }, "[ConversationRouter:stream] Split transform failed — falling back to AI-only");
     }
+  }
+
+  // ── Constraint reinforcement shortcut (SSE) ──────────────────────────────
+  if (execPlan.constraintReinforcement) {
+    transformHint = execPlan.constraintReinforcement.promptDirective;
+    logger.info(
+      {
+        constraintLabel: execPlan.constraintReinforcement.constraintLabel,
+        alreadyPersisted: execPlan.constraintReinforcement.alreadyPersisted,
+      },
+      "[ConstraintReinforcement:SSE] Injecting reinforcement directive — no mutation will run"
+    );
   }
 
   // ── Clarification loop guard ───────────────────────────────────────────────

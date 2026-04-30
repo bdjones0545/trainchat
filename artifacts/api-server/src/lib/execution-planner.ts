@@ -26,6 +26,12 @@ import { classifyAdjustmentIntent, type AdjustmentIntentClassification } from ".
 import { type ProgramStructure } from "./ai";
 import { logger } from "./logger";
 import type { FocusMode } from "./focus-engines/engine-interface";
+import {
+  isConstraintAlreadySatisfied,
+  isConstraintAlreadyPersisted,
+  buildConstraintReinforcementDirective,
+  type HardConstraints,
+} from "./constraint-memory";
 
 // ─── Execution Action Types ───────────────────────────────────────────────────
 
@@ -67,6 +73,18 @@ export interface ExecutionPlan {
   mutation?: ExecutionMutation;
   clarification?: ExecutionClarification;
   reasoning: string;
+  /**
+   * Present when the execution planner short-circuited an equipment or dislike
+   * constraint that is already satisfied by the active program.  The route handler
+   * must inject `transformHint` derived from buildConstraintReinforcementDirective()
+   * instead of running a mutation.
+   */
+  constraintReinforcement?: {
+    constraintLabel: string;
+    alreadyPersisted: boolean;
+    intentFamily: IntentFamily;
+    promptDirective: string;
+  };
 }
 
 // ─── Pending Clarification Shape ──────────────────────────────────────────────
@@ -91,6 +109,7 @@ export async function buildExecutionPlan({
   pendingClarification,
   uiContext,
   focusMode,
+  hardConstraints,
 }: {
   message: string;
   userId: string;
@@ -99,6 +118,7 @@ export async function buildExecutionPlan({
   pendingClarification: PendingClarificationContext | null;
   uiContext?: Record<string, unknown> | null;
   focusMode?: FocusMode;
+  hardConstraints?: HardConstraints;
 }): Promise<ExecutionPlan> {
   // ── STEP 0: Button signal override ─────────────────────────────────────────
   // Right-panel buttons send an explicit button signal via uiContext.
@@ -205,6 +225,59 @@ export async function buildExecutionPlan({
 
   // ── STEP 3: Resolve target scope ──────────────────────────────────────────
   const scope = resolveScope(message);
+
+  // ── STEP 3.5: Satisfied-constraint shortcut ───────────────────────────────
+  // When the user restates a constraint that the active program already honors
+  // (the banned/disliked item is absent from every exercise slot), skip any
+  // mutation path and return a memory-reinforcement GUIDANCE plan instead.
+  if (
+    program &&
+    hardConstraints &&
+    (intent === "equipment_constraint" || intent === "exercise_dislike_or_preference")
+  ) {
+    try {
+      const adjClass = classifyAdjustmentIntent(message, focusMode);
+      const constraintLabel =
+        adjClass.extractedEntities.targetEquipment ??
+        adjClass.extractedEntities.targetExercise ??
+        null;
+
+      if (constraintLabel) {
+        const satisfied = isConstraintAlreadySatisfied({ constraintLabel, activeProgram: program });
+        if (satisfied) {
+          const alreadyPersisted = isConstraintAlreadyPersisted({ constraintLabel, hardConstraints });
+          const promptDirective = buildConstraintReinforcementDirective({
+            constraintLabel,
+            alreadyPersisted,
+            intentFamily: intent,
+          });
+
+          const reinforcementPlan: ExecutionPlan = {
+            action: "GUIDANCE",
+            intentFamily: intent,
+            scope,
+            reasoning: `Constraint "${constraintLabel}" already satisfied by active program — returning memory-reinforcement GUIDANCE without mutation`,
+            constraintReinforcement: {
+              constraintLabel,
+              alreadyPersisted,
+              intentFamily: intent,
+              promptDirective,
+            },
+          };
+
+          logger.info(
+            { conversationId, userId, constraintLabel, alreadyPersisted, intent },
+            "[ConstraintReinforcement] Constraint already satisfied — skipping mutation, sending acknowledgment"
+          );
+
+          return reinforcementPlan;
+        }
+      }
+    } catch (err) {
+      // If classification fails, fall through to normal mutation path
+      logger.warn({ err, intent }, "[ConstraintReinforcement] classifyAdjustmentIntent failed — falling through to mutation path");
+    }
+  }
 
   // ── STEP 4: Decision tree ─────────────────────────────────────────────────
   let plan: ExecutionPlan;

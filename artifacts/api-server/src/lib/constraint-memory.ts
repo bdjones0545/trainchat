@@ -383,3 +383,103 @@ export function validateAgainstHardConstraints(
 
   return violations;
 }
+
+// ─── 5. Constraint Satisfaction Check ────────────────────────────────────────
+
+function normalizeConstraintLabel(s: string): string {
+  return s.toLowerCase().replace(/[-_\s]+/g, " ").trim();
+}
+
+/**
+ * Returns true when a named constraint is already honored by the active program
+ * — i.e. the item does NOT appear in any exercise slot.
+ *
+ * Used by the execution planner to short-circuit APPLY_MUTATION → GUIDANCE when
+ * the user is restating a constraint that the current program already satisfies.
+ */
+export function isConstraintAlreadySatisfied({
+  constraintLabel,
+  activeProgram,
+}: {
+  constraintLabel: string;
+  activeProgram: ProgramStructure;
+}): boolean {
+  const needle = normalizeConstraintLabel(constraintLabel);
+  if (!needle) return false;
+
+  for (const day of activeProgram.days) {
+    for (const exercise of day.exercises) {
+      const hay = normalizeConstraintLabel(exercise.name);
+      if (hay.includes(needle) || needle.includes(hay)) {
+        return false; // program DOES contain the item — not satisfied
+      }
+    }
+  }
+  return true; // item absent from every exercise slot
+}
+
+/**
+ * Checks whether a constraint label is already present in hard constraints
+ * (i.e. previously persisted in memory).
+ */
+export function isConstraintAlreadyPersisted({
+  constraintLabel,
+  hardConstraints,
+}: {
+  constraintLabel: string;
+  hardConstraints: HardConstraints;
+}): boolean {
+  const needle = normalizeConstraintLabel(constraintLabel);
+  return [...hardConstraints.bannedItems, ...hardConstraints.dislikedItems].some(
+    (item) => {
+      const hay = normalizeConstraintLabel(item);
+      return hay.includes(needle) || needle.includes(hay);
+    }
+  );
+}
+
+/**
+ * Builds the coach-voice reinforcement message for a constraint that is
+ * already satisfied by the current program.
+ *
+ * Format: "Got it — I'll keep avoiding {Label} going forward. Your current
+ * program already reflects that."
+ */
+export function buildConstraintReinforcementDirective({
+  constraintLabel,
+  alreadyPersisted,
+  intentFamily,
+}: {
+  constraintLabel: string;
+  alreadyPersisted: boolean;
+  intentFamily: string;
+}): string {
+  const label = constraintLabel.trim().replace(/\b\w/g, (c) => c.toUpperCase());
+  const avoidVerb = intentFamily === "exercise_dislike_or_preference" ? "including" : "using";
+
+  const persistNote = alreadyPersisted
+    ? "I already have that noted in your preferences."
+    : "I've added that to your preferences now.";
+
+  return [
+    `## CONSTRAINT REINFORCEMENT`,
+    ``,
+    `The user is restating a constraint their current program already satisfies.`,
+    `DO NOT ask for clarification. DO NOT ask a question. DO NOT trigger a program rebuild. DO NOT modify anything.`,
+    ``,
+    `Respond ONLY with a short (1-2 sentence) memory reinforcement message:`,
+    `- Acknowledge the constraint by name: "${label}"`,
+    `- Confirm the current program already avoids it`,
+    `- State it is stored for future programs`,
+    ``,
+    `Example: "Got it — I'll keep avoiding ${label} going forward. Your current program already reflects that. ${persistNote}"`,
+    ``,
+    `Rules:`,
+    `- Name the constraint explicitly ("${label}", not "that exercise" or "this equipment")`,
+    `- Use the word "already" to signal compliance`,
+    `- Keep it under 2 sentences`,
+    `- Do not use technical terms from internal plumbing; speak like a coach`,
+    `- Do not ask what to do`,
+    `- Avoid verb "${avoidVerb}" — prefer "including" or "putting it in your program"`,
+  ].join("\n");
+}
