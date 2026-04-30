@@ -1,0 +1,138 @@
+Sprint: TrainChat Thinking UX Shell
+
+Goal:
+Upgrade the current thinking/loading modal into a conversational agent progress experience that uses the systems already built:
+- SSE stageNarration
+- microReasons
+- actionContract / actionType
+- verification outcome
+
+Do not create a new reasoning system. This is UI integration.
+
+1. Modal Modes
+
+Derive mode from actionContract/actionType/intentFamily:
+
+BUILD:
+Header: “Building your training system”
+Subheader: “Creating your program”
+
+UPDATE:
+Header: “Updating your program”
+Subheader: “Applying your adjustment”
+
+GUIDANCE:
+Header: “Thinking through your question”
+Subheader: “No program changes yet”
+
+PAIN_OR_SAFETY:
+Header: “Adjusting with care”
+Subheader: “Keeping the session useful and joint-friendly”
+
+REBUILD:
+Header: “Rebuilding your training system”
+Subheader: “Creating a new structure”
+
+2. Layout
+
+Modal/card structure:
+
+Top:
+- Header
+- Subheader
+
+Middle:
+- Stage checklist with active/completed states
+
+Stages:
+- Understanding request
+- Choosing structure
+- Selecting exercises
+- Checking constraints
+- Saving updates
+
+Bottom:
+- Conversational feedback line
+
+This line should use:
+
+combineNarrationAndReasons({
+  stageNarration,
+  microReasons,
+  activeStage
+})
+
+Behavior:
+- stageNarration = what the agent is doing
+- microReason = why it is doing it
+- If both exist: “{stageNarration} — {microReason}”
+- If only narration exists: show narration
+- If neither exists: “Working through your request…”
+
+Rules:
+- Max 1 microReason per stage
+- Max 3 microReasons per stream
+- No duplicate reasons
+- Only show reasons where safeToShow === true
+- Never show internal terms
+
+3. Visual Behavior
+
+- Active stage has subtle pulse/loader
+- Completed stages show checkmark
+- Feedback line fades/slides when text changes
+- Keep modal compact on mobile
+- No large paragraphs
+- No internal debug language
+- No scrolling unless absolutely necessary
+
+4. Stream Completion
+
+On success:
+- modal fades out
+- final assistant message appears
+- Live Program panel updates
+- changed item/day highlights if mutation occurred
+
+On failure:
+Show:
+“I couldn’t finish that update cleanly. Try again or ask me to simplify the change.”
+
+If verification fails:
+Show:
+“I caught a mismatch before saving, so I’m not going to pretend it updated.”
+
+5. Guardrails
+
+Never render:
+- actionContract
+- intentFamily
+- transformHint
+- hardConstraints
+- execution planner
+- mutation verifier
+- file names
+- code terms
+
+Use training language only.
+
+6. Tests
+
+Add tests for:
+1. Build mode header appears for new generation.
+2. Update mode appears for mutation.
+3. Guidance mode appears for guidance-only response.
+4. Pain/safety mode appears for pain adjustment.
+5. stageNarration renders in feedback line.
+6. microReason appends only when safeToShow.
+7. Max 3 microReasons per stream.
+8. Duplicate microReasons are suppressed.
+9. Internal terms never render.
+10. Active stage updates from SSE events.
+11. Completed stages show checkmarks.
+12. Modal fades out on successful completion.
+13. Failure state shows honest message.
+14. Mobile layout stays compact.
+
+Goal:
+Make TrainChat feel like a real agent actively building, adjusting, checking, and saving the user’s training system.

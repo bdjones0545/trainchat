@@ -63,6 +63,7 @@ import {
 import { resolveFocusMode } from "../lib/focus-mode-audit";
 import { logFocusModeAudit } from "../lib/focus-mode-audit";
 import { generateCoachReasoning, goalToFocusMode, type FocusMode } from "../lib/coach-reasoning-engine";
+import { buildMicroReasons } from "../lib/micro-reasoning";
 import {
   resolveFailSafeState,
   applyFailSafeConstraints,
@@ -2079,12 +2080,27 @@ Keep it helpful and intelligent, never promotional.`;
       goal: extractedConstraints?.primaryGoal ?? undefined,
       frequency: structuredData.days.length,
     });
+    const _microReasonResult = buildMicroReasons({
+      goal: extractedConstraints?.primaryGoal ?? null,
+      sport: extractedConstraints?.sportFocus ?? null,
+      equipmentProfile: extractedConstraints?.equipmentLevel ?? null,
+      hardConstraints: hardConstraintsNonSSE,
+    });
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[MicroReasoningAudit]", JSON.stringify({
+        path: "non_sse_build",
+        safeToShow: _microReasonResult.safeToShow,
+        reasons: _microReasonResult.reasons,
+        evidence: _microReasonResult.evidence,
+      }));
+    }
     (structuredData as unknown as Record<string, unknown>)._buildMeta = {
       frequency: structuredData.days.length,
       goal: extractedConstraints?.primaryGoal ?? null,
       sport: extractedConstraints?.sportFocus ?? null,
       sessionDuration: extractedConstraints?.sessionDuration ?? null,
       _coachReasoning: _buildCoachReasoning,
+      _microReasons: _microReasonResult.safeToShow ? _microReasonResult.reasons : [],
     };
   }
 
@@ -3675,12 +3691,27 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       goal: extractedConstraints?.primaryGoal ?? undefined,
       frequency: structuredData.days.length,
     });
+    const _sseMicroReasonResult = buildMicroReasons({
+      goal: extractedConstraints?.primaryGoal ?? null,
+      sport: extractedConstraints?.sportFocus ?? null,
+      equipmentProfile: extractedConstraints?.equipmentLevel ?? null,
+      hardConstraints: hardConstraintsSSE,
+    });
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[MicroReasoningAudit]", JSON.stringify({
+        path: "sse_build",
+        safeToShow: _sseMicroReasonResult.safeToShow,
+        reasons: _sseMicroReasonResult.reasons,
+        evidence: _sseMicroReasonResult.evidence,
+      }));
+    }
     (structuredData as unknown as Record<string, unknown>)._buildMeta = {
       frequency: structuredData.days.length,
       goal: extractedConstraints?.primaryGoal ?? null,
       sport: extractedConstraints?.sportFocus ?? null,
       sessionDuration: extractedConstraints?.sessionDuration ?? null,
       _coachReasoning: _sseBuildCoachReasoning,
+      _microReasons: _sseMicroReasonResult.safeToShow ? _sseMicroReasonResult.reasons : [],
     };
   }
 
