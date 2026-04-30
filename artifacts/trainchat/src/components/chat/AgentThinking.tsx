@@ -217,6 +217,8 @@ interface Props {
   stageLabel: string;
   stageHistory: string[];
   actionType?: string;
+  /** Coach-voiced narration for the active stage — updated progressively from server. */
+  stageNarration?: string;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -225,6 +227,7 @@ export default function AgentThinking({
   acknowledgment,
   buildStage,
   actionType,
+  stageNarration,
 }: Props) {
   const steps = STEP_SEQUENCES[actionType ?? ""] ?? DEFAULT_STEPS;
   const title = getCardTitle(actionType);
@@ -307,6 +310,18 @@ export default function AgentThinking({
             />
           ))}
         </div>
+
+        {/* Stage narration — coaching voice text, updates with each stage */}
+        {isActiveStage && stageNarration && (
+          <div
+            className="mx-4 mb-3.5 border-t border-border/30 pt-2.5 animate-in fade-in duration-300"
+            key={stageNarration}
+          >
+            <p className="text-[10.5px] text-muted-foreground/70 leading-snug italic">
+              {stageNarration}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

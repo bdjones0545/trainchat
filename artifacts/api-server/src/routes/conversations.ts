@@ -34,6 +34,7 @@ import { getActiveTrainingSystem, getFullTrainingSystem, createTrainingSystemFro
 import { buildDecisionMemory } from "../lib/decision-memory-service";
 import { logger } from "../lib/logger";
 import { buildStageEvent, type BuildStage } from "../lib/build-pipeline";
+import type { NarrationContext } from "../lib/stage-narration";
 import {
   writePendingClarification,
   getActivePendingClarification,
@@ -2374,11 +2375,18 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     return "Got it — working on this now.";
   })();
   emit({ type: "acknowledged", text: ackText });
-  emit(buildStageEvent("understanding"));
+
+  // Early narration context — only user message is available at these stages.
+  // Action type is not yet classified; keyword hints drive the narration branch.
+  const _earlyNarrationCtx: NarrationContext = {
+    action: "",
+    userMessageHint: parsed.data.content.slice(0, 120),
+  };
+  emit(buildStageEvent("understanding", undefined, undefined, _earlyNarrationCtx));
 
   // ── Stage 2: Load Program State ──────────────────────────────────────────
   // Fetch conversation history and pro context before loading program state
-  emit(buildStageEvent("loading"));
+  emit(buildStageEvent("loading", undefined, undefined, _earlyNarrationCtx));
 
   const history = await db
     .select()
@@ -2634,8 +2642,24 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   logFailSafeAudit(logger, { message: parsed.data.content, focusMode: streamFocusMode, activeProgram: (activeSystem as any) ?? (latestStructuredProgram as any), action: execPlan.action, intentType: intentResult.type }, failSafeResolution);
 
   _t_intent_done = Date.now();
+
+  // Full narration context — action type, intent family, constraints, and
+  // mutation details are all available from classifying onwards.
+  const _narrationCtx: NarrationContext = {
+    action: execPlan.action,
+    intentFamily: execPlan.intentFamily ?? null,
+    mutationType: execPlan.mutation?.type ?? null,
+    goal: extractedConstraints?.primaryGoal ?? null,
+    daysPerWeek: extractedConstraints?.daysPerWeek ?? null,
+    equipment: extractedConstraints?.equipment ?? null,
+    sport: extractedConstraints?.sportFocus ?? null,
+    sessionDuration: extractedConstraints?.sessionDuration ?? null,
+    hasPain: intentResult.type === "ADJUST_FOR_PAIN" || execPlan.intentFamily === "injury_modification" || execPlan.intentFamily === "joint_friendly_modification",
+    userMessageHint: parsed.data.content.slice(0, 120),
+  };
+
   // Emit classifying stage — intent and action type are now known
-  emit(buildStageEvent("classifying", intentResult.type, execPlan.action));
+  emit(buildStageEvent("classifying", intentResult.type, execPlan.action, _narrationCtx));
 
   // ── Helper: build the final SSE complete response ─────────────────────────
   function buildCompleteEvent(opts: {
@@ -3015,7 +3039,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
     try {
       // ── Stage: Planning ────────────────────────────────────────────────────
-      emit(buildStageEvent("planning", intentResult.type, execPlan.action));
+      emit(buildStageEvent("planning", intentResult.type, execPlan.action, _narrationCtx));
 
       // ── 1. Load full training system for DB pipeline ───────────────────────
       const [streamFullSystem, streamDecisionMemory] = await Promise.all([
@@ -3047,7 +3071,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           { scope: streamScopeResolution.scope, systemId: resolvedSystem.id },
           "[HierarchicalRefine:stream] Routing to hierarchical engine"
         );
-        emit(buildStageEvent("applying", intentResult.type, execPlan.action));
+        emit(buildStageEvent("applying", intentResult.type, execPlan.action, _narrationCtx));
         const streamHierarchicalResult = await applyHierarchicalRefinement({
           systemId: resolvedSystem.id,
           userId,
@@ -3119,7 +3143,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       }
 
       // ── 2. Resolve target + interpret via DB edit pipeline ─────────────────
-      emit(buildStageEvent("applying", intentResult.type, execPlan.action));
+      emit(buildStageEvent("applying", intentResult.type, execPlan.action, _narrationCtx));
 
       const streamTarget = resolveTargetFromRequest(
         parsed.data.content,
@@ -3193,7 +3217,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       }
 
       // ── 4. Handle failed verification ──────────────────────────────────────
-      emit(buildStageEvent("validating", intentResult.type, execPlan.action));
+      emit(buildStageEvent("validating", intentResult.type, execPlan.action, _narrationCtx));
       const streamVerification = streamEditResult.verification;
 
       if (streamVerification.status === "failed") {
@@ -3329,7 +3353,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
   // ── Standard AI Response Path ─────────────────────────────────────────────
   // Stage 4: Plan Modifications — determine scope and pre-transform if needed
-  emit(buildStageEvent("planning", intentResult.type, execPlan.action));
+  emit(buildStageEvent("planning", intentResult.type, execPlan.action, _narrationCtx));
 
   const isModificationIntent = (
     intentResult.type === "EDIT_PROGRAM" ||
@@ -3401,7 +3425,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   }
 
   // Stage 5: Apply Changes — AI generates the program (this is the longest stage)
-  emit(buildStageEvent("applying", intentResult.type, execPlan.action));
+  emit(buildStageEvent("applying", intentResult.type, execPlan.action, _narrationCtx));
 
   // For new program builds (or explicit fresh-build sessions), do NOT pass the old
   // uiContext to the AI. The buildUIContextSection would otherwise inject the old
@@ -3547,7 +3571,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
   _t_ai_end = Date.now();
   // Stage 6: Validate — AI response quality checks done; now persist
-  emit(buildStageEvent("validating", intentResult.type, execPlan.action));
+  emit(buildStageEvent("validating", intentResult.type, execPlan.action, _narrationCtx));
 
   // ── Enrich structuredData with build metadata for initial builds ──────────
   // If there was no active system before this request and we built a new program,
@@ -3575,7 +3599,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   }
 
   // Stage 7: Save Program State
-  emit(buildStageEvent("saving", intentResult.type, execPlan.action));
+  emit(buildStageEvent("saving", intentResult.type, execPlan.action, _narrationCtx));
   _t_db_start = Date.now();
 
   const [assistantMessage] = await db.insert(messagesTable).values({

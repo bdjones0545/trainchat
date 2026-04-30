@@ -1,0 +1,172 @@
+Build Conversational SSE Reasoning Layer for TrainChat
+
+Goal:
+Upgrade the streaming experience so the agent shows human-readable reasoning while building or adjusting a program — similar to Replit Agent, but using training-specific language.
+
+Do NOT expose internal file names, system architecture, or developer terminology.
+All narration must sound like a coach thinking through decisions.
+
+---
+
+1. Add Stage-Based Narration System
+
+Create a function:
+
+buildStageNarration(stage, context)
+
+Stages to support:
+- understanding
+- planning
+- assigning_main
+- assigning_accessories
+- validating
+- saving
+
+Each stage returns 1–2 short conversational sentences.
+
+Example outputs:
+
+understanding:
+"Got it — I’m building your 4-day strength system."
+
+planning:
+"I’m choosing a split that lets you recover between hard training days."
+
+assigning_main:
+"I’m selecting your main lifts based on strength carryover and what most gyms have."
+
+assigning_accessories:
+"I’m filling in supporting work to balance muscle groups and avoid overload."
+
+validating:
+"Final check — making sure everything lines up before saving."
+
+saving:
+"Saving your program — this is now your active system."
+
+---
+
+2. Use Real Context (No Generic Text)
+
+Narration must pull from actual planner data:
+
+context includes:
+- goal (strength, hypertrophy, power)
+- splitType (e.g., lower/upper)
+- equipmentProfile (common gym, home, hotel)
+- sport (optional)
+- constraints (pain, unavailable equipment)
+
+Examples:
+
+"I’m building a lower/upper split so recovery stays clean."
+
+"I’m prioritizing dumbbells and barbells since those are available in most gyms."
+
+"I’m reducing knee stress based on what you told me."
+
+If context is missing, fallback to generic version.
+
+---
+
+3. Integrate with Existing SSE Pipeline
+
+Hook into current streaming stages:
+understanding → planning → applying → validating → saving
+
+Map them to narration stages:
+
+understanding → understanding  
+planning → planning  
+applying → assigning_main + assigning_accessories  
+validating → validating  
+saving → saving  
+
+Emit narration progressively during SSE, not all at once.
+
+---
+
+4. Add Stage Commitment Events
+
+Each stage emits:
+
+{
+  stage: string,
+  status: "start" | "complete",
+  message: narration,
+  timestamp: number
+}
+
+UI should:
+- show checkmark when stage completes
+- animate progress
+- persist completed stages
+
+---
+
+5. Chat Stream Behavior
+
+Stream messages like:
+
+"Got it — I’m building your program."
+
+Then progressively:
+
+"I’m choosing your split..."
+"I’m selecting your main lifts..."
+"I’m balancing your accessory work..."
+"Final check before saving..."
+
+Do NOT dump full message at end.
+Stream step-by-step.
+
+---
+
+6. Mutation Awareness
+
+If the action is NOT a full rebuild:
+
+- Equipment change:
+"I removed Belt Squat and replaced it with Goblet Squat."
+
+- Pain:
+"I adjusted today to reduce stress on your knee."
+
+- Time constraint:
+"I shortened today while keeping the main lifts."
+
+Do NOT narrate full program build if only mutation occurred.
+
+---
+
+7. Guardrails
+
+Do NOT:
+- mention files, code, or system internals
+- repeat the same narration
+- exceed 1–2 sentences per stage
+- contradict final output
+
+DO:
+- keep tone simple and confident
+- reflect actual decisions
+- align narration with final program
+
+---
+
+8. Tests
+
+Add tests for:
+
+1. Each stage emits narration
+2. Narration uses real context when available
+3. Stages stream in correct order
+4. No duplicate stage emissions
+5. Mutation flow produces mutation-specific narration
+6. Final program matches narrated decisions
+7. No internal system terms appear in output
+
+---
+
+Goal:
+Make the agent feel like it is thinking in real time — not loading — and make every step understandable and trustworthy to the user.

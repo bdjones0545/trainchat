@@ -1,3 +1,5 @@
+import { buildStageNarration, type NarrationContext } from "./stage-narration";
+
 /**
  * Build Pipeline — Phase 2.4
  *
@@ -160,14 +162,23 @@ export type StageEmitter = (stage: BuildStage) => void;
 /**
  * Build a stage SSE event object ready to write to the stream.
  * Picks the most specific label available: actionType > default.
+ * When narrationCtx is provided, includes a `narration` field with
+ * coach-voiced, context-specific text for the UI to display.
  */
 export function buildStageEvent(
   stage: BuildStage,
   intentType?: string,
   actionType?: string,
+  narrationCtx?: NarrationContext,
 ): Record<string, unknown> {
   const actionLabels = actionType ? ACTION_STAGE_LABELS[actionType] : null;
   const step = actionLabels?.[stage] ?? STAGE_LABELS[stage];
+
+  let narration: string | undefined;
+  if (narrationCtx) {
+    const text = buildStageNarration(stage, narrationCtx);
+    if (text) narration = text;
+  }
 
   return {
     type: "stage",
@@ -175,5 +186,6 @@ export function buildStageEvent(
     step,
     ...(intentType  ? { intentType }  : {}),
     ...(actionType  ? { actionType }  : {}),
+    ...(narration   ? { narration }   : {}),
   };
 }

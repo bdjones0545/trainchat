@@ -37,6 +37,8 @@ export interface StageEvent {
   step: string;
   intentType?: string;
   actionType?: string;
+  /** Coach-voiced narration for this stage — context-specific, 1–2 sentences. */
+  narration?: string;
 }
 
 export interface CompleteEvent {
@@ -137,6 +139,8 @@ export interface StreamState {
   buildStage: BuildStage | null;
   /** User-visible label for the current stage (intent-specific from server). */
   stageLabel: string;
+  /** Coach-voiced narration for the current stage — context-specific, updates per stage. */
+  stageNarration: string;
   /** Labels of committed milestone stages, shown as locked bubbles. */
   stageHistory: string[];
   intentType: string | undefined;
@@ -229,6 +233,7 @@ const INITIAL_STATE: StreamState = {
   acknowledgment: "",
   buildStage: null,
   stageLabel: "",
+  stageNarration: "",
   stageHistory: [],
   intentType: undefined,
   actionType: undefined,
@@ -257,6 +262,7 @@ export function useStreamMessage(): UseStreamMessageResult {
         acknowledgment: "",
         buildStage: null,
         stageLabel: "",
+        stageNarration: "",
         stageHistory: [],
         intentType: undefined,
         actionType: undefined,
@@ -391,6 +397,7 @@ export function useStreamMessage(): UseStreamMessageResult {
                     phase: "building",
                     buildStage: event.stage,
                     stageLabel: event.step,
+                    stageNarration: event.narration ?? s.stageNarration,
                     stageHistory: newHistory,
                     intentType: event.intentType ?? s.intentType,
                     actionType: resolvedActionType,

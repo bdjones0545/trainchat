@@ -2649,6 +2649,7 @@ export default function Chat() {
                     stageLabel={stream.state.stageLabel}
                     stageHistory={stream.state.stageHistory}
                     actionType={stream.state.actionType}
+                    stageNarration={stream.state.stageNarration || undefined}
                   />
                 )}
 
