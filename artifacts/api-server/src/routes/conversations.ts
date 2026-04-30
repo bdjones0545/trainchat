@@ -2066,11 +2066,14 @@ Keep it helpful and intelligent, never promotional.`;
     }
   }
 
-  // ── Enrich structuredData with build metadata for initial builds ──────────
+  // ── Enrich structuredData with build metadata for all program builds ────────
+  // Attach _buildMeta for initial builds AND for rebuilds from scratch so the UI
+  // always renders a BuildSummaryCard after any full program generation.
   const isInitialBuildNonStream =
-    !hasActiveSystem &&
     structuredData != null &&
-    (intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM");
+    (intentResult.type === "CREATE_PROGRAM" ||
+     intentResult.type === "START_NEW_PROGRAM" ||
+     intentResult.type === "STRUCTURAL_REBUILD");
 
   if (isInitialBuildNonStream && structuredData) {
     const _buildFocusMode = goalToFocusMode(extractedConstraints?.primaryGoal) as FocusMode;
@@ -3698,13 +3701,14 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   // Stage 6: Validate — AI response quality checks done; now persist
   emit(buildStageEvent("validating", intentResult.type, execPlan.action, _narrationCtx));
 
-  // ── Enrich structuredData with build metadata for initial builds ──────────
-  // If there was no active system before this request and we built a new program,
-  // attach _buildMeta so the chat message can render a rich BuildSummaryCard.
+  // ── Enrich structuredData with build metadata for all program builds ────────
+  // Attach _buildMeta for initial builds AND for rebuilds from scratch so the UI
+  // always renders a BuildSummaryCard after any full program generation.
   const isInitialBuild =
-    !hasActiveSystem &&
     structuredData != null &&
-    (intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM");
+    (intentResult.type === "CREATE_PROGRAM" ||
+     intentResult.type === "START_NEW_PROGRAM" ||
+     intentResult.type === "STRUCTURAL_REBUILD");
 
   if (isInitialBuild && structuredData) {
     const _sseBuildFocusMode = goalToFocusMode(extractedConstraints?.primaryGoal) as FocusMode;

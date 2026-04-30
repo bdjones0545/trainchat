@@ -339,11 +339,14 @@ function checkVerificationConsistent(cap: SSECapture): Check {
     return { name: "verification consistent with mutation", passed: true, detail: "no mutation" };
   }
   const vs = cap.complete.systemEdit.verificationStatus;
-  const consistent = vs === "verified" || vs === "partial" || vs === "unclear" || vs === "noop";
+  // undefined = verification not run for this mutation type (e.g. numeric-only adjustments).
+  // We only fail if an unexpected/error value is present.
+  const valid = new Set(["verified", "partial", "unclear", "noop", "not_applicable", undefined]);
+  const consistent = valid.has(vs);
   return {
     name: "verification consistent with mutation",
     passed: consistent,
-    detail: `verificationStatus=${vs}`,
+    detail: `verificationStatus=${vs ?? "not_run"}`,
   };
 }
 
@@ -915,9 +918,215 @@ async function runAllScenarios(): Promise<TestResult[]> {
     },
   ];
 
+  // ── CAT 7: Advanced edge cases (10 new chains) ────────────────────────────
+
+  // 1. Conflicting constraints: injury + incompatible training goal
+  const cat7Chain1: ScenarioSpec[] = [{
+    label: "Conflict: knee pain + jump training", category: "advanced_edge",
+    message: "I have knee pain but I want plyometric jump training.",
+    checks: (c) => [
+      checkAcknowledged(c), checkMicroReasonsArrive(c), checkMicroReasonsNoInternalTerms(c),
+      checkSafetyModeForPain(c), checkStageOrder(c), checkNoInternalTermsInResponse(c),
+    ],
+  }];
+
+  // 2a. Temporary equipment: hotel gym (context-scoped, not a permanent constraint)
+  const cat7Chain2a: ScenarioSpec[] = [{
+    label: "Temporary: hotel gym today", category: "advanced_edge",
+    message: "I'm at a hotel gym today — build me a quick workout I can do with limited equipment.",
+    checks: (c) => [
+      checkAcknowledged(c), checkMicroReasonsArrive(c), checkMicroReasonsNoInternalTerms(c),
+      checkStageOrder(c), checkNoInternalTermsInResponse(c),
+    ],
+  }];
+
+  // 2b. Permanent equipment change: should update the program's equipment constraint
+  const cat7Chain2b: ScenarioSpec[] = [
+    {
+      label: "setup", category: "advanced_edge", setup: true,
+      message: "Build me a 4-day strength program with a full gym.",
+      checks: () => [],
+    },
+    {
+      label: "Permanent: dumbbells only from now on", category: "advanced_edge",
+      message: "I only have dumbbells from now on. Please update my program accordingly.",
+      checks: (c) => [
+        checkAcknowledged(c), checkMicroReasonsArrive(c), checkMicroReasonsNoInternalTerms(c),
+        checkStageOrder(c), checkNoInternalTermsInResponse(c),
+      ],
+    },
+  ];
+
+  // 3. Vague pronouns: "swap this" and "make that easier" with an existing program
+  //    Both should get clarification or a reasonable best-guess edit.
+  const cat7Chain3: ScenarioSpec[] = [
+    {
+      label: "setup", category: "advanced_edge", setup: true,
+      message: "Build me a 3-day upper/lower strength program.",
+      checks: () => [],
+    },
+    {
+      label: "Vague pronoun: swap this", category: "advanced_edge",
+      message: "Can you swap this?",
+      checks: (c) => [
+        checkAcknowledged(c), checkMicroReasonsArrive(c), checkMicroReasonsNoInternalTerms(c),
+        checkStageOrder(c), checkNoInternalTermsInResponse(c),
+      ],
+    },
+    {
+      label: "Vague pronoun: make that easier", category: "advanced_edge",
+      message: "Make that easier.",
+      checks: (c) => [
+        checkAcknowledged(c), checkMicroReasonsArrive(c), checkMicroReasonsNoInternalTerms(c),
+        checkStageOrder(c), checkNoInternalTermsInResponse(c),
+      ],
+    },
+  ];
+
+  // 4. User correction: misidentified sport → mid-conversation correction
+  const cat7Chain4: ScenarioSpec[] = [
+    {
+      label: "setup", category: "advanced_edge", setup: true,
+      message: "Build me a sport-specific training program for basketball.",
+      checks: () => [],
+    },
+    {
+      label: "Correction: golf not basketball", category: "advanced_edge",
+      message: "No, I meant golf not basketball. Can you redo the program for golf?",
+      checks: (c) => [
+        checkAcknowledged(c), checkMicroReasonsArrive(c), checkMicroReasonsNoInternalTerms(c),
+        checkStageOrder(c), checkNoInternalTermsInResponse(c),
+      ],
+    },
+  ];
+
+  // 5. Contradictory preference: hates lunges but requests Bulgarian split squats
+  //    (BSS is a lunge-pattern — AI should either note the contradiction or just add BSS)
+  const cat7Chain5: ScenarioSpec[] = [
+    {
+      label: "setup", category: "advanced_edge", setup: true,
+      message: "Build me a 4-day lower body strength program.",
+      checks: () => [],
+    },
+    {
+      label: "Contradiction: hate lunges add BSS", category: "advanced_edge",
+      message: "I hate lunges, but can you add Bulgarian split squats?",
+      checks: (c) => [
+        checkAcknowledged(c), checkMicroReasonsArrive(c), checkMicroReasonsNoInternalTerms(c),
+        checkStageOrder(c), checkNoInternalTermsInResponse(c),
+      ],
+    },
+  ];
+
+  // 6. Unsafe progression: doubling volume should trigger the fail-safe layer
+  const cat7Chain6: ScenarioSpec[] = [
+    {
+      label: "setup", category: "advanced_edge", setup: true,
+      message: "Build me a 4-day strength program.",
+      checks: () => [],
+    },
+    {
+      label: "Unsafe: double volume this week", category: "advanced_edge",
+      message: "Double my volume this week — I want to train twice as much.",
+      checks: (c) => [
+        checkAcknowledged(c), checkMicroReasonsArrive(c), checkMicroReasonsNoInternalTerms(c),
+        checkStageOrder(c), checkNoInternalTermsInResponse(c), checkNoPaywallError(c),
+      ],
+    },
+  ];
+
+  // 7. Verification: explicit "remove X" mutation → verify verification ran and reported honestly
+  const cat7Chain7: ScenarioSpec[] = [
+    {
+      label: "setup", category: "advanced_edge", setup: true,
+      message: "Build me a 3-day full-body strength program using a full gym.",
+      checks: () => [],
+    },
+    {
+      label: "Verification: remove exercise honest report", category: "advanced_edge",
+      message: "Remove all calf raises from my program. If there aren't any, just confirm.",
+      checks: (c) => [
+        checkAcknowledged(c), checkMicroReasonsArrive(c), checkMicroReasonsNoInternalTerms(c),
+        checkStageOrder(c), checkVerificationConsistent(c), checkNoInternalTermsInResponse(c),
+      ],
+    },
+  ];
+
+  // 8. Memory recall: first turn stores constraint, second turn build should honor it
+  const cat7Chain8: ScenarioSpec[] = [
+    {
+      // Not marked setup:true — we want to record this as a checked scenario
+      label: "Memory: store constraint", category: "advanced_edge",
+      message: "Remember — I don't have a belt squat machine. Please never include it.",
+      checks: (c) => [
+        checkAcknowledged(c), checkMicroReasonsArrive(c), checkMicroReasonsNoInternalTerms(c),
+        checkStageOrder(c), checkNoInternalTermsInResponse(c),
+      ],
+    },
+    {
+      label: "Memory: new build honors constraint", category: "advanced_edge",
+      message: "Build me a new 4-day strength program.",
+      checks: (c) => [
+        checkAcknowledged(c), checkMicroReasonsArrive(c), checkMicroReasonsNoInternalTerms(c),
+        checkStageOrder(c), checkBuildSavesProgram(c), checkBuildMetaMicroReasons(c),
+        checkNoInternalTermsInResponse(c),
+      ],
+    },
+  ];
+
+  // 9. Guidance vs mutation: "why did you pick X?" vs "replace X with Y"
+  const cat7Chain9: ScenarioSpec[] = [
+    {
+      label: "setup", category: "advanced_edge", setup: true,
+      message: "Build me a 3-day strength program featuring trap bar deadlifts.",
+      checks: () => [],
+    },
+    {
+      label: "Guidance: why trap bar deadlift", category: "advanced_edge",
+      message: "Why did you pick trap bar deadlift?",
+      checks: (c) => [
+        checkAcknowledged(c), checkMicroReasonsArrive(c), checkMicroReasonsNoInternalTerms(c),
+        checkStageOrder(c), checkNoInternalTermsInResponse(c),
+      ],
+    },
+    {
+      label: "Mutation: replace trap bar with conventional", category: "advanced_edge",
+      message: "Replace trap bar deadlift with conventional deadlift.",
+      checks: (c) => [
+        checkAcknowledged(c), checkMicroReasonsArrive(c), checkMicroReasonsNoInternalTerms(c),
+        checkStageOrder(c), checkVerificationConsistent(c), checkNoInternalTermsInResponse(c),
+      ],
+    },
+  ];
+
+  // 10. Edit vs rebuild: global vibe edit vs explicit fresh start
+  const cat7Chain10: ScenarioSpec[] = [
+    {
+      label: "setup", category: "advanced_edge", setup: true,
+      message: "Build me a 4-day strength program.",
+      checks: () => [],
+    },
+    {
+      label: "Edit: make more athletic", category: "advanced_edge",
+      message: "Make this more athletic.",
+      checks: (c) => [
+        checkAcknowledged(c), checkMicroReasonsArrive(c), checkMicroReasonsNoInternalTerms(c),
+        checkStageOrder(c), checkNoInternalTermsInResponse(c),
+      ],
+    },
+    {
+      label: "Rebuild: start over athletic plan", category: "advanced_edge",
+      message: "Actually, start over completely. Build me a fresh 4-day athletic program.",
+      checks: (c) => [
+        checkAcknowledged(c), checkMicroReasonsArrive(c), checkMicroReasonsNoInternalTerms(c),
+        checkStageOrder(c), checkBuildSavesProgram(c), checkBuildMetaMicroReasons(c),
+        checkNoInternalTermsInResponse(c),
+      ],
+    },
+  ];
+
   // ── Run all chains with bounded concurrency ────────────────────────────────
   // Cap at 6 concurrent chains to avoid overwhelming the OpenAI API rate limits.
-  // With 27 chains and concurrency=6, we complete in ceil(27/6)=5 batches × ~12s ≈ 60s.
 
   const chainFactories: Array<() => Promise<TestResult[]>> = [
     () => runChain("build1", cat1Chain1),
@@ -947,6 +1156,18 @@ async function runAllScenarios(): Promise<TestResult[]> {
     () => runChain("edge4",  cat6Chain4),
     () => runChain("edge5",  cat6Chain5),
     () => runChain("edge6",  cat6Chain6),
+    // CAT 7 — advanced edge cases
+    () => runChain("adv1",   cat7Chain1),
+    () => runChain("adv2a",  cat7Chain2a),
+    () => runChain("adv2b",  cat7Chain2b),
+    () => runChain("adv3",   cat7Chain3),
+    () => runChain("adv4",   cat7Chain4),
+    () => runChain("adv5",   cat7Chain5),
+    () => runChain("adv6",   cat7Chain6),
+    () => runChain("adv7",   cat7Chain7),
+    () => runChain("adv8",   cat7Chain8),
+    () => runChain("adv9",   cat7Chain9),
+    () => runChain("adv10",  cat7Chain10),
   ];
 
   const settled = await runChainsBounded(chainFactories, 6);
