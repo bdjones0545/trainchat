@@ -58,6 +58,14 @@ export interface ExerciseScoreBreakdown {
     dayIdentityAlignmentFit: number;
     controlNoveltyBonus: number;
     controlNoveltyPenalty: number;
+    blockExposurePenalty: number;
+    phaseAffinityFit: number;
+    /** -100 when the exercise matches a user-banned item (last-resort safety) */
+    bannedPenalty: number;
+    /** -6 when the exercise matches a user-disliked item */
+    dislikedPenalty: number;
+    /** -6 (hard) or -3 (soft) when the exercise conflicts with a pain region */
+    painConflictPenalty: number;
   };
 }
 

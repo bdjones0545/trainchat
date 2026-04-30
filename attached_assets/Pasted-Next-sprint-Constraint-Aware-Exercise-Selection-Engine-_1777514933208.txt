@@ -1,0 +1,118 @@
+Next sprint: Constraint-Aware Exercise Selection Engine
+
+Goal:
+Ensure banned/disliked exercises and constraint-violating patterns are NEVER selected during generation — not just caught afterward.
+
+Current problem:
+Constraints are enforced via:
+- memory directive (prompt)
+- post-generation validator
+
+This still allows violations and requires repair.
+
+Target:
+Move constraint enforcement upstream into the exercise selection/scoring process so invalid exercises are never selected.
+
+---
+
+1. Update Exercise Selection Pipeline
+
+In exercise-variation-engine.ts (or equivalent selection logic):
+
+Add constraint filtering BEFORE scoring:
+
+filterCandidatesByConstraints(candidates, constraints)
+
+Remove any candidate where:
+- exercise matches bannedItems (equipment_unavailable)
+- exercise matches dislikedItems
+- exercise conflicts with painRegions (pattern-level)
+- exercise conflicts with equipment profile
+
+Then run scoring only on filtered candidates.
+
+---
+
+2. Add Constraint Penalty System (soft fallback)
+
+If filtering would remove ALL candidates:
+- fallback to penalty-based scoring instead of empty list
+
+Add:
+- hardBanPenalty (effectively removes unless no alternatives)
+- strongDislikePenalty
+- painConflictPenalty
+
+But NEVER allow:
+- banned equipment (e.g., belt squat when unavailable)
+
+---
+
+3. Pattern-Level Constraint Handling
+
+Pain is NOT exercise-specific only.
+
+Example:
+knee pain →
+- penalize deep knee flexion patterns
+- avoid high-load bilateral squats
+- prefer:
+  - split squats (controlled ROM)
+  - step-ups
+  - hip-dominant patterns
+
+Implement:
+conflictsWithPainPattern(exercise, painRegions)
+
+---
+
+4. Equipment Availability Tiers
+
+Add metadata to exercise library:
+
+equipmentAvailability:
+- common
+- uncommon
+- specialty
+
+Default behavior:
+- prioritize "common"
+- heavily penalize "specialty" unless explicitly allowed
+
+---
+
+5. Sport Context Bias (positive constraint)
+
+From memory:
+- golf → rotational power emphasis
+- football → acceleration / lower power
+- tennis/pickleball → lateral + decel
+
+Add positive scoring boosts, not just penalties.
+
+---
+
+6. Remove Reliance on Prompt Compliance
+
+After this change:
+- constraint directive becomes reinforcement, not primary defense
+- validator becomes safety net, not main mechanism
+
+---
+
+7. Update Tests
+
+Add tests for:
+
+1. Belt Squat banned → never appears in generated program
+2. Disliked exercise → never appears
+3. Knee pain → deep squat patterns reduced or removed
+4. Home gym → no machine-based exercises
+5. No candidates edge case → fallback works safely
+6. Sport context influences selection
+7. Validator rarely triggers (only edge cases)
+
+---
+
+Goal:
+Make constraint violations structurally impossible instead of reactively corrected.

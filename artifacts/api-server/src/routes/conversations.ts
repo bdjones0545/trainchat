@@ -1920,6 +1920,7 @@ Keep it helpful and intelligent, never promotional.`;
       responsePolicy: resolvedResponsePolicy,
       focusMode: nonStreamFocusMode,
       failSafeResolution,
+      hardConstraints: hardConstraintsNonSSE,
     }
   );
 
@@ -2019,6 +2020,7 @@ Keep it helpful and intelligent, never promotional.`;
           neuralBias,
           neuralImbalances,
           agentSettings,
+          hardConstraints: hardConstraintsNonSSE,
         }
       ).catch(() => null);
 
@@ -3533,6 +3535,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       responsePolicy: resolvedResponsePolicy,
       focusMode: streamFocusMode,
       failSafeResolution,
+      hardConstraints: hardConstraintsSSE,
     }
   );
 
@@ -3618,6 +3621,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           userMessage: parsed.data.content,
           transformHint: enforceHint,
           agentSettings,
+          hardConstraints: hardConstraintsSSE,
         }
       ).catch(() => null);
 

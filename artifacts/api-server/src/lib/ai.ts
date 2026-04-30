@@ -35,6 +35,7 @@ import {
 } from "./split-transform";
 import { retrieveRelevantKnowledge } from "./knowledge-retrieval";
 import { buildArchitectureBrief, validateProgramArchitecture, extractSportFromRequest, getLastSlotSelection, enforceVariationMandateOnProgram, computeWeeklyArchitecture } from "./program-architecture-engine";
+import type { HardConstraints } from "./constraint-memory";
 import type { WeeklyArchitecture, SessionArchitecture, MovementPattern as ArchMovementPattern } from "./program-architecture-engine";
 import { buildConditioningContext, isConditioningGoal } from "./conditioning-engine";
 import { buildPowerSpeedContext, isPowerRequest, isSpeedRequest } from "./power-speed-engine";
@@ -2193,6 +2194,13 @@ export interface AIResponseOptions {
    */
   execPlanAction?: string | null;
   failSafeResolution?: FailSafeResolution | null;
+  /**
+   * Persisted user hard constraints from cross-turn constraint memory.
+   * When provided, these are threaded into the exercise selection engine
+   * so constraint violations are structurally impossible to select, not
+   * just caught and repaired in the post-generation validator.
+   */
+  hardConstraints?: HardConstraints | null;
 }
 
 // ─── Main entry point ────────────────────────────────────────────────────────
@@ -2225,6 +2233,7 @@ export async function generateAIResponse(
     focusMode: rawFocusMode,
     execPlanAction,
     failSafeResolution,
+    hardConstraints,
   } = options;
 
   const focusMode = resolveFocusMode(rawFocusMode ?? null);
@@ -2514,7 +2523,7 @@ export async function generateAIResponse(
         [], // preserveInstructions: empty at this stage — future: populate from responsePolicy
       );
 
-      architectureBriefText = buildArchitectureBrief(days, sport, goal, userMessage, Math.random(), detectedDirectives ?? undefined);
+      architectureBriefText = buildArchitectureBrief(days, sport, goal, userMessage, Math.random(), detectedDirectives ?? undefined, hardConstraints);
       // Capture the freshly-computed slot selections (set as a side-effect inside buildArchitectureBrief).
       // buildArchitectureBrief resets _lastSlotSelection to null at its start, so this correctly
       // returns null for SP builds and the fresh selection for non-SP builds.

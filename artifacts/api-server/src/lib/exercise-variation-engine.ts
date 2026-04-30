@@ -60,6 +60,8 @@ import {
 import type { ProgramContextProfile } from "./programs/programContextProfile";
 import type { ResolvedAgentControls } from "./programs/agentControlTypes";
 import { getAnchorPenaltyMultiplierForMode } from "./programs/agentControlResolver";
+import type { HardConstraints } from "./constraint-memory";
+import { filterCandidatesByConstraints, computeConstraintPenalties } from "./exercise-constraint-filter";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -132,6 +134,13 @@ export interface ScoreContext {
    * that prevents any single exercise from dominating a slot across all weeks.
    */
   blockExposure?: BlockExposureTracker;
+  /**
+   * Persisted user hard constraints (banned equipment, disliked exercises,
+   * pain regions, sport context). When provided, scoreCandidate applies
+   * heavy penalties to constraint-violating exercises as a final safety
+   * layer after pre-filtering has already removed most violations.
+   */
+  hardConstraints?: HardConstraints | null;
 }
 
 export interface SlotExerciseSelection {
@@ -219,6 +228,13 @@ interface CandidateScore {
      *  movement family during the current training phase (establish/build/
      *  intensify/deload).  Drives WHICH family member is chosen. */
     phaseAffinityFit: number;
+    // ── Constraint Enforcement Layer ──────────────────────────────────────────
+    /** -100 if the exercise matches a user-banned item (last-resort fallback) */
+    bannedPenalty: number;
+    /** -6 if the exercise matches a user-disliked item */
+    dislikedPenalty: number;
+    /** -6 (hard) or -3 (soft) pain-region conflict */
+    painConflictPenalty: number;
   };
 }
 
@@ -1099,6 +1115,23 @@ function scoreCandidate(
     phaseAffinityFit = Math.min(2.5, rawBonus);
   }
 
+  // ── Constraint Penalties (last-resort safety layer) ─────────────────────
+  // Applied AFTER pre-filtering in pick() has already removed most violations.
+  // These penalties act as a scoring safety net in case a constraint-violating
+  // exercise survived the pre-filter (e.g. the entire pool was banned).
+  //   bannedPenalty      -100   — effectively eliminates from softmax draw
+  //   dislikedPenalty      -6   — strong discouragement, not hard elimination
+  //   painConflictPenalty -4/-2 — hard/soft pain region conflict
+  let bannedPenalty = 0;
+  let dislikedPenalty = 0;
+  let painConflictPenalty = 0;
+  if (ctx.hardConstraints) {
+    const cp = computeConstraintPenalties(meta.name, ctx.hardConstraints);
+    bannedPenalty = cp.bannedPenalty;
+    dislikedPenalty = cp.dislikedPenalty;
+    painConflictPenalty = cp.painConflictPenalty;
+  }
+
   // ── Total ─────────────────────────────────────────────────────────────────
   //
   // New decision hierarchy (read top-to-bottom = highest priority first):
@@ -1145,7 +1178,9 @@ function scoreCandidate(
     + controlNoveltyBonus - controlNoveltyPenalty
     // PRIMARY: family rotation system
     - blockExposurePenalty
-    + phaseAffinityFit;
+    + phaseAffinityFit
+    // CONSTRAINT ENFORCEMENT: persisted user constraints (last-resort safety)
+    - bannedPenalty - dislikedPenalty - painConflictPenalty;
 
   return {
     name: meta.name,
@@ -1186,6 +1221,9 @@ function scoreCandidate(
       controlNoveltyPenalty,
       blockExposurePenalty,
       phaseAffinityFit,
+      bannedPenalty,
+      dislikedPenalty,
+      painConflictPenalty,
     },
   };
 }
@@ -1414,6 +1452,9 @@ function ranked(pool: ExerciseMeta[], ctx: ScoreContext, primeMultiplier: number
           phaseAffinityFit: c.breakdown.phaseAffinityFit,
           controlNoveltyBonus: c.breakdown.controlNoveltyBonus,
           controlNoveltyPenalty: c.breakdown.controlNoveltyPenalty,
+          bannedPenalty: c.breakdown.bannedPenalty,
+          dislikedPenalty: c.breakdown.dislikedPenalty,
+          painConflictPenalty: c.breakdown.painConflictPenalty,
         },
       });
 
@@ -2302,6 +2343,7 @@ export function selectSlotExercises(
   dayIndex?: number,
   registerSelections: boolean = true,
   blockExposure?: BlockExposureTracker,
+  hardConstraints?: HardConstraints | null,
 ): SlotExerciseSelection {
   const alreadySelected = new Set<string>();
   const debugInfos: SlotDebugInfo[] = [];
@@ -2338,6 +2380,14 @@ export function selectSlotExercises(
       intent,
     );
 
+    // ── Pre-filter: structurally remove constraint violations before scoring ──
+    // Banned items and disliked items are removed BEFORE the softmax draw so
+    // they are impossible to select, not just penalised. The filter includes a
+    // safety fallback — it will never return an empty pool.
+    const effectivePool = hardConstraints
+      ? filterCandidatesByConstraints(pool, hardConstraints)
+      : pool;
+
     // Derive per-slot intent from block archetype + phase (pass dayIndex for day identity overrides)
     const slotIntent = programContext
       ? deriveSlotIntent(programContext, slotName, dayIndex)
@@ -2360,8 +2410,9 @@ export function selectSlotExercises(
       resolvedAgentControls,
       dayIndex,
       blockExposure,
+      hardConstraints: hardConstraints ?? undefined,
     };
-    const { chosen, debugInfo } = ranked(pool, ctx, primeMultiplier);
+    const { chosen, debugInfo } = ranked(effectivePool, ctx, primeMultiplier);
     debugInfos.push(debugInfo);
     alreadySelected.add(chosen);
 

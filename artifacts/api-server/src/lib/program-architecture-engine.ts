@@ -56,6 +56,7 @@ import { validateArchetypeCoherence } from "./programs/blockArchetypes";
 import { validateSplitArchitectures } from "./programs/splitArchitectures";
 import { buildProgramContextProfile } from "./programs/programContextProfile";
 import type { AgentControlDirectives } from "./programs/agentControlTypes";
+import type { HardConstraints } from "./constraint-memory";
 import { buildExtendedFingerprint } from "./programs/programFingerprint";
 import { runProgramVarianceAudit } from "./programs/programVarianceAudit";
 import { emitRerollLog } from "./programs/programVarianceReroll";
@@ -3211,6 +3212,7 @@ export function buildArchitectureBrief(
   userRequest: string,
   variationSeed?: number,
   agentControlDirectives?: AgentControlDirectives,
+  hardConstraints?: HardConstraints | null,
 ): string | null {
   if (!daysPerWeek || daysPerWeek < 2) return null;
 
@@ -3345,7 +3347,7 @@ export function buildArchitectureBrief(
   const splitVariationSeed = blockSelection.variationSeed;
   // dayIndex=0: architecture brief generates the primary/anchor day template
   blockExposure.setWeek(1);
-  const slotSelection = selectSlotExercises(splitVariationSeed, sport, goal, neuralDemand, equipmentLevel, isDeload, blockCtx, programContext, 0, true, blockExposure);
+  const slotSelection = selectSlotExercises(splitVariationSeed, sport, goal, neuralDemand, equipmentLevel, isDeload, blockCtx, programContext, 0, true, blockExposure, hardConstraints);
   _lastSlotSelection = slotSelection;
 
   // ── Per-week slot selections (Weeks 2–4) ─────────────────────────────────
@@ -3394,7 +3396,7 @@ export function buildArchitectureBrief(
     weeklyPlans[1].overallNeuralDemand,
     equipmentLevel, false,
     { blockType: blockTypeStr, weekRole: "build" },
-    programContextW2, 0, false, blockExposure,
+    programContextW2, 0, false, blockExposure, hardConstraints,
   );
 
   blockExposure.setWeek(3);
@@ -3403,7 +3405,7 @@ export function buildArchitectureBrief(
     weeklyPlans[2].overallNeuralDemand,
     equipmentLevel, false,
     { blockType: blockTypeStr, weekRole: "intensify" },
-    programContextW3, 0, false, blockExposure,
+    programContextW3, 0, false, blockExposure, hardConstraints,
   );
 
   blockExposure.setWeek(4);
@@ -3412,7 +3414,7 @@ export function buildArchitectureBrief(
     "low",
     equipmentLevel, true,
     { blockType: blockTypeStr, weekRole: "deload" },
-    programContextW4, 0, false, blockExposure,
+    programContextW4, 0, false, blockExposure, hardConstraints,
   );
 
   if (process.env.NODE_ENV !== "production") {
