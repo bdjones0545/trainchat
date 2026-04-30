@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "seed:products": "pnpm exec tsx scripts/seed-products.ts",
     "reset:dev-programs": "pnpm exec tsx scripts/reset-dev-programs.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "scenario-replay": "pnpm exec tsx scenario-replay.ts"
   },
   "dependencies": {
     "@sendgrid/mail": "^8.1.6",
