@@ -13,6 +13,7 @@ import { getChangeHistory, getChangeDetail } from "../lib/change-log-service";
 import { restoreFromChange } from "../lib/restore-service";
 import { getTodaySession, getCurrentWeek, getBlockSummary } from "../lib/training-system-service";
 import { trackLearningEvent } from "../lib/globalLearningService";
+import { writeAuditReceipt, deriveVerificationStatus } from "../lib/mutation-audit-receipt-service";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -91,6 +92,32 @@ router.post("/training-system/restore/:changeId", requireAuth, async (req, res):
       mutationApplied: true,
       metadata: { changeId, restoredChangeLogId: changeId },
     });
+
+    // ── Undo Audit Receipt — record the revert as its own immutable entry ──
+    // The restore's before/after are flipped from the original: the "before"
+    // state going into undo is the current (mutated) state, and the "after"
+    // is the state we restored to. We use empty snapshots as placeholders
+    // since `restoreFromChange` doesn't expose them directly.
+    void writeAuditReceipt({
+      userId,
+      trainingSystemId: activeSystem.id,
+      changeLogId: changeId,
+      userRequest: `[undo] restore to change log entry #${changeId}`,
+      intentFamily: "undo",
+      targetScope: "system",
+      persistenceType: "permanent",
+      mutationType: "reorient",
+      beforeSnapshot: { exercises: {}, sessions: {}, weeks: {}, phases: {} },
+      afterSnapshot:  { exercises: {}, sessions: {}, weeks: {}, phases: {} },
+      persistedConstraints: [],
+      verificationStatus: (result.verificationStatus === "verified" || result.verificationStatus === "partial")
+        ? result.verificationStatus
+        : "noop",
+      repairAttempted: false,
+      responseShown: null,
+      source: "chat",
+      metadata: { changeId, restoredChangeLogId: result.changeLogId ?? changeId, isUndo: true },
+    }).catch(() => {});
 
     // Return fresh data alongside the restore result
     const [today, week, block] = await Promise.all([

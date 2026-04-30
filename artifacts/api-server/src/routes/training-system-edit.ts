@@ -41,6 +41,7 @@ import {
   writeAuditReceipt,
   deriveVerificationStatus,
 } from "../lib/mutation-audit-receipt-service";
+import { classifyAdjustmentIntent } from "../lib/adjustment-intent-classifier";
 
 // ─── Diff computation ─────────────────────────────────────────────────────────
 
@@ -411,6 +412,20 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
     );
 
     // 5. Persist the change log entry
+    // ── Pre-log classification — sync, no async cost ──────────────────────────
+    // Compute these before the change log so decisionMetadata is enriched.
+    const preLogIntentClassification = (() => {
+      try {
+        return classifyAdjustmentIntent(userRequest, auditSystemFocus as FocusMode);
+      } catch {
+        return null;
+      }
+    })();
+
+    const resolvedVerificationStatus =
+      editResult.verification?.status ??
+      deriveVerificationStatus(editResult.appliedCount, editResult.skippedCount);
+
     let changeLogId: number | undefined;
     try {
       changeLogId = await createChangeLogEntry({
@@ -428,6 +443,14 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
         afterSnapshot: editResult.afterSnapshot,
         appliedCount: editResult.appliedCount,
         skippedCount: editResult.skippedCount,
+        decisionMetadata: {
+          verificationStatus: resolvedVerificationStatus,
+          persistenceType: preLogIntentClassification?.persistenceType ?? null,
+          mutationType: preLogIntentClassification?.mutationType ?? null,
+          safetyFlags: preLogIntentClassification?.safetyFlags ?? [],
+          changedCount: editResult.appliedCount,
+          skippedCount: editResult.skippedCount,
+        },
       });
     } catch (logErr) {
       logger.error({ logErr, userId }, "[SystemEdit] Failed to persist change log entry (non-fatal)");
@@ -462,21 +485,28 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       appliedCount: editResult.appliedCount,
     }).catch(() => {});
 
-    // ── Mutation Audit Receipt — immutable per-adjustment record ───────────────
-    // Fire-and-forget. A write failure MUST NOT break the response.
-    writeAuditReceipt({
+    // 6. Compute structured diff from before/after snapshots
+    const diff = computeSnapshotDiff(editResult.beforeSnapshot, editResult.afterSnapshot);
+
+    // ── Mutation Audit Receipt — immutable per-adjustment record (v2) ──────────
+    // Fire-and-forget. A write failure MUST NOT block the response.
+    void writeAuditReceipt({
       userId,
       trainingSystemId: activeSystem.id,
       changeLogId: changeLogId,
       userRequest,
       intentFamily: editPlan.intent,
+      targetScope: (targetContext?.type as string | undefined) ?? editPlan.scope,
+      persistenceType: preLogIntentClassification?.persistenceType ?? undefined,
+      mutationType: preLogIntentClassification?.mutationType ?? undefined,
       beforeSnapshot: editResult.beforeSnapshot,
       afterSnapshot: editResult.afterSnapshot,
+      beforeProgramSnapshot: editResult.beforeSnapshot,
+      afterProgramSnapshot: editResult.afterSnapshot,
+      changedExercises: diff.changedExercises ?? [],
       persistedConstraints: [],
-      verificationStatus: deriveVerificationStatus(
-        editResult.appliedCount,
-        editResult.skippedCount,
-      ),
+      verificationStatus: resolvedVerificationStatus,
+      repairAttempted: false,
       responseShown: editResult.changeSummary ?? null,
       source: (source as "chat" | "edit_panel" | "quick_command" | "checkin" | "agent") ?? "edit_panel",
       focusMode: auditSystemFocus,
@@ -485,11 +515,15 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
         appliedCount: editResult.appliedCount,
         skippedCount: editResult.skippedCount,
         changedIds: editResult.changedIds,
+        intentClassification: preLogIntentClassification
+          ? {
+              persistenceType: preLogIntentClassification.persistenceType,
+              mutationType: preLogIntentClassification.mutationType,
+              safetyFlags: preLogIntentClassification.safetyFlags,
+            }
+          : null,
       },
     }).catch(() => {});
-
-    // 6. Compute structured diff from before/after snapshots
-    const diff = computeSnapshotDiff(editResult.beforeSnapshot, editResult.afterSnapshot);
 
     // Sync memories fire-and-forget — never block the response on memory ops.
     syncMemoriesFromData(userId).catch(() => {});
@@ -521,6 +555,7 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       changeSummary: editResult.changeSummary,
       appliedCount: editResult.appliedCount,
       skippedCount: editResult.skippedCount,
+      verificationStatus: resolvedVerificationStatus,
       changedIds: editResult.changedIds,
       changeTargets: editResult.changeTargets,
       changeLogId,

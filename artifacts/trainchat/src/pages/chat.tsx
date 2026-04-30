@@ -1202,6 +1202,8 @@ export default function Chat() {
       // Partial key match: invalidates all ["training-system-week", *] entries
       // so any observer re-fetches with the current active system and focus.
       queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+      // Audit receipts — always refresh so the Changes tab reflects the latest mutation
+      queryClient.invalidateQueries({ queryKey: ["mutation-audit-receipts"] });
 
       if (result.systemSaved) {
         // Record the newly saved system ID before flipping isSaved=true.

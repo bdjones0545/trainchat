@@ -5,6 +5,7 @@ import {
   integer,
   timestamp,
   jsonb,
+  boolean,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -17,15 +18,15 @@ import {
  * Design rules:
  *   - Append-only. Rows are NEVER updated or deleted.
  *   - Non-blocking. A write failure MUST NOT break the edit pipeline.
- *   - Intent-family-aware. Every row knows its IntentFamily classification.
- *   - Before/after are delta arrays (names that were removed / added), not
- *     full snapshots. Full snapshots live in system_change_log.
- *   - persistedConstraints lists constraint keys written to the user profile
- *     as a result of this adjustment (e.g. "belt_squat_unavailable").
- *   - verificationStatus follows the MutationVerificationResult contract:
- *     "verified" | "partial" | "failed" | "noop" | "unclear"
- *   - responseShown captures the exact text surfaced to the user after the
- *     adjustment. NEVER written unless the mutation verifier has confirmed.
+ *   - Intent-family-aware. Every row knows its IntentFamily + mutation class.
+ *   - before/after are delta name arrays (removed / added exercises).
+ *   - beforeProgramSnapshot / afterProgramSnapshot are full SystemSnapshots
+ *     stored for undo replay and verification.
+ *   - verificationStatus: "verified"|"partial"|"failed"|"noop"|"unclear"
+ *   - responseShown is ONLY written when the verifier confirms the change.
+ *   - v2 adds: targetScope, persistenceType, mutationType,
+ *     beforeProgramSnapshot, afterProgramSnapshot, changedExercises,
+ *     repairAttempted, auditReceiptVersion.
  */
 export const mutationAuditReceiptsTable = pgTable("mutation_audit_receipts", {
   id: serial("id").primaryKey(),
@@ -49,18 +50,58 @@ export const mutationAuditReceiptsTable = pgTable("mutation_audit_receipts", {
   intentFamily: text("intent_family").notNull(),
 
   /**
-   * Exercise / session / block names that were present BEFORE and are now gone.
-   * Computed as: names in beforeSnapshot.exercises not in afterSnapshot.exercises.
+   * Scope of the target entity that was edited.
+   * "exercise" | "session" | "week" | "block" | "system"
+   */
+  targetScope: text("target_scope"),
+
+  /**
+   * How long this change should persist.
+   * "permanent" | "temporary" | "session_scope" | "program_scope" |
+   * "context_update" | "none"
+   */
+  persistenceType: text("persistence_type"),
+
+  /**
+   * What kind of structural change was performed.
+   * "substitute" | "remove" | "add" | "reduce" | "increase" |
+   * "reorder" | "reorient" | "deload" | "adapt_env" | "store_context" | "none"
+   */
+  mutationType: text("mutation_type"),
+
+  /**
+   * Exercise / session / block names present BEFORE but gone after.
    * Empty array if nothing was removed.
    */
   before: jsonb("before").$type<string[]>().notNull().default([]),
 
   /**
-   * Exercise / session / block names that are present AFTER but were not before.
-   * Computed as: names in afterSnapshot.exercises not in beforeSnapshot.exercises.
+   * Exercise / session / block names present AFTER but not before.
    * Empty array if nothing was added.
    */
   after: jsonb("after").$type<string[]>().notNull().default([]),
+
+  /**
+   * Structured list of exercise changes from the computed diff.
+   * Each entry: { from: string; to: string }
+   */
+  changedExercises: jsonb("changed_exercises")
+    .$type<Array<{ from: string; to: string }>>()
+    .notNull()
+    .default([]),
+
+  /**
+   * Full SystemSnapshot captured BEFORE the mutation.
+   * Stored for undo replay and post-hoc verification.
+   * Nullable — not all paths capture it (e.g. agent edits in early versions).
+   */
+  beforeProgramSnapshot: jsonb("before_program_snapshot").$type<Record<string, unknown>>(),
+
+  /**
+   * Full SystemSnapshot captured AFTER the mutation.
+   * Compared against beforeProgramSnapshot to derive the verified diff.
+   */
+  afterProgramSnapshot: jsonb("after_program_snapshot").$type<Record<string, unknown>>(),
 
   /**
    * Constraint keys written to the user profile as a result of this adjustment.
@@ -85,6 +126,12 @@ export const mutationAuditReceiptsTable = pgTable("mutation_audit_receipts", {
   }).notNull(),
 
   /**
+   * Whether a repair pass was attempted after an initial verification failure.
+   * True = the system tried to fix the mutation before giving up.
+   */
+  repairAttempted: boolean("repair_attempted").notNull().default(false),
+
+  /**
    * The exact text shown to the user after the adjustment.
    * Only written when verificationStatus is "verified" or "partial".
    * Null for "failed", "noop", or "unclear" outcomes.
@@ -99,6 +146,9 @@ export const mutationAuditReceiptsTable = pgTable("mutation_audit_receipts", {
 
   /** Focus mode active at the time of the adjustment */
   focusMode: text("focus_mode"),
+
+  /** Schema version — v1 rows have no snapshots; v2+ rows have full snapshots */
+  auditReceiptVersion: integer("audit_receipt_version").notNull().default(2),
 
   /** Flexible bag for extra audit context (scope, appliedCount, skippedCount, etc.) */
   metadata: jsonb("metadata").$type<Record<string, unknown>>(),

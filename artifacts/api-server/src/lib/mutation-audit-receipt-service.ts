@@ -1,16 +1,20 @@
 /**
- * Mutation Audit Receipt Service
+ * Mutation Audit Receipt Service  (v2)
  *
  * Writes and queries MutationAuditReceipts — the immutable per-adjustment
  * records that prove (or disprove) every change made to a training program.
  *
+ * v2 additions:
+ *   - targetScope, persistenceType, mutationType (from classifier)
+ *   - beforeProgramSnapshot / afterProgramSnapshot (full SystemSnapshot)
+ *   - changedExercises (structured diff array)
+ *   - repairAttempted flag
+ *   - auditReceiptVersion field
+ *
  * Design rules:
  *   - writeAuditReceipt() is ALWAYS non-blocking and never throws.
- *     A write failure must not propagate into the edit pipeline.
- *   - Reads are simple and paginated — no complex joins.
- *   - before/after are delta arrays, not full snapshots.
- *   - verificationStatus is derived from editResult counters, OR passed
- *     explicitly when the mutation-verifier has run.
+ *   - responseShown is ONLY written when verificationStatus is "verified" or "partial".
+ *   - Full snapshots enable receipt-based undo without touching the change log.
  */
 
 import { db, mutationAuditReceiptsTable } from "@workspace/db";
@@ -18,6 +22,7 @@ import { eq, desc, and } from "drizzle-orm";
 import { logger } from "./logger";
 import type { SystemSnapshot } from "./change-log-service";
 import type { VerificationStatus } from "./mutation-verifier";
+import type { PersistenceType, MutationType } from "./adjustment-intent-classifier";
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -28,18 +33,71 @@ export type AuditReceiptSource =
   | "checkin"
   | "agent";
 
+export interface ChangedExerciseEntry {
+  from: string;
+  to: string;
+}
+
 export interface WriteAuditReceiptParams {
   userId: number;
   trainingSystemId?: number;
   changeLogId?: number;
   conversationId?: string;
+
+  /** Raw user message */
   userRequest: string;
+
+  /** Normalized IntentFamily */
   intentFamily: string;
+
+  /** Scope of the targeted entity ("exercise" | "session" | "week" | "block" | "system") */
+  targetScope?: string;
+
+  /** How long this change persists */
+  persistenceType?: PersistenceType | string;
+
+  /** Structural mutation class */
+  mutationType?: MutationType | string;
+
+  /** SystemSnapshot captured before the mutation (for delta + undo) */
   beforeSnapshot: SystemSnapshot;
+
+  /** SystemSnapshot captured after the mutation (for verification) */
   afterSnapshot: SystemSnapshot;
+
+  /**
+   * Full SystemSnapshot for undo replay.
+   * Pass the same object as beforeSnapshot — it will be stored as JSONB.
+   */
+  beforeProgramSnapshot?: SystemSnapshot;
+
+  /**
+   * Full SystemSnapshot post-mutation.
+   */
+  afterProgramSnapshot?: SystemSnapshot;
+
+  /**
+   * Structured exercise changes from the computed diff.
+   */
+  changedExercises?: ChangedExerciseEntry[];
+
+  /** Constraint keys persisted to user profile */
   persistedConstraints?: string[];
+
+  /** Outcome from the mutation verifier */
   verificationStatus: VerificationStatus;
+
+  /**
+   * Whether a repair pass was attempted after an initial verification failure.
+   */
+  repairAttempted?: boolean;
+
+  /**
+   * Text shown to the user.
+   * Only stored when verificationStatus is "verified" or "partial".
+   */
   responseShown?: string | null;
+
   source?: AuditReceiptSource;
   focusMode?: string;
   metadata?: Record<string, unknown>;
@@ -53,13 +111,21 @@ export interface AuditReceiptRow {
   conversationId: string | null;
   userRequest: string;
   intentFamily: string;
+  targetScope: string | null;
+  persistenceType: string | null;
+  mutationType: string | null;
   before: string[];
   after: string[];
+  changedExercises: ChangedExerciseEntry[];
+  beforeProgramSnapshot: Record<string, unknown> | null;
+  afterProgramSnapshot: Record<string, unknown> | null;
   persistedConstraints: string[];
   verificationStatus: string;
+  repairAttempted: boolean;
   responseShown: string | null;
   source: string | null;
   focusMode: string | null;
+  auditReceiptVersion: number;
   metadata: Record<string, unknown> | null;
   createdAt: Date;
 }
@@ -78,9 +144,9 @@ function extractExerciseNames(snapshot: SystemSnapshot): Set<string> {
 }
 
 /**
- * Compute the delta between two snapshots:
- *   before = names present before but gone after (removed exercises)
- *   after  = names present after but not before (added exercises)
+ * Compute the exercise name delta between two snapshots:
+ *   before = names present before but gone after  (removed)
+ *   after  = names present after but not before   (added)
  */
 export function computeSnapshotDelta(
   beforeSnapshot: SystemSnapshot,
@@ -96,8 +162,8 @@ export function computeSnapshotDelta(
 }
 
 /**
- * Derive verification status from edit result counters when the
- * mutation-verifier hasn't been explicitly run.
+ * Derive a VerificationStatus from raw edit result counters.
+ * Use when the mutation verifier hasn't been run explicitly.
  */
 export function deriveVerificationStatus(
   appliedCount: number,
@@ -114,16 +180,22 @@ export function deriveVerificationStatus(
 /**
  * Write a mutation audit receipt to the database.
  * Fire-and-forget — always resolves, never rejects.
- * Returns the new receipt ID, or null on failure.
+ *
+ * Returns { id, delta } or null on failure.
  */
 export async function writeAuditReceipt(
   params: WriteAuditReceiptParams,
-): Promise<number | null> {
+): Promise<{ id: number; delta: { before: string[]; after: string[] } } | null> {
   try {
     const delta = computeSnapshotDelta(
       params.beforeSnapshot,
       params.afterSnapshot,
     );
+
+    // Only store responseShown when the mutation is confirmed to have landed
+    const isConfirmed =
+      params.verificationStatus === "verified" ||
+      params.verificationStatus === "partial";
 
     const [inserted] = await db
       .insert(mutationAuditReceiptsTable)
@@ -134,31 +206,45 @@ export async function writeAuditReceipt(
         conversationId: params.conversationId ?? null,
         userRequest: params.userRequest,
         intentFamily: params.intentFamily,
+        targetScope: params.targetScope ?? null,
+        persistenceType: params.persistenceType ?? null,
+        mutationType: params.mutationType ?? null,
         before: delta.before,
         after: delta.after,
+        changedExercises: params.changedExercises ?? [],
+        beforeProgramSnapshot:
+          (params.beforeProgramSnapshot ?? params.beforeSnapshot) as Record<string, unknown>,
+        afterProgramSnapshot:
+          (params.afterProgramSnapshot ?? params.afterSnapshot) as Record<string, unknown>,
         persistedConstraints: params.persistedConstraints ?? [],
         verificationStatus: params.verificationStatus,
-        responseShown: params.responseShown ?? null,
+        repairAttempted: params.repairAttempted ?? false,
+        responseShown: isConfirmed ? (params.responseShown ?? null) : null,
         source: params.source ?? null,
         focusMode: params.focusMode ?? null,
+        auditReceiptVersion: 2,
         metadata: params.metadata ?? null,
       })
       .returning({ id: mutationAuditReceiptsTable.id });
 
-    logger.debug(
+    logger.info(
       {
         receiptId: inserted?.id,
         intentFamily: params.intentFamily,
+        targetScope: params.targetScope,
+        persistenceType: params.persistenceType,
+        mutationType: params.mutationType,
         verificationStatus: params.verificationStatus,
-        before: delta.before,
-        after: delta.after,
-        persistedConstraints: params.persistedConstraints ?? [],
+        repairAttempted: params.repairAttempted ?? false,
+        removedCount: delta.before.length,
+        addedCount: delta.after.length,
+        changedExercisesCount: (params.changedExercises ?? []).length,
         userId: params.userId,
       },
       "[MutationAuditReceipt] Written",
     );
 
-    return inserted?.id ?? null;
+    return inserted ? { id: inserted.id, delta } : null;
   } catch (err) {
     logger.error(
       { err, userId: params.userId, intentFamily: params.intentFamily },
@@ -170,109 +256,72 @@ export async function writeAuditReceipt(
 
 // ─── Reads ────────────────────────────────────────────────────────────────────
 
-/**
- * Get the most recent receipts for a training system, newest first.
- * Returns up to `limit` rows (default 20).
- */
 export async function getReceiptsForSystem(
   trainingSystemId: number,
   limit = 20,
 ): Promise<AuditReceiptRow[]> {
   try {
-    const rows = await db
+    return (await db
       .select()
       .from(mutationAuditReceiptsTable)
       .where(eq(mutationAuditReceiptsTable.trainingSystemId, trainingSystemId))
       .orderBy(desc(mutationAuditReceiptsTable.createdAt))
-      .limit(limit);
-
-    return rows as AuditReceiptRow[];
+      .limit(limit)) as AuditReceiptRow[];
   } catch (err) {
-    logger.error(
-      { err, trainingSystemId },
-      "[MutationAuditReceipt] getReceiptsForSystem failed",
-    );
+    logger.error({ err, trainingSystemId }, "[MutationAuditReceipt] getReceiptsForSystem failed");
     return [];
   }
 }
 
-/**
- * Get the most recent receipts for a user across all systems.
- */
 export async function getReceiptsForUser(
   userId: number,
   limit = 20,
 ): Promise<AuditReceiptRow[]> {
   try {
-    const rows = await db
+    return (await db
       .select()
       .from(mutationAuditReceiptsTable)
       .where(eq(mutationAuditReceiptsTable.userId, userId))
       .orderBy(desc(mutationAuditReceiptsTable.createdAt))
-      .limit(limit);
-
-    return rows as AuditReceiptRow[];
+      .limit(limit)) as AuditReceiptRow[];
   } catch (err) {
-    logger.error(
-      { err, userId },
-      "[MutationAuditReceipt] getReceiptsForUser failed",
-    );
+    logger.error({ err, userId }, "[MutationAuditReceipt] getReceiptsForUser failed");
     return [];
   }
 }
 
-/**
- * Get a single receipt by ID (for inspection / replay UI).
- */
-export async function getReceiptById(
-  id: number,
-): Promise<AuditReceiptRow | null> {
+export async function getReceiptById(id: number): Promise<AuditReceiptRow | null> {
   try {
     const [row] = await db
       .select()
       .from(mutationAuditReceiptsTable)
       .where(eq(mutationAuditReceiptsTable.id, id))
       .limit(1);
-
     return (row as AuditReceiptRow) ?? null;
   } catch (err) {
-    logger.error(
-      { err, id },
-      "[MutationAuditReceipt] getReceiptById failed",
-    );
+    logger.error({ err, id }, "[MutationAuditReceipt] getReceiptById failed");
     return null;
   }
 }
 
-/**
- * Get only failed/noop receipts for a user — useful for surfacing
- * mutations that didn't land so the UI can offer a retry.
- */
 export async function getFailedReceiptsForUser(
   userId: number,
   limit = 10,
 ): Promise<AuditReceiptRow[]> {
   try {
-    const rows = await db
+    return (await db
       .select()
       .from(mutationAuditReceiptsTable)
       .where(
         and(
           eq(mutationAuditReceiptsTable.userId, userId),
-          // Drizzle doesn't have inArray for enum values without raw SQL,
-          // so we query failed rows specifically
           eq(mutationAuditReceiptsTable.verificationStatus, "failed"),
         ),
       )
       .orderBy(desc(mutationAuditReceiptsTable.createdAt))
-      .limit(limit);
-
-    return rows as AuditReceiptRow[];
+      .limit(limit)) as AuditReceiptRow[];
   } catch (err) {
-    logger.error(
-      { err, userId },
-      "[MutationAuditReceipt] getFailedReceiptsForUser failed",
-    );
+    logger.error({ err, userId }, "[MutationAuditReceipt] getFailedReceiptsForUser failed");
     return [];
   }
 }

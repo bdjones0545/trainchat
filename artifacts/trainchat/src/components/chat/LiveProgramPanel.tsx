@@ -2395,6 +2395,16 @@ function ChangesTab({ hasActiveSystem, newChangeSignal }: { hasActiveSystem?: bo
             );
           }
 
+          const verificationStatus = entry.decisionMetadata?.verificationStatus as string | undefined;
+          const verificationBadge =
+            verificationStatus === "verified"
+              ? { label: "✓ confirmed", cls: "text-emerald-400 bg-emerald-400/10" }
+              : verificationStatus === "partial"
+              ? { label: "⚡ partial", cls: "text-amber-400 bg-amber-400/10" }
+              : verificationStatus === "failed"
+              ? { label: "✗ unconfirmed", cls: "text-red-400 bg-red-400/10" }
+              : null;
+
           return (
             <div
               key={entry.id}
@@ -2402,9 +2412,16 @@ function ChangesTab({ hasActiveSystem, newChangeSignal }: { hasActiveSystem?: bo
               style={isNewest && animateNewest ? { animation: "change-entry-in 1.4s ease forwards" } : undefined}
             >
               <div className="flex items-start justify-between gap-2 mb-1.5">
-                <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${scopeColor(entry.scope)}`}>
-                  {entry.isMajorVersion && entry.versionLabel ? entry.versionLabel : entry.scope}
-                </span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${scopeColor(entry.scope)}`}>
+                    {entry.isMajorVersion && entry.versionLabel ? entry.versionLabel : entry.scope}
+                  </span>
+                  {verificationBadge && (
+                    <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${verificationBadge.cls}`}>
+                      {verificationBadge.label}
+                    </span>
+                  )}
+                </div>
                 <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatRelative(entry.createdAt)}</span>
               </div>
               <p className="text-[11px] text-foreground leading-relaxed">{entry.changeSummary}</p>
