@@ -35,6 +35,7 @@ import { buildDecisionMemory } from "../lib/decision-memory-service";
 import { logger } from "../lib/logger";
 import { buildStageEvent, type BuildStage } from "../lib/build-pipeline";
 import type { NarrationContext } from "../lib/stage-narration";
+import { verifyResponseAlignment } from "../lib/response-alignment-verifier";
 import {
   writePendingClarification,
   getActivePendingClarification,
@@ -3741,6 +3742,61 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     stripeStorage.incrementMessageCount(userId).catch(() => {});
   }
 
+  // ── Final Response Alignment Verification ─────────────────────────────────
+  // Checks consistency between narration context, action contract, mutation
+  // outcome, final program payload, and assistant message text.
+  // On mismatch: attempt one repair; on failure: return transparent failure.
+  let _alignedAssistantMsg = assistantMessage;
+  {
+    const _alignResult = verifyResponseAlignment({
+      action: execPlan.action,
+      intentType: intentResult.type,
+      narrationCtx: _narrationCtx,
+      aiContent: assistantMessage.content,
+      structuredData: structuredData ?? null,
+      systemSaved,
+      outcomeType: systemSaved ? "mutation_applied" : "conversation_only",
+      mutationApplied: turnOutcomeSSE.mutationApplied,
+      extractedConstraints: extractedConstraints
+        ? { daysPerWeek: extractedConstraints.daysPerWeek }
+        : null,
+    });
+
+    if (!_alignResult.passed) {
+      logger.warn(
+        {
+          issues: _alignResult.issues.map((i) => ({ type: i.type, severity: i.severity, detail: i.detail })),
+          intentType: intentResult.type,
+          action: execPlan.action,
+          systemSaved,
+        },
+        "[ResponseAlignment] Alignment mismatch detected before final SSE event"
+      );
+
+      if (_alignResult.repairedContent) {
+        logger.info(
+          { repairPreview: _alignResult.repairedContent.slice(0, 120) },
+          "[ResponseAlignment] Applying repair — updating persisted message"
+        );
+        await db
+          .update(messagesTable)
+          .set({ content: _alignResult.repairedContent })
+          .where(eq(messagesTable.id, assistantMessage.id))
+          .catch((repairErr: unknown) => {
+            logger.warn({ repairErr }, "[ResponseAlignment] DB repair update failed — non-fatal");
+          });
+        _alignedAssistantMsg = { ...assistantMessage, content: _alignResult.repairedContent };
+      }
+
+      if (_alignResult.structuredDataRepair === "clear") {
+        logger.info(
+          "[ResponseAlignment] Suppressing structuredData — guidance_program_leak detected"
+        );
+        _alignedAssistantMsg = { ..._alignedAssistantMsg, structuredData: null };
+      }
+    }
+  }
+
   // ── Pipeline Latency Audit ────────────────────────────────────────────────
   const _pipeline_total = Date.now() - _pipeline_t0;
   logger.info(
@@ -3768,7 +3824,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   }
 
   done(buildCompleteEvent({
-    userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo,
+    userMsg: userMessage, assistantMsg: _alignedAssistantMsg, planInfoVal: planInfo,
     intentResultVal: intentResult, systemSavedVal: systemSaved, systemIdVal: autoSavedSystemId,
     changeLogIdVal: changeLogId,
     outcomeTypeVal: systemSaved ? "mutation_applied" : "conversation_only",
