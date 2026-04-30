@@ -1896,34 +1896,83 @@ Keep it helpful and intelligent, never promotional.`;
     logger.warn({ err }, "[NeuralGraph] Failed to load neural profile — proceeding without bias");
   }
 
-  let { content: aiContent, structuredData } = await generateAIResponse(
-    parsed.data.content,
-    history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
-    userId,
-    {
-      adaptationContext: adaptationCtx || undefined,
-      memoryContext: (hasMemory && memoryCtx) ? memoryCtx : undefined,
-      insightHint: insightHint || undefined,
-      conversionHint: conversionHint || undefined,
-      currentProgram: preTransformedProgram,
-      intentResult,
-      actionDecision: null,
-      execPlanAction: execPlan.action,
-      transformHint: transformHint || undefined,
-      responseMode,
-      extractedConstraints,
-      userMessage: parsed.data.content,
-      neuralContext: neuralContextStr,
-      neuralBias,
-      neuralImbalances,
-      hasActiveProgram: !!currentProgram || hasActiveSystem,
-      agentSettings,
-      responsePolicy: resolvedResponsePolicy,
-      focusMode: nonStreamFocusMode,
-      failSafeResolution,
-      hardConstraints: hardConstraintsNonSSE,
+  // ── Clarification loop guard (non-SSE) ────────────────────────────────────
+  {
+    const _recentAsstMsgsNS = await db
+      .select({ structuredData: messagesTable.structuredData })
+      .from(messagesTable)
+      .where(and(eq(messagesTable.conversationId, params.data.id), eq(messagesTable.role, "assistant")))
+      .orderBy(desc(messagesTable.createdAt))
+      .limit(6)
+      .catch(() => [] as Array<{ structuredData: string | null }>);
+    const _convOnlyCountNS = _recentAsstMsgsNS.filter((m) => !m.structuredData).length;
+    if (_convOnlyCountNS >= 3) {
+      const _loopNoteNS = `\n\n## CLARIFICATION LOOP PREVENTION\nThe assistant has responded ${_convOnlyCountNS} consecutive times without producing an actionable output. You MUST take a decisive action this turn: either build a program, apply a mutation, or give concrete specific guidance. Do NOT ask another clarifying question.`;
+      transformHint = transformHint ? `${transformHint}${_loopNoteNS}` : _loopNoteNS.trim();
+      logger.warn(
+        { conversationId: params.data.id, _convOnlyCountNS },
+        "[LoopGuard:NonSSE] Clarification loop detected — injecting force-action prompt nudge"
+      );
     }
-  );
+  }
+
+  // ── Rate-limit / API failure safety wrapper (non-SSE) ─────────────────────
+  let aiContent: string;
+  let structuredData: any;
+  try {
+    const _nonSseAiResult = await generateAIResponse(
+      parsed.data.content,
+      history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+      userId,
+      {
+        adaptationContext: adaptationCtx || undefined,
+        memoryContext: (hasMemory && memoryCtx) ? memoryCtx : undefined,
+        insightHint: insightHint || undefined,
+        conversionHint: conversionHint || undefined,
+        currentProgram: preTransformedProgram,
+        intentResult,
+        actionDecision: null,
+        execPlanAction: execPlan.action,
+        transformHint: transformHint || undefined,
+        responseMode,
+        extractedConstraints,
+        userMessage: parsed.data.content,
+        neuralContext: neuralContextStr,
+        neuralBias,
+        neuralImbalances,
+        hasActiveProgram: !!currentProgram || hasActiveSystem,
+        agentSettings,
+        responsePolicy: resolvedResponsePolicy,
+        focusMode: nonStreamFocusMode,
+        failSafeResolution,
+        hardConstraints: hardConstraintsNonSSE,
+      }
+    );
+    aiContent = _nonSseAiResult.content;
+    structuredData = _nonSseAiResult.structuredData;
+  } catch (aiErrNonSSE: any) {
+    const is429 = /429|rate.?limit/i.test(String(aiErrNonSSE?.message ?? ""));
+    const errContent = is429
+      ? "I'm experiencing high demand right now — please try again in a moment. Your program hasn't been changed."
+      : "Something went wrong generating your response. Please try again — your program is unchanged.";
+    logger.error(
+      { aiErr: aiErrNonSSE?.message, is429 },
+      "[NonSSE/AIFallback] generateAIResponse threw — returning graceful error"
+    );
+    const [fallbackMsg] = await db.insert(messagesTable).values({
+      conversationId: params.data.id, role: "assistant", content: errContent, structuredData: null,
+    }).returning();
+    await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+    if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+      stripeStorage.incrementMessageCount(userId).catch(() => {});
+    }
+    return res.json({
+      userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
+      assistantMessage: { id: fallbackMsg.id, conversationId: fallbackMsg.conversationId, role: fallbackMsg.role, content: fallbackMsg.content, createdAt: fallbackMsg.createdAt.toISOString(), structuredData: null },
+      planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+      systemSaved: false,
+    });
+  }
 
   // Warn if EDIT_PROGRAM was routed but no structured data returned
   structuredData = attachFailSafeMetadata(structuredData as any, failSafeResolution) as any;
@@ -3539,6 +3588,28 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     }
   }
 
+  // ── Clarification loop guard ───────────────────────────────────────────────
+  // If the last ≥ 3 assistant messages are all conversation_only (no structuredData),
+  // inject a "take decisive action" nudge so the AI breaks the clarification cycle.
+  {
+    const _recentAsstMsgs = await db
+      .select({ structuredData: messagesTable.structuredData })
+      .from(messagesTable)
+      .where(and(eq(messagesTable.conversationId, params.data.id), eq(messagesTable.role, "assistant")))
+      .orderBy(desc(messagesTable.createdAt))
+      .limit(6)
+      .catch(() => [] as Array<{ structuredData: string | null }>);
+    const _convOnlyCount = _recentAsstMsgs.filter((m) => !m.structuredData).length;
+    if (_convOnlyCount >= 3) {
+      const _loopNote = `\n\n## CLARIFICATION LOOP PREVENTION\nThe assistant has responded ${_convOnlyCount} consecutive times without producing an actionable output. The user may be growing frustrated. You MUST take a decisive action this turn: either build a program, apply a mutation, or give concrete specific guidance. Do NOT ask another clarifying question unless the request is genuinely unsafe to proceed without clarification.`;
+      transformHint = transformHint ? `${transformHint}${_loopNote}` : _loopNote.trim();
+      logger.warn(
+        { conversationId: params.data.id, _convOnlyCount },
+        "[LoopGuard:SSE] Clarification loop detected — injecting force-action prompt nudge"
+      );
+    }
+  }
+
   // Stage 5: Apply Changes — AI generates the program (this is the longest stage)
   emit(buildStageEvent("applying", intentResult.type, execPlan.action, _narrationCtx));
 
@@ -3551,35 +3622,66 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   const safeUIContext = (isFreshBuildSession || isNewBuildIntent) ? null : streamUIContext;
 
   _t_ai_start = Date.now();
-  let { content: aiContent, structuredData } = await generateAIResponse(
-    parsed.data.content,
-    history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
-    userId,
-    {
-      adaptationContext: adaptationCtx || undefined,
-      memoryContext: (hasMemory && memoryCtx) ? memoryCtx : undefined,
-      insightHint: insightHint || undefined,
-      conversionHint: conversionHint || undefined,
-      currentProgram: preTransformedProgram,
-      intentResult,
-      actionDecision: null,
-      execPlanAction: execPlan.action,
-      transformHint: transformHint || undefined,
-      responseMode,
-      extractedConstraints,
-      userMessage: parsed.data.content,
-      neuralContext: streamNeuralContextStr,
-      neuralBias: streamNeuralBias,
-      neuralImbalances: streamNeuralImbalances,
-      uiContext: safeUIContext,
-      hasActiveProgram: !!currentProgram || hasActiveSystem,
-      agentSettings,
-      responsePolicy: resolvedResponsePolicy,
-      focusMode: streamFocusMode,
-      failSafeResolution,
-      hardConstraints: hardConstraintsSSE,
+
+  // ── Rate-limit / API failure safety wrapper ────────────────────────────────
+  // If OpenAI throws (e.g. 429 after retries, 5xx, network drop), we return a
+  // graceful user-facing message instead of crashing the SSE stream.
+  let aiContent: string;
+  let structuredData: any;
+  try {
+    const _sseAiResult = await generateAIResponse(
+      parsed.data.content,
+      history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+      userId,
+      {
+        adaptationContext: adaptationCtx || undefined,
+        memoryContext: (hasMemory && memoryCtx) ? memoryCtx : undefined,
+        insightHint: insightHint || undefined,
+        conversionHint: conversionHint || undefined,
+        currentProgram: preTransformedProgram,
+        intentResult,
+        actionDecision: null,
+        execPlanAction: execPlan.action,
+        transformHint: transformHint || undefined,
+        responseMode,
+        extractedConstraints,
+        userMessage: parsed.data.content,
+        neuralContext: streamNeuralContextStr,
+        neuralBias: streamNeuralBias,
+        neuralImbalances: streamNeuralImbalances,
+        uiContext: safeUIContext,
+        hasActiveProgram: !!currentProgram || hasActiveSystem,
+        agentSettings,
+        responsePolicy: resolvedResponsePolicy,
+        focusMode: streamFocusMode,
+        failSafeResolution,
+        hardConstraints: hardConstraintsSSE,
+      }
+    );
+    aiContent = _sseAiResult.content;
+    structuredData = _sseAiResult.structuredData;
+  } catch (aiErrSSE: any) {
+    const is429 = /429|rate.?limit/i.test(String(aiErrSSE?.message ?? ""));
+    const sseErrContent = is429
+      ? "I'm experiencing high demand right now — please try again in a moment. Your program hasn't been changed."
+      : "Something went wrong on my end while generating your response. Please try again — your program is unchanged.";
+    logger.error(
+      { aiErr: aiErrSSE?.message, is429 },
+      "[SSE/AIFallback] generateAIResponse threw — returning graceful error to client"
+    );
+    const [sseErrMsg] = await db.insert(messagesTable).values({
+      conversationId: params.data.id, role: "assistant", content: sseErrContent, structuredData: null,
+    }).returning();
+    await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+    if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+      stripeStorage.incrementMessageCount(userId).catch(() => {});
     }
-  );
+    done(buildCompleteEvent({
+      userMsg: userMessage, assistantMsg: sseErrMsg, planInfoVal: planInfo,
+      intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure",
+    }));
+    return;
+  }
 
   // ── HARD GUARD: Block build templates for edit/refinement and program-question intents ─
   structuredData = attachFailSafeMetadata(structuredData as any, failSafeResolution) as any;
@@ -3890,7 +3992,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   // outcome, final program payload, and assistant message text.
   // On mismatch: attempt one repair; on failure: return transparent failure.
   let _alignedAssistantMsg = assistantMessage;
-  {
+  try {
     const _alignResult = verifyResponseAlignment({
       action: execPlan.action,
       intentType: intentResult.type,
@@ -3939,6 +4041,10 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         _alignedAssistantMsg = { ..._alignedAssistantMsg, structuredData: null };
       }
     }
+  } catch (alignErr: unknown) {
+    // Verification mismatch fallback: if the verifier itself throws, the response
+    // is still valid — log and continue so the client always gets its complete event.
+    logger.warn({ alignErr }, "[ResponseAlignment] verifyResponseAlignment threw — skipping alignment repair, response unaffected");
   }
 
   // ── Pipeline Latency Audit ────────────────────────────────────────────────

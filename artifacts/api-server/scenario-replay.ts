@@ -59,6 +59,20 @@ interface SSECapture {
     microReasonsFromMeta?: string[];
   };
   error?: { message: string; status?: number };
+  // ── Per-stage timing (ms from stream start) ─────────────────────────────
+  _startMs: number;
+  _acknowledgedMs?: number;
+  _stageMs: Record<string, number>;
+  _completeMs?: number;
+}
+
+interface LatencyBreakdown {
+  ttAcknowledgeMs?: number;  // stream start → acknowledged event
+  ttClassifyMs?: number;     // stream start → classifying stage
+  openAiMs?: number;         // applying stage → validating stage (AI call duration)
+  verificationMs?: number;   // validating stage → saving stage
+  saveMs?: number;           // saving stage → complete event
+  ttCompleteMs?: number;     // total stream duration
 }
 
 interface TestResult {
@@ -70,6 +84,11 @@ interface TestResult {
   actionType?: string;
   outcomeType?: string;
   microReasons?: string[];
+  latency?: LatencyBreakdown;
+  systemSaved?: boolean;
+  mutationApplied?: boolean;
+  safetyMode?: boolean;
+  verificationStatus?: string;
 }
 
 // ─── HTTP helpers ─────────────────────────────────────────────────────────────
@@ -102,7 +121,8 @@ async function streamMessage(
   content: string,
   deviceId: string,
 ): Promise<SSECapture> {
-  const capture: SSECapture = { stages: [] };
+  const _streamStart = Date.now();
+  const capture: SSECapture = { stages: [], _startMs: _streamStart, _stageMs: {} };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -139,6 +159,7 @@ async function streamMessage(
           const ev = JSON.parse(raw) as Record<string, unknown>;
           if (ev.type === "acknowledged") {
             capture.acknowledged = { text: ev.text as string };
+            capture._acknowledgedMs = Date.now() - _streamStart;
           } else if (ev.type === "micro_reasons") {
             capture.microReasons = {
               reasons: (ev.reasons as string[]) ?? [],
@@ -146,11 +167,15 @@ async function streamMessage(
               safetyMode: Boolean(ev.safetyMode),
             };
           } else if (ev.type === "stage") {
+            const stageName = ev.stage as string;
             capture.stages.push({
-              stage: ev.stage as string,
+              stage: stageName,
               actionType: ev.actionType as string | undefined,
               narration: ev.narration as string | undefined,
             });
+            if (stageName && !capture._stageMs[stageName]) {
+              capture._stageMs[stageName] = Date.now() - _streamStart;
+            }
           } else if (ev.type === "complete") {
             const c = ev as Record<string, unknown>;
             const am = c.assistantMessage as Record<string, unknown>;
@@ -164,6 +189,7 @@ async function streamMessage(
                 }
               } catch { /* ignore */ }
             }
+            capture._completeMs = Date.now() - _streamStart;
             capture.complete = {
               outcomeType: c.outcomeType as string,
               systemSaved: Boolean(c.systemSaved),
@@ -381,6 +407,29 @@ function checkNoPaywallError(cap: SSECapture): Check {
   };
 }
 
+// ─── Timing helpers ───────────────────────────────────────────────────────────
+
+function deriveLatency(cap: SSECapture): LatencyBreakdown {
+  const s = cap._stageMs;
+  const applyMs  = s["applying"];
+  const validateMs = s["validating"];
+  const saveMs   = s["saving"];
+  return {
+    ttAcknowledgeMs : cap._acknowledgedMs,
+    ttClassifyMs    : s["classifying"],
+    openAiMs        : (applyMs !== undefined && validateMs !== undefined) ? validateMs - applyMs : undefined,
+    verificationMs  : (validateMs !== undefined && saveMs !== undefined) ? saveMs - validateMs : undefined,
+    saveMs          : (saveMs !== undefined && cap._completeMs !== undefined) ? cap._completeMs - saveMs : undefined,
+    ttCompleteMs    : cap._completeMs,
+  };
+}
+
+function percentile(sorted: number[], p: number): number {
+  if (sorted.length === 0) return 0;
+  const idx = Math.ceil((p / 100) * sorted.length) - 1;
+  return sorted[Math.max(0, Math.min(idx, sorted.length - 1))];
+}
+
 // ─── Session management ───────────────────────────────────────────────────────
 
 interface Session {
@@ -433,6 +482,11 @@ async function run(
     actionType: [...actionTypes][0],
     outcomeType: cap.complete?.outcomeType,
     microReasons: cap.microReasons?.reasons,
+    latency: deriveLatency(cap),
+    systemSaved: cap.complete?.systemSaved,
+    mutationApplied: cap.complete?.systemEdit?.applied,
+    safetyMode: cap.microReasons?.safetyMode,
+    verificationStatus: cap.complete?.systemEdit?.verificationStatus,
   };
 }
 
@@ -1125,6 +1179,107 @@ async function runAllScenarios(): Promise<TestResult[]> {
     },
   ];
 
+  // ── CAT 8: Messy Real-World Language ──────────────────────────────────────
+  //
+  // These scenarios simulate real public-user behavior: typos, slang, half-finished
+  // thoughts, contradictory requests, ALL CAPS, emoji-only, and multi-intent blasts.
+  // The only invariant we test is pipeline resilience — the agent MUST respond
+  // gracefully without crashing or leaking internal terms.
+  //
+  // Outcome, actionType, and mutation checks are intentionally omitted because
+  // the AI's interpretation of ambiguous input is legitimately stochastic.
+
+  const MESSY_CHECKS = (c: SSECapture) => [
+    checkAcknowledged(c),
+    checkStageOrder(c),
+    checkNoInternalTermsInResponse(c),
+    checkNoPaywallError(c),
+  ];
+
+  // 1. Typos — heavy misspelling but clear intent
+  const cat8Chain1: ScenarioSpec[] = [{
+    label: "Messy: typo-heavy build request", category: "messy_language",
+    message: "bild me a strngth progran for sholers and arms, 3 daz a week, full jim",
+    checks: MESSY_CHECKS,
+  }];
+
+  // 2. Gym slang — bro-speak, should still get a program or coherent response
+  const cat8Chain2: ScenarioSpec[] = [{
+    label: "Messy: gym slang cold start", category: "messy_language",
+    message: "bro i wanna get absolutely jacked and shredded rn, hook me up with something sick for the gym",
+    checks: MESSY_CHECKS,
+  }];
+
+  // 3. Half-finished sentence — user trails off mid-request
+  const cat8Chain3: ScenarioSpec[] = [{
+    label: "Messy: half-finished request", category: "messy_language",
+    message: "can you like... add um... some exercises for my... you know, the shoulder stuff or whatever i guess",
+    checks: MESSY_CHECKS,
+  }];
+
+  // 4. Contradictory days — user states two incompatible constraints
+  const cat8Chain4: ScenarioSpec[] = [{
+    label: "Messy: contradictory day count", category: "messy_language",
+    message: "i want a 5 day a week program but i can only actually come into the gym 3 days, make it work",
+    checks: MESSY_CHECKS,
+  }];
+
+  // 5. Multi-intent single message — several changes at once after a program exists
+  const cat8Chain5: ScenarioSpec[] = [
+    {
+      label: "setup", category: "messy_language", setup: true,
+      message: "Build me a 4-day upper/lower strength program.",
+      checks: () => [],
+    },
+    {
+      label: "Messy: multi-intent blast", category: "messy_language",
+      message: "okay swap my bench press for incline dumbbell press, also make it a 3-day program instead of 4, and remove all leg press from the whole thing please thanks",
+      checks: MESSY_CHECKS,
+    },
+  ];
+
+  // 6. ALL CAPS aggression — user is frustrated, still a legitimate request
+  const cat8Chain6: ScenarioSpec[] = [
+    {
+      label: "setup", category: "messy_language", setup: true,
+      message: "Build me a 4-day strength program.",
+      checks: () => [],
+    },
+    {
+      label: "Messy: ALL CAPS aggressive", category: "messy_language",
+      message: "ADD MORE VOLUME TO MY LEG DAYS THE PROGRAM IS TOO EASY I WANT MORE WORK",
+      checks: MESSY_CHECKS,
+    },
+  ];
+
+  // 7. Very long rambling run-on — multiple half-formed ideas, no punctuation
+  const cat8Chain7: ScenarioSpec[] = [{
+    label: "Messy: very long rambling run-on", category: "messy_language",
+    message: "okay so i was thinking maybe we could add some more upper body stuff but also keep it simple and not too long and maybe also add some cardio but not like intense cardio more like moderate and also i kind of want to do more back work because my back feels weak and i haven't been doing enough rows i think and also could you maybe change the rest periods because i feel like they are too short or maybe too long i'm not sure and also i want to keep my deadlifts but maybe change the squat variation",
+    checks: MESSY_CHECKS,
+  }];
+
+  // 8. Emoji-only message — no text at all, just emoji
+  const cat8Chain8: ScenarioSpec[] = [{
+    label: "Messy: emoji-only message", category: "messy_language",
+    message: "💪🏋️‍♂️🔥",
+    checks: MESSY_CHECKS,
+  }];
+
+  // 9. Single slang word — minimal signal, agent must handle gracefully
+  const cat8Chain9: ScenarioSpec[] = [{
+    label: "Messy: single slang word", category: "messy_language",
+    message: "gainz",
+    checks: MESSY_CHECKS,
+  }];
+
+  // 10. Mid-sentence context switch — user changes their mind repeatedly
+  const cat8Chain10: ScenarioSpec[] = [{
+    label: "Messy: mid-sentence context switch", category: "messy_language",
+    message: "i want to do a push pull legs program actually no i want full body but wait can you just build me the best program possible for getting stronger overall",
+    checks: MESSY_CHECKS,
+  }];
+
   // ── Run all chains with bounded concurrency ────────────────────────────────
   // Cap at 6 concurrent chains to avoid overwhelming the OpenAI API rate limits.
 
@@ -1168,6 +1323,17 @@ async function runAllScenarios(): Promise<TestResult[]> {
     () => runChain("adv8",   cat7Chain8),
     () => runChain("adv9",   cat7Chain9),
     () => runChain("adv10",  cat7Chain10),
+    // CAT 8 — messy real-world language
+    () => runChain("messy1",  cat8Chain1),
+    () => runChain("messy2",  cat8Chain2),
+    () => runChain("messy3",  cat8Chain3),
+    () => runChain("messy4",  cat8Chain4),
+    () => runChain("messy5",  cat8Chain5),
+    () => runChain("messy6",  cat8Chain6),
+    () => runChain("messy7",  cat8Chain7),
+    () => runChain("messy8",  cat8Chain8),
+    () => runChain("messy9",  cat8Chain9),
+    () => runChain("messy10", cat8Chain10),
   ];
 
   const settled = await runChainsBounded(chainFactories, 6);
@@ -1185,6 +1351,20 @@ async function runAllScenarios(): Promise<TestResult[]> {
 
 // ─── Reporter ─────────────────────────────────────────────────────────────────
 
+function fmtMs(ms: number | undefined): string {
+  if (ms === undefined) return "   —   ";
+  return `${ms.toLocaleString()}ms`.padStart(8);
+}
+
+function latencyRow(label: string, vals: (number | undefined)[], width = 10): string {
+  const defined = (vals.filter((v) => v !== undefined) as number[]).sort((a, b) => a - b);
+  if (defined.length === 0) return `  ${label.padEnd(width)} —`;
+  const p50 = percentile(defined, 50);
+  const p95 = percentile(defined, 95);
+  const avg = Math.round(defined.reduce((s, v) => s + v, 0) / defined.length);
+  return `  ${label.padEnd(width)} avg ${fmtMs(avg).trim()}  p50 ${fmtMs(p50).trim()}  p95 ${fmtMs(p95).trim()}`;
+}
+
 function printResults(results: TestResult[]): void {
   const pass = results.filter((r) => r.passed).length;
   const fail = results.filter((r) => !r.passed).length;
@@ -1195,7 +1375,7 @@ function printResults(results: TestResult[]): void {
   console.log("SCENARIO REPLAY RESULTS");
   console.log("═".repeat(70));
 
-  // Group by category
+  // Per-category scenario listing
   const categories = [...new Set(results.map((r) => r.category))];
   for (const cat of categories) {
     const catResults = results.filter((r) => r.category === cat);
@@ -1216,14 +1396,61 @@ function printResults(results: TestResult[]): void {
     }
   }
 
+  // ── Scenario + Check totals ────────────────────────────────────────────────
   console.log("\n" + "═".repeat(70));
   console.log(`SCENARIOS  : ${pass} passed, ${fail} failed (${results.length} total)`);
   console.log(`CHECKS     : ${passedChecks}/${totalChecks} passed`);
 
-  // Timing summary
+  // ── Latency breakdown ─────────────────────────────────────────────────────
+  const withLatency = results.filter((r) => r.latency?.ttCompleteMs !== undefined);
+  if (withLatency.length > 0) {
+    console.log("\n── LATENCY BREAKDOWN " + "─".repeat(49));
+    console.log(`  (${withLatency.length} scenarios with full timing)`);
+    const col = 22;
+    console.log(latencyRow("Time-to-acknowledge", withLatency.map((r) => r.latency?.ttAcknowledgeMs), col));
+    console.log(latencyRow("Time-to-classify   ", withLatency.map((r) => r.latency?.ttClassifyMs), col));
+    console.log(latencyRow("OpenAI call        ", withLatency.map((r) => r.latency?.openAiMs), col));
+    console.log(latencyRow("Verification       ", withLatency.map((r) => r.latency?.verificationMs), col));
+    console.log(latencyRow("DB save            ", withLatency.map((r) => r.latency?.saveMs), col));
+    console.log(latencyRow("Total turn         ", withLatency.map((r) => r.latency?.ttCompleteMs), col));
+  }
+
+  // ── Launch dashboard metrics ──────────────────────────────────────────────
+  const completed = results.filter((r) => r.outcomeType !== undefined);
+  if (completed.length > 0) {
+    const builds          = completed.filter((r) => r.systemSaved === true);
+    const mutations       = completed.filter((r) => r.mutationApplied === true);
+    const guidanceOnly    = completed.filter((r) => r.outcomeType === "conversation_only" && !r.mutationApplied);
+    const withSafetyMode  = completed.filter((r) => r.safetyMode === true);
+    const verFailures     = completed.filter((r) =>
+      r.verificationStatus !== undefined &&
+      !["verified", "partial", "noop", "not_applicable", "unclear"].includes(r.verificationStatus)
+    );
+    const withMicroReasons = completed.filter((r) => (r.microReasons?.length ?? 0) > 0);
+
+    const pct = (n: number, d: number) => d === 0 ? "—" : `${Math.round((n / d) * 100)}%`;
+
+    console.log("\n── LAUNCH DASHBOARD METRICS " + "─".repeat(42));
+    console.log(`  Scenarios completed (with outcome)  : ${completed.length} of ${results.length}`);
+    console.log(`  ✓ Successful builds                 : ${builds.length}  (${pct(builds.length, completed.length)})`);
+    console.log(`  ✓ Successful mutations              : ${mutations.length}  (${pct(mutations.length, completed.length)})`);
+    console.log(`  ◌ Guidance-only responses           : ${guidanceOnly.length}  (${pct(guidanceOnly.length, completed.length)})`);
+    console.log(`  ⚑ Safety mode triggered             : ${withSafetyMode.length}  (${pct(withSafetyMode.length, completed.length)})`);
+    console.log(`  ✗ Verification failures             : ${verFailures.length}  (${pct(verFailures.length, completed.length)})`);
+    console.log(`  ✓ Micro-reasons surfaced            : ${withMicroReasons.length}  (${pct(withMicroReasons.length, completed.length)})`);
+
+    // Average response time per category
+    console.log("\n  Avg response time by category:");
+    for (const cat of categories) {
+      const catResults = results.filter((r) => r.category === cat);
+      const avgMs = Math.round(catResults.reduce((s, r) => s + r.durationMs, 0) / catResults.length);
+      console.log(`    ${cat.padEnd(18)} ${avgMs.toLocaleString()}ms`);
+    }
+  }
+
   const avgMs = Math.round(results.reduce((s, r) => s + r.durationMs, 0) / results.length);
   const maxMs = Math.max(...results.map((r) => r.durationMs));
-  console.log(`TIMING     : avg ${avgMs.toLocaleString()}ms, max ${maxMs.toLocaleString()}ms`);
+  console.log(`\n  Overall avg ${avgMs.toLocaleString()}ms · max ${maxMs.toLocaleString()}ms`);
   console.log("═".repeat(70) + "\n");
 
   // Failed check breakdown
