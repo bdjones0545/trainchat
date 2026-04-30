@@ -1,0 +1,148 @@
+Build TrainChat Agent Action Contract Layer
+
+Goal:
+Make the TrainChat agent behave like a true operator, similar to Replit Agent.
+
+For every user message, the agent must decide:
+
+1. Is this a command that changes the program/system?
+2. Is this a question that needs guidance only?
+3. Is this ambiguous and needs clarification?
+4. Is this unsafe or medically sensitive?
+5. Is this a preference/constraint that must be remembered?
+6. Is this a temporary adjustment only?
+7. Is this a full rebuild request?
+
+Create a central action contract:
+
+{
+  userMessage,
+  detectedIntentFamily,
+  actionType,
+  targetScope,
+  confidence,
+  shouldMutate,
+  shouldPersistConstraint,
+  shouldAskClarification,
+  shouldRebuild,
+  shouldRespondGuidanceOnly,
+  safetyMode,
+  requiredVerification,
+  expectedStateChange,
+  forbiddenResponseTypes
+}
+
+Action types:
+- MUTATE_ACTIVE_PROGRAM
+- TEMPORARY_ADJUSTMENT
+- REBUILD_PROGRAM
+- PERSIST_CONSTRAINT_ONLY
+- GUIDANCE_ONLY
+- ASK_CLARIFICATION
+- SAFETY_RESPONSE
+- NO_OP
+
+Core rules:
+
+If shouldMutate = true:
+- create mutation plan
+- apply mutation
+- verify state changed
+- save audit receipt
+- update Live Program
+- respond with specific confirmation
+
+If shouldPersistConstraint = true:
+- save constraint/preference
+- apply to future generations
+- say exactly what was remembered
+
+If shouldAskClarification = true:
+- ask one clear question
+- do not mutate yet
+
+If shouldRespondGuidanceOnly = true:
+- answer as a coach
+- do not pretend a program changed
+
+If shouldRebuild = true:
+- either rebuild immediately when explicit
+- or ask confirmation when it would destroy too much existing structure
+
+Forbidden responses:
+- “I processed your request”
+- “I applied the change” without verification
+- “Here’s what I would do” when a mutation was requested and possible
+- generic safety disclaimers without useful coaching action
+- changing future weeks when user clearly said “today”
+
+Examples:
+
+User: “I don’t have a belt squat”
+Action:
+MUTATE_ACTIVE_PROGRAM + PERSIST_CONSTRAINT_ONLY
+Expected:
+Belt Squat removed now and avoided later.
+
+User: “Why did you choose trap bar deadlift?”
+Action:
+GUIDANCE_ONLY
+Expected:
+Explain rationale. Do not mutate.
+
+User: “Make today easier”
+Action:
+TEMPORARY_ADJUSTMENT
+Expected:
+Today changes only. Future weeks unchanged.
+
+User: “I hate lunges”
+Action:
+MUTATE_ACTIVE_PROGRAM + PERSIST_CONSTRAINT_ONLY
+Expected:
+Remove lunges if present and remember dislike.
+
+User: “Build me a new 4-day hypertrophy plan”
+Action:
+REBUILD_PROGRAM
+Expected:
+Generate new plan.
+
+User: “My knee hurts”
+Action:
+MUTATE_ACTIVE_PROGRAM or ASK_CLARIFICATION depending severity/context.
+Expected:
+Reduce knee stress without diagnosing.
+
+User: “Can I do this instead?”
+Action:
+ASK_CLARIFICATION if “this” is unresolved.
+Expected:
+Ask what exercise they mean.
+
+Add response contract:
+
+Every response must include one of:
+- change_confirmed
+- temporary_adjustment_confirmed
+- remembered_preference
+- guidance_answer
+- clarification_question
+- safety_adjustment
+- rebuild_started
+- unable_to_verify
+
+Add tests:
+1. Guidance question does not mutate.
+2. Direct command mutates.
+3. Temporary wording only affects today.
+4. Preference wording persists.
+5. Ambiguous pronoun asks clarification.
+6. Full rebuild request routes to rebuild.
+7. Pain request uses safety mode.
+8. Agent never claims success without verification.
+9. Response type matches action type.
+10. Audit receipt matches final response.
+
+Goal:
+For every user message, the action contract should make it impossible for the agent to do the wrong kind of thing.
