@@ -81,6 +81,39 @@ export interface CompleteEvent {
   mutationApplied?: boolean;
   /** Debug info from the edit-intent routing layer. Present in dev and when pathUsed is available. */
   routeDebug?: { pathUsed?: "deterministic" | "library_progression" | "rule_based" | "openai"; openaiCalled?: boolean; openaiSucceeded?: boolean; [key: string]: unknown };
+  /** Full audit receipt from the action contract enforcer. Present when contract enforcement ran. */
+  auditReceipt?: {
+    receiptId: string;
+    timestamp: string;
+    userMessage: string;
+    contract: {
+      actionType: string;
+      targetScope: string;
+      confidence: string;
+      shouldMutate: boolean;
+      shouldPersistConstraint: boolean;
+      shouldAskClarification: boolean;
+      shouldRebuild: boolean;
+      shouldRespondGuidanceOnly: boolean;
+      safetyMode: boolean;
+      requiredVerification: boolean;
+      expectedStateChange: string | null;
+      allowedResponseTypes: string[];
+      contractReasons: string[];
+    };
+    outcome: {
+      actualResponseType: string;
+      mutationApplied: boolean;
+      constraintPersisted: boolean;
+      clarificationAsked: boolean;
+      programRebuilt: boolean;
+      verificationStatus: "verified" | "partial" | "unclear" | "not_applicable";
+    };
+    compliance: {
+      passed: boolean;
+      violations: string[];
+    };
+  } | null;
 }
 
 export interface StreamErrorEvent {

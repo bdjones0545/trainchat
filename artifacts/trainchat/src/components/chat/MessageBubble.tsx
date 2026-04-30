@@ -2,8 +2,10 @@ import { useMemo } from "react";
 import { Share2 } from "lucide-react";
 import SystemUpdateCard from "./SystemUpdateCard";
 import BuildSummaryCard from "./BuildSummaryCard";
+import AgentTurnReport from "./AgentTurnReport";
 import { buildShareMoment, type ShareMoment } from "@/types/share-moments";
 import { extractProgramData, stripProgramJson, isProgramFragment } from "@/lib/extractProgramArtifact";
+import type { CompleteEvent } from "@/hooks/useStreamMessage";
 
 interface Message {
   id: number;
@@ -19,6 +21,8 @@ interface Props {
   onViewProgram?: () => void;
   onShowChange?: () => void;
   onShareMoment?: (moment: ShareMoment) => void;
+  /** Dev-only: CompleteEvent for the last agent turn. Renders AgentTurnReport when present. */
+  turnReport?: CompleteEvent | null;
 }
 
 function formatTime(dateStr: string) {
@@ -229,7 +233,7 @@ function parseStructuredData(raw: string | null | undefined) {
   return { type: "none" as const };
 }
 
-export default function MessageBubble({ message, onViewProgram, onShowChange, onShareMoment }: Props) {
+export default function MessageBubble({ message, onViewProgram, onShowChange, onShareMoment, turnReport }: Props) {
   const isUser = message.role === "user";
   const parsed = parseStructuredData(message.structuredData);
   const isSystemEdit = !isUser && parsed.type === "system_edit";
@@ -405,6 +409,10 @@ export default function MessageBubble({ message, onViewProgram, onShowChange, on
               </div>
             )}
           </div>
+        )}
+        {/* Dev-only Agent Turn Report — collapsible debug card after last assistant message */}
+        {!isUser && turnReport && import.meta.env.DEV && (
+          <AgentTurnReport event={turnReport} />
         )}
         <span className={`text-[10px] text-muted-foreground mt-1.5 px-1 block ${isUser ? "text-right" : ""}`}>
           {formatTime(message.createdAt)}

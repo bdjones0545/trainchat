@@ -40,7 +40,7 @@ import AnonymousConversionFloor from "@/components/AnonymousConversionFloor";
 import AnonymousUpgradeModal from "@/components/AnonymousUpgradeModal";
 import CalibrationModal from "@/components/chat/CalibrationModal";
 import CoachMemoryPanel from "@/components/chat/CoachMemoryPanel";
-import { useStreamMessage } from "@/hooks/useStreamMessage";
+import { useStreamMessage, type CompleteEvent } from "@/hooks/useStreamMessage";
 import { clearAuthState, markOnboardingComplete, logRouteDecision, readDeviceId, readOnboardingComplete } from "@/lib/routing";
 import { resolveProgramState } from "@/lib/resolveProgramState";
 import { extractProgramData, isProgramFragment } from "@/lib/extractProgramArtifact";
@@ -187,6 +187,7 @@ export default function Chat() {
   const [operationErrorRetryable, setOperationErrorRetryable] = useState(false);
   const operationErrorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSentInputRef = useRef<string>("");
+  const [lastTurnReport, setLastTurnReport] = useState<CompleteEvent | null>(null);
   const [newChangeSignal, setNewChangeSignal] = useState(0);
   const [newProgramSignal, setNewProgramSignal] = useState(0);
   const [changeTargets, setChangeTargets] = useState<Array<{
@@ -1016,6 +1017,8 @@ export default function Chat() {
     }
 
     // Stream completed — process result.
+    // Store the full event for the Agent Turn Report (dev-only debug panel).
+    setLastTurnReport(result);
     console.log("[ThinkingStateAudit] finalResponseCommitted", {
       outcomeType: result.outcomeType,
       assistantMsgId: result.assistantMessage?.id,
@@ -2615,6 +2618,11 @@ export default function Chat() {
                       setPendingShareMoment(moment);
                       setShowShareModal(true);
                     }}
+                    turnReport={
+                      lastTurnReport && msg.role === "assistant" && msg.id === lastTurnReport.assistantMessage?.id
+                        ? lastTurnReport
+                        : null
+                    }
                   />
                 ))}
 
