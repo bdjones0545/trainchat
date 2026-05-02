@@ -111,6 +111,13 @@ import { buildFailSafePromptSection, type FailSafeResolution } from "./fail-safe
 import { evaluateBuildThreshold, buildThresholdPromptSection } from "./build-threshold";
 import { detectPopulation, buildPopulationPromptSection, validatePopulationOutput } from "./population-engine";
 import { runCEOHeartbeatCheck, type CEOHeartbeatContext } from "../agents/ceo-heartbeat";
+import {
+  validateArchitectureGate,
+  logValidationGateResult,
+  logArchitectHandoff,
+  type CoachToArchitectHandoff,
+  type ArchitectToCoachHandoff,
+} from "../agents/agent-orchestrator";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -2811,6 +2818,31 @@ export async function generateAIResponse(
           "[ArchitectureEngine] Architecture brief injected into prompt"
         );
       }
+
+      // ── Log Architect → Coach handoff ─────────────────────────────────────
+      // Emits the structured [AgentOrchestrator] handoff event so every
+      // build-path turn has a traceable architect → coach transition in logs.
+      {
+        const coachToArchHandoff: CoachToArchitectHandoff = {
+          daysPerWeek: days,
+          sport,
+          goal,
+          userMessage: (typeof userMessage === "string" ? userMessage : ""),
+          focusMode: (focusMode as "strength" | "speed" | "mobility"),
+          variationSeed: 0,
+          hardConstraints: hardConstraints ?? null,
+        };
+        const archToCoachHandoff: ArchitectToCoachHandoff = {
+          architectureBriefText,
+          lockedExerciseSelections: lockedExerciseSelections as Record<string, unknown> | null,
+          weeklyArchitecture: null,
+          briefSource: (focusMode as "strength" | "speed" | "mobility") ?? "none",
+          sessionCount: days ?? 0,
+          briefGenerated: !!architectureBriefText,
+          briefError: null,
+        };
+        logArchitectHandoff(coachToArchHandoff, archToCoachHandoff);
+      }
     } catch (archErr) {
       const errMsg = archErr instanceof Error ? archErr.message : String(archErr);
       const errStack = archErr instanceof Error ? archErr.stack : undefined;
@@ -4815,8 +4847,8 @@ Output the corrected program JSON and a brief calm confirmation.`;
         );
       }
 
-      if (process.env.NODE_ENV !== "production") {
-        console.log("[CEOHeartbeat]", JSON.stringify({
+      logger.debug(
+        {
           pass: heartbeatResult.pass,
           overrideRecommended: heartbeatResult.overrideRecommended ?? false,
           concernCount: heartbeatResult.concerns.length,
@@ -4825,8 +4857,24 @@ Output the corrected program JSON and a brief calm confirmation.`;
           minorAdjustments: heartbeatResult.minorAdjustments,
           identityAlignment: heartbeatResult.identityAlignment,
           identityConcerns: heartbeatResult.identityConcerns,
-        }));
-      }
+        },
+        "[CEOHeartbeat] Detail"
+      );
+
+      // ── Architecture Validation Gate (post-generation) ─────────────────
+      // Validates structural integrity of the generated program.
+      // Non-blocking — logs issues but never drops the program.
+      const gateResult = validateArchitectureGate({
+        program: structuredData,
+        focusMode: (focusMode as "strength" | "speed" | "mobility"),
+        requestedDays: extractedConstraints?.daysPerWeek ?? null,
+        isBuildIntent: true,
+      });
+      logValidationGateResult(gateResult, {
+        focusMode: focusMode ?? "strength",
+        programName: structuredData.programName,
+        dayCount: structuredData.days?.length ?? 0,
+      });
     }
 
     // ── Final Latency Audit ──────────────────────────────────────────────────

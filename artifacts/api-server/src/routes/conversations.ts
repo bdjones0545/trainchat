@@ -75,6 +75,7 @@ import {
 } from "../lib/fail-safe";
 import { buildActionContract, type ActionContract } from "../lib/action-contract";
 import { enforceActionContract, buildContractPromptDirective, type TurnOutcome } from "../lib/action-contract-enforcer";
+import { orchestrate, logOrchestratorDecision } from "../agents/agent-orchestrator";
 
 const router: IRouter = Router();
 
@@ -828,6 +829,23 @@ Keep it helpful and intelligent, never promotional.`;
     });
   }
 
+  // ── Agent Orchestrator — structured chain-of-command decision log ────────
+  // orchestrate() converts the execution plan into a formal OrchestratorDecision
+  // and emits the [AgentChain] observability event for every turn.
+  // This is dev/ops logging only — never exposed to users.
+  const orchDecision = orchestrate({
+    message: parsed.data.content,
+    userId,
+    conversationId: String(params.data.id),
+    intentType: intentResult.type,
+    execPlanAction: execPlan.action as "APPLY_MUTATION" | "ASK_CLARIFICATION" | "GUIDANCE" | "REBUILD_PROGRAM" | "NO_OP",
+    focusMode: nonStreamFocusMode,
+    hasActiveProgram: hasAnyProgram,
+    isAdminRequest: false,
+    isFreshBuildSession,
+  });
+  logOrchestratorDecision(orchDecision.observabilityEvent);
+
   logger.info(
     {
       action: execPlan.action,
@@ -835,6 +853,8 @@ Keep it helpful and intelligent, never promotional.`;
       scope: execPlan.scope,
       mutation: execPlan.mutation?.type ?? null,
       intentType: intentResult.type,
+      orchRoute: orchDecision.route,
+      orchAgents: orchDecision.participatingAgents,
     },
     "[ExecutionPlanner] Plan resolved — driving routing"
   );
