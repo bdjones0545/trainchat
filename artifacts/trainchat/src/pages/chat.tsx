@@ -813,10 +813,25 @@ export default function Chat() {
   // whenever the ReturnSessionHook, active system, or focus mode changes — any
   // of which could shift the content height and leave the container at a
   // non-zero scroll offset on iOS.
+  //
+  // Double-RAF: the first frame lets React flush DOM mutations and triggers the
+  // browser's layout pass; the second frame fires after that reflow is complete,
+  // which is when iOS Safari has finalised dynamic-viewport heights (address bar,
+  // composer, safe-area insets).  A synchronous or single-RAF reset fires too
+  // early and the subsequent layout shift re-introduces a non-zero scrollTop.
   useEffect(() => {
     if (messages.length > 0 || optimisticUserMsg || stream.isActive) return;
-    const container = messagesContainerRef.current;
-    if (container) container.scrollTop = 0;
+    let raf2: number;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        const container = messagesContainerRef.current;
+        if (container) container.scrollTop = 0;
+      });
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
   }, [convShowReturnHook, activeSystem?.id, focusMode, messages.length, optimisticUserMsg, stream.isActive]);
 
   // Panel auto-open rules:
@@ -2845,7 +2860,7 @@ export default function Chat() {
               </div>
             ) : messages.length === 0 && !optimisticUserMsg && !stream.isActive ? (
               /* ─── Empty state — only shown when no messages AND no active submission ─── */
-              <div className="flex flex-col items-center justify-center h-full py-8 px-4 text-center animate-in fade-in slide-in-from-bottom-2 duration-500">
+              <div className="flex flex-col items-center justify-start px-4 pt-[max(10dvh,_2.5rem)] pb-8 text-center animate-in fade-in slide-in-from-bottom-2 duration-500">
                 {/* System core — TrainChat logo with living glow field */}
                 <div className="relative mb-5 flex items-center justify-center" style={{ width: 88, height: 88 }}>
                   {/* Outer radial glow halo */}
