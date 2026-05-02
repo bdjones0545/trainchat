@@ -1,0 +1,180 @@
+Audit the “Refine My Plan” flow in TrainChat.
+
+Issue:
+On the main chat screen there is a “Refine My Plan” button. It opens an “Upgrade Your Training Intelligence” modal with training background fields and AI accuracy percentage.
+
+Goal:
+Determine exactly how this flow affects the active training system, agent context, program generation, and future refinements.
+
+Audit:
+- Refine My Plan button
+- modal component
+- all fields collected
+- save/skip behavior
+- user profile updates
+- active system updates
+- agent context injection
+- program regeneration/refinement behavior
+- AI accuracy score calculation
+- persistence across sessions
+
+Questions to answer:
+
+1. What happens when user taps “Refine My Plan”?
+- Is it only opening a modal?
+- Does it send anything to the agent?
+- Does it update user profile?
+- Does it update the active system?
+- Does it trigger a refinement after completion?
+
+2. What does each modal field do?
+- training level
+- years training
+- any later steps
+- pain/injury
+- equipment
+- goals
+- schedule
+- sport
+- preferences
+
+3. Where is this data stored?
+- local state
+- user profile
+- active training system
+- program constraints
+- backend database
+
+4. Does the Coach Agent use this data?
+Confirm whether modal answers are included in:
+- buildSystemPrompt
+- user context
+- constraint extraction
+- research guidance
+- Performance Architect handoff
+- CEO Heartbeat / review layer if present
+
+5. Does the Live Program update?
+After completing the modal:
+- Does the current program refine automatically?
+- Does it ask user to confirm?
+- Does it just improve future generations?
+- Does it change AI accuracy only?
+
+6. What does “AI Accuracy Low • 0%” mean?
+Audit:
+- formula
+- field weighting
+- where percentage is calculated
+- when it updates
+- whether it is user-facing accurate language
+
+If this is not actually measuring accuracy, rename to something clearer, such as:
+- Personalization
+- Training Profile
+- Coaching Context
+- Plan Precision
+
+7. UX audit:
+Determine if “Upgrade Your Training Intelligence” is the right wording.
+Potential issue:
+It may sound like a paid upgrade rather than profile refinement.
+
+Consider renaming:
+Title:
+“Improve Your Training System”
+
+Subtext:
+“The more context I have, the better I can build and adjust your program.”
+
+Metric:
+“Plan Precision”
+instead of “AI Accuracy”
+
+8. Agent integration audit:
+If modal data is not fully connected, wire it into:
+- user profile context
+- active system constraints
+- Coach Agent prompt
+- Performance Architect handoff
+- research retrieval params
+- future edit/refinement decisions
+
+9. Refinement behavior:
+After user completes modal, show options:
+- “Update my current plan”
+- “Use this for future programs”
+
+If user chooses update current plan:
+- route through Performance Architect if structure-level change needed
+- preserve current program intent
+- apply new context
+- return visible changes
+- show toast: “Plan refined”
+
+10. Skip behavior:
+If user skips:
+- close modal
+- do not mark data as complete
+- do not inflate plan precision
+- allow user to revisit
+
+11. State sync:
+Ensure:
+- modal completion updates UI immediately
+- accuracy/precision score updates
+- active system context updates
+- no stale old profile context remains
+
+12. QA tests:
+
+A. Tap Refine My Plan
+PASS:
+- modal opens
+- no program mutation yet unless intentional
+
+B. Fill training level + years
+PASS:
+- profile/context updates
+- precision score updates
+
+C. Complete full modal
+PASS:
+- system stores context
+- Coach Agent uses it on next refinement
+
+D. Choose “Update current plan”
+PASS:
+- plan updates visibly
+- Live Program Panel reflects changes
+- receipt/confirmation appears
+
+E. Choose “Use for future programs”
+PASS:
+- current plan does not unexpectedly change
+- future builds use new data
+
+F. Skip
+PASS:
+- no fake precision increase
+- no unwanted mutation
+
+G. Refresh page
+PASS:
+- stored profile context persists
+
+Output:
+- Root cause / current behavior
+- Files inspected
+- Data flow map
+- What fields affect the agent
+- What fields do not yet affect anything
+- Recommended wording changes
+- Fixes implemented
+- QA results
+- Typecheck result
+
+Important:
+Do not break existing chat, program generation, save flow, or Live Program Panel.
+Do not make the modal feel like a paywall.
+This flow should feel like personalization, not an upgrade wall.
