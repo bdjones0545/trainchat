@@ -2667,6 +2667,12 @@ export default function Chat() {
 
         {/* Center chat column */}
         <div className="flex-1 flex flex-col min-w-0 relative">
+          {/* Atmospheric background overlay — subtle focus-mode tint, pointer-events-none */}
+          <div
+            aria-hidden
+            className="absolute inset-0 z-0 pointer-events-none"
+            style={getFocusModeConfig(focusMode).theme.atmosphereStyle}
+          />
           {/* Sidebar toggle */}
           <button
             onClick={() => setSidebarOpen((s) => !s)}

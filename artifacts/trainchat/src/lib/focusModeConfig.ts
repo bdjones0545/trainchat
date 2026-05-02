@@ -40,6 +40,8 @@ export interface FocusModeTheme {
   heroGlowOuter: React.CSSProperties;
   /** Inline style for the hero inner logo container */
   heroGlowInner: React.CSSProperties;
+  /** Inline style for the full-area atmospheric background overlay */
+  atmosphereStyle: React.CSSProperties;
   /** Label for the "X mode active" confirmation */
   confirmLabel: string;
   /** Lucide icon name to show in the switcher */
@@ -105,21 +107,25 @@ const STRENGTH_CONFIG: FocusModeConfig = {
     badgeClass: "bg-primary/15 text-primary border border-primary/30",
     badgeStyle: { color: "#3B82F6", borderColor: "#3B82F6", backgroundColor: "rgba(59, 130, 246, 0.1)" },
     heroGlowOuter: {
-      background: "radial-gradient(ellipse at center, rgba(59, 130, 246, 0.35) 0%, transparent 70%)",
-      filter: "blur(18px)",
-      transition: "background 250ms ease",
+      background: "radial-gradient(ellipse at center, rgba(59, 130, 246, 0.45) 0%, transparent 65%)",
+      filter: "blur(14px)",
+      transition: "background 250ms ease, filter 250ms ease",
     },
     heroGlowInner: {
       width: 80,
       height: 80,
       borderRadius: 22,
-      background: "radial-gradient(ellipse at 40% 35%, rgba(59, 130, 246, 0.18) 0%, rgba(59, 130, 246, 0.06) 100%)",
-      border: "1px solid rgba(59, 130, 246, 0.28)",
-      boxShadow: "0 0 18px rgba(59, 130, 246, 0.22), inset 0 1px 1px rgba(59, 130, 246, 0.15)",
+      background: "radial-gradient(ellipse at 40% 35%, rgba(59, 130, 246, 0.22) 0%, rgba(59, 130, 246, 0.07) 100%)",
+      border: "1px solid rgba(59, 130, 246, 0.32)",
+      boxShadow: "0 0 24px rgba(59, 130, 246, 0.32), inset 0 1px 1px rgba(59, 130, 246, 0.20)",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
       transition: "background 250ms ease, border-color 250ms ease, box-shadow 250ms ease",
+    },
+    atmosphereStyle: {
+      background: "radial-gradient(ellipse at 50% 0%, rgba(59, 130, 246, 0.07) 0%, transparent 60%)",
+      transition: "background 250ms ease",
     },
     confirmLabel: "Strength mode active",
     iconName: "Dumbbell",
@@ -165,21 +171,25 @@ const SPEED_CONFIG: FocusModeConfig = {
     badgeClass: "bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30",
     badgeStyle: { color: "#06B6D4", borderColor: "#06B6D4", backgroundColor: "rgba(6, 182, 212, 0.1)" },
     heroGlowOuter: {
-      background: "radial-gradient(ellipse at center, rgba(6, 182, 212, 0.35) 0%, transparent 70%)",
-      filter: "blur(18px)",
-      transition: "background 250ms ease",
+      background: "radial-gradient(ellipse at center, rgba(6, 182, 212, 0.45) 0%, transparent 68%)",
+      filter: "blur(16px)",
+      transition: "background 250ms ease, filter 250ms ease",
     },
     heroGlowInner: {
       width: 80,
       height: 80,
       borderRadius: 22,
-      background: "radial-gradient(ellipse at 40% 35%, rgba(6, 182, 212, 0.18) 0%, rgba(6, 182, 212, 0.06) 100%)",
-      border: "1px solid rgba(6, 182, 212, 0.28)",
-      boxShadow: "0 0 18px rgba(6, 182, 212, 0.22), inset 0 1px 1px rgba(6, 182, 212, 0.15)",
+      background: "radial-gradient(ellipse at 40% 35%, rgba(6, 182, 212, 0.20) 0%, rgba(6, 182, 212, 0.06) 100%)",
+      border: "1px solid rgba(6, 182, 212, 0.30)",
+      boxShadow: "0 0 22px rgba(6, 182, 212, 0.32), inset 0 1px 1px rgba(6, 182, 212, 0.18)",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
       transition: "background 250ms ease, border-color 250ms ease, box-shadow 250ms ease",
+    },
+    atmosphereStyle: {
+      background: "radial-gradient(ellipse at 50% 0%, rgba(6, 182, 212, 0.07) 0%, transparent 60%)",
+      transition: "background 250ms ease",
     },
     confirmLabel: "Speed / Footwork mode active",
     iconName: "Zap",
@@ -224,21 +234,25 @@ const MOBILITY_CONFIG: FocusModeConfig = {
     badgeClass: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30",
     badgeStyle: { color: "#10B981", borderColor: "#10B981", backgroundColor: "rgba(16, 185, 129, 0.1)" },
     heroGlowOuter: {
-      background: "radial-gradient(ellipse at center, rgba(16, 185, 129, 0.35) 0%, transparent 70%)",
-      filter: "blur(18px)",
-      transition: "background 250ms ease",
+      background: "radial-gradient(ellipse at center, rgba(16, 185, 129, 0.28) 0%, transparent 72%)",
+      filter: "blur(24px)",
+      transition: "background 250ms ease, filter 250ms ease",
     },
     heroGlowInner: {
       width: 80,
       height: 80,
       borderRadius: 22,
-      background: "radial-gradient(ellipse at 40% 35%, rgba(16, 185, 129, 0.18) 0%, rgba(16, 185, 129, 0.06) 100%)",
-      border: "1px solid rgba(16, 185, 129, 0.28)",
-      boxShadow: "0 0 18px rgba(16, 185, 129, 0.22), inset 0 1px 1px rgba(16, 185, 129, 0.15)",
+      background: "radial-gradient(ellipse at 40% 35%, rgba(16, 185, 129, 0.14) 0%, rgba(16, 185, 129, 0.04) 100%)",
+      border: "1px solid rgba(16, 185, 129, 0.22)",
+      boxShadow: "0 0 20px rgba(16, 185, 129, 0.16), inset 0 1px 1px rgba(16, 185, 129, 0.10)",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
       transition: "background 250ms ease, border-color 250ms ease, box-shadow 250ms ease",
+    },
+    atmosphereStyle: {
+      background: "radial-gradient(ellipse at 50% 0%, rgba(16, 185, 129, 0.07) 0%, transparent 60%)",
+      transition: "background 250ms ease",
     },
     confirmLabel: "Mobility mode active",
     iconName: "Leaf",
