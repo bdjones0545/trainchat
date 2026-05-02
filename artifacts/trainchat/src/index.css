@@ -139,8 +139,19 @@
     @apply border-border;
   }
 
+  html {
+    height: 100%;
+    overscroll-behavior: none;
+  }
+
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    height: 100%;
+    overscroll-behavior: none;
+  }
+
+  #root {
+    height: 100%;
   }
 }
 

@@ -2616,7 +2616,7 @@ export default function Chat() {
           <div
             ref={messagesContainerRef}
             className="flex-1 overflow-y-auto px-4 pt-4 md:pt-12 pb-4"
-            style={{ overscrollBehaviorY: "contain", overflowAnchor: "none" }}
+            style={{ overscrollBehavior: "contain", overflowAnchor: "none", WebkitOverflowScrolling: "touch" }}
           >
             {messagesLoading ? (
               <div className="flex justify-center items-center h-32">
