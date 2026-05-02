@@ -683,6 +683,31 @@ function ProgramTab({
   // ── Share program modal ───────────────────────────────────────────────────
   const [showShareModal, setShowShareModal] = useState(false);
 
+  // ── Inline program name editing ───────────────────────────────────────────
+  const [localProgramName, setLocalProgramName] = useState(() =>
+    generateProgramName(program?.programName ?? "", program?.days.length ?? 0, program?.splitType, trainingGoal)
+  );
+  const [isEditingName, setIsEditingName] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync when program changes (new build or save)
+  useEffect(() => {
+    if (!isEditingName) {
+      setLocalProgramName(
+        generateProgramName(program?.programName ?? "", program?.days.length ?? 0, program?.splitType, trainingGoal)
+      );
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [program?.programName, program?.days.length]);
+
+  // Focus input when editing starts
+  useEffect(() => {
+    if (isEditingName && nameInputRef.current) {
+      nameInputRef.current.focus();
+      nameInputRef.current.select();
+    }
+  }, [isEditingName]);
+
   // ── Week selector state ──────────────────────────────────────────────────
   const currentWeekNum = program?.weekNumber ?? null;
   const [selectedWeek, setSelectedWeek] = useState<number>(currentWeekNum ?? 1);
@@ -1473,16 +1498,43 @@ function ProgramTab({
         </div>
 
         {/* Program title + draft label */}
-        <div className="flex items-start gap-2 mb-2.5">
-          <h3 className="text-[15px] font-bold text-foreground leading-snug tracking-tight flex-1">
-            {program.programName}
-          </h3>
+        <div className="flex items-start gap-2 mb-1">
+          {isEditingName ? (
+            <input
+              ref={nameInputRef}
+              type="text"
+              value={localProgramName}
+              onChange={(e) => setLocalProgramName(e.target.value)}
+              onBlur={() => setIsEditingName(false)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === "Escape") setIsEditingName(false);
+              }}
+              className="flex-1 text-[15px] font-bold text-foreground leading-snug tracking-tight bg-muted/40 border border-primary/30 rounded-md px-2 py-0.5 outline-none focus:ring-1 focus:ring-primary/40"
+              maxLength={60}
+            />
+          ) : (
+            <h3
+              className="text-[15px] font-bold text-foreground leading-snug tracking-tight flex-1 cursor-pointer hover:text-primary transition-colors group flex items-center gap-1.5"
+              onClick={() => setIsEditingName(true)}
+              title="Click to rename"
+            >
+              {localProgramName}
+              <span className="opacity-0 group-hover:opacity-40 transition-opacity text-[10px] font-normal text-muted-foreground">✎</span>
+            </h3>
+          )}
           {programSource === "draft" && (
             <span className="flex-shrink-0 mt-0.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/30 text-[9px] font-semibold text-amber-400 uppercase tracking-wider">
               Draft — not saved
             </span>
           )}
         </div>
+
+        {/* Progression tease */}
+        <p className="text-[10px] text-muted-foreground/50 font-medium mb-2.5 leading-snug">
+          {program.weekNumber
+            ? `Week ${program.weekNumber} of 4 · Progression built in`
+            : "This system adapts as you train"}
+        </p>
 
         {/* Hierarchy breadcrumb — block phase · week number · week role */}
         {hierarchyParts.length > 0 && (
@@ -2709,6 +2761,47 @@ function TabLockedView({ message, onUpgrade }: { message: string; onUpgrade?: ()
   );
 }
 
+// ─── Program name generator ───────────────────────────────────────────────────
+
+function generateProgramName(
+  backendName: string,
+  daysPerWeek: number,
+  splitType?: string,
+  trainingGoal?: string,
+): string {
+  const isGeneric =
+    !backendName ||
+    backendName === "Workout Plan" ||
+    backendName === "Training Plan" ||
+    backendName === "My Program";
+  if (!isGeneric) return backendName;
+
+  const dayStr = daysPerWeek > 0 ? `${daysPerWeek}-Day` : "";
+  const goalMap: Record<string, string> = {
+    strength: "Strength",
+    "fat loss": "Fat Loss",
+    "fat-loss": "Fat Loss",
+    hypertrophy: "Muscle Hypertrophy",
+    endurance: "Endurance",
+    speed: "Speed & Acceleration",
+    mobility: "Mobility",
+    athletic: "Athletic Performance",
+    general: "General Fitness",
+    football: "Football Performance",
+    basketball: "Basketball Performance",
+    soccer: "Soccer Performance",
+  };
+  const goalLabel = trainingGoal
+    ? (goalMap[trainingGoal.toLowerCase()] ?? trainingGoal)
+    : null;
+
+  if (goalLabel && dayStr) return `${dayStr} ${goalLabel} System`;
+  if (goalLabel) return `${goalLabel} System`;
+  if (splitType && dayStr) return `${dayStr} ${splitType} Program`;
+  if (dayStr) return `${dayStr} Training Program`;
+  return "Training Program";
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function LiveProgramPanel({
@@ -2773,35 +2866,57 @@ export default function LiveProgramPanel({
     refetchOnWindowFocus: true,
   });
   const hasUnseenAdaptation = (adaptedNewCount ?? 0) > 0 && activeTab !== "adapted";
-  const [showBuildSuccess, setShowBuildSuccess] = useState(false);
+  const [ownershipBannerType, setOwnershipBannerType] = useState<"active" | "saved" | null>(null);
   const [panelSwitchConfirm, setPanelSwitchConfirm] = useState<string | null>(null);
   const prevChangeSignalRef = useRef(0);
   const prevProgramSignalRef = useRef(0);
-  const buildSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevIsSavedRef = useRef(isSaved);
+  const ownershipBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasShownOwnershipActiveRef = useRef(false);
   const panelSwitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // New program built → switch to Program tab so user sees the result
+  function showOwnershipBanner(type: "active" | "saved") {
+    setOwnershipBannerType(type);
+    if (ownershipBannerTimerRef.current) clearTimeout(ownershipBannerTimerRef.current);
+    ownershipBannerTimerRef.current = setTimeout(() => setOwnershipBannerType(null), 6500);
+  }
+
+  // New program built → switch to Program tab, reset ownership tracking, show banner
   useEffect(() => {
     if (newProgramSignal > 0 && newProgramSignal !== prevProgramSignalRef.current) {
       prevProgramSignalRef.current = newProgramSignal;
       setActiveTab("program");
-      setHasUnseenChange(true); // badge on Changes tab so user knows it populated
-      // Show the "Training system created" success indicator briefly
-      setShowBuildSuccess(true);
-      if (buildSuccessTimerRef.current) clearTimeout(buildSuccessTimerRef.current);
-      buildSuccessTimerRef.current = setTimeout(() => setShowBuildSuccess(false), 4000);
+      setHasUnseenChange(true);
+      hasShownOwnershipActiveRef.current = false;
+      showOwnershipBanner("active");
+      hasShownOwnershipActiveRef.current = true;
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newProgramSignal]);
 
   // Program edited → switch to Program tab and highlight the change
-  // (Changes tab gets an unseen badge so user can still see it)
+  // Show ownership banner once per session (first edit only)
   useEffect(() => {
     if (newChangeSignal > 0 && newChangeSignal !== prevChangeSignalRef.current) {
       prevChangeSignalRef.current = newChangeSignal;
       setActiveTab("program");
       setHasUnseenChange(true);
+      if (!hasShownOwnershipActiveRef.current) {
+        showOwnershipBanner("active");
+        hasShownOwnershipActiveRef.current = true;
+      }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newChangeSignal]);
+
+  // isSaved transition → show "saved" banner
+  useEffect(() => {
+    if (isSaved && !prevIsSavedRef.current) {
+      showOwnershipBanner("saved");
+    }
+    prevIsSavedRef.current = isSaved;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSaved]);
 
   // Clear badge when user views Changes tab
   useEffect(() => {
@@ -2860,12 +2975,26 @@ export default function LiveProgramPanel({
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Training system created — transient success indicator */}
-      {showBuildSuccess && (
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 border-b border-primary/20 flex-shrink-0">
-          <CheckCircle className="w-3 h-3 text-primary flex-shrink-0" />
-          <span className="text-[11px] font-semibold text-primary">Training system created</span>
-          <span className="ml-auto text-[10px] text-primary/50">{program?.splitType ?? ""}</span>
+      {/* Ownership banner — transient, appears after build / edit / save */}
+      {ownershipBannerType && (
+        <div
+          className="flex items-start gap-2.5 px-3 py-2 bg-primary/10 border-b border-primary/20 flex-shrink-0 animate-in fade-in slide-in-from-top-1 duration-300"
+          style={{ animation: "fadeSlideIn 0.25s ease both" }}
+        >
+          <CheckCircle className="w-3.5 h-3.5 text-primary flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            {ownershipBannerType === "saved" ? (
+              <>
+                <p className="text-[11px] font-semibold text-primary leading-snug">Saved to your account</p>
+                <p className="text-[10px] text-primary/60 leading-snug">Your system is ready anytime.</p>
+              </>
+            ) : (
+              <>
+                <p className="text-[11px] font-semibold text-primary leading-snug">Your system is active</p>
+                <p className="text-[10px] text-primary/60 leading-snug">You can edit this anytime.</p>
+              </>
+            )}
+          </div>
         </div>
       )}
 
