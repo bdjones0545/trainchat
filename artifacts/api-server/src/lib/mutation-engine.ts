@@ -206,6 +206,12 @@ export async function applyMutation({
 }): Promise<{
   updatedProgram: ProgramStructure;
   changeSummary: string;
+  /** Premium skill name that handled this mutation */
+  skillUsed: string;
+  /** Confidence in the mutation result */
+  confidence: "low" | "moderate" | "high";
+  /** true if deterministic fallback path was taken instead of primary AI/cluster path */
+  fallbackUsed: boolean;
 }> {
   if (!plan.mutation) {
     throw new Error("[MutationEngine] No mutation descriptor on ExecutionPlan");
@@ -214,23 +220,35 @@ export async function applyMutation({
   const cloned: ProgramStructure = structuredClone(program);
 
   switch (plan.mutation.type) {
-    case "swap":
-      return handleSwap(cloned, plan, userContext);
+    case "swap": {
+      const result = await handleSwap(cloned, plan, userContext);
+      return { ...result, skillUsed: "TrueSwap", confidence: "high", fallbackUsed: false };
+    }
 
-    case "transform":
-      return handleTransformation(cloned, plan);
+    case "transform": {
+      const result = handleTransformation(cloned, plan);
+      return { ...result, skillUsed: "TransformationOverlay", confidence: "high", fallbackUsed: false };
+    }
 
-    case "add":
-      return handleAdd(cloned, plan, userContext);
+    case "add": {
+      const result = await handleAdd(cloned, plan, userContext);
+      return { ...result, skillUsed: "ExerciseAddition", confidence: "high", fallbackUsed: false };
+    }
 
-    case "remove":
-      return handleRemove(cloned, plan);
+    case "remove": {
+      const result = handleRemove(cloned, plan);
+      return { ...result, skillUsed: "ExerciseRemoval", confidence: "high", fallbackUsed: false };
+    }
 
-    case "progression":
-      return handleProgression(cloned, plan, userContext);
+    case "progression": {
+      const result = await handleProgression(cloned, plan, userContext);
+      return { ...result, skillUsed: "ProgressionLever", confidence: "high", fallbackUsed: false };
+    }
 
-    case "regression":
-      return handleRegression(cloned, plan, userContext);
+    case "regression": {
+      const result = await handleRegression(cloned, plan, userContext);
+      return { ...result, skillUsed: "RegressionLever", confidence: "high", fallbackUsed: false };
+    }
 
     default: {
       const exhaustive: never = plan.mutation.type;

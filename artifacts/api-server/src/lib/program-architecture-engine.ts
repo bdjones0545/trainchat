@@ -22,6 +22,15 @@
 // The engine generates a structured "Architecture Brief" that is injected
 // into the AI system prompt, ensuring every generated program follows elite
 // strength & conditioning principles.
+//
+// PREMIUM ARCHITECT SKILLS:
+//   • Program Architecture   — select split based on goal, schedule, sport, equipment, recovery
+//   • Exercise Sequencing    — speed/power while fresh; strength before accessories; conditioning last
+//   • Constraint Optimization — find the best training solution under real-world constraints
+//   • Periodization Design   — linear, wave, undulating, block, or autoregulated per training age
+//   • Athletic Transfer      — connect strength, power, mobility, and speed to actual sport demands
+//   • Fatigue Economics      — remove junk volume; balance stress so no session undermines the next
+//   • Expert Judgment        — use nonstandard structures when better; document in expertJudgmentNotes
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {

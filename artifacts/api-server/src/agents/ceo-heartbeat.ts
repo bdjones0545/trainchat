@@ -68,6 +68,21 @@ export interface CEOHeartbeatResult {
   identityAlignment: "strong" | "acceptable" | "weak";
   /** Specific identity concerns detected. Empty if identityAlignment is "strong". */
   identityConcerns: string[];
+  /**
+   * Premium skill names executed during this heartbeat pass.
+   * Used for internal dev logging and observability.
+   */
+  skillsRun: string[];
+  /**
+   * Aggregate confidence in the program quality assessment.
+   * Derived from the number and severity of concerns found.
+   */
+  confidence: "low" | "moderate" | "high";
+  /**
+   * true when expert judgment latitude was granted (hasExpertJudgmentNotes = true),
+   * meaning flow/structure and simplicity checks were relaxed.
+   */
+  fallbackUsed: boolean;
 }
 
 // ─── Check Thresholds ─────────────────────────────────────────────────────────
@@ -534,6 +549,26 @@ export function runCEOHeartbeatCheck(
     identityConcerns.length === 1 ? "acceptable" :
     "weak";
 
+  const skillsRun = [
+    "Clarity Check",
+    "Goal Match Check",
+    "Practicality Check",
+    "Coaching Quality Check",
+    "Flow & Structure Check",
+    "Fatigue Economics Check",
+    "Safety Check",
+    "Simplicity Check",
+    "Confidence Check",
+    "Identity Check",
+  ];
+
+  const confidence: CEOHeartbeatResult["confidence"] =
+    finalConcerns.length === 0
+      ? "high"
+      : finalConcerns.length <= 2
+        ? "moderate"
+        : "low";
+
   return {
     pass,
     concerns: finalConcerns,
@@ -541,5 +576,8 @@ export function runCEOHeartbeatCheck(
     overrideRecommended: overrideRecommended || undefined,
     identityAlignment,
     identityConcerns,
+    skillsRun,
+    confidence,
+    fallbackUsed: context.hasExpertJudgmentNotes,
   };
 }
