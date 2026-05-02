@@ -1,0 +1,113 @@
+Audit and strengthen how TrainChat’s approved research layer influences actual program generation and editing.
+
+Goal:
+Make sure retrieved research does not merely appear in explanations, but actively improves programming decisions.
+
+Audit the current flow:
+- Research retriever
+- buildSystemPrompt
+- program generation logic
+- mutation/edit pipeline
+- exercise selection
+- volume/intensity/progression rules
+- safety constraints
+- Live Program Panel output
+
+Determine:
+1. Is approved research context being injected into program generation?
+2. Is it being injected into program edits/mutations?
+3. Is it influencing structured programming fields, not just chat text?
+4. Are volume, intensity, frequency, progression, exercise selection, and recovery decisions affected?
+5. Does pain/safety still override research suggestions?
+6. Does sport/population context retrieve the right research?
+
+Implement a “Research-Informed Programming Layer.”
+
+For each generated or edited program, research context should be translated into programming constraints:
+
+Examples:
+- Hypertrophy research → weekly set targets, proximity to failure, frequency, recovery
+- Strength research → heavier loading ranges, longer rest, lower rep ranges, progressive overload
+- Speed research → high-quality sprint work, adequate rest, low fatigue, power emphasis
+- Plyometric research → dosage, landing quality, readiness, progression
+- Older adult research → controlled tempo, joint-friendly selections, conservative progression
+- Pain-related research → symptom-guided modification, no diagnosis, reduce provocative patterns
+
+Create a function like:
+
+buildResearchProgrammingGuidance(params)
+
+Inputs:
+- user goal
+- sport
+- age/population
+- pain/limitations
+- training phase
+- current program
+- retrieved research chunks
+
+Output:
+- volumeGuidance
+- intensityGuidance
+- exerciseSelectionGuidance
+- progressionGuidance
+- recoveryGuidance
+- safetyGuidance
+- contraindications
+- confidenceLevel
+
+Then inject this into the agent/programming prompt under:
+
+RESEARCH-INFORMED PROGRAMMING GUIDANCE
+
+Rules:
+- Use this to improve the actual program structure.
+- Do not simply mention the research.
+- Do not overrule user constraints.
+- Do not overrule pain/safety rules.
+- If evidence is limited/conflicting, use conservative programming.
+- Keep user-facing responses practical and simple.
+
+Also update the mutation/edit pipeline:
+When user clicks:
+- Make harder
+- Make easier
+- Swap
+- Replace equipment
+- Adapt for pain
+The agent should use relevant research guidance to choose safer/better modifications.
+
+Add internal debug/dev-only logging:
+- research chunks retrieved
+- programming guidance generated
+- which programming dimensions were influenced
+- confidence level
+
+Do not show these logs in production.
+
+Validation tests:
+1. Hypertrophy program:
+- Should show appropriate volume/frequency/progression logic.
+
+2. Football speed program:
+- Should prioritize sprint quality, rest, acceleration, power, and low fatigue.
+
+3. Knee pain modification:
+- Should reduce provocative exercises and suggest joint-friendly alternatives without medical claims.
+
+4. Older adult program:
+- Should use conservative progression and joint-friendly choices.
+
+5. Make harder edit:
+- Should increase difficulty intelligently, not randomly add volume.
+
+6. Make easier edit:
+- Should preserve intent while reducing demand.
+
+Output:
+- Files changed
+- Where research now influences programming
+- New guidance function added
+- Before/after examples
+- QA results
+- Typecheck results
