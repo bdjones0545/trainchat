@@ -3966,6 +3966,9 @@ ELIMINATE from this baseball program:
     .join("\n");
 
   return `## PROGRAM ARCHITECTURE BRIEF — MANDATORY STRUCTURE
+**Source: Architect Vale — Internal Performance Architect**
+The following architecture was designed by TrainChat's internal programming engine. Every structural decision (split, block type, session sequence, neural demand profile) is intentional. Preserve this architecture unless a hard user constraint requires adjustment.
+
 The following architecture MUST be used as the blueprint for this program.
 DO NOT begin exercise selection until this structure is established.
 

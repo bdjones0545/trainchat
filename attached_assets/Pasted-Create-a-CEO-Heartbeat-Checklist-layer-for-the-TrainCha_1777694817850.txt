@@ -1,0 +1,165 @@
+Create a CEO Heartbeat Checklist layer for the TrainChat Coach Agent.
+
+Goal:
+Ensure every program, edit, or response meets a high-quality coaching standard before being shown to the user.
+
+The Coach Agent acts as the final decision-maker (CEO) and must validate outputs using this checklist.
+
+-------------------------------------
+PHASE 1 — HEARTBEAT MODULE
+-------------------------------------
+
+Create:
+
+server/agents/ceo-heartbeat.ts
+
+Function:
+
+runCEOHeartbeatCheck(output, context)
+
+Inputs:
+- final program or mutation result
+- user goal
+- sport
+- constraints
+- pain limitations
+- experience level
+- session length
+- recent actions (if available)
+
+-------------------------------------
+PHASE 2 — HEARTBEAT CHECKLIST
+-------------------------------------
+
+Implement checks:
+
+1. Clarity
+- Is this easy to understand?
+- Is it overcomplicated?
+
+2. Goal Alignment
+- Does this clearly match the user’s goal?
+
+3. Practicality
+- Does this fit the user’s time, equipment, and ability?
+
+4. Coaching Quality
+- Does this feel like a real coach designed it?
+
+5. Flow & Structure
+- Does the session order make sense?
+
+6. Fatigue & Recovery
+- Is this sustainable?
+- Is there unnecessary junk volume?
+
+7. Safety
+- Are pain and injury constraints respected?
+
+8. Simplicity vs Overengineering
+- Is this doing too much?
+
+9. Confidence
+- Would a high-level coach confidently give this to an athlete?
+
+-------------------------------------
+PHASE 3 — OUTPUT
+-------------------------------------
+
+Return:
+
+CEOHeartbeatResult {
+  pass: boolean;
+  concerns: string[];
+  minorAdjustments?: string[];
+  overrideRecommended?: boolean;
+}
+
+-------------------------------------
+PHASE 4 — ADJUSTMENT RULES
+-------------------------------------
+
+If:
+- pass → proceed
+
+If:
+- minor concerns → Coach Agent tweaks:
+  - simplify wording
+  - reduce clutter
+  - clarify intent
+
+If:
+- overrideRecommended → regenerate or re-route:
+  - call Performance Architect again
+  - adjust structure
+  - fix misalignment
+
+-------------------------------------
+PHASE 5 — COACH AGENT INTEGRATION
+-------------------------------------
+
+Before final response:
+
+→ run CEOHeartbeatCheck()
+
+Coach Agent must:
+- approve output
+- or adjust
+- or regenerate
+
+Add to prompt:
+
+“You are the final decision-maker. If something feels off, you fix it before showing the user.”
+
+-------------------------------------
+PHASE 6 — DEV LOGGING
+-------------------------------------
+
+Add:
+
+[CEOHeartbeat]
+- pass/fail
+- concerns
+- adjustments
+- overrideTriggered
+
+-------------------------------------
+PHASE 7 — QA
+-------------------------------------
+
+Test:
+
+1. Overcomplicated program
+→ should simplify
+
+2. Misaligned goal
+→ should adjust
+
+3. Unsafe output
+→ must fix
+
+4. Clean program
+→ no change
+
+5. Creative program
+→ passes if justified
+
+-------------------------------------
+PHASE 8 — CONSTRAINTS
+-------------------------------------
+
+Do NOT:
+- override safety rules
+- override user constraints
+- redesign entire program unnecessarily
+- expose this layer to users
+
+-------------------------------------
+OUTPUT
+-------------------------------------
+
+Return:
+- Files added
+- Integration point
+- QA results
+- Typecheck result

@@ -2,26 +2,33 @@
 //
 // Central coordination layer for TrainChat's three-agent architecture.
 //
-// ┌─────────────────────────────────────────────────────────────────────────┐
-// │                    THREE-AGENT ARCHITECTURE MAP                         │
-// ├──────────────────────────┬──────────────────────────────────────────────┤
-// │ Agent                    │ Responsibility                               │
-// ├──────────────────────────┼──────────────────────────────────────────────┤
-// │ Coach Agent              │ All user-facing conversation, program        │
-// │ (lib/ai.ts)              │ building, program editing, coaching          │
-// │                          │ responses. Single OpenAI system prompt.      │
-// │                          │ Never touches research ingestion.            │
-// ├──────────────────────────┼──────────────────────────────────────────────┤
-// │ Performance Architect    │ Deterministic (no AI call). Generates        │
-// │ (program-architecture-   │ CNS-driven architecture briefs, validates    │
-// │  engine.ts)              │ session structures, selects exercises via    │
-// │                          │ the variation engine. Called FROM the Coach  │
-// │                          │ on build paths, never on edit paths.         │
-// ├──────────────────────────┼──────────────────────────────────────────────┤
-// │ Research Librarian       │ Separate AI agent. Evaluates, summarizes,    │
-// │ (research/research-      │ and chunks research documents. Admin-only.   │
-// │  librarian-agent.ts)     │ NEVER called during user chat sessions.      │
-// └──────────────────────────┴──────────────────────────────────────────────┘
+// ┌──────────────────────────────────────────────────────────────────────────────┐
+// │                    THREE-AGENT ARCHITECTURE MAP                              │
+// ├───────────────────────────────┬──────────────────────────────────────────────┤
+// │ Agent (Internal Persona)      │ Responsibility                               │
+// ├───────────────────────────────┼──────────────────────────────────────────────┤
+// │ Coach Agent                   │ All user-facing conversation, program        │
+// │ [Coach Atlas]                 │ building, program editing, coaching          │
+// │ (lib/ai.ts)                   │ responses. Single OpenAI system prompt.      │
+// │                               │ Never touches research ingestion.            │
+// │                               │ User only knows this as "TrainChat."         │
+// ├───────────────────────────────┼──────────────────────────────────────────────┤
+// │ Performance Architect         │ Deterministic (no AI call). Generates        │
+// │ [Architect Vale]              │ CNS-driven architecture briefs, validates    │
+// │ (program-architecture-        │ session structures, selects exercises via    │
+// │  engine.ts)                   │ the variation engine. Called FROM the Coach  │
+// │                               │ on build paths, never on edit paths.         │
+// │                               │ Never speaks to users.                       │
+// ├───────────────────────────────┼──────────────────────────────────────────────┤
+// │ Research Librarian            │ Separate AI agent. Evaluates, summarizes,    │
+// │ [Dr. Sable]                   │ and chunks research documents. Admin-only.   │
+// │ (research/research-           │ NEVER called during user chat sessions.      │
+// │  librarian-agent.ts)          │ Never speaks to users.                       │
+// └───────────────────────────────┴──────────────────────────────────────────────┘
+//
+// Internal persona names (Coach Atlas / Architect Vale / Dr. Sable) are for
+// dev/admin logs only. They must NEVER appear in user-facing responses.
+// See: src/agents/agent-personas.ts for full persona definitions.
 //
 // This module provides:
 //   1. Typed handoff contracts between agents
@@ -43,9 +50,30 @@ import { logger } from "../lib/logger";
 // ─── Agent Roles ─────────────────────────────────────────────────────────────
 
 export type AgentRole =
-  | "coach"                 // User-facing Coach Agent (lib/ai.ts → generateAIResponse)
-  | "performance_architect" // Deterministic engine (lib/program-architecture-engine.ts)
-  | "research_librarian";   // Admin-only AI agent (research/research-librarian-agent.ts)
+  | "coach"                 // User-facing Coach Agent — internal persona: Coach Atlas
+  | "performance_architect" // Deterministic engine   — internal persona: Architect Vale
+  | "research_librarian";   // Admin-only AI agent    — internal persona: Dr. Sable
+
+/** Maps AgentRole to its internal persona name for dev/admin log labels. */
+export const AGENT_PERSONA_LABELS: Record<AgentRole, string> = {
+  coach: "Coach Atlas",
+  performance_architect: "Architect Vale",
+  research_librarian: "Dr. Sable",
+};
+
+/**
+ * Returns the persona label for a log message.
+ * Returns the label only in non-production or admin contexts to prevent leakage.
+ */
+export function personaLabel(
+  role: AgentRole,
+  opts: { isAdmin?: boolean } = {}
+): string {
+  if (process.env.NODE_ENV !== "production" || opts.isAdmin) {
+    return AGENT_PERSONA_LABELS[role];
+  }
+  return role;
+}
 
 // ─── Orchestrator Route ───────────────────────────────────────────────────────
 //
@@ -573,7 +601,7 @@ export function logArchitectHandoff(
       hasLockedSelections: result.lockedExerciseSelections !== null,
       briefError: result.briefError ?? null,
     },
-    "[AgentOrchestrator] Performance Architect → Coach Agent handoff complete"
+    `[AgentOrchestrator] ${personaLabel("performance_architect")} → ${personaLabel("coach")} handoff complete`
   );
 }
 
@@ -628,7 +656,7 @@ export function logLibrarianHandoff(handoff: LibrarianToResearchDatabaseHandoff)
       warningFlags: handoff.librarianResult.warningFlags,
       triggeredBy: handoff.triggeredBy,
     },
-    "[AgentOrchestrator] Research Librarian → Research Database handoff logged"
+    `[AgentOrchestrator] ${personaLabel("research_librarian")} → Research Database handoff logged`
   );
 }
 
