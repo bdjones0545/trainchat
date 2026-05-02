@@ -1,0 +1,170 @@
+Implement the final 3 commercial leverage upgrades for TrainChat.
+
+Goal:
+Increase perceived ownership, retention, and conversion by making the system feel personal, named, and progressive.
+
+Do NOT change core architecture.
+Do NOT add unnecessary complexity.
+These are lightweight, high-impact UI/UX upgrades.
+
+-------------------------------------
+PHASE 1 — OWNERSHIP MOMENT
+-------------------------------------
+
+Create a clear “ownership” state after a system is created, edited, or saved.
+
+Trigger conditions:
+- First successful program generation
+- First successful edit (quick action or chat)
+- Successful save
+
+UI implementation:
+
+At the top of the Live Program Panel (above program name):
+
+Display a subtle but clear ownership indicator:
+
+Option A (preferred):
+✅ Your system is active  
+You can edit this anytime.
+
+Option B (if saved):
+✅ Saved to your account  
+Your system is ready anytime.
+
+Behavior:
+- Show for ~5–8 seconds after trigger, then fade or collapse
+- Should not be intrusive or shift layout aggressively
+- On mobile, ensure it is visible without pushing content too far down
+
+Technical:
+- Track local UI state (e.g., hasSeenOwnershipBanner)
+- Do not persist to backend
+- Reset only on full new system creation
+
+-------------------------------------
+PHASE 2 — PROGRAM NAMING SYSTEM
+-------------------------------------
+
+Every generated system must have a clear, human-readable name.
+
+If backend already provides a name:
+→ Use it
+
+If not:
+→ Generate a name on the frontend using available context:
+
+Inputs:
+- Goal (strength, fat loss, hypertrophy, etc.)
+- Sport (football, general, etc.)
+- Days per week
+- Constraints (pain, equipment, etc.)
+
+Examples:
+- “3-Day Strength System”
+- “Football Speed & Acceleration Program”
+- “Knee-Friendly Lower Body Plan”
+- “4-Day Muscle Hypertrophy Split”
+- “Dumbbell-Only Home Program”
+
+Rules:
+- Keep under ~6–8 words
+- Must sound like a real program name
+- Avoid generic labels like “Workout Plan”
+
+UI:
+
+- Display program name prominently at top of Live Program Panel
+- Larger font than body, clear hierarchy
+- Allow inline rename:
+  - Click/tap name → editable input
+  - Save on blur or enter
+  - Persist if system is saved
+
+Technical:
+- If backend supports name field → sync it
+- If not → store locally until backend supports it
+
+-------------------------------------
+PHASE 3 — PROGRESSION TEASE / RETENTION HOOK
+-------------------------------------
+
+Add a subtle progression indicator to increase perceived long-term value.
+
+Under the program name, add one of:
+
+Option A:
+Week 1 of 4  
+Progression built in
+
+Option B:
+This system adapts as you train
+
+Option C (if progression data exists):
+Week X of Y • Adaptive progression active
+
+Behavior:
+- Static for now (no need to implement full tracking)
+- Should feel real, not fake or gimmicky
+- Do not over-explain
+
+UI:
+- Small, muted text
+- Positioned directly under program name
+- Consistent across desktop and mobile
+
+-------------------------------------
+PHASE 4 — INTEGRATION RULES
+-------------------------------------
+
+- Must work with existing Live Program Panel
+- Must NOT break streaming or mutation updates
+- Must NOT interfere with change highlighting system
+- Must NOT clutter UI
+- Must be mobile-friendly
+- Must respect current design system (Tailwind/shadcn)
+
+-------------------------------------
+PHASE 5 — VALIDATION
+-------------------------------------
+
+After implementation:
+
+1. Generate a new system:
+   - Program name appears correctly
+   - Ownership banner appears
+
+2. Perform an edit:
+   - Ownership banner appears (if first interaction)
+   - Program name remains stable
+
+3. Save system:
+   - Ownership message updates to saved state
+
+4. Rename program:
+   - Inline edit works
+   - Name persists (if saved)
+
+5. Mobile (~390px):
+   - No layout breaking
+   - Name and progression text readable
+   - Banner does not push content excessively
+
+6. Typecheck:
+   - Zero TypeScript errors
+
+-------------------------------------
+OUTPUT
+-------------------------------------
+
+At completion, output:
+
+- Files modified
+- New state variables added
+- Naming logic used
+- Any assumptions made
+- QA checklist results
+
+-------------------------------------
+
+This is the final polish layer before scaling. Focus on clarity, ownership, and perceived value.
