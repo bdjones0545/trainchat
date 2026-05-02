@@ -97,10 +97,12 @@ const STRENGTH_CONFIG: FocusModeConfig = {
   },
   keywords: ["squat", "deadlift", "bench", "barbell", "dumbbell", "hypertrophy", "lift", "1rm", "strength", "powerlifting", "bodybuilding", "muscle"],
   suggestionChips: [
-    { label: "Build a 4-day strength system", prompt: "Design a 4-day strength training system for me", highlight: true },
-    { label: "Work around pain or injury", prompt: "Help me train around an injury or pain", highlight: false },
-    { label: "More explosive power", prompt: "Add explosive power and strength to my program", highlight: false },
-    { label: "Home gym program", prompt: "Build a strength program using only home gym equipment", highlight: false },
+    { label: "Build a 3-day strength program", prompt: "Build me a 3-day strength program", highlight: true },
+    { label: "Build a 4-day muscle program", prompt: "Build a 4-day muscle building program", highlight: true },
+    { label: "Build a fat-loss training plan", prompt: "Build a fat-loss training plan for me", highlight: false },
+    { label: "Build around knee pain", prompt: "Build a training program around knee pain", highlight: false },
+    { label: "Build with dumbbells only", prompt: "Build a program using dumbbells only", highlight: false },
+    { label: "Build a home gym program", prompt: "Build a strength program for a home gym", highlight: false },
   ],
   quickActions: [
     { label: "More explosive", prompt: "Make this program more explosive and power-focused" },
@@ -135,9 +137,10 @@ const SPEED_CONFIG: FocusModeConfig = {
   },
   keywords: ["sprint", "speed", "agility", "footwork", "acceleration", "deceleration", "change of direction", "reactive", "ladder", "cone", "fast feet"],
   suggestionChips: [
-    { label: "Build a speed & acceleration program", prompt: "Design a speed and acceleration training program for me", highlight: true },
-    { label: "Improve change of direction", prompt: "I need to improve my change of direction and agility", highlight: false },
-    { label: "Add footwork & rhythm", prompt: "Build footwork, rhythm, and reactive drills into my program", highlight: false },
+    { label: "Build a football speed program", prompt: "Build a football speed program", highlight: true },
+    { label: "Build a speed & acceleration program", prompt: "Build a speed and acceleration training program for me", highlight: true },
+    { label: "Improve change of direction", prompt: "Build a program to improve my change of direction and agility", highlight: false },
+    { label: "Build around knee pain", prompt: "Build a speed program around knee pain", highlight: false },
     { label: "In-season speed maintenance", prompt: "Design an in-season speed maintenance program for my sport", highlight: false },
   ],
   quickActions: [

@@ -762,14 +762,16 @@ function ProgramTab({
     setPanelEditError(null);
     setPendingRefinement(key);
     const payload = { source: "right_panel", ...options };
-    console.log("[SidebarEditExecutionAudit]", {
-      buttonPressed: key,
-      focusMode: panelFocusMode,
-      commandSent: message,
-      structuredIntent: options?.structuredIntent ?? null,
-      interactionType: options?.interactionType ?? null,
-      payload,
-    });
+    if (import.meta.env.DEV) {
+      console.log("[SidebarEditExecutionAudit]", {
+        buttonPressed: key,
+        focusMode: panelFocusMode,
+        commandSent: message,
+        structuredIntent: options?.structuredIntent ?? null,
+        interactionType: options?.interactionType ?? null,
+        payload,
+      });
+    }
     onSendMessage(message, payload);
     onClose?.();
   }
@@ -894,15 +896,17 @@ function ProgramTab({
   }
   const sessionMode = getSessionMode();
 
-  console.log("[SessionLogRenderAudit]", {
-    focusMode: panelFocusMode,
-    expandedDay,
-    expandedDayNum: expandedDay !== null ? (program?.days[expandedDay]?.dayNumber ?? expandedDay + 1) : null,
-    serverStatus,
-    serverDayNum: activeSessionData?.dayNumber ?? null,
-    localMode,
-    resolvedSessionMode: sessionMode,
-  });
+  if (import.meta.env.DEV) {
+    console.log("[SessionLogRenderAudit]", {
+      focusMode: panelFocusMode,
+      expandedDay,
+      expandedDayNum: expandedDay !== null ? (program?.days[expandedDay]?.dayNumber ?? expandedDay + 1) : null,
+      serverStatus,
+      serverDayNum: activeSessionData?.dayNumber ?? null,
+      localMode,
+      resolvedSessionMode: sessionMode,
+    });
+  }
 
   const startSessionMutation = useMutation({
     mutationFn: (data: { trainingSystemId?: number; savedProgramId?: number; dayNumber?: number; focusMode?: string }) =>
@@ -969,17 +973,19 @@ function ProgramTab({
       const completedDayNum = expandedDay !== null
         ? (program?.days[expandedDay]?.dayNumber ?? expandedDay + 1)
         : null;
-      console.log("[SessionLogWriteAudit]", {
-        focusMode: panelFocusMode,
-        completedDayNum,
-        savedProgramId: savedProgramId ?? null,
-      });
-      console.log("[SessionProgramWriteAudit]", {
-        focusMode: panelFocusMode,
-        trainingSystemId: trainingSystemId ?? null,
-        completedDayNum,
-        writeSucceeded: true,
-      });
+      if (import.meta.env.DEV) {
+        console.log("[SessionLogWriteAudit]", {
+          focusMode: panelFocusMode,
+          completedDayNum,
+          savedProgramId: savedProgramId ?? null,
+        });
+        console.log("[SessionProgramWriteAudit]", {
+          focusMode: panelFocusMode,
+          trainingSystemId: trainingSystemId ?? null,
+          completedDayNum,
+          writeSucceeded: true,
+        });
+      }
       customFetch("/api/active-session/complete", {
         method: "POST",
         body: JSON.stringify({
@@ -1145,11 +1151,13 @@ function ProgramTab({
       // with the DB-canonical (orderIndex-sorted) program instead of the AI draft.
       pinnedProgramKey.current = null;
       newBuildPendingRef.current = true;
-      console.log("[CanonicalDay1]", JSON.stringify({
-        event: "draft_to_live_repin",
-        trainingSystemId: trainingSystemId ?? null,
-        note: "draft→live transition for new build — re-arming pin to DB-canonical Day 1",
-      }));
+      if (import.meta.env.DEV) {
+        console.log("[CanonicalDay1]", JSON.stringify({
+          event: "draft_to_live_repin",
+          trainingSystemId: trainingSystemId ?? null,
+          note: "draft→live transition for new build — re-arming pin to DB-canonical Day 1",
+        }));
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [programSource]);
@@ -1164,16 +1172,18 @@ function ProgramTab({
       newBuildPendingRef.current = true;
       // Invalidate the pin so the pinning effect below re-runs for the new program.
       pinnedProgramKey.current = null;
-      console.log("[ProgramActivation]", JSON.stringify({
-        event: "newProgramSignal",
-        programId: trainingSystemId ?? null,
-        programName: program?.programName ?? null,
-        isNewBuild: true,
-        selectedDayBefore: expandedDay,
-        prevSignal,
-        nextSignal: newProgramSignal,
-        note: "new build detected — will force Day 1 on next pin",
-      }));
+      if (import.meta.env.DEV) {
+        console.log("[ProgramActivation]", JSON.stringify({
+          event: "newProgramSignal",
+          programId: trainingSystemId ?? null,
+          programName: program?.programName ?? null,
+          isNewBuild: true,
+          selectedDayBefore: expandedDay,
+          prevSignal,
+          nextSignal: newProgramSignal,
+          note: "new build detected — will force Day 1 on next pin",
+        }));
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newProgramSignal]);
@@ -1213,18 +1223,20 @@ function ProgramTab({
         newBuildPinnedFromDraftRef.current = true;
       }
 
-      console.log("[CanonicalDay1]", JSON.stringify({
-        caller: "LiveProgramPanel",
-        event: "new_build_pin",
-        trainingSystemId: trainingSystemId ?? null,
-        chosenSessionId: null,
-        chosenSessionName: days[selectedIdx]?.name ?? null,
-        dayNumber: days[selectedIdx]?.dayNumber ?? null,
-        selectedIdx,
-        programSource,
-        totalDays: days.length,
-        dayOrder: days.map((d) => ({ name: d.name, dayNumber: d.dayNumber })),
-      }));
+      if (import.meta.env.DEV) {
+        console.log("[CanonicalDay1]", JSON.stringify({
+          caller: "LiveProgramPanel",
+          event: "new_build_pin",
+          trainingSystemId: trainingSystemId ?? null,
+          chosenSessionId: null,
+          chosenSessionName: days[selectedIdx]?.name ?? null,
+          dayNumber: days[selectedIdx]?.dayNumber ?? null,
+          selectedIdx,
+          programSource,
+          totalDays: days.length,
+          dayOrder: days.map((d) => ({ name: d.name, dayNumber: d.dayNumber })),
+        }));
+      }
     } else {
       // Existing program — use weekday-matching with Day 1 fallback.
       const todayDow = new Date().getDay();
@@ -1233,15 +1245,17 @@ function ProgramTab({
       selectionSource = weekdayIdx >= 0 ? "weekday" : "day1_default";
     }
 
-    console.log("[ProgramActivation]", JSON.stringify({
-      event: "pinDay",
-      programId: trainingSystemId ?? null,
-      programName: program.programName,
-      isNewBuild,
-      selectedDayBefore: expandedDay,
-      selectedDayAfter: selectedIdx,
-      selectionSource,
-    }));
+    if (import.meta.env.DEV) {
+      console.log("[ProgramActivation]", JSON.stringify({
+        event: "pinDay",
+        programId: trainingSystemId ?? null,
+        programName: program.programName,
+        isNewBuild,
+        selectedDayBefore: expandedDay,
+        selectedDayAfter: selectedIdx,
+        selectionSource,
+      }));
+    }
 
     setExpandedDay(selectedIdx);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1561,7 +1575,7 @@ function ProgramTab({
               ) : isSaving ? (
                 <><Loader2 className="w-3 h-3 animate-spin" /> Saving…</>
               ) : (
-                <><Save className="w-3 h-3" /> Save to My System</>
+                <><Save className="w-3 h-3" /> Save My System</>
               )}
             </button>
           )}
@@ -1695,14 +1709,23 @@ function ProgramTab({
         </div>
       )}
 
-      {/* Progression strategy */}
-      {program.progressionStrategy && (
-        <div className="px-4 py-2.5 border-b border-border bg-primary/5">
+      {/* Why this plan works */}
+      {(program.progressionStrategy || program.description) && (
+        <div className="px-4 py-3 border-b border-border bg-primary/3">
           <div className="flex items-start gap-2">
             <TrendingUp className="w-3 h-3 text-primary mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-[9px] font-bold text-primary uppercase tracking-[0.1em] mb-0.5">Progression</p>
-              <p className="text-[10px] text-muted-foreground leading-relaxed">{program.progressionStrategy}</p>
+            <div className="flex-1 min-w-0">
+              <p className="text-[9px] font-bold text-primary uppercase tracking-[0.12em] mb-1.5">Why this plan works</p>
+              {program.progressionStrategy && (
+                <p className="text-[10px] text-muted-foreground leading-relaxed mb-1">
+                  {program.progressionStrategy}
+                </p>
+              )}
+              {!program.progressionStrategy && program.description && (
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  {program.description}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -1865,15 +1888,17 @@ function ProgramTab({
                                       ? (program?.days[expandedDay]?.dayNumber ?? expandedDay + 1)
                                       : undefined;
 
-                                  console.log("[RightPanelLogModalAudit]", {
-                                    focusMode: panelFocusMode,
-                                    trainingSystemId: savedProgramId ?? null,
-                                    weekNumber: program?.weekNumber ?? null,
-                                    sessionId: null,
-                                    dayNumber: dayNum ?? null,
-                                    modalOpened: true,
-                                    directCompletionBlocked: true,
-                                  });
+                                  if (import.meta.env.DEV) {
+                                    console.log("[RightPanelLogModalAudit]", {
+                                      focusMode: panelFocusMode,
+                                      trainingSystemId: savedProgramId ?? null,
+                                      weekNumber: program?.weekNumber ?? null,
+                                      sessionId: null,
+                                      dayNumber: dayNum ?? null,
+                                      modalOpened: true,
+                                      directCompletionBlocked: true,
+                                    });
+                                  }
 
                                   // Save exercise progression data immediately so it is
                                   // captured even if the user cancels the feedback modal.
@@ -2665,7 +2690,9 @@ export default function LiveProgramPanel({
   // Keep sidebarFocus in sync when the global focus changes from OUTSIDE the
   // sidebar (e.g. user switches via the top bar or onboarding).
   useEffect(() => {
-    console.log("[SidebarFocus] global focusMode changed →", focusMode, "| syncing sidebarFocus from", sidebarFocus);
+    if (import.meta.env.DEV) {
+      console.log("[SidebarFocus] global focusMode changed →", focusMode, "| syncing sidebarFocus from", sidebarFocus);
+    }
     setSidebarFocus(focusMode);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusMode]);
@@ -2803,14 +2830,16 @@ export default function LiveProgramPanel({
                   key={mode}
                   onClick={() => {
                     // All three pills are always clickable — no hasProgram guard.
-                    console.log(
-                      "[SidebarFocus] pill clicked:", mode,
-                      "| global focusMode:", focusMode,
-                      "| prev sidebarFocus:", sidebarFocus,
-                      "| hasProgram:", hasProgram,
-                      "| resulting displayed focus →", mode,
-                      "| content filtered by focus:", hasProgram ? "yes (program exists)" : "no program yet"
-                    );
+                    if (import.meta.env.DEV) {
+                      console.log(
+                        "[SidebarFocus] pill clicked:", mode,
+                        "| global focusMode:", focusMode,
+                        "| prev sidebarFocus:", sidebarFocus,
+                        "| hasProgram:", hasProgram,
+                        "| resulting displayed focus →", mode,
+                        "| content filtered by focus:", hasProgram ? "yes (program exists)" : "no program yet"
+                      );
+                    }
                     setSidebarFocus(mode);
                     if (onFocusModeChange) onFocusModeChange(mode);
                     setPanelSwitchConfirm(cfg.theme.confirmLabel);

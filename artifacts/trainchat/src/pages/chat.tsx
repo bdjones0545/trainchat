@@ -322,13 +322,14 @@ export default function Chat() {
     staleTime: 30000,
   });
 
-  // Debug log when the saved program library changes
   useEffect(() => {
     if (!me) return;
-    console.log("[Saved programs count]", {
-      total: programLibrary.length,
-      names: programLibrary.map((p: any) => p.name ?? p.programName ?? "(unnamed)"),
-    });
+    if (import.meta.env.DEV) {
+      console.log("[Saved programs count]", {
+        total: programLibrary.length,
+        names: programLibrary.map((p: any) => p.name ?? p.programName ?? "(unnamed)"),
+      });
+    }
   }, [programLibrary, me]);
 
   const { data: weekData, isLoading: weekDataLoading } = useQuery({
@@ -408,25 +409,28 @@ export default function Chat() {
     sessionDraftMsgId: sessionDraftMsgIdRef.current,
   });
 
-  console.log("[top bar source chosen]", {
-    hasActiveSystem,
-    isNewBuildSession,
-    hasUnsavedDraft,
-    isSaved,
-    sessionDraftMsgId: sessionDraftMsgIdRef.current,
-    latestProgramName: latestProgram?.programName ?? null,
-    dbSystemProgramName: dbSystemProgram?.programName ?? null,
-    displayProgramSource,
-    displayProgramName: displayProgram?.programName ?? null,
-  });
+  if (import.meta.env.DEV) {
+    console.log("[top bar source chosen]", {
+      hasActiveSystem,
+      isNewBuildSession,
+      hasUnsavedDraft,
+      isSaved,
+      sessionDraftMsgId: sessionDraftMsgIdRef.current,
+      latestProgramName: latestProgram?.programName ?? null,
+      dbSystemProgramName: dbSystemProgram?.programName ?? null,
+      displayProgramSource,
+      displayProgramName: displayProgram?.programName ?? null,
+    });
+  }
 
   // The program is "in system" if explicitly saved this session OR if
   // we're showing the DB-backed program (no chat draft, system active, not a new build).
   const isInSystem = isSaved || (!isNewBuildSession && hasActiveSystem && !latestProgram);
 
-  // FIX 8: log auth/user state transitions for debugging
   useEffect(() => {
-    console.log("[Chat] auth state:", { hasUser: !!me, meLoading, meError });
+    if (import.meta.env.DEV) {
+      console.log("[Chat] auth state:", { hasUser: !!me, meLoading, meError });
+    }
   }, [me, meLoading, meError]);
 
   // ── State integrity assertions + audit log (DEV ONLY) ───────────────────
@@ -529,11 +533,13 @@ export default function Chat() {
   // via the "New conversation" button or by sending a message.
   useEffect(() => {
     if (!me || convosLoading) return;
-    console.log("[SessionHistorySourceAudit]", {
-      source: "listConversations query (DB)",
-      sessionIds: conversations.map((c: any) => c.id),
-      titles: conversations.map((c: any) => c.title),
-    });
+    if (import.meta.env.DEV) {
+      console.log("[SessionHistorySourceAudit]", {
+        source: "listConversations query (DB)",
+        sessionIds: conversations.map((c: any) => c.id),
+        titles: conversations.map((c: any) => c.title),
+      });
+    }
     if (conversations.length > 0) {
       if (!activeConvoId) setActiveConvoId(conversations[0].id);
       return;
@@ -551,7 +557,9 @@ export default function Chat() {
     hasCheckedCalibrationNudge.current = true;
 
     const onboardingComplete = readOnboardingComplete();
-    console.log("[Chat] calibration nudge check:", { calibrationScore, onboardingComplete });
+    if (import.meta.env.DEV) {
+      console.log("[Chat] calibration nudge check:", { calibrationScore, onboardingComplete });
+    }
 
     // Only show the nudge if calibration is low AND the user is not already
     // flagged as complete in localStorage (undefined config ≠ force modal)
@@ -576,9 +584,11 @@ export default function Chat() {
 
   useEffect(() => {
     if (messages.length > preSubmitMessagesLengthRef.current && optimisticUserMsg) {
-      console.log("[ChatSendAudit] optimisticMsgCleared — real messages arrived", {
-        messageCountAfter: messages.length,
-      });
+      if (import.meta.env.DEV) {
+        console.log("[ChatSendAudit] optimisticMsgCleared — real messages arrived", {
+          messageCountAfter: messages.length,
+        });
+      }
       if (optimisticClearTimerRef.current) clearTimeout(optimisticClearTimerRef.current);
       setOptimisticUserMsg(null);
     }
@@ -589,7 +599,9 @@ export default function Chat() {
   useEffect(() => {
     if (!stream.isActive && optimisticUserMsg) {
       optimisticClearTimerRef.current = setTimeout(() => {
-        console.log("[ChatSendAudit] optimisticMsgCleared — safety-net timeout");
+        if (import.meta.env.DEV) {
+          console.log("[ChatSendAudit] optimisticMsgCleared — safety-net timeout");
+        }
         setOptimisticUserMsg(null);
         preSubmitMessagesLengthRef.current = messages.length;
       }, 2000);
@@ -608,17 +620,21 @@ export default function Chat() {
       setThinkingStuck(false);
       if (thinkingTimeoutRef.current) clearTimeout(thinkingTimeoutRef.current);
       thinkingTimeoutRef.current = setTimeout(() => {
-        console.warn("[ThinkingStateAudit] thinkingStuck — timeout exceeded", {
-          stage: stream.state.buildStage,
-          timeoutMs: THINKING_TIMEOUT_MS,
-        });
+        if (import.meta.env.DEV) {
+          console.warn("[ThinkingStateAudit] thinkingStuck — timeout exceeded", {
+            stage: stream.state.buildStage,
+            timeoutMs: THINKING_TIMEOUT_MS,
+          });
+        }
         setThinkingStuck(true);
       }, THINKING_TIMEOUT_MS);
     } else {
       if (thinkingTimeoutRef.current) {
         clearTimeout(thinkingTimeoutRef.current);
         thinkingTimeoutRef.current = null;
-        console.log("[ThinkingStateAudit] clearedThinking — stream resolved");
+        if (import.meta.env.DEV) {
+          console.log("[ThinkingStateAudit] clearedThinking — stream resolved");
+        }
       }
       setThinkingStuck(false);
     }
@@ -725,14 +741,16 @@ export default function Chat() {
       if (_hasUnsavedDraft) {
         // New program draft in progress — keep it visible; don't let the old DB
         // program overwrite the freshly generated one.
-        console.log("[db system overwrite detected?]", {
-          blocked: true,
-          reason: "hasUnsavedDraft",
-          sessionDraftMsgId: sessionDraftMsgIdRef.current,
-          isSaved,
-          latestProgramName: latestProgram?.programName ?? null,
-          dbSystemProgramName: dbSystemProgram.programName,
-        });
+        if (import.meta.env.DEV) {
+          console.log("[db system overwrite detected?]", {
+            blocked: true,
+            reason: "hasUnsavedDraft",
+            sessionDraftMsgId: sessionDraftMsgIdRef.current,
+            isSaved,
+            latestProgramName: latestProgram?.programName ?? null,
+            dbSystemProgramName: dbSystemProgram.programName,
+          });
+        }
         return;
       }
 
@@ -744,10 +762,12 @@ export default function Chat() {
       if (justSavedSystemIdRef.current !== null) {
         if (activeSystem?.id !== justSavedSystemIdRef.current) {
           // activeSystem hasn't caught up yet — keep showing the new draft
-          console.log("[Sidebar propagation guard] blocking clear — waiting for activeSystem refetch", {
-            expectedSystemId: justSavedSystemIdRef.current,
-            currentSystemId: activeSystem?.id,
-          });
+          if (import.meta.env.DEV) {
+            console.log("[Sidebar propagation guard] blocking clear — waiting for activeSystem refetch", {
+              expectedSystemId: justSavedSystemIdRef.current,
+              currentSystemId: activeSystem?.id,
+            });
+          }
           return;
         }
         // activeSystem has updated to the new system ID — clear the guard ref
@@ -758,11 +778,13 @@ export default function Chat() {
       // Drop any stale draft and transition to live DB-canonical state.
       streamJustFinishedRef.current = false;
       setLatestProgram(null);
-      console.log("[Active program updated]", {
-        source: "live",
-        activeSystemId: activeSystem?.id,
-        programName: dbSystemProgram.programName,
-      });
+      if (import.meta.env.DEV) {
+        console.log("[Active program updated]", {
+          source: "live",
+          activeSystemId: activeSystem?.id,
+          programName: dbSystemProgram.programName,
+        });
+      }
       return;
     }
 
@@ -789,11 +811,13 @@ export default function Chat() {
       if (streamJustFinishedRef.current) {
         streamJustFinishedRef.current = false;
         sessionDraftMsgIdRef.current = last.id;
-        console.log("[Program generated] (messages effect)", {
-          messageId: last.id,
-          sessionDraftMsgId: sessionDraftMsgIdRef.current,
-          hasStructuredData: !!last.structuredData,
-        });
+        if (import.meta.env.DEV) {
+          console.log("[Program generated] (messages effect)", {
+            messageId: last.id,
+            sessionDraftMsgId: sessionDraftMsgIdRef.current,
+            hasStructuredData: !!last.structuredData,
+          });
+        }
       }
 
       // ── GHOST PREVENTION ─────────────────────────────────────────────────
@@ -817,13 +841,15 @@ export default function Chat() {
           };
           setLatestProgram(safe);
           setIsSaved(false);
-          console.log("[Program committed to state] (messages effect)", {
-            programName: safe.programName,
-            messageId: safe.messageId,
-            dayCount: safe.days.length,
-            source: last.structuredData ? "structuredData" : "content_fallback",
-          });
-          console.log("[Saved programs count]", programMessages.length);
+          if (import.meta.env.DEV) {
+            console.log("[Program committed to state] (messages effect)", {
+              programName: safe.programName,
+              messageId: safe.messageId,
+              dayCount: safe.days.length,
+              source: last.structuredData ? "structuredData" : "content_fallback",
+            });
+            console.log("[Saved programs count]", programMessages.length);
+          }
         }
       } else {
         // Historical program from a previous build or a different session —
@@ -969,10 +995,12 @@ export default function Chat() {
     // point the optimistic placeholder is cleared by the cleanup effect above.
     const msgCountBeforeSend = messages.length;
     preSubmitMessagesLengthRef.current = msgCountBeforeSend;
-    console.log("[ChatSendAudit] userMessageInserted", {
-      messageCountBefore: msgCountBeforeSend,
-      optimisticText: content.slice(0, 60),
-    });
+    if (import.meta.env.DEV) {
+      console.log("[ChatSendAudit] userMessageInserted", {
+        messageCountBefore: msgCountBeforeSend,
+        optimisticText: content.slice(0, 60),
+      });
+    }
     setOptimisticUserMsg(content);
 
     // Reset intentional-scroll tracking so send always anchors chat to the bottom.
@@ -987,12 +1015,14 @@ export default function Chat() {
     //  (b) hasUnsavedDraft  — user is generating a new program in an existing session and
     //                         has not saved yet; the old program should not pollute the prompt
     const _ctxHideOldProgram = isNewBuildSession || hasUnsavedDraft;
-    console.log("[active program id set]", {
-      _ctxHideOldProgram,
-      isNewBuildSession,
-      hasUnsavedDraft,
-      activeSystemId: activeSystem?.id ?? null,
-    });
+    if (import.meta.env.DEV) {
+      console.log("[active program id set]", {
+        _ctxHideOldProgram,
+        isNewBuildSession,
+        hasUnsavedDraft,
+        activeSystemId: activeSystem?.id ?? null,
+      });
+    }
     const chatUIContext = {
       page: "chat",
       activeProgramId: _ctxHideOldProgram ? null : (activeSystem?.id ?? null),
@@ -1012,18 +1042,22 @@ export default function Chat() {
       // a stale closure snapshot from before the async send completed.
       // Clear optimistic message so chat is not stuck showing it on failure.
       setOptimisticUserMsg(null);
-      console.log("[ChatSendAudit] streamFailed — optimisticMsgCleared");
+      if (import.meta.env.DEV) {
+        console.log("[ChatSendAudit] streamFailed — optimisticMsgCleared");
+      }
       return;
     }
 
     // Stream completed — process result.
     // Store the full event for the Agent Turn Report (dev-only debug panel).
     setLastTurnReport(result);
-    console.log("[ThinkingStateAudit] finalResponseCommitted", {
-      outcomeType: result.outcomeType,
-      assistantMsgId: result.assistantMessage?.id,
-      systemSaved: result.systemSaved,
-    });
+    if (import.meta.env.DEV) {
+      console.log("[ThinkingStateAudit] finalResponseCommitted", {
+        outcomeType: result.outcomeType,
+        assistantMsgId: result.assistantMessage?.id,
+        systemSaved: result.systemSaved,
+      });
+    }
 
     // ── IMMEDIATE PROGRAM COMMIT — explicit Case A / B / C state machine ─────
     //
@@ -1050,18 +1084,20 @@ export default function Chat() {
       if (msg.structuredData) {
         try { sdKeys = Object.keys(JSON.parse(msg.structuredData)).join(","); } catch { sdKeys = "parse_error"; }
       }
-      console.log("[Program state machine]", {
-        caseLabel,
-        assistantMsgId: msg.id,
-        hasStructuredData: !!msg.structuredData,
-        structuredDataKeys: sdKeys,
-        extractedFrom,
-        rawDataDays: rawData?.days?.length ?? null,
-        rawDataProgramName: rawData?.programName ?? null,
-        suppressionApplied: rawData !== null || isFragment,
-        commitAttempted: rawData !== null,
-        isFragment,
-      });
+      if (import.meta.env.DEV) {
+        console.log("[Program state machine]", {
+          caseLabel,
+          assistantMsgId: msg.id,
+          hasStructuredData: !!msg.structuredData,
+          structuredDataKeys: sdKeys,
+          extractedFrom,
+          rawDataDays: rawData?.days?.length ?? null,
+          rawDataProgramName: rawData?.programName ?? null,
+          suppressionApplied: rawData !== null || isFragment,
+          commitAttempted: rawData !== null,
+          isFragment,
+        });
+      }
 
       if (rawData) {
         // ── CASE A: valid full program ────────────────────────────────────────
@@ -1075,13 +1111,15 @@ export default function Chat() {
           })) : [],
         };
 
-        console.log("[Program normalized]", {
-          programName: safe.programName,
-          messageId: safe.messageId,
-          dayCount: safe.days.length,
-          splitType: (safe as any).splitType ?? null,
-          firstDayName: safe.days[0]?.name ?? null,
-        });
+        if (import.meta.env.DEV) {
+          console.log("[Program normalized]", {
+            programName: safe.programName,
+            messageId: safe.messageId,
+            dayCount: safe.days.length,
+            splitType: (safe as any).splitType ?? null,
+            firstDayName: safe.days[0]?.name ?? null,
+          });
+        }
 
         // Register draft BEFORE setting latestProgram so hasUnsavedDraft flips
         // to true in the same synchronous batch — preventing any intermediate render
@@ -1093,14 +1131,16 @@ export default function Chat() {
         setIsSaved(false);
         setLatestProgram(safe);
 
-        console.log("[Program committed to state]", {
-          programName: safe.programName,
-          messageId: safe.messageId,
-          dayCount: safe.days.length,
-          systemSaved: result.systemSaved,
-          extractedFrom,
-          hasUnsavedDraftAfterCommit: true,
-        });
+        if (import.meta.env.DEV) {
+          console.log("[Program committed to state]", {
+            programName: safe.programName,
+            messageId: safe.messageId,
+            dayCount: safe.days.length,
+            systemSaved: result.systemSaved,
+            extractedFrom,
+            hasUnsavedDraftAfterCommit: true,
+          });
+        }
       } else if (isFragment) {
         // ── CASE B: fragment/truncated — do NOT commit, fallback text shown by MessageBubble ──
         const fragmentContent = msg.content ?? "";
@@ -1114,19 +1154,21 @@ export default function Chat() {
           fragmentChars < 2000 ? "severely_truncated_check_budget" :
           fragmentChars < 5000 ? "moderately_truncated_budget_marginal" :
           "nearly_complete_boundary_overflow";
-        console.warn("[FragmentFallback]", {
-          assistantMsgId: msg.id,
-          estimatedDayCount: dayNumberMatches,
-          estimatedExercisesInFragment: exerciseNameMatches,
-          exercisesPerDay: dayNumberMatches > 0 ? (exerciseNameMatches / dayNumberMatches).toFixed(1) : "n/a",
-          responseCharCount: fragmentChars,
-          estimatedTokensUsed: Math.round(fragmentChars / 4),
-          likelyFailureSource,
-          action: "suppression_applied_no_commit_fallback_text_shown_in_bubble",
-          recommendation: fragmentChars < 5000
-            ? "increase maxTokensBudget or tighten skeleton field compaction"
-            : "response nearly complete — retry budget +20% may be sufficient",
-        });
+        if (import.meta.env.DEV) {
+          console.warn("[FragmentFallback]", {
+            assistantMsgId: msg.id,
+            estimatedDayCount: dayNumberMatches,
+            estimatedExercisesInFragment: exerciseNameMatches,
+            exercisesPerDay: dayNumberMatches > 0 ? (exerciseNameMatches / dayNumberMatches).toFixed(1) : "n/a",
+            responseCharCount: fragmentChars,
+            estimatedTokensUsed: Math.round(fragmentChars / 4),
+            likelyFailureSource,
+            action: "suppression_applied_no_commit_fallback_text_shown_in_bubble",
+            recommendation: fragmentChars < 5000
+              ? "increase maxTokensBudget or tighten skeleton field compaction"
+              : "response nearly complete — retry budget +20% may be sufficient",
+          });
+        }
       }
       // CASE C: no program content — nothing to do, normal render
     }
@@ -1149,9 +1191,11 @@ export default function Chat() {
 
     queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(resolvedConvoId) });
     queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
-    console.log("[ChatSendAudit] queriesInvalidated — messages will refetch", {
-      messageCountBefore: messages.length,
-    });
+    if (import.meta.env.DEV) {
+      console.log("[ChatSendAudit] queriesInvalidated — messages will refetch", {
+        messageCountBefore: messages.length,
+      });
+    }
 
     if (result.planInfo?.messagesRemaining !== undefined) {
       setMessagesUsed(messagesUsed + 1);
@@ -1512,12 +1556,14 @@ export default function Chat() {
         })
         .catch(() => {});
 
-      console.log("[RightPanelLogSubmitAudit]", {
-        focusMode,
-        feedbackSubmitted: true,
-        completionTriggered: true,
-        sessionStatus: data.sessionStatus ?? "completed",
-      });
+      if (import.meta.env.DEV) {
+        console.log("[RightPanelLogSubmitAudit]", {
+          focusMode,
+          feedbackSubmitted: true,
+          completionTriggered: true,
+          sessionStatus: data.sessionStatus ?? "completed",
+        });
+      }
 
       queryClient.invalidateQueries({ queryKey: ["streak"] });
       queryClient.invalidateQueries({ queryKey: ["insights"] });
@@ -1626,13 +1672,15 @@ export default function Chat() {
         }
       }
 
-      console.log("[DeleteCascadeAudit] program deleted", {
-        sourceType: "program",
-        sourceId: id,
-        wasActive: result.wasActive,
-        linkedConversationId: result.linkedConversationId,
-        conversationDeleted: result.conversationDeleted,
-      });
+      if (import.meta.env.DEV) {
+        console.log("[DeleteCascadeAudit] program deleted", {
+          sourceType: "program",
+          sourceId: id,
+          wasActive: result.wasActive,
+          linkedConversationId: result.linkedConversationId,
+          conversationDeleted: result.conversationDeleted,
+        });
+      }
     } catch (err) {
       console.error("[DeleteProgram] Failed:", err);
       if (operationErrorTimeoutRef.current) clearTimeout(operationErrorTimeoutRef.current);
@@ -1647,13 +1695,15 @@ export default function Chat() {
   async function handleDeleteConversation(id: number) {
     if (isDeleting) return;
     const target = conversations.find((c: any) => c.id === id);
-    console.log("[SessionDeleteAudit] started", {
-      clickedSessionId: id,
-      clickedTitle: target?.title ?? "unknown",
-      modalOpened: true,
-      confirmed: true,
-      deleteSource: "db",
-    });
+    if (import.meta.env.DEV) {
+      console.log("[SessionDeleteAudit] started", {
+        clickedSessionId: id,
+        clickedTitle: target?.title ?? "unknown",
+        modalOpened: true,
+        confirmed: true,
+        deleteSource: "db",
+      });
+    }
     setIsDeleting(true);
     try {
       const result = await customFetch<{
@@ -1696,15 +1746,17 @@ export default function Chat() {
       }
 
       const remaining = conversations.filter((c: any) => c.id !== id);
-      console.log("[SessionDeleteAudit] success", {
-        clickedSessionId: id,
-        deleteSucceeded: true,
-        trainingSystemsDeleted: result.trainingSystemsDeleted,
-        savedProgramsDeleted: result.savedProgramsDeleted,
-        wasActiveSystemDeleted: result.wasActiveSystemDeleted,
-        invalidatedQueryKeys: [getListConversationsQueryKey()],
-        remainingSessionIds: remaining.map((c: any) => c.id),
-      });
+      if (import.meta.env.DEV) {
+        console.log("[SessionDeleteAudit] success", {
+          clickedSessionId: id,
+          deleteSucceeded: true,
+          trainingSystemsDeleted: result.trainingSystemsDeleted,
+          savedProgramsDeleted: result.savedProgramsDeleted,
+          wasActiveSystemDeleted: result.wasActiveSystemDeleted,
+          invalidatedQueryKeys: [getListConversationsQueryKey()],
+          remainingSessionIds: remaining.map((c: any) => c.id),
+        });
+      }
     } catch (err) {
       console.error("[SessionDeleteAudit] failed", { clickedSessionId: id, deleteSucceeded: false, error: err });
       if (operationErrorTimeoutRef.current) clearTimeout(operationErrorTimeoutRef.current);
@@ -1951,7 +2003,7 @@ export default function Chat() {
             className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-primary hover:bg-primary/5 active:bg-primary/10 active:scale-[0.98] transition-all text-left"
           >
             <Zap className="w-4 h-4 flex-shrink-0" />
-            <span>Upgrade to Pro</span>
+            <span>Upgrade My Training System</span>
           </button>
         )}
 
@@ -2585,6 +2637,13 @@ export default function Chat() {
                   )}
                 </div>
 
+                {/* Differentiation tagline — only shown when no active system */}
+                {displayProgramSource === "none" && (
+                  <p className="text-[11px] text-muted-foreground/50 max-w-[260px] text-center leading-relaxed mb-4 -mt-2">
+                    ChatGPT gives you a workout. TrainChat builds a living training system.
+                  </p>
+                )}
+
                 {/* Quick action chips — mode-specific */}
                 <div className="flex flex-wrap justify-center gap-2 w-full max-w-sm">
                   {getFocusModeConfig(focusMode).suggestionChips.map((chip) => (
@@ -2865,7 +2924,7 @@ export default function Chat() {
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleKeyDown}
                   rows={1}
-                  placeholder="Describe your goal, sport, or constraints…"
+                  placeholder="Build or edit your training system…"
                   disabled={stream.isActive}
                   onFocus={() => { if (messages.length === 0) triggerCorePulse(); }}
                   className="flex-1 resize-none bg-transparent px-4 py-3.5 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none leading-relaxed max-h-40 overflow-y-auto disabled:opacity-60"
