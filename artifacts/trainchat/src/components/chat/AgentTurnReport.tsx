@@ -4,7 +4,7 @@ import type { CompleteEvent } from "@/hooks/useStreamMessage";
 
 export interface PanelActionReceipt {
   success: true;
-  source: "program_panel";
+  source: "program_panel" | "chat_button" | "try_saying" | "system_cta" | "starter_prompt" | "retry";
   actionType: string;
   programChanged: boolean;
   receiptId: string;
@@ -159,10 +159,14 @@ export default function AgentTurnReport({ event, panelReceipt }: Props) {
         <div className="px-3 pb-3">
           <div className="border-t border-white/10 pt-3">
 
-            {/* Panel reconciliation banner — right-sidebar action succeeded */}
+            {/* Panel reconciliation banner — action reconciled as success */}
             {panelReconciled && (
               <div className="flex items-start gap-2 rounded p-2 mb-3 text-[10px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-                <span>✓ Right-sidebar action reconciled as success — program state changed.</span>
+                <span>
+                  {panelReceipt?.source === "program_panel"
+                    ? "✓ Right-sidebar action reconciled as success — program state changed."
+                    : "✓ Action reconciled as success — program state changed."}
+                </span>
               </div>
             )}
 

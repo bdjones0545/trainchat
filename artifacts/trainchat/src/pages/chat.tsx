@@ -324,6 +324,10 @@ export default function Chat() {
   // Right-panel auto-open guard: opens panel once on load if user already has a program.
   // Prevents the panel from re-opening after conversational (non-mutation) messages.
   const hasAutoOpenedPanelRef = useRef(false);
+  // Snapshot of active-system version taken immediately before each send.
+  // Used by post-refetch reconciliation to detect silent program changes when
+  // the server classifies the turn as true_failure despite the DB mutating.
+  const preSendActiveSystemVersionRef = useRef<string | null>(null);
   const [showCalibrationNudge, setShowCalibrationNudge] = useState(false);
 
   const logout = useLogout();
@@ -1112,6 +1116,14 @@ export default function Chat() {
     lastExtraContextRef.current = extraContext ?? {};
     // Clear any stale panel receipt from the previous turn so new turns start clean.
     setLastPanelReceipt(null);
+    // Snapshot the current program version for post-refetch reconciliation.
+    // We use updatedAt when available (most precise), else fall back to system id string.
+    preSendActiveSystemVersionRef.current =
+      (activeSystem as any)?.updatedAt
+        ? String((activeSystem as any).updatedAt)
+        : activeSystem?.id != null
+        ? `id:${activeSystem.id}`
+        : null;
 
     setInputText("");
     if (inputRef.current) {
@@ -1366,41 +1378,56 @@ export default function Chat() {
     if (result.outcomeType === "true_failure") {
       const pathUsed = result.routeDebug?.pathUsed;
       const nonOpenAIPath = pathUsed && pathUsed !== "openai";
+      // ── Broad success detection ───────────────────────────────────────────
+      // Any of these signals means the program actually changed — suppress failure.
       const mutationApplied =
         nonOpenAIPath ||
         result.mutationApplied === true ||
+        result.success === true ||
+        result.programChanged === true ||
         result.systemEdit?.applied === true ||
-        result.changeLogId != null;
+        result.changeLogId != null ||
+        result.systemEdit?.changeLogId != null ||
+        result.mutationId != null ||
+        result.changedProgram != null ||
+        result.updatedProgram != null;
 
-      // ── Right-sidebar receipt reconciliation ─────────────────────────────
-      const isPanelAction = btnPayload?.source === "program_panel";
       // Suppress failure banner whenever the mutation was actually applied —
-      // regardless of whether it came from the panel or chat. If the DB changed,
-      // showing a failure banner confuses users who can see their program updated.
+      // regardless of source. If the DB changed, showing a failure banner
+      // confuses users who can see their program updated.
       const failureSuppressed = mutationApplied;
+      const effectiveSource = btnPayload?.source ?? "program_panel";
+      const receiptId =
+        result.changeLogId
+          ? `cl-${result.changeLogId}`
+          : result.systemEdit?.changeLogId
+          ? `cl-${result.systemEdit.changeLogId}`
+          : result.mutationId != null
+          ? `mid-${result.mutationId}`
+          : `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-      if (import.meta.env.DEV && isPanelAction) {
-        console.log("[RightSidebarReceiptReconciliation]", {
+      // ── Dev-only receipt reconciliation log ──────────────────────────────
+      if (import.meta.env.DEV) {
+        console.log("[ReceiptReconciliation]", {
           actionType: btnPayload?.actionType ?? null,
-          dayIndex: btnPayload?.dayIndex ?? null,
-          exerciseIndex: btnPayload?.exerciseIndex ?? null,
-          previousExercise: btnPayload?.exerciseName ?? null,
-          newExercise: null,
-          backendStatus: result.outcomeType,
+          source: effectiveSource,
           programChanged: mutationApplied,
+          changeLogId: result.changeLogId ?? result.systemEdit?.changeLogId ?? null,
+          mutationId: result.mutationId ?? null,
+          serverSuccess: result.success ?? null,
+          localReceiptCreated: failureSuppressed,
           failureSuppressed,
         });
       }
 
       if (failureSuppressed) {
-        // Program panel action succeeded — the mutation state is authoritative.
-        // Suppress the failure banner and issue a local success receipt.
-        const panelReceipt: PanelActionReceipt = {
+        // Mutation was applied — suppress failure banner and issue local success receipt.
+        const localReceipt: PanelActionReceipt = {
           success: true,
-          source: "program_panel",
+          source: effectiveSource as PanelActionReceipt["source"],
           actionType: btnPayload?.actionType ?? "refine_program",
           programChanged: true,
-          receiptId: `panel-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          receiptId,
           target: {
             dayIndex: btnPayload?.dayIndex,
             exerciseIndex: btnPayload?.exerciseIndex,
@@ -1408,11 +1435,65 @@ export default function Chat() {
           },
           userMessage: "Program updated",
         };
-        setLastPanelReceipt(panelReceipt);
+        setLastPanelReceipt(localReceipt);
         if (import.meta.env.DEV) {
-          console.log("[RightSidebarReceiptReconciliation] Issuing local success receipt", panelReceipt);
+          console.log("[ReceiptReconciliation] Issuing local success receipt", localReceipt);
         }
-      } else if (!mutationApplied) {
+      } else {
+        // ── Async snapshot reconciliation ─────────────────────────────────
+        // The server said failure but may have mutated anyway. After refetching
+        // the active system, compare program version to the pre-send snapshot.
+        // If they differ the program DID change — clear the error retroactively.
+        if (btnPayload) {
+          const preVersion = preSendActiveSystemVersionRef.current;
+          const capturedFocusMode = focusMode;
+          queryClient.refetchQueries({ queryKey: ["training-system-active", capturedFocusMode] }).then(() => {
+            const latestData = queryClient.getQueryData<any>(["training-system-active", capturedFocusMode]);
+            const newVersion =
+              latestData?.updatedAt
+                ? String(latestData.updatedAt)
+                : latestData?.id != null
+                ? `id:${latestData.id}`
+                : null;
+            const programChangedAfterRefetch =
+              preVersion !== null && newVersion !== null && preVersion !== newVersion;
+
+            if (import.meta.env.DEV) {
+              console.log("[ReceiptReconciliation] post-refetch", {
+                actionType: btnPayload.actionType,
+                source: btnPayload.source,
+                preVersion,
+                newVersion,
+                programChangedAfterRefetch,
+                failureSuppressed: programChangedAfterRefetch,
+                localReceiptCreated: programChangedAfterRefetch,
+              });
+            }
+
+            if (programChangedAfterRefetch) {
+              // Program changed — false failure. Clear error and issue receipt.
+              if (operationErrorTimeoutRef.current) clearTimeout(operationErrorTimeoutRef.current);
+              setOperationError(null);
+              setOperationErrorRetryable(false);
+              const refetchReceipt: PanelActionReceipt = {
+                success: true,
+                source: btnPayload.source as PanelActionReceipt["source"],
+                actionType: btnPayload.actionType,
+                programChanged: true,
+                receiptId: result.changeLogId ? `cl-${result.changeLogId}` : `refetch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                target: {
+                  dayIndex: btnPayload.dayIndex,
+                  exerciseIndex: btnPayload.exerciseIndex,
+                  exerciseName: btnPayload.exerciseName,
+                },
+                userMessage: "Program updated",
+              };
+              setLastPanelReceipt(refetchReceipt);
+            }
+          });
+        }
+
+        // Show failure banner (may be cleared by async reconciliation above)
         if (operationErrorTimeoutRef.current) clearTimeout(operationErrorTimeoutRef.current);
         let msg = "Something went wrong with that build. Hit retry and I'll try again.";
         let retryable = true;

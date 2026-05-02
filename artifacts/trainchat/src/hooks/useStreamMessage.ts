@@ -81,6 +81,16 @@ export interface CompleteEvent {
   saveFailure?: { reason: string };
   /** Whether the DB mutation was actually executed, independent of verification outcome. */
   mutationApplied?: boolean;
+  /** Explicit success flag — some server paths send this instead of mutationApplied. */
+  success?: boolean;
+  /** Whether the program state changed — alternative success signal from deterministic paths. */
+  programChanged?: boolean;
+  /** Mutation identifier from deterministic paths — alternative to changeLogId. */
+  mutationId?: string | number | null;
+  /** Changed program data (alternative field name from some server paths). */
+  changedProgram?: unknown;
+  /** Updated program data (alternative field name from some server paths). */
+  updatedProgram?: unknown;
   /** Debug info from the edit-intent routing layer. Present in dev and when pathUsed is available. */
   routeDebug?: { pathUsed?: "deterministic" | "library_progression" | "rule_based" | "openai"; openaiCalled?: boolean; openaiSucceeded?: boolean; [key: string]: unknown };
   /** Full audit receipt from the action contract enforcer. Present when contract enforcement ran. */
