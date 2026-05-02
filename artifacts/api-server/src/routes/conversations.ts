@@ -1507,9 +1507,10 @@ Keep it helpful and intelligent, never promotional.`;
         "[ActionRoutingAudit]"
       );
       if (directScopeResolution.scope !== "session_scope") {
+        const _directBlockType = directScopeResolution.derivedTransformation ?? null;
         logger.info(
-          { scope: directScopeResolution.scope, systemId: resolvedSystem.id },
-          "[HierarchicalRefine] Routing to hierarchical engine"
+          { scope: directScopeResolution.scope, systemId: resolvedSystem.id, blockType: _directBlockType, btnScope: _directBtnScope ?? null },
+          "[ArchitectureChipFlow] Routing to hierarchical engine (non-stream)"
         );
         const hierarchicalResult = await applyHierarchicalRefinement({
           systemId: resolvedSystem.id,
@@ -1533,7 +1534,12 @@ Keep it helpful and intelligent, never promotional.`;
           });
           hierarchicalContent = hierarchicalImpact.coachResponse;
         } else {
-          hierarchicalContent = `I wasn't able to apply that change. ${hierarchicalResult.changeSummary}`;
+          const _hfr = (hierarchicalResult as any).failureReason;
+          if (_hfr === "system_not_found") {
+            hierarchicalContent = "I need a structured training program to apply that change. Build a program first and I'll handle any adjustments you need.";
+          } else {
+            hierarchicalContent = `I wasn't able to shift the block right now — ${hierarchicalResult.changeSummary} Try a more specific request like "shift to strength" or "make this more explosive."`;
+          }
         }
 
         const _hierarchicalCoachReasoning = hierarchicalResult.applied ? generateCoachReasoning({
@@ -2915,7 +2921,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     intentResultVal: typeof intentResult;
     systemSavedVal: boolean;
     systemIdVal?: number;
-    systemEditVal?: { applied: boolean };
+    systemEditVal?: { applied: boolean; changeSummary?: string; systemId?: number };
     changeLogIdVal?: number;
     outcomeTypeVal?: "mutation_applied" | "clarification_needed" | "conversation_only" | "true_failure";
     auditReceiptVal?: unknown;
@@ -3325,14 +3331,15 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       const _streamBtnScope = streamUIContext?.buttonPayload?.scope as string | undefined;
       const streamScopeResolution: ScopeResolution = (_streamBtnScope === "architecture" || _streamBtnScope === "block")
         ? (() => {
+            const derivedBlockType = inferBlockTypeFromMessage(parsed.data.content) ?? undefined;
             logger.info(
-              { message: parsed.data.content.slice(0, 80), btnScope: _streamBtnScope },
-              "[GlobalChipRouting] buttonPayload.scope=architecture — overriding to block_scope"
+              { message: parsed.data.content.slice(0, 80), btnScope: _streamBtnScope, derivedBlockType },
+              "[ArchitectureChipFlow] buttonPayload.scope=architecture — overriding to block_scope"
             );
             return {
               scope: "block_scope" as const,
               confidence: "high" as const,
-              derivedTransformation: inferBlockTypeFromMessage(parsed.data.content) ?? undefined,
+              derivedTransformation: derivedBlockType,
               reasoning: "buttonPayload.scope=block override from client chip",
             };
           })()
@@ -3360,6 +3367,16 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           userMessage: parsed.data.content,
           scopeResolution: streamScopeResolution,
         });
+        logger.info(
+          {
+            applied: streamHierarchicalResult.applied,
+            blockType: streamScopeResolution.derivedTransformation ?? null,
+            sessionCount: streamHierarchicalResult.sessionCount,
+            exerciseCount: streamHierarchicalResult.exerciseCount,
+            failureReason: (streamHierarchicalResult as any).failureReason ?? null,
+          },
+          "[ArchitectureChipFlow] Hierarchical engine result"
+        );
 
         let streamHierarchicalContent: string;
         if (streamHierarchicalResult.applied) {
@@ -3376,7 +3393,12 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           });
           streamHierarchicalContent = streamHierarchicalImpact.coachResponse;
         } else {
-          streamHierarchicalContent = `I wasn't able to apply that change. ${streamHierarchicalResult.changeSummary}`;
+          const _sfr = (streamHierarchicalResult as any).failureReason;
+          if (_sfr === "system_not_found") {
+            streamHierarchicalContent = "I need a structured training program to apply that change. Build a program first and I'll handle any adjustments you need.";
+          } else {
+            streamHierarchicalContent = `I wasn't able to shift the block right now — ${streamHierarchicalResult.changeSummary} Try a more specific request like "shift to strength" or "make this more explosive."`;
+          }
         }
 
         const _streamHierarchicalCoachReasoning = streamHierarchicalResult.applied ? generateCoachReasoning({
@@ -3418,7 +3440,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           systemSavedVal: streamHierarchicalResult.applied,
           outcomeTypeVal: streamHierarchicalResult.applied ? "mutation_applied" : "true_failure",
           systemEditVal: streamHierarchicalResult.applied
-            ? { applied: true }
+            ? { applied: true, changeSummary: streamHierarchicalResult.changeSummary, systemId: resolvedSystem.id }
             : { applied: false },
         }));
         return;

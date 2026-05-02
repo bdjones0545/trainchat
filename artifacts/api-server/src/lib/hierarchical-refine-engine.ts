@@ -459,7 +459,10 @@ async function applyBlockScope(
   const swapSuffix = totalSwapped > 0
     ? `, ${totalSwapped} primary exercise${totalSwapped !== 1 ? "s" : ""} updated to match ${newBlockPlan.displayName}`
     : "";
-  const changeSummary = `Block shifted to **${newBlockPlan.displayName}** — ${newBlockPlan.primaryAdaptation.toLowerCase()}. Updated ${sessionCount} session${sessionCount !== 1 ? "s" : ""} (${exerciseCount} prescription${exerciseCount !== 1 ? "s" : ""} adjusted${swapSuffix}) across the full program.`;
+  const adaptationLabel = newBlockPlan.primaryAdaptation
+    ? newBlockPlan.primaryAdaptation.toLowerCase()
+    : "performance focus shift";
+  const changeSummary = `Block shifted to **${newBlockPlan.displayName}** — ${adaptationLabel}. Updated ${sessionCount} session${sessionCount !== 1 ? "s" : ""} (${exerciseCount} prescription${exerciseCount !== 1 ? "s" : ""} adjusted${swapSuffix}) across the full program.`;
 
   logger.info(
     { systemId, blockType, transformation, sessionCount, exerciseCount, displayName: newBlockPlan.displayName },
@@ -527,8 +530,15 @@ export async function applyHierarchicalRefinement(opts: {
     };
   } catch (err: any) {
     logger.error(
-      { err: err?.message, stack: err?.stack, scope: scopeResolution.scope, systemId },
-      "[HierarchicalRefine] Error applying refinement"
+      {
+        err: err?.message,
+        stack: err?.stack,
+        scope: scopeResolution.scope,
+        systemId,
+        derivedTransformation: scopeResolution.derivedTransformation ?? null,
+        userMessageSnippet: opts.userMessage.slice(0, 80),
+      },
+      "[ArchitectureChipFlow] Exception in hierarchical refinement engine"
     );
 
     return {

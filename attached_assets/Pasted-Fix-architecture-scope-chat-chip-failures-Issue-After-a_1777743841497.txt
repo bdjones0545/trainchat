@@ -1,0 +1,134 @@
+Fix architecture-scope chat chip failures.
+
+Issue:
+After action routing audit, “Make this more athletic” now has scope: "architecture", but it still fails:
+- “I wasn’t able to apply that change”
+- “NO RECEIPT”
+- “Something went wrong with that build”
+
+This means routing is no longer the main problem. The architecture/rebuild path is failing to return a valid updated program or receipt.
+
+Goal:
+Architecture-scope chips must either:
+1. successfully update the active program, or
+2. return a clean coaching clarification/fallback — never a generic build failure.
+
+Audit:
+- conversations.ts architecture/block_scope override path
+- agent-orchestrator.ts BUILD_WITH_ARCHITECT route
+- ai.ts rebuild/mutation application
+- program-architecture-engine.ts
+- Performance Architect input/output schema
+- validation gate
+- receipt generation
+- Live Program Panel update path
+
+Known failing case:
+source: try_saying
+actionType: refine_program
+scope: architecture
+submittedText: "Make this more athletic"
+
+Fix requirements:
+
+1. Confirm architecture chip reaches Performance Architect
+Add DEV log:
+[ArchitectureChipFlow]
+- source
+- actionType
+- scope
+- submittedText
+- activeSystemId
+- activeProgramName
+- architectCalled
+- architectSucceeded
+- validationPassed
+- programChanged
+- receiptCreated
+- failureReason
+
+2. Validate Architect input
+For architecture chips, ensure handoff includes:
+- current active program
+- current days/week
+- current program goal
+- current exercises
+- user profile/context
+- equipment constraints
+- pain limitations
+- banned exercises
+- research guidance
+
+If selectedExercises is empty, derive it from the current active program.
+
+3. Architect output repair
+If Architect output is invalid:
+- retry once with stricter JSON instruction
+- if still invalid, apply deterministic architecture fallback
+
+4. Deterministic fallback for “Make this more athletic”
+If AI architecture update fails, apply safe fallback:
+- preserve day count
+- add or reposition athletic elements where appropriate
+- add one power/athletic movement to Day 1 or top of each relevant day if equipment allows
+- add coaching notes about intent
+- do not violate exclusions/equipment/pain
+- return success receipt if any safe change is made
+
+Example fallback:
+- add low-volume explosive primer before main strength work:
+  “Med Ball Chest Pass” / “Broad Jump” / “Explosive Step-Up” / “Kettlebell Swing” depending equipment
+- if equipment unknown, use bodyweight option:
+  “Pogo Jumps” or “Snap-Down to Stick” if safe
+
+5. Receipt contract
+If architecture update or fallback changes program:
+- success: true
+- programChanged: true
+- receiptId
+- userMessage: "Program updated for athletic performance"
+- Agent Turn Report: Updated
+- no red failure banner
+
+6. Clarification fallback
+If no safe athletic change can be made because constraints are missing/conflicting:
+Return:
+“I can make this more athletic — tell me your sport or equipment first.”
+Do NOT show generic build failure.
+
+7. Validation must not block justified athletic changes
+If validation only has info/warnings, allow output.
+Only critical validation failure should block:
+- empty program
+- wrong day count
+- unsafe pain conflict
+- unavailable equipment
+
+8. QA:
+A. Tap “Make this more athletic”
+PASS:
+- Performance Architect called OR deterministic fallback applied
+- program changes visibly
+- receipt success
+
+B. Tap “Progress this for 4 weeks”
+PASS:
+- progression output created
+- receipt success
+
+C. Force invalid architect JSON
+PASS:
+- retry/repair/fallback happens
+- no generic failure
+
+D. Missing equipment/sport
+PASS:
+- clean clarification instead of failure
+
+Run typecheck.
+
+Output:
+- root cause found
+- architecture path fixed
+- fallback behavior added
+- QA results
