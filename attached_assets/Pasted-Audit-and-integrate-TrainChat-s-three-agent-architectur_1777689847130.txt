@@ -1,0 +1,396 @@
+Audit and integrate TrainChat’s three-agent architecture.
+
+Goal:
+Make sure the Coach Agent, Research Librarian Agent, and Performance Architect Agent have clean responsibilities, communicate through controlled handoffs, and improve the final program without overlapping or conflicting.
+
+Current architecture:
+1. Coach Agent
+- User-facing
+- Handles conversation, intent, constraints, exercise selection, final response
+- Uses approved research context
+- Sends architecture tasks to Performance Architect when needed
+
+2. Research Librarian Agent
+- Admin-only
+- Curates research
+- Summarizes, tags, chunks, confidence-rates, and recommends approval
+- Never talks to users directly
+
+3. Performance Architect Agent
+- Internal programming architect
+- Places exercises in the correct order
+- Structures days/weeks
+- Assigns sets/reps/rest/progression
+- Manages fatigue and periodization
+
+-------------------------------------
+PHASE 1 — RESPONSIBILITY BOUNDARY AUDIT
+-------------------------------------
+
+Audit all agent-related files and prompts.
+
+Confirm:
+
+Coach Agent DOES:
+- Understand user intent
+- Extract constraints
+- Select exercise candidates / exercise intent
+- Retrieve approved research context
+- Apply practical coaching language
+- Present final output
+- Route structure-heavy tasks to Performance Architect
+
+Coach Agent DOES NOT:
+- Curate raw research
+- Approve research
+- Generate research chunks
+- Overrule Performance Architect structure without cause
+- Expose internal agent names to users
+
+Research Librarian DOES:
+- Analyze research documents
+- Create structured summaries
+- Generate chunks
+- Recommend approve/reject/needs_review
+- Assign confidence and evidence type
+
+Research Librarian DOES NOT:
+- Generate user programs
+- Chat with users
+- Influence live programming except through approved research chunks
+- Auto-approve without admin permission
+
+Performance Architect DOES:
+- Sequence exercises
+- Build day structure
+- Assign sets/reps/rest/intensity
+- Create progression
+- Manage fatigue
+- Validate architecture
+
+Performance Architect DOES NOT:
+- Search web
+- Curate research
+- Chat with users
+- Ignore Coach Agent constraints
+- Override pain/safety rules
+
+-------------------------------------
+PHASE 2 — CREATE AGENT ORCHESTRATOR
+-------------------------------------
+
+Create a central orchestration module:
+
+server/agents/agent-orchestrator.ts
+
+Responsibilities:
+- Decide which agents are needed for each request
+- Prevent unnecessary agent calls
+- Create structured handoff payloads
+- Preserve fallback paths
+- Return one final user-facing response through Coach Agent
+
+Flow:
+
+User message
+→ Coach Agent intent/constraint extraction
+→ Research retriever gets approved chunks
+→ Research guidance builder converts chunks into programming guidance
+→ If request requires full structure/periodization:
+     call Performance Architect
+  Else:
+     use existing mutation/edit pipeline
+→ Coach Agent formats/presents final answer
+→ Live Program Panel updates
+
+Never call Research Librarian during normal user chats.
+
+-------------------------------------
+PHASE 3 — ROUTING RULES
+-------------------------------------
+
+Implement explicit routing logic.
+
+Route to Performance Architect when user request involves:
+- create new full program
+- change number of days
+- restructure week
+- make program sport-specific
+- make program strength/speed/hypertrophy focused at the whole-program level
+- add progression
+- add deload
+- reduce fatigue globally
+- adjust pain constraints across the program
+- balance the program
+- rebuild split
+
+Do NOT route to Performance Architect for:
+- simple exercise swap
+- explain exercise
+- make one exercise harder/easier
+- replace one exercise due to equipment
+- simple chat explanation
+
+Route to Research Librarian only in admin routes:
+- analyze document
+- review candidate
+- generate chunks
+- batch analyze
+- summarize research
+
+-------------------------------------
+PHASE 4 — HANDOFF CONTRACTS
+-------------------------------------
+
+Create typed handoff contracts:
+
+CoachToArchitectHandoff {
+  userIntent: string;
+  userGoal: string;
+  sport?: string;
+  daysPerWeek?: number;
+  sessionLengthMinutes?: number;
+  equipment: string[];
+  painLimitations: string[];
+  experienceLevel?: string;
+  population?: string;
+  trainingPhase?: string;
+  selectedExercises: ExerciseCandidate[];
+  researchGuidance: ResearchProgrammingGuidance;
+  existingProgram?: any;
+  requestedChange?: string;
+}
+
+ArchitectToCoachHandoff {
+  structuredProgram: PerformanceArchitectOutput;
+  architectureSummary: string;
+  validationWarnings: string[];
+  safetyNotes: string[];
+  progressionSummary: string;
+  fatigueManagementSummary: string;
+}
+
+LibrarianToResearchDatabaseHandoff {
+  documentId: string;
+  recommendation: "approve" | "reject" | "needs_review";
+  confidence: string;
+  evidenceType: string;
+  structuredSummary: any;
+  retrievalChunks: any[];
+  adminNotes: string;
+}
+
+Validate all handoffs.
+
+If validation fails:
+- log dev-only warning
+- fallback safely
+- do not break user response
+
+-------------------------------------
+PHASE 5 — CONFLICT RESOLUTION RULES
+-------------------------------------
+
+Add explicit hierarchy:
+
+1. Safety / pain constraints
+2. User constraints: schedule, equipment, preferences
+3. Program goal and sport
+4. Research-informed guidance
+5. Performance architecture preferences
+6. Coach Agent style and explanation
+
+Rules:
+- Safety beats research.
+- User equipment beats exercise ideal.
+- Performance Architect can restructure, but cannot violate constraints.
+- Coach Agent can simplify language, but should not alter structured programming silently.
+- Research guidance informs decisions but does not create medical claims.
+- If Architect output conflicts with constraints, validation catches it and requests/falls back to fix.
+
+-------------------------------------
+PHASE 6 — ARCHITECTURE VALIDATION GATE
+-------------------------------------
+
+Before final program is saved or sent to Live Program Panel, validate:
+
+- Correct number of training days
+- Exercises match available equipment
+- Pain limitations respected
+- Speed/power placed before high-fatigue work
+- Heavy strength before accessories
+- Mobility/warm-up before main work
+- Conditioning placed appropriately
+- Weekly progression exists when requested
+- Session length is reasonable
+- No internal agent names exposed
+
+If validation fails:
+- Attempt one repair pass with Performance Architect
+- If repair fails, fallback to existing safe generation path
+- Log validation warnings in development only
+
+-------------------------------------
+PHASE 7 — PROMPT CLEANUP
+-------------------------------------
+
+Update prompts so each agent knows its lane.
+
+Coach Agent prompt:
+- You are the user-facing coach.
+- Do not mention internal agents.
+- Use approved research and architect output.
+- Keep response practical and simple.
+- Do not perform research curation.
+- Do not create unsupported claims.
+
+Research Librarian prompt:
+- You are admin-only research curator.
+- Never create programs.
+- Never speak to users.
+- Output structured JSON for database use.
+
+Performance Architect prompt:
+- You are internal program architect.
+- Never speak directly to users.
+- Output structured JSON.
+- Prioritize structure, sequencing, periodization, fatigue, and constraints.
+
+-------------------------------------
+PHASE 8 — OBSERVABILITY / DEBUGGING
+-------------------------------------
+
+Add dev-only orchestration logs:
+
+[AgentOrchestrator]
+- route selected
+- research chunks count
+- research guidance confidence
+- performance architect called: true/false
+- validation pass/fail
+- fallback used: true/false
+
+Analytics events:
+- agent_orchestrator_route_selected
+- architect_called
+- architect_skipped
+- architect_validation_passed
+- architect_validation_failed
+- architect_repair_attempted
+- architect_fallback_used
+- research_librarian_admin_called
+
+Do not expose logs in production.
+
+-------------------------------------
+PHASE 9 — QA TESTS
+-------------------------------------
+
+Create:
+
+AGENT_ORCHESTRATION_QA.md
+
+Include these tests:
+
+1. Full program build
+Prompt:
+“Build me a 4-day football strength and speed program.”
+PASS:
+- Coach extracts intent
+- Research retrieved
+- Performance Architect called
+- Program structured logically
+- Coach presents user-friendly response
+
+2. Simple swap
+Prompt:
+“Swap the second exercise.”
+PASS:
+- Performance Architect NOT called
+- Existing mutation pipeline handles it
+- Program updates correctly
+
+3. Whole-program restructure
+Prompt:
+“Make this a 3-day program instead.”
+PASS:
+- Performance Architect called
+- Program becomes 3 days
+- Constraints preserved
+
+4. Research admin action
+Action:
+Analyze a research document in admin.
+PASS:
+- Research Librarian called
+- Coach Agent not called
+- Document/chunks updated only after admin workflow
+
+5. Pain conflict
+Prompt:
+“My knee hurts. Restructure this week.”
+PASS:
+- Safety overrides
+- Architect called
+- Knee-stressing patterns modified
+- No medical claims
+
+6. Evidence request
+Prompt:
+“Why is this structured this way?”
+PASS:
+- Coach explains using architecture + research
+- Does not mention internal agents
+- Does not overdo citations
+
+7. Validation failure simulation
+Force an invalid architect output if possible.
+PASS:
+- Validation catches issue
+- Repair or fallback occurs
+- User experience does not break
+
+-------------------------------------
+PHASE 10 — FINAL VALIDATION
+-------------------------------------
+
+After implementation:
+- Run typecheck
+- Confirm zero TypeScript errors
+- Build app
+- Confirm full program generation works
+- Confirm simple edits still work
+- Confirm architecture-heavy edits route to Architect
+- Confirm Research Librarian is admin-only
+- Confirm no internal agent names appear in normal user responses
+- Confirm Live Program Panel still receives valid structured program
+
+-------------------------------------
+OUTPUT
+-------------------------------------
+
+Return:
+- Files added
+- Files modified
+- Orchestrator created
+- Routing rules implemented
+- Handoff contracts added
+- Conflict hierarchy added
+- Validation gate added
+- Prompt cleanup completed
+- QA results
+- Typecheck result
+
+-------------------------------------
+IMPORTANT CONSTRAINTS
+-------------------------------------
+
+Do NOT expose internal agents to users.
+Do NOT slow down simple edits.
+Do NOT call Research Librarian during normal chat.
+Do NOT remove existing fallback paths.
+Do NOT break Live Program Panel.
+Do NOT let agents produce conflicting outputs.
+Do NOT let research or architecture override safety.
+
+The final system should feel like one seamless TrainChat coach to the user, while internally using three specialized agents.

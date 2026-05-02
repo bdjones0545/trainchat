@@ -1,5 +1,16 @@
 // ─── Program Architecture Engine ─────────────────────────────────────────────
 //
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │  AGENT ROLE: Performance Architect                                      │
+// │  Type: Deterministic (no AI / LLM call)                                │
+// │  Invoked by: Coach Agent (lib/ai.ts) on BUILD paths only               │
+// │  Orchestration: src/agents/agent-orchestrator.ts → BUILD_WITH_ARCHITECT │
+// │                                                                         │
+// │  This module is NEVER called on edit paths (DIRECT_EDIT route).        │
+// │  It is NEVER called from admin routes.                                 │
+// │  It is NEVER called during coaching guidance responses.                │
+// └─────────────────────────────────────────────────────────────────────────┘
+//
 // Implements CNS-driven, movement-based program architecture per the spec:
 //   1. Define weekly architecture
 //   2. Define session intent

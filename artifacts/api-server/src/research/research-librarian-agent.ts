@@ -1,5 +1,19 @@
 // ─── Research Librarian Agent ─────────────────────────────────────────────────
 //
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │  AGENT ROLE: Research Librarian                                         │
+// │  Type: AI agent (own system prompt, separate from Coach Agent)          │
+// │  Invoked by: Admin routes only (routes/admin.ts)                        │
+// │  Orchestration: src/agents/agent-orchestrator.ts → LIBRARIAN_ADMIN      │
+// │                                                                         │
+// │  !! CRITICAL INVARIANT !!                                               │
+// │  This agent is NEVER called during user chat sessions.                 │
+// │  It is NEVER called from conversations.ts.                             │
+// │  It is NEVER called from lib/ai.ts.                                    │
+// │  Any invocation outside of admin routes is a critical architecture      │
+// │  violation. See assertLibrarianIsAdminOnly() in agent-orchestrator.ts. │
+// └─────────────────────────────────────────────────────────────────────────┘
+//
 // Internal-only AI agent that evaluates, summarizes, tags, and generates
 // retrieval chunks for research documents. It is strictly separated from the
 // user-facing Coach Agent — the coach only consumes approved documents.

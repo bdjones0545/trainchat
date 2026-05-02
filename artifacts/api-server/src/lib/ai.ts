@@ -1,3 +1,22 @@
+// ─── Coach Agent ──────────────────────────────────────────────────────────────
+//
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │  AGENT ROLE: Coach Agent                                                │
+// │  Type: AI agent (OpenAI, assembled system prompt)                       │
+// │  Entry point: generateAIResponse()                                      │
+// │  Invoked by: routes/conversations.ts (all user-facing routes)           │
+// │  Orchestration: src/agents/agent-orchestrator.ts                        │
+// │    → DIRECT_EDIT: surgical edits, clarifications                        │
+// │    → BUILD_WITH_ARCHITECT: new programs (calls Performance Architect)   │
+// │    → GUIDANCE: coaching/question responses                              │
+// │                                                                         │
+// │  This is the ONLY agent that talks to users.                           │
+// │  It delegates to the Performance Architect on build paths.             │
+// │  It NEVER calls the Research Librarian — that is admin-only.           │
+// │  Conflict resolution hierarchy: SAFETY > MOVEMENT_QUALITY >            │
+// │    GOAL_OUTPUT > FATIGUE_MANAGEMENT > USER_PREFERENCE                  │
+// └─────────────────────────────────────────────────────────────────────────┘
+
 import { db, userProfilesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
