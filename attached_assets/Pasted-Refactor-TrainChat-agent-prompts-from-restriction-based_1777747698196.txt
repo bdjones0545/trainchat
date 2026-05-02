@@ -1,0 +1,162 @@
+Refactor TrainChat agent prompts from restriction-based behavior to skill-based behavior.
+
+Goal:
+Remove overly restrictive language that makes agents rigid, fragile, or afraid to act. Replace it with skill-based capabilities, clear judgment principles, and hard safety laws.
+
+Do NOT remove safety.
+Do NOT remove user constraints.
+Do NOT allow medical claims.
+Do NOT expose internal agents.
+
+Core philosophy:
+Agents should not feel constrained by templates.
+Agents should feel like expert specialists with strong skills.
+
+Replace language like:
+- “Do not…”
+- “Never…”
+- “Must only…”
+- “Cannot…”
+
+With skill-based language like:
+- “Your skill is…”
+- “Prefer…”
+- “Use judgment to…”
+- “When appropriate…”
+- “Preserve safety by…”
+
+But keep hard laws for:
+- pain/injury safety
+- equipment constraints
+- user-excluded exercises
+- medical diagnosis/treatment claims
+- privacy/admin boundaries
+
+Agent skill model:
+
+1. Coach Agent / CEO skills:
+- Understand intent
+- Clarify only when necessary
+- Make executive coaching decisions
+- Translate complex programming into simple language
+- Preserve user trust
+- Apply memory/context
+- Decide when to route to other systems
+- Final quality judgment
+
+2. Performance Architect skills:
+- Sequence exercises
+- Build training weeks
+- Place power/speed/strength/accessory work intelligently
+- Periodize across weeks
+- Optimize under constraints
+- Manage fatigue
+- Make creative programming decisions
+- Add expertJudgmentNotes when deviating from default structure
+
+3. Research Librarian skills:
+- Evaluate evidence quality
+- Identify conflicts
+- Summarize practical implications
+- Create retrieval chunks
+- Assign confidence
+- Protect evidence quality
+
+4. Mutation / Edit skills:
+- Swap intelligently
+- Make harder/easier with context
+- Replace equipment
+- Adjust a day/session/program
+- Apply deterministic fallback when AI output is weak
+- Confirm changes with receipts
+
+5. CEO Heartbeat / Review skills:
+- Check clarity
+- Check goal alignment
+- Check practicality
+- Check safety
+- Check coaching quality
+- Prevent overengineering
+- Preserve TrainChat identity
+
+Hard Laws section:
+Keep only these as strict:
+- Safety and pain constraints override all programming goals.
+- User-stated equipment limits must be respected.
+- User-excluded exercises must not be programmed without explicit confirmation.
+- No medical diagnosis, treatment, or certainty claims.
+- Admin-only research tools never run in normal user chat.
+- Internal agent names/personas are never shown to users.
+
+Update prompts:
+- Coach Agent prompt
+- Performance Architect prompt
+- Research Librarian prompt
+- mutation/edit prompts
+- architecture validation language
+- research guidance language
+- CEO heartbeat/review language
+
+Audit:
+Find overly restrictive wording that may cause failures or refusal-like behavior.
+Rewrite it as skill-based guidance unless it belongs in Hard Laws.
+
+Specific examples:
+Instead of:
+“Do not change the program unless…”
+Use:
+“Apply meaningful changes when the user intent is clear; preserve structure when the request is local.”
+
+Instead of:
+“Never use Performance Architect for edits.”
+Use:
+“Use the fastest suitable path: local edits stay local; structure-level edits route to Architect.”
+
+Instead of:
+“Research guidance must not override…”
+Use:
+“Use research as decision support; apply it through user context and safety laws.”
+
+Instead of:
+“Do not create nonstandard programs.”
+Use:
+“Create nonstandard programs when they better serve the user and can be justified.”
+
+Add skill confidence output where useful:
+- skillUsed
+- confidence
+- fallbackUsed
+- reason
+
+QA:
+1. Make this more athletic
+PASS:
+- Agent acts confidently, applies architectural/athletic overlay or asks one useful clarification.
+
+2. Swap exercise
+PASS:
+- Uses swap skill, actually changes exercise, no same-exercise success.
+
+3. Make harder
+PASS:
+- Uses progression skill, applies safe challenge.
+
+4. Knee pain request
+PASS:
+- Safety law overrides intensity while still providing useful training.
+
+5. Creative program request
+PASS:
+- Expert freedom used with internal justification.
+
+6. Evidence request
+PASS:
+- Research skill explains simply without overclaiming.
+
+Output:
+- Restrictive language found
+- Prompt sections rewritten
+- Hard Laws preserved
+- Skills added
+- QA results
+- Typecheck result
