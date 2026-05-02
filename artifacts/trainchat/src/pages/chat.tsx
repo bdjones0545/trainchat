@@ -2944,9 +2944,14 @@ export default function Chat() {
 
                 {/* Differentiation tagline — only shown when no active system */}
                 {displayProgramSource === "none" && (
-                  <p className="text-[11px] text-muted-foreground/50 max-w-[260px] text-center leading-relaxed mb-4 -mt-2">
-                    ChatGPT gives you a workout. TrainChat builds a living training system.
-                  </p>
+                  <div className="flex flex-col items-center gap-0.5 mb-4 -mt-2">
+                    <p className="text-[11px] font-medium text-muted-foreground/60 max-w-[260px] text-center leading-relaxed">
+                      This isn't a workout. It's a training system.
+                    </p>
+                    <p className="text-[10px] text-muted-foreground/40 max-w-[260px] text-center leading-relaxed">
+                      Built and adapted in real time.
+                    </p>
+                  </div>
                 )}
 
                 {/* Quick action chips — mode-specific */}
