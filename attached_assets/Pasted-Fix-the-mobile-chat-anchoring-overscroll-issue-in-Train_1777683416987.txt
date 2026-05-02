@@ -1,0 +1,85 @@
+Fix the mobile chat anchoring / overscroll issue in TrainChat.
+
+Problem:
+On mobile Safari/Replit preview, the first screen looks normal, but when I hold my thumb on the chat area and drag down, the chat content shifts downward and exposes an anchoring gap. The fixed bottom composer stays in place, but the main chat/hero area scrolls independently and loses its anchored position.
+
+Goal:
+The mobile chat layout should feel locked and app-like:
+- Header/focus tabs stay fixed/stable
+- Main chat content scrolls only within the intended content area
+- Bottom composer stays fixed
+- Pulling/dragging down should NOT create a visible layout gap or displace the hero
+- No rubber-band overscroll inside the chat shell
+
+Audit and fix the layout in the TrainChat chat page/components.
+
+Likely areas to inspect:
+- chat.tsx
+- main chat container
+- mobile viewport wrappers
+- fixed/sticky bottom input composer
+- LiveProgramPanel mobile interaction
+- any h-screen, min-h-screen, overflow-y-auto, fixed, sticky, or flex containers
+- iOS Safari viewport height handling
+
+Implementation requirements:
+
+1. Use a stable app shell layout
+- Root chat page should use:
+  - height: 100dvh or equivalent dynamic viewport handling
+  - overflow: hidden
+  - flex column layout
+
+2. Header / training focus area
+- Keep header and training focus tabs outside the scrollable message area
+- They should not move when the user pulls/scrolls the message area
+
+3. Scrollable content area
+- Only the message/hero/content area should scroll
+- Use:
+  - flex-1
+  - min-h-0
+  - overflow-y-auto
+  - overscroll-behavior: contain or none
+  - -webkit-overflow-scrolling: touch where appropriate
+
+4. Bottom composer
+- Keep composer anchored to bottom
+- Prefer placing it as the final flex child inside the app shell instead of relying only on position: fixed
+- Account for safe-area inset:
+  - padding-bottom: env(safe-area-inset-bottom)
+
+5. Prevent iOS pull/bounce issue
+- Add overscroll containment to the chat shell and scroll container
+- Prevent body/html from scrolling behind the app:
+  - html, body, #root should not create a second scroll layer
+  - avoid nested full-page scroll areas fighting each other
+
+6. Preserve behavior
+Do not break:
+- Starter prompts
+- Try saying chips
+- Program generation
+- Streaming messages
+- Bottom input
+- Live Program Panel
+- Mobile keyboard behavior
+- Desktop layout
+
+7. QA
+After fix, test at ~390px width:
+- Initial load looks the same
+- Dragging down on the hero/content area does not shift the full layout
+- Bottom composer remains anchored
+- Header/focus tabs remain stable
+- Messages still scroll normally when content exceeds viewport
+- Keyboard open/close does not hide the input
+- No horizontal scroll
+
+Also test desktop to confirm no layout regression.
+
+Output:
+- Files changed
+- Exact cause found
+- CSS/layout changes made
+- Mobile QA checklist result
