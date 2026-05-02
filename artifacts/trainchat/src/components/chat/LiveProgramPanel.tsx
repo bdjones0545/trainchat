@@ -2,10 +2,12 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Dumbbell, Save, CheckCircle, Loader2, Lock, Zap, PlayCircle,
-  MessageSquare, ChevronDown, ChevronUp, TrendingUp, LayoutGrid,
+  MessageSquare, ChevronDown, ChevronUp, TrendingUp, TrendingDown, LayoutGrid,
   Calendar, Clock, RotateCcw, GitBranch, Activity, Layers,
-  AlertCircle, RefreshCw, Send, Leaf, CheckCircle2, Share2,
+  AlertCircle, RefreshCw, Send, Leaf, CheckCircle2, Share2, Wrench, HelpCircle,
+  type LucideIcon,
 } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 import { customFetch } from "@workspace/api-client-react";
 import type { ProgramStructure } from "./ChatOutput";
@@ -569,10 +571,42 @@ const FOCUS_SESSION_ACTIONS: Record<FocusMode, SessionAction[]> = {
   ],
 };
 
-const EXERCISE_ACTIONS: { label: string; buildMessage: (name: string) => string }[] = [
-  { label: "Swap", buildMessage: (n) => `Swap ${n} with something similar` },
-  { label: "Easier", buildMessage: (n) => `Make ${n} easier` },
-  { label: "Harder", buildMessage: (n) => `Make ${n} harder` },
+interface ExerciseAction {
+  label: string;
+  Icon: LucideIcon;
+  buildMessage: (name: string) => string;
+  direct?: "easier" | "harder" | "swap";
+}
+
+const EXERCISE_ACTIONS: ExerciseAction[] = [
+  {
+    label: "Swap",
+    Icon: RefreshCw,
+    buildMessage: (n) => `Replace ${n} with a similar alternative while preserving the training intent`,
+    direct: "swap",
+  },
+  {
+    label: "Easier",
+    Icon: TrendingDown,
+    buildMessage: (n) => `Make ${n} easier while preserving the training goal`,
+    direct: "easier",
+  },
+  {
+    label: "Harder",
+    Icon: TrendingUp,
+    buildMessage: (n) => `Increase the difficulty of ${n} appropriately`,
+    direct: "harder",
+  },
+  {
+    label: "Equipment",
+    Icon: Wrench,
+    buildMessage: (n) => `Replace ${n} with an equivalent exercise that fits my available equipment`,
+  },
+  {
+    label: "Explain",
+    Icon: HelpCircle,
+    buildMessage: (n) => `Explain why ${n} is included in this program and what it is training`,
+  },
 ];
 
 
@@ -826,6 +860,28 @@ function ProgramTab({
       setShowProgramUpdated(true);
       if (programUpdatedTimerRef.current) clearTimeout(programUpdatedTimerRef.current);
       programUpdatedTimerRef.current = setTimeout(() => setShowProgramUpdated(false), 3000);
+
+      // Highlight + scroll to the edited exercise
+      const label =
+        action === "swap" ? `Swapped: ${exerciseName}`
+        : action === "easier" ? "Made easier"
+        : "Made harder";
+      setHighlightedNames(new Set([exerciseName]));
+      setInlineLabels(new Map([[exerciseName, label]]));
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+      highlightTimerRef.current = setTimeout(() => {
+        setHighlightedNames(new Set());
+        setInlineLabels(new Map());
+      }, 4000);
+      pendingScrollName.current = exerciseName;
+      if (program) {
+        const dayIdx = program.days.findIndex((d) =>
+          (d.exercises ?? []).some((e) => e.name === exerciseName)
+        );
+        if (dayIdx !== -1) setExpandedDay(dayIdx);
+      }
+
+      toast({ title: "Program updated", description: label, duration: 2500 });
     } catch (error) {
       console.error("[SidebarEditExecutionAudit] direct exercise edit failed", {
         action,
@@ -1748,7 +1804,7 @@ function ProgramTab({
             <Loader2 className="w-4 h-4 animate-spin text-muted-foreground/50" />
           </div>
         )}
-        {!altWeekLoading && viewDays.map((day, idx) => {
+        {!altWeekLoading && viewDays.map((day: any, idx: number) => {
           const isLocked = !isPremium && idx > 0;
           const isExpanded = expandedDay === idx;
           const dayDiff = animatedKeys.get(`d${idx}`);
@@ -1993,7 +2049,7 @@ function ProgramTab({
                       )}
 
                       {/* Exercise rows */}
-                      {(day.exercises ?? []).map((ex, exIdx) => {
+                      {(day.exercises ?? []).map((ex: any, exIdx: number) => {
                         const exKey = `d${idx}-e${exIdx}`;
                         const exDiff = animatedKeys.get(exKey);
                         const isHighlighted = highlightedNames.has(ex.name);
@@ -2120,23 +2176,23 @@ function ProgramTab({
                             {ex.notes && (
                               <p className="text-[10px] text-muted-foreground/70 mt-1.5 italic leading-relaxed">{ex.notes}</p>
                             )}
-                            {/* Exercise action row — Swap / Easier / Harder */}
+                            {/* Exercise action row — Swap / Easier / Harder / Equipment / Explain */}
                             {onSendMessage && (
-                              <div className="flex flex-wrap gap-1.5 mt-2" onClick={(e) => e.stopPropagation()}>
+                              <div
+                                className="flex flex-wrap gap-1 mt-2 sm:opacity-0 sm:group-hover:opacity-100 sm:transition-opacity sm:duration-150"
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 {EXERCISE_ACTIONS.map((action) => {
                                   const exActionKey = `ex-${idx}-${exIdx}-${action.label}`;
                                   const isLoading = pendingRefinement === exActionKey;
+                                  const { Icon } = action;
                                   return (
                                     <button
                                       key={action.label}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        if (isSaved) {
-                                          const dir =
-                                            action.label === "Easier" ? "easier" as const
-                                            : action.label === "Harder" ? "harder" as const
-                                            : "swap" as const;
-                                          handleDirectExerciseEdit(ex.name, dir, exActionKey, ex.id);
+                                        if (action.direct && isSaved) {
+                                          handleDirectExerciseEdit(ex.name, action.direct, exActionKey, ex.id);
                                         } else {
                                           sendRefinement(action.buildMessage(ex.name), exActionKey, {
                                             dayIndex: idx,
@@ -2147,14 +2203,17 @@ function ProgramTab({
                                         }
                                       }}
                                       disabled={!!buildingState?.isBuilding || !!pendingRefinement}
-                                      className={`h-7 inline-flex items-center gap-1 px-2.5 rounded-full text-[10px] font-medium border transition-all duration-150 active:scale-95 select-none ${
+                                      title={action.buildMessage(ex.name)}
+                                      className={`h-7 inline-flex items-center gap-1 px-2 rounded-full text-[10px] font-medium border transition-all duration-150 active:scale-95 select-none ${
                                         isLoading
                                           ? "bg-primary/12 border-primary/35 text-primary"
                                           : "bg-transparent border-border/50 text-muted-foreground/70 hover:border-primary/25 hover:text-foreground hover:bg-accent/40"
                                       } disabled:opacity-30 disabled:cursor-not-allowed`}
                                     >
-                                      {isLoading && (
+                                      {isLoading ? (
                                         <Loader2 className="w-2.5 h-2.5 animate-spin flex-shrink-0" />
+                                      ) : (
+                                        <Icon className="w-2.5 h-2.5 flex-shrink-0" />
                                       )}
                                       {action.label}
                                     </button>

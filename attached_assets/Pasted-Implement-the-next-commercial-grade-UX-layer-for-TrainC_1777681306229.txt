@@ -1,0 +1,214 @@
+Implement the next commercial-grade UX layer for TrainChat.
+
+Goal:
+Make TrainChat feel like software (not chat), make edits visible and satisfying, and improve the save → account → upgrade conversion flow.
+
+Do NOT break existing agent architecture or Live Program Panel.
+Do NOT remove chat-based editing.
+We are layering UI-driven control on top of the agent.
+
+-------------------------------------
+PHASE 1 — EXERCISE-LEVEL QUICK ACTIONS
+-------------------------------------
+
+Add UI-driven quick actions to every exercise in the Live Program Panel.
+
+Each exercise card must include:
+
+- Swap
+- Make Harder
+- Make Easier
+- Replace Equipment
+- Explain
+
+These should be small, clean, icon + label buttons (mobile-friendly).
+
+Behavior:
+- Each button triggers a structured agent request (NOT free text).
+- Do not rely on the user typing manually.
+
+Example mappings:
+
+Swap:
+→ “Replace this exercise with a similar alternative while preserving intent”
+
+Make Harder:
+→ “Increase difficulty of this exercise appropriately”
+
+Make Easier:
+→ “Reduce difficulty while preserving training goal”
+
+Replace Equipment:
+→ “Replace this with an equivalent exercise using available equipment”
+
+Explain:
+→ “Explain why this exercise is included”
+
+Implementation requirements:
+
+- Each exercise must have a stable identifier (exerciseId or index)
+- Pass context to the agent:
+  - Day index
+  - Exercise index
+  - Exercise name
+  - Program goal
+- Use existing mutation/edit pipeline (DO NOT create a separate system)
+- Ensure result updates the Live Program Panel (not just chat)
+
+UI requirements:
+
+- Buttons appear on hover (desktop) and always visible or expandable on mobile
+- Keep layout clean and non-cluttered
+- Use consistent iconography (swap, arrow up/down, wrench, info)
+
+-------------------------------------
+PHASE 2 — CHANGE FEEDBACK SYSTEM
+-------------------------------------
+
+Make all edits visually obvious and satisfying.
+
+When a program mutation occurs:
+
+1. Highlight the changed exercise:
+   - Background glow or border highlight
+   - Duration: ~3–4 seconds
+
+2. Auto-scroll:
+   - Scroll the program panel to the updated exercise
+
+3. Add inline badge:
+   - Small “Updated” badge on the changed item (temporary)
+
+4. Toast notification:
+   - Bottom or top-right
+   - Message: “Program updated”
+   - Duration: ~2–3 seconds
+
+5. Change tracking:
+   - Ensure this integrates with existing “Changes” or history tab if present
+
+Implementation details:
+
+- Track which exercise(s) changed via mutation result
+- Use refs to scroll into view
+- Avoid janky scrolling or layout shifts
+- Ensure mobile works cleanly
+
+-------------------------------------
+PHASE 3 — SAVE → ACCOUNT → UPGRADE FLOW
+-------------------------------------
+
+Refactor the save and upgrade experience to follow value-first conversion.
+
+Flow:
+
+1. Guest user builds program
+2. Guest user edits program
+3. User clicks “Save My System”
+
+IF user is NOT signed in:
+→ Trigger account creation modal
+
+Modal requirements:
+- Simple (email + password OR magic link)
+- Messaging:
+
+  Title:
+  “Save your training system”
+
+  Subtext:
+  “Create a free account to store and edit your system anytime.”
+
+- Do NOT mention pricing here
+
+4. After account creation:
+- Automatically save the system
+- Show confirmation toast:
+  “System saved”
+
+5. Upgrade timing:
+
+Do NOT show upgrade immediately after signup.
+
+Instead:
+Trigger upgrade after:
+- X number of edits (e.g., 3–5), OR
+- Attempting advanced action (future), OR
+- Returning session
+
+Upgrade messaging:
+
+Title:
+“Unlock your full training system”
+
+Bullets:
+- Unlimited systems
+- Full program editing
+- Adaptive updates
+- History & tracking
+
+CTA:
+“Upgrade My Training System”
+
+-------------------------------------
+PHASE 4 — “TRY SAYING” GUIDANCE
+-------------------------------------
+
+Under the chat input, add a subtle guidance strip:
+
+“Try saying:”
+
+- Make this more athletic
+- Replace squats with knee-friendly options
+- Add sprint work
+- Make this fit 45 minutes
+- Progress this for 4 weeks
+
+Behavior:
+- Clicking inserts AND submits
+- Rotate or vary suggestions occasionally
+
+-------------------------------------
+PHASE 5 — VALIDATION
+-------------------------------------
+
+After implementation:
+
+- Run full typecheck and fix all errors
+- Test mobile (~390px width)
+- Test guest flow:
+  - Generate program
+  - Edit via quick actions
+  - Save → triggers signup → saves successfully
+- Test edit:
+  - Quick action modifies program
+  - Highlight appears
+  - Auto-scroll works
+  - Toast appears
+- Ensure NO debug UI appears in production
+
+-------------------------------------
+CONSTRAINTS
+-------------------------------------
+
+- Do NOT break existing agent pipeline
+- Do NOT remove chat-based editing
+- Do NOT clutter UI
+- Maintain TrainChat identity:
+  “Your AI training system”
+
+-------------------------------------
+OUTPUT
+-------------------------------------
+
+At the end, output a summary:
+
+- Files changed
+- New components added
+- State changes introduced
+- Any assumptions made
+- Manual QA checklist
+
+-------------------------------------
+
+This is a commercial UX upgrade. Prioritize clarity, responsiveness, and perceived intelligence.

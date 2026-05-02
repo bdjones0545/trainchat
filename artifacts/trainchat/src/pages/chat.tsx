@@ -4,7 +4,7 @@ import {
   SendHorizontal, Zap, PanelLeftClose, PanelLeft, Activity,
   Menu, Target, CreditCard, LogOut, Dumbbell, UserPlus,
   MessageSquare, Plus, RotateCcw, Brain, ChevronDown, ChevronRight,
-  CheckCircle2, Library, Trash2, AlertTriangle, Info, Leaf, X,
+  CheckCircle2, Library, Trash2, AlertTriangle, Info, Leaf, X, Sparkles,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -51,6 +51,39 @@ import { buildShareMoment, type ShareMoment } from "@/types/share-moments";
 import { useFocusMode } from "@/hooks/useFocusMode";
 import { getFocusModeConfig, detectFocusMismatch, FOCUS_MODE_CONFIGS } from "@/lib/focusModeConfig";
 import type { FocusMode } from "@/lib/focusMode";
+
+const TRY_SAYING_PROMPTS: Record<string, string[]> = {
+  strength: [
+    "Make this more athletic",
+    "Replace squats with knee-friendly options",
+    "Add more explosive work",
+    "Make this fit 45 minutes",
+    "Progress this for 4 weeks",
+    "Add a core finisher",
+    "Remove all barbell exercises",
+    "Make Day 1 heavier",
+  ],
+  speed: [
+    "Add more reactive drills",
+    "Shorten rest periods",
+    "Focus more on acceleration",
+    "Add footwork to Day 2",
+    "Make this fit 30 minutes",
+    "Remove any gym-based lifts",
+    "Add sprint work to this",
+    "Make this more game-speed",
+  ],
+  mobility: [
+    "Add more hip work",
+    "Shorten this to 20 minutes",
+    "Focus on thoracic mobility",
+    "Make this a morning routine",
+    "Add breathing work",
+    "Focus on tissue restoration",
+    "Add shoulder mobility work",
+    "Make this more restorative",
+  ],
+};
 
 async function fetchSubscription() {
   try {
@@ -199,6 +232,12 @@ export default function Chat() {
   const [showProgramLibrary, setShowProgramLibrary] = useState(false);
   const [isSwitchingProgram, setIsSwitchingProgram] = useState(false);
   const [anonymousUpgradePlan, setAnonymousUpgradePlan] = useState<{ planId: string; priceId: string } | null>(null);
+  const [showSaveAccountModal, setShowSaveAccountModal] = useState(false);
+  const [trySayingIndex, setTrySayingIndex] = useState(0);
+  const trySayingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Rotate "Try saying" prompts every 12 seconds (effect placed after stream is declared)
+
   // Delete confirmation state — tracks which item is pending user confirmation
   const [deleteConfirm, setDeleteConfirm] = useState<{
     type: "program" | "convo";
@@ -353,6 +392,19 @@ export default function Chat() {
 
   const createConvo = useCreateConversation();
   const stream = useStreamMessage();
+
+  // Rotate "Try saying" prompts every 12 seconds — must run after stream is declared
+  useEffect(() => {
+    if (stream.isActive) return;
+    trySayingTimerRef.current = setTimeout(() => {
+      const prompts = TRY_SAYING_PROMPTS[focusMode] ?? TRY_SAYING_PROMPTS.strength;
+      setTrySayingIndex((i) => (i + 4) % prompts.length);
+    }, 12000);
+    return () => {
+      if (trySayingTimerRef.current) clearTimeout(trySayingTimerRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trySayingIndex, stream.isActive, focusMode]);
 
   const isPremium = subscription?.plan === "pro" || subscription?.plan === "elite";
   const currentPlan = subscription?.plan ?? "free";
@@ -609,6 +661,7 @@ export default function Chat() {
         if (optimisticClearTimerRef.current) clearTimeout(optimisticClearTimerRef.current);
       };
     }
+    return undefined;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stream.isActive, optimisticUserMsg]);
 
@@ -901,6 +954,7 @@ export default function Chat() {
       }, 400);
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [messages.length, messagesLoading]);
 
   function handleNewConversation() {
@@ -1406,6 +1460,14 @@ export default function Chat() {
       operationErrorTimeoutRef.current = setTimeout(() => setOperationError(null), 7000);
     } finally {
       setIsUndoing(false);
+    }
+  }
+
+  function handleSaveClick() {
+    if (isAnonymousUser) {
+      setShowSaveAccountModal(true);
+    } else {
+      handleSaveProgram();
     }
   }
 
@@ -2084,7 +2146,7 @@ export default function Chat() {
           program={displayProgram}
           programSource={displayProgramSource}
           buildingState={buildingState}
-          onSave={latestProgram && !isSaved ? handleSaveProgram : undefined}
+          onSave={latestProgram && !isSaved ? handleSaveClick : undefined}
           onFeedback={() => { setShowFeedback(true); setMobilePanel(null); }}
           onLogSession={() => { setShowSessionLog(true); setMobilePanel(null); }}
           onUpgrade={() => { setShowPricing(true); setMobilePanel(null); }}
@@ -2944,6 +3006,26 @@ export default function Chat() {
                   <SendHorizontal className="w-4 h-4" />
                 </button>
               </div>
+              {/* "Try saying" guidance strip */}
+              {hasActiveSystem && !stream.isActive && (
+                <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] text-muted-foreground/40 flex-shrink-0 flex items-center gap-1">
+                    <Sparkles className="w-2.5 h-2.5" />
+                    Try:
+                  </span>
+                  {(TRY_SAYING_PROMPTS[focusMode] ?? TRY_SAYING_PROMPTS.strength)
+                    .slice(trySayingIndex, trySayingIndex + 4)
+                    .map((prompt) => (
+                      <button
+                        key={prompt}
+                        onClick={() => handleSend(prompt)}
+                        className="text-[10px] text-muted-foreground/60 hover:text-primary border border-border/40 hover:border-primary/30 rounded-full px-2 py-0.5 transition-all duration-150 active:scale-95"
+                      >
+                        {prompt}
+                      </button>
+                    ))}
+                </div>
+              )}
               <p className="hidden md:block text-[10px] text-muted-foreground/40 text-center mt-2">
                 Enter to send · Shift+Enter for new line
               </p>
@@ -2974,7 +3056,7 @@ export default function Chat() {
                   program={displayProgram}
                   programSource={displayProgramSource}
                   buildingState={buildingState}
-                  onSave={latestProgram && !isSaved ? handleSaveProgram : undefined}
+                  onSave={latestProgram && !isSaved ? handleSaveClick : undefined}
                   onFeedback={() => setShowFeedback(true)}
                   onLogSession={() => setShowSessionLog(true)}
                   onUpgrade={() => setShowPricing(true)}
@@ -3033,6 +3115,50 @@ export default function Chat() {
       <AnonymousConversionFloor
         onCreateAccount={() => setLocation("/register?from=conversion-floor")}
       />
+    )}
+
+    {/* ─── Save Account Modal ───────────────────────────────────────────────── */}
+    {showSaveAccountModal && (
+      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowSaveAccountModal(false)} />
+        <div
+          className="relative w-full max-w-sm rounded-2xl border border-border bg-[#0c1220] shadow-2xl p-6 animate-in fade-in slide-in-from-bottom-4 duration-300"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent rounded-t-2xl" />
+          <div className="flex items-start gap-3 mb-4">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
+              <Sparkles className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-foreground">Save your training system</h3>
+              <p className="text-[12px] text-muted-foreground mt-0.5 leading-relaxed">
+                Create a free account to store and edit your system anytime.
+              </p>
+            </div>
+          </div>
+          <div className="space-y-2 mb-4 text-[11px] text-muted-foreground">
+            <div className="flex items-center gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-primary/60 flex-shrink-0" /> Your program is saved automatically</div>
+            <div className="flex items-center gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-primary/60 flex-shrink-0" /> Continue editing with the AI</div>
+            <div className="flex items-center gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-primary/60 flex-shrink-0" /> Track sessions and progress</div>
+          </div>
+          <button
+            onClick={() => {
+              setShowSaveAccountModal(false);
+              setLocation("/register?from=save-program");
+            }}
+            className="w-full py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all mb-2"
+          >
+            Create Free Account
+          </button>
+          <button
+            onClick={() => setShowSaveAccountModal(false)}
+            className="w-full py-2 rounded-xl text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Continue without saving
+          </button>
+        </div>
+      </div>
     )}
 
     {/* ─── Share moment modal ──────────────────────────────────────────────── */}

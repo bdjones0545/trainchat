@@ -672,6 +672,7 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditC
       prevLoggedRef.current = false;
       setJustLoggedFlash(false);
     }
+    return undefined;
   }, [sessionLoggedToday]);
 
   // ── If the backend has advanced past the completed session, clear the "logged" badge ──
