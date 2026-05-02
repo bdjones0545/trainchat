@@ -1,0 +1,130 @@
+Fix active system UI not updating after creating a new program.
+
+Issue:
+After generating a new program, the UI still displays the previous program name (e.g., “3-Day Strength Intensification”) instead of the newly created system.
+
+Goal:
+Ensure the active system state updates immediately and consistently across the app.
+
+-------------------------------------
+PHASE 1 — TRACE ACTIVE SYSTEM SOURCE
+-------------------------------------
+
+Audit:
+- where active system name is rendered (header, banner, etc.)
+- where activeSystemId / activeSystem is stored
+- where new program is created
+- where program is saved
+- where queries are fetched (React Query / state)
+
+Confirm:
+- single source of truth for active system
+
+-------------------------------------
+PHASE 2 — UPDATE ACTIVE SYSTEM ON CREATE
+-------------------------------------
+
+After new program generation/save:
+
+Ensure:
+setActiveSystem(newProgram.id)
+
+If using React Query:
+- invalidate or refetch:
+  - ["training-system-active"]
+  - ["training-systems"]
+  - any relevant cache
+
+-------------------------------------
+PHASE 3 — FIX STALE CACHE
+-------------------------------------
+
+If React Query is used:
+
+Add:
+queryClient.setQueryData(["training-system-active"], newProgram)
+
+OR:
+queryClient.invalidateQueries(["training-system-active"])
+
+Make sure the UI subscribes to this query.
+
+-------------------------------------
+PHASE 4 — REMOVE MULTIPLE SOURCES OF TRUTH
+-------------------------------------
+
+Ensure header, banner, and panel all read from:
+→ the SAME activeSystem state
+
+Do NOT:
+- derive name separately
+- cache name locally without syncing
+
+-------------------------------------
+PHASE 5 — HANDLE EDGE CASES
+-------------------------------------
+
+If:
+- user creates program
+- but save hasn’t completed
+
+Use:
+- optimistic update OR
+- temporary local active system
+
+-------------------------------------
+PHASE 6 — DEV LOGGING
+-------------------------------------
+
+Add:
+
+[ActiveSystemSync]
+- previousSystemId
+- newSystemId
+- updateTriggered
+- cacheUpdated
+
+-------------------------------------
+PHASE 7 — QA
+-------------------------------------
+
+Test:
+
+1. Create new program
+PASS:
+- header updates immediately
+- banner updates
+- panel shows correct program
+
+2. Create multiple programs in a row
+PASS:
+- always shows latest
+
+3. Refresh page
+PASS:
+- latest program persists
+
+4. Switch between systems (if applicable)
+PASS:
+- correct system always shown
+
+-------------------------------------
+PHASE 8 — CONSTRAINTS
+-------------------------------------
+
+Do NOT:
+- break program generation
+- break save flow
+- break Live Program Panel
+- introduce flicker
+
+-------------------------------------
+OUTPUT
+-------------------------------------
+
+Return:
+- Root cause
+- Files changed
+- State fix applied
+- Cache fix applied
+- QA results
