@@ -1,0 +1,252 @@
+Perform a full commercial-grade TrainChat product audit and implementation plan.
+
+Goal:
+Audit TrainChat from UI, UX, agent behavior, onboarding, monetization, reliability, and commercial launch readiness. Then implement the highest-leverage fixes that make the app feel like a polished, paid SaaS product instead of a basic chat app.
+
+Do not redesign randomly. Preserve the current TrainChat concept:
+“Your AI training system. Vibe code your workouts. Adapt in real time.”
+
+Audit the app across these areas:
+
+1. First-Time User Experience
+- Is it instantly clear what TrainChat does?
+- Can a cold user build a program within 15–30 seconds?
+- Are starter prompts obvious and clickable?
+- Does the first generated program appear clearly in the Live Program Panel?
+- Does the user understand what to do next?
+
+Required improvements:
+- Add clear starter prompts such as:
+  - Build me a 3-day strength program
+  - Build a football speed program
+  - Build a fat-loss training plan
+  - Build around knee pain
+  - Build a 4-day muscle program
+  - Build with dumbbells only
+- These prompts should submit immediately, not just fill the input.
+- After the first program is generated, show a clear “Your training system is ready” message.
+- The user should be guided toward saving only after value is delivered.
+
+2. UI / Layout Audit
+Evaluate and improve:
+- Header simplicity
+- Mobile layout
+- Chat input visibility
+- Live Program Panel visibility
+- Empty states
+- Button labels
+- Sidebar clarity
+- Upgrade/paywall timing
+
+Recommended language:
+- Input placeholder: “Build or edit your training system…”
+- Main CTA: “Build My System”
+- Save CTA: “Save My System”
+- Upgrade CTA: “Upgrade My Training System”
+
+Keep the interface clean. Avoid debug-like labels, cluttered badges, or excessive technical language.
+
+3. Live Program Panel Audit
+The Live Program Panel should be the star of the product.
+
+Audit whether:
+- New programs always appear in the panel
+- Program edits visually update the panel
+- The panel matches the chat response
+- Mobile users can easily access it
+- Changes are highlighted
+- Day structure is readable
+
+Improve program display so each day has:
+- Day title
+- Goal / training emphasis
+- Estimated time
+- Exercises with sets, reps, rest, intensity, and coaching notes
+
+Add or verify quick actions where possible:
+- Swap
+- Make easier
+- Make harder
+- Explain
+- Replace equipment
+- Remove
+
+If these actions already exist, polish them. If not, create a clean UI-ready structure for them without breaking current agent functionality.
+
+4. Agent Behavior Audit
+The agent must consistently support four core commercial behaviors:
+
+- Build programs
+- Edit programs
+- Explain programs
+- Adapt programs based on pain, schedule, equipment, sport, goal, age, or limitations
+
+Audit for these failure cases:
+- User asks for 3 days and receives 4
+- User asks for strength and receives generic fitness
+- User mentions pain and receives unsafe/aggressive exercise selection
+- Edits are described in chat but not applied to the actual program panel
+- Program panel and chat response disagree
+- Guest user loses work
+- Saved system differs from generated system
+
+Add validation and safeguards where needed.
+
+5. Trust Layer Audit
+Add a simple trust layer after program generation.
+
+Every generated program should include a section or card:
+
+“Why this plan works”
+
+It should explain:
+- How it matches the user’s goal
+- How it fits their schedule
+- How it balances strength, power, conditioning, trunk, mobility, or recovery
+- How it manages fatigue
+- How it respects pain, equipment, sport, or experience constraints when provided
+
+Add lightweight safety language:
+“TrainChat provides educational training guidance. Adjust for pain, medical limitations, and professional advice when needed.”
+
+Do not overclaim certifications. Use wording like:
+“Built around established strength and conditioning principles.”
+
+6. Differentiation Audit
+Make it obvious TrainChat is not just ChatGPT.
+
+Add or polish a concise comparison message somewhere in onboarding, empty state, or marketing area:
+
+“ChatGPT gives you a workout. TrainChat builds a living training system.”
+
+Support this with short points:
+- Remembers your training context
+- Edits the actual program
+- Tracks changes
+- Preserves constraints
+- Adapts around pain, schedule, equipment, goals, and sport
+- Builds progressions instead of one-off workouts
+
+7. Monetization / Paywall Audit
+Review the current paywall and upgrade flow.
+
+Commercial-grade rule:
+Do not block before value is delivered.
+
+Preferred flow:
+- Let guest users generate and edit enough to feel value
+- Then ask them to save the system
+- Then introduce upgrade for deeper usage
+
+Recommended pricing structure to support later:
+- Free: limited builds/edits and basic saving
+- Pro: unlimited training systems, full editing, adaptation, history, forecast
+- Coach/Business: client programming, sharing, dashboard, business tools
+- White Label: branded org version, setup fee, monthly fee, revenue share
+
+Do not necessarily implement pricing changes unless pricing logic already exists. Instead, prepare the UI/copy structure for it.
+
+8. Mobile Audit
+Mobile must feel premium.
+
+Verify:
+- No horizontal scroll
+- Input is always reachable
+- Live Program Panel can be opened easily
+- Program cards are readable
+- Buttons are large enough
+- Starter prompts wrap cleanly
+- Save/upgrade CTAs are not buried
+- No debug cards or development UI are visible
+
+9. Reliability / State Audit
+Perform a deep state consistency audit.
+
+Specifically inspect:
+- Anonymous/guest user creation
+- Device ID handling
+- Active training system updates
+- Program save flow
+- Program panel propagation
+- SSE streaming stage updates
+- Mutation/edit pipeline
+- Query invalidation after save/edit
+- Race conditions between generated program, saved program, and active system
+
+Add defensive logging only in development mode.
+
+Remove or hide all debug UI in production.
+
+10. Analytics / Commercial Readiness
+Add or verify event tracking hooks for:
+- First prompt clicked
+- Program generation started
+- Program generation completed
+- Live Program Panel opened
+- First edit requested
+- Edit applied successfully
+- Save clicked
+- Account created
+- Paywall shown
+- Upgrade clicked
+- Program shared, if sharing exists
+
+If no analytics provider is configured, create a clean internal analytics helper/stub so these events can later be wired into PostHog, Plausible, GA4, or custom logging.
+
+11. Output Required
+After auditing, produce a clear report in the console or a markdown file:
+
+COMMERCIAL_GRADE_AUDIT.md
+
+Include:
+- Current strengths
+- Critical issues found
+- Fixes implemented
+- Remaining recommendations
+- Files changed
+- Manual QA checklist
+- Mobile QA checklist
+- Guest-user QA checklist
+- Paid-user/upgrade QA checklist
+
+12. Implementation Priority
+Use this order:
+
+Priority 1:
+- First-time user clarity
+- Starter prompts
+- Live Program Panel consistency
+- Guest → save flow
+- Mobile usability
+- Remove production debug UI
+
+Priority 2:
+- “Why this plan works”
+- Differentiation copy
+- Better CTA labels
+- Program display polish
+- Change highlighting
+
+Priority 3:
+- Quick action buttons
+- Analytics hooks
+- Monetization copy
+- Commercial audit markdown report
+
+13. Validation
+After implementation:
+- Run typecheck/build
+- Fix all TypeScript errors caused by this work
+- Verify mobile layout at ~390px width
+- Verify guest user can generate a program
+- Verify generated program appears in Live Program Panel
+- Verify an edit visibly changes the program
+- Verify save flow works
+- Verify no dev/debug UI appears in production mode
+
+Important:
+Do not break existing agent architecture.
+Do not remove the Live Program Panel.
+Do not turn TrainChat into a generic chatbot.
+Do not overcomplicate the first screen.
+The goal is commercial polish, clarity, and reliability.
