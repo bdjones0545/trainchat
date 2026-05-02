@@ -1,0 +1,103 @@
+Fix “Make this more athletic” architecture transform failures.
+
+Issue:
+The chip “Make this more athletic” now routes to the architecture/block refinement path, but still fails with:
+“I wasn’t able to shift the block…”
+The program is unchanged.
+
+Goal:
+“Make this more athletic” must have a reliable transformation path and fallback. It should not depend only on a block-type shift that can fail.
+
+Root cause:
+The hierarchical/block refinement engine is treating “make this more athletic” as a block shift, but athleticism is not always a full block replacement. It can be applied as an athletic overlay to the existing program.
+
+Implement an ATHLETIC_OVERLAY transformation.
+
+When user intent includes:
+- athletic
+- explosive
+- performance
+- sport transfer
+- power
+- more dynamic
+
+Route to:
+transformationType: "ATHLETIC_OVERLAY"
+
+Behavior:
+Preserve:
+- current program name or append “Athletic”
+- current day count
+- current main goal
+- current equipment constraints
+- pain/injury constraints
+- excluded exercises
+
+Apply safe athletic upgrades:
+1. Add or reposition a low-volume power primer near the start of appropriate sessions.
+2. Add athletic coaching notes to main lifts.
+3. Replace one low-value accessory if needed.
+4. Improve sequencing so explosive/high-skill work happens before fatigue.
+5. Add trunk/anti-rotation/carry work if missing and appropriate.
+6. Do not convert the whole program into conditioning.
+7. Do not violate session length.
+
+Examples:
+- Strength program → add jump/throw/explosive hinge primer before main lift
+- Hypertrophy program → add controlled power primer without reducing the hypertrophy goal
+- Dumbbell-only → use DB jump squat if safe, DB push press, explosive step-up, pogo hops, snap-downs, med ball only if available
+- Knee limitation → avoid aggressive jumps/cuts; use low-impact power such as med ball throw, fast intent hinge, sled if available, or tempo/intent changes
+
+Fallback rules:
+If AI transform fails:
+- deterministic fallback must still make at least one safe change:
+  - add “Explosive Primer” to Day 1
+  - or add athletic intent coaching note to first main lift
+  - or add anti-rotation/core athletic finisher
+- Return success if program changed.
+
+Receipt:
+If athletic overlay succeeds or fallback applies:
+- success: true
+- programChanged: true
+- changeSummary: “Updated program for athletic performance”
+- no red failure banner
+- no Retry
+- Agent Turn Report: Updated
+
+Clarification only if:
+- there is no active program
+- program has no sessions/exercises
+- all safe athletic options are blocked by constraints
+
+Add dev logs:
+[AthleticOverlay]
+- activeSystemId
+- currentGoal
+- days
+- equipment
+- painConstraints
+- overlayApplied
+- fallbackApplied
+- changesMade
+- failureReason
+
+QA:
+1. Build 3-day strength program.
+2. Tap “Make this more athletic.”
+PASS:
+- program changes visibly
+- power/athletic intent added
+- receipt success
+
+3. Build knee-friendly program.
+4. Tap “Make this more athletic.”
+PASS:
+- low-impact athletic option chosen
+- no unsafe jumps/cuts
+
+5. Build dumbbell-only program.
+PASS:
+- equipment-compatible athletic overlay
+
+Run typecheck.

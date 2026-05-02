@@ -85,25 +85,27 @@ export default function SystemUpdateCard({ data, onShowChange }: Props) {
   const config = getStatusConfig(data.verificationStatus);
   const { Icon } = config;
 
+  const changedIds = data.changedIds ?? { exercises: [], sessions: [], weeks: [], phases: [] };
+
   const totalChanged =
-    data.changedIds.exercises.length +
-    data.changedIds.sessions.length +
-    data.changedIds.weeks.length +
-    data.changedIds.phases.length;
+    changedIds.exercises.length +
+    changedIds.sessions.length +
+    changedIds.weeks.length +
+    changedIds.phases.length;
 
   function buildChangeLabel(): string {
     const parts: string[] = [];
-    if (data.changedIds.exercises.length > 0) {
-      parts.push(`${data.changedIds.exercises.length} exercise${data.changedIds.exercises.length > 1 ? "s" : ""}`);
+    if (changedIds.exercises.length > 0) {
+      parts.push(`${changedIds.exercises.length} exercise${changedIds.exercises.length > 1 ? "s" : ""}`);
     }
-    if (data.changedIds.sessions.length > 0) {
-      parts.push(`${data.changedIds.sessions.length} session${data.changedIds.sessions.length > 1 ? "s" : ""}`);
+    if (changedIds.sessions.length > 0) {
+      parts.push(`${changedIds.sessions.length} session${changedIds.sessions.length > 1 ? "s" : ""}`);
     }
-    if (data.changedIds.weeks.length > 0) {
-      parts.push(`${data.changedIds.weeks.length} week${data.changedIds.weeks.length > 1 ? "s" : ""}`);
+    if (changedIds.weeks.length > 0) {
+      parts.push(`${changedIds.weeks.length} week${changedIds.weeks.length > 1 ? "s" : ""}`);
     }
-    if (data.changedIds.phases.length > 0) {
-      parts.push(`${data.changedIds.phases.length} phase${data.changedIds.phases.length > 1 ? "s" : ""}`);
+    if (changedIds.phases.length > 0) {
+      parts.push(`${changedIds.phases.length} phase${changedIds.phases.length > 1 ? "s" : ""}`);
     }
     return parts.join(", ") || "system";
   }

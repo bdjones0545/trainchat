@@ -3411,7 +3411,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           role: "assistant",
           content: streamHierarchicalContent,
           structuredData: streamHierarchicalResult.applied
-            ? JSON.stringify({ _type: "system_edit", changeSummary: streamHierarchicalResult.changeSummary, systemId: resolvedSystem.id, coachReasoning: _streamHierarchicalCoachReasoning })
+            ? JSON.stringify({ _type: "system_edit", changeSummary: streamHierarchicalResult.changeSummary, systemId: resolvedSystem.id, coachReasoning: _streamHierarchicalCoachReasoning, changedIds: { exercises: [], sessions: [], weeks: [], phases: [] } })
             : null,
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));

@@ -17,7 +17,7 @@ import {
   trainingSessions,
   trainingSystems,
 } from "@workspace/db";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 
 import { logger } from "./logger";
 import { getFullTrainingSystem } from "./training-system-service";
@@ -277,6 +277,239 @@ async function swapExercisesForFocus(
   return swapCount;
 }
 
+// ─── Athletic Overlay ─────────────────────────────────────────────────────────
+// Additive enhancement: preserves block type and program structure, adds
+// power primers and athletic coaching notes appropriate to the user's constraints.
+
+const ATHLETIC_OVERLAY_RE = /\b(make (this|it|my|the program) (more |a bit |even )?(athletic|explosive|dynamic)|add (more |an |some )?(explosive|athletic|power) (work|primer|intent|focus|training)|more (athletic|explosive|dynamic)( overall| performance| focus)?|make (it|this) explosive)\b/i;
+
+const ATHLETIC_COACHING_NOTE = "Move with intent — speed of execution is a training variable. Focus on force expression, not just completion.";
+
+interface AthleticPrimer {
+  name: string;
+  sets: number;
+  reps: string;
+  rest: string;
+  notes: string;
+}
+
+function selectAthleticPrimer(
+  equipment: string[],
+  painConstraints: string[],
+  excludedExercises: string[] = [],
+): AthleticPrimer {
+  const hasKneePain = painConstraints.some(c => /knee|acl|meniscus|patella|quad tendon/i.test(c));
+  const hasShoulderPain = painConstraints.some(c => /shoulder|rotator|labrum/i.test(c));
+  const hasLowerBackPain = painConstraints.some(c => /back|lumbar|disc|spine/i.test(c));
+  const equipStr = equipment.join(" ").toLowerCase();
+  const hasDumbbellsOnly = equipment.length > 0 && /dumbbell|db/.test(equipStr) && !/barbell/.test(equipStr);
+  const isExcluded = (name: string) => excludedExercises.some(e => e.toLowerCase() === name.toLowerCase());
+
+  if (hasKneePain) {
+    const opts: AthleticPrimer[] = [
+      { name: "Medicine Ball Slam", sets: 3, reps: "5", rest: "90 sec", notes: "Total body power — full hip extension, slam with intent, reset between reps" },
+      { name: "Explosive Hip Hinge", sets: 3, reps: "5", rest: "90 sec", notes: "Fast hip drive, neutral spine — focus on rate of force development through the hinge" },
+      { name: "Pallof Press", sets: 3, reps: "8 each", rest: "60 sec", notes: "Anti-rotation power expression — press with intent and resist the rotation" },
+    ];
+    return opts.find(o => !isExcluded(o.name)) ?? opts[0];
+  }
+
+  if (hasShoulderPain) {
+    const opts: AthleticPrimer[] = [
+      { name: "Box Jump", sets: 3, reps: "5", rest: "90 sec", notes: "Maximum vertical intent — land softly, step down, reset fully" },
+      { name: "Broad Jump", sets: 3, reps: "5", rest: "90 sec", notes: "Maximum horizontal power — stick the landing, absorb with both legs" },
+    ];
+    return opts.find(o => !isExcluded(o.name)) ?? opts[0];
+  }
+
+  if (hasLowerBackPain) {
+    const opts: AthleticPrimer[] = [
+      { name: "Box Jump", sets: 3, reps: "5", rest: "90 sec", notes: "Lower box height — reactive quality focus, land softly with hip hinge" },
+      { name: "Medicine Ball Chest Pass", sets: 3, reps: "6", rest: "60 sec", notes: "Upper body power expression — full extension, no lumbar shear" },
+    ];
+    return opts.find(o => !isExcluded(o.name)) ?? opts[0];
+  }
+
+  if (hasDumbbellsOnly) {
+    const opts: AthleticPrimer[] = [
+      { name: "Dumbbell Jump Squat", sets: 3, reps: "5", rest: "90 sec", notes: "Light DBs — explosive concentric, soft landing, full reset between reps" },
+      { name: "Dumbbell Push Press", sets: 3, reps: "5", rest: "90 sec", notes: "Drive from legs — express power through the press, control the descent" },
+      { name: "Dumbbell Power Clean", sets: 3, reps: "4", rest: "2 min", notes: "Explosive pull from knee — catch at shoulder with soft reception" },
+    ];
+    return opts.find(o => !isExcluded(o.name)) ?? opts[0];
+  }
+
+  const opts: AthleticPrimer[] = [
+    { name: "Box Jump", sets: 3, reps: "5", rest: "90 sec", notes: "Maximum intent each rep — step down, never jump down, full reset" },
+    { name: "Broad Jump", sets: 3, reps: "5", rest: "90 sec", notes: "Maximum horizontal power expression — stick the landing" },
+    { name: "Trap Bar Jump", sets: 3, reps: "5", rest: "90 sec", notes: "Explosive pull from floor — light to moderate load, max bar speed" },
+  ];
+  return opts.find(o => !isExcluded(o.name)) ?? opts[0];
+}
+
+async function applyAthleticOverlay(
+  systemId: number,
+  fullSystem: FullTrainingSystem,
+  resolution: ScopeResolution,
+  _userMessage: string,
+): Promise<HierarchicalRefineResult> {
+  const metadata = ((fullSystem as any).metadata as Record<string, unknown>) ?? {};
+  const goal = (metadata.goal as string | null) ?? null;
+  const sport = (metadata.sport as string | null) ?? null;
+  const equipment: string[] = Array.isArray(metadata.equipment) ? (metadata.equipment as string[]) : [];
+  const painConstraints: string[] = Array.isArray(metadata.painConstraints) ? (metadata.painConstraints as string[]) : [];
+  const excludedExercises: string[] = Array.isArray(metadata.excludedExercises) ? (metadata.excludedExercises as string[]) : [];
+
+  const primer = selectAthleticPrimer(equipment, painConstraints, excludedExercises);
+
+  const allSessions = fullSystem.phases.flatMap(p => p.weeks.flatMap(w => w.sessions));
+  const totalDays = allSessions.filter(s => !s.isRestDay).length;
+
+  let primersAdded = 0;
+  let notesUpdated = 0;
+  let overlaySessionCount = 0;
+  const changesMade: string[] = [];
+
+  // ── Step 1: Add power primer to first training session of each week ────────
+  for (const phase of fullSystem.phases) {
+    for (const week of phase.weeks) {
+      const activeSessions = week.sessions.filter(s => !s.isRestDay);
+      if (activeSessions.length === 0) continue;
+
+      const firstSession = activeSessions[0];
+
+      const hasPowerPrimer = firstSession.exercises.some(
+        e => e.category === "power" || /jump|explosive|broad|box jump|plyometric|pogo|slam|bound/i.test(e.name),
+      );
+
+      if (!hasPowerPrimer && firstSession.exercises.length > 0) {
+        const existingIds = firstSession.exercises
+          .map(e => e.id)
+          .filter((id): id is number => id != null);
+
+        if (existingIds.length > 0) {
+          await db
+            .update(sessionExercises)
+            .set({ orderIndex: sql`${sessionExercises.orderIndex} + 1` })
+            .where(inArray(sessionExercises.id, existingIds));
+        }
+
+        await db.insert(sessionExercises).values({
+          trainingSessionId: firstSession.id,
+          name: primer.name,
+          category: "power",
+          sets: primer.sets,
+          reps: primer.reps,
+          rest: primer.rest,
+          notes: primer.notes,
+          orderIndex: 0,
+        });
+        primersAdded++;
+        overlaySessionCount++;
+      }
+    }
+  }
+
+  // ── Step 2: Add athletic coaching notes to primary lifts ──────────────────
+  for (const session of allSessions) {
+    if (session.isRestDay) continue;
+    for (const exercise of session.exercises) {
+      if (exercise.category !== "primary") continue;
+      const existingNote = exercise.notes ?? null;
+      if (existingNote && /intent|express|force/i.test(existingNote)) continue;
+
+      const newNote = existingNote
+        ? `${existingNote}. ${ATHLETIC_COACHING_NOTE}`
+        : ATHLETIC_COACHING_NOTE;
+
+      await db
+        .update(sessionExercises)
+        .set({ notes: newNote })
+        .where(eq(sessionExercises.id, exercise.id));
+      notesUpdated++;
+    }
+  }
+
+  // ── Deterministic fallback — guarantee at least one change ────────────────
+  let fallbackApplied = false;
+  if (primersAdded === 0 && notesUpdated === 0) {
+    const firstExercise = allSessions
+      .filter(s => !s.isRestDay)
+      .flatMap(s => s.exercises)
+      .find(e => e.id != null);
+
+    if (firstExercise) {
+      await db
+        .update(sessionExercises)
+        .set({ notes: ATHLETIC_COACHING_NOTE })
+        .where(eq(sessionExercises.id, firstExercise.id));
+      notesUpdated++;
+      fallbackApplied = true;
+    }
+  }
+
+  // ── Update system metadata ────────────────────────────────────────────────
+  const applied = primersAdded > 0 || notesUpdated > 0;
+  if (applied) {
+    await db
+      .update(trainingSystems)
+      .set({
+        metadata: {
+          ...(((fullSystem as any).metadata as Record<string, unknown>) ?? {}),
+          athleticOverlayApplied: true,
+          athleticOverlayAt: new Date().toISOString(),
+          athleticPrimer: primer.name,
+        },
+      })
+      .where(eq(trainingSystems.id, systemId));
+
+    if (primersAdded > 0) {
+      changesMade.push(`Added ${primer.name} as explosive primer to ${primersAdded} session${primersAdded !== 1 ? "s" : ""}`);
+    }
+    if (notesUpdated > 0) {
+      changesMade.push(`Updated ${notesUpdated} primary lift${notesUpdated !== 1 ? "s" : ""} with athletic intent cues`);
+    }
+  }
+
+  logger.info(
+    {
+      activeSystemId: systemId,
+      currentGoal: goal,
+      sport,
+      days: totalDays,
+      equipment,
+      painConstraints,
+      overlayApplied: primersAdded > 0,
+      fallbackApplied,
+      changesMade,
+      primersAdded,
+      notesUpdated,
+      failureReason: applied ? null : "no_exercises_found",
+    },
+    "[AthleticOverlay]",
+  );
+
+  const primerLine = primersAdded > 0
+    ? `${primer.name} added as explosive primer to ${primersAdded} session${primersAdded !== 1 ? "s" : ""}`
+    : "";
+  const notesLine = notesUpdated > 0
+    ? `${notesUpdated} primary lift${notesUpdated !== 1 ? "s" : ""} updated with athletic intent coaching cues`
+    : "";
+  const changeSummary = applied
+    ? [primerLine, notesLine].filter(Boolean).join(". ") + "."
+    : "No safe athletic changes could be applied with the current constraints.";
+
+  return {
+    applied,
+    changeSummary,
+    sessionCount: overlaySessionCount > 0 ? overlaySessionCount : Math.min(1, totalDays),
+    exerciseCount: primersAdded + notesUpdated,
+    scopeLabel: "athletic_overlay",
+    scopeResolution: resolution,
+    failureReason: applied ? undefined : "no_exercises_found",
+  };
+}
+
 // ─── Week Scope ───────────────────────────────────────────────────────────────
 
 async function applyWeekScope(
@@ -393,8 +626,8 @@ async function applyBlockScope(
   // Build the new monthly block plan for metadata
   const newBlockPlan = buildMonthlyBlockPlanForType(
     blockType,
-    (fullSystem.system.metadata as any)?.sport ?? null,
-    (fullSystem.system.metadata as any)?.goal ?? null,
+    ((fullSystem as any).metadata as any)?.sport ?? null,
+    ((fullSystem as any).metadata as any)?.goal ?? null,
   );
 
   const prescription = prescriptionForTransformation(transformation);
@@ -441,7 +674,7 @@ async function applyBlockScope(
   }
 
   // Update system metadata with new block info
-  const currentMetadata = (fullSystem.system.metadata as Record<string, unknown>) ?? {};
+  const currentMetadata = ((fullSystem as any).metadata as Record<string, unknown>) ?? {};
   const updatedMetadata = {
     ...currentMetadata,
     blockType: newBlockPlan.blockType,
@@ -510,6 +743,13 @@ export async function applyHierarchicalRefinement(opts: {
   }
 
   try {
+    // Athletic overlay — additive enhancement, not a block replacement.
+    // Fires first so "make this more athletic / explosive" never falls through
+    // to a pure block shift that can fail on programs with no sport context.
+    if (ATHLETIC_OVERLAY_RE.test(userMessage)) {
+      return await applyAthleticOverlay(systemId, fullSystem, scopeResolution, userMessage);
+    }
+
     if (scopeResolution.scope === "week_scope") {
       return await applyWeekScope(systemId, fullSystem, scopeResolution, userMessage);
     }
