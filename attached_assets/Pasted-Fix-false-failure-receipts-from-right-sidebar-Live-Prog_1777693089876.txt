@@ -1,0 +1,96 @@
+Fix false failure receipts from right-sidebar Live Program Panel buttons.
+
+Issue:
+A right-sidebar Live Program Panel button, such as Swap, successfully changes the exercise, but the chat still shows:
+- “Something went wrong applying that change”
+- “I couldn't apply that change cleanly”
+- “NO RECEIPT”
+
+This is incorrect. The right-sidebar button action succeeded. The failure is only in receipt/status reconciliation.
+
+Goal:
+For right-sidebar direct-edit actions, the successful program mutation itself counts as the receipt.
+
+Audit:
+- LiveProgramPanel.tsx
+- handleDirectExerciseEdit
+- sendRefinement
+- direct-edit fast path
+- sidebar edit execution audit
+- chat.tsx failure banner logic
+- Agent Turn Report receipt logic
+- stream success/failure handling
+
+Fix requirements:
+
+1. Right-sidebar button actions should return or emit a local success receipt when the program changes.
+
+Receipt shape:
+{
+  success: true,
+  source: "program_panel",
+  actionType: "swap_exercise" | "make_harder" | "make_easier" | "replace_equipment" | "explain_exercise",
+  programChanged: true,
+  receiptId: string,
+  target: {
+    dayIndex,
+    exerciseIndex,
+    exerciseName
+  },
+  userMessage: "Program updated"
+}
+
+2. Chat failure banner must not appear if:
+- source === "program_panel"
+- programChanged === true
+
+3. If backend/stream response says failure but Live Program Panel state changed:
+- reconcile as success
+- clear failure banner
+- suppress retry button
+- show toast: “Program updated”
+- Agent Turn Report should show “Updated,” not “NO RECEIPT”
+
+4. For direct sidebar edits:
+- Do not require a streamed assistant message to validate success
+- Do not rely only on natural-language receipt parsing
+- Mutation state update is authoritative
+
+5. Add dev-only log:
+[RightSidebarReceiptReconciliation]
+- actionType
+- dayIndex
+- exerciseIndex
+- previousExercise
+- newExercise
+- backendStatus
+- programChanged
+- failureSuppressed
+
+6. True failures should still show:
+- user-friendly failure message
+- retry button
+Only if no program change occurred.
+
+Validation:
+- Open Live Program Panel
+- Tap Swap on an exercise
+- Confirm exercise changes
+- Confirm no red failure banner
+- Confirm no “NO RECEIPT”
+- Confirm toast says “Program updated”
+- Tap Harder
+- Tap Easier
+- Tap Equipment
+- Confirm same behavior
+- Force real failure with missing program/exercise
+- Confirm failure still appears correctly
+- Run typecheck
+
+Do not break:
+- normal chat edits
+- Try saying chips
+- starter prompts
+- Performance Architect routing
+- research guidance
+- Live Program Panel rendering
