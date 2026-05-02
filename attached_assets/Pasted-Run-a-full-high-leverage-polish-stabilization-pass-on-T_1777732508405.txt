@@ -1,0 +1,149 @@
+Run a full high-leverage polish + stabilization pass on TrainChat.
+
+Goal:
+Eliminate all major UX friction, state inconsistencies, and mobile issues while preserving the current architecture.
+
+This is NOT a feature build.
+This is a stability + UX + reliability pass.
+
+-------------------------------------
+PHASE 1 — MOBILE SCROLL & ANCHOR FIX
+-------------------------------------
+
+Fix:
+- chat content anchoring
+- overscroll reveal
+- “Welcome Back” card pull-down issue
+- inconsistent resting scroll position
+
+Requirements:
+- single scroll owner
+- top anchor sentinel
+- overflow-anchor: none where needed
+- no hidden content reveal on drag/hold
+- stable initial layout
+
+-------------------------------------
+PHASE 2 — ACTIVE SYSTEM STATE SYNC
+-------------------------------------
+
+Fix:
+- new program not updating header
+- stale system showing after creation
+
+Ensure:
+- setActiveSystem(newProgram.id)
+- query invalidation or setQueryData
+- single source of truth
+
+-------------------------------------
+PHASE 3 — MUTATION RECEIPT CONSISTENCY
+-------------------------------------
+
+Fix:
+- program changes but UI shows failure
+- “NO RECEIPT” mismatch
+
+Ensure:
+- programChanged === true → always success
+- unified MutationActionResult
+- suppress false failures
+
+-------------------------------------
+PHASE 4 — BUTTON ACTION RELIABILITY
+-------------------------------------
+
+Ensure:
+- all buttons use structured payloads
+- no ambiguous actions
+- deterministic fallback logic
+
+-------------------------------------
+PHASE 5 — UX POLISH
+-------------------------------------
+
+Enforce:
+Tap → feedback → visible change → confirmation
+
+Add:
+- highlight animations
+- “Program updated” toasts
+- remove technical language
+
+-------------------------------------
+PHASE 6 — CEO HEARTBEAT + REVIEW
+-------------------------------------
+
+Add:
+- lightweight Program Review layer
+- CEO Heartbeat checklist
+
+Ensure:
+- no overengineering
+- no unsafe outputs
+- no chaotic programs
+
+-------------------------------------
+PHASE 7 — CODE CLEANUP
+-------------------------------------
+
+Refactor:
+- extract helpers
+- remove duplication
+- centralize payloads and receipts
+- clean dev logs
+
+-------------------------------------
+PHASE 8 — QA
+-------------------------------------
+
+Test:
+
+1. Mobile scroll behavior
+2. New program creation
+3. Swap exercise
+4. Make harder/easier
+5. Retry logic
+6. Return session hook
+7. Program panel updates
+
+-------------------------------------
+PHASE 9 — VALIDATION
+-------------------------------------
+
+Run:
+- typecheck
+- app load
+- key flows
+
+Confirm:
+- no new errors
+- no broken features
+- smoother UX
+
+-------------------------------------
+OUTPUT
+-------------------------------------
+
+Return:
+- Issues fixed
+- Files changed
+- UX improvements
+- State fixes
+- Scroll fixes
+- QA results
+- Typecheck result
+
+-------------------------------------
+IMPORTANT
+-------------------------------------
+
+Do NOT:
+- add new features
+- break architecture
+- change agent behavior
+- expose internal systems
+- introduce regressions
+
+Focus:
+stability, clarity, trust, smoothness
