@@ -537,8 +537,8 @@ function CoachSettingsSection() {
       </div>
       <div className="flex items-center justify-between py-3.5 px-4">
         <div className="min-w-0 pr-4">
-          <p className="text-sm font-medium text-foreground">Auto-adjust recommendations</p>
-          <p className="text-xs text-muted-foreground mt-0.5">AI adapts your plan based on readiness and feedback</p>
+          <p className="text-sm font-medium text-foreground">Adjustment suggestions</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Suggest changes from readiness and feedback. You approve before anything changes.</p>
         </div>
         <Switch
           checked={autoAdjust}
@@ -548,7 +548,7 @@ function CoachSettingsSection() {
       <div className="flex items-center justify-between py-3.5 px-4">
         <div className="min-w-0 pr-4">
           <p className="text-sm font-medium text-foreground">Memory personalization</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Coach remembers your history, preferences, and patterns</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Use saved preferences, history, and constraints to personalize coaching. Injury and safety constraints remain active regardless.</p>
         </div>
         <Switch
           checked={memory}
