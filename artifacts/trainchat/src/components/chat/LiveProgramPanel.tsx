@@ -962,7 +962,7 @@ function ProgramTab({
         error,
       });
       setPendingRefinement(null);
-      setPanelEditError("Couldn't apply that sidebar edit. Open Full edit or try again.");
+      setPanelEditError("That change didn't apply — try again or describe it in the chat.");
     }
   }
 

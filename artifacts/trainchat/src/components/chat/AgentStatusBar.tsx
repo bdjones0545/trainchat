@@ -205,7 +205,7 @@ export default function AgentStatusBar({
           {isDone
             ? "Done. Your program is ready."
             : isError
-            ? (error ? "Something went wrong." : "I hit a problem — try again.")
+            ? "I hit a problem — try again."
             : label}
         </span>
 

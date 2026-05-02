@@ -4,7 +4,7 @@ import {
   SendHorizontal, Zap, PanelLeftClose, PanelLeft, Activity,
   Menu, Target, CreditCard, LogOut, Dumbbell, UserPlus,
   MessageSquare, Plus, RotateCcw, Brain, ChevronDown, ChevronRight,
-  CheckCircle2, Library, Trash2, AlertTriangle, Info, Leaf, X, Sparkles,
+  CheckCircle2, Library, Trash2, AlertTriangle, Info, Leaf, X, Sparkles, Loader2,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -1351,7 +1351,10 @@ export default function Chat() {
 
       // ── Right-sidebar receipt reconciliation ─────────────────────────────
       const isPanelAction = btnPayload?.source === "program_panel";
-      const failureSuppressed = isPanelAction && mutationApplied;
+      // Suppress failure banner whenever the mutation was actually applied —
+      // regardless of whether it came from the panel or chat. If the DB changed,
+      // showing a failure banner confuses users who can see their program updated.
+      const failureSuppressed = mutationApplied;
 
       if (import.meta.env.DEV && isPanelAction) {
         console.log("[RightSidebarReceiptReconciliation]", {
@@ -1388,16 +1391,16 @@ export default function Chat() {
         }
       } else if (!mutationApplied) {
         if (operationErrorTimeoutRef.current) clearTimeout(operationErrorTimeoutRef.current);
-        let msg = "That build didn't come back cleanly. Hit retry to try again — I'll rebuild it fresh.";
+        let msg = "Something went wrong with that build. Hit retry and I'll try again.";
         let retryable = true;
         if (result.editFailure?.reason === "verification_failed") {
-          msg = "That edit was processed but couldn't be confirmed. Retry with the same request or rephrase it.";
+          msg = "That change went through but I couldn't confirm it saved correctly. Try the same request again or rephrase it.";
           retryable = true;
         } else if (result.saveFailure) {
-          msg = "Your program was built but couldn't be saved — a system error interrupted it. Please try again.";
+          msg = "Your program was built but couldn't be saved. Please try again.";
           retryable = true;
         } else if (result.editFailure) {
-          msg = "I couldn't apply that change cleanly. Your program hasn't been modified — retry or rephrase.";
+          msg = "I couldn't apply that change. Your program hasn't been modified — try again or rephrase your request.";
           retryable = true;
         }
         setOperationError(msg);
@@ -3256,7 +3259,11 @@ export default function Chat() {
                   disabled={!inputText.trim() || stream.isActive}
                   className="m-2 p-2.5 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-25 disabled:cursor-not-allowed transition-all duration-150 active:scale-95 flex-shrink-0 shadow-sm"
                 >
-                  <SendHorizontal className="w-4 h-4" />
+                  {stream.isActive ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <SendHorizontal className="w-4 h-4" />
+                  )}
                 </button>
               </div>
               {/* "Try saying" guidance strip */}
