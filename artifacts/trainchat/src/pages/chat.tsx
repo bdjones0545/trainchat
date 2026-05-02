@@ -1617,7 +1617,7 @@ export default function Chat() {
     setUndoVerificationStatus(null);
     try {
       await customFetch<any>(`/api/training-system/restore/${undoChangeLogId}`, { method: "POST" });
-      queryClient.refetchQueries({ queryKey: ["training-system-active"] });
+      queryClient.refetchQueries({ queryKey: ["training-system-active", focusMode] });
       queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
@@ -1669,7 +1669,7 @@ export default function Chat() {
         console.warn("[SaveProgram] saved_programs save failed (non-fatal):", err);
       });
 
-      await customFetch<any>("/api/training-system/from-chat", {
+      const savedSystem = await customFetch<{ success: boolean; systemId: number; systemName: string }>("/api/training-system/from-chat", {
         method: "POST",
         body: JSON.stringify({
           conversationId: activeConvoId ?? undefined,
@@ -1700,12 +1700,42 @@ export default function Chat() {
         }),
       });
 
-      queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+      const previousSystemId = activeSystem?.id ?? null;
+      const newSystemId = savedSystem?.systemId ?? null;
+
+      if (import.meta.env.DEV) {
+        console.log("[ActiveSystemSync]", {
+          previousSystemId,
+          newSystemId,
+          updateTriggered: true,
+          cacheUpdated: false,
+        });
+      }
+
+      // Stamp the guard ref BEFORE clearing latestProgram so the messages effect
+      // does not drop the draft while the training-system-active query is still
+      // refetching to the new system.
+      if (newSystemId) {
+        justSavedSystemIdRef.current = newSystemId;
+      }
+
+      // Force-refetch (not just invalidate) so activeSystem.id updates immediately.
+      // Using the full focusMode-qualified key matches the query registered at line ~378.
+      queryClient.refetchQueries({ queryKey: ["training-system-active", focusMode] });
       queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-library"] });
+
+      if (import.meta.env.DEV) {
+        console.log("[ActiveSystemSync]", {
+          previousSystemId,
+          newSystemId,
+          updateTriggered: true,
+          cacheUpdated: true,
+        });
+      }
 
       setIsSaving(false);
       setIsSaved(true);
@@ -1752,7 +1782,7 @@ export default function Chat() {
       // Refetch the two queries that drive the main panel display, then
       // invalidate the rest so they refresh in the background.
       await Promise.all([
-        queryClient.refetchQueries({ queryKey: ["training-system-active"] }),
+        queryClient.refetchQueries({ queryKey: ["training-system-active", focusMode] }),
         queryClient.refetchQueries({ queryKey: ["training-system-week"] }),
       ]);
       queryClient.invalidateQueries({ queryKey: ["training-system-library"] });
