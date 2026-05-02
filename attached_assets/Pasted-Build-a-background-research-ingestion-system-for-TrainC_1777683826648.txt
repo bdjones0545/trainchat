@@ -1,0 +1,406 @@
+Build a background research ingestion system for TrainChat.
+
+Goal:
+Allow the TrainChat agent to continuously improve its knowledge by consuming gold-standard strength, conditioning, exercise science, nutrition, recovery, and sports performance research.
+
+Important:
+Do NOT let the chat agent randomly browse the open web during every user message.
+Instead, build a controlled RAG/research pipeline:
+Trusted sources → ingest → summarize → embed → store → retrieve during agent responses.
+
+Core principle:
+The TrainChat agent should answer using:
+1. User context
+2. Current training system
+3. Internal programming logic
+4. Retrieved trusted research
+5. Safety constraints
+
+-------------------------------------
+PHASE 1 — TRUSTED SOURCE REGISTRY
+-------------------------------------
+
+Create a trusted source registry.
+
+Initial source categories:
+
+1. Strength & Conditioning
+- NSCA-style principles
+- ACSM-style exercise prescription principles
+- Peer-reviewed strength training studies
+- Periodization research
+- Power, speed, plyometric, and sprint research
+
+2. Medical / Rehab Adjacent
+- PubMed research
+- Clinical exercise guidelines
+- Pain-modification and return-to-training principles
+- Only educational, not diagnosis/treatment
+
+3. Nutrition
+- ISSN-style sports nutrition position stands
+- Protein, hydration, energy balance, creatine, timing, recovery
+
+4. Recovery / Wellness
+- Sleep research
+- Fatigue management
+- Stress/readiness principles
+- Load management research
+
+5. Sport Performance
+- Sprint mechanics
+- Change of direction
+- Jump training
+- Youth athlete development
+- Older adult training safety
+
+Create a config file:
+
+server/research/trusted-sources.ts
+
+Each source should include:
+- name
+- category
+- baseUrl or API endpoint if applicable
+- trustLevel: "gold" | "high" | "supporting"
+- allowedUseCases
+- disallowedUseCases
+- notes
+
+-------------------------------------
+PHASE 2 — RESEARCH INGESTION JOB
+-------------------------------------
+
+Create a background ingestion job.
+
+File:
+server/research/research-ingestion.ts
+
+Responsibilities:
+- Run manually at first
+- Later support scheduled cron
+- Search trusted sources for approved topics
+- Pull metadata:
+  - title
+  - authors
+  - year
+  - journal/source
+  - abstract/summary
+  - URL/DOI
+  - category
+  - topic tags
+- Avoid full copyrighted article ingestion unless openly available
+- Prefer abstracts, metadata, public guidelines, and summarized notes
+
+Approved starting topics:
+- hypertrophy programming
+- strength training volume
+- speed training
+- plyometrics
+- resistance training for older adults
+- youth athlete training
+- concurrent training
+- recovery and sleep
+- protein intake for muscle gain
+- return to training after pain
+- periodization
+- sprint acceleration
+- change of direction
+
+Do not ingest random blogs, Reddit, influencer content, or low-quality SEO articles.
+
+-------------------------------------
+PHASE 3 — DATABASE SCHEMA
+-------------------------------------
+
+Add research knowledge tables.
+
+Suggested table: research_documents
+
+Fields:
+- id
+- title
+- authors
+- year
+- source
+- journal
+- url
+- doi
+- category
+- topicTags: text[]
+- abstract
+- plainLanguageSummary
+- coachingImplications
+- contraindications
+- populationTags
+- trustLevel
+- evidenceType
+- createdAt
+- updatedAt
+- lastReviewedAt
+
+Suggested table: research_chunks
+
+Fields:
+- id
+- documentId
+- chunkText
+- embedding
+- topicTags
+- category
+- trustLevel
+- createdAt
+
+Use existing database conventions, Drizzle ORM, and migrations.
+
+-------------------------------------
+PHASE 4 — SUMMARIZATION LAYER
+-------------------------------------
+
+For each ingested source, create structured summaries.
+
+Each document should produce:
+
+1. Plain-language summary
+2. Coaching implications
+3. Programming implications
+4. Safety considerations
+5. Population relevance
+6. Contraindications
+7. What this does NOT prove
+
+Example format:
+
+Plain-language summary:
+“This study suggests...”
+
+Coaching implications:
+“For trained athletes, this may support...”
+
+Programming implications:
+“This may influence volume, intensity, frequency, or exercise selection by...”
+
+Safety:
+“Do not apply this directly to users with medical limitations...”
+
+Limitations:
+“This evidence does not prove...”
+
+Important:
+Avoid overclaiming.
+Use cautious language.
+Research should inform the agent, not override user safety or programming rules.
+
+-------------------------------------
+PHASE 5 — EMBEDDINGS + RETRIEVAL
+-------------------------------------
+
+Add embedding support for research chunks.
+
+When the agent receives a user message, retrieve relevant research based on:
+- User goal
+- Sport
+- Age/population
+- Pain/limitation
+- Training phase
+- Current program
+- Message intent
+
+Examples:
+- User asks for hypertrophy → retrieve hypertrophy volume/frequency evidence
+- User asks for knee pain → retrieve pain-modification and joint-friendly training principles
+- User asks for sprint speed → retrieve acceleration/sprint/plyometric research
+- Older adult → retrieve older adult resistance training safety principles
+
+Create:
+
+server/research/research-retriever.ts
+
+Function:
+getRelevantResearchContext(params)
+
+Returns:
+- 3–6 most relevant chunks
+- Source titles
+- Short citation labels
+- Coaching implications
+- Safety notes
+
+-------------------------------------
+PHASE 6 — AGENT INTEGRATION
+-------------------------------------
+
+Integrate retrieved research into the TrainChat system prompt.
+
+Add a new section:
+
+RESEARCH CONTEXT:
+- Use these retrieved notes to improve programming quality.
+- Do not cite research unless user asks or unless it improves trust.
+- Do not overstate certainty.
+- Do not contradict safety constraints.
+- Do not diagnose, treat, or prescribe medical care.
+- Prefer practical coaching application.
+
+Agent should use research to improve:
+- Exercise selection
+- Volume
+- Intensity
+- Frequency
+- Progression
+- Recovery
+- Sport specificity
+- Pain modifications
+- Population-specific constraints
+
+But the agent must still follow:
+- User constraints
+- Training system contract
+- Safety rules
+- Program mutation rules
+- Current program structure
+
+-------------------------------------
+PHASE 7 — ADMIN RESEARCH DASHBOARD
+-------------------------------------
+
+Create a simple internal admin page:
+
+/admin/research
+
+Features:
+- View ingested research
+- Filter by category/topic/trust level
+- See summaries
+- See coaching implications
+- Manually approve/reject documents
+- Re-run summarization
+- Mark as reviewed
+- Disable a document from retrieval
+
+Only approved documents should be available to the agent.
+
+Add role protection so normal users cannot access this page.
+
+-------------------------------------
+PHASE 8 — CITATION / TRUST MODE
+-------------------------------------
+
+Add optional citation behavior.
+
+Default:
+- Agent uses research silently to improve output.
+
+When user asks:
+“Why?”
+“What research supports this?”
+“Show sources”
+“Is this evidence-based?”
+
+Then agent should provide short source-backed reasoning.
+
+Format:
+“Based on current strength and conditioning research, this program uses progressive overload, adequate recovery, and movement balance. Relevant evidence includes...”
+
+Do not overload normal users with academic citations unless requested.
+
+-------------------------------------
+PHASE 9 — SAFETY / QUALITY GUARDRAILS
+-------------------------------------
+
+Add guardrails:
+
+- Research never overrides pain safety
+- No medical diagnosis
+- No treatment claims
+- No supplement dosing beyond conservative educational guidance
+- Flag conflicting evidence
+- Prefer meta-analyses, position stands, systematic reviews, and major guidelines
+- Use individual studies as supporting evidence, not absolute truth
+- Mark old research for review
+- Do not use unapproved documents in agent context
+
+Add a research confidence field:
+- strong
+- moderate
+- limited
+- conflicting
+
+-------------------------------------
+PHASE 10 — ANALYTICS
+-------------------------------------
+
+Track:
+- research_retrieval_used
+- research_chunks_returned
+- research_category_used
+- user_asked_for_sources
+- citation_response_generated
+- research_document_ingested
+- research_document_approved
+
+Use the existing analytics stub if available.
+
+-------------------------------------
+PHASE 11 — VALIDATION
+-------------------------------------
+
+Test these cases:
+
+1. User asks:
+“Build me a hypertrophy program”
+Expected:
+Agent retrieves hypertrophy evidence and produces better volume/frequency logic.
+
+2. User asks:
+“Make this better for football speed”
+Expected:
+Agent retrieves sprint, power, plyometric, and acceleration research.
+
+3. User asks:
+“My knee hurts”
+Expected:
+Agent retrieves pain-modification principles but avoids diagnosis.
+
+4. User asks:
+“Why did you choose this?”
+Expected:
+Agent can explain using research-informed reasoning.
+
+5. User asks:
+“Show me the sources”
+Expected:
+Agent provides short source references from approved documents.
+
+6. Bad source test:
+Unapproved/random source should not appear in agent context.
+
+-------------------------------------
+OUTPUT
+-------------------------------------
+
+At the end, provide:
+
+- Files added
+- Files modified
+- Database tables added
+- Research ingestion flow summary
+- Retrieval flow summary
+- Agent prompt changes
+- Admin dashboard status
+- Known limitations
+- QA results
+
+-------------------------------------
+IMPORTANT CONSTRAINTS
+-------------------------------------
+
+Do NOT scrape random websites.
+Do NOT ingest copyrighted full-text articles unless openly available and permitted.
+Do NOT make medical claims.
+Do NOT replace the existing TrainChat agent.
+Do NOT slow down normal chat responses significantly.
+Do NOT retrieve too many research chunks.
+Do NOT expose admin tools to normal users.
+
+This should make TrainChat feel like an evidence-informed AI training system, not a generic chatbot.
