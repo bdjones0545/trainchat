@@ -1,0 +1,172 @@
+Persist "sport focus" and "exercises to avoid" as first-class user memories.
+
+Goal:
+Make sport context and exclusion constraints persist across sessions and be retrieved automatically in future agent calls.
+
+-------------------------------------
+PHASE 1 — MEMORY TYPES
+-------------------------------------
+
+Add new memory types (or confirm they exist):
+
+- sport_focus
+- exercise_exclusion
+
+Update any enum/union:
+MemoryType = ... | "sport_focus" | "exercise_exclusion"
+
+-------------------------------------
+PHASE 2 — WRITE MEMORIES ON CALIBRATION
+-------------------------------------
+
+File:
+artifacts/api-server/src/routes/calibrate.ts
+
+When saving calibration:
+
+If sportFocus exists:
+- write memory:
+  type: "sport_focus"
+  value: sportFocus (e.g., "football", "basketball", etc.)
+  tags: ["sport", sportFocus]
+  priority: high
+
+If exercisesToAvoid exists:
+For each exercise:
+- write memory:
+  type: "exercise_exclusion"
+  value: exerciseName
+  tags: ["exclude", "exercise"]
+  priority: high
+
+Rules:
+- de-dupe existing memories (same value/type)
+- update timestamp if already exists instead of duplicating
+
+-------------------------------------
+PHASE 3 — MEMORY RETRIEVAL
+-------------------------------------
+
+File:
+retriever / memory loader (where userMemories are pulled into context)
+
+Ensure:
+- sport_focus memories are always included in context
+- exercise_exclusion memories are always included
+
+Group them cleanly:
+
+User Context:
+- Sport: football
+- Avoid: barbell back squat, lunges
+
+-------------------------------------
+PHASE 4 — SYSTEM PROMPT INJECTION
+-------------------------------------
+
+File:
+artifacts/api-server/src/lib/ai.ts (buildSystemPrompt)
+
+Add explicit section:
+
+## PERSISTENT USER CONTEXT
+
+Sport focus:
+- football
+
+Exercises to avoid:
+- barbell back squat
+- lunges
+
+Rules:
+- treat as HARD constraints
+- never suggest excluded exercises
+- always bias toward sport-specific transfer when relevant
+
+-------------------------------------
+PHASE 5 — ARCHITECT HANDOFF
+-------------------------------------
+
+Ensure Performance Architect receives:
+
+- sportFocus (already passed)
+- exercisesToAvoid (explicitly passed)
+
+If missing:
+→ add to Coach → Architect handoff payload
+
+-------------------------------------
+PHASE 6 — MUTATION PIPELINE ENFORCEMENT
+-------------------------------------
+
+Files:
+- swap-backstop-service.ts
+- harder-easier-fallback.ts
+- edit-intent-service.ts
+
+Add guard:
+
+If candidate exercise ∈ exercise_exclusion:
+→ reject
+→ select alternative
+
+-------------------------------------
+PHASE 7 — CONFLICT HANDLING
+-------------------------------------
+
+If:
+- user asks for excluded exercise explicitly
+
+Then:
+- Coach responds:
+  “You mentioned avoiding this movement — want me to include it anyway?”
+
+Do NOT silently override memory.
+
+-------------------------------------
+PHASE 8 — QA
+-------------------------------------
+
+Test:
+
+1. Set sport: football
+→ Build program
+PASS: speed/power elements present
+
+2. Set exercises to avoid: barbell squat
+→ Build program
+PASS: no squat appears
+
+3. Swap exercise
+PASS: excluded exercise never selected
+
+4. Harder/easier
+PASS: alternatives respect exclusions
+
+5. Return next session
+PASS: memory persists
+
+6. Refresh
+PASS: memory persists
+
+-------------------------------------
+PHASE 9 — LOGGING
+-------------------------------------
+
+Add DEV logs:
+
+[MemoryWrite]
+[MemoryRead]
+[MemoryApplied]
+
+-------------------------------------
+OUTPUT
+-------------------------------------
+
+Return:
+- Files modified
+- Memory types added
+- Retrieval confirmed
+- Prompt injection added
+- QA results
+- Typecheck result

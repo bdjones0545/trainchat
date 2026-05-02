@@ -193,6 +193,39 @@ router.post("/calibrate", requireAuth, async (req, res): Promise<void> => {
       }));
     }
 
+    // Sport focus — persisted as first-class sport_context memory
+    if (data.sportFocus) {
+      const sport = data.sportFocus.trim();
+      memoryPromises.push(upsertMemory(userId, {
+        type: "sport_context",
+        subject: sport.toLowerCase().replace(/\s+/g, "_"),
+        sentiment: "neutral",
+        confidence: 5,
+        source: "onboarding",
+        detail: `User's sport focus: ${sport}. Programs should bias toward ${sport}-relevant movement qualities, transfer patterns, and athletic demands.`,
+      }));
+      logger.info({ userId, sport }, "[MemoryWrite] Sport focus persisted as sport_context memory");
+    }
+
+    // Exercises to avoid — each exercise written as a hard exercise_exclusion memory
+    if (data.exercisesToAvoid) {
+      const exclusions = data.exercisesToAvoid
+        .split(/,|;|\n/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      for (const exercise of exclusions) {
+        memoryPromises.push(upsertMemory(userId, {
+          type: "exercise_exclusion",
+          subject: exercise.toLowerCase().replace(/\s+/g, "_"),
+          sentiment: "negative",
+          confidence: 5,
+          source: "onboarding",
+          detail: `User explicitly excluded "${exercise}" during profile setup. NEVER include this exercise in any program, swap, or progression suggestion. If the user asks for it directly, confirm before overriding this rule.`,
+        }));
+        logger.info({ userId, exercise }, "[MemoryWrite] Exercise exclusion persisted as exercise_exclusion memory");
+      }
+    }
+
     await Promise.all(memoryPromises);
 
     const coachReply = buildCoachingReply(data, score);

@@ -19,6 +19,7 @@ import { eq, desc, and, gte, lt, asc } from "drizzle-orm";
 
 export type MemoryType =
   | "exercise_preference"      // prefers or avoids specific exercises/equipment
+  | "exercise_exclusion"       // hard-excluded exercise — never include under any circumstance
   | "pain_pattern"             // recurring discomfort with movement patterns
   | "session_preference"       // session length, format, structure preferences
   | "volume_response"          // how user responds to volume and intensity
@@ -966,6 +967,7 @@ export function buildMemoryContext(memories: MemoryEntry[]): string {
   lines.push("");
 
   const typeLabels: Record<MemoryType, string> = {
+    exercise_exclusion: "Hard-Excluded Exercises (NEVER program these)",
     exercise_preference: "Exercise & Equipment Preferences",
     pain_pattern: "Pain & Limitation Patterns",
     session_preference: "Session Preferences",
@@ -980,6 +982,7 @@ export function buildMemoryContext(memories: MemoryEntry[]): string {
   };
 
   const order: MemoryType[] = [
+    "exercise_exclusion",
     "sport_context",
     "pain_pattern",
     "exercise_preference",
