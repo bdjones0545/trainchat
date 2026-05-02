@@ -3,10 +3,7 @@ import { db, readinessEntriesTable, conversationsTable, messagesTable, trainingS
 import { eq, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { logger } from "../lib/logger";
-import { evaluateCheckIn, applyCheckInAdjustment, type CheckInScores, type AdaptationMode, computeReadinessScore } from "../lib/check-in-adaptation";
-
-// Re-export for backward compat
-export { computeReadinessScore };
+import { evaluateCheckIn, applyCheckInAdjustment, type CheckInScores, type AdaptationMode } from "../lib/check-in-adaptation";
 
 // ─── Pipeline helpers: chat ack + agent memory ────────────────────────────────
 
