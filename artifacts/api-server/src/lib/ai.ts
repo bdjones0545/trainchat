@@ -110,6 +110,7 @@ import type { FocusMode } from "./focus-engines/engine-interface";
 import { buildFailSafePromptSection, type FailSafeResolution } from "./fail-safe";
 import { evaluateBuildThreshold, buildThresholdPromptSection } from "./build-threshold";
 import { detectPopulation, buildPopulationPromptSection, validatePopulationOutput } from "./population-engine";
+import { runCEOHeartbeatCheck, type CEOHeartbeatContext } from "../agents/ceo-heartbeat";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -195,6 +196,9 @@ HARD IDENTITY RULES — NEVER VIOLATE:
 - Never sound like a research paper — translate everything into practical coaching language
 - Never expose the internal three-agent architecture to users
 - The user knows only one thing: they are talking to TrainChat
+
+CEO DECISION RULE — FINAL GATE:
+You are the final decision-maker for every program output. Before a program reaches the user, apply your coaching judgment. If something feels overcomplicated, misaligned with the user's goal, or structurally off — fix it. Do not output work you would not be confident handing to an athlete. Your standard: a high-level coach would stand behind this program.
 
 ---
 
@@ -4724,6 +4728,70 @@ Output the corrected program JSON and a brief calm confirmation.`;
           },
           "[ProgramGenerationPathAudit] Program validated and approved — returning real engine output"
         );
+      }
+    }
+
+    // ── CEO Heartbeat Check — Final Quality Gate ──────────────────────────
+    // Runs after all upstream validation layers. Coach Atlas's final approval
+    // gate: nine coaching-standard checks before the program reaches the user.
+    // Non-blocking — logs concerns and override recommendations, never silently
+    // drops or replaces a program.
+    if (isBuildIntent && structuredData) {
+      const heartbeatCtx: CEOHeartbeatContext = {
+        userGoal: profile?.trainingGoal ?? extractedConstraints?.sportFocus ?? null,
+        sport: extractedConstraints?.sportFocus ?? profile?.sportFocus ?? null,
+        painLimitations: profile?.injuries ?? null,
+        equipmentAccess: profile?.equipmentAccess ?? null,
+        experienceLevel: profile?.experienceLevel ?? null,
+        sessionLength: profile?.sessionDuration ? `${profile.sessionDuration} min` : null,
+        daysPerWeek: extractedConstraints?.daysPerWeek ?? profile?.daysPerWeek ?? null,
+        hasExpertJudgmentNotes: (structuredData.expertJudgmentNotes?.length ?? 0) > 0,
+      };
+
+      const heartbeatResult = runCEOHeartbeatCheck(structuredData, heartbeatCtx);
+
+      if (heartbeatResult.pass) {
+        logger.info(
+          {
+            programName: structuredData.programName,
+            dayCount: structuredData.days?.length ?? 0,
+            minorAdjustments: heartbeatResult.minorAdjustments?.length ?? 0,
+            hasExpertJudgmentNotes: heartbeatCtx.hasExpertJudgmentNotes,
+          },
+          "[CEOHeartbeat] PASS — program approved"
+        );
+      } else if (heartbeatResult.overrideRecommended) {
+        logger.warn(
+          {
+            programName: structuredData.programName,
+            dayCount: structuredData.days?.length ?? 0,
+            concerns: heartbeatResult.concerns,
+            minorAdjustments: heartbeatResult.minorAdjustments,
+            overrideRecommended: true,
+          },
+          "[CEOHeartbeat] FAIL — override recommended"
+        );
+      } else {
+        logger.warn(
+          {
+            programName: structuredData.programName,
+            dayCount: structuredData.days?.length ?? 0,
+            concerns: heartbeatResult.concerns,
+            minorAdjustments: heartbeatResult.minorAdjustments,
+          },
+          "[CEOHeartbeat] FAIL — concerns detected"
+        );
+      }
+
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[CEOHeartbeat]", JSON.stringify({
+          pass: heartbeatResult.pass,
+          overrideRecommended: heartbeatResult.overrideRecommended ?? false,
+          concernCount: heartbeatResult.concerns.length,
+          minorCount: heartbeatResult.minorAdjustments?.length ?? 0,
+          concerns: heartbeatResult.concerns,
+          minorAdjustments: heartbeatResult.minorAdjustments,
+        }));
       }
     }
 
