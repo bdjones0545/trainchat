@@ -134,6 +134,16 @@ export interface WeeklyArchitecture {
   movementAllocation: MovementAllocation;
   weeklyRhythm: string;
   recoveryNotes: string;
+  /**
+   * Autonomous programming decisions made by the Performance Architect.
+   * Each entry is a plain-English explanation of a structural choice that
+   * deviates from or extends beyond default templates — e.g. "Added a contrast
+   * pair on Day 2 to amplify PAP for the athlete's power development goal" or
+   * "Used a carry-led opener on Day 3 to address trunk bracing under fatigue."
+   * The Coach Agent may reference these in conversation if asked "why", but
+   * should not surface them unprompted.
+   */
+  architectureDecisions?: string[];
 }
 
 // ─── Density Fill Engine ─────────────────────────────────────────────────────

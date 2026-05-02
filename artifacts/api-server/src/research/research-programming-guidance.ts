@@ -526,9 +526,9 @@ export function formatResearchGuidanceForPrompt(
   const lines: string[] = [
     "\n## RESEARCH-INFORMED PROGRAMMING GUIDANCE",
     `Evidence confidence: ${guidance.confidenceLevel.toUpperCase()}`,
-    "Apply this guidance to improve the actual program structure — not just the explanation.",
-    "Do NOT simply mention the research. Translate it into programming decisions.",
-    "Do NOT overrule user constraints or pain/safety rules.\n",
+    "Use this as evidence-informed direction — not a mandatory protocol. Your expert judgment and the user's individual constraints take precedence.",
+    "Where the evidence aligns with the user's goal and situation, apply it in the program structure — not just the explanation.",
+    "Where it conflicts with the user's context, constraints, or a better individualized choice, use your coaching judgment.\n",
   ];
 
   if (guidance.volumeGuidance) {
@@ -556,7 +556,7 @@ export function formatResearchGuidanceForPrompt(
   }
 
   lines.push(
-    "\nIf evidence is limited or conflicting, use conservative programming defaults.",
+    "\nIf evidence is limited, conflicting, or a better individualized choice exists, use your expert coaching judgment over the research defaults.",
   );
 
   return lines.join("\n");

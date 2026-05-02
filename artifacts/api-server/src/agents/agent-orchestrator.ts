@@ -461,6 +461,9 @@ export function validateArchitectureGate(
   }
 
   // ── Check 4: Trunk/core work present (all modes) ──────────────────────────
+  // NOTE: This is an informational check only. Unconventional but justified programming
+  // is allowed — a program without traditional trunk classification may still be structurally
+  // sound (e.g. carry-led programs, loaded-movement programs, or intentionally minimalist builds).
   const classifications = program.days.flatMap((d) =>
     d.exercises.map((e) => (e.classification ?? "").toLowerCase())
   );
@@ -468,24 +471,29 @@ export function validateArchitectureGate(
   if (!hasTrunk && focusMode !== "speed") {
     issues.push({
       type: "no_trunk_work",
-      description: "No trunk/carry work detected across any session — required for all strength and mobility programs",
-      severity: "warning",
+      description: "No trunk/carry classification detected — verify this is intentional (creative programming allowed)",
+      severity: "info",
     });
   }
 
   // ── Check 5: Unilateral work present for strength programs ────────────────
+  // NOTE: Informational only. A strength program may legitimately omit traditional
+  // unilateral classification if it uses asymmetrical loading, single-leg variations
+  // under a different classification label, or a justified programming style choice.
   if (focusMode === "strength") {
     const hasUnilateral = classifications.some((c) => c.includes("unilateral"));
     if (!hasUnilateral) {
       issues.push({
         type: "no_unilateral",
-        description: "No unilateral lower body work detected — required for all strength programs",
-        severity: "warning",
+        description: "No unilateral lower body classification detected — verify this is intentional (creative programming allowed)",
+        severity: "info",
       });
     }
   }
 
   // ── Check 6: Speed programs must not have strength-primary session names ──
+  // NOTE: Informational only. A speed program may legitimately include strength session
+  // naming if the session serves a dual purpose (e.g. strength-speed day in a concurrent block).
   if (focusMode === "speed") {
     const sessionNames = program.days.map((d) => (d.name ?? "").toLowerCase());
     const strengthBleed = sessionNames.some(
@@ -494,8 +502,8 @@ export function validateArchitectureGate(
     if (strengthBleed) {
       issues.push({
         type: "focus_bleed",
-        description: "Speed program contains session names with strength/hypertrophy language — focus contamination detected",
-        severity: "warning",
+        description: "Speed program has session names with strength/hypertrophy language — verify this reflects intent (concurrent programming allowed)",
+        severity: "info",
       });
     }
   }

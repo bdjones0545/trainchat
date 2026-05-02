@@ -30,6 +30,31 @@ import {
 } from "./exercise-intelligence";
 import { logger } from "./logger";
 
+// ─── Mutation Scope Classification ───────────────────────────────────────────
+//
+// Global mutations affect the entire program (all days, all sessions).
+// Local mutations affect a single session or a single exercise.
+//
+// Scope is determined by the ExecutionPlan scope field:
+//   scope.type === "program"  → global: apply across all days
+//   scope.type === "session"  → local: apply to one day
+//   scope.type === "exercise" → local: apply to one specific exercise
+//
+// Examples:
+//   "make this program harder"     → global  (scope.type = "program")
+//   "make Day 2 harder"            → local   (scope.type = "session")
+//   "swap the back squat"          → local   (scope.type = "exercise")
+//   "add more conditioning"        → global  (scope.type = "program")
+//
+// The add/remove/progression/regression handlers default to a single target day
+// (getTargetDay). When the scope is "program", use resolveDays to apply globally.
+//
+// Callers can inspect isMutationGlobal(plan) to branch logic.
+
+export function isMutationGlobal(plan: ExecutionPlan): boolean {
+  return plan.scope.type === "program";
+}
+
 // ─── User Context ─────────────────────────────────────────────────────────────
 //
 // Real user context passed into mutations so exercise selection reflects
@@ -276,8 +301,30 @@ async function handleAdd(
   userContext?: UserMutationContext
 ): Promise<{ updatedProgram: ProgramStructure; changeSummary: string }> {
   const categoryRaw = String(plan.mutation?.params?.category ?? "general");
-  const day = getTargetDay(program, plan.scope);
 
+  // Global scope: add the exercise to all sessions
+  if (isMutationGlobal(plan)) {
+    const days = resolveDays(program, plan.scope);
+    if (days.length === 0) throw new Error("[MutationEngine] No days resolved for global add");
+
+    for (const day of days) {
+      const exercise = pickAdditionExercise(categoryRaw, day.exercises.map((e) => e.name), userContext);
+      day.exercises.push(exercise);
+    }
+
+    logger.info(
+      { category: categoryRaw, daysAffected: days.map((d) => d.name) },
+      "[MutationEngine] Global add applied across all sessions"
+    );
+
+    return {
+      updatedProgram: program,
+      changeSummary: `Added ${categoryRaw} work across all ${days.length} sessions`,
+    };
+  }
+
+  // Local scope: add to a single day
+  const day = getTargetDay(program, plan.scope);
   if (!day) throw new Error("[MutationEngine] No target day resolved for add");
 
   const exercise = pickAdditionExercise(categoryRaw, day.exercises.map((e) => e.name), userContext);
