@@ -2860,7 +2860,7 @@ export default function Chat() {
               </div>
             ) : messages.length === 0 && !optimisticUserMsg && !stream.isActive ? (
               /* ─── Empty state — only shown when no messages AND no active submission ─── */
-              <div className="flex flex-col items-center justify-start px-4 pt-[max(10dvh,_2.5rem)] pb-8 text-center animate-in fade-in slide-in-from-bottom-2 duration-500">
+              <div className="flex flex-col items-center justify-start px-4 pt-2 md:pt-[max(8dvh,_2rem)] pb-8 text-center animate-in fade-in slide-in-from-bottom-2 duration-500">
                 {/* System core — TrainChat logo with living glow field */}
                 <div className="relative mb-5 flex items-center justify-center" style={{ width: 88, height: 88 }}>
                   {/* Outer radial glow halo */}
