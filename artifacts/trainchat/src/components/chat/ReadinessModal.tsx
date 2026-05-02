@@ -18,54 +18,12 @@ interface ReadinessScores {
 }
 
 const METRICS = [
-  {
-    key: "sleepScore" as const,
-    label: "Sleep",
-    icon: Moon,
-    lowLabel: "Terrible",
-    highLabel: "Excellent",
-    invertedColor: false,
-  },
-  {
-    key: "energyScore" as const,
-    label: "Energy",
-    icon: Zap,
-    lowLabel: "Depleted",
-    highLabel: "High",
-    invertedColor: false,
-  },
-  {
-    key: "motivationScore" as const,
-    label: "Motivation",
-    icon: Flame,
-    lowLabel: "None",
-    highLabel: "High",
-    invertedColor: false,
-  },
-  {
-    key: "sorenessScore" as const,
-    label: "Soreness",
-    icon: Activity,
-    lowLabel: "None",
-    highLabel: "Severe",
-    invertedColor: true,
-  },
-  {
-    key: "stressScore" as const,
-    label: "Stress",
-    icon: Brain,
-    lowLabel: "Low",
-    highLabel: "Very High",
-    invertedColor: true,
-  },
-  {
-    key: "painScore" as const,
-    label: "Pain",
-    icon: AlertTriangle,
-    lowLabel: "None",
-    highLabel: "Significant",
-    invertedColor: true,
-  },
+  { key: "sleepScore" as const, label: "Sleep", icon: Moon, lowLabel: "Terrible", highLabel: "Excellent", invertedColor: false },
+  { key: "energyScore" as const, label: "Energy", icon: Zap, lowLabel: "Depleted", highLabel: "High", invertedColor: false },
+  { key: "motivationScore" as const, label: "Motivation", icon: Flame, lowLabel: "None", highLabel: "High", invertedColor: false },
+  { key: "sorenessScore" as const, label: "Soreness", icon: Activity, lowLabel: "None", highLabel: "Severe", invertedColor: true },
+  { key: "stressScore" as const, label: "Stress", icon: Brain, lowLabel: "Low", highLabel: "Very High", invertedColor: true },
+  { key: "painScore" as const, label: "Pain", icon: AlertTriangle, lowLabel: "None", highLabel: "Significant", invertedColor: true },
 ] as const;
 
 function getScoreColor(score: number, inverted: boolean) {
@@ -75,23 +33,10 @@ function getScoreColor(score: number, inverted: boolean) {
   return "text-red-400";
 }
 
-function getScoreLabel(score: number, inverted: boolean) {
-  const level = inverted ? 6 - score : score;
-  if (level >= 5) return "5";
-  if (level >= 4) return "4";
-  if (level >= 3) return "3";
-  if (level >= 2) return "2";
-  return "1";
-}
-
 export default function ReadinessModal({ onClose, onSubmit }: ReadinessModalProps) {
   const [scores, setScores] = useState<ReadinessScores>({
-    sleepScore: 3,
-    energyScore: 3,
-    sorenessScore: 2,
-    stressScore: 2,
-    motivationScore: 3,
-    painScore: 1,
+    sleepScore: 3, energyScore: 3, sorenessScore: 2,
+    stressScore: 2, motivationScore: 3, painScore: 1,
   });
   const [notes, setNotes] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -108,14 +53,24 @@ export default function ReadinessModal({ onClose, onSubmit }: ReadinessModalProp
       { data: { ...scores, notes: notes.trim() || undefined } },
       {
         onSuccess: (data: any) => {
-          setAdaptation(data?.adaptation ?? null);
+          const raw = data?.adaptation ?? null;
+          if (raw) {
+            const enriched: AdaptationResult = {
+              ...raw,
+              readinessEntryId: data?.id,
+              scores,
+            };
+            setAdaptation(enriched);
+          } else {
+            setAdaptation(null);
+          }
           setSubmitted(true);
         },
       }
     );
   }
 
-  function handleDismiss() {
+  function handleDismiss(_applied?: boolean) {
     onSubmit?.(adaptation);
     onClose();
   }
@@ -153,12 +108,8 @@ export default function ReadinessModal({ onClose, onSubmit }: ReadinessModalProp
                     <Icon className={`w-3.5 h-3.5 ${colorClass}`} />
                     <span className="text-sm font-medium text-foreground">{label}</span>
                   </div>
-                  <span className={`text-sm font-bold tabular-nums ${colorClass}`}>
-                    {score}/5
-                  </span>
+                  <span className={`text-sm font-bold tabular-nums ${colorClass}`}>{score}/5</span>
                 </div>
-
-                {/* Dot selector */}
                 <div className="flex gap-2">
                   {[1, 2, 3, 4, 5].map((val) => (
                     <button
@@ -184,9 +135,7 @@ export default function ReadinessModal({ onClose, onSubmit }: ReadinessModalProp
 
           {/* Notes */}
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-              Notes (optional)
-            </label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Notes (optional)</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -207,7 +156,7 @@ export default function ReadinessModal({ onClose, onSubmit }: ReadinessModalProp
                 <div className="w-4 h-4 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center">
                   <div className="w-2 h-2 rounded-full bg-green-400" />
                 </div>
-                <span className="text-sm font-medium text-green-400">Logged — your agent has it.</span>
+                <span className="text-sm font-medium text-green-400">Check-in saved — your coach has it.</span>
               </div>
             )
           ) : (

@@ -1,8 +1,7 @@
 /**
- * ReadinessCheckIn — Phase 5
- *
- * Daily check-in bottom sheet. 6 emoji-scored dimensions (1-5).
- * Fast to complete (<10 seconds), mobile-first, non-intrusive.
+ * ReadinessCheckIn — Daily check-in bottom sheet.
+ * 6 emoji-scored dimensions (1-5). Mobile-first, non-intrusive.
+ * Check-in saves and evaluates readiness — plan changes only happen on user confirmation.
  */
 
 import { useState } from "react";
@@ -21,9 +20,7 @@ interface ScoreDimension {
 
 const DIMENSIONS: ScoreDimension[] = [
   {
-    key: "sleepScore",
-    label: "Sleep",
-    description: "How did you sleep?",
+    key: "sleepScore", label: "Sleep", description: "How did you sleep?",
     options: [
       { value: 1, emoji: "😫", label: "Very poor" },
       { value: 2, emoji: "😔", label: "Poor" },
@@ -33,9 +30,7 @@ const DIMENSIONS: ScoreDimension[] = [
     ],
   },
   {
-    key: "energyScore",
-    label: "Energy",
-    description: "Energy level right now?",
+    key: "energyScore", label: "Energy", description: "Energy level right now?",
     options: [
       { value: 1, emoji: "🪫", label: "Empty" },
       { value: 2, emoji: "😩", label: "Low" },
@@ -45,9 +40,7 @@ const DIMENSIONS: ScoreDimension[] = [
     ],
   },
   {
-    key: "sorenessScore",
-    label: "Soreness",
-    description: "Muscle soreness today?",
+    key: "sorenessScore", label: "Soreness", description: "Muscle soreness today?",
     options: [
       { value: 1, emoji: "✅", label: "None" },
       { value: 2, emoji: "😌", label: "Mild" },
@@ -57,9 +50,7 @@ const DIMENSIONS: ScoreDimension[] = [
     ],
   },
   {
-    key: "stressScore",
-    label: "Stress",
-    description: "Life stress / mental load?",
+    key: "stressScore", label: "Stress", description: "Life stress / mental load?",
     options: [
       { value: 1, emoji: "🧘", label: "Very low" },
       { value: 2, emoji: "😊", label: "Low" },
@@ -69,9 +60,7 @@ const DIMENSIONS: ScoreDimension[] = [
     ],
   },
   {
-    key: "motivationScore",
-    label: "Motivation",
-    description: "Drive to train today?",
+    key: "motivationScore", label: "Motivation", description: "Drive to train today?",
     options: [
       { value: 1, emoji: "😴", label: "None" },
       { value: 2, emoji: "😔", label: "Low" },
@@ -81,9 +70,7 @@ const DIMENSIONS: ScoreDimension[] = [
     ],
   },
   {
-    key: "painScore",
-    label: "Pain / Discomfort",
-    description: "Any pain or injury today?",
+    key: "painScore", label: "Pain / Discomfort", description: "Any pain or injury today?",
     options: [
       { value: 1, emoji: "✅", label: "None" },
       { value: 2, emoji: "😌", label: "Mild" },
@@ -94,16 +81,12 @@ const DIMENSIONS: ScoreDimension[] = [
   },
 ];
 
-// ─── Types ─────────────────────────────────────────────────────────────────
-
 type Scores = Record<string, number>;
 
 interface ReadinessCheckInProps {
   onClose: () => void;
   onSubmitted: (adaptation: AdaptationResult | null) => void;
 }
-
-// ─── Component ─────────────────────────────────────────────────────────────
 
 export default function ReadinessCheckIn({ onClose, onSubmitted }: ReadinessCheckInProps) {
   const [scores, setScores] = useState<Scores>({});
@@ -119,26 +102,36 @@ export default function ReadinessCheckIn({ onClose, onSubmitted }: ReadinessChec
     if (!allAnswered || submitting) return;
     setSubmitting(true);
     try {
+      const scorePayload = {
+        sleepScore: scores.sleepScore,
+        energyScore: scores.energyScore,
+        sorenessScore: scores.sorenessScore,
+        stressScore: scores.stressScore,
+        motivationScore: scores.motivationScore,
+        painScore: scores.painScore,
+      };
       const data = await customFetch<any>("/api/readiness", {
         method: "POST",
-        body: JSON.stringify({
-          sleepScore: scores.sleepScore,
-          energyScore: scores.energyScore,
-          sorenessScore: scores.sorenessScore,
-          stressScore: scores.stressScore,
-          motivationScore: scores.motivationScore,
-          painScore: scores.painScore,
-          notes: notes.trim() || null,
-        }),
+        body: JSON.stringify({ ...scorePayload, notes: notes.trim() || null }),
       });
-      setAdaptation(data?.adaptation ?? null);
+      const raw = data?.adaptation ?? null;
+      if (raw) {
+        const enriched: AdaptationResult = {
+          ...raw,
+          readinessEntryId: data?.id,
+          scores: scorePayload,
+        };
+        setAdaptation(enriched);
+      } else {
+        setAdaptation(null);
+      }
       setSubmitted(true);
     } catch {
       setSubmitting(false);
     }
   }
 
-  function handleDismiss() {
+  function handleDismiss(_applied?: boolean) {
     onSubmitted(adaptation);
     onClose();
   }
@@ -173,9 +166,9 @@ export default function ReadinessCheckIn({ onClose, onSubmitted }: ReadinessChec
                 <div className="w-14 h-14 rounded-full bg-green-500/15 flex items-center justify-center">
                   <CheckCircle2 className="w-7 h-7 text-green-500" />
                 </div>
-                <p className="text-sm font-bold text-foreground">Check-in logged</p>
+                <p className="text-sm font-bold text-foreground">Check-in saved</p>
                 <p className="text-xs text-muted-foreground text-center">Your coach is now aware of how you're feeling today.</p>
-                <button onClick={handleDismiss} className="mt-2 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">
+                <button onClick={() => handleDismiss()} className="mt-2 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">
                   Close
                 </button>
               </div>
