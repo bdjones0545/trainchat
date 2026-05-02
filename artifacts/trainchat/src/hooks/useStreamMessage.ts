@@ -471,7 +471,7 @@ export function useStreamMessage(): UseStreamMessageResult {
                       : s.stageHistory;
 
                   // [AssistantUiStateAudit] — confirms UI state matches the real action
-                  if (resolvedActionType && resolvedActionType !== s.actionType) {
+                  if (import.meta.env.DEV && resolvedActionType && resolvedActionType !== s.actionType) {
                     const isBuilding = ["PROGRAM_GENERATION", "STRUCTURAL_REBUILD", "REBUILD_PROGRAM"].includes(resolvedActionType);
                     const isEditing  = ["DIRECT_MUTATION", "SESSION_ADJUSTMENT", "APPLY_MUTATION"].includes(resolvedActionType);
                     const isQA       = ["GUIDANCE", "ASK_CLARIFICATION", "NO_OP"].includes(resolvedActionType);

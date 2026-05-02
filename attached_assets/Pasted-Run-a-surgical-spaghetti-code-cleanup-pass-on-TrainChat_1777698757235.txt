@@ -1,0 +1,241 @@
+Run a surgical spaghetti-code cleanup pass on TrainChat.
+
+Goal:
+Improve maintainability, readability, and reliability without changing product behavior.
+
+Do NOT redesign the app.
+Do NOT change agent behavior.
+Do NOT change user-facing UX unless fixing obvious inconsistencies.
+Do NOT remove fallbacks.
+Do NOT introduce new architecture beyond extracting messy logic into clearer modules.
+
+-------------------------------------
+PHASE 1 — CODE SMELL AUDIT
+-------------------------------------
+
+Audit the codebase for:
+- oversized files
+- repeated logic
+- tangled state
+- duplicated button/action payload logic
+- mixed UI + business logic
+- mutation/result handling inconsistencies
+- repeated prompt strings
+- scattered constants
+- unclear naming
+- dead code
+- debug logs not gated by DEV
+- type holes / implicit any
+- fragile conditionals
+- duplicated error handling
+
+Prioritize:
+- chat.tsx
+- LiveProgramPanel.tsx
+- useStreamMessage.ts
+- edit/mutation pipeline files
+- agent-orchestrator.ts
+- ai.ts
+- research guidance files
+- performance architect files
+
+-------------------------------------
+PHASE 2 — NO-BEHAVIOR-CHANGE REFACTOR
+-------------------------------------
+
+Refactor only where safe.
+
+Allowed:
+- extract helper functions
+- extract constants
+- extract types
+- rename unclear variables
+- consolidate duplicate button payload builders
+- consolidate receipt/result handling
+- consolidate error messages
+- move prompt sections into named builders
+- create utility modules for repeated logic
+- add comments around complex agent boundaries
+
+Not allowed:
+- changing generation logic
+- changing routing behavior
+- changing prompt meaning
+- changing validation thresholds
+- changing UI layout
+- deleting fallbacks
+
+-------------------------------------
+PHASE 3 — CLEAN BUTTON ACTION PAYLOADS
+-------------------------------------
+
+Create a single utility:
+
+src/lib/button-action-payloads.ts
+
+or equivalent.
+
+Centralize:
+- starter prompt payload creation
+- try-saying payload creation
+- program panel exercise action payload creation
+- retry payload creation
+- system CTA payload creation
+
+Goal:
+No more hand-built payload objects scattered across chat.tsx and LiveProgramPanel.tsx.
+
+-------------------------------------
+PHASE 4 — CLEAN MUTATION RECEIPTS
+-------------------------------------
+
+Create a single mutation receipt/result utility.
+
+Centralize:
+- success receipt creation
+- failure receipt creation
+- fallback receipt creation
+- programChanged reconciliation
+- user-facing success/failure copy
+
+Goal:
+No more mismatched “program changed but chat says failed” behavior.
+
+-------------------------------------
+PHASE 5 — CLEAN AGENT PROMPT BUILDERS
+-------------------------------------
+
+If ai.ts is oversized, extract prompt sections into named builders:
+
+server/agents/prompts/
+- coach-persona.ts
+- creative-freedom.ts
+- expert-judgment.ts
+- research-guidance.ts
+- validation-rules.ts
+- output-schema.ts
+- heartbeat.ts
+
+Important:
+Prompt meaning must remain identical unless fixing obvious duplication.
+
+-------------------------------------
+PHASE 6 — CLEAN AGENT TYPES
+-------------------------------------
+
+Create shared agent type files:
+
+server/agents/types.ts
+
+Include:
+- AgentRole
+- ButtonActionPayload if backend has its own type
+- CoachToArchitectHandoff
+- ArchitectToCoachHandoff
+- ResearchProgrammingGuidance
+- CEOHeartbeatResult
+- ProgramReviewResult
+- MutationActionResult
+
+Avoid duplicate interfaces across files.
+
+-------------------------------------
+PHASE 7 — CLEAN DEV LOGGING
+-------------------------------------
+
+Create:
+
+src/lib/dev-log.ts
+server/lib/dev-log.ts
+
+Helpers:
+- devLog(label, data)
+- devWarn(label, data)
+- devError(label, data)
+
+Ensure:
+- all debug logs are DEV-only
+- no production console spam
+- labels are consistent
+
+-------------------------------------
+PHASE 8 — DEAD CODE + DUPLICATION PASS
+-------------------------------------
+
+Remove only clearly unused:
+- old debug helpers
+- unused imports
+- unreachable branches
+- duplicate constants
+- stale comments that contradict current architecture
+
+Do NOT remove anything uncertain.
+
+If uncertain, add TODO with explanation instead of deleting.
+
+-------------------------------------
+PHASE 9 — TYPE SAFETY PASS
+-------------------------------------
+
+Improve types where safe:
+- remove implicit any
+- replace any with narrowed interfaces where practical
+- add return types to complex functions
+- avoid unsafe casts where easy
+
+Do NOT attempt massive type rewrite.
+
+Focus only on files touched.
+
+-------------------------------------
+PHASE 10 — QA SAFETY CHECKS
+-------------------------------------
+
+After cleanup, verify:
+
+1. App loads
+2. Chat input works
+3. Starter prompt builds program
+4. Program appears in right panel
+5. Right panel Swap works
+6. Right panel Make Harder works
+7. Try-saying chip works
+8. Save My System still works
+9. Retry still works
+10. Admin research page still loads
+11. No internal agent names leak to normal users
+
+-------------------------------------
+PHASE 11 — TYPECHECK / BUILD
+-------------------------------------
+
+Run:
+- typecheck
+- build if available
+
+Report:
+- zero new errors
+- any pre-existing errors unchanged
+
+-------------------------------------
+OUTPUT
+-------------------------------------
+
+Return:
+
+- Code smells found
+- Files changed
+- Helpers extracted
+- Types consolidated
+- Dead code removed
+- Behavior preserved checklist
+- Typecheck/build result
+- Any risky areas left untouched
+
+-------------------------------------
+IMPORTANT
+-------------------------------------
+
+This is a cleanup pass, not a feature pass.
+
+The product should behave exactly the same after this refactor, only with cleaner code.

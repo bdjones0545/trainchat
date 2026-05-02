@@ -41,6 +41,13 @@ import AnonymousUpgradeModal from "@/components/AnonymousUpgradeModal";
 import CalibrationModal from "@/components/chat/CalibrationModal";
 import CoachMemoryPanel from "@/components/chat/CoachMemoryPanel";
 import { useStreamMessage, type CompleteEvent, type ButtonActionPayload } from "@/hooks/useStreamMessage";
+import {
+  makeCtaRefinePayload,
+  makeStarterChipPayload,
+  makeChatButtonPayload,
+  makeTrySayingPayload,
+  makeRetryPayload,
+} from "@/lib/button-action-payloads";
 import type { PanelActionReceipt } from "@/components/chat/AgentTurnReport";
 import { clearAuthState, markOnboardingComplete, logRouteDecision, readDeviceId, readOnboardingComplete } from "@/lib/routing";
 import { resolveProgramState } from "@/lib/resolveProgramState";
@@ -2795,13 +2802,11 @@ export default function Chat() {
                     onIntensify={() => {
                       setConvShowReturnHook(false);
                       handleSend("Make this more intense", {
-                        buttonPayload: {
-                          source: "system_cta",
-                          actionType: "refine_program",
-                          displayText: "Make it more intense",
-                          submittedText: "Make this more intense",
-                          programId: activeSystem?.id ?? null,
-                        } satisfies ButtonActionPayload,
+                        buttonPayload: makeCtaRefinePayload(
+                          "Make it more intense",
+                          "Make this more intense",
+                          activeSystem?.id ?? null,
+                        ),
                       });
                     }}
                     onDismiss={() => setConvShowReturnHook(false)}
@@ -2896,12 +2901,7 @@ export default function Chat() {
                       onClick={() => {
                         triggerCorePulse();
                         handleSend(chip.prompt, {
-                          buttonPayload: {
-                            source: "starter_prompt",
-                            actionType: "build_program",
-                            displayText: chip.label,
-                            submittedText: chip.prompt,
-                          } satisfies ButtonActionPayload,
+                          buttonPayload: makeStarterChipPayload(chip.label, chip.prompt),
                         });
                       }}
                       className={`px-3.5 py-2 text-xs font-medium rounded-full active:scale-95 transition-all duration-150 ${
@@ -3007,17 +3007,7 @@ export default function Chat() {
                     onAction={(text) => {
                       setConvShowFirstValue(false);
                       setTimeout(() => handleSend(text, {
-                        buttonPayload: {
-                          source: "chat_button",
-                          actionType: text.toLowerCase().includes("harder") || text.toLowerCase().includes("intense")
-                            ? "make_harder"
-                            : text.toLowerCase().includes("easier") || text.toLowerCase().includes("simple")
-                            ? "make_easier"
-                            : "refine_program",
-                          displayText: text,
-                          submittedText: text,
-                          programId: activeSystem?.id ?? null,
-                        } satisfies ButtonActionPayload,
+                        buttonPayload: makeChatButtonPayload(text, activeSystem?.id ?? null),
                       }), 100);
                     }}
                     onDismiss={() => setConvShowFirstValue(false)}
@@ -3162,12 +3152,7 @@ export default function Chat() {
                       if (lastInput) {
                         handleSend(lastInput, {
                           ...lastCtx,
-                          ...(lastPayload ? {
-                            buttonPayload: {
-                              ...lastPayload,
-                              source: "retry" as const,
-                            },
-                          } : {}),
+                          ...(lastPayload ? { buttonPayload: makeRetryPayload(lastPayload) } : {}),
                         });
                       }
                     }}
@@ -3279,13 +3264,7 @@ export default function Chat() {
                       <button
                         key={prompt}
                         onClick={() => handleSend(prompt, {
-                          buttonPayload: {
-                            source: "try_saying",
-                            actionType: "refine_program",
-                            displayText: prompt,
-                            submittedText: prompt,
-                            programId: activeSystem?.id ?? null,
-                          } satisfies ButtonActionPayload,
+                          buttonPayload: makeTrySayingPayload(prompt, activeSystem?.id ?? null),
                         })}
                         className="text-[10px] text-muted-foreground/60 hover:text-primary border border-border/40 hover:border-primary/30 rounded-full px-2 py-0.5 transition-all duration-150 active:scale-95"
                       >
