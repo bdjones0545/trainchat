@@ -1,0 +1,111 @@
+Add an Expert Judgment Layer to TrainChat’s programming agents.
+
+Goal:
+Give the Coach Agent and Performance Architect more freedom to make expert programming decisions while preserving accountability, safety, and user constraints.
+
+Add this principle to the Coach Agent and Performance Architect prompts:
+
+“You may deviate from default templates when expert judgment suggests a better solution. Creative programming is allowed when it improves goal alignment, fatigue management, sport transfer, session flow, or user adherence. However, every deviation must be internally justified and must not violate safety, equipment, schedule, or pain constraints.”
+
+Add internal field:
+
+expertJudgmentNotes: string[]
+
+Use this to explain internally:
+- why a nonstandard split was chosen
+- why an exercise was moved
+- why volume was reduced or increased
+- why a progression style was selected
+- why a user request was partially modified
+- why a safer substitute was chosen
+- why recovery was prioritized over more work
+
+Examples:
+- “Used a high-low weekly structure because the user requested speed and strength, and this better preserves sprint quality.”
+- “Reduced lower-body accessory volume because knee pain and speed work increase total tissue stress.”
+- “Used wave progression instead of linear progression because the goal combines strength and power.”
+- “Preserved athletic intent by adding medicine-ball throws instead of extra conditioning.”
+
+Add controlled freedom areas:
+
+1. Split freedom
+Allow:
+- full body
+- upper/lower
+- high/low
+- push/pull/lower
+- athletic total body
+- strength/power hybrid
+- minimalist split
+- joint-friendly split
+
+2. Progression freedom
+Allow:
+- linear progression
+- double progression
+- wave loading
+- block progression
+- undulating progression
+- accumulation/intensification/deload
+- autoregulated RPE progression
+
+3. Exercise placement freedom
+Allow nonstandard ordering if justified, such as:
+- mobility before power
+- power before strength
+- strength before hypertrophy
+- accessories earlier if needed for activation or pain tolerance
+- conditioning separated or reduced to preserve output
+
+4. Constraint negotiation
+If the user asks for something suboptimal, the agent may preserve the spirit while improving the plan.
+
+Example:
+User asks for “7 hard days.”
+Agent should create a safer high-frequency structure with hard/easy distribution.
+
+5. Creative substitutions
+Allow substitutions based on:
+- movement intent
+- joint tolerance
+- sport transfer
+- equipment reality
+- fatigue cost
+- skill level
+
+6. Adaptive block design
+Allow the architect to create blocks such as:
+- Foundation
+- Intensification
+- Power conversion
+- Rebuild/deload
+- Return-to-training
+- Athletic transfer
+
+Important rules:
+- Safety remains hard law.
+- User constraints remain hard law.
+- Research guidance is directional, not rigid.
+- Templates are starting points, not requirements.
+- Unconventional programming is allowed if justified.
+- Do not expose internal expertJudgmentNotes to normal users unless summarized naturally.
+
+Update validation:
+Do not flag unconventional structure as bad if expertJudgmentNotes justify it and constraints are respected.
+
+Update “Why this plan works”:
+Include a simple user-facing version of the best expert judgment:
+“I used this structure because it keeps your highest-skill work fresh, gives strength work enough recovery, and avoids unnecessary junk volume.”
+
+QA:
+Test:
+“Build me a creative 4-day football strength and speed plan that doesn’t feel like a generic template.”
+
+PASS:
+- Structure is not generic
+- Speed/strength sequencing makes sense
+- Progression is clear
+- Expert judgment notes exist internally
+- User-facing explanation is simple
+
+Run typecheck and report files changed.

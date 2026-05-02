@@ -144,6 +144,15 @@ export interface WeeklyArchitecture {
    * should not surface them unprompted.
    */
   architectureDecisions?: string[];
+  /**
+   * Expert judgment notes from the architecture phase.
+   * Parallel to the Coach Agent's expertJudgmentNotes on ProgramStructure —
+   * these capture Architect-level reasoning about split selection, block design,
+   * volume allocation, and progression model choices made before the AI prompt.
+   * Injected into the brief so the Coach Agent can incorporate them into its
+   * own expertJudgmentNotes output.
+   */
+  expertJudgmentNotes?: string[];
 }
 
 // ─── Density Fill Engine ─────────────────────────────────────────────────────

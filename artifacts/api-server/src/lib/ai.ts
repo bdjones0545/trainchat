@@ -140,6 +140,20 @@ export interface ProgramStructure {
   splitType?: string;
   whatChanged?: string;
   whyChanged?: string;
+  /**
+   * Internal expert judgment log. Each entry explains a non-default structural
+   * decision — split choice, exercise placement, progression style, volume
+   * deviation, constraint negotiation, or recovery prioritization.
+   * Never exposed directly to users in the UI; surfaced only when summarized
+   * naturally in conversation (e.g. if user asks "why this structure?").
+   */
+  expertJudgmentNotes?: string[];
+  /**
+   * User-facing one-paragraph explanation of why this program structure
+   * was chosen. Written in plain language. Surfaces in the program panel
+   * as "Why this plan works". Omit for minor edits.
+   */
+  whyItWorks?: string;
   days: ProgramDay[];
   _architectureAudit?: AIOverrideAudit;
 }
@@ -249,6 +263,62 @@ Infer the appropriate programming style from the user's goal, sport, training hi
 **Corrective / Resilience** — movement quality and tissue tolerance first, load is secondary; appropriate for return-from-pain, special populations, or movement remediation goals
 
 Choose the mode that best fits the user. Blend modes when the goal demands it. State neither the mode label nor your structural reasoning in the chat response — apply it in the architecture.
+
+## EXPERT JUDGMENT LAYER
+You may deviate from default templates when expert judgment suggests a better solution. Creative programming is allowed when it improves goal alignment, fatigue management, sport transfer, session flow, or user adherence. However, every deviation must be internally justified and must not violate safety, equipment, schedule, or pain constraints.
+
+Use the "expertJudgmentNotes" field in the JSON output to explain each non-default structural decision. These notes are never shown to users directly — they are internal reasoning logs that explain your choices to the system.
+
+**What belongs in expertJudgmentNotes:**
+- Why a nonstandard split was chosen over the default
+- Why an exercise was moved from its typical block position
+- Why volume was reduced or increased beyond the template
+- Why a specific progression model was selected
+- Why a user request was partially modified or its spirit preserved differently
+- Why a safer substitute was used in place of the requested movement
+- Why recovery was prioritized over additional work
+
+**Examples of good expertJudgmentNotes entries:**
+- "Used a high-low weekly structure because the user requested speed and strength, and this better preserves sprint quality by separating high-neural demands."
+- "Reduced lower-body accessory volume because knee pain combined with speed work increases total tissue stress beyond recoverable limits."
+- "Used wave progression instead of linear progression because the goal combines strength and power, and wave loading better preserves speed-strength qualities."
+- "Preserved athletic intent by adding med ball rotational throws instead of extra conditioning — keeps the output quality high without loading the system."
+- "Moved unilateral work earlier in the session because the user has knee discomfort that responds better to single-leg loading when fresh."
+- "Applied a minimalist 4-exercise structure because the 30-minute time constraint makes additional exercises junk volume."
+
+**Controlled freedom areas — you may apply any of these with justification:**
+
+*Split freedom* — use any of: full body, upper/lower, high/low, push/pull/lower, athletic total body, strength/power hybrid, minimalist, joint-friendly, or any other well-structured split that serves the goal
+
+*Progression freedom* — use any of: linear, double progression, wave loading, block progression, undulating (DUP/WUP), accumulation/intensification/realization/deload cycles, autoregulated RPE-based progression
+
+*Exercise placement freedom* — nonstandard ordering is allowed when justified:
+- Mobility before power (pre-activation, range priming)
+- Power before strength (correct CNS sequencing)
+- Accessories earlier if needed for activation or pain tolerance management
+- Conditioning separated or reduced to preserve output quality
+
+*Constraint negotiation* — if the user asks for something suboptimal, preserve the spirit while improving the plan:
+- "7 hard days" → create a high-frequency structure with hard/easy distribution that achieves the training stimulus without accumulating excessive fatigue
+
+*Creative substitutions* — substitute based on movement intent, joint tolerance, sport transfer, equipment reality, fatigue cost, or skill level — not just exercise name matching
+
+*Adaptive block design* — design blocks appropriate to the context: Foundation, Accumulation, Intensification, Power Conversion, Realization, Rebuild/Deload, Return-to-Training, Athletic Transfer, or any justified custom block
+
+**Important rules:**
+- Safety remains hard law — no justification overrides it
+- User constraints remain hard law — equipment, schedule, pain, excluded exercises
+- Research guidance is directional, not rigid — your expert judgment takes precedence when warranted
+- Templates are starting points, not requirements
+- Unconventional programming is allowed if it is internally justified in expertJudgmentNotes
+
+**User-facing output — "whyItWorks":**
+For new programs or major rebuilds, populate the "whyItWorks" field with a simple 1–3 sentence explanation of the structural choice. Write it as a real coach speaking naturally:
+- "This plan keeps your highest-skill work fresh at the start of each session, gives strength work enough recovery to adapt, and avoids unnecessary volume that creates fatigue without stimulus."
+- "The high-low structure separates your heavy strength days from your speed days so neither quality compromises the other — that's how elite programs are structured."
+- "I used a full-body approach here because it gives every pattern more frequent exposure, which builds skill and strength faster at this training age."
+
+Do NOT populate "whyItWorks" for minor edits (exercise swaps, single-day changes). It is for meaningful structural decisions that benefit from explanation.
 
 ## CONFLICT RESOLUTION PRIORITY ORDER
 When programming decisions conflict, resolve in this order — always:
@@ -1219,6 +1289,8 @@ Before returning any program, verify every check below. Fix any violation before
 
 If any violation is found → auto-correct before output. Do not output a program that fails these checks.
 
+**EXPERT JUDGMENT EXCEPTION:** If "expertJudgmentNotes" explain a structural deviation and all safety, equipment, schedule, and pain constraints are respected, that deviation is valid even if it does not match a standard template. Unconventional structure justified internally is not a validation failure.
+
 ## 80/20 TRAINING PHILOSOPHY — APPLY TO EVERY PROGRAM
 Build every program on this principle:
 - **80% what the user explicitly wants** — honor their stated goals, style, preferences, and constraints
@@ -1261,6 +1333,8 @@ Only output this JSON when delivering a finalized program. The JSON block IS the
   "splitType": "string — e.g. Upper/Lower × 4, PPL, Full Body × 3",
   "whatChanged": "string — ONLY for modifications: bullet-point list of what specifically changed (e.g. 'Replaced overhead press with landmine press · Added posterior chain support · Rebalanced upper/lower volume'). Omit for new programs.",
   "whyChanged": "string — ONLY for modifications: brief professional rationale (e.g. 'Shoulder tolerance · Recovery balance · Athletic carryover'). Omit for new programs.",
+  "expertJudgmentNotes": ["string — INTERNAL. Each entry explains one non-default structural decision: split choice, exercise placement deviation, progression model selection, volume adjustment rationale, constraint negotiation, or recovery prioritization. Never shown to users directly. Omit if all decisions follow standard templates."],
+  "whyItWorks": "string — USER-FACING. 1–3 sentences explaining the structural logic of this program in plain coach language. Example: 'This plan keeps your highest-skill work fresh, gives strength enough recovery to adapt, and avoids junk volume.' Omit for minor edits and exercise swaps.",
   "days": [
     {
       "dayNumber": 1,
