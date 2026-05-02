@@ -51,6 +51,7 @@ export interface HarderEasierContext {
   notes?: string;
   userId?: number;
   focusMode?: string;
+  researchGuidance?: string;
 }
 
 export interface HarderEasierResolution {
@@ -144,6 +145,7 @@ function buildFallbackSystemPrompt(ctx: HarderEasierContext): string {
   const sessionNote = ctx.sessionLabel ? `SESSION: ${ctx.sessionLabel}` : "";
   const patternNote = ctx.movementPattern ? `MOVEMENT PATTERN: ${ctx.movementPattern}` : "";
   const categoryNote = ctx.category ? `EXERCISE CATEGORY: ${ctx.category}` : "";
+  const researchNote = ctx.researchGuidance ? `\n${ctx.researchGuidance}` : "";
 
   return `You are a NSCA-certified strength and conditioning coach resolving an exercise progression/regression request.
 
@@ -157,7 +159,7 @@ CONTEXT:
   ${sportNote}
   ${equipNote}
   ${injuryNote}
-
+${researchNote}
 YOUR TASK:
 Resolve the ${ctx.direction} request for "${ctx.exerciseName}" by choosing EXACTLY ONE of:
 

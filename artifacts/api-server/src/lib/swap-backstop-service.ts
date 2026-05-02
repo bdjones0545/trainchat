@@ -15,6 +15,7 @@ interface SwapBackstopContext {
   system: any;
   equipmentLevel: string;
   injuryFlags: string[];
+  researchGuidance?: string;
 }
 
 interface GeneratedExerciseDefinition {
@@ -176,6 +177,7 @@ async function callOpenAIForSwap(ctx: SwapBackstopContext, sourcePattern: string
     : (process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? "https://api.openai.com/v1");
   const allowed = EQUIPMENT_LEVEL_MAP[ctx.equipmentLevel] ?? EQUIPMENT_LEVEL_MAP.full_gym;
   const allowedPatterns = approvedPatterns(sourcePattern);
+  const researchNote = ctx.researchGuidance ? `\n${ctx.researchGuidance}\n` : "";
   const prompt = `You are a strength and conditioning exercise library safety resolver.
 
 Return one real exercise definition that can replace the current exercise when the local library has no candidates.
@@ -189,7 +191,7 @@ Allowed equipment: ${allowed.join(", ")}
 Injury flags to avoid exactly: ${ctx.injuryFlags.join(", ") || "none"}
 Session category: ${sourceMeta?.exercise?.category ?? "unknown"}
 Session label: ${sourceMeta?.session?.label ?? "unknown"}
-Program goal: ${ctx.system.overarchingGoal ?? "general training"}
+Program goal: ${ctx.system.overarchingGoal ?? "general training"}${researchNote}
 
 Rules:
 - Use library-first thinking: only invent this because deterministic candidates are empty.

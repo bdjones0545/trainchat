@@ -17,6 +17,8 @@ import { auditLanguageInterpretation } from "./language-audit";
 import { buildSwapContext, getProgressions, findExerciseByName, getSwapCandidates } from "./exercise-service";
 import { resolveSafeSwapBackstop } from "./swap-backstop-service";
 import { resolveHarderEasierFallback } from "./harder-easier-fallback";
+import { getRelevantResearchContextWithChunks } from "../research/research-retriever";
+import { buildResearchProgrammingGuidance, formatResearchGuidanceCompact } from "../research/research-programming-guidance";
 import {
   detectsBeltSquatUnavailable,
   findBeltSquatsInSystem,
@@ -882,6 +884,36 @@ async function autoSelectOpenEndedSwap(opts: {
   const equipmentLevel = resolveEquipmentLevel(system);
   const injuryFlags = resolveInjuryFlags(system);
 
+  // Fetch research guidance for exercise selection (non-fatal)
+  let _swapResearchGuidance: string | undefined;
+  try {
+    const _swapResearch = await getRelevantResearchContextWithChunks({
+      goal: system.overarchingGoal ?? system.goal ?? system.programGoal,
+      sport: system.sport,
+      injuries: system.specialConsiderations ?? (Array.isArray(injuryFlags) ? injuryFlags.join(", ") : undefined),
+      maxChunks: 3,
+    });
+    if (_swapResearch.chunks.length > 0) {
+      const _swapGuidance = buildResearchProgrammingGuidance({
+        goal: system.overarchingGoal ?? system.goal ?? system.programGoal,
+        sport: system.sport,
+        injuries: system.specialConsiderations,
+        retrievedChunks: _swapResearch.chunks,
+      });
+      _swapResearchGuidance = formatResearchGuidanceCompact(_swapGuidance, ["exercise_selection", "safety"]);
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[SwapResearchDebug]", JSON.stringify({
+          exerciseName,
+          chunksRetrieved: _swapResearch.chunks.length,
+          influencedDimensions: _swapGuidance.influencedDimensions,
+          confidenceLevel: _swapGuidance.confidenceLevel,
+        }));
+      }
+    }
+  } catch (_swapResearchErr) {
+    // Non-fatal — proceed without research guidance
+  }
+
   const debugInfo: Record<string, unknown> = {
     originalRequest: userRequest.slice(0, 120),
     swapMode: "OPEN_ENDED_SWAP",
@@ -902,6 +934,7 @@ async function autoSelectOpenEndedSwap(opts: {
         system,
         equipmentLevel,
         injuryFlags,
+        researchGuidance: _swapResearchGuidance,
       });
       if (backstopPlan) {
         debugInfo.candidateList = [];
@@ -936,6 +969,7 @@ async function autoSelectOpenEndedSwap(opts: {
       system,
       equipmentLevel,
       injuryFlags,
+      researchGuidance: _swapResearchGuidance,
     });
     if (backstopPlan) {
       debugInfo.result = "safe_backstop_selected";
@@ -3711,6 +3745,43 @@ export async function interpretEditRequest(
       }
     }
 
+    // Fetch research guidance to inform harder/easier resolution
+    let _harderEasierResearchGuidance: string | undefined;
+    try {
+      const _heResearch = await getRelevantResearchContextWithChunks({
+        goal: system.overarchingGoal ?? system.goal ?? system.programGoal,
+        sport: system.sport,
+        injuries: system.specialConsiderations ?? system.injuryFlags,
+        population: system.population ?? null,
+        maxChunks: 3,
+      });
+      if (_heResearch.chunks.length > 0) {
+        const _heGuidance = buildResearchProgrammingGuidance({
+          goal: system.overarchingGoal ?? system.goal ?? system.programGoal,
+          sport: system.sport,
+          injuries: system.specialConsiderations ?? system.injuryFlags,
+          retrievedChunks: _heResearch.chunks,
+        });
+        _harderEasierResearchGuidance = formatResearchGuidanceCompact(_heGuidance, [
+          "exercise_selection",
+          "safety",
+          "intensity",
+          "progression",
+        ]);
+        if (process.env.NODE_ENV !== "production") {
+          console.log("[HarderEasierResearchDebug]", JSON.stringify({
+            direction,
+            exerciseName,
+            chunksRetrieved: _heResearch.chunks.length,
+            influencedDimensions: _heGuidance.influencedDimensions,
+            confidenceLevel: _heGuidance.confidenceLevel,
+          }));
+        }
+      }
+    } catch (_researchErr) {
+      // Non-fatal — proceed without research guidance
+    }
+
     const fallbackCtx = {
       exerciseName,
       exerciseId: targetContext.id,
@@ -3727,6 +3798,7 @@ export async function interpretEditRequest(
       notes: system.specialConsiderations,
       userId: system.userId,
       focusMode: system.focusMode ?? system.metadata?.focusMode,
+      researchGuidance: _harderEasierResearchGuidance,
     };
 
     try {

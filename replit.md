@@ -83,6 +83,7 @@ The user interface features a dark theme with electric blue accents and the Inte
 - **Adaptive Micro-Reasoning Layer**: Generates short, coach-voiced explanations for key decisions during program generation or mutation.
 - **Constraint-Aware Exercise Selection Engine**: Moves constraint enforcement upstream into exercise selection, making invalid selections structurally impossible.
 - **Agent Pre-Launch Hardening**: Five production-safety layers: CAT 8 Messy-Language Scenarios, Latency & Reliability Tracking, Production-Safe Fallback Responses, Abuse / Loop Prevention, and Verification Mismatch Fallback.
+- **Research-Informed Programming Layer**: Translates retrieved research chunks into structured programming constraints injected directly into the system prompt and mutation prompts. `buildResearchProgrammingGuidance()` maps evidence tags to 7 concrete programming dimensions (volume, intensity, exercise selection, progression, recovery, safety, contraindications) with a `confidenceLevel`. Injected into program generation via `## RESEARCH-INFORMED PROGRAMMING GUIDANCE` section, and also into Harder/Easier and Swap mutation prompts via compact formatters. Dev-only debug logging: `[ResearchProgrammingDebug]`, `[HarderEasierResearchDebug]`, `[SwapResearchDebug]`. Pain/safety constraints always override research suggestions.
 
 ### System Design Choices
 - **Database Schema**: Comprehensive tables for user data, training programs, conversation history, analytics, and coaching knowledge.

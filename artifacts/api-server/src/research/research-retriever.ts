@@ -246,6 +246,121 @@ export async function getRelevantResearchContext(
   }
 }
 
+// ─── Rich Retrieval (text + structured chunks) ────────────────────────────────
+// Use this when callers need both the injected prompt text AND the raw chunks
+// (e.g. to pass into buildResearchProgrammingGuidance).
+
+export interface ResearchContextWithChunks {
+  text: string;
+  chunks: RetrievedResearchChunk[];
+}
+
+export async function getRelevantResearchContextWithChunks(
+  params: ResearchRetrievalParams,
+): Promise<ResearchContextWithChunks> {
+  const maxChunks = params.maxChunks ?? 5;
+
+  try {
+    const approvedDocs = await db
+      .select({ id: researchDocumentsTable.id, title: researchDocumentsTable.title, source: researchDocumentsTable.source, trustLevel: researchDocumentsTable.trustLevel })
+      .from(researchDocumentsTable)
+      .where(
+        and(
+          eq(researchDocumentsTable.status, "approved"),
+          eq(researchDocumentsTable.isActive, true),
+          sql`${researchDocumentsTable.trustLevel} != 'reject'`,
+        ),
+      );
+
+    if (approvedDocs.length === 0) return { text: "", chunks: [] };
+
+    const approvedIds = approvedDocs.map((d) => d.id);
+    const docMap = new Map(approvedDocs.map((d) => [d.id, d]));
+
+    const rawChunks = await db
+      .select()
+      .from(researchChunksTable)
+      .where(inArray(researchChunksTable.documentId, approvedIds));
+
+    if (rawChunks.length === 0) return { text: "", chunks: [] };
+
+    const contextTags = extractContextTags(params);
+    if (contextTags.length === 0) return { text: "", chunks: [] };
+
+    const hasInjuries = Boolean(params.injuries && params.injuries.trim().length > 0);
+
+    const scored = rawChunks
+      .map((chunk) => ({
+        chunk,
+        score: scoreChunk(chunk, contextTags, hasInjuries, params.population),
+      }))
+      .filter((s) => s.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, maxChunks);
+
+    if (scored.length === 0) return { text: "", chunks: [] };
+
+    // Build structured chunk objects
+    const retrievedChunks: RetrievedResearchChunk[] = scored.map(({ chunk }) => {
+      const doc = docMap.get(chunk.documentId);
+      return {
+        documentId: chunk.documentId,
+        documentTitle: doc?.title ?? "",
+        documentSource: doc?.source ?? "",
+        trustLevel: doc?.trustLevel ?? chunk.trustLevel ?? "medium",
+        chunkText: chunk.chunkText,
+        chunkType: chunk.chunkType,
+        topicTags: Array.isArray(chunk.topicTags) ? chunk.topicTags : [],
+        category: chunk.category ?? "",
+      };
+    });
+
+    // Build the text block (same logic as getRelevantResearchContext)
+    const lines: string[] = ["\n## RESEARCH CONTEXT (Evidence-Informed Coaching Notes)"];
+    lines.push(
+      "The following evidence-based notes are retrieved from trusted sources to inform this response.",
+      "Use these to improve programming quality. Do not cite unless the user asks for sources.",
+      "Do not overstate certainty. Research informs — it does not override safety or user constraints.\n",
+    );
+
+    const seenDocIds = new Set<number>();
+
+    for (const chunk of retrievedChunks) {
+      const chunkTags: string[] = chunk.topicTags;
+      const typeLabel =
+        chunk.chunkType === "coaching_implications" ? "Coaching Implications"
+        : chunk.chunkType === "programming_implications" ? "Programming Implications"
+        : chunk.chunkType === "safety" ? "Safety Note"
+        : chunk.chunkType === "limitations" ? "Evidence Limitations"
+        : "Research Note";
+
+      lines.push(`### [${typeLabel}] — ${chunk.documentSource} (${chunk.trustLevel} trust)`);
+      lines.push(chunk.chunkText);
+      if (chunkTags.length > 0) {
+        lines.push(`*Relevant for: ${chunkTags.slice(0, 4).join(", ")}*`);
+      }
+      lines.push("");
+      seenDocIds.add(chunk.documentId);
+    }
+
+    const citedDocs = [...seenDocIds]
+      .map((id) => docMap.get(id))
+      .filter(Boolean);
+    if (citedDocs.length > 0) {
+      lines.push(
+        "<!-- RESEARCH_SOURCES: " +
+          citedDocs.map((d) => `${d!.title} (${d!.source})`).join(" | ") +
+          " -->",
+      );
+    }
+
+    return { text: lines.join("\n"), chunks: retrievedChunks };
+  } catch (err) {
+    logger.warn({ err }, "[ResearchRetriever] Failed to retrieve research (rich) — skipping");
+    return { text: "", chunks: [] };
+  }
+}
+
 // ─── Citation Extraction ──────────────────────────────────────────────────────
 // Used when agent needs to surface sources to the user
 

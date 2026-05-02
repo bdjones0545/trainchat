@@ -34,7 +34,8 @@ import {
   type TransformRequest,
 } from "./split-transform";
 import { retrieveRelevantKnowledge } from "./knowledge-retrieval";
-import { getRelevantResearchContext } from "../research/research-retriever";
+import { getRelevantResearchContextWithChunks } from "../research/research-retriever";
+import { buildResearchProgrammingGuidance, formatResearchGuidanceForPrompt } from "../research/research-programming-guidance";
 import { buildArchitectureBrief, validateProgramArchitecture, extractSportFromRequest, getLastSlotSelection, enforceVariationMandateOnProgram, computeWeeklyArchitecture } from "./program-architecture-engine";
 import type { HardConstraints } from "./constraint-memory";
 import type { WeeklyArchitecture, SessionArchitecture, MovementPattern as ArchMovementPattern } from "./program-architecture-engine";
@@ -1391,7 +1392,8 @@ The conversion rule: show intelligence first → build tension → deliver parti
   });
 
   // Retrieve evidence-informed research context (async, gracefully skips on error)
-  const researchContext = await getRelevantResearchContext({
+  // Use rich retrieval to get both the text block AND structured chunks for guidance layer
+  const _researchRich = await getRelevantResearchContextWithChunks({
     userMessage,
     goal: profile.trainingGoal,
     sport: resolvedSport ?? profile.sportFocus,
@@ -1399,6 +1401,29 @@ The conversion rule: show intelligence first → build tension → deliver parti
     population: profile.sportFocus ?? null,
     maxChunks: 4,
   });
+  const researchContext = _researchRich.text;
+
+  // Build structured research-informed programming guidance from retrieved chunks
+  // This translates raw evidence notes into concrete programming constraints
+  const _researchGuidance = buildResearchProgrammingGuidance({
+    goal: profile.trainingGoal,
+    sport: resolvedSport ?? profile.sportFocus,
+    population: profile.sportFocus ?? null,
+    injuries: profile.injuries,
+    trainingPhase: null,
+    retrievedChunks: _researchRich.chunks,
+  });
+  const researchProgrammingGuidance = formatResearchGuidanceForPrompt(_researchGuidance);
+
+  if (process.env.NODE_ENV !== "production" && _researchRich.chunks.length > 0) {
+    console.log("[ResearchProgrammingDebug]", JSON.stringify({
+      chunksRetrieved: _researchRich.chunks.length,
+      chunkTags: _researchRich.chunks.flatMap((c) => c.topicTags ?? []),
+      guidanceGenerated: _researchGuidance.influencedDimensions,
+      confidenceLevel: _researchGuidance.confidenceLevel,
+      researchSources: _researchGuidance.researchSources,
+    }));
+  }
 
   // Conditioning engine — activated by live message OR profile
   // Previously: only profile.trainingGoal was checked
@@ -1533,7 +1558,7 @@ ${profile.exercisePreferences ? `- Exercise Preferences: ${profile.exercisePrefe
 ${profile.exercisesToAvoid ? `- Exercises to Avoid (NEVER program these): ${profile.exercisesToAvoid}` : ""}
 ${homeGymConstraintBlock}
 ${SPECIALTY_EQUIPMENT_CONSTRAINT_BLOCK}
-${routingHint}${reEntryContext}${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${researchContext}${conditioningContext}${powerSpeedContext}${sportContext}${periodizationContext}${mobilityContext}${specialConsiderationsContext}${specialConsiderationsClarification}${returnFromInjuryContext}${returnFromInjuryClarification}`;
+${routingHint}${reEntryContext}${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${researchContext}${researchProgrammingGuidance}${conditioningContext}${powerSpeedContext}${sportContext}${periodizationContext}${mobilityContext}${specialConsiderationsContext}${specialConsiderationsClarification}${returnFromInjuryContext}${returnFromInjuryClarification}`;
 }
 
 // ─── Special Considerations Clarification Hint ────────────────────────────────
