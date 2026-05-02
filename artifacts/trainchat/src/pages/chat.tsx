@@ -2706,10 +2706,10 @@ export default function Chat() {
                     onClick={() => handleFocusSwitch(cfg.id)}
                     className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[11px] font-semibold transition-all duration-200 select-none ${
                       isActive
-                        ? `${cfg.theme.pillActiveClass} shadow-md`
+                        ? "text-white shadow-md"
                         : cfg.theme.inactiveClass + " bg-muted/30"
                     }`}
-                    style={isActive ? cfg.theme.pillGlow : undefined}
+                    style={isActive ? { ...cfg.theme.pillGlow, backgroundColor: cfg.theme.primaryColor } : undefined}
                     title={cfg.description}
                   >
                     <Icon className="w-3 h-3 flex-shrink-0" />
@@ -2722,7 +2722,10 @@ export default function Chat() {
             {/* Switch confirmation toast */}
             {focusSwitchConfirm && (
               <div className="flex items-center justify-center pb-2 animate-in fade-in slide-in-from-top-1 duration-200">
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-semibold ${getFocusModeConfig(focusMode).theme.badgeClass}`}>
+                <span
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-semibold border"
+                  style={getFocusModeConfig(focusMode).theme.badgeStyle}
+                >
                   <CheckCircle2 className="w-3 h-3" />
                   {focusSwitchConfirm}
                 </span>
@@ -2853,8 +2856,7 @@ export default function Chat() {
                     className="system-core-halo absolute rounded-full pointer-events-none"
                     style={{
                       inset: -16,
-                      background: "radial-gradient(ellipse at center, hsl(var(--primary)/0.35) 0%, transparent 70%)",
-                      filter: "blur(18px)",
+                      ...getFocusModeConfig(focusMode).theme.heroGlowOuter,
                     }}
                   />
                   {/* Core shell — pulses + drifts in idle state, reacts on interaction */}
@@ -2864,17 +2866,7 @@ export default function Chat() {
                   >
                     {/* Inner container — subtle border glow */}
                     <div
-                      style={{
-                        width: 80,
-                        height: 80,
-                        borderRadius: 22,
-                        background: "radial-gradient(ellipse at 40% 35%, hsl(var(--primary)/0.18) 0%, hsl(var(--primary)/0.06) 100%)",
-                        border: "1px solid hsl(var(--primary)/0.28)",
-                        boxShadow: "0 0 18px hsl(var(--primary)/0.22), inset 0 1px 1px hsl(var(--primary)/0.15)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
+                      style={getFocusModeConfig(focusMode).theme.heroGlowInner}
                     >
                       <img
                         src={trainChatLogo}

@@ -14,6 +14,10 @@ import type { FocusMode } from "./focusMode";
 export interface FocusModeTheme {
   /** Tailwind CSS variable name suffix for the primary accent (used in inline styles) */
   accentHsl: string;
+  /** Hex primary color for this focus mode */
+  primaryColor: string;
+  /** rgba glow color at 0.35 opacity for this focus mode */
+  glowColor: string;
   /** Background tint class applied to the main chat area */
   bgTintClass: string;
   /** Tab active text + ring color classes */
@@ -30,6 +34,12 @@ export interface FocusModeTheme {
   pillGlow: React.CSSProperties;
   /** Badge background class for active focus badge */
   badgeClass: string;
+  /** Inline style for the "mode active" confirmation badge */
+  badgeStyle: React.CSSProperties;
+  /** Inline style for the hero outer radial glow halo */
+  heroGlowOuter: React.CSSProperties;
+  /** Inline style for the hero inner logo container */
+  heroGlowInner: React.CSSProperties;
   /** Label for the "X mode active" confirmation */
   confirmLabel: string;
   /** Lucide icon name to show in the switcher */
@@ -83,14 +93,34 @@ const STRENGTH_CONFIG: FocusModeConfig = {
   focusExplanation: "Builds lifting, hypertrophy, power-strength, and structural development programs",
   theme: {
     accentHsl: "var(--primary)",
+    primaryColor: "#3B82F6",
+    glowColor: "rgba(59, 130, 246, 0.35)",
     bgTintClass: "",
     tabActiveClass: "text-foreground",
     tabUnderlineClass: "bg-primary",
     iconColorClass: "text-primary",
     chipHighlightClass: "text-primary border border-primary/50 bg-primary/10 hover:bg-primary/20 hover:border-primary/70",
     pillActiveClass: "bg-primary text-white",
-    pillGlow: { boxShadow: "0 0 14px hsl(var(--primary)/0.55)" },
+    pillGlow: { boxShadow: "0 0 14px rgba(59, 130, 246, 0.55)" },
     badgeClass: "bg-primary/15 text-primary border border-primary/30",
+    badgeStyle: { color: "#3B82F6", borderColor: "#3B82F6", backgroundColor: "rgba(59, 130, 246, 0.1)" },
+    heroGlowOuter: {
+      background: "radial-gradient(ellipse at center, rgba(59, 130, 246, 0.35) 0%, transparent 70%)",
+      filter: "blur(18px)",
+      transition: "background 250ms ease",
+    },
+    heroGlowInner: {
+      width: 80,
+      height: 80,
+      borderRadius: 22,
+      background: "radial-gradient(ellipse at 40% 35%, rgba(59, 130, 246, 0.18) 0%, rgba(59, 130, 246, 0.06) 100%)",
+      border: "1px solid rgba(59, 130, 246, 0.28)",
+      boxShadow: "0 0 18px rgba(59, 130, 246, 0.22), inset 0 1px 1px rgba(59, 130, 246, 0.15)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      transition: "background 250ms ease, border-color 250ms ease, box-shadow 250ms ease",
+    },
     confirmLabel: "Strength mode active",
     iconName: "Dumbbell",
     inactiveClass: "text-muted-foreground hover:text-foreground hover:bg-muted/50",
@@ -123,14 +153,34 @@ const SPEED_CONFIG: FocusModeConfig = {
   focusExplanation: "Builds sprint, acceleration, deceleration, agility, and footwork programs",
   theme: {
     accentHsl: "var(--primary)",
+    primaryColor: "#06B6D4",
+    glowColor: "rgba(6, 182, 212, 0.35)",
     bgTintClass: "bg-[hsl(200,60%,98%)] dark:bg-[hsl(200,30%,8%)]",
     tabActiveClass: "text-sky-500 dark:text-sky-400",
     tabUnderlineClass: "bg-sky-500",
     iconColorClass: "text-sky-500 dark:text-sky-400",
     chipHighlightClass: "text-sky-600 dark:text-sky-400 border border-sky-500/50 bg-sky-500/10 hover:bg-sky-500/20 hover:border-sky-500/70",
     pillActiveClass: "bg-sky-500 text-white",
-    pillGlow: { boxShadow: "0 0 14px rgba(14,165,233,0.55)" },
+    pillGlow: { boxShadow: "0 0 14px rgba(6, 182, 212, 0.55)" },
     badgeClass: "bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30",
+    badgeStyle: { color: "#06B6D4", borderColor: "#06B6D4", backgroundColor: "rgba(6, 182, 212, 0.1)" },
+    heroGlowOuter: {
+      background: "radial-gradient(ellipse at center, rgba(6, 182, 212, 0.35) 0%, transparent 70%)",
+      filter: "blur(18px)",
+      transition: "background 250ms ease",
+    },
+    heroGlowInner: {
+      width: 80,
+      height: 80,
+      borderRadius: 22,
+      background: "radial-gradient(ellipse at 40% 35%, rgba(6, 182, 212, 0.18) 0%, rgba(6, 182, 212, 0.06) 100%)",
+      border: "1px solid rgba(6, 182, 212, 0.28)",
+      boxShadow: "0 0 18px rgba(6, 182, 212, 0.22), inset 0 1px 1px rgba(6, 182, 212, 0.15)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      transition: "background 250ms ease, border-color 250ms ease, box-shadow 250ms ease",
+    },
     confirmLabel: "Speed / Footwork mode active",
     iconName: "Zap",
     inactiveClass: "text-muted-foreground hover:text-foreground hover:bg-muted/50",
@@ -162,14 +212,34 @@ const MOBILITY_CONFIG: FocusModeConfig = {
   focusExplanation: "Builds range-of-motion, joint control, and recovery-focused programs",
   theme: {
     accentHsl: "var(--primary)",
+    primaryColor: "#10B981",
+    glowColor: "rgba(16, 185, 129, 0.35)",
     bgTintClass: "bg-[hsl(160,30%,98%)] dark:bg-[hsl(160,20%,8%)]",
     tabActiveClass: "text-emerald-600 dark:text-emerald-400",
     tabUnderlineClass: "bg-emerald-500",
     iconColorClass: "text-emerald-600 dark:text-emerald-400",
     chipHighlightClass: "text-emerald-700 dark:text-emerald-400 border border-emerald-500/50 bg-emerald-500/10 hover:bg-emerald-500/20 hover:border-emerald-500/70",
     pillActiveClass: "bg-emerald-500 text-white",
-    pillGlow: { boxShadow: "0 0 14px rgba(16,185,129,0.55)" },
+    pillGlow: { boxShadow: "0 0 14px rgba(16, 185, 129, 0.55)" },
     badgeClass: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30",
+    badgeStyle: { color: "#10B981", borderColor: "#10B981", backgroundColor: "rgba(16, 185, 129, 0.1)" },
+    heroGlowOuter: {
+      background: "radial-gradient(ellipse at center, rgba(16, 185, 129, 0.35) 0%, transparent 70%)",
+      filter: "blur(18px)",
+      transition: "background 250ms ease",
+    },
+    heroGlowInner: {
+      width: 80,
+      height: 80,
+      borderRadius: 22,
+      background: "radial-gradient(ellipse at 40% 35%, rgba(16, 185, 129, 0.18) 0%, rgba(16, 185, 129, 0.06) 100%)",
+      border: "1px solid rgba(16, 185, 129, 0.28)",
+      boxShadow: "0 0 18px rgba(16, 185, 129, 0.22), inset 0 1px 1px rgba(16, 185, 129, 0.15)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      transition: "background 250ms ease, border-color 250ms ease, box-shadow 250ms ease",
+    },
     confirmLabel: "Mobility mode active",
     iconName: "Leaf",
     inactiveClass: "text-muted-foreground hover:text-foreground hover:bg-muted/50",
