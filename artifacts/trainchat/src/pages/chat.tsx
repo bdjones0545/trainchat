@@ -4,7 +4,7 @@ import {
   SendHorizontal, Zap, PanelLeftClose, PanelLeft, Activity,
   Menu, Target, CreditCard, LogOut, Dumbbell, UserPlus,
   MessageSquare, Plus, RotateCcw, Brain, ChevronDown, ChevronRight,
-  CheckCircle2, Library, Trash2, AlertTriangle, Info, Leaf, X, Sparkles, Loader2,
+  CheckCircle2, Library, Trash2, AlertTriangle, Info, Leaf, X, Sparkles, Loader2, Check,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -236,6 +236,12 @@ export default function Chat() {
   const lastExtraContextRef = useRef<Record<string, unknown>>({});
   const [lastTurnReport, setLastTurnReport] = useState<CompleteEvent | null>(null);
   const [lastPanelReceipt, setLastPanelReceipt] = useState<PanelActionReceipt | null>(null);
+  /**
+   * Shown as an inline receipt card in chat after a program edit when the right
+   * panel is closed. Lets the user stay in conversation and choose to view changes.
+   * Cleared on the next send or when the panel is opened.
+   */
+  const [editReceipt, setEditReceipt] = useState<{ summary: string | null; receiptId: string } | null>(null);
   const [newChangeSignal, setNewChangeSignal] = useState(0);
   const [newProgramSignal, setNewProgramSignal] = useState(0);
   const [changeTargets, setChangeTargets] = useState<Array<{
@@ -1114,8 +1120,9 @@ export default function Chat() {
     const btnPayload = (extraContext?.buttonPayload as ButtonActionPayload | undefined) ?? null;
     lastActionPayloadRef.current = btnPayload;
     lastExtraContextRef.current = extraContext ?? {};
-    // Clear any stale panel receipt from the previous turn so new turns start clean.
+    // Clear any stale panel receipt and edit receipt from the previous turn.
     setLastPanelReceipt(null);
+    setEditReceipt(null);
     // Snapshot the current program version for post-refetch reconciliation.
     // We use updatedAt when available (most precise), else fall back to system id string.
     preSendActiveSystemVersionRef.current =
@@ -1657,18 +1664,30 @@ export default function Chat() {
           setPendingShareMoment(moment);
         }, 2000);
       }
-      // After a program modification (edit): switch to Program tab, highlight, and open panel
+      // After a program modification (edit): highlight changes, but only auto-open
+      // the panel if it is ALREADY open. If closed, show an inline receipt card
+      // so the user can stay in chat and choose to view changes when ready.
       if (result.systemEdit?.applied) {
         if (result.systemEdit?.changeTargets?.length) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           setChangeTargets(result.systemEdit.changeTargets as any);
         }
         setNewChangeSignal((n) => n + 1);
-        // Delay panel reveal by 200ms — gives processing state time to visually settle
-        setTimeout(() => {
-          setRightPanelOpen(true);
-          setMobilePanel("right");
-        }, 200);
+        if (!rightPanelOpen) {
+          // Panel is closed — surface a receipt card in chat instead of forcing it open.
+          const receiptId = result.changeLogId
+            ? `cl-${result.changeLogId}`
+            : result.systemEdit.changeLogId
+            ? `cl-${result.systemEdit.changeLogId}`
+            : `edit-${Date.now()}`;
+          setEditReceipt({
+            summary: result.systemEdit.changeSummary ?? null,
+            receiptId,
+          });
+        }
+        // If the panel is already open, it will highlight changes via newChangeSignal —
+        // no further action needed. Panel stays open, user isn't interrupted.
+
         // Track last change summary for continuity chip in panel header
         if (result.systemEdit.changeSummary) {
           setLastChangeSummary(result.systemEdit.changeSummary);
@@ -3153,6 +3172,45 @@ export default function Chat() {
                       >
                         Retry →
                       </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Edit receipt card ──────────────────────────────────────────────
+                    Shown after a program edit when the sidebar is closed. Keeps the
+                    user in chat but surfaces a "View changes →" CTA they can tap when
+                    ready. Hidden while streaming. Auto-dismissed on next send. */}
+                {editReceipt && !stream.isActive && !rightPanelOpen && (
+                  <div
+                    key={editReceipt.receiptId}
+                    className="flex items-start gap-3 mb-5 animate-in fade-in slide-in-from-bottom-1 duration-300"
+                  >
+                    <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center mt-0.5">
+                      <Check className="w-3.5 h-3.5 text-primary" />
+                    </div>
+                    <div className="flex-1 max-w-[90%] px-4 py-3 rounded-2xl rounded-tl-sm bg-card border border-border/70">
+                      <p className="text-[13px] font-semibold text-foreground mb-0.5">Program updated</p>
+                      {editReceipt.summary && (
+                        <p className="text-[12px] text-muted-foreground leading-snug mb-3">{editReceipt.summary}</p>
+                      )}
+                      <div className="flex items-center gap-4">
+                        <button
+                          onClick={() => {
+                            setEditReceipt(null);
+                            setRightPanelOpen(true);
+                            setMobilePanel("right");
+                          }}
+                          className="text-[12px] font-semibold text-primary hover:text-primary/80 transition-colors"
+                        >
+                          View changes →
+                        </button>
+                        <button
+                          onClick={() => setEditReceipt(null)}
+                          className="text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                        >
+                          Dismiss
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
