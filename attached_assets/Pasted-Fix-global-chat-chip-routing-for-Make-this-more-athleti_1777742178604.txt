@@ -1,0 +1,98 @@
+Fix global chat chip routing for “Make this more athletic.”
+
+Issue:
+The chat chip “Make this more athletic” fails with:
+“Something went wrong applying that change…”
+No program adjustment was made.
+
+Root cause:
+This chip is currently being treated like a simple mutation/refinement, but it is a whole-program architecture request.
+
+Goal:
+Route global chips to the correct system.
+
+Audit:
+- button-action-payloads.ts
+- chat.tsx try-saying chip payloads
+- conversations.ts
+- agent-orchestrator.ts
+- edit-intent-service
+- mutation-engine
+- Performance Architect routing
+
+Fix requirements:
+
+1. “Make this more athletic” should create payload:
+{
+  source: "try_saying",
+  actionType: "refine_program",
+  scope: "architecture",
+  submittedText: "Make this program more athletic",
+  programId/systemId
+}
+
+2. Backend routing:
+If buttonPayload.actionType === "refine_program"
+AND submittedText includes athletic / sport / explosive / performance
+→ route to Performance Architect
+NOT simple mutation pipeline.
+
+3. Performance Architect should:
+- preserve the current program’s core goal
+- add or reposition athletic elements:
+  - power work
+  - speed/acceleration if appropriate
+  - medicine ball / jump / explosive hinge/push/pull options if equipment allows
+- manage fatigue
+- preserve day count
+- preserve equipment, pain, and exercise exclusions
+- return updated structured program
+
+4. Receipt:
+If architecture update succeeds:
+- success: true
+- programChanged: true
+- receipt message: “Program updated for athletic performance”
+- no red failure
+- no Retry
+
+5. If Architect cannot change safely:
+Return a coaching clarification, not a failure:
+“I can make this more athletic, but I need to know your sport or available equipment.”
+
+6. Update these chips with explicit scope:
+- “Make this more athletic” → architecture
+- “Progress this for 4 weeks” → progression/architecture
+- “Add a core finisher” → session/program mutation
+- “Remove all barbell exercises” → global equipment mutation
+- “Make Day 1 heavier” → session mutation
+
+7. Add dev logs:
+[GlobalChipRouting]
+- chipText
+- actionType
+- scope
+- routedTo
+- architectCalled
+- failureReason
+
+QA:
+- Tap “Make this more athletic”
+PASS:
+  - Architect route runs
+  - program changes
+  - receipt success
+
+- Tap “Progress this for 4 weeks”
+PASS:
+  - progression route runs
+
+- Tap “Make Day 1 heavier”
+PASS:
+  - session-level route runs
+
+- Tap “Add a core finisher”
+PASS:
+  - finisher added
+
+Run typecheck.

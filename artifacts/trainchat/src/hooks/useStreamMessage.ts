@@ -276,6 +276,14 @@ export interface ButtonActionPayload {
     goal?: string;
     sport?: string;
   };
+  /**
+   * Explicit routing scope hint for the server.
+   * When set, the server should prefer this over pattern-matching scope resolution.
+   * "block" → hierarchical block/phase engine
+   * "week"  → week-scope refinement engine
+   * "session" → session/exercise edit pipeline (default)
+   */
+  scope?: "block" | "week" | "session";
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────

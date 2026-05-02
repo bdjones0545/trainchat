@@ -10,6 +10,25 @@ function inferActionType(text: string): ButtonActionPayload["actionType"] {
   return "refine_program";
 }
 
+/**
+ * Infer routing scope from a try-saying chip prompt.
+ * Block-scope chips target the overall program architecture/direction.
+ * Session-scope chips target a specific day or exercise.
+ * Undefined = let the server resolve via pattern matching.
+ */
+function inferTrySayingScope(prompt: string): ButtonActionPayload["scope"] {
+  const lower = prompt.toLowerCase();
+  // Block-scope: global architectural / directional changes
+  if (/make this (more |a bit )?(athletic|explosive|powerful|strong)/i.test(lower)) return "block";
+  if (/progress this (for )?\d+[ -]?weeks?/i.test(lower)) return "block";
+  if (/add more explosive/i.test(lower)) return "block";
+  if (/remove all/i.test(lower)) return "block";
+  // Session-scope: day-specific or exercise-specific
+  if (/\bday \d/i.test(lower)) return "session";
+  // Default: let the server decide
+  return undefined;
+}
+
 // ── Factories ─────────────────────────────────────────────────────────────────
 
 /** CTA button inside a conversational card (ReturnSessionHook, etc.) */
@@ -62,11 +81,13 @@ export function makeTrySayingPayload(
   prompt: string,
   programId?: number | null,
 ): ButtonActionPayload {
+  const scope = inferTrySayingScope(prompt);
   return {
     source: "try_saying",
     actionType: "refine_program",
     displayText: prompt,
     submittedText: prompt,
+    ...(scope !== undefined ? { scope } : {}),
     ...(programId != null ? { programId } : {}),
   };
 }

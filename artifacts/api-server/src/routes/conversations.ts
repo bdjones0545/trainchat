@@ -54,7 +54,7 @@ import {
 import { normalizeToIntentFamily } from "../lib/intent-family-engine";
 import { buildExecutionPlan, type ExecutionPlan } from "../lib/execution-planner";
 import { resolveAgentSettingsContext, type CoachBehaviorSettings, type AgentSettingsContext } from "../lib/agent-settings-resolver";
-import { resolveRefinementScope } from "../lib/refinement-scope-resolver";
+import { resolveRefinementScope, inferBlockTypeFromMessage, type ScopeResolution } from "../lib/refinement-scope-resolver";
 import { applyHierarchicalRefinement } from "../lib/hierarchical-refine-engine";
 import {
   processSessionScopeImpact,
@@ -1480,7 +1480,21 @@ Keep it helpful and intelligent, never promotional.`;
       }
 
       // ── 1.5 Hierarchical scope check — week or block scope bypasses session edit pipeline ─
-      const directScopeResolution = resolveRefinementScope(parsed.data.content);
+      const _directBtnScope = nonStreamUiCtx?.buttonPayload?.scope as string | undefined;
+      const directScopeResolution: ScopeResolution = _directBtnScope === "block"
+        ? (() => {
+            logger.info(
+              { message: parsed.data.content.slice(0, 80), btnScope: _directBtnScope },
+              "[GlobalChipRouting] buttonPayload.scope=block — overriding to block_scope"
+            );
+            return {
+              scope: "block_scope" as const,
+              confidence: "high" as const,
+              derivedTransformation: inferBlockTypeFromMessage(parsed.data.content) ?? undefined,
+              reasoning: "buttonPayload.scope=block override from client chip",
+            };
+          })()
+        : resolveRefinementScope(parsed.data.content);
       if (directScopeResolution.scope !== "session_scope") {
         logger.info(
           { scope: directScopeResolution.scope, systemId: resolvedSystem.id },
@@ -3297,7 +3311,21 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       }
 
       // ── 1.5 Hierarchical scope check — week or block scope bypasses session edit pipeline ─
-      const streamScopeResolution = resolveRefinementScope(parsed.data.content);
+      const _streamBtnScope = streamUIContext?.buttonPayload?.scope as string | undefined;
+      const streamScopeResolution: ScopeResolution = _streamBtnScope === "block"
+        ? (() => {
+            logger.info(
+              { message: parsed.data.content.slice(0, 80), btnScope: _streamBtnScope },
+              "[GlobalChipRouting] buttonPayload.scope=block — overriding to block_scope"
+            );
+            return {
+              scope: "block_scope" as const,
+              confidence: "high" as const,
+              derivedTransformation: inferBlockTypeFromMessage(parsed.data.content) ?? undefined,
+              reasoning: "buttonPayload.scope=block override from client chip",
+            };
+          })()
+        : resolveRefinementScope(parsed.data.content);
       if (streamScopeResolution.scope !== "session_scope") {
         logger.info(
           { scope: streamScopeResolution.scope, systemId: resolvedSystem.id },
