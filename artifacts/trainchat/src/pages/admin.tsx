@@ -89,7 +89,7 @@ interface KnowledgeEntry {
 }
 
 type DateRange = "7d" | "30d" | "all";
-type AdminTab = "analytics" | "knowledge";
+type AdminTab = "analytics" | "knowledge" | "research";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -471,6 +471,420 @@ function KnowledgeBase() {
   );
 }
 
+// ─── Research Dashboard Component ────────────────────────────────────────────
+
+interface ResearchDoc {
+  id: number;
+  title: string;
+  authors: string | null;
+  year: number | null;
+  source: string;
+  journal: string | null;
+  category: string;
+  topicTags: string[];
+  trustLevel: "gold" | "high" | "supporting";
+  confidence: string;
+  evidenceType: string | null;
+  status: "pending" | "approved" | "rejected" | "archived";
+  isActive: boolean;
+  plainLanguageSummary: string | null;
+  coachingImplications: string | null;
+  programmingImplications: string | null;
+  safetyConsiderations: string | null;
+  limitations: string | null;
+  contraindications: string | null;
+  abstract: string | null;
+  createdAt: string;
+  lastReviewedAt: string | null;
+}
+
+interface ResearchStats {
+  total: number;
+  approved: number;
+  chunks: number;
+  byCategory: { category: string; count: string }[];
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  strength_conditioning: "Strength & Conditioning",
+  medical_rehab: "Medical / Rehab",
+  nutrition: "Nutrition",
+  recovery_wellness: "Recovery & Wellness",
+  sport_performance: "Sport Performance",
+};
+
+const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+  pending: { bg: "hsl(40 80% 12%)", text: "hsl(40 90% 60%)" },
+  approved: { bg: "hsl(142 50% 12%)", text: "hsl(142 60% 55%)" },
+  rejected: { bg: "hsl(0 50% 12%)", text: "hsl(0 60% 60%)" },
+  archived: { bg: "hsl(222 47% 16%)", text: "hsl(0 0% 45%)" },
+};
+
+const TRUST_COLORS: Record<string, string> = {
+  gold: "hsl(40 90% 55%)",
+  high: "hsl(142 60% 50%)",
+  supporting: "hsl(199 70% 55%)",
+};
+
+function ResearchDashboard() {
+  const [docs, setDocs] = useState<ResearchDoc[]>([]);
+  const [stats, setStats] = useState<ResearchStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [seeding, setSeeding] = useState(false);
+
+  const fieldStyle = {
+    background: "hsl(222 47% 9%)",
+    border: "1px solid hsl(222 47% 22%)",
+    color: "#fff",
+    borderRadius: "8px",
+    padding: "6px 10px",
+    fontSize: "13px",
+    outline: "none",
+  };
+
+  async function loadAll() {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (filterStatus !== "all") params.set("status", filterStatus);
+      if (filterCategory !== "all") params.set("category", filterCategory);
+      const [docsData, statsData] = await Promise.all([
+        apiFetch<{ documents: ResearchDoc[] }>(`/api/admin/research?${params}`),
+        apiFetch<ResearchStats>("/api/admin/research/stats"),
+      ]);
+      setDocs(docsData.documents);
+      setStats(statsData);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { loadAll(); }, [filterStatus, filterCategory]);
+
+  async function handleApprove(id: number) {
+    setActionLoading(id);
+    try {
+      await apiFetch(`/api/admin/research/${id}/approve`, { method: "POST" });
+      await loadAll();
+    } catch (e: any) { setError(e.message); }
+    finally { setActionLoading(null); }
+  }
+
+  async function handleReject(id: number) {
+    setActionLoading(id);
+    try {
+      await apiFetch(`/api/admin/research/${id}/reject`, { method: "POST" });
+      await loadAll();
+    } catch (e: any) { setError(e.message); }
+    finally { setActionLoading(null); }
+  }
+
+  async function handleToggle(doc: ResearchDoc) {
+    setActionLoading(doc.id);
+    try {
+      await apiFetch(`/api/admin/research/${doc.id}/toggle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !doc.isActive }),
+      });
+      await loadAll();
+    } catch (e: any) { setError(e.message); }
+    finally { setActionLoading(null); }
+  }
+
+  async function handleResummarize(id: number) {
+    setActionLoading(id);
+    try {
+      await apiFetch(`/api/admin/research/${id}/summarize`, { method: "POST" });
+      await loadAll();
+    } catch (e: any) { setError(e.message); }
+    finally { setActionLoading(null); }
+  }
+
+  async function handleDelete(id: number) {
+    if (!confirm("Delete this research document?")) return;
+    try {
+      await apiFetch(`/api/admin/research/${id}`, { method: "DELETE" });
+      await loadAll();
+    } catch (e: any) { setError(e.message); }
+  }
+
+  async function handleSeed(force = false) {
+    setSeeding(true);
+    try {
+      const url = `/api/admin/research/seed${force ? "?force=true" : ""}`;
+      const result = await apiFetch<{ ok: boolean; inserted: number; skipped: number }>(url, { method: "POST" });
+      await loadAll();
+      alert(`Seeded: ${result.inserted} inserted, ${result.skipped} skipped`);
+    } catch (e: any) { setError(e.message); }
+    finally { setSeeding(false); }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-white">Research Knowledge Base</h2>
+          <p className="text-zinc-500 text-xs mt-0.5">
+            Evidence-informed coaching notes retrieved during AI responses
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => handleSeed(false)}
+            disabled={seeding}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-50"
+            style={{ background: "hsl(142 50% 15%)", color: "hsl(142 60% 55%)", border: "1px solid hsl(142 50% 22%)" }}
+          >
+            {seeding ? "Seeding…" : "Seed Library"}
+          </button>
+          <button
+            onClick={() => handleSeed(true)}
+            disabled={seeding}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-50"
+            style={{ background: "hsl(222 47% 14%)", color: "hsl(0 0% 55%)", border: "1px solid hsl(222 47% 22%)" }}
+          >
+            Force Re-seed
+          </button>
+        </div>
+      </div>
+
+      {/* Stats */}
+      {stats && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="rounded-xl p-4" style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(222 47% 18%)" }}>
+            <p className="text-zinc-500 text-xs uppercase tracking-wide mb-1">Total Documents</p>
+            <p className="text-2xl font-bold text-white">{stats.total}</p>
+          </div>
+          <div className="rounded-xl p-4" style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(222 47% 18%)" }}>
+            <p className="text-zinc-500 text-xs uppercase tracking-wide mb-1">Active & Approved</p>
+            <p className="text-2xl font-bold" style={{ color: "hsl(142 60% 55%)" }}>{stats.approved}</p>
+          </div>
+          <div className="rounded-xl p-4" style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(222 47% 18%)" }}>
+            <p className="text-zinc-500 text-xs uppercase tracking-wide mb-1">Retrieval Chunks</p>
+            <p className="text-2xl font-bold text-white">{stats.chunks}</p>
+          </div>
+          <div className="rounded-xl p-4" style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(222 47% 18%)" }}>
+            <p className="text-zinc-500 text-xs uppercase tracking-wide mb-1">Categories</p>
+            <p className="text-2xl font-bold text-white">{stats.byCategory.length}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Filters */}
+      <div className="flex gap-3 flex-wrap">
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          style={{ ...fieldStyle, paddingRight: "28px" }}
+        >
+          <option value="all">All statuses</option>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+        </select>
+        <select
+          value={filterCategory}
+          onChange={(e) => setFilterCategory(e.target.value)}
+          style={{ ...fieldStyle, paddingRight: "28px" }}
+        >
+          <option value="all">All categories</option>
+          {Object.entries(CATEGORY_LABELS).map(([v, l]) => (
+            <option key={v} value={v}>{l}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div className="p-3 rounded-lg text-red-400 text-sm" style={{ background: "hsl(0 50% 10%)", border: "1px solid hsl(0 50% 20%)" }}>
+          {error}
+        </div>
+      )}
+
+      {/* Documents list */}
+      {loading ? (
+        <div className="text-zinc-500 text-sm py-8 text-center">Loading research documents…</div>
+      ) : docs.length === 0 ? (
+        <div className="rounded-xl p-8 text-center" style={{ background: "hsl(222 47% 10%)", border: "1px solid hsl(222 47% 16%)" }}>
+          <p className="text-zinc-400 text-sm mb-2">No research documents found.</p>
+          <p className="text-zinc-600 text-xs">Click "Seed Library" to load curated evidence-based research notes.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {docs.map((doc) => {
+            const statusStyle = STATUS_COLORS[doc.status] ?? STATUS_COLORS.pending;
+            const isExpanded = expandedId === doc.id;
+            const isWorking = actionLoading === doc.id;
+            return (
+              <div
+                key={doc.id}
+                className="rounded-xl"
+                style={{
+                  background: "hsl(222 47% 10%)",
+                  border: `1px solid ${doc.isActive ? "hsl(222 47% 18%)" : "hsl(222 47% 13%)"}`,
+                  opacity: doc.status === "rejected" ? 0.5 : 1,
+                }}
+              >
+                {/* Row */}
+                <div className="p-4 flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    {/* Title & badges */}
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span
+                        className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                        style={{ background: statusStyle.bg, color: statusStyle.text, border: `1px solid ${statusStyle.text}33` }}
+                      >
+                        {doc.status}
+                      </span>
+                      <span
+                        className="text-xs px-2 py-0.5 rounded-full font-medium"
+                        style={{ color: TRUST_COLORS[doc.trustLevel] ?? "#fff", background: (TRUST_COLORS[doc.trustLevel] ?? "#fff") + "18" }}
+                      >
+                        {doc.trustLevel} trust
+                      </span>
+                      {doc.evidenceType && (
+                        <span className="text-xs text-zinc-500 px-1.5 py-0.5 rounded" style={{ background: "hsl(222 47% 14%)" }}>
+                          {doc.evidenceType.replace(/_/g, " ")}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-zinc-100 text-sm font-medium leading-snug">{doc.title}</p>
+                    {doc.authors && <p className="text-zinc-500 text-xs mt-0.5">{doc.authors}{doc.year ? ` (${doc.year})` : ""} — {doc.source}</p>}
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "hsl(199 89% 12%)", color: "hsl(199 89% 60%)" }}>
+                        {CATEGORY_LABELS[doc.category] ?? doc.category}
+                      </span>
+                      {(Array.isArray(doc.topicTags) ? doc.topicTags : []).slice(0, 4).map((tag) => (
+                        <span key={tag} className="text-xs px-1.5 py-0.5 rounded text-zinc-500" style={{ background: "hsl(222 47% 16%)" }}>
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="shrink-0 flex items-center gap-1.5 flex-wrap justify-end">
+                    <button
+                      onClick={() => setExpandedId(isExpanded ? null : doc.id)}
+                      className="text-xs px-2 py-1 rounded transition-all"
+                      style={{ background: "hsl(222 47% 16%)", color: "hsl(0 0% 60%)" }}
+                    >
+                      {isExpanded ? "Hide" : "View"}
+                    </button>
+                    {doc.status === "pending" && (
+                      <>
+                        <button
+                          onClick={() => handleApprove(doc.id)}
+                          disabled={isWorking}
+                          className="text-xs px-2 py-1 rounded transition-all disabled:opacity-40"
+                          style={{ background: "hsl(142 50% 12%)", color: "hsl(142 60% 55%)" }}
+                        >
+                          {isWorking ? "…" : "Approve"}
+                        </button>
+                        <button
+                          onClick={() => handleReject(doc.id)}
+                          disabled={isWorking}
+                          className="text-xs px-2 py-1 rounded transition-all disabled:opacity-40"
+                          style={{ background: "hsl(0 50% 12%)", color: "hsl(0 60% 60%)" }}
+                        >
+                          Reject
+                        </button>
+                      </>
+                    )}
+                    {doc.status === "approved" && (
+                      <button
+                        onClick={() => handleToggle(doc)}
+                        disabled={isWorking}
+                        className="text-xs px-2 py-1 rounded transition-all disabled:opacity-40"
+                        style={{
+                          background: doc.isActive ? "hsl(142 50% 12%)" : "hsl(222 47% 16%)",
+                          color: doc.isActive ? "hsl(142 60% 55%)" : "hsl(0 0% 45%)",
+                        }}
+                      >
+                        {doc.isActive ? "Active" : "Disabled"}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleResummarize(doc.id)}
+                      disabled={isWorking}
+                      className="text-xs px-2 py-1 rounded transition-all disabled:opacity-40"
+                      style={{ background: "hsl(270 50% 14%)", color: "hsl(270 60% 65%)" }}
+                    >
+                      {isWorking ? "…" : "Resummarize"}
+                    </button>
+                    <button
+                      onClick={() => handleDelete(doc.id)}
+                      className="text-xs px-1 py-1 rounded text-zinc-600 hover:text-red-400 transition-colors"
+                    >
+                      Del
+                    </button>
+                  </div>
+                </div>
+
+                {/* Expanded details */}
+                {isExpanded && (
+                  <div className="px-4 pb-4 space-y-3" style={{ borderTop: "1px solid hsl(222 47% 15%)" }}>
+                    <div className="pt-3 space-y-3">
+                      {doc.plainLanguageSummary && (
+                        <div>
+                          <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide mb-1">Summary</p>
+                          <p className="text-zinc-300 text-sm leading-relaxed">{doc.plainLanguageSummary}</p>
+                        </div>
+                      )}
+                      {doc.coachingImplications && (
+                        <div>
+                          <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide mb-1">Coaching Implications</p>
+                          <p className="text-zinc-300 text-sm leading-relaxed">{doc.coachingImplications}</p>
+                        </div>
+                      )}
+                      {doc.programmingImplications && (
+                        <div>
+                          <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide mb-1">Programming Implications</p>
+                          <p className="text-zinc-300 text-sm leading-relaxed">{doc.programmingImplications}</p>
+                        </div>
+                      )}
+                      {doc.safetyConsiderations && (
+                        <div>
+                          <p className="text-xs font-medium" style={{ color: "hsl(40 90% 55%)", textTransform: "uppercase", letterSpacing: "0.06em", fontSize: "11px", marginBottom: "4px" }}>Safety</p>
+                          <p className="text-zinc-300 text-sm leading-relaxed">{doc.safetyConsiderations}</p>
+                        </div>
+                      )}
+                      {doc.limitations && (
+                        <div>
+                          <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1">Limitations</p>
+                          <p className="text-zinc-500 text-sm leading-relaxed italic">{doc.limitations}</p>
+                        </div>
+                      )}
+                      {!doc.plainLanguageSummary && doc.abstract && (
+                        <div>
+                          <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide mb-1">Abstract</p>
+                          <p className="text-zinc-400 text-sm leading-relaxed">{doc.abstract}</p>
+                        </div>
+                      )}
+                      {!doc.plainLanguageSummary && !doc.abstract && (
+                        <p className="text-zinc-600 text-sm italic">No summary yet — click "Resummarize" to generate one with AI.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function AdminDashboard() {
@@ -541,6 +955,7 @@ export default function AdminDashboard() {
           <div className="flex gap-1 rounded-lg p-1" style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(222 47% 18%)" }}>
             <button style={tabStyle("analytics")} onClick={() => setActiveTab("analytics")}>Analytics</button>
             <button style={tabStyle("knowledge")} onClick={() => setActiveTab("knowledge")}>Knowledge Base</button>
+            <button style={tabStyle("research")} onClick={() => setActiveTab("research")}>Research</button>
           </div>
         </div>
 
@@ -568,6 +983,9 @@ export default function AdminDashboard() {
       <div className="px-6 py-6 max-w-6xl mx-auto">
         {/* ── Knowledge Base Tab ── */}
         {activeTab === "knowledge" && <KnowledgeBase />}
+
+        {/* ── Research Tab ── */}
+        {activeTab === "research" && <ResearchDashboard />}
 
         {/* ── Analytics Tab ── */}
         {activeTab === "analytics" && (

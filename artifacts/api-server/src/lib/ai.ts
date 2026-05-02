@@ -34,6 +34,7 @@ import {
   type TransformRequest,
 } from "./split-transform";
 import { retrieveRelevantKnowledge } from "./knowledge-retrieval";
+import { getRelevantResearchContext } from "../research/research-retriever";
 import { buildArchitectureBrief, validateProgramArchitecture, extractSportFromRequest, getLastSlotSelection, enforceVariationMandateOnProgram, computeWeeklyArchitecture } from "./program-architecture-engine";
 import type { HardConstraints } from "./constraint-memory";
 import type { WeeklyArchitecture, SessionArchitecture, MovementPattern as ArchMovementPattern } from "./program-architecture-engine";
@@ -1370,6 +1371,16 @@ The conversion rule: show intelligence first → build tension → deliver parti
     bodyRegion: profile.injuries ? "injury_present" : null,
   });
 
+  // Retrieve evidence-informed research context (async, gracefully skips on error)
+  const researchContext = await getRelevantResearchContext({
+    userMessage,
+    goal: profile.trainingGoal,
+    sport: resolvedSport ?? profile.sportFocus,
+    injuries: profile.injuries,
+    population: profile.sportFocus ?? null,
+    maxChunks: 4,
+  });
+
   // Conditioning engine — activated by live message OR profile
   // Previously: only profile.trainingGoal was checked
   const conditioningContext = routing.conditioning
@@ -1503,7 +1514,7 @@ ${profile.exercisePreferences ? `- Exercise Preferences: ${profile.exercisePrefe
 ${profile.exercisesToAvoid ? `- Exercises to Avoid (NEVER program these): ${profile.exercisesToAvoid}` : ""}
 ${homeGymConstraintBlock}
 ${SPECIALTY_EQUIPMENT_CONSTRAINT_BLOCK}
-${routingHint}${reEntryContext}${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${conditioningContext}${powerSpeedContext}${sportContext}${periodizationContext}${mobilityContext}${specialConsiderationsContext}${specialConsiderationsClarification}${returnFromInjuryContext}${returnFromInjuryClarification}`;
+${routingHint}${reEntryContext}${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${researchContext}${conditioningContext}${powerSpeedContext}${sportContext}${periodizationContext}${mobilityContext}${specialConsiderationsContext}${specialConsiderationsClarification}${returnFromInjuryContext}${returnFromInjuryClarification}`;
 }
 
 // ─── Special Considerations Clarification Hint ────────────────────────────────

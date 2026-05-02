@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, usersTable, conversationsTable, messagesTable, savedProgramsTable, sessionLogsTable, coachingKnowledgeTable } from "@workspace/db";
-import { eq, count, sql, gte, desc } from "drizzle-orm";
+import { db, usersTable, conversationsTable, messagesTable, savedProgramsTable, sessionLogsTable, coachingKnowledgeTable, researchDocumentsTable, researchChunksTable } from "@workspace/db";
+import { eq, count, sql, gte, desc, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { getFunnelMetrics, getRecentEvents } from "../lib/analyticsService";
 import {
@@ -14,6 +14,14 @@ import {
   dismissCandidate,
 } from "../lib/globalLearningService";
 import { seedExerciseLibrary, isExerciseLibraryEmpty } from "../lib/exercise-seeder";
+import {
+  createResearchDocument,
+  summarizeAndChunkDocument,
+  approveDocument,
+  rejectDocument,
+  toggleDocumentActive,
+} from "../research/research-ingestion";
+import { seedResearchLibrary, isResearchLibraryEmpty } from "../research/research-seeder";
 
 const router: IRouter = Router();
 
@@ -490,6 +498,232 @@ router.post("/admin/users/set-plan", async (req, res): Promise<void> => {
   }
 
   res.json({ ok: true, user: updated });
+});
+
+// ─── Research Knowledge Admin Routes ─────────────────────────────────────────
+
+/**
+ * GET /api/admin/research
+ * List all research documents with optional filters.
+ * Query params: status, category, trustLevel
+ */
+router.get("/admin/research", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const { status, category, trustLevel } = req.query as Record<string, string>;
+
+  let query = db.select().from(researchDocumentsTable).$dynamic();
+
+  const conditions = [];
+  if (status) conditions.push(eq(researchDocumentsTable.status, status as any));
+  if (category) conditions.push(eq(researchDocumentsTable.category, category as any));
+  if (trustLevel) conditions.push(eq(researchDocumentsTable.trustLevel, trustLevel as any));
+
+  if (conditions.length > 0) {
+    query = query.where(and(...conditions) as any);
+  }
+
+  const docs = await query.orderBy(desc(researchDocumentsTable.createdAt));
+  res.json({ documents: docs });
+});
+
+/**
+ * GET /api/admin/research/:id
+ * Get a single research document with its chunks.
+ */
+router.get("/admin/research/:id", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [doc] = await db.select().from(researchDocumentsTable).where(eq(researchDocumentsTable.id, id));
+  if (!doc) { res.status(404).json({ error: "Not found" }); return; }
+
+  const chunks = await db.select().from(researchChunksTable).where(eq(researchChunksTable.documentId, id));
+  res.json({ document: doc, chunks });
+});
+
+/**
+ * POST /api/admin/research
+ * Create a new research document.
+ */
+router.post("/admin/research", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const {
+    title, authors, year, source, journal, url, doi,
+    category, topicTags, populationTags, evidenceType,
+    trustLevel, confidence, abstract: abstractText,
+  } = req.body ?? {};
+
+  if (!title || !source || !category) {
+    res.status(400).json({ error: "title, source, and category are required" });
+    return;
+  }
+
+  try {
+    const doc = await createResearchDocument({
+      title,
+      authors: authors || null,
+      year: year ? parseInt(year, 10) : null,
+      source,
+      journal: journal || null,
+      url: url || null,
+      doi: doi || null,
+      category,
+      topicTags: Array.isArray(topicTags) ? topicTags : [],
+      populationTags: Array.isArray(populationTags) ? populationTags : [],
+      evidenceType: evidenceType || null,
+      trustLevel: trustLevel ?? "high",
+      confidence: confidence ?? "moderate",
+      abstract: abstractText || null,
+      status: "pending",
+      isActive: false,
+    });
+    res.status(201).json({ document: doc });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * PUT /api/admin/research/:id
+ * Update a research document.
+ */
+router.put("/admin/research/:id", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const allowed = [
+    "title", "authors", "year", "source", "journal", "url", "doi",
+    "category", "topicTags", "populationTags", "evidenceType", "trustLevel",
+    "confidence", "abstract", "plainLanguageSummary", "coachingImplications",
+    "programmingImplications", "safetyConsiderations", "limitations", "contraindications",
+    "status", "isActive",
+  ];
+
+  const updates: Record<string, any> = { updatedAt: new Date() };
+  for (const key of allowed) {
+    if (req.body?.[key] !== undefined) updates[key] = req.body[key];
+  }
+
+  const [updated] = await db
+    .update(researchDocumentsTable)
+    .set(updates)
+    .where(eq(researchDocumentsTable.id, id))
+    .returning();
+
+  if (!updated) { res.status(404).json({ error: "Not found" }); return; }
+  res.json({ document: updated });
+});
+
+/**
+ * DELETE /api/admin/research/:id
+ * Delete a research document and its chunks.
+ */
+router.delete("/admin/research/:id", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  await db.delete(researchChunksTable).where(eq(researchChunksTable.documentId, id));
+  await db.delete(researchDocumentsTable).where(eq(researchDocumentsTable.id, id));
+  res.json({ ok: true });
+});
+
+/**
+ * POST /api/admin/research/:id/approve
+ * Approve a document — makes it available to the agent.
+ */
+router.post("/admin/research/:id/approve", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  try {
+    const ok = await approveDocument(id);
+    if (!ok) { res.status(404).json({ error: "Not found" }); return; }
+    res.json({ ok: true, id, approved: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/research/:id/reject
+ * Reject a document — removes it from agent context.
+ */
+router.post("/admin/research/:id/reject", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const ok = await rejectDocument(id);
+  if (!ok) { res.status(404).json({ error: "Not found" }); return; }
+  res.json({ ok: true, id, rejected: true });
+});
+
+/**
+ * POST /api/admin/research/:id/toggle
+ * Toggle a document's active status (enable/disable from agent without full rejection).
+ */
+router.post("/admin/research/:id/toggle", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const { isActive } = req.body ?? {};
+  const ok = await toggleDocumentActive(id, Boolean(isActive));
+  if (!ok) { res.status(404).json({ error: "Not found" }); return; }
+  res.json({ ok: true, id, isActive: Boolean(isActive) });
+});
+
+/**
+ * POST /api/admin/research/:id/summarize
+ * Re-run AI summarization and chunk generation for a document.
+ */
+router.post("/admin/research/:id/summarize", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  try {
+    const result = await summarizeAndChunkDocument(id);
+    res.json({ ok: result.ok, chunksCreated: result.chunksCreated, error: result.error });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/research/seed
+ * Seed the research library with curated initial data.
+ * Query params: force=true to re-seed even if data already exists.
+ */
+router.post("/admin/research/seed", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const force = req.query.force === "true";
+  try {
+    const { inserted, skipped } = await seedResearchLibrary(force);
+    res.json({ ok: true, inserted, skipped });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/admin/research/stats
+ * Summary stats for the research library.
+ */
+router.get("/admin/research/stats", requireAuth, requireAdmin, async (_req, res): Promise<void> => {
+  const [totalResult] = await db.select({ n: count() }).from(researchDocumentsTable);
+  const [approvedResult] = await db
+    .select({ n: count() })
+    .from(researchDocumentsTable)
+    .where(and(eq(researchDocumentsTable.status, "approved"), eq(researchDocumentsTable.isActive, true)));
+  const [chunkResult] = await db.select({ n: count() }).from(researchChunksTable);
+
+  const byCategory = await db.execute(sql`
+    SELECT category, COUNT(*) as count
+    FROM research_documents
+    GROUP BY category ORDER BY count DESC
+  `);
+
+  res.json({
+    total: Number(totalResult?.n ?? 0),
+    approved: Number(approvedResult?.n ?? 0),
+    chunks: Number(chunkResult?.n ?? 0),
+    byCategory: byCategory.rows,
+  });
 });
 
 export default router;
