@@ -1,0 +1,274 @@
+Refactor TrainChat’s programming agents to allow more expert creativity while preserving safety and user constraints.
+
+Goal:
+Make the Coach Agent and Performance Architect feel less rigid and more like expert coaches. They should have more freedom to design programs creatively, vary structure, and choose smarter progressions instead of over-following fixed templates.
+
+Do NOT weaken:
+- pain/safety constraints
+- equipment constraints
+- schedule constraints
+- user-stated preferences
+- medical disclaimer boundaries
+- admin-only Research Librarian boundaries
+
+-------------------------------------
+PHASE 1 — AUDIT RIGID PROGRAMMING RULES
+-------------------------------------
+
+Audit:
+- Coach Agent prompt
+- Performance Architect prompt
+- program architecture engine
+- research programming guidance
+- mutation/edit pipeline
+- validation gate
+- exercise selection rules
+- slot/category systems
+- set/rep/rest assignment logic
+- fallback logic
+
+Find places where the system is too rigid, including:
+- always forcing the same split
+- overusing fixed slots
+- excessive validation warnings
+- overly narrow exercise categories
+- forcing identical set/rep schemes
+- blocking creative substitutions
+- treating research guidance as hard rules instead of guidance
+- over-constraining “make harder/easier”
+
+-------------------------------------
+PHASE 2 — ADD CREATIVE COACHING FREEDOM LAYER
+-------------------------------------
+
+Add a new principle to Coach Agent and Performance Architect prompts:
+
+“Use programming rules as guardrails, not cages. You may design creatively when the result better serves the user’s goal, sport, experience level, schedule, equipment, and recovery. Maintain safety and constraints, but avoid formulaic templates.”
+
+Performance Architect should be allowed to vary:
+- split structure
+- day emphasis
+- exercise order when justified
+- set/rep/rest schemes
+- progression style
+- block structure
+- mobility/warm-up integration
+- power/strength/hypertrophy blending
+- accessory placement
+- conditioning placement
+
+Coach Agent should be allowed to:
+- suggest better alternatives
+- modify the plan beyond literal user wording when it improves the system
+- explain tradeoffs simply
+- preserve user goal while adding expert-needed elements
+
+-------------------------------------
+PHASE 3 — SOFTEN RESEARCH GUIDANCE
+-------------------------------------
+
+Update research-informed programming guidance so it is treated as:
+- “evidence-informed direction”
+not:
+- “mandatory fixed programming law”
+
+Add language:
+“Use research guidance to improve decisions, but adapt it to the individual. If user context suggests a better practical option, choose the practical option while staying within safety boundaries.”
+
+Examples:
+- Hypertrophy volume guidance should not force 10–20 sets in every microcycle.
+- Strength rest guidance should not force long rests for every lift.
+- Speed guidance should prioritize quality but may include limited conditioning if the goal requires it.
+- Mobility guidance should support training rather than dominate the session.
+
+-------------------------------------
+PHASE 4 — RELAX VALIDATION WARNINGS
+-------------------------------------
+
+Update architecture validation gate:
+
+Critical errors should only be:
+- wrong number of days when explicitly requested
+- unsafe pain conflict
+- unavailable equipment
+- empty program/day
+- missing required user constraint
+- no progression when progression explicitly requested
+
+Warnings should be softer:
+- missing unilateral work
+- missing trunk work
+- unusual exercise order
+- unconventional split
+- atypical volume
+- speed/strength blend
+
+Warnings should not block output unless they create safety or constraint issues.
+
+Add:
+“Unconventional but justified programming is allowed.”
+
+-------------------------------------
+PHASE 5 — ADD PROGRAMMING STYLE MODES
+-------------------------------------
+
+Create internal programming style modes:
+
+- classic
+- athletic
+- minimalist
+- high-performance
+- joint-friendly
+- hypertrophy-biased
+- strength-biased
+- speed-biased
+- hybrid
+
+The agent can infer style from user intent.
+
+Example:
+“football strength and speed” → high-performance / athletic
+“3-day strength” → classic or strength-biased
+“knee pain” → joint-friendly
+“busy schedule” → minimalist
+
+These modes should influence structure without hard-locking it.
+
+-------------------------------------
+PHASE 6 — MAKE PERFORMANCE ARCHITECT MORE AUTONOMOUS
+-------------------------------------
+
+Allow Performance Architect to:
+- add missing support exercises if needed for balance
+- remove redundant exercises
+- adjust exercise order
+- choose a better weekly split
+- add warm-up/mobility if needed
+- add deload or progression logic when appropriate
+- choose between linear, wave, block, or undulating progression
+
+But it must explain internally why.
+
+Add field to output:
+architectureDecisions: string[]
+
+Examples:
+- “Moved power work before heavy strength to preserve output quality.”
+- “Reduced accessory volume to fit 45-minute sessions.”
+- “Used trap bar deadlift instead of deep squat to respect knee limitation.”
+- “Added trunk anti-rotation because rotational sport demand was present.”
+
+-------------------------------------
+PHASE 7 — UPDATE MUTATION LOGIC
+-------------------------------------
+
+For edits like:
+- make harder
+- make easier
+- make more athletic
+- make better for sport
+- add speed work
+- reduce fatigue
+- progress this for 4 weeks
+
+Allow the system to make meaningful structural changes when appropriate instead of only small literal edits.
+
+Rules:
+- If user requests a local exercise edit, keep it local.
+- If user requests a global improvement, allow broader changes.
+- If button action has a specific exercise target, preserve target.
+- If user says “make this more athletic,” the architect can modify structure, not just add one exercise.
+
+-------------------------------------
+PHASE 8 — USER-FACING LANGUAGE
+-------------------------------------
+
+Make explanations sound like expert coaching, not rigid rules.
+
+Examples:
+Instead of:
+“I followed the required template.”
+
+Say:
+“I structured this so the highest-skill work happens while you’re fresh, then strength work builds the base, and accessories support the main goal.”
+
+Instead of:
+“Research says you must…”
+
+Say:
+“This gives you a strong evidence-informed starting point while still fitting your schedule and equipment.”
+
+-------------------------------------
+PHASE 9 — QA TESTS
+-------------------------------------
+
+Create or update PROGRAMMING_FLEXIBILITY_QA.md.
+
+Test 1:
+Prompt:
+“Build me a creative 4-day football strength and speed program. I don’t want a basic template.”
+
+PASS:
+- Output feels less generic
+- Still safe and structured
+- Speed/power/strength sequencing makes sense
+- Progression exists
+
+Test 2:
+Prompt:
+“Make this more athletic, but don’t just add random plyos.”
+
+PASS:
+- Meaningful structure changes
+- Better power/speed placement
+- Not random exercises
+
+Test 3:
+Prompt:
+“Build me a minimalist 3-day strength plan with only dumbbells.”
+
+PASS:
+- Not overbuilt
+- Creative but simple
+- Equipment respected
+
+Test 4:
+Prompt:
+“My knee hurts but I still want to train hard.”
+
+PASS:
+- Creative joint-friendly intensity
+- Safety preserved
+- No medical claims
+
+Test 5:
+Prompt:
+“Make this harder.”
+
+PASS:
+- If targeted button, local harder edit
+- If global text, smart broader difficulty increase
+- No false failure
+
+-------------------------------------
+PHASE 10 — VALIDATION
+-------------------------------------
+
+After implementation:
+- Run typecheck
+- Generate several programs
+- Confirm outputs are less templated
+- Confirm safety constraints still override
+- Confirm equipment constraints still override
+- Confirm architect can make justified changes
+- Confirm user-facing text does not expose internal agents
+- Confirm simple edits remain fast
+
+Output:
+- Rigid rules found
+- Rules softened
+- Prompt changes
+- Validation changes
+- Programming style modes added
+- QA results
+- Typecheck result
