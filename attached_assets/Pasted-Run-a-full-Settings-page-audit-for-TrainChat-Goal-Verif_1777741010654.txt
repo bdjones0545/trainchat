@@ -1,0 +1,254 @@
+Run a full Settings page audit for TrainChat.
+
+Goal:
+Verify every Settings section works correctly, persists correctly, and integrates with the Coach Agent, memory system, billing, privacy controls, and user profile.
+
+Do not redesign the page unless fixing broken or misleading UX.
+Do not break existing chat, calibration, check-in, program generation, or Live Program Panel.
+
+SECTIONS TO AUDIT
+
+1. Account
+Audit:
+- displayed name/avatar
+- email
+- sign-in method
+- sign out
+- delete account
+
+Confirm:
+- email is correct
+- sign out clears auth and redirects safely
+- delete account requires confirmation
+- delete account does not accidentally fire on first tap
+- account deletion clears or anonymizes associated data as intended
+
+2. Subscription & Billing
+Audit:
+- current plan display
+- active/canceled/past due states
+- Stripe portal link
+- manage billing button
+- upgrade/downgrade/cancel state
+
+Confirm:
+- plan is pulled from backend/Stripe source of truth
+- “Elite” displays only when actually active
+- manage billing opens the correct Stripe portal
+- failed billing state is handled
+- mobile button is not blocked by browser controls
+
+3. Training Preferences
+Audit fields:
+- Primary goal
+- Experience
+- Training style
+- Days per week
+- Session length
+- Equipment
+- Sport focus
+- Limitations
+
+Questions:
+- Where does each value come from?
+- Why are fields showing “Not set” if calibration/profile data exists?
+- Does Edit training preferences open the same personalization/calibration modal?
+- Do updates persist to user profile?
+- Do updates write memories when appropriate?
+- Does the Coach Agent receive these values in buildSystemPrompt?
+- Does the Performance Architect receive them in handoff?
+- Are sport focus and exercise exclusions included as hard memory constraints?
+
+Fix:
+- If values exist in user profile or memories but display as Not set, wire the Settings page to the correct data source.
+- Ensure settings are not using stale/local-only state.
+- Settings should reflect the same profile used by the agent.
+
+4. AI Coach Settings
+Audit toggles:
+- Concise responses
+- Proactive insights
+- Auto-adjust recommendations
+- Memory personalization
+
+For each toggle determine:
+- Is it saved to backend?
+- Is it loaded on refresh?
+- Does it affect the Coach Agent?
+- Does it affect prompts, behavior, or UI?
+- Is it only UI state?
+
+Required behavior:
+Concise responses:
+- When on, Coach Agent should respond shorter and more directly by default.
+- When off, normal detail level.
+
+Proactive insights:
+- When on, Coach may surface trends/suggestions.
+- When off, Coach should not add unprompted insights.
+
+Auto-adjust recommendations:
+- When on, Coach may recommend readiness/program adjustments.
+- Still must require user confirmation before changing a plan.
+- When off, Check-In should save data but avoid proactive adjustment prompts unless user asks.
+
+Memory personalization:
+- When on, Coach uses stored memories/profile.
+- When off, Coach should not inject memory context into system prompt.
+- Existing memories should remain stored unless user clears them.
+
+5. Privacy & Data
+Audit:
+- Export my data
+- Clear coach memory
+- Privacy policy
+- Terms of service
+
+Clear coach memory:
+- Must require confirmation modal
+- Must clearly explain what will be deleted
+- Must delete userMemoriesTable entries or equivalent
+- Should not delete account
+- Should not delete billing
+- Should not delete saved programs unless explicitly stated
+- After clearing, memory personalization context should be gone from agent prompt
+
+Export my data:
+- If coming soon, ensure disabled state is clear and not clickable.
+- If implemented, export profile, memories, programs, check-ins, billing metadata excluding sensitive payment details.
+
+Privacy policy / Terms:
+- Links should work
+- No broken route
+
+6. Support
+Audit:
+- Contact support
+- Report a bug
+- Request a feature
+
+Confirm:
+- Each opens correct modal, mailto, form, or route
+- User/email/context is included if possible
+- Bug report can include device/app context
+- No dead buttons
+
+AGENT INTEGRATION AUDIT
+
+Verify Settings values are injected into:
+
+- Coach Agent prompt
+- Research retrieval params when relevant
+- Performance Architect handoff
+- Progression Intelligence if present
+- Behavioral Intelligence if present
+- CEO Heartbeat / Program Review if present
+
+Create a settings-to-agent map:
+
+Setting | Storage | Agent use | Current status | Fix needed
+
+Examples:
+- conciseResponses → coach style
+- proactiveInsights → unprompted suggestions
+- autoAdjustRecommendations → readiness adjustment prompts
+- memoryPersonalization → memory retrieval allowed/blocked
+- sportFocus → sport-specific programming
+- exercisesToAvoid/limitations → hard constraints
+
+STATE SYNC AUDIT
+
+Check:
+- Settings page loads existing profile
+- Calibration modal updates Settings immediately after save
+- Improve My Plan updates Settings immediately after save
+- Clearing memory updates Settings/memory state immediately
+- Refresh preserves settings
+- Multiple tabs do not create stale state
+
+UX COPY AUDIT
+
+Make sure language is honest:
+- “AI Coach Settings” is okay
+- “Auto-adjust recommendations” should not imply automatic program mutation
+Consider clearer copy:
+“Adjustment suggestions”
+Subtext:
+“Suggest changes from readiness and feedback. You approve before anything changes.”
+
+“Memory personalization”
+Subtext:
+“Use saved preferences, history, and constraints to personalize coaching.”
+
+QA TESTS
+
+A. Profile preferences
+1. Complete Improve My Plan calibration.
+2. Open Settings.
+PASS:
+- Training Preferences show saved values, not Not set.
+
+B. Edit preferences
+1. Tap Edit training preferences.
+2. Change sport/equipment/limitations.
+PASS:
+- Settings updates
+- Profile/memories update
+- Agent uses new values next chat
+
+C. Concise responses
+1. Toggle on.
+2. Ask “Why this plan?”
+PASS:
+- Response is shorter
+
+D. Proactive insights
+1. Toggle off.
+2. Ask normal question.
+PASS:
+- No unprompted trend suggestions
+
+E. Auto-adjust recommendations
+1. Toggle off.
+2. Submit low readiness check-in.
+PASS:
+- Saves check-in but does not aggressively prompt adjustment unless user asks
+
+F. Memory personalization
+1. Toggle off.
+2. Ask for new program.
+PASS:
+- Stored memories are not injected
+- Hard safety constraints should be clarified: if memory off, decide whether hard exclusions still apply or ask user.
+Recommendation: hard safety exclusions should remain unless user explicitly clears them.
+
+G. Clear coach memory
+1. Tap clear memory.
+2. Confirm.
+PASS:
+- Memories deleted
+- Agent no longer references old preferences
+- Profile remains unless intentionally cleared
+
+H. Billing
+PASS:
+- Current plan correct
+- Manage billing opens Stripe portal
+
+I. Support
+PASS:
+- all actions work
+
+OUTPUT
+
+Return:
+- Files inspected
+- Broken items found
+- Fixes implemented
+- Settings-to-agent integration map
+- Storage map
+- QA results
+- Typecheck result
+
+Important:
+Settings must be the user-facing control center for how TrainChat remembers, adapts, and communicates.
