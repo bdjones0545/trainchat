@@ -1,0 +1,209 @@
+Implement high-leverage conversion and retention upgrades for TrainChat.
+
+Goal:
+Maximize:
+1. First-session engagement
+2. Edit interactions
+3. Save conversions
+4. Account creation
+5. Upgrade readiness
+
+Do NOT add complex features.
+Do NOT change core agent logic.
+Focus ONLY on perception, flow, and conversion.
+
+-------------------------------------
+PHASE 1 — FIRST VALUE MOMENT ACCELERATION
+-------------------------------------
+
+After a user generates their first program:
+
+Immediately display a lightweight overlay or inline card:
+
+Title:
+“Your training system is ready”
+
+Subtext:
+“You can now edit anything in real time”
+
+Show 3 clickable quick actions:
+
+- Make this more athletic
+- Make Day 1 harder
+- Replace squats with knee-friendly options
+
+Behavior:
+- Clicking executes immediately (no typing required)
+- Triggers visible change (highlight system already exists)
+
+This forces the user into their FIRST EDIT.
+
+-------------------------------------
+PHASE 2 — EDIT MOMENT REINFORCEMENT
+-------------------------------------
+
+After the FIRST successful edit:
+
+Show a subtle reinforcement message:
+
+“Your system just updated in real time”
+
+Then:
+
+“Every part of your program is editable”
+
+Optional CTA (small button):
+“Keep refining”
+
+Behavior:
+- Show only once per session
+- Do not block UI
+- Fade after ~4 seconds
+
+-------------------------------------
+PHASE 3 — SAVE TRIGGER (CRITICAL)
+-------------------------------------
+
+Trigger save intent AFTER value is felt.
+
+Conditions:
+- After 2–3 edits OR
+- After ~20–40 seconds of engagement
+
+Show:
+
+Inline or floating card:
+
+Title:
+“Save your system”
+
+Subtext:
+“Store this and continue editing anytime”
+
+CTA:
+“Save My System”
+
+Behavior:
+- If user is guest → trigger account modal
+- If logged in → save immediately
+
+-------------------------------------
+PHASE 4 — SOFT UPGRADE PRIMING
+-------------------------------------
+
+After user has:
+- Generated a program
+- Performed at least 2 edits
+- Saved OR attempted to save
+
+Show a small non-intrusive hint:
+
+“Pro unlocks unlimited systems and advanced edits”
+
+Do NOT show full paywall yet.
+
+This primes the upgrade without friction.
+
+-------------------------------------
+PHASE 5 — RETURN SESSION HOOK
+-------------------------------------
+
+If user returns (has existing system):
+
+Show at top:
+
+“Your system is ready to continue”
+
+CTA:
+“Resume editing”
+
+Optional secondary:
+“Make this more intense”
+
+This reduces drop-off between sessions.
+
+-------------------------------------
+PHASE 6 — MICRO INTERACTION POLISH
+-------------------------------------
+
+Enhance perceived intelligence:
+
+1. Slight delay (150–300ms) before showing updates → feels intentional
+2. Keep highlight + scroll + toast (already implemented)
+3. Add subtle haptic-style feedback (if supported)
+4. Ensure zero lag between action → visible change
+
+-------------------------------------
+PHASE 7 — ANALYTICS EVENTS
+-------------------------------------
+
+Track:
+
+- first_program_generated
+- first_edit_performed
+- second_edit_performed
+- save_prompt_shown
+- save_clicked
+- account_created_from_save
+- upgrade_hint_shown
+- session_returned
+
+Use existing analytics.ts stub.
+
+-------------------------------------
+PHASE 8 — GUARDRAILS
+-------------------------------------
+
+Do NOT:
+- Show paywall too early
+- Interrupt the build/edit flow
+- Add large modals unnecessarily
+- Overwhelm with text
+- Break mobile UX
+
+Everything should feel:
+Fast, obvious, and natural.
+
+-------------------------------------
+PHASE 9 — VALIDATION
+-------------------------------------
+
+Test flow:
+
+1. New user:
+- Builds program
+- Sees “Your system is ready”
+- Clicks quick action
+- Sees change
+- Gets reinforcement message
+
+2. After edits:
+- Save prompt appears
+- User clicks save → signup flow works
+
+3. After signup:
+- System persists
+- User continues editing
+
+4. Return visit:
+- “Resume your system” appears
+
+-------------------------------------
+OUTPUT
+-------------------------------------
+
+Return:
+
+- Files modified
+- Components added
+- New state triggers
+- Analytics events wired
+- QA checklist results
+
+-------------------------------------
+
+This is not a feature build.
+
+This is a conversion engine.
+
+Prioritize clarity, speed, and momentum.

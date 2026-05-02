@@ -51,6 +51,8 @@ import { buildShareMoment, type ShareMoment } from "@/types/share-moments";
 import { useFocusMode } from "@/hooks/useFocusMode";
 import { getFocusModeConfig, detectFocusMismatch, FOCUS_MODE_CONFIGS } from "@/lib/focusModeConfig";
 import type { FocusMode } from "@/lib/focusMode";
+import { analytics } from "@/lib/analytics";
+import { FirstValueOverlay, EditReinforcementToast, SavePromptCard, UpgradeHint, ReturnSessionHook } from "@/components/conversion/ConversionEngine";
 
 const TRY_SAYING_PROMPTS: Record<string, string[]> = {
   strength: [
@@ -235,6 +237,19 @@ export default function Chat() {
   const [showSaveAccountModal, setShowSaveAccountModal] = useState(false);
   const [trySayingIndex, setTrySayingIndex] = useState(0);
   const trySayingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Conversion engine state ──────────────────────────────────────────────
+  const [convShowFirstValue, setConvShowFirstValue] = useState(false);
+  const [convShowEditReinforcement, setConvShowEditReinforcement] = useState(false);
+  const [convShowSavePrompt, setConvShowSavePrompt] = useState(false);
+  const [convShowUpgradeHint, setConvShowUpgradeHint] = useState(false);
+  const [convShowReturnHook, setConvShowReturnHook] = useState(false);
+  const convFirstValueShownRef = useRef(false);
+  const convEditReinfShownRef = useRef(false);
+  const convSavePromptShownRef = useRef(false);
+  const convUpgradeHintShownRef = useRef(false);
+  const convEditCountRef = useRef(0);
+  const convEngagementTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Rotate "Try saying" prompts every 12 seconds (effect placed after stream is declared)
 
@@ -664,6 +679,31 @@ export default function Chat() {
     return undefined;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stream.isActive, optimisticUserMsg]);
+
+  // ── Phase 5: Return session hook — shown once per browser session ────────────
+  useEffect(() => {
+    if (!hasActiveSystem || messagesLoading || messages.length > 0) return;
+    try {
+      if (sessionStorage.getItem("tc_return_hook_shown")) return;
+      sessionStorage.setItem("tc_return_hook_shown", "1");
+    } catch { return; }
+    const id = setTimeout(() => {
+      setConvShowReturnHook(true);
+      analytics.track("session_returned");
+    }, 500);
+    return () => clearTimeout(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasActiveSystem, messagesLoading]);
+
+  // ── Phase 4: Upgrade hint — fires once after saving with 2+ edits ────────────
+  useEffect(() => {
+    if (!isSaved || isPremium || convUpgradeHintShownRef.current || convEditCountRef.current < 2) return;
+    convUpgradeHintShownRef.current = true;
+    analytics.track("upgrade_hint_shown");
+    const id = setTimeout(() => setConvShowUpgradeHint(true), 500);
+    return () => clearTimeout(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSaved, isPremium]);
 
   // ── Stuck thinking timeout — hard safety net ─────────────────────────────────
   // If stream.isActive stays true for THINKING_TIMEOUT_MS without resolving,
@@ -1320,6 +1360,12 @@ export default function Chat() {
         if (isNewBuildSession) {
           setIsNewBuildSession(false);
         }
+        // ── Phase 1: first value moment overlay ───────────────────────────
+        if (!convFirstValueShownRef.current) {
+          convFirstValueShownRef.current = true;
+          analytics.track("first_program_generated");
+          setTimeout(() => setConvShowFirstValue(true), 250);
+        }
       }
       // Vibe edit mutated the DB system — clear the chat draft and the session
       // draft ref so the right panel transitions to showing the live DB-backed program.
@@ -1328,6 +1374,39 @@ export default function Chat() {
       if (result.systemEdit?.applied) {
         setLatestProgram(null);
         sessionDraftMsgIdRef.current = null;
+        // ── Phase 2 & 3: edit tracking ─────────────────────────────────────
+        convEditCountRef.current += 1;
+        const editNum = convEditCountRef.current;
+        if (editNum === 1) {
+          analytics.track("first_edit_performed");
+          if (!convEditReinfShownRef.current) {
+            convEditReinfShownRef.current = true;
+            setTimeout(() => setConvShowEditReinforcement(true), 200);
+          }
+          if (!convSavePromptShownRef.current) {
+            if (convEngagementTimerRef.current) clearTimeout(convEngagementTimerRef.current);
+            convEngagementTimerRef.current = setTimeout(() => {
+              if (!convSavePromptShownRef.current) {
+                convSavePromptShownRef.current = true;
+                setConvShowSavePrompt(true);
+                analytics.track("save_prompt_shown", { trigger: "time" });
+              }
+            }, 25000);
+          }
+        } else if (editNum === 2) {
+          analytics.track("second_edit_performed");
+          if (!convSavePromptShownRef.current) {
+            convSavePromptShownRef.current = true;
+            if (convEngagementTimerRef.current) clearTimeout(convEngagementTimerRef.current);
+            setConvShowSavePrompt(true);
+            analytics.track("save_prompt_shown", { trigger: "edit_count" });
+          }
+        } else if (editNum >= 3 && !convSavePromptShownRef.current) {
+          convSavePromptShownRef.current = true;
+          if (convEngagementTimerRef.current) clearTimeout(convEngagementTimerRef.current);
+          setConvShowSavePrompt(true);
+          analytics.track("save_prompt_shown", { trigger: "edit_count" });
+        }
       }
       // After a new program build: switch to Program tab to show the result.
       // Also open the panel (mutation_applied) so the user sees their new program.
@@ -1464,6 +1543,7 @@ export default function Chat() {
   }
 
   function handleSaveClick() {
+    analytics.track("save_clicked");
     if (isAnonymousUser) {
       setShowSaveAccountModal(true);
     } else {
@@ -2625,6 +2705,15 @@ export default function Chat() {
             ) : messages.length === 0 && !optimisticUserMsg && !stream.isActive ? (
               /* ─── Empty state — only shown when no messages AND no active submission ─── */
               <div className="flex flex-col items-center justify-center h-full py-8 px-4 text-center animate-in fade-in slide-in-from-bottom-2 duration-500">
+                {/* Phase 5: Return session hook — welcome back card for returning users */}
+                {convShowReturnHook && (
+                  <ReturnSessionHook
+                    programName={displayProgram?.programName}
+                    onResume={() => { setConvShowReturnHook(false); setTimeout(() => inputRef.current?.focus(), 100); }}
+                    onIntensify={() => { setConvShowReturnHook(false); handleSend("Make this more intense"); }}
+                    onDismiss={() => setConvShowReturnHook(false)}
+                  />
+                )}
                 {/* System core — TrainChat logo with living glow field */}
                 <div className="relative mb-5 flex items-center justify-center" style={{ width: 88, height: 88 }}>
                   {/* Outer radial glow halo */}
@@ -2802,6 +2891,25 @@ export default function Chat() {
                   </div>
                 )}
 
+                {/* ── Phase 1: First value overlay ────────────────────────────────────
+                    Shown after first program is generated. 3 one-tap quick actions
+                    force the user into their first edit. Dismissed on action or X. */}
+                {convShowFirstValue && !stream.isActive && (
+                  <FirstValueOverlay
+                    onAction={(text) => {
+                      setConvShowFirstValue(false);
+                      setTimeout(() => handleSend(text), 100);
+                    }}
+                    onDismiss={() => setConvShowFirstValue(false)}
+                  />
+                )}
+
+                {/* ── Phase 4: Upgrade hint ────────────────────────────────────────────
+                    Small non-intrusive hint shown once after saving with 2+ edits. */}
+                {convShowUpgradeHint && !isPremium && (
+                  <UpgradeHint onDismiss={() => setConvShowUpgradeHint(false)} />
+                )}
+
                 {/* Calibration nudge — shown at most once per session after a program
                     is generated. State is managed by the useEffect above so this
                     is a pure conditional render with no side effects. */}
@@ -2898,6 +3006,22 @@ export default function Chat() {
                   Undo
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* ── Phase 3: Save prompt card ──────────────────────────────────────────
+              Shown after 2-3 edits OR ~25s of engagement. Surfaces save intent
+              after value is felt. Anonymous users are routed to account creation. */}
+          {convShowSavePrompt && !isSaved && displayProgram && (
+            <div className="flex-shrink-0 px-4 py-2">
+              <SavePromptCard
+                isAnonymous={isAnonymousUser}
+                onSave={() => {
+                  setConvShowSavePrompt(false);
+                  handleSaveClick();
+                }}
+                onDismiss={() => setConvShowSavePrompt(false)}
+              />
             </div>
           )}
 
@@ -3105,6 +3229,18 @@ export default function Chat() {
       )}
     </MobileSlideLayout>
     </div>
+
+    {/* ── Phase 2: Edit reinforcement toast ──────────────────────────────────
+        Fixed floating toast shown once after the first edit. Auto-fades in 4s. */}
+    {convShowEditReinforcement && (
+      <EditReinforcementToast
+        onDone={() => setConvShowEditReinforcement(false)}
+        onKeepRefining={() => {
+          setConvShowEditReinforcement(false);
+          setTimeout(() => inputRef.current?.focus(), 100);
+        }}
+      />
+    )}
 
     {/* ─── Anonymous conversion floor ─────────────────────────────────────
         Rendered below the 100dvh workspace for anonymous deviceId users only.

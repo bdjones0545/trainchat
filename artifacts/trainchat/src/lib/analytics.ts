@@ -8,7 +8,15 @@ type EventName =
   | "paywall_shown"
   | "suggestion_chip_clicked"
   | "focus_mode_changed"
-  | "share_program_clicked";
+  | "share_program_clicked"
+  | "first_program_generated"
+  | "first_edit_performed"
+  | "second_edit_performed"
+  | "save_prompt_shown"
+  | "save_clicked"
+  | "account_created_from_save"
+  | "upgrade_hint_shown"
+  | "session_returned";
 
 interface EventProperties {
   [key: string]: string | number | boolean | null | undefined;
