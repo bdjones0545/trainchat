@@ -61,9 +61,9 @@ function buildCoachingReply(data: CalibrationData, score: number): string {
     "baseline";
 
   const tierMsg =
-    tier === "high" ? "Your AI accuracy is now high — I have everything I need to build precisely for you." :
-    tier === "medium" ? "Your AI accuracy is now medium. Add more detail anytime to sharpen recommendations further." :
-    "I've got the basics. The more you share, the more dialed in I can get.";
+    tier === "high" ? "Plan precision is high — I have everything I need to build precisely around you." :
+    tier === "medium" ? "Plan precision is solid. Add more detail anytime to sharpen things further." :
+    "I've got the basics. The more you share, the more dialed in your programs will be.";
 
   return `${detail} ${tierMsg}${
     data.primaryGoal ? ` I'm optimizing around ${data.primaryGoal.toLowerCase().replace(/_/g, " ")} as your primary driver.` : ""

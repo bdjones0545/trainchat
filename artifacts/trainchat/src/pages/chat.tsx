@@ -2118,7 +2118,7 @@ export default function Chat() {
           {calibrationScore > 0 && (
             <button
               onClick={() => setShowCalibration(true)}
-              title="Refine My Plan"
+              title="Plan Precision"
               className={`flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-lg border transition-all ${
                 calibrationScore >= 70
                   ? "text-green-400 border-green-400/30 bg-green-400/10"
@@ -3267,7 +3267,7 @@ export default function Chat() {
                     }`}
                   >
                     <Zap className="w-3 h-3" />
-                    {calibrationScore > 0 ? `${calibrationScore}% Calibrated` : "Refine My Plan"}
+                    {calibrationScore > 0 ? `${calibrationScore}% Precision` : "Improve My Plan"}
                   </button>
                 </div>
                 {hasActiveSystem && (
