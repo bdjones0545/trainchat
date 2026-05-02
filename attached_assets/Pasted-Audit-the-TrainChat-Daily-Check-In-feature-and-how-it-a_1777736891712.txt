@@ -1,0 +1,211 @@
+Audit the TrainChat Daily Check-In feature and how it affects the coaching system.
+
+Issue:
+The main chat has a “Check-In” button that opens a Daily Check-In modal with sleep, energy, motivation, soreness, and stress scores.
+
+Goal:
+Determine exactly how check-in data affects:
+- user profile
+- active training system
+- Coach Agent context
+- Performance Architect decisions
+- progression intelligence
+- readiness/fatigue adjustments
+- current plan modifications
+
+Audit:
+- Check-In button
+- Daily Check-In modal/component
+- submit behavior
+- backend route/API
+- database table/storage
+- agent prompt injection
+- memory/context retrieval
+- program mutation/refinement behavior
+
+Questions to answer:
+
+1. What happens when user taps Check-In?
+- Is it only opening a modal?
+- Does it save data?
+- Does it trigger an agent response?
+- Does it update today’s workout?
+- Does it affect future programming?
+
+2. What does each score affect?
+- Sleep
+- Energy
+- Motivation
+- Soreness
+- Stress
+
+3. Where is check-in data stored?
+- local state
+- user profile
+- check-in table
+- memories
+- active system metadata
+
+4. Is readiness calculated?
+Audit whether there is a readiness score or fatigue score.
+
+If not, add one:
+ReadinessScore {
+  sleep: number;
+  energy: number;
+  motivation: number;
+  soreness: number;
+  stress: number;
+  readinessLevel: "high" | "moderate" | "low";
+  fatigueRisk: "low" | "moderate" | "high";
+}
+
+Suggested logic:
+- Higher sleep/energy/motivation improves readiness
+- Higher soreness/stress lowers readiness
+- Low sleep + high soreness = high fatigue risk
+
+5. Does Coach Agent use check-in data?
+Confirm whether check-in data is included in:
+- buildSystemPrompt
+- recent user context
+- behavioral intelligence
+- progression intelligence
+- mutation/edit decisions
+- pain/safety logic
+
+6. Does Performance Architect use check-in data?
+Confirm whether readiness/fatigue is passed in handoff.
+
+If not, add:
+- readinessLevel
+- fatigueRisk
+- latestCheckIn
+- recommendedAdjustment
+
+7. What should happen after check-in submit?
+Add post-submit behavior:
+
+After user logs check-in, show:
+Title:
+“Check-in saved”
+
+Then give one clear coaching recommendation:
+
+Examples:
+- “You look ready for normal training today.”
+- “Recovery looks a little low — I can reduce volume today.”
+- “Soreness is elevated — I can make today more joint-friendly.”
+
+Buttons:
+- “Adjust today’s plan”
+- “Keep plan as-is”
+
+If user taps “Adjust today’s plan”:
+- route through Coach Agent / Performance Architect if needed
+- adjust only today’s session unless user asks for whole-program adjustment
+- show visible program update
+- toast: “Today’s plan adjusted”
+
+8. How should check-in affect programming?
+Rules:
+
+High readiness:
+- normal training
+- optional progression if user wants
+- no automatic reckless increase
+
+Moderate readiness:
+- keep plan mostly intact
+- reduce optional finishers
+- slightly lower volume or intensity if soreness/stress is elevated
+
+Low readiness:
+- reduce volume
+- reduce intensity
+- preserve movement quality
+- swap high-risk/high-fatigue work for lower-stress alternatives
+- keep training useful, not random rest
+
+High soreness:
+- reduce loaded eccentric stress
+- avoid aggressive high-impact work
+- bias toward mobility, technique, or upper/lower adjustment based on soreness location if available
+
+High stress + low sleep:
+- reduce complexity and intensity
+- keep session shorter
+- avoid max effort work
+
+9. Store as behavioral intelligence
+Check-ins should contribute to behavioral signals over time:
+- fatigue_risk
+- low_adherence
+- high_motivation
+- pain_pattern if soreness/pain repeatedly high
+- recovery_trend
+
+10. UX language audit:
+Make sure this feels like coaching, not medical diagnosis.
+
+Avoid:
+- “You are overtrained”
+- “You should not train”
+- “This means injury risk”
+
+Use:
+- “Recovery looks lower today”
+- “Let’s keep quality high and reduce unnecessary fatigue”
+- “I can adjust today’s plan”
+
+11. QA tests:
+
+A. Tap Check-In
+PASS:
+- modal opens
+- no program mutation yet
+
+B. Log normal scores
+PASS:
+- data saves
+- recommendation says normal training
+
+C. Log low sleep, low energy, high soreness/stress
+PASS:
+- readiness low
+- recommendation suggests reducing today’s plan
+
+D. Tap “Adjust today’s plan”
+PASS:
+- today/session-level adjustment occurs
+- current program visibly updates
+- receipt/confirmation appears
+
+E. Tap “Keep plan as-is”
+PASS:
+- data saved
+- no plan mutation
+
+F. Refresh / return next session
+PASS:
+- previous check-ins influence behavioral intelligence if intended
+
+G. Agent prompt
+PASS:
+- latest check-in appears in Coach context
+- Performance Architect receives readiness/fatigue when relevant
+
+Output:
+- Root cause / current behavior
+- Files inspected
+- Data flow map
+- Whether check-in affects agent today
+- Missing integrations
+- Fixes implemented
+- QA results
+- Typecheck result
+
+Important:
+Do not make check-in auto-change the plan without user confirmation.
+Do not make medical claims.
+Do not break chat, calibration, Live Program Panel, or save flow.
