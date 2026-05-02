@@ -90,13 +90,22 @@ function extractContextTags(params: ResearchRetrievalParams): string[] {
   // Programming
   if (/periodiz|block|linear|undulat|wave/.test(combined)) tags.push("periodization");
   if (/volume|frequency|intensity|load/.test(combined)) tags.push("volume_management");
-  if (/concurrent|aerobic|lifting together/.test(combined)) tags.push("concurrent_training");
+  if (/concurrent|both.?strength.?and|strength.?and.?cardio|lifting.?and.?running|aerobic.?and.?lifting/.test(combined)) tags.push("concurrent_training");
+  if (/concurrent|interference.?effect|cardio.?and.?strength|endurance.?and.?strength/.test(combined)) tags.push("interference_effect");
   if (/overload|progression|progressive/.test(combined)) tags.push("progressive_overload");
+
+  // Hypertrophy
+  if (/hypertrophy|muscle|size|bulk|mass|build.?muscle|grow.?muscle/.test(combined)) tags.push("hypertrophy");
+  if (/hypertrophy|muscle.?growth|build.?muscle|gain.?muscle/.test(combined)) tags.push("muscle_growth");
+  if (/rep.?range|how.?many.?reps|reps.?for.?muscle|sets.?and.?reps/.test(combined)) tags.push("rep_ranges");
+  if (/training.?frequency|how.?often.?train|times.?per.?week|sessions.?per.?week/.test(combined)) tags.push("training_frequency");
 
   // Recovery & Wellness
   if (/recover|rest|sleep|fatigue|overtraining|deload/.test(combined)) tags.push("recovery");
+  if (/fatigue|overtrain|burnout|worn.?out|tired|exhausted/.test(combined)) tags.push("fatigue_management");
   if (/sleep/.test(combined)) tags.push("sleep");
-  if (/readiness|hrv|stress/.test(combined)) tags.push("load_management");
+  if (/readiness|hrv|heart.?rate.?variab/.test(combined)) tags.push("load_management");
+  if (/stress|life.?stress|work.?stress/.test(combined)) tags.push("load_management");
 
   // Nutrition
   if (/protein|amino/.test(combined)) tags.push("protein_intake");

@@ -30,6 +30,7 @@ import {
 import { seedResearchLibrary, isResearchLibraryEmpty } from "../research/research-seeder";
 import { seedSpeedMobilityResearch, hasSpeedMobilityResearch } from "../research/research-speed-mobility-seeder";
 import { seedStrengthResearch, hasStrengthResearch } from "../research/research-strength-seeder";
+import { seedWeeklyUpdateWeek1, hasWeeklyUpdateWeek1Research } from "../research/research-weekly-update-seeder";
 
 const router: IRouter = Router();
 
@@ -839,6 +840,39 @@ router.post("/admin/research/:id/librarian/chunks", requireAuth, requireAdmin, a
       return;
     }
     res.json({ ok: true, chunksCreated: outcome.chunksCreated });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/research/seed-weekly-update-week1
+ * Seed Week 1 of the weekly research update (3 pending docs: hypertrophy, recovery, concurrent training).
+ * Documents are inserted as status: "pending" / isActive: false — admin must approve before they enter retrieval.
+ * Query params: force=true to re-seed even if already seeded.
+ */
+router.post("/admin/research/seed-weekly-update-week1", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const force = req.query.force === "true";
+  try {
+    const alreadySeeded = await hasWeeklyUpdateWeek1Research();
+    if (alreadySeeded && !force) {
+      res.json({
+        ok: true,
+        skipped: true,
+        message: "Week 1 weekly update already seeded. Use ?force=true to re-seed. Documents remain PENDING — approve individually via /api/admin/research/:id/approve.",
+      });
+      return;
+    }
+    const { inserted, skipped, chunks } = await seedWeeklyUpdateWeek1(force);
+    res.json({
+      ok: true,
+      inserted,
+      skipped,
+      chunks,
+      status: "pending",
+      isActive: false,
+      note: "Documents are PENDING and NOT active. Review and approve each via POST /api/admin/research/:id/approve.",
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

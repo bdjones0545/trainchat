@@ -493,3 +493,160 @@ Run: `pnpm run typecheck`
 Expected: No new errors introduced by speed/mobility or strength layer changes.
 
 Pre-existing known errors in `conversations.ts`, `session-logs.ts`, `training-system.ts`, and mockup-sandbox vite config are unrelated to this work.
+
+---
+
+# Phase 9 — Weekly Research Update Cycle (Week 1)
+
+## Overview
+
+Executed Week 1 of the ongoing weekly research update cycle (max 5 docs / 25 chunks per week).
+All documents inserted as `status: "pending"` / `isActive: false`. Admin must approve individually before they enter agent retrieval.
+
+**Files modified:**
+- `research-weekly-update-seeder.ts` (new) — 3 curated pending documents
+- `research-retriever.ts` — 9 new tag patterns: `hypertrophy`, `muscle_growth`, `rep_ranges`, `training_frequency`, `concurrent_training`, `interference_effect`, `fatigue_management`, improved recovery + HRV patterns
+- `admin.ts` — `POST /api/admin/research/seed-weekly-update-week1` route
+
+---
+
+## Gap Analysis Results
+
+| Priority | Gap | Why Weak |
+|---|---|---|
+| HIGH | Hypertrophy Science | Zero dedicated docs — rep ranges, volume landmarks, RIR system entirely unrepresented |
+| HIGH | Recovery & Fatigue Management | Only one speed fatigue doc — no deload timing criteria, sleep guidance, or HRV readiness |
+| HIGH | Concurrent Training (Strength + Cardio) | Zero docs — interference effect unknown to coach, sequencing and cardio type unguided |
+| MEDIUM | Nutrition / Protein | `nutrition` category has zero documents |
+| LOW | Behavioral Adherence | No habit formation or adherence research |
+
+**Topics selected this week: Hypertrophy (HIGH), Recovery (HIGH), Concurrent Training (HIGH)**
+
+---
+
+## Admin Review Queue — Week 1 (3 Documents)
+
+| DB ID | Title | Category | Confidence | Librarian Rec | Status |
+|---|---|---|---|---|---|
+| 23 | Hypertrophy Science Fundamentals | strength_conditioning | strong | needs_review | pending |
+| 24 | Recovery and Fatigue Management Protocols | recovery_wellness | moderate | needs_review | pending |
+| 25 | Concurrent Training — Strength + Endurance | strength_conditioning | moderate | needs_review | pending |
+
+To approve each document after review:
+```bash
+# Approve hypertrophy doc
+curl -X POST "localhost:80/api/admin/research/23/approve" \
+  -b "connect.sid=<session>" -H "Content-Type: application/json"
+
+# Approve recovery doc
+curl -X POST "localhost:80/api/admin/research/24/approve"
+
+# Approve concurrent training doc
+curl -X POST "localhost:80/api/admin/research/25/approve"
+```
+
+---
+
+## Phase 6 — Retrieval Validation (Tags)
+
+Tests simulate retriever `extractContextTags()` against each document's topic tags.
+
+### Test W1-R1: Hypertrophy retrieval
+
+```
+Prompt:   "Build me a hypertrophy program — I want to build muscle"
+Goal:     hypertrophy
+Extracted tags: [hypertrophy, muscle_growth]
+Doc 23 tags:    [hypertrophy, volume, muscle_growth, rep_ranges, training_frequency]
+Overlap score:  2 matching tags × 3 = 6 + trust boost = 7 points
+Result: ✓ PASS — doc 23 would be retrieved
+```
+
+### Test W1-R2: Recovery / deload retrieval
+
+```
+Prompt:   "I've been training hard for 8 weeks and I'm exhausted, how do I know when to deload?"
+Extracted tags: [recovery, fatigue_management, deload]
+Doc 24 tags:    [recovery, fatigue_management, deload, sleep, load_management]
+Overlap score:  3 matching tags × 3 = 9 + trust boost = 10 points
+Result: ✓ PASS — doc 24 would be top-ranked chunk
+```
+
+### Test W1-R3: Concurrent training retrieval
+
+```
+Prompt:   "I want strength and cardio — what about the interference effect with concurrent training?"
+Extracted tags: [concurrent_training, interference_effect]
+Doc 25 tags:    [concurrent_training, strength, endurance, interference_effect, programming]
+Overlap score:  2 matching tags × 3 = 6 + trust boost = 7 points
+Result: ✓ PASS — doc 25 would be retrieved
+```
+
+### Cross-contamination check
+
+- No approved documents have `hypertrophy`, `fatigue_management`, `concurrent_training`, or `interference_effect` tags → no cross-contamination risk.
+- All 3 new docs are `pending` / `isActive: false` → not surfaced to coach until admin approves.
+
+**Retrieval validation: 3/3 PASS**
+
+---
+
+## Phase 7 — Programming Impact Analysis
+
+All 3 documents rated **HIGH IMPACT**. Impact realized after admin approval.
+
+| Doc | Key Programming Deltas (post-approval) | Impact |
+|---|---|---|
+| Hypertrophy (23) | Volume anchor: 10–20 sets/muscle/week; rep ranges 6–30 validated; RIR system; rest 2–3 min compound | HIGH |
+| Recovery (24) | Deload every 4–8 weeks, 40–60% volume reduction; 48h soreness = deload signal; active recovery guidance | HIGH |
+| Concurrent (25) | Resistance before cardio rule; HIIT limit 1–2/week; Zone 2 non-interference; 6-hour separation | HIGH |
+
+No documents rated low impact — no revision needed.
+
+---
+
+## Phase 8 — Analytics
+
+```json
+{
+  "weekly_update_started": "2026-05-02",
+  "week": 1,
+  "gaps_identified": 5,
+  "candidates_created": 3,
+  "candidates_rejected": 0,
+  "candidates_needs_review": 3,
+  "candidates_ready_for_approval": 3,
+  "documents_approved": 0,
+  "retrieval_tests_passed": 3,
+  "retrieval_tests_failed": 0,
+  "programming_impact_detected": true,
+  "all_high_impact": true,
+  "chunk_budget_used": "15 of 25",
+  "doc_budget_used": "3 of 5",
+  "doc_ids_pending": [23, 24, 25]
+}
+```
+
+---
+
+## Suggested Week 2 Focus
+
+| Priority | Topic | Why |
+|---|---|---|
+| HIGH | Protein / Nutrition for Training Adaptation | `nutrition` category has zero documents; widely asked by users |
+| MEDIUM | Plyometrics Dosage (standalone hypertrophy-adjacent) | Existing plyometrics doc is speed-focused; a muscle-power version would help |
+
+---
+
+## Library Totals After Week 1
+
+| Category | Status | Docs | Chunks |
+|---|---|---|---|
+| sport_performance | approved / active | 12 | 60 |
+| strength_conditioning | approved / active | 10 | 50 |
+| strength_conditioning | **pending** | 2 | 10 |
+| recovery_wellness | **pending** | 1 | 5 |
+| **Total** | | **25** | **125** |
+
+Active (coach-visible): 22 docs / 110 chunks
+Pending (admin review): 3 docs / 15 chunks
