@@ -844,6 +844,18 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditC
 
   const sessionFocusBullets = coachingNotesToBullets(today.coachingNotes ?? "");
 
+  if (import.meta.env.DEV) {
+    const completedCount = (today as any).currentSessionIndex ?? 0;
+    const currentSession = today;
+    console.log("[Program Progression]", {
+      programId: (today as any).trainingSystemId ?? null,
+      completedCount,
+      currentSessionIndex: (today as any).currentSessionIndex ?? 0,
+      currentSessionTitle: currentSession?.label,
+      reason: "session-history-based",
+    });
+  }
+
   // ── Week-complete state — all sessions in this week are done ─────────────────
   if (today.isWeekComplete) {
     return (
@@ -879,10 +891,12 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditC
     );
   }
 
-  // ── Label for the hero card: "Today's Session" or "Next Up" ─────────────────
+  // ── Label for the hero card: program-first "Day X of Y" ─────────────────────
+  const sessionDayNumber = ((today as any).currentSessionIndex ?? 0) + 1;
+  const sessionTotalDays = (today as any).totalSessions ?? 1;
   const heroLabel = today.isAdvancedFromCompleted
-    ? "Next Up"
-    : `${dayOfWeekLabel}'s Session`;
+    ? `Day ${sessionDayNumber} of ${sessionTotalDays}`
+    : `Day ${sessionDayNumber} of ${sessionTotalDays}`;
 
   return (
     <div className="space-y-4">
@@ -892,6 +906,7 @@ function TodayView({ highlightedIds, onEditExercise, onEditSession, onQuickEditC
           <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">{heroLabel}</p>
             <h2 className="text-xl font-bold text-foreground leading-tight">{today.label}</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Suggested for {dayOfWeekLabel}</p>
             {today.emphasis && <p className="text-sm text-muted-foreground mt-1">{today.emphasis}</p>}
             {highlightedIds.sessions.has(today.id) && (
               <span className="inline-flex items-center gap-1 mt-2 text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">

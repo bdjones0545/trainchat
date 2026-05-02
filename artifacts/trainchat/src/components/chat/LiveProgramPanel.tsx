@@ -1353,10 +1353,9 @@ function ProgramTab({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newProgramSignal]);
 
-  // Pin expanded day to today's session on initial program load and after each program change.
-  // Uses dayOfWeek preserved in the ProgramDay by transformSystemToProgram.
-  // Falls back to Day 1 (index 0) when today has no scheduled session.
-  // EXCEPTION: brand-new builds always start at Day 1, regardless of the current weekday.
+  // Pin expanded day to the current session on initial program load and after each program change.
+  // Uses session-history (completedCount) instead of calendar/weekday matching.
+  // EXCEPTION: brand-new builds always start at Day 1 (completedCount=0 naturally handles this).
   useEffect(() => {
     if (!program) return;
     const key = `${trainingSystemId ?? ""}::${program.programName}::${program.days?.length ?? 0}`;
@@ -1403,11 +1402,27 @@ function ProgramTab({
         }));
       }
     } else {
-      // Existing program — use weekday-matching with Day 1 fallback.
-      const todayDow = new Date().getDay();
-      const weekdayIdx = (program.days ?? []).findIndex((d) => d.dayOfWeek === todayDow);
-      selectedIdx = weekdayIdx >= 0 ? weekdayIdx : 0;
-      selectionSource = weekdayIdx >= 0 ? "weekday" : "day1_default";
+      // Existing program — use session-history index (from cached today API response).
+      // completedCount → currentSessionIndex drives the position, not the calendar weekday.
+      // Falls back to Day 1 (index 0) when no cache is available yet.
+      const todayCacheEntries = queryClient.getQueriesData<any>({ queryKey: ["training-system-today"] });
+      const cachedToday = todayCacheEntries
+        .map(([, data]) => data)
+        .find((d) => d?.currentSessionIndex != null);
+      const historyIdx = cachedToday?.currentSessionIndex ?? 0;
+      const days = program.days ?? [];
+      selectedIdx = Math.min(historyIdx, Math.max(0, days.length - 1));
+      selectionSource = "session_history";
+
+      if (import.meta.env.DEV) {
+        console.log("[Program Progression]", {
+          programId: trainingSystemId ?? null,
+          completedCount: historyIdx,
+          currentSessionIndex: selectedIdx,
+          currentSessionTitle: days[selectedIdx]?.name ?? null,
+          reason: "session-history-based",
+        });
+      }
     }
 
     if (import.meta.env.DEV) {

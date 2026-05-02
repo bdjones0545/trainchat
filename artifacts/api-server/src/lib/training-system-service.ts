@@ -527,7 +527,6 @@ export async function getTodaySession(userId: number, focusMode?: string | null,
 
   if (!currentWeek) return null;
 
-  const dayOfWeek = new Date().getDay();
   const todayStr = new Date().toISOString().slice(0, 10);
   const resolvedFocus = (focusMode === "strength" || focusMode === "speed" || focusMode === "mobility")
     ? focusMode
@@ -539,24 +538,64 @@ export async function getTodaySession(userId: number, focusMode?: string | null,
     .where(eq(trainingSessions.trainingWeekId, currentWeek.id))
     .orderBy(trainingSessions.orderIndex);
 
-  // Brand-new build: always return Day 1 (first session by orderIndex), ignore weekday mapping.
-  // forceDay1 is set by the client immediately after a new program is saved and cleared
-  // on first acknowledgement — so subsequent loads revert to normal weekday logic.
-  const todaySession = forceDay1
-    ? (sessions[0] ?? null)
-    : (sessions.find((s) => s.dayOfWeek === dayOfWeek) ?? sessions[0] ?? null);
+  if (sessions.length === 0) return null;
 
-  if (forceDay1 && sessions[0]) {
-    logger.info({ userId, systemId: system.id, resolvedFocus, sessionId: sessions[0].id, sessionLabel: sessions[0].label },
-      "[TodaySession:forceDay1] Returning Day 1 for new build");
+  // ── Session-history-based progression ────────────────────────────────────────
+  // Count ALL completed sessions for this user + program (not just today).
+  // This drives the current session index, replacing calendar/weekday matching.
+  // Rules: if 0 completed → Day 1, if 1 completed → Day 2, etc.
+  // Clamp so currentSessionIndex never exceeds the last session.
+  const allCompletedRows = await db
+    .select()
+    .from(activeSessionsTable)
+    .where(
+      and(
+        eq(activeSessionsTable.userId, userId),
+        eq(activeSessionsTable.status, "completed"),
+        system.id != null
+          ? eq(activeSessionsTable.trainingSystemId, system.id)
+          : isNull(activeSessionsTable.trainingSystemId),
+      )
+    );
+
+  const completedCount = allCompletedRows.length;
+  const totalSessions = sessions.length;
+  const isWeekComplete = completedCount >= totalSessions;
+  const currentSessionIndex = Math.min(completedCount, totalSessions - 1);
+  const targetSession = sessions[currentSessionIndex] ?? sessions[0] ?? null;
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[Program Progression]", {
+      programId: system.id,
+      completedCount,
+      currentSessionIndex,
+      currentSessionTitle: targetSession?.label,
+      reason: "session-history-based",
+    });
   }
 
-  if (!todaySession) return null;
+  if (forceDay1) {
+    logger.info({ userId, systemId: system.id, resolvedFocus, sessionId: sessions[0].id, sessionLabel: sessions[0].label },
+      "[TodaySession:forceDay1] New build — session-history completedCount=0 naturally resolves to Day 1");
+  }
 
-  // ── Check if today's session is already completed in active_sessions ────────
+  if (!targetSession) return null;
+
+  logger.info({
+    userId,
+    focusMode: resolvedFocus,
+    trainingSystemId: system.id,
+    today: todayStr,
+    completedCount,
+    currentSessionIndex,
+    isWeekComplete,
+    crossProgramLeakDetected: false,
+  }, "[SessionProgramIsolationAudit] getTodaySession — session-history lookup");
+
+  // ── Check if today's session specifically is completed (drives isAdvancedFromCompleted) ──
   // CRITICAL: scope by trainingSystemId so Program A's completion doesn't
   // leak into Program B that shares the same focusMode.
-  const [completedRow] = await db
+  const [completedTodayRow] = await db
     .select()
     .from(activeSessionsTable)
     .where(
@@ -572,96 +611,56 @@ export async function getTodaySession(userId: number, focusMode?: string | null,
     )
     .limit(1);
 
-  logger.info({
-    userId,
-    focusMode: resolvedFocus,
-    trainingSystemId: system.id,
-    today: todayStr,
-    resolvedLoggedState: !!completedRow,
-    sourceRecordIds: completedRow ? [completedRow.id] : [],
-    crossProgramLeakDetected: false,
-  }, "[SessionProgramIsolationAudit] getTodaySession — completed lookup");
+  // isAdvancedFromCompleted: user completed today's session and we're now showing the next one.
+  const isAdvancedFromCompleted = !!completedTodayRow && completedCount < totalSessions;
 
-  let targetSession = todaySession;
-  let isAdvancedFromCompleted = false;
-  let isWeekComplete = false;
   let nextWeekNumber: number | null = null;
   let nextWeekLabel: string | null = null;
 
-  if (completedRow) {
-    // ── Today's session is done — advance to next actionable session in this week
-    const nextSession = sessions.find((s) => s.orderIndex > todaySession.orderIndex) ?? null;
+  if (isWeekComplete) {
+    // ── No more sessions this week — find the next week info ─────────────────
+    const allWeeks = await db
+      .select()
+      .from(trainingWeeks)
+      .where(eq(trainingWeeks.trainingPhaseId, currentPhase.id))
+      .orderBy(trainingWeeks.orderIndex);
 
-    if (nextSession) {
-      targetSession = nextSession;
-      isAdvancedFromCompleted = true;
+    const currentWeekIdx = allWeeks.findIndex((w) => w.id === currentWeek.id);
+    const nextWeek = currentWeekIdx >= 0 ? (allWeeks[currentWeekIdx + 1] ?? null) : null;
 
-      console.log("[TodayAdvanceAudit]", JSON.stringify({
-        focusMode: resolvedFocus,
-        completedSessionId: todaySession.id,
-        completedSessionLabel: todaySession.label,
-        completedDayNumber: todaySession.orderIndex,
-        previousTodaySessionId: todaySession.id,
-        nextTodaySessionId: nextSession.id,
-        nextTodaySessionLabel: nextSession.label,
-        nextTodayWeekNumber: currentWeek.weekNumber,
-        nextTodayStatus: "not_started",
-        advancedSuccessfully: true,
-      }));
-    } else {
-      // ── No more sessions this week — find the next week info ─────────────────
-      isWeekComplete = true;
+    nextWeekNumber = nextWeek?.weekNumber ?? null;
+    nextWeekLabel = nextWeek?.label ?? null;
 
-      const allWeeks = await db
-        .select()
-        .from(trainingWeeks)
-        .where(eq(trainingWeeks.trainingPhaseId, currentPhase.id))
-        .orderBy(trainingWeeks.orderIndex);
+    const lastSession = sessions[totalSessions - 1];
+    const exercises = await db
+      .select()
+      .from(sessionExercises)
+      .where(eq(sessionExercises.trainingSessionId, lastSession.id))
+      .orderBy(sessionExercises.orderIndex);
 
-      const currentWeekIdx = allWeeks.findIndex((w) => w.id === currentWeek.id);
-      const nextWeek = currentWeekIdx >= 0 ? (allWeeks[currentWeekIdx + 1] ?? null) : null;
+    console.log("[TodayResolverAudit]", JSON.stringify({
+      focusMode: resolvedFocus,
+      displayedSessionId: lastSession.id,
+      displayedStatus: "week_complete",
+      sourceRule: "session_history_week_complete",
+      completedCount,
+      totalSessions,
+      nextWeekNumber,
+    }));
 
-      nextWeekNumber = nextWeek?.weekNumber ?? null;
-      nextWeekLabel = nextWeek?.label ?? null;
-
-      console.log("[TodayAdvanceAudit]", JSON.stringify({
-        focusMode: resolvedFocus,
-        completedSessionId: todaySession.id,
-        completedDayNumber: todaySession.orderIndex,
-        previousTodaySessionId: todaySession.id,
-        nextTodaySessionId: null,
-        nextTodayWeekNumber: nextWeekNumber,
-        nextTodayStatus: "week_complete",
-        advancedSuccessfully: false,
-        isWeekComplete: true,
-      }));
-
-      const exercises = await db
-        .select()
-        .from(sessionExercises)
-        .where(eq(sessionExercises.trainingSessionId, todaySession.id))
-        .orderBy(sessionExercises.orderIndex);
-
-      console.log("[TodayResolverAudit]", JSON.stringify({
-        focusMode: resolvedFocus,
-        displayedSessionId: todaySession.id,
-        displayedStatus: "week_complete",
-        sourceRule: "week_complete_after_final_session",
-        nextWeekNumber,
-      }));
-
-      return {
-        ...todaySession,
-        exercises,
-        currentWeek,
-        currentPhase,
-        trainingSystemId: currentPhase.trainingSystemId,
-        isAdvancedFromCompleted: false,
-        isWeekComplete: true,
-        nextWeekNumber,
-        nextWeekLabel,
-      };
-    }
+    return {
+      ...lastSession,
+      exercises,
+      currentWeek,
+      currentPhase,
+      trainingSystemId: currentPhase.trainingSystemId,
+      isAdvancedFromCompleted: false,
+      isWeekComplete: true,
+      nextWeekNumber,
+      nextWeekLabel,
+      currentSessionIndex: totalSessions - 1,
+      totalSessions,
+    };
   }
 
   const exercises = await db
@@ -673,12 +672,10 @@ export async function getTodaySession(userId: number, focusMode?: string | null,
   console.log("[TodayResolverAudit]", JSON.stringify({
     focusMode: resolvedFocus,
     displayedSessionId: targetSession.id,
-    displayedStatus: isAdvancedFromCompleted ? "next_after_completion" : (completedRow ? "completed" : "not_started"),
-    sourceRule: isAdvancedFromCompleted
-      ? "advanced_from_completed"
-      : sessions.find((s) => s.dayOfWeek === dayOfWeek)
-        ? "day_of_week_match"
-        : "first_session_fallback",
+    displayedStatus: isAdvancedFromCompleted ? "next_after_completion" : (completedTodayRow ? "completed" : "not_started"),
+    sourceRule: "session_history_based",
+    completedCount,
+    currentSessionIndex,
   }));
 
   return {
@@ -691,6 +688,8 @@ export async function getTodaySession(userId: number, focusMode?: string | null,
     isWeekComplete: false,
     nextWeekNumber: null,
     nextWeekLabel: null,
+    currentSessionIndex,
+    totalSessions,
   };
 }
 
