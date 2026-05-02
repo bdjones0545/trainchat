@@ -1,0 +1,259 @@
+Audit TrainChat’s 3-agent chain of command and interaction model.
+
+Goal:
+Make sure Coach Agent, Performance Architect, and Research Librarian interact cleanly, have clear authority, and never conflict, overlap, or leak complexity to the user.
+
+Agents:
+1. Coach Agent / CEO
+- User-facing final decision-maker
+- Owns conversation, intent, constraints, final response
+- Decides when to use other agents
+- Applies CEO Heartbeat
+
+2. Performance Architect
+- Internal programming architect
+- Owns structure, sequencing, progression, periodization
+- Receives constraints/research guidance from Coach/Orchestrator
+- Returns structured program architecture
+
+3. Research Librarian
+- Admin-only evidence curator
+- Owns research ingestion, review, tagging, chunking
+- Never runs during normal user chat
+- Only feeds approved research into database
+
+-------------------------------------
+PHASE 1 — CHAIN OF COMMAND AUDIT
+-------------------------------------
+
+Define final authority hierarchy:
+
+1. Safety / pain / medical boundaries
+2. User constraints: equipment, schedule, preferences
+3. Coach Agent / CEO decision
+4. Performance Architect structure
+5. Research guidance
+6. Style/persona/wording
+
+Confirm:
+- Research never overrides safety
+- Architect never violates user constraints
+- Coach can reject/repair Architect output
+- Librarian never directly influences live chat except through approved chunks
+- User only experiences one unified TrainChat coach
+
+-------------------------------------
+PHASE 2 — INTERACTION FLOW MAP
+-------------------------------------
+
+Document exact flows:
+
+A. New program build
+User → Coach → Research Retriever → Programming Guidance → Architect → Program Review/Heartbeat → Coach response
+
+B. Simple exercise edit
+User/button → Coach/orchestrator → mutation pipeline → receipt → Coach confirmation
+
+C. Whole-program restructure
+User → Coach → Research Guidance → Architect → Review/Heartbeat → Coach response
+
+D. Research admin action
+Admin → Research Librarian → research_documents/chunks → admin approval → retriever availability
+
+E. Evidence question
+User → Coach → approved research retrieval → concise explanation
+
+Output these as a markdown diagram.
+
+-------------------------------------
+PHASE 3 — OVERLAP AUDIT
+-------------------------------------
+
+Search prompts/files for responsibility overlap.
+
+Flag if:
+- Coach is doing research curation
+- Architect is doing user-facing explanation
+- Librarian is doing program creation
+- Research guidance is treated as hard law
+- Architect overrides constraints
+- Coach rewrites structured program silently
+- Multiple systems assign sets/reps inconsistently
+
+Create table:
+- overlap found
+- risk level
+- recommended fix
+- file location
+
+-------------------------------------
+PHASE 4 — ROUTING AUDIT
+-------------------------------------
+
+Audit agent-orchestrator routes.
+
+Confirm:
+- build_program → Architect
+- restructure/progress/deload/global sport goal → Architect
+- single exercise swap/harder/easier → mutation pipeline, Architect skipped
+- research admin actions → Librarian only
+- evidence/why questions → Coach only with approved research
+- retry → replays original structured action
+
+Add route tests if missing.
+
+-------------------------------------
+PHASE 5 — HANDOFF CONTRACT AUDIT
+-------------------------------------
+
+Audit handoff payloads:
+
+Coach → Architect:
+- goal
+- sport
+- days/week
+- session length
+- equipment
+- pain limitations
+- selected exercises
+- research guidance
+- behavioral signals if available
+
+Architect → Coach:
+- structured program
+- architecture decisions
+- expert judgment notes
+- progression plan
+- safety notes
+- warnings
+
+Librarian → Database:
+- summary
+- confidence
+- evidence type
+- tags
+- chunks
+- recommendation
+- admin notes
+
+Confirm:
+- all required fields are present
+- missing fields have safe defaults
+- invalid handoffs fall back safely
+
+-------------------------------------
+PHASE 6 — CONFLICT RESOLUTION AUDIT
+-------------------------------------
+
+Create explicit conflict rules:
+
+If Architect conflicts with safety:
+→ reject/repair Architect output
+
+If Architect conflicts with equipment:
+→ repair or fallback
+
+If Research conflicts with user context:
+→ user context wins
+
+If Coach response conflicts with structured program:
+→ structured program wins, Coach rephrases
+
+If button payload conflicts with parsed text:
+→ button payload wins
+
+If research confidence is low/conflicting:
+→ conservative programming wins
+
+-------------------------------------
+PHASE 7 — OBSERVABILITY
+-------------------------------------
+
+Add dev-only chain logs:
+
+[AgentChain]
+- requestId
+- route
+- agentsCalled
+- skippedAgents
+- authorityApplied
+- handoffValid
+- conflictsDetected
+- repairApplied
+- finalStatus
+
+Do not expose to users.
+
+-------------------------------------
+PHASE 8 — QA DOC
+-------------------------------------
+
+Create:
+
+AGENT_CHAIN_OF_COMMAND_AUDIT.md
+
+Include:
+- agent roles
+- authority hierarchy
+- flow diagrams
+- routing matrix
+- handoff contracts
+- conflict rules
+- overlap findings
+- QA test cases
+
+-------------------------------------
+PHASE 9 — QA TESTS
+-------------------------------------
+
+Test:
+
+1. New program build:
+“Build me a 4-day football strength and speed program.”
+Expected:
+Coach → Research → Architect → Review → Coach
+
+2. Simple button swap:
+Expected:
+Architect skipped, mutation pipeline used
+
+3. Whole-program restructure:
+“Make this a 3-day program instead.”
+Expected:
+Architect called
+
+4. Research admin:
+Expected:
+Librarian called, Coach/Architect skipped
+
+5. Safety conflict:
+“Make this harder but my knee hurts.”
+Expected:
+Safety wins
+
+6. Evidence request:
+“Why is this evidence-based?”
+Expected:
+Coach explains with approved research, no internal names
+
+7. Retry:
+Expected:
+structured action payload replayed
+
+-------------------------------------
+PHASE 10 — OUTPUT
+-------------------------------------
+
+Return:
+- chain of command summary
+- overlaps found
+- fixes made
+- files changed
+- QA results
+- typecheck result
+
+Important:
+Do not add new features.
+Do not change user-facing UX unless fixing clear agent-conflict bugs.
+Do not expose internal agents.
+This is an audit + integration hardening pass.
