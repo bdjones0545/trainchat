@@ -1,0 +1,223 @@
+Audit TrainChat’s System Brain / Identity Layer.
+
+Goal:
+Find, define, and harden the highest-level entity that tells all agents who they are, what TrainChat is, what the hard laws are, and how the user should experience the product.
+
+This is an architecture audit, not a feature build.
+
+-------------------------------------
+PHASE 1 — FIND CURRENT SYSTEM BRAIN
+-------------------------------------
+
+Audit where global identity and rules currently live:
+
+- Coach Agent system prompt
+- Performance Architect prompt
+- Research Librarian prompt
+- agent-orchestrator.ts
+- ai.ts / buildSystemPrompt
+- validation rules
+- hard constraint memory
+- CEO Heartbeat / review layer
+- mutation prompts
+- research guidance prompts
+
+Determine:
+- Is there one central identity source?
+- Or are identity rules scattered across files?
+
+-------------------------------------
+PHASE 2 — DEFINE TRAINCHAT CONSTITUTION
+-------------------------------------
+
+Create a central file if missing:
+
+server/agents/trainchat-constitution.ts
+
+It should define:
+
+1. Product identity:
+“TrainChat is an evidence-informed AI training system that builds, edits, and adapts training programs in real time.”
+
+2. User experience law:
+“The user experiences one unified TrainChat coach. Internal agents are never exposed.”
+
+3. Agent roles:
+- Coach Agent / CEO = user-facing decision maker
+- Performance Architect = programming structure, sequencing, periodization
+- Research Librarian = evidence curation and quality
+- Mutation system = local/action-based program edits
+- Review/Heartbeat = final quality control
+
+4. Hard laws:
+- Safety and pain constraints override all programming goals
+- User equipment constraints must be respected
+- User-excluded exercises require explicit confirmation before use
+- No diagnosis or treatment claims
+- Research Librarian never runs during normal user chat
+- Internal agent names/personas never appear to users
+- Program state and user-facing receipt must agree
+
+5. Authority hierarchy:
+Safety > user constraints > Coach CEO judgment > Architect structure > research guidance > style/persona
+
+6. Communication model:
+Agents communicate through structured handoffs, not freeform hidden conversation.
+
+-------------------------------------
+PHASE 3 — REPLACE SCATTERED RULES WITH IMPORTS
+-------------------------------------
+
+Where possible, import from trainchat-constitution.ts instead of duplicating rules.
+
+Do not rewrite everything if risky.
+
+At minimum:
+- export constants
+- export prompt sections
+- reference them in agent prompts
+
+-------------------------------------
+PHASE 4 — AUDIT FOR CONFLICTING IDENTITY
+-------------------------------------
+
+Search for conflicting language:
+
+- “ChatGPT gives you…”
+- internal agent names exposed
+- Research Librarian in user path
+- architect/persona names in user prompts
+- rigid restriction language conflicting with skill-based language
+- research treated as mandatory law instead of guidance
+- validation blocking justified creativity
+
+Fix obvious conflicts.
+
+-------------------------------------
+PHASE 5 — SYSTEM BRAIN PROMPT SECTION
+-------------------------------------
+
+Create a reusable prompt block:
+
+TRAINCHAT_SYSTEM_BRAIN_PROMPT
+
+It should be injected above agent-specific prompts.
+
+It should say:
+- What TrainChat is
+- What the user should experience
+- Hard laws
+- Authority hierarchy
+- Unified coach requirement
+- State/receipt truth rule
+
+-------------------------------------
+PHASE 6 — AGENT PROMPT ALIGNMENT
+-------------------------------------
+
+Ensure each agent gets:
+
+Coach Agent:
+- System Brain
+- Coach/CEO skills
+- user-facing simplicity
+- final decision authority
+
+Performance Architect:
+- System Brain
+- structure/periodization skills
+- output JSON/structured handoff
+- no user-facing persona leakage
+
+Research Librarian:
+- System Brain
+- admin-only evidence curation
+- no live user chat access
+
+Mutation prompts:
+- System Brain hard laws
+- local action skills
+- receipt truth rule
+
+-------------------------------------
+PHASE 7 — OBSERVABILITY
+-------------------------------------
+
+Add dev-only log:
+
+[SystemBrainAudit]
+- constitutionLoaded
+- agentPromptIncluded
+- hardLawsIncluded
+- role
+- leakageRisk
+
+Do not log in production.
+
+-------------------------------------
+PHASE 8 — QA DOC
+-------------------------------------
+
+Create:
+
+SYSTEM_BRAIN_AUDIT.md
+
+Include:
+- current identity sources found
+- scattered/duplicated rules
+- final constitution
+- files updated
+- agent alignment map
+- conflicts fixed
+- unresolved risks
+
+-------------------------------------
+PHASE 9 — QA TESTS
+-------------------------------------
+
+Test:
+
+1. Normal user asks:
+“Who are you?”
+PASS:
+- says TrainChat / AI training system
+- does not mention internal agents
+
+2. Evidence question:
+“Who decides the program?”
+PASS:
+- explains TrainChat uses coaching logic/research without internal leakage
+
+3. Program mutation:
+PASS:
+- if program changes, receipt agrees
+
+4. Admin research:
+PASS:
+- Librarian only appears in admin logs/UI
+
+5. Creative program:
+PASS:
+- creativity allowed but hard laws preserved
+
+6. Pain request:
+PASS:
+- safety hierarchy wins
+
+-------------------------------------
+PHASE 10 — OUTPUT
+-------------------------------------
+
+Return:
+- whether central System Brain existed
+- files changed
+- constitution added
+- prompt alignment completed
+- conflicts fixed
+- QA results
+- typecheck result
+
+Important:
+Do not change user-facing behavior except to remove contradictions/leakage.
+Do not add new product features.
+This is about making TrainChat’s identity and chain of command centralized and consistent.
