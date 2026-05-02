@@ -1,0 +1,210 @@
+Fix all TrainChat chat/action buttons so they send structured payloads instead of ambiguous text.
+
+Issue:
+Some chat buttons appear to send generic natural-language prompts like “Make harder,” which can cause mutation failures, ambiguity, or “NO RECEIPT.”
+
+Goal:
+Every button-generated action in TrainChat must carry enough structured context for the backend to execute reliably.
+
+Audit all buttons/actions in:
+- Chat message buttons
+- Starter prompts
+- Try saying chips
+- Live Program Panel quick actions
+- Share card actions
+- Save buttons
+- Refine My Plan button
+- Check-In button
+- Retry button
+- Any CTA that triggers agent behavior or program mutation
+
+Required action contract:
+
+ButtonActionPayload {
+  source: "chat_button" | "program_panel" | "starter_prompt" | "try_saying" | "system_cta" | "retry";
+  actionType:
+    | "build_program"
+    | "refine_program"
+    | "make_harder"
+    | "make_easier"
+    | "swap_exercise"
+    | "replace_equipment"
+    | "explain_exercise"
+    | "adapt_for_pain"
+    | "progress_program"
+    | "add_core"
+    | "remove_equipment"
+    | "save_system"
+    | "share_system"
+    | "check_in"
+    | "retry_last_action";
+  displayText: string;
+  submittedText?: string;
+  programId?: string;
+  systemId?: string;
+  dayIndex?: number;
+  exerciseIndex?: number;
+  exerciseName?: string;
+  dayName?: string;
+  currentExerciseData?: {
+    sets?: string;
+    reps?: string;
+    rest?: string;
+    intensity?: string;
+    tempo?: string;
+    category?: string;
+    movementPattern?: string;
+  };
+  userConstraints?: {
+    equipment?: string[];
+    painLimitations?: string[];
+    goal?: string;
+    sport?: string;
+    sessionLengthMinutes?: number;
+  };
+  previousActionId?: string;
+}
+
+Implementation rules:
+
+1. Button actions should not be treated as vague chat input if structured payload exists.
+
+2. Backend should branch:
+- If structured payload exists → execute via actionType route
+- If no structured payload → use normal natural-language parsing
+
+3. All mutation buttons must include target context:
+- make_harder
+- make_easier
+- swap_exercise
+- replace_equipment
+- explain_exercise
+
+They need:
+- programId/systemId
+- dayIndex
+- exerciseIndex
+- exerciseName
+- current exercise data
+
+4. General prompt chips can still submit text, but they should include source and actionType:
+Examples:
+- “Make this more athletic” → actionType: refine_program
+- “Progress this for 4 weeks” → actionType: progress_program
+- “Add a core finisher” → actionType: add_core
+- “Remove all barbell exercises” → actionType: remove_equipment
+
+5. Retry button:
+Retry must replay the last structured payload if one exists.
+Do not retry only the display text.
+Store lastActionPayload in state.
+
+6. Agent Turn Report:
+For button actions, receipts must include:
+- actionType
+- target if applicable
+- success/failure
+- mutation summary
+- fallback used if applicable
+
+7. Deterministic fallback:
+For valid structured button payloads:
+- Never return NO RECEIPT unless program/system data is missing.
+- If AI fails, use deterministic fallback:
+  - make_harder: add one set, add reps, increase tempo, or increase intensity safely
+  - make_easier: reduce reps/load/ROM/tempo demand
+  - swap: choose nearest same-pattern alternative from available library
+  - replace_equipment: choose same-pattern available-equipment alternative
+
+8. Dev-only logging:
+Add:
+[StructuredButtonAction]
+- source
+- actionType
+- programId/systemId
+- dayIndex
+- exerciseIndex
+- exerciseName
+
+Add:
+[StructuredButtonActionFailure]
+- actionType
+- target
+- failureReason
+- fallbackAttempted
+- fallbackSucceeded
+
+9. UI feedback:
+For any structured button action:
+- show immediate “Updating…”
+- disable repeated tapping during pending state
+- on success, highlight changed area
+- show toast:
+  - “Program updated”
+  - or “Program updated with a safe fallback”
+- on true failure, show specific but user-friendly error:
+  - “I couldn’t find that exercise in the current program. Try opening the program panel and selecting it again.”
+
+10. Preserve:
+- Existing chat natural-language input
+- Existing Live Program Panel
+- Research guidance
+- Performance Architect routing
+- Research Librarian boundaries
+- Save/account flow
+- Mobile layout
+
+Validation tests:
+
+A. Program panel buttons:
+- Tap Make Harder
+- Tap Make Easier
+- Tap Swap
+- Tap Replace Equipment
+- Tap Explain
+Expected:
+- Exact target context passed
+- No ambiguity
+- Valid receipt or deterministic fallback
+- No “NO RECEIPT”
+
+B. Chat suggestion buttons:
+- Tap “Make this more athletic”
+- Tap “Progress this for 4 weeks”
+- Tap “Add a core finisher”
+- Tap “Remove all barbell exercises”
+Expected:
+- Correct actionType
+- Correct route
+- Program updates or architect route runs
+- Receipt generated
+
+C. Starter prompts:
+- Tap “Build a 3-day strength program”
+Expected:
+- build_program actionType
+- Program generated
+- receipt generated if applicable
+
+D. Retry button:
+- Trigger a failed action
+- Tap Retry
+Expected:
+- Last structured payload is replayed
+- Not just vague display text
+
+E. Safety:
+- Pain-related buttons preserve safety hierarchy
+- Equipment-related buttons respect available equipment
+
+F. Typecheck:
+- Zero new TypeScript errors
+
+Output:
+- Root cause found
+- Files changed
+- Button payload contract implemented
+- Backend routing changes
+- Fallback behavior
+- Retry behavior
+- QA results
