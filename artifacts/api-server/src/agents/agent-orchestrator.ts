@@ -210,6 +210,23 @@ export const CONFLICT_RESOLUTION_HIERARCHY: ConflictResolutionRule[] = [
 //   4. DIRECT_EDIT — fast path, skip architect
 //   5. BUILD_WITH_ARCHITECT — build paths always use architect
 //   6. GUIDANCE — fallback for coaching/question responses
+//
+// AGENT PARTICIPATION RULES (Phase 8 — Updated Agent Flow):
+//
+//   User message
+//     → Coach Agent intent/constraint extraction
+//     → MutationScopeDecision (Intent Scaling — determineMutationScope)
+//     → Behavioral Intelligence signals (if session history exists)
+//     → Performance Architect (BUILD_WITH_ARCHITECT path only)
+//     → Progression Intelligence (if "4 weeks" / progression block detected)
+//     → CEO Heartbeat + Coaching Identity Filter (BUILD paths — always last)
+//     → Final user response via Coach Agent
+//
+//   FAST PATH (DIRECT_EDIT):
+//     Coach Agent only — no other layers called.
+//     Simple edits stay fast. Research Librarian never called during user chat.
+//
+//   Research Librarian (Dr. Sable): ADMIN-ONLY. Never triggered by user messages.
 
 export interface RoutingInput {
   execPlanAction: "APPLY_MUTATION" | "ASK_CLARIFICATION" | "GUIDANCE" | "REBUILD_PROGRAM" | "NO_OP";

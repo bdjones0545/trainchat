@@ -55,6 +55,19 @@ export interface CEOHeartbeatResult {
    * logged loudly and flagged for observation.
    */
   overrideRecommended?: boolean;
+  /**
+   * Coaching Identity Filter result (Phase 6).
+   * Evaluates whether the output aligns with TrainChat's programming philosophy:
+   * purposeful programming, movement quality, neuromuscular efficiency, less
+   * junk volume, quality adaptation over random fatigue.
+   *
+   * "strong"     = output clearly reflects TrainChat's identity
+   * "acceptable" = minor concerns but output is defensible
+   * "weak"       = output feels generic or overbuilt — simplify recommended
+   */
+  identityAlignment: "strong" | "acceptable" | "weak";
+  /** Specific identity concerns detected. Empty if identityAlignment is "strong". */
+  identityConcerns: string[];
 }
 
 // ─── Check Thresholds ─────────────────────────────────────────────────────────
@@ -354,15 +367,106 @@ function extractSessionLengthMinutes(sessionLength: string | null): number | nul
   return match ? parseInt(match[1], 10) : null;
 }
 
+// ─── Coaching Identity Filter (Phase 6) ──────────────────────────────────────
+//
+// Checks whether the output aligns with TrainChat's programming philosophy:
+//   purposeful programming · movement quality · neuromuscular efficiency
+//   less junk volume · quality adaptation > random fatigue
+//   constraints respected · simple enough to execute
+
+function checkCoachingIdentity(
+  program: ProgramStructure,
+  ctx: CEOHeartbeatContext,
+  identityConcerns: string[],
+): void {
+  const isStrength = /strength|power|force/i.test(ctx.userGoal ?? "");
+  const isSpeed = /speed|sprint|athletic/i.test(ctx.userGoal ?? "") || /speed|sprint/i.test(ctx.sport ?? "");
+
+  // 1. Overbuilt — excessive exercise count relative to goal
+  //    Quality programs: 6–9 exercises per day for general; up to 11 for advanced multi-block.
+  const MAX_QUALITY_EXERCISES = isStrength ? 9 : 11;
+  for (const day of program.days) {
+    const exCount = (day.exercises ?? []).length;
+    if (exCount > MAX_QUALITY_EXERCISES) {
+      identityConcerns.push(
+        `Overbuilt: Day "${day.name}" has ${exCount} exercises — quality programs prioritize fewer, better exercises over exercise count. Review for junk volume.`,
+      );
+    }
+  }
+
+  // 2. Junk volume — 4+ consecutive accessories, or accessory-dominant day with no compound base
+  for (const day of program.days) {
+    const exes = day.exercises ?? [];
+    let accessoryRun = 0;
+    for (const ex of exes) {
+      const cls = (ex.classification ?? "").toLowerCase();
+      if (cls === "accessory") {
+        accessoryRun++;
+      } else {
+        accessoryRun = 0;
+      }
+      if (accessoryRun >= 4) {
+        identityConcerns.push(
+          `Junk Volume: Day "${day.name}" has 4+ consecutive accessory exercises. Each accessory must earn its place and contribute directly to the goal.`,
+        );
+        break;
+      }
+    }
+
+    // Flag days with accessories but no compound foundation
+    const hasCompound = exes.some((e) =>
+      /(primary|secondary|power|plyometric|olympic)/.test((e.classification ?? "").toLowerCase()),
+    );
+    const accessoryCount = exes.filter((e) => /accessory/.test((e.classification ?? "").toLowerCase())).length;
+    if (!hasCompound && accessoryCount >= 3 && exes.length >= 4) {
+      identityConcerns.push(
+        `Junk Volume: Day "${day.name}" has ${accessoryCount} accessories but no primary or secondary compound work — lacks structural foundation.`,
+      );
+    }
+  }
+
+  // 3. Static intensity — uniform high-intensity naming across all days suggests
+  //    no recovery logic (random fatigue bias over quality adaptation)
+  if (program.days.length >= 4) {
+    const intensityWords = ["max", "hardest", "brutal", "extreme", "all out", "all-out", "intense"];
+    const highIntensityDays = program.days.filter((d) =>
+      intensityWords.some((w) => d.name.toLowerCase().includes(w)),
+    );
+    if (highIntensityDays.length >= Math.ceil(program.days.length * 0.75)) {
+      identityConcerns.push(
+        "Static Intensity: Most day names suggest uniform maximum intensity with no visible recovery or variation structure. Quality programs alternate high and moderate stimulus.",
+      );
+    }
+  }
+
+  // 4. Speed/power programs must include neural quality work (power/plyometric)
+  if (isSpeed) {
+    for (const day of program.days) {
+      const exes = day.exercises ?? [];
+      if (exes.length < 3) continue; // skip very short days
+      const hasPowerWork = exes.some((e) =>
+        /(power|plyometric|olympic)/.test((e.classification ?? "").toLowerCase()),
+      );
+      if (!hasPowerWork) {
+        identityConcerns.push(
+          `Intentionality: Speed/power program — Day "${day.name}" has no Power, Plyometric, or Olympic work. Speed transfer requires neural quality work to be present.`,
+        );
+      }
+    }
+  }
+}
+
 // ─── Main Check ───────────────────────────────────────────────────────────────
 
 /**
  * Run the CEO Heartbeat Check on a finalized program before it is returned
  * to the user. This is Coach Atlas's final quality gate.
  *
+ * Runs nine coaching-standard checks plus the Coaching Identity Filter.
+ *
  * @param program - The finalized ProgramStructure about to be returned.
  * @param context - User context for goal alignment, safety, and practicality checks.
- * @returns CEOHeartbeatResult with pass/fail, concerns, and override recommendation.
+ * @returns CEOHeartbeatResult with pass/fail, identity alignment, and override recommendation.
  */
 export function runCEOHeartbeatCheck(
   program: ProgramStructure,
@@ -421,10 +525,21 @@ export function runCEOHeartbeatCheck(
         c.startsWith("Confidence: Day"),
     ) || finalConcerns.length >= 4;
 
+  // 10. Coaching Identity Filter — TrainChat philosophy alignment
+  const identityConcerns: string[] = [];
+  checkCoachingIdentity(program, context, identityConcerns);
+
+  const identityAlignment: CEOHeartbeatResult["identityAlignment"] =
+    identityConcerns.length === 0 ? "strong" :
+    identityConcerns.length === 1 ? "acceptable" :
+    "weak";
+
   return {
     pass,
     concerns: finalConcerns,
     minorAdjustments: minor.length > 0 ? minor : undefined,
     overrideRecommended: overrideRecommended || undefined,
+    identityAlignment,
+    identityConcerns,
   };
 }

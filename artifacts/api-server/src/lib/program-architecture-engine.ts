@@ -153,6 +153,22 @@ export interface WeeklyArchitecture {
    * own expertJudgmentNotes output.
    */
   expertJudgmentNotes?: string[];
+  /**
+   * Practical tradeoff explanations from the Constraint Optimization step.
+   * Each entry describes a programming decision made to balance competing constraints
+   * (safety, goal, equipment, time, pain, adherence). Resolved according to the
+   * Performance Architect's priority order: safety > goal alignment > user constraints
+   * > training quality > recovery > simplicity > adherence.
+   *
+   * Examples:
+   *   "Chose trap bar deadlift over deep squat to preserve strength intent while reducing knee stress."
+   *   "Reduced total lower-body volume to preserve sprint quality on field sessions."
+   *   "Used a 3-day full-body split because dumbbells-only limits heavy axial loading options."
+   *   "Prioritized hinge and unilateral patterns because available equipment limits compound pressing."
+   *
+   * Never surfaced to users directly. Passed to CEO Heartbeat for context.
+   */
+  constraintTradeoffs?: string[];
 }
 
 // ─── Density Fill Engine ─────────────────────────────────────────────────────

@@ -1,0 +1,414 @@
+Add next-level skills to TrainChat’s multi-agent system.
+
+Goal:
+Give each agent sharper capabilities without making the system slower, chaotic, or overbuilt.
+
+Current agents:
+- Coach Agent / CEO = user-facing decision maker
+- Performance Architect = program structure, sequencing, periodization
+- Research Librarian = evidence curation
+- CEO Heartbeat = final quality/judgment layer
+
+Do NOT replace existing agents.
+Do NOT expose internal agent names to users.
+Do NOT weaken safety or user constraints.
+Do NOT let Research Librarian run during normal user chats.
+
+-------------------------------------
+PHASE 1 — COACH AGENT: BEHAVIORAL INTELLIGENCE
+-------------------------------------
+
+Add a Behavioral Intelligence Layer for the Coach Agent.
+
+Purpose:
+Adapt programming based on user behavior patterns, not just one-off prompts.
+
+Detect:
+- user frequently asks to make things easier
+- user frequently asks to make things harder
+- user skips sessions or returns after inactivity
+- user repeatedly mentions pain/fatigue
+- user often shortens sessions
+- user repeatedly changes goals
+- user asks for aggressive progressions too often
+
+Output:
+
+BehavioralSignal {
+  type:
+    | "fatigue_risk"
+    | "under_challenged"
+    | "pain_pattern"
+    | "low_adherence"
+    | "high_motivation"
+    | "goal_instability"
+    | "time_constraint_pattern";
+  confidence: "low" | "moderate" | "high";
+  coachingAdjustment: string;
+  programmingAdjustment: string;
+}
+
+Examples:
+- If user repeatedly asks for easier sessions:
+  → reduce baseline volume/intensity slightly
+  → simplify sessions
+- If user repeatedly asks for harder sessions:
+  → increase progression carefully
+  → preserve fatigue management
+- If user returns after long inactivity:
+  → suggest re-entry session
+- If pain appears repeatedly:
+  → route through pain-safe modifications
+
+Store only lightweight signals if persistence exists.
+If not, infer from current session and recent messages.
+
+-------------------------------------
+PHASE 2 — PERFORMANCE ARCHITECT: CONSTRAINT OPTIMIZATION
+-------------------------------------
+
+Add Constraint Optimization skill to Performance Architect.
+
+Purpose:
+Given competing constraints, select the best practical tradeoff.
+
+The architect should optimize for:
+1. Safety
+2. Goal alignment
+3. User constraints
+4. Training quality
+5. Recovery
+6. Simplicity
+7. Adherence
+
+Add internal field:
+
+constraintTradeoffs: string[]
+
+Examples:
+- “Chose trap bar deadlift over deep squat to preserve strength intent while reducing knee stress.”
+- “Reduced total lower-body volume to preserve sprint quality.”
+- “Used a 3-day full-body split because dumbbells-only limits heavy loading options.”
+- “Prioritized hinge and unilateral patterns because available equipment limits axial loading.”
+
+The architect may:
+- reduce volume to improve quality
+- choose fewer exercises if session time is limited
+- bias toward safer variations when pain exists
+- preserve sport transfer over bodybuilding volume when sport goal is dominant
+- simplify structure for adherence
+
+-------------------------------------
+PHASE 3 — RESEARCH LIBRARIAN: EVIDENCE CONFLICT HANDLING
+-------------------------------------
+
+Add Evidence Conflict Handling to Research Librarian.
+
+Purpose:
+When research is mixed, avoid fake certainty.
+
+Update librarian output to include:
+
+evidenceConflictProfile {
+  hasConflict: boolean;
+  conflictSummary?: string;
+  practicalResolution?: string;
+  confidenceImpact?: "none" | "downgrade_to_moderate" | "downgrade_to_limited";
+}
+
+Rules:
+- If evidence is mixed, say so internally.
+- Prefer conservative, practical middle-ground.
+- Context determines application.
+- Do not overstate conclusions.
+- Single studies should not override meta-analyses or guidelines.
+- Conflicting evidence should lower confidence when appropriate.
+
+Examples:
+- Hypertrophy volume: individual tolerance matters
+- Mobility and injury prevention: avoid overclaiming
+- Recovery methods: effect sizes may vary
+- Supplement claims: require higher evidence threshold
+
+-------------------------------------
+PHASE 4 — SYSTEM-WIDE: PROGRESSION INTELLIGENCE
+-------------------------------------
+
+Add a Progression Intelligence Layer.
+
+Purpose:
+Make TrainChat evolve programs over time instead of only generating static plans.
+
+Create:
+
+server/agents/progression-intelligence.ts
+
+Function:
+
+buildProgressionIntelligence(program, context)
+
+Inputs:
+- current program
+- user goal
+- training phase
+- experience level
+- pain/fatigue signals
+- adherence signals if available
+- recent edits
+- research guidance
+
+Output:
+
+ProgressionIntelligence {
+  progressionModel:
+    | "linear"
+    | "double_progression"
+    | "wave"
+    | "undulating"
+    | "block"
+    | "autoregulated"
+    | "re_entry";
+  weeklyRules: {
+    week: number;
+    focus: string;
+    loadRule: string;
+    volumeRule: string;
+    intensityRule: string;
+    recoveryRule: string;
+  }[];
+  deloadRecommendation?: string;
+  adjustmentTriggers: string[];
+}
+
+Rules:
+- Beginners: simpler progression
+- Advanced users: wave/block/undulating allowed
+- Pain/fatigue: slower progression or re-entry
+- Speed/power: quality and recovery > volume
+- Hypertrophy: volume progression but recovery-aware
+- Strength: intensity progression but technical-quality aware
+
+Integrate this with Performance Architect and CEO Heartbeat.
+
+-------------------------------------
+PHASE 5 — MUTATION ENGINE: INTENT SCALING
+-------------------------------------
+
+Add Intent Scaling Logic.
+
+Purpose:
+Determine whether a requested change is local, session-level, program-level, or architecture-level.
+
+Create:
+
+MutationScopeDecision {
+  scope: "exercise" | "session" | "program" | "architecture";
+  confidence: "low" | "moderate" | "high";
+  reason: string;
+}
+
+Rules:
+- Button with exercise target → exercise scope
+- “Make Day 1 harder” → session scope
+- “Make this program harder” → program scope
+- “Make this better for football” → architecture scope
+- “Progress this for 4 weeks” → architecture/progression scope
+- “Swap this exercise” → exercise scope
+
+Use this to route:
+- exercise/session → mutation pipeline
+- program/architecture → Performance Architect
+- progression → Progression Intelligence + Architect
+
+-------------------------------------
+PHASE 6 — CEO HEARTBEAT: COACHING IDENTITY FILTER
+-------------------------------------
+
+Add a Coaching Identity Filter to CEO Heartbeat.
+
+Purpose:
+Ensure final outputs feel like TrainChat’s philosophy, not generic AI fitness.
+
+TrainChat philosophy:
+- purposeful programming
+- movement quality
+- neuromuscular efficiency
+- athletic transfer when relevant
+- less junk volume
+- constraints respected
+- high-quality adaptation over random intensity
+- simple enough to execute
+
+Add checks:
+- Is this overbuilt?
+- Is there unnecessary junk volume?
+- Does exercise order preserve movement quality?
+- Does the plan favor quality adaptations over random fatigue?
+- Does the plan feel intentional?
+- Does it preserve user trust?
+
+Output:
+identityAlignment: "strong" | "acceptable" | "weak";
+identityConcerns: string[];
+
+If weak:
+- simplify
+- reduce junk volume
+- clarify purpose
+- improve sequencing
+- preserve quality
+
+-------------------------------------
+PHASE 7 — SESSION EXPERIENCE DESIGN
+-------------------------------------
+
+Add Session Experience Design as a lightweight skill.
+
+Purpose:
+Make sessions feel better to perform, not just correct on paper.
+
+Each session should consider:
+- ramp-up
+- main work
+- support work
+- optional finisher
+- cooldown/mobility when useful
+- psychological flow
+- confidence building
+
+Add optional field:
+
+sessionFlowNotes: string[]
+
+Examples:
+- “Starts with low-friction prep, then moves into the highest-skill work while fresh.”
+- “Keeps accessories focused so the session does not feel bloated.”
+- “Finisher is optional to preserve recovery.”
+
+Do not overcomplicate session output.
+
+-------------------------------------
+PHASE 8 — ORCHESTRATOR INTEGRATION
+-------------------------------------
+
+Update orchestrator flow:
+
+User message
+→ Coach intent/constraints
+→ Intent Scaling
+→ Research retrieval/guidance
+→ Behavioral Intelligence
+→ Performance Architect if needed
+→ Progression Intelligence when progression/time block needed
+→ CEO Heartbeat + Coaching Identity Filter
+→ Final user response
+
+Rules:
+- Do not call every layer every time.
+- Simple edits should remain fast.
+- Heavy architecture/progression requests can call more layers.
+- Research Librarian remains admin-only.
+
+-------------------------------------
+PHASE 9 — QA
+-------------------------------------
+
+Create:
+
+NEXT_AGENT_SKILLS_QA.md
+
+Tests:
+
+1. Behavioral Intelligence:
+Prompt sequence:
+“Make this easier”
+“Make the next day easier too”
+“I’m tired today”
+PASS:
+- Coach detects fatigue/low recovery pattern
+- Program adjusts conservatively
+
+2. Under-challenged:
+Prompt sequence:
+“Make this harder”
+“This is still too easy”
+PASS:
+- Coach increases challenge intelligently without reckless volume
+
+3. Constraint Optimization:
+Prompt:
+“Build me a 3-day football speed and strength plan with dumbbells only and knee pain.”
+PASS:
+- Clear tradeoffs
+- Practical structure
+- Knee-safe choices
+- Speed quality preserved
+
+4. Evidence Conflict:
+Admin research test with mixed evidence topic.
+PASS:
+- Librarian identifies conflict
+- confidence adjusts
+- practical resolution generated
+
+5. Progression Intelligence:
+Prompt:
+“Progress this for 4 weeks.”
+PASS:
+- progression model selected
+- weekly rules created
+- deload or adjustment triggers included
+
+6. Intent Scaling:
+Prompt:
+“Make this harder”
+from button vs typed chat.
+PASS:
+- button = exercise scope
+- typed chat = program/session scope depending context
+
+7. Identity Filter:
+Prompt:
+“Build me the hardest possible 7-day program.”
+PASS:
+- avoids reckless junk volume
+- creates smarter hard/easy structure
+- explains tradeoff
+
+8. Session Experience:
+Prompt:
+“Build me a 45-minute strength session.”
+PASS:
+- warm-up/ramp, main work, accessories, optional finisher
+- clean flow
+
+-------------------------------------
+PHASE 10 — VALIDATION
+-------------------------------------
+
+Run:
+- typecheck
+- program generation
+- exercise button edit
+- whole-program restructure
+- progression request
+- admin librarian conflict test
+
+Confirm:
+- no user-facing internal agent names
+- simple edits remain fast
+- safety constraints override everything
+- outputs feel more adaptive and less generic
+- zero new TypeScript errors
+
+-------------------------------------
+OUTPUT
+-------------------------------------
+
+Return:
+- Files added
+- Files modified
+- New skills added
+- Orchestrator changes
+- QA results
+- Typecheck result

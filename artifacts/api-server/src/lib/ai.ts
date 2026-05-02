@@ -165,6 +165,16 @@ export interface ProgramDay {
   focus?: string;
   exercises: Exercise[];
   notes?: string;
+  /**
+   * Session Experience Design notes (Phase 7).
+   * Describes the psychological and structural flow of the session — not the
+   * exercises themselves, but how the session is designed to feel and progress.
+   * Optional. Omit for minor edits. Examples:
+   *   "Opens with low-friction prep to prime the CNS before the primary strength work."
+   *   "Main block sequenced strength-first while neural drive is highest."
+   *   "Finisher is optional — skip if time is tight or fatigue is elevated."
+   */
+  sessionFlowNotes?: string[];
 }
 
 export interface Exercise {
@@ -338,6 +348,27 @@ For new programs or major rebuilds, populate the "whyItWorks" field with a simpl
 - "I used a full-body approach here because it gives every pattern more frequent exposure, which builds skill and strength faster at this training age."
 
 Do NOT populate "whyItWorks" for minor edits (exercise swaps, single-day changes). It is for meaningful structural decisions that benefit from explanation.
+
+## SESSION EXPERIENCE DESIGN
+Each session should be designed to feel purposeful, not just technically correct on paper. Structure the flow so that the athlete moves through the session with confidence and clear purpose.
+
+A well-designed session considers:
+- **Ramp-up** — low-friction prep that primes the nervous system without creating fatigue before main work
+- **Main work** — highest-skill or highest-load work performed while neural drive is freshest
+- **Support work** — secondary and unilateral patterns that build without overshadowing the main stimulus
+- **Optional finisher** — a conditioning or capacity element that is always optional, never mandatory
+- **Psychological flow** — the session should feel like it builds, not like a random list of exercises
+
+Use the optional "sessionFlowNotes" field on each day to describe the intended experience flow. These are for internal coaching context — they do not replace exercise intent cues or day notes.
+
+**Examples of good sessionFlowNotes entries:**
+- "Opens with a low-friction prep block to prime the CNS, then moves into the primary strength work while the athlete is fully fresh."
+- "The strength block is front-loaded so fatigue does not compromise technique on the heaviest movements."
+- "Accessories kept tight — three patterns, no fluff — so the session ends clean without dragging."
+- "Finisher is optional: if time is short or fatigue from earlier in the week is elevated, end after the trunk block."
+- "The session builds from controlled prep into explosive output, then drops back to support work — mirrors the feel of a quality training day."
+
+Do NOT use sessionFlowNotes to repeat what the exercises already communicate. Write about the experience arc of the session.
 
 ## CONFLICT RESOLUTION PRIORITY ORDER
 When programming decisions conflict, resolve in this order — always:
@@ -1370,7 +1401,8 @@ Only output this JSON when delivering a finalized program. The JSON block IS the
           "notes": "optional additional technique cue or execution detail"
         }
       ],
-      "notes": "REQUIRED coach note — must explain WHY this day exists in terms of the user's actual performance goal. Sound like a real coach, not a template. GOOD: 'This session builds lower-body force production through bilateral squat strength and single-leg positional control. The trunk work at the end reinforces stiffness under fatigue — directly supports change-of-direction mechanics.' BAD: 'Great lower body day! Work hard!' or 'This day targets the legs.'"
+      "notes": "REQUIRED coach note — must explain WHY this day exists in terms of the user's actual performance goal. Sound like a real coach, not a template. GOOD: 'This session builds lower-body force production through bilateral squat strength and single-leg positional control. The trunk work at the end reinforces stiffness under fatigue — directly supports change-of-direction mechanics.' BAD: 'Great lower body day! Work hard!' or 'This day targets the legs.'",
+      "sessionFlowNotes": ["Optional. 1–3 entries describing the psychological and structural flow of the session — the experience arc, not the exercises themselves. Example: 'Opens with low-friction prep while neural drive is fresh, then moves into the primary strength block. Accessories kept focused so the session ends clean.' Omit for minor edits or session-specific day changes."]
     }
   ]
 }
@@ -4791,6 +4823,8 @@ Output the corrected program JSON and a brief calm confirmation.`;
           minorCount: heartbeatResult.minorAdjustments?.length ?? 0,
           concerns: heartbeatResult.concerns,
           minorAdjustments: heartbeatResult.minorAdjustments,
+          identityAlignment: heartbeatResult.identityAlignment,
+          identityConcerns: heartbeatResult.identityConcerns,
         }));
       }
     }

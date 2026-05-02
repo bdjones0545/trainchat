@@ -71,6 +71,21 @@ export interface ResearchLibrarianResult {
 
   adminNotes: string;
   warningFlags: string[];
+  /**
+   * Structured conflict profile for topics with mixed or contested evidence.
+   * Populated whenever research findings are inconsistent across studies.
+   * When hasConflict is true, the confidence field should reflect this
+   * (typically "conflicting" or "limited").
+   */
+  evidenceConflictProfile?: {
+    hasConflict: boolean;
+    /** Plain-language description of what the studies disagree on */
+    conflictSummary?: string;
+    /** Conservative, defensible middle-ground coaching recommendation */
+    practicalResolution?: string;
+    /** How the conflict should affect the overall confidence rating */
+    confidenceImpact?: "none" | "downgrade_to_moderate" | "downgrade_to_limited";
+  };
 }
 
 // ─── Candidate Input (for pre-ingestion review) ───────────────────────────────
@@ -141,6 +156,25 @@ HARD REJECT RULES (set recommendation to "reject" if any apply):
 - Cannot identify any evidence type
 - Source is completely unknown or cannot be verified as legitimate
 
+EVIDENCE CONFLICT HANDLING:
+When research evidence is mixed or contested, you MUST handle it honestly:
+- Acknowledge the conflict explicitly — do not manufacture false certainty
+- Prefer conservative, practical middle-ground recommendations
+- Single studies do NOT override meta-analyses, position stands, or clinical guidelines
+- Conflicting evidence MUST lower confidence to "conflicting" or "limited"
+- Never overstate conclusions when evidence is divided
+- Context and population determine application — the same evidence may support different conclusions
+
+Include "evidenceConflictProfile" in your output when:
+- You detect disagreement between the source and established guidelines or meta-analyses
+- The topic has known mixed evidence (e.g. stretching and injury prevention, certain recovery methods, supplement claims)
+- The source itself acknowledges significant limitations or opposing findings
+
+"confidenceImpact" values for evidenceConflictProfile:
+- "none": Evidence is consistent with established consensus — no confidence penalty
+- "downgrade_to_moderate": Some conflicting evidence but majority supports the finding
+- "downgrade_to_limited": Evidence is significantly mixed — use cautious language throughout
+
 IMPORTANT RULES:
 - Never create medical diagnosis or treatment claims
 - Never claim certainty beyond the evidence
@@ -202,7 +236,13 @@ Return a single JSON object with this exact structure:
     }
   ],
   "adminNotes": "Brief notes for the admin reviewer about this document's quality or concerns",
-  "warningFlags": ["single_study", "old_evidence"]
+  "warningFlags": ["single_study", "old_evidence"],
+  "evidenceConflictProfile": {
+    "hasConflict": false,
+    "conflictSummary": "Optional — describe what the studies disagree on",
+    "practicalResolution": "Optional — conservative, defensible middle-ground recommendation",
+    "confidenceImpact": "none | downgrade_to_moderate | downgrade_to_limited"
+  }
 }
 
 Generate 3–8 retrieval chunks. Each chunk must be standalone, practical, and directly useful for a coaching AI retrieving evidence during a session.`;

@@ -69,6 +69,130 @@ export interface UserMutationContext {
   sessionDurationMinutes?: number;
 }
 
+// ─── Mutation Scope Decision (Intent Scaling) ─────────────────────────────────
+//
+// Phase 5 skill addition — determine the correct scope for a requested change
+// BEFORE routing it through the mutation or architecture pipeline.
+//
+// Scope levels:
+//   "exercise"     → applies to a single exercise (button click or specific swap)
+//   "session"      → applies to one training day ("Make Day 2 harder")
+//   "program"      → applies across the whole program ("Make this program harder")
+//   "architecture" → requires structural redesign or sport/goal pivot
+//
+// Routing:
+//   exercise / session → mutation pipeline (fast path)
+//   program            → Performance Architect
+//   architecture       → Performance Architect + Progression Intelligence
+
+export interface MutationScopeDecision {
+  scope: "exercise" | "session" | "program" | "architecture";
+  confidence: "low" | "moderate" | "high";
+  reason: string;
+}
+
+export interface MutationScopeContext {
+  /** Whether the request originated from a button action (vs typed chat) */
+  isButtonAction: boolean;
+  /** Target day index if pre-specified by UI */
+  targetDayIndex?: number;
+  /** Target exercise name if pre-specified by UI */
+  targetExerciseName?: string;
+  /** Whether an active program exists */
+  hasActiveProgram: boolean;
+}
+
+/**
+ * Determine the scope of a requested mutation from the user's message and UI context.
+ * Used to route the request to the correct pipeline before any processing begins.
+ */
+export function determineMutationScope(
+  userMessage: string,
+  ctx: MutationScopeContext,
+): MutationScopeDecision {
+  const msg = userMessage.toLowerCase().trim();
+
+  // Button action with explicit exercise target → always exercise scope
+  if (ctx.isButtonAction && ctx.targetExerciseName) {
+    return {
+      scope: "exercise",
+      confidence: "high",
+      reason: `Button action targeting exercise "${ctx.targetExerciseName}" — exercise-level scope.`,
+    };
+  }
+
+  // Architecture-level signals — sport pivot, goal change, "for X sport", progression block
+  const architecturePatterns = [
+    /\bfor\s+(football|soccer|basketball|rugby|baseball|tennis|hockey|swimming|cycling|mma|combat|volleyball)\b/i,
+    /\b(progress|evolve|advance)\s+(this|the)\s+(program|plan)\s+(for|over)\s+\d+\s*weeks?\b/i,
+    /\b(redesign|rebuild|restructure|overhaul|rethink|change the structure)\b/i,
+    /\b(better for|suited for|optimized for|built for)\s+\w+/i,
+    /\bperiodiz/i,
+    /\b(new goal|different goal|switch to|pivot to|change my goal)\b/i,
+    /\b4.week|6.week|8.week|12.week\b/i,
+  ];
+  if (architecturePatterns.some((p) => p.test(msg))) {
+    return {
+      scope: "architecture",
+      confidence: "high",
+      reason: "Message contains sport pivot, goal change, progression block, or structural redesign language.",
+    };
+  }
+
+  // Single-exercise patterns
+  const exercisePatterns = [
+    /\b(swap|replace|substitute|change|switch out)\s+(this|the|that)\s+(exercise|movement|lift)\b/i,
+    /\b(swap|replace|substitute)\s+\w[\w\s]+\b/i,
+    /\b(make|make this exercise|this one)\s+(harder|easier|heavier|lighter)\b/i,
+  ];
+  if (ctx.isButtonAction || exercisePatterns.some((p) => p.test(msg))) {
+    return {
+      scope: "exercise",
+      confidence: ctx.isButtonAction ? "high" : "moderate",
+      reason: ctx.isButtonAction
+        ? "Button-triggered mutation defaults to exercise scope."
+        : "Message targets a specific exercise or uses exercise-swap language.",
+    };
+  }
+
+  // Session-level patterns — day-specific language
+  const sessionPatterns = [
+    /\bday\s*\d+\b/i,
+    /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
+    /\b(this day|this session|today's session|session \d+)\b/i,
+    /\b(make|make this day|make this session)\s+(harder|easier|shorter|longer|more intense|less intense)\b/i,
+  ];
+  if (sessionPatterns.some((p) => p.test(msg))) {
+    return {
+      scope: "session",
+      confidence: "high",
+      reason: "Message references a specific day or session.",
+    };
+  }
+
+  // Program-level patterns
+  const programPatterns = [
+    /\b(this program|the program|the whole thing|all days|every day|overall)\b/i,
+    /\b(make it|make this)\s+(harder|easier|more challenging|less challenging|more intense|less intense|more volume|less volume)\b/i,
+    /\b(add|increase|reduce|decrease)\s+(volume|intensity|frequency|days|sessions)\b/i,
+    /\b(more challenging|too easy|not hard enough|too hard|too much)\b/i,
+  ];
+  if (programPatterns.some((p) => p.test(msg))) {
+    return {
+      scope: "program",
+      confidence: "moderate",
+      reason: "Message uses program-wide language without a specific day or architecture-level trigger.",
+    };
+  }
+
+  // Fallback: if active program exists, default to program scope; otherwise guidance
+  return {
+    scope: ctx.hasActiveProgram ? "program" : "exercise",
+    confidence: "low",
+    reason: "No clear scope signal detected — defaulting based on program state.",
+  };
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function applyMutation({
