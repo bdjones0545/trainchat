@@ -1,0 +1,68 @@
+Fix TrainChat active program progression so new programs start at Day 1 based on the program lifecycle, not the calendar week.
+
+Problem:
+Right now, if a user creates a program later in the week, the Active Program view may open on Day 2 or Day 3 because the UI is anchoring the current session to the calendar day/week. This feels confusing because the user just created the program and should not feel like they already missed earlier sessions.
+
+Goal:
+Program progression must be session-based, not weekday-based.
+
+Rules:
+1. When a new program is created, the active session should always start at Day 1 / first programmed session.
+2. Do not auto-advance the active session based only on weekday.
+3. Advance only when the user completes or explicitly starts/progresses through a session, using completedSessions/sessionHistory if available.
+4. Calendar labels like “Saturday’s Session” can remain as secondary context, but the primary label should be “Day 1”, “Day 2”, etc.
+5. If no sessions are completed, currentSessionIndex must be 0.
+6. If one session is completed, currentSessionIndex should be 1, and so on.
+7. Clamp currentSessionIndex so it never exceeds the last session in the current program.
+
+Implementation requirements:
+- Audit the frontend and backend for any logic that determines active day/session from:
+  - new Date()
+  - dayOfWeek
+  - weekday
+  - calendar index
+  - todayIndex
+  - currentWeekDay
+  - schedule day matching
+- Replace that logic for active program selection with lifecycle/session-history logic.
+
+Expected logic:
+const completedCount = completedSessions?.filter(s => s.programId === activeProgram.id).length ?? 0;
+const currentSessionIndex = Math.min(completedCount, activeProgram.sessions.length - 1);
+const currentSession = activeProgram.sessions[currentSessionIndex];
+
+UI changes:
+- In the Today card, replace the primary heading context from calendar-first language to program-first language.
+- Example:
+  Instead of:
+  “Saturday’s Session”
+  Use:
+  “Day 1 of 3”
+- Keep weekday as secondary text only:
+  “Suggested for Saturday” or “Scheduled today”
+- If the program was created today and has no completed sessions, display:
+  “Day 1 of X”
+  not Day 2 or Day 3.
+
+Acceptance tests:
+1. Create a 3-day program on any weekday.
+   Expected: Active Program opens on Day 1.
+2. Create a program on Thursday/Saturday/Sunday.
+   Expected: It still opens on Day 1.
+3. Complete Day 1.
+   Expected: Active Program advances to Day 2.
+4. Refresh the page.
+   Expected: Active Program still shows the correct session based on completed sessions, not weekday.
+5. If no sessions are completed, the visible session is always the first session.
+6. Existing saved programs should not break. If they have completion history, respect it. If not, show Day 1.
+
+Also add a short debug log in development only:
+console.log("[Program Progression]", {
+  programId: activeProgram.id,
+  completedCount,
+  currentSessionIndex,
+  currentSessionTitle: currentSession?.title,
+  reason: "session-history-based"
+});
+
+Do not redesign the entire page. This is a targeted progression and labeling fix.
