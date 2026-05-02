@@ -1,0 +1,304 @@
+Create and seed TrainChat’s Strength research layer, then integrate it with the main Coach Agent retrieval and programming guidance.
+
+Goal:
+Add curated, approved-ready strength research documents and chunks so TrainChat can build better strength, max strength, hypertrophy-strength, power-strength, beginner strength, and pain-aware strength programs.
+
+Do NOT let the Coach Agent search the web directly.
+Do NOT remove the Research Librarian Agent.
+Do NOT weaken safety constraints.
+The Coach Agent should only consume approved, active research chunks.
+
+-------------------------------------
+PHASE 1 — ADD STRENGTH RESEARCH SEED PACK
+-------------------------------------
+
+Add seeded research documents for these topics:
+
+1. Max strength programming principles
+Tags:
+["strength", "max_strength", "progressive_overload", "intensity"]
+
+Programming implications:
+- Heavier loading ranges
+- Lower to moderate reps
+- Longer rest periods
+- Technical quality over failure
+- Progressive overload over time
+
+2. Strength volume and frequency
+Tags:
+["strength", "volume", "frequency", "programming"]
+
+Programming implications:
+- Manage weekly hard sets
+- Train major patterns multiple times per week when appropriate
+- Balance stress and recovery
+- Avoid excessive volume on heavy lifts
+
+3. Progressive overload for strength
+Tags:
+["strength", "progressive_overload", "periodization"]
+
+Programming implications:
+- Add load gradually
+- Use reps, sets, tempo, ROM, or density when load jumps are not appropriate
+- Deload when fatigue accumulates
+- Progression should match experience level
+
+4. Rest periods for strength
+Tags:
+["strength", "rest_periods", "intensity", "recovery"]
+
+Programming implications:
+- Longer rest for heavy compound lifts
+- Shorter rest for accessories
+- Rest should support output quality
+
+5. Exercise selection for strength
+Tags:
+["strength", "exercise_selection", "movement_patterns"]
+
+Programming implications:
+- Prioritize major movement patterns:
+  - squat
+  - hinge
+  - push
+  - pull
+  - carry
+  - trunk
+- Choose variations based on goal, equipment, pain, skill, and experience
+
+6. Beginner strength training
+Tags:
+["strength", "beginner", "motor_learning", "technique"]
+
+Programming implications:
+- Emphasize movement skill
+- Moderate loads
+- Conservative progression
+- Avoid unnecessary complexity
+- Build consistency first
+
+7. Strength training with pain or limitations
+Tags:
+["strength", "pain_modification", "safety", "joint_friendly"]
+
+Programming implications:
+- Preserve training intent while modifying painful patterns
+- Use pain-free ROM
+- Adjust load, tempo, range, exercise selection, or volume
+- Avoid diagnosis or treatment claims
+
+8. Strength and athletic performance
+Tags:
+["strength", "athletic_performance", "power", "force_production"]
+
+Programming implications:
+- Max strength supports force production
+- Pair strength with power/speed work when performance is the goal
+- Avoid excessive fatigue that harms speed/power quality
+
+9. Strength periodization
+Tags:
+["strength", "periodization", "training_phase", "deload"]
+
+Programming implications:
+- Organize loading over weeks
+- Alternate accumulation, intensification, power, and deload phases when useful
+- Match progression to training age and recovery
+
+10. Strength for older adults
+Tags:
+["strength", "older_adults", "safety", "functional_strength"]
+
+Programming implications:
+- Strength training can support function and independence
+- Use conservative loading progression
+- Prioritize controlled movement and joint-friendly exercise selection
+- Avoid aggressive fatigue or unnecessary high-risk variations
+
+-------------------------------------
+PHASE 2 — DATABASE SEEDING
+-------------------------------------
+
+Create or update a seed function:
+
+POST /api/admin/research/seed-strength
+
+This should add the Strength seed documents to research_documents and research_chunks.
+
+Each document should include:
+- title
+- category: "strength"
+- source: "Curated TrainChat Research Seed"
+- evidenceType: "expert_consensus" or "position_stand" unless a more specific evidence type is already supported
+- trustLevel: "high"
+- confidence: "moderate"
+- approved: true
+- active: true
+- topicTags
+- populationTags
+- sportTags
+- goalTags
+- plainLanguageSummary
+- coachingImplications
+- programmingImplications
+- safetyConsiderations
+- limitations
+- whatThisDoesNotProve
+- retrievalChunks
+
+Important:
+These are curated principle documents, not fake citations.
+Do NOT invent specific journal citations or DOIs.
+Label them transparently as curated seed principles unless real sources are added later.
+
+Admin notes:
+"Seed principle document. Replace or supplement with source-backed evidence as library matures."
+
+-------------------------------------
+PHASE 3 — RETRIEVAL INTEGRATION
+-------------------------------------
+
+Update research retrieval matching so prompts involving:
+
+Strength:
+- strength
+- stronger
+- max strength
+- heavy
+- compound lifts
+- progressive overload
+- squat
+- deadlift
+- bench
+- press
+- pull-up
+- rows
+- carries
+- force production
+- strength phase
+- intensification
+
+retrieve relevant strength chunks.
+
+Ensure retrieval considers:
+- user goal
+- sport
+- message text
+- current program
+- pain/limitations
+- edit intent
+- training phase
+
+-------------------------------------
+PHASE 4 — PROGRAMMING GUIDANCE INTEGRATION
+-------------------------------------
+
+Update buildResearchProgrammingGuidance so strength chunks translate into structured programming.
+
+Strength guidance should influence:
+- volumeGuidance
+- intensityGuidance
+- exerciseSelectionGuidance
+- progressionGuidance
+- recoveryGuidance
+- safetyGuidance
+- contraindications
+
+Strength rules:
+- Heavy compound lifts require longer rest and technical quality
+- Avoid false failure on high-skill heavy lifts
+- Progression should be gradual and experience-appropriate
+- Strength volume should support progress without excessive fatigue
+- Exercise selection should preserve movement intent
+- Pain or limitations override standard strength progressions
+- Older adults and beginners require conservative progression
+- Athletes should balance strength with speed/power quality
+
+-------------------------------------
+PHASE 5 — MAIN COACH AGENT PROMPT UPDATE
+-------------------------------------
+
+Update the Coach Agent prompt so it knows how to apply strength research.
+
+Add:
+“When strength research context is present, prioritize progressive overload, technical quality, appropriate loading, longer rest for heavy lifts, movement-pattern balance, and fatigue management. Do not blindly add load or volume.”
+
+Add:
+“For strength edits, preserve the movement intent. Make harder/easier should adjust load, variation, tempo, ROM, reps, sets, or density intelligently based on goal, pain, equipment, and experience.”
+
+User-facing language should remain simple and practical.
+
+-------------------------------------
+PHASE 6 — QA TESTS
+-------------------------------------
+
+Add to RESEARCH_PROGRAMMING_QA.md:
+
+Strength test:
+Prompt:
+“Build me a 4-day strength program focused on getting stronger in the squat, deadlift, press, and pull-up.”
+
+PASS:
+- Prioritizes major movement patterns
+- Uses appropriate strength rep ranges
+- Uses longer rest for heavy lifts
+- Includes progression
+- Does not overload every day with maximal work
+
+Strength + pain test:
+Prompt:
+“Build me a strength program, but deep squats bother my knees.”
+
+PASS:
+- Preserves strength goal
+- Modifies squat pattern intelligently
+- Uses pain-free ROM
+- Avoids aggressive deep knee flexion
+- Does not diagnose
+
+Strength + athlete test:
+Prompt:
+“Make this strength program better for football performance.”
+
+PASS:
+- Keeps strength foundation
+- Adds or preserves power/speed transfer
+- Manages fatigue
+- Does not turn every session into bodybuilding
+
+Make harder strength edit:
+Prompt:
+“Make the main lift harder.”
+
+PASS:
+- Progression is intelligent
+- Does not blindly add weight if unsafe
+- Preserves technical quality
+- Respects pain/equipment constraints
+
+-------------------------------------
+PHASE 7 — VALIDATION
+-------------------------------------
+
+After implementation:
+- Run typecheck
+- Seed strength library
+- Confirm documents appear in admin research tab
+- Confirm approved/active chunks are created
+- Confirm strength prompts retrieve strength chunks
+- Confirm strength guidance appears in dev-only debug logs
+- Confirm normal chat UX is unchanged
+- Confirm Coach Agent does not search web directly
+
+Output:
+- Files added
+- Files modified
+- Seed route added
+- Number of strength docs created
+- Number of chunks created
+- Retrieval updates
+- Programming guidance updates
+- QA result
+- Typecheck result

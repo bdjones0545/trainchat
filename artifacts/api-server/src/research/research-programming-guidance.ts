@@ -80,6 +80,34 @@ function normalizedContext(params: ResearchProgrammingParams): string {
 
 // ─── Dimension Builders ───────────────────────────────────────────────────────
 
+function hasMobilityTags(chunks: RetrievedResearchChunk[]): boolean {
+  return hasTags(
+    chunks,
+    "mobility",
+    "hip_mobility",
+    "ankle_mobility",
+    "thoracic_mobility",
+    "shoulder_mobility",
+    "dynamic_warmup",
+    "movement_quality",
+    "flexibility",
+    "range_of_motion",
+  );
+}
+
+function hasSpeedTags(chunks: RetrievedResearchChunk[]): boolean {
+  return hasTags(
+    chunks,
+    "speed",
+    "sprint_mechanics",
+    "acceleration",
+    "max_velocity",
+    "change_of_direction",
+    "agility",
+    "force_velocity",
+  );
+}
+
 function buildVolumeGuidance(
   ctx: string,
   chunks: RetrievedResearchChunk[],
@@ -91,8 +119,8 @@ function buildVolumeGuidance(
   if (hasTags(chunks, "strength_training", "powerlifting")) {
     return `Research-informed: Strength development uses lower per-session volume with higher intensity. 3–6 working sets per main lift. Weekly per-pattern volume: 6–12 sets. Reduce volume during peaking phases. Prioritize quality of effort over accumulated fatigue.`;
   }
-  if (hasTags(chunks, "sprint_mechanics", "sport_performance") || /sprint|speed|football|soccer/.test(ctx)) {
-    return `Research-informed: Sprint/speed volume governed by quality, not quantity. Limit high-intensity sprint volume per session (4–8 maximal-effort sprints for neuromuscular quality). Total weekly sprint distance: guided by readiness. Lower volume in-season. Preserve neuromuscular quality over accumulated mileage.`;
+  if (hasTags(chunks, "sprint_mechanics", "speed", "max_velocity", "acceleration") || /sprint|speed|football/.test(ctx)) {
+    return `Research-informed: Sprint/speed volume governed by quality, not quantity. Limit high-intensity sprint volume per session (4–8 maximal-effort sprints for neuromuscular quality). Total weekly sprint distance: guided by readiness. Lower volume in-season. Preserve neuromuscular quality over accumulated mileage. Do NOT inflate sprint volume to achieve conditioning effect — these are separate training qualities.`;
   }
   if (hasTags(chunks, "plyometrics")) {
     return `Research-informed: Plyometric dosage should be conservative to preserve landing quality and readiness. Beginner: 80–120 foot contacts/week. Intermediate: 120–200. Advanced: 200–300. Never sacrifice landing mechanics for more volume. Volume dictated by readiness, not progression calendar.`;
@@ -102,6 +130,9 @@ function buildVolumeGuidance(
   }
   if (hasTags(chunks, "endurance")) {
     return `Research-informed: Concurrent training — strength volume should be managed to avoid interference with endurance adaptations. 2–3 strength sessions/week at moderate volume. Sequence strength before endurance in same-day sessions where possible.`;
+  }
+  if (hasMobilityTags(chunks) && !hasTags(chunks, "strength_training", "hypertrophy", "sprint_mechanics", "speed")) {
+    return `Research-informed: Mobility work is integrated as session preparation and accessory work — not as high-volume standalone training. Dynamic warm-up mobility: 10–15 minutes per session. Active mobility exercises (CARs, controlled articulations) can be performed daily without significant fatigue accumulation. Focus on consistency of brief daily bouts rather than infrequent long sessions.`;
   }
   return "";
 }
@@ -116,14 +147,20 @@ function buildIntensityGuidance(
   if (hasTags(chunks, "strength_training", "powerlifting")) {
     return `Research-informed: Strength development requires heavy loading (75–95% 1RM) on primary compound movements. Include sub-maximal practice (80–90%) as the bulk of training volume. Reserve true maximal loads (>95%) for testing or peaking. Longer rest periods (3–5 min) are mandatory for strength expression and quality.`;
   }
-  if (hasTags(chunks, "sprint_mechanics") || /sprint|speed|acceleration/.test(ctx)) {
-    return `Research-informed: Speed and sprint development requires maximum intent on every rep. Work at >90% max velocity for speed quality. Inadequate rest destroys sprint quality — do not compress rest intervals for conditioning purposes. Fatigue-compromised sprints have poor neural transfer.`;
+  if (hasTags(chunks, "sprint_mechanics", "speed", "max_velocity", "acceleration") || /sprint|speed|acceleration/.test(ctx)) {
+    return `Research-informed: Speed and sprint development requires maximum intent on every rep. Work at >90% max velocity for speed quality. Inadequate rest destroys sprint quality — do not compress rest intervals for conditioning purposes. Fatigue-compromised sprints have poor neural transfer. Sprint quality is the non-negotiable variable; everything else is secondary.`;
+  }
+  if (hasTags(chunks, "change_of_direction", "agility", "deceleration")) {
+    return `Research-informed: Change-of-direction training intensity should be progressive — begin at controlled submaximal speeds with planned cutting patterns before adding reactive demands and full-speed COD. Deceleration mechanics (hip-loading, braking angles) must be established at moderate intensity before high-velocity cutting is introduced.`;
   }
   if (hasTags(chunks, "older_adult") || /older|senior|65/.test(ctx)) {
     return `Research-informed: Moderate intensity (RPE 6–8, never to true failure) with controlled tempo (3-1-2 or slower) for older adult populations. Full ROM at manageable loads. Reduce loads if form compromises. Intensity increments should be small and infrequent.`;
   }
   if (hasTags(chunks, "plyometrics")) {
     return `Research-informed: Plyometric intensity is governed by ground contact mechanics, not added external load. Maximal intent on each jump/bound with full recovery between reps. Never program plyometrics under fatigue conditions that compromise landing quality.`;
+  }
+  if (hasMobilityTags(chunks)) {
+    return `Research-informed: Mobility work intensity is governed by active control — never forced into end range. Dynamic mobility during warm-up should be moderate intensity, gradually increasing. Static stretching post-session: hold for 30–60 seconds at comfortable end range, not pain range. Forced stretching is counterproductive and increases injury risk.`;
   }
   return "";
 }
@@ -140,11 +177,20 @@ function buildExerciseSelectionGuidance(
   if (hasTags(chunks, "strength_training")) {
     lines.push(`Strength: Anchor sessions around barbell compound movements (squat, hinge, press, pull). Accessory work should reinforce technical weaknesses in primary patterns.`);
   }
-  if (hasTags(chunks, "sprint_mechanics") || /sprint|speed|football|soccer/.test(ctx)) {
-    lines.push(`Speed/sprint: Prioritize acceleration work (resisted sprints, sled push, A-skips, wall drills), max velocity mechanics (flying sprints, wickets, falling starts), and reactive drills. Power work (trap bar deadlift, jump squat, hang power clean) directly supports sprint speed.`);
+  if (hasTags(chunks, "sprint_mechanics", "speed", "acceleration", "max_velocity") || /sprint|speed|football/.test(ctx)) {
+    lines.push(`Speed/sprint: Prioritize acceleration work (resisted sprints, sled push, A-skips, wall drills), max velocity mechanics (flying sprints, wickets, falling starts), and reactive drills. Power work (trap bar deadlift, jump squat, hang power clean) directly supports sprint speed. Do not substitute generic conditioning drills for structured speed work.`);
+  }
+  if (hasTags(chunks, "change_of_direction", "agility", "deceleration")) {
+    lines.push(`Change of direction / deceleration: Include dedicated deceleration strength work (Nordic curls, eccentric-focused RDL, step-behind decelerations), structured cutting drills (45°/90° planned cuts before reactive), and braking mechanics exercises. Avoid random cone-ladder circuits as the primary agility method — use structured, progressive COD patterns with defined mechanics.`);
+  }
+  if (hasTags(chunks, "force_velocity")) {
+    lines.push(`Strength-speed / force-velocity: Include power bridging exercises (hang power clean, trap bar deadlift jump, medicine ball throws, jump squats) to connect max strength to sprint speed. Place power work when CNS is freshest — before strength or conditioning in the session order.`);
   }
   if (hasTags(chunks, "plyometrics")) {
     lines.push(`Plyometrics: Progress from bilateral to unilateral, and from low-intensity to high-intensity (squat jump → box jump → depth jump). Prioritize landing quality and reactive mechanics. Do not program plyometrics when lower-body fatigue is high.`);
+  }
+  if (hasMobilityTags(chunks)) {
+    lines.push(`Mobility/movement prep: Select joint-specific mobility exercises — hip (hip 90/90, world's greatest stretch, hip CARs), ankle (wall dorsiflexion mobilization, eccentric heel drops), thoracic (foam roller extension, open book, thoracic CARs), shoulder (band dislocates, wall slides). Dynamic warm-up before power/speed work must match session demands. Pair each mobility drill with a stability exercise in the same range. Reserve static stretching (30–60 second holds) for post-session, not pre-power.`);
   }
   if (hasTags(chunks, "older_adult") || /older|senior|65/.test(ctx)) {
     lines.push(`Older adult population: Prefer bilateral exercises before unilateral. Machine variations acceptable and often preferable for joint safety. Include balance and stability work. Choose joint-friendly exercise variants (goblet squat over back squat, leg press, seated variations). Avoid high-impact exercises unless well-established.`);
@@ -170,8 +216,11 @@ function buildProgressionGuidance(
     }
     return `Research-informed: Strength progression requires planned overload. Linear progression for novices (add weight each session). Intermediate+ use weekly or block-based progression (linear periodization or DUP). Deload every 4–6 weeks. Track 1RM and working maxes — log every session.`;
   }
-  if (hasTags(chunks, "sprint_mechanics") || /sprint|speed/.test(ctx)) {
-    return `Research-informed: Speed progression is NOT linear load-based. Progress sprint quality by: reducing assists (resisted → free sprint), increasing distance segments, improving mechanics, and reducing contact times. Volume increases should be gradual (+10% max per week). Never sacrifice quality for speed progression.`;
+  if (hasTags(chunks, "sprint_mechanics", "speed", "acceleration", "max_velocity") || /sprint|speed/.test(ctx)) {
+    return `Research-informed: Speed progression is NOT linear load-based. Progress sprint quality by: reducing resistance (resisted → free sprint), increasing distance segments, improving mechanics, and improving reactive quality. Volume increases: no more than 10% per week. Never sacrifice quality for volume or distance progression. Track sprint times and mechanics — not just reps.`;
+  }
+  if (hasTags(chunks, "change_of_direction", "agility")) {
+    return `Research-informed: COD progression: planned cutting patterns at submaximal speed → reactive stimuli at controlled speed → full-speed reactive cutting. Build deceleration strength (eccentric squats, Nordic curls) as the prerequisite before adding aggressive cutting angles or velocity. Progress angle complexity and decision demand separately.`;
   }
   if (hasTags(chunks, "plyometrics")) {
     return `Research-informed: Plyometric progression: bilateral → unilateral; low amplitude → high amplitude; slow-tempo → reactive. Foot contacts per week is the primary volume metric. Increase by no more than 10% per week. Progress difficulty only when landing quality and readiness are consistently strong.`;
@@ -181,6 +230,9 @@ function buildProgressionGuidance(
   }
   if (hasTags(chunks, "pain_modification") || ctx.includes("pain")) {
     return `Research-informed: Pain-context progression is symptom-guided. Progress only when symptoms remain at or below baseline during and after training. Increase load or volume one variable at a time. Never chase progression at the cost of symptom flare-up.`;
+  }
+  if (hasMobilityTags(chunks)) {
+    return `Research-informed: Mobility progression: passive range → active controlled range → loaded range. Address one joint per focus block with consistency (daily short bouts are more effective than infrequent long sessions). Progress mobility gains into stability and strength in the new range before adding load. Allow 4–8+ weeks for meaningful, lasting mobility improvement.`;
   }
   return "";
 }
@@ -194,8 +246,11 @@ function buildRecoveryGuidance(
   if (hasTags(chunks, "recovery") || hasTags(chunks, "hypertrophy")) {
     lines.push(`Allow 48–72h between sessions targeting the same primary muscle groups. Recovery between hypertrophy sets: 1–3 min. Recovery between strength sets: 3–5 min.`);
   }
-  if (hasTags(chunks, "sprint_mechanics") || /sprint|speed/.test(ctx)) {
-    lines.push(`Sprint/speed: Full CNS recovery between efforts — work:rest ratios of 1:6 to 1:10. 48h minimum between high-intensity sprint sessions. Do not program sprint work after heavy lower-body strength if same day.`);
+  if (hasTags(chunks, "sprint_mechanics", "speed", "max_velocity", "acceleration") || /sprint|speed/.test(ctx)) {
+    lines.push(`Sprint/speed: Full CNS recovery between efforts — work:rest ratios of 1:6 to 1:10. 48h minimum between high-intensity sprint sessions. Do not program sprint work after heavy lower-body strength in the same session. Fatigue from conditioning sessions must not carry into speed sessions.`);
+  }
+  if (hasTags(chunks, "change_of_direction", "agility")) {
+    lines.push(`COD/agility: 48h between high-intensity COD sessions. Do not pair with heavy eccentric lower-body work in same session — cumulative fatigue degrades cutting mechanics and elevates injury risk.`);
   }
   if (hasTags(chunks, "plyometrics")) {
     lines.push(`Plyometrics: 48–72h recovery between high-intensity plyometric sessions. Do not pair with heavy strength work in same session unless explicitly warm-up based.`);
@@ -205,6 +260,9 @@ function buildRecoveryGuidance(
   }
   if (hasTags(chunks, "load_management")) {
     lines.push(`Load management: Monitor cumulative fatigue across weeks. Deload every 4–6 weeks. Reduce volume (not intensity) by 30–50% in deload weeks.`);
+  }
+  if (hasMobilityTags(chunks)) {
+    lines.push(`Mobility/warm-up: Integrate dynamic movement prep (leg swings, hip circles, lunge patterns, arm circles, joint CARs) at the start of every training session — especially before power and speed work. Warm-up should ramp intensity gradually over 10–15 minutes. Reserve static holds (30–60s) for post-session cool-down blocks, not pre-power preparation. Active mobility exercises carry low fatigue cost and can be included daily.`);
   }
 
   return lines.join(" ");
@@ -225,6 +283,15 @@ function buildSafetyGuidance(
   if (hasTags(chunks, "plyometrics")) {
     lines.push(`SAFETY — plyometrics: Never program plyometrics under fatigued conditions. Landing quality is the primary safety indicator — if landing is compromised, the session ends. Beginners must master landing mechanics before adding height or reactive demands.`);
   }
+  if (hasTags(chunks, "sprint_mechanics", "speed", "max_velocity") && (ctx.includes("pain") || ctx.includes("knee") || ctx.includes("hamstring") || ctx.includes("hip"))) {
+    lines.push(`SAFETY — speed + pain context: Sprint work with pain or injury present requires conservative exposure. Reduce sprint intensity to submaximal, eliminate reactive/max-velocity work, and address the symptomatic area first. Hamstring and hip pain are absolute contraindications to maximal-intent sprint work until symptom-free.`);
+  }
+  if (hasTags(chunks, "change_of_direction", "agility") && (ctx.includes("knee") || ctx.includes("ankle") || ctx.includes("pain"))) {
+    lines.push(`SAFETY — COD + joint pain: High-velocity cutting and deceleration are contraindicated when knee or ankle pain is present. Modify to planned, controlled deceleration drills at submaximal speed. Do not program reactive cutting until the athlete is pain-free at lower-intensity COD.`);
+  }
+  if (hasMobilityTags(chunks)) {
+    lines.push(`SAFETY — mobility: Do not claim mobility prevents injury. Frame as movement quality and readiness preparation. Mobility exercises must stay in pain-free ranges — never forced through pain. Hypermobile joints should not receive excessive passive stretching without concurrent stability training. No medical claims about joint health or injury prevention.`);
+  }
   if (hasCategory(chunks, "medical_rehab")) {
     lines.push(`SAFETY — medical/rehab context: Medical-category research applies. Conservative modifications only. Exercise does not replace medical treatment. Flag any exercises that are contraindicated per retrieved research.`);
   }
@@ -242,6 +309,9 @@ function buildContraindications(
     contra.push("Deep loaded squats below 90° if knee pain is present");
     contra.push("Leg extension machine in pain-provocative ranges");
     contra.push("Running or jumping until symptom-free at lower load");
+    if (hasTags(chunks, "change_of_direction", "agility")) {
+      contra.push("High-velocity reactive cutting until knee is symptom-free and deceleration strength is re-established");
+    }
   }
   if (ctx.includes("shoulder") || ctx.includes("rotator")) {
     contra.push("Overhead pressing in pain range — reduce range or load");
@@ -256,10 +326,29 @@ function buildContraindications(
   if (ctx.includes("hip") || ctx.includes("groin")) {
     contra.push("Deep hip flexion under load if hip pain present");
     contra.push("Single-leg exercises that reproduce groin or hip impingement pain");
+    if (hasTags(chunks, "sprint_mechanics", "speed", "acceleration")) {
+      contra.push("Max-intent sprint work or hip-flexion-dominant acceleration drills until hip is symptom-free");
+    }
+  }
+  if (ctx.includes("hamstring") || ctx.includes("posterior")) {
+    if (hasSpeedTags(chunks)) {
+      contra.push("Maximum-intensity sprint work with active hamstring pain or strain");
+      contra.push("High-speed reactive drills until hamstring is cleared through graduated return-to-speed protocol");
+    }
+  }
+  if (ctx.includes("ankle") && hasMobilityTags(chunks)) {
+    contra.push("Aggressive loaded ankle dorsiflexion over acutely swollen or sprained ankle");
+    contra.push("Banded ankle mobilization applied directly over acute ankle sprain");
+  }
+  if (ctx.includes("thoracic") && hasMobilityTags(chunks)) {
+    contra.push("Aggressive thoracic extension exercises if osteoporosis, fracture risk, or disc pathology is present");
   }
   if (hasTags(chunks, "older_adult") || /older|senior/.test(ctx)) {
     contra.push("High-impact plyometrics without established landing competency");
     contra.push("Unassisted single-leg balance work on unstable surfaces without progression");
+  }
+  if (hasMobilityTags(chunks) && ctx.includes("hyper")) {
+    contra.push("Extensive passive stretching in hypermobile joints without concurrent stability training");
   }
 
   return contra;

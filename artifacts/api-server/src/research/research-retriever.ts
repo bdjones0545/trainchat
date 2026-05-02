@@ -60,11 +60,16 @@ function extractContextTags(params: ResearchRetrievalParams): string[] {
   if (/fat.?loss|weight.?loss|cut|lean|body.?comp/.test(combined)) tags.push("body_composition");
   if (/endurance|cardio|aerobic|conditioning/.test(combined)) tags.push("endurance");
 
-  // Speed / Power / Sport performance
-  if (/sprint|speed|acceleration|velocity/.test(combined)) tags.push("sprint_mechanics");
+  // Speed / Power / Sport performance (expanded)
+  if (/sprint|speed|acceleration|velocity|faster|quickness|first.?step|explosiveness/.test(combined)) tags.push("speed");
+  if (/sprint|acceleration|velocity|sprint.?mechanic/.test(combined)) tags.push("sprint_mechanics");
   if (/plyometric|jump|explosive|reactive/.test(combined)) tags.push("plyometrics");
-  if (/change.?of.?direction|agility|lateral/.test(combined)) tags.push("agility");
-  if (/sport|athletic|performance/.test(combined)) tags.push("sport_performance");
+  if (/change.?of.?direction|agility|lateral|deceleration|cutting|cod\b/.test(combined)) tags.push("agility");
+  if (/change.?of.?direction|deceleration|cod\b|cutting/.test(combined)) tags.push("change_of_direction");
+  if (/sport|athletic|performance|football.?speed/.test(combined)) tags.push("sport_performance");
+  if (/football/.test(combined)) tags.push("football");
+  if (/force.?velocity|strength.?speed|speed.?strength|power.?development/.test(combined)) tags.push("force_velocity");
+  if (/max.?velocity|top.?speed|top.?end.?speed/.test(combined)) tags.push("max_velocity");
 
   // Programming
   if (/periodiz|block|linear|undulat|wave/.test(combined)) tags.push("periodization");
@@ -83,13 +88,24 @@ function extractContextTags(params: ResearchRetrievalParams): string[] {
   if (/nutrition|diet|fuel|hydrat|eat/.test(combined)) tags.push("sports_nutrition");
   if (/calorie|energy balance/.test(combined)) tags.push("energy_balance");
 
+  // Mobility / Movement Quality (expanded)
+  if (/mobility|flexibility|range.?of.?motion|stiffness|tightness|movement.?quality/.test(combined)) tags.push("mobility");
+  if (/warm.?up|warmup|movement.?prep|dynamic.?warm|activation|movement.?prep/.test(combined)) tags.push("dynamic_warmup");
+  if (/hip.?mobility|hip.?flexor|hip.?tightness|tight.?hip|hip.?stiffness/.test(combined)) tags.push("hip_mobility");
+  if (/ankle.?mobility|ankle.?dorsiflexion|ankle.?stiffness|tight.?ankle|ankle.?tightness/.test(combined)) tags.push("ankle_mobility");
+  if (/thoracic|t.?spine|upper.?back.?mob/.test(combined)) tags.push("thoracic_mobility");
+  if (/shoulder.?mobility|shoulder.?stiffness|shoulder.?range/.test(combined)) tags.push("shoulder_mobility");
+  if (/movement.?quality|movement.?prep|movement.?competency|movement.?pattern/.test(combined)) tags.push("movement_quality");
+  if (/rotation|rotational/.test(combined)) tags.push("rotation");
+
   // Rehab / Pain
   if (/pain|hurt|injur|sore|ache/.test(combined)) tags.push("pain_modification");
   if (/return.?to|after.?injur|post.?op|rehabilit/.test(combined)) tags.push("return_to_training");
   if (/knee/.test(combined)) tags.push("knee");
   if (/shoulder/.test(combined)) tags.push("shoulder");
   if (/back|spine/.test(combined)) tags.push("back");
-  if (/hip/.test(combined)) tags.push("hip");
+  if (/hip/.test(combined)) { tags.push("hip"); tags.push("hip_mobility"); }
+  if (/ankle/.test(combined)) tags.push("ankle_mobility");
 
   // Populations
   if (/youth|kid|teen|adolescent|young.?athlete/.test(combined)) tags.push("youth_athlete");

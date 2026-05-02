@@ -1,0 +1,339 @@
+Create and seed TrainChat’s Speed + Mobility research layer, then integrate it with the main Coach Agent retrieval and programming guidance.
+
+Goal:
+Add curated, approved-ready research documents and chunks for speed development and mobility so TrainChat can build better sprint, acceleration, change-of-direction, warm-up, movement prep, and mobility programs.
+
+Do NOT let the Coach Agent search the web directly.
+Do NOT remove the Research Librarian Agent.
+Do NOT weaken safety constraints.
+The Coach Agent should only consume approved, active research chunks.
+
+-------------------------------------
+PHASE 1 — ADD SPEED RESEARCH SEED PACK
+-------------------------------------
+
+Add seeded research documents for these topics:
+
+1. Sprint acceleration principles
+Tags:
+["speed", "sprint", "acceleration", "football", "athletic_performance"]
+
+Programming implications:
+- Short sprint distances
+- Full recovery between reps
+- High intent
+- Low fatigue
+- Horizontal force emphasis
+- Technique quality over conditioning fatigue
+
+2. Max velocity sprinting
+Tags:
+["speed", "max_velocity", "sprint_mechanics", "athletic_performance"]
+
+Programming implications:
+- Upright mechanics
+- High-speed exposure
+- Low total volume initially
+- Adequate rest
+- Quality over quantity
+
+3. Plyometric training dosage
+Tags:
+["plyometrics", "power", "reactive_strength", "speed"]
+
+Programming implications:
+- Dose jumps based on experience
+- Prioritize landing quality
+- Avoid excessive contacts
+- Progress from low to high intensity
+
+4. Change of direction and deceleration
+Tags:
+["change_of_direction", "deceleration", "agility", "football"]
+
+Programming implications:
+- Deceleration strength
+- Braking mechanics
+- Cutting angles
+- Progressive complexity
+- Avoid random “ladder-only” agility programming
+
+5. Strength-speed relationship
+Tags:
+["strength", "power", "speed", "force_velocity"]
+
+Programming implications:
+- Max strength supports force production
+- Power training bridges strength to speed
+- Heavy lifts should not create excessive fatigue before sprint work
+
+6. Speed training fatigue management
+Tags:
+["speed", "recovery", "fatigue_management", "sprint"]
+
+Programming implications:
+- Long rest intervals
+- Avoid speed work under heavy fatigue
+- Separate high-output sprint work from high-fatigue conditioning when possible
+
+-------------------------------------
+PHASE 2 — ADD MOBILITY RESEARCH SEED PACK
+-------------------------------------
+
+Add seeded research documents for these topics:
+
+1. Mobility vs flexibility
+Tags:
+["mobility", "flexibility", "range_of_motion", "movement_quality"]
+
+Programming implications:
+- Mobility = usable range under control
+- Flexibility alone does not equal movement capacity
+- Pair range-of-motion work with control/stability
+
+2. Dynamic warm-ups and movement prep
+Tags:
+["warmup", "dynamic_warmup", "movement_prep", "mobility"]
+
+Programming implications:
+- Dynamic warm-ups before training
+- Movement-specific prep
+- Gradual ramp-up of intensity
+- Static stretching is not the default pre-power choice
+
+3. Hip mobility for athletes
+Tags:
+["hip_mobility", "mobility", "athletes", "sprint"]
+
+Programming implications:
+- Hip extension/flexion control supports sprinting and lower-body movement
+- Use active mobility, positional strength, and controlled ranges
+
+4. Ankle mobility and lower-body mechanics
+Tags:
+["ankle_mobility", "mobility", "squat", "deceleration"]
+
+Programming implications:
+- Ankle dorsiflexion affects squat, landing, and deceleration mechanics
+- Use controlled mobility and progressive loading
+
+5. Thoracic mobility and upper-body mechanics
+Tags:
+["thoracic_mobility", "mobility", "rotation", "upper_body"]
+
+Programming implications:
+- Thoracic rotation/extension can support overhead, rotational, and sprint posture mechanics
+- Pair mobility with trunk control
+
+6. Mobility and injury risk — conservative framing
+Tags:
+["mobility", "injury_risk", "movement_quality", "safety"]
+
+Programming implications:
+- Avoid claiming mobility prevents injuries by itself
+- Frame mobility as one component of movement quality, readiness, and tolerance
+- Do not make medical claims
+
+-------------------------------------
+PHASE 3 — DATABASE SEEDING
+-------------------------------------
+
+Create or update a seed function:
+
+POST /api/admin/research/seed-speed-mobility
+
+This should add the Speed + Mobility seed documents to research_documents and research_chunks.
+
+Each document should include:
+- title
+- category: "speed" or "mobility"
+- source: "Curated TrainChat Research Seed"
+- evidenceType: "expert_consensus" or "position_stand" unless a more specific evidence type is already supported
+- trustLevel: "high"
+- confidence: "moderate"
+- approved: true
+- active: true
+- topicTags
+- populationTags
+- sportTags
+- goalTags
+- plainLanguageSummary
+- coachingImplications
+- programmingImplications
+- safetyConsiderations
+- limitations
+- whatThisDoesNotProve
+- retrievalChunks
+
+Important:
+These are curated principle documents, not fake citations.
+Do NOT invent specific journal citations or DOIs.
+Label them transparently as curated seed principles unless real sources are added later.
+
+-------------------------------------
+PHASE 4 — RESEARCH LIBRARIAN COMPATIBILITY
+-------------------------------------
+
+Ensure the Research Librarian Agent can later analyze, replace, or upgrade these seed documents with real source-backed documents.
+
+Add admin notes:
+"Seed principle document. Replace or supplement with source-backed evidence as library matures."
+
+Do not lock these documents permanently.
+
+-------------------------------------
+PHASE 5 — RETRIEVAL INTEGRATION
+-------------------------------------
+
+Update research retrieval matching so user prompts involving:
+
+Speed:
+- speed
+- sprint
+- acceleration
+- max velocity
+- explosiveness
+- power
+- football speed
+- faster
+- change of direction
+- agility
+- deceleration
+- first step
+- quickness
+
+retrieve relevant speed chunks.
+
+Mobility:
+- mobility
+- flexibility
+- range of motion
+- warm-up
+- movement prep
+- stiffness
+- hips
+- ankles
+- thoracic
+- shoulder mobility
+- tightness
+
+retrieve relevant mobility chunks.
+
+Ensure retrieval considers:
+- user goal
+- sport
+- message text
+- current program
+- pain/limitations
+- edit intent
+
+-------------------------------------
+PHASE 6 — PROGRAMMING GUIDANCE INTEGRATION
+-------------------------------------
+
+Update buildResearchProgrammingGuidance so speed and mobility chunks translate into structured programming.
+
+Speed guidance should influence:
+- exerciseSelectionGuidance
+- intensityGuidance
+- progressionGuidance
+- recoveryGuidance
+- safetyGuidance
+
+Speed rules:
+- Prioritize sprint quality over fatigue
+- Use full recovery for high-output speed
+- Keep sprint volume appropriate
+- Pair strength/power work with sprint intent
+- Do not turn speed work into conditioning unless requested
+
+Mobility guidance should influence:
+- warm-up selection
+- exercise preparation
+- cooldown / accessory work
+- movement quality recommendations
+- pain-sensitive modifications
+
+Mobility rules:
+- Dynamic warm-up before power/speed work
+- Mobility should be joint-specific
+- Pair mobility with control/stability
+- Avoid claiming mobility alone prevents injury
+- Do not overuse static stretching before high-output sprint/power work
+
+-------------------------------------
+PHASE 7 — MAIN COACH AGENT PROMPT UPDATE
+-------------------------------------
+
+Update the Coach Agent prompt so it knows how to apply speed and mobility research.
+
+Add:
+“When speed research context is present, prioritize high-quality sprinting, power expression, full recovery, progressive exposure, and low fatigue. Do not confuse speed training with conditioning.”
+
+Add:
+“When mobility research context is present, use mobility as movement preparation and usable range development. Pair range-of-motion work with control, stability, and task-specific movement. Avoid medical claims.”
+
+Ensure user-facing language stays simple.
+
+-------------------------------------
+PHASE 8 — QA TESTS
+-------------------------------------
+
+Add to RESEARCH_PROGRAMMING_QA.md:
+
+Speed test:
+Prompt:
+“Build me a football speed program with proper sprint mechanics, acceleration work, and mobility.”
+
+PASS:
+- Includes acceleration/sprint work
+- Uses long rest
+- Includes power work
+- Includes movement prep
+- Does not become generic conditioning
+
+Mobility test:
+Prompt:
+“Build me a 3-day strength program with hip and ankle mobility built in.”
+
+PASS:
+- Mobility is joint-specific
+- Warm-up is dynamic
+- Mobility is paired with control/stability
+- Does not overpromise injury prevention
+
+Speed + pain test:
+Prompt:
+“Make this better for speed, but my knee bothers me when I cut hard.”
+
+PASS:
+- Keeps speed intent
+- Modifies COD/deceleration exposure
+- Avoids aggressive cutting
+- Uses safer progressions
+
+-------------------------------------
+PHASE 9 — VALIDATION
+-------------------------------------
+
+After implementation:
+- Run typecheck
+- Seed speed + mobility library
+- Confirm documents appear in admin research tab
+- Confirm approved/active chunks are created
+- Confirm speed prompts retrieve speed chunks
+- Confirm mobility prompts retrieve mobility chunks
+- Confirm Coach Agent does not search web directly
+- Confirm speed/mobility guidance appears in dev-only debug logs
+- Confirm normal chat UX is unchanged
+
+Output:
+- Files added
+- Files modified
+- Seed route added
+- Number of seed docs created
+- Number of chunks created
+- Retrieval updates
+- Programming guidance updates
+- QA result
+- Typecheck result

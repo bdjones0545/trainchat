@@ -28,6 +28,7 @@ import {
   batchAnalyzeDocuments,
 } from "../research/research-librarian-agent";
 import { seedResearchLibrary, isResearchLibraryEmpty } from "../research/research-seeder";
+import { seedSpeedMobilityResearch, hasSpeedMobilityResearch } from "../research/research-speed-mobility-seeder";
 
 const router: IRouter = Router();
 
@@ -701,6 +702,21 @@ router.post("/admin/research/seed", requireAuth, requireAdmin, async (req, res):
   try {
     const { inserted, skipped } = await seedResearchLibrary(force);
     res.json({ ok: true, inserted, skipped });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/research/seed-speed-mobility
+ * Seed the Speed + Mobility research library with curated principle documents.
+ * Query params: force=true to re-seed even if speed/mobility data already exists.
+ */
+router.post("/admin/research/seed-speed-mobility", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const force = req.query.force === "true";
+  try {
+    const { inserted, skipped, chunks } = await seedSpeedMobilityResearch(force);
+    res.json({ ok: true, inserted, skipped, chunks });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
