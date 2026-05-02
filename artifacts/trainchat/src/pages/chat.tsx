@@ -2613,10 +2613,11 @@ export default function Chat() {
         <button
           onClick={() => setMobilePanel(null)}
           aria-label="Return to TrainChat agent"
-          className="flex items-center justify-center rounded-xl px-2 py-1 transition-all duration-150 active:scale-95 active:opacity-70"
+          className="flex items-center gap-1.5 rounded-xl px-2 py-1 transition-all duration-150 active:scale-95 active:opacity-70"
           style={stream.isActive ? { filter: "drop-shadow(0 0 6px hsl(199 89% 48% / 0.55))" } : undefined}
         >
-          <img src={trainChatLogo} alt="TrainChat" className="h-6 object-contain" />
+          <img src={trainChatLogo} alt="" aria-hidden="true" style={{ width: 22, height: 22, objectFit: "contain", flexShrink: 0 }} />
+          <span className="text-[15px] font-bold tracking-tight text-foreground leading-none select-none">TrainChat</span>
         </button>
         <button
           onClick={() => setMobilePanel("right")}
