@@ -72,7 +72,7 @@ export interface AdaptationResult {
 // Converts all 6 dimensions into a single 6-30 composite score.
 // Positive dims: sleep, energy, motivation. Negative dims inverted: soreness, stress, pain.
 
-function computeReadinessScore(s: CheckInScores): ReadinessScore {
+export function computeReadinessScore(s: CheckInScores): ReadinessScore {
   const composite =
     s.sleepScore +
     s.energyScore +
