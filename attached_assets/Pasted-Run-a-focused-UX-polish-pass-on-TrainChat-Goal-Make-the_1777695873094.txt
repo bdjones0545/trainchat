@@ -1,0 +1,188 @@
+Run a focused UX polish pass on TrainChat.
+
+Goal:
+Make the app feel simple, fast, and trustworthy while preserving all existing functionality and agent architecture.
+
+Do NOT add new features.
+Do NOT change backend architecture.
+Do NOT expose internal agents.
+
+Focus on:
+- clarity
+- feedback
+- consistency
+- trust
+- speed of perception
+
+-------------------------------------
+PHASE 1 — ACTION FEEDBACK SYSTEM
+-------------------------------------
+
+For every user action (button or chat):
+
+1. Immediate feedback:
+- show “Updating…” state
+- disable repeat taps
+
+2. Visible change:
+- highlight affected exercise or section
+- auto-scroll if needed
+
+3. Clear confirmation:
+- toast: “Program updated”
+- inline badge: “Swapped”, “Made harder”, etc.
+
+Never show:
+- conflicting failure messages
+- NO RECEIPT when change occurred
+
+-------------------------------------
+PHASE 2 — REMOVE FAILURE CONFUSION
+-------------------------------------
+
+If programChanged === true:
+- suppress all failure banners
+- suppress retry button
+- mark as success
+
+Only show failure when:
+- no program change occurred
+
+-------------------------------------
+PHASE 3 — CONSISTENT INTERACTION MODEL
+-------------------------------------
+
+Unify behavior:
+
+Buttons:
+- always structured
+- always deterministic
+- always fast
+
+Chat:
+- flexible
+- can be interpreted
+
+Rule:
+Buttons = action execution  
+Chat = intent + conversation
+
+-------------------------------------
+PHASE 4 — “WHAT JUST HAPPENED” CLARITY
+-------------------------------------
+
+After any change:
+
+Add micro-feedback:
+
+Examples:
+- “Swapped Goblet Squat → Bulgarian Split Squat”
+- “Increased intensity on Trap Bar Deadlift”
+- “Reduced volume to manage fatigue”
+
+Keep it:
+- short
+- specific
+- human
+
+-------------------------------------
+PHASE 5 — PROGRAM PANEL CONFIDENCE
+-------------------------------------
+
+Make the right panel feel authoritative:
+
+- smooth highlight animation on change (2–3 seconds)
+- subtle emphasis color (not aggressive)
+- no layout jumps
+- keep scroll stable unless needed
+
+-------------------------------------
+PHASE 6 — SIMPLIFY LANGUAGE
+-------------------------------------
+
+Audit all user-facing text:
+
+Replace:
+- “mutation”
+- “receipt”
+- “refinement”
+- “execution”
+
+With:
+- “updated”
+- “changed”
+- “adjusted”
+- “improved”
+
+Tone:
+- coach, not engineer
+
+-------------------------------------
+PHASE 7 — LOADING & SPEED PERCEPTION
+-------------------------------------
+
+Make system feel faster:
+
+- skeleton states instead of blank
+- immediate optimistic UI where safe
+- streaming feels intentional, not slow
+
+-------------------------------------
+PHASE 8 — ERROR DESIGN
+-------------------------------------
+
+If true error:
+
+Show:
+- clear reason
+- clear next step
+
+Example:
+“I couldn’t find that exercise. Try selecting it again.”
+
+Never show:
+- generic AI failure language
+- internal system phrases
+
+-------------------------------------
+PHASE 9 — COACH PRESENCE
+-------------------------------------
+
+Make it feel like a coach:
+
+- responses concise by default
+- expand only when asked
+- confident tone
+- no over-explaining
+
+-------------------------------------
+PHASE 10 — QA
+-------------------------------------
+
+Test:
+
+1. Tap Swap
+→ instant feedback, highlight, confirmation, no failure
+
+2. Tap Make Harder
+→ change visible, confirmation
+
+3. Chat: “Make this more athletic”
+→ structured change, clear explanation
+
+4. Retry after real failure
+→ works correctly
+
+5. Build new program
+→ smooth, clear, confident
+
+-------------------------------------
+OUTPUT
+-------------------------------------
+
+Return:
+- UX issues found
+- Files changed
+- Improvements made
+- QA results
+- Typecheck result
