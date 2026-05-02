@@ -278,12 +278,18 @@ export interface ButtonActionPayload {
   };
   /**
    * Explicit routing scope hint for the server.
-   * When set, the server should prefer this over pattern-matching scope resolution.
-   * "block" → hierarchical block/phase engine
-   * "week"  → week-scope refinement engine
-   * "session" → session/exercise edit pipeline (default)
+   * Matches ActionScope — server prefers this over pattern-matching when present.
+   *
+   * "architecture" → hierarchical block/phase engine (Performance Architect)
+   * "program"      → global mutation pipeline (all sessions, program-wide)
+   * "session"      → session/day mutation pipeline
+   * "exercise"     → exercise-level mutation pipeline (surgical, fast path)
+   * "readiness"    → readiness service — never through edit pipeline
+   * "profile"      → profile/memory update service
+   * "settings"     → user settings controls
+   * "admin"        → Research Librarian (admin-only, never user-facing)
    */
-  scope?: "block" | "week" | "session";
+  scope?: "exercise" | "session" | "program" | "architecture" | "readiness" | "profile" | "settings" | "admin";
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────

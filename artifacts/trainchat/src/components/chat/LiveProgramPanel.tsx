@@ -824,15 +824,21 @@ function ProgramTab({
     const payload: Record<string, unknown> = { source: "right_panel", ...options };
     if (buttonPayload) payload.buttonPayload = buttonPayload;
     if (import.meta.env.DEV) {
-      console.log("[StructuredButtonAction]", {
+      console.log("[ActionRoutingAudit]", {
         source: buttonPayload?.source ?? "program_panel",
         actionType: buttonPayload?.actionType ?? null,
+        scope: buttonPayload?.scope ?? null,
         displayText: buttonPayload?.displayText ?? key,
         submittedText: message,
         dayIndex: buttonPayload?.dayIndex ?? null,
         exerciseIndex: buttonPayload?.exerciseIndex ?? null,
         exerciseName: buttonPayload?.exerciseName ?? null,
         structuredIntent: options?.structuredIntent ?? null,
+        expectedRoute: buttonPayload?.scope === "exercise" ? "mutation_pipeline/exercise"
+          : buttonPayload?.scope === "session" ? "mutation_pipeline/session"
+          : buttonPayload?.scope === "program" ? "mutation_pipeline/program"
+          : buttonPayload?.scope === "architecture" ? "hierarchical_engine"
+          : "auto_resolved_by_server",
       });
       console.log("[SidebarEditExecutionAudit]", {
         buttonPressed: key,
@@ -2142,6 +2148,7 @@ function ProgramTab({
                                     ...(action.button ? { button: action.button } : {}),
                                   }, {
                                     source: "program_panel",
+                                    scope: "session",
                                     actionType: sessionActionType,
                                     displayText: action.label,
                                     submittedText: action.buildMessage(day.dayNumber),
@@ -2311,6 +2318,7 @@ function ProgramTab({
                                         e.stopPropagation();
                                         const exPayload: ButtonActionPayload = {
                                           source: "program_panel",
+                                          scope: "exercise",
                                           actionType:
                                             action.direct === "easier" ? "make_easier" :
                                             action.direct === "harder" ? "make_harder" :

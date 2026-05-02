@@ -1145,15 +1145,26 @@ export default function Chat() {
     setOptimisticUserMsg(content);
 
     if (import.meta.env.DEV && btnPayload) {
-      console.log("[StructuredButtonAction]", {
+      console.log("[ActionRoutingAudit]", {
         source: btnPayload.source,
         actionType: btnPayload.actionType,
+        scope: btnPayload.scope ?? null,
         displayText: btnPayload.displayText,
         submittedText: content,
         dayIndex: btnPayload.dayIndex ?? null,
         exerciseIndex: btnPayload.exerciseIndex ?? null,
         exerciseName: btnPayload.exerciseName ?? null,
         programId: btnPayload.programId ?? null,
+        expectedRoute:
+          btnPayload.scope === "architecture" ? "hierarchical_engine (block_scope)" :
+          btnPayload.scope === "exercise"      ? "mutation_pipeline/exercise" :
+          btnPayload.scope === "session"       ? "mutation_pipeline/session" :
+          btnPayload.scope === "program"       ? "mutation_pipeline/program" :
+          btnPayload.scope === "readiness"     ? "readiness_service" :
+          btnPayload.scope === "profile"       ? "profile_update" :
+          btnPayload.scope === "admin"         ? "research_librarian" :
+          btnPayload.actionType === "build_program" ? "build_with_architect" :
+          "auto_resolved_by_server",
       });
     }
 

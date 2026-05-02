@@ -11,18 +11,24 @@ function inferActionType(text: string): ButtonActionPayload["actionType"] {
 }
 
 /**
- * Infer routing scope from a try-saying chip prompt.
- * Block-scope chips target the overall program architecture/direction.
- * Session-scope chips target a specific day or exercise.
- * Undefined = let the server resolve via pattern matching.
+ * Infer ActionScope routing hint from a try-saying chip prompt.
+ *
+ * "architecture" — block/phase level directional change → hierarchical engine
+ * "program"      — global constraint/equipment change → mutation pipeline (all sessions)
+ * "session"      — day-specific change → session mutation pipeline
+ * undefined      — let the server resolve via pattern matching
  */
 function inferTrySayingScope(prompt: string): ButtonActionPayload["scope"] {
   const lower = prompt.toLowerCase();
-  // Block-scope: global architectural / directional changes
-  if (/make this (more |a bit )?(athletic|explosive|powerful|strong)/i.test(lower)) return "block";
-  if (/progress this (for )?\d+[ -]?weeks?/i.test(lower)) return "block";
-  if (/add more explosive/i.test(lower)) return "block";
-  if (/remove all/i.test(lower)) return "block";
+  // Architecture: global directional/periodization changes → Performance Architect
+  if (/make this (more |a bit )?(athletic|explosive|powerful|strong)/i.test(lower)) return "architecture";
+  if (/progress this (for )?\d+[ -]?weeks?/i.test(lower)) return "architecture";
+  if (/add more explosive/i.test(lower)) return "architecture";
+  if (/make this (a |an )?(re[\-\s]?entry|power|strength|hypertrophy)/i.test(lower)) return "architecture";
+  // Program: global constraint/equipment changes → mutation pipeline (all sessions)
+  if (/remove all/i.test(lower)) return "program";
+  if (/replace.*equipment|no barbell|dumbbell.only|no gym/i.test(lower)) return "program";
+  if (/make this.*joint.friendly|knee.friendly|shoulder.friendly/i.test(lower)) return "program";
   // Session-scope: day-specific or exercise-specific
   if (/\bday \d/i.test(lower)) return "session";
   // Default: let the server decide

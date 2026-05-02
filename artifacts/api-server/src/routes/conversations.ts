@@ -1481,11 +1481,11 @@ Keep it helpful and intelligent, never promotional.`;
 
       // ── 1.5 Hierarchical scope check — week or block scope bypasses session edit pipeline ─
       const _directBtnScope = nonStreamUiCtx?.buttonPayload?.scope as string | undefined;
-      const directScopeResolution: ScopeResolution = _directBtnScope === "block"
+      const directScopeResolution: ScopeResolution = (_directBtnScope === "architecture" || _directBtnScope === "block")
         ? (() => {
             logger.info(
               { message: parsed.data.content.slice(0, 80), btnScope: _directBtnScope },
-              "[GlobalChipRouting] buttonPayload.scope=block — overriding to block_scope"
+              "[GlobalChipRouting] buttonPayload.scope=architecture — overriding to block_scope"
             );
             return {
               scope: "block_scope" as const,
@@ -1495,6 +1495,17 @@ Keep it helpful and intelligent, never promotional.`;
             };
           })()
         : resolveRefinementScope(parsed.data.content);
+      logger.info(
+        {
+          label: parsed.data.content.slice(0, 80),
+          source: nonStreamUiCtx?.buttonPayload?.source ?? null,
+          actionType: nonStreamUiCtx?.buttonPayload?.actionType ?? null,
+          scope: _directBtnScope ?? null,
+          actualRoute: directScopeResolution.scope,
+          btnScopeOverride: _directBtnScope === "architecture" || _directBtnScope === "block",
+        },
+        "[ActionRoutingAudit]"
+      );
       if (directScopeResolution.scope !== "session_scope") {
         logger.info(
           { scope: directScopeResolution.scope, systemId: resolvedSystem.id },
@@ -3312,11 +3323,11 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
       // ── 1.5 Hierarchical scope check — week or block scope bypasses session edit pipeline ─
       const _streamBtnScope = streamUIContext?.buttonPayload?.scope as string | undefined;
-      const streamScopeResolution: ScopeResolution = _streamBtnScope === "block"
+      const streamScopeResolution: ScopeResolution = (_streamBtnScope === "architecture" || _streamBtnScope === "block")
         ? (() => {
             logger.info(
               { message: parsed.data.content.slice(0, 80), btnScope: _streamBtnScope },
-              "[GlobalChipRouting] buttonPayload.scope=block — overriding to block_scope"
+              "[GlobalChipRouting] buttonPayload.scope=architecture — overriding to block_scope"
             );
             return {
               scope: "block_scope" as const,
@@ -3326,6 +3337,17 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
             };
           })()
         : resolveRefinementScope(parsed.data.content);
+      logger.info(
+        {
+          label: parsed.data.content.slice(0, 80),
+          source: streamUIContext?.buttonPayload?.source ?? null,
+          actionType: streamUIContext?.buttonPayload?.actionType ?? null,
+          scope: _streamBtnScope ?? null,
+          actualRoute: streamScopeResolution.scope,
+          btnScopeOverride: _streamBtnScope === "architecture" || _streamBtnScope === "block",
+        },
+        "[ActionRoutingAudit]"
+      );
       if (streamScopeResolution.scope !== "session_scope") {
         logger.info(
           { scope: streamScopeResolution.scope, systemId: resolvedSystem.id },

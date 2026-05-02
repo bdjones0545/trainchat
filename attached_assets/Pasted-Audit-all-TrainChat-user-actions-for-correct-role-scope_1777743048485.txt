@@ -1,0 +1,237 @@
+Audit all TrainChat user actions for correct role, scope, and agent routing.
+
+Goal:
+Make sure every UI action routes to the correct system:
+- local exercise edit
+- session/day edit
+- program/global edit
+- architecture/periodization edit
+- readiness/check-in flow
+- calibration/profile flow
+- settings/memory flow
+- research/admin flow
+
+Core routing rules:
+
+1. Exercise-level actions
+Examples:
+- Swap
+- Harder
+- Easier
+- Replace equipment
+- Explain exercise
+
+Route:
+→ mutation pipeline / direct edit
+NOT Performance Architect unless multiple changes require validation.
+
+Required payload:
+- source
+- actionType
+- scope: "exercise"
+- programId/systemId
+- dayIndex
+- exerciseIndex
+- exerciseName
+- currentExerciseData
+
+2. Session/day-level actions
+Examples:
+- Make Day 1 harder
+- Make Day 1 lighter
+- Add finisher to Day 2
+- Shorten today’s session
+
+Route:
+→ session mutation pipeline
+OR Performance Architect if structure needs rebalancing.
+
+Required payload:
+- scope: "session"
+- dayIndex
+- dayName
+- active program context
+
+3. Program/global actions
+Examples:
+- Remove all barbell exercises
+- Make this program harder
+- Reduce fatigue
+- Make this joint-friendly
+
+Route:
+→ global mutation pipeline
+OR Performance Architect depending depth.
+
+Required payload:
+- scope: "program"
+- active system
+- constraints
+- banned/excluded exercises
+
+4. Architecture/periodization actions
+Examples:
+- Make this more athletic
+- Make this better for football
+- Progress this for 4 weeks
+- Turn this into a 3-day program
+- Add speed work across the week
+- Deload this week
+
+Route:
+→ Performance Architect
+→ Program Review / validation
+→ Coach response
+
+Required payload:
+- scope: "architecture"
+- full active program
+- goal/sport/context
+- research guidance
+- profile/memories
+- safety constraints
+
+5. Readiness/check-in actions
+Examples:
+- Check-In
+- Adjust today’s plan
+- Keep plan as-is
+
+Route:
+→ readiness service
+→ only mutate plan after explicit user confirmation
+
+6. Calibration/profile actions
+Examples:
+- Improve My Plan
+- Edit training preferences
+- Save & Apply
+- Use for future programs
+- Update current plan
+
+Route:
+→ profile/memory update
+→ optional Coach/Architect refinement only if user chooses update current plan
+
+7. Settings actions
+Examples:
+- concise responses
+- proactive insights
+- auto-adjust recommendations
+- memory personalization
+- clear coach memory
+
+Route:
+→ user settings/profile/memory controls
+→ must affect agent prompt behavior where relevant
+
+8. Research/admin actions
+Examples:
+- analyze research
+- approve/reject document
+- regenerate chunks
+
+Route:
+→ Research Librarian only
+Never Coach Agent during user chat.
+
+Audit all places actions are created:
+- chat.tsx
+- button-action-payloads.ts
+- LiveProgramPanel.tsx
+- CalibrationModal.tsx
+- ReadinessModal.tsx
+- Settings page
+- admin research page
+- useStreamMessage.ts
+- conversations.ts
+- agent-orchestrator.ts
+- edit-intent-service
+- mutation-engine
+- program-architecture-engine
+
+For each action, create a table:
+
+Action label | Source | actionType | scope | required context | current route | expected route | status | fix
+
+Fix any mismatches.
+
+Specific known issue:
+“Make this more athletic” should be scope: "architecture" and route to Performance Architect, not simple mutation.
+
+Also verify:
+- “Progress this for 4 weeks” routes to progression/architecture.
+- “Make Day 1 heavier” routes to session-level mutation.
+- “Add a core finisher” routes to session/program mutation.
+- “Remove all barbell exercises” routes to global mutation.
+- Exercise buttons stay exercise-level.
+- Retry replays the original structured payload with original scope.
+
+Add shared scope type if missing:
+
+ActionScope =
+  | "exercise"
+  | "session"
+  | "program"
+  | "architecture"
+  | "readiness"
+  | "profile"
+  | "settings"
+  | "admin";
+
+Add dev logs:
+
+[ActionRoutingAudit]
+- label
+- source
+- actionType
+- scope
+- expectedRoute
+- actualRoute
+- routeMatched
+
+Add QA doc:
+ACTION_ROUTING_AUDIT.md
+
+Include:
+- full action matrix
+- mismatches found
+- fixes implemented
+- manual QA checklist
+
+Manual QA:
+1. Tap Make this more athletic
+PASS: Architect route, program changes or clarifying coach response.
+
+2. Tap Progress this for 4 weeks
+PASS: progression/architecture route.
+
+3. Tap Make Day 1 heavier
+PASS: session-level route.
+
+4. Tap Add a core finisher
+PASS: finisher added.
+
+5. Tap Remove all barbell exercises
+PASS: all barbell exercises removed.
+
+6. Tap exercise Swap/Harder/Easier
+PASS: local exercise edit.
+
+7. Tap Check-In → Adjust today’s plan
+PASS: readiness route, confirmed mutation only.
+
+8. Edit training preferences → Update current plan
+PASS: profile saved, optional refinement route.
+
+9. Toggle memory personalization off
+PASS: memory context not injected.
+
+10. Admin research action
+PASS: Librarian only.
+
+Run typecheck and report:
+- files changed
+- mismatches fixed
+- routes verified
+- typecheck result
