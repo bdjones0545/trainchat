@@ -1,0 +1,108 @@
+Fix remaining mobile chat scroll anchoring issue in TrainChat.
+
+Issue:
+On mobile, the app shell no longer rubber-bands the full page, but the chat content area still shifts when I scroll/drag and hold. The “Welcome Back / Resume editing” card can be pulled into view above the hero, creating an unstable anchored position.
+
+Goal:
+The initial mobile chat state should stay visually anchored. Pulling/holding on the chat content should not reveal hidden content above the intended top position or shift the hero down.
+
+Audit:
+- chat.tsx
+- return session hook / Welcome Back card placement
+- chat content scroll container
+- message/hero empty state container
+- bottom composer layout
+- MobileSlideLayout
+- any auto-scroll logic
+- scrollIntoView calls
+- useEffect hooks that scroll on activeSystem/message changes
+
+Likely root cause:
+The content area has multiple “top” elements and the scroll position is not being normalized after the ReturnSessionHook/Welcome Back card renders. The scroll container can rest at a negative/offset visual position on iOS.
+
+Fix requirements:
+
+1. Single scroll owner
+Confirm only one internal container owns vertical scrolling:
+- app shell: overflow hidden
+- content area: overflow-y auto
+- composer: fixed/flex anchored, not part of scroll
+
+2. Stable top anchor
+Create a top sentinel ref at the intended resting top of the chat content.
+
+Example:
+<div ref={topAnchorRef} data-chat-top-anchor />
+
+On mount, focus-mode change, active system change, and return hook render:
+- reset scrollTop to 0
+- or scroll topAnchorRef into view with block: "start"
+
+Do this carefully so it does not fight normal message scrolling after conversation starts.
+
+3. ReturnSessionHook placement
+The Welcome Back / Resume editing card should not appear above the intended initial hero if it causes anchor drift.
+
+Choose one:
+A. Keep it inside the normal content flow but make it part of the intended top state
+OR
+B. Render it as a stable inline card below the header/focus tabs and above hero without allowing overscroll reveal
+OR
+C. Hide/collapse it when user is in empty/new-build state
+
+No hidden card should be pull-revealed by iOS drag.
+
+4. Prevent overscroll reveal inside content container
+Add to scroll container:
+- overscroll-behavior-y: contain or none
+- touch-action: pan-y
+- WebkitOverflowScrolling: touch
+- min-height: 0
+- flex: 1
+
+If needed, add CSS:
+.chat-scroll-container {
+  overscroll-behavior-y: contain;
+  overflow-anchor: none;
+}
+
+5. Disable browser scroll anchoring where harmful
+For dynamic cards like Welcome Back, ownership banner, share card:
+- use overflow-anchor: none
+
+This prevents browser from preserving an unwanted scroll offset when elements insert above.
+
+6. Auto-scroll logic guard
+Audit any scrollIntoView or auto-scroll useEffect.
+Do not auto-scroll to Welcome Back card.
+Do not auto-scroll hero downward.
+Only auto-scroll:
+- to latest message during active chat
+- to changed exercise inside panel
+- after user action where expected
+
+7. Mobile keyboard safety
+Do not break input keyboard behavior:
+- input remains visible
+- composer stays anchored
+- no extra jump when keyboard opens/closes
+
+8. QA
+At ~390px mobile:
+- Fresh load: hero starts in same place every time
+- Drag/hold downward on content: no hidden card reveal, no anchor shift
+- Drag upward/downward repeatedly: content returns to same resting position
+- Welcome Back card does not create scroll offset drift
+- Bottom composer stays stable
+- Header/focus tabs stay stable
+- Starting a new program still scrolls correctly to chat/program state
+- Returning user still sees Resume card if appropriate, but not as a pull-revealed artifact
+
+Output:
+- Root cause found
+- Files changed
+- Scroll owner confirmed
+- Anchor fix applied
+- ReturnSessionHook placement decision
+- QA results
+- Typecheck result
