@@ -330,6 +330,7 @@ export default function Chat() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const topAnchorRef = useRef<HTMLDivElement>(null);
   const agentSectionRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   // Tracks whether the user has intentionally scrolled up in the messages container.
@@ -798,12 +799,25 @@ export default function Chat() {
   // ── Auto-scroll to bottom on new messages / stream activity ─────────────────
   // Uses the sentinel div at the end of the message list for reliable anchoring.
   // Only scrolls if the user has not intentionally scrolled up.
+  // Guard: never fires in empty state (messagesEndRef is only mounted with messages).
   useEffect(() => {
+    if (messages.length === 0 && !optimisticUserMsg && !stream.isActive) return;
     if (!userScrolledUpRef.current && messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
     }
-  }, [messages, stream.isActive, stream.state.phase, stream.state.acknowledgment, me]);
+  }, [messages, optimisticUserMsg, stream.isActive, stream.state.phase, stream.state.acknowledgment, me]);
 
+  // ── Empty-state scroll anchor: reset to top ──────────────────────────────────
+  // When in the empty/hero state, always normalise scrollTop to 0 so the hero
+  // starts in the same visual position on every render.  Fires on mount and
+  // whenever the ReturnSessionHook, active system, or focus mode changes — any
+  // of which could shift the content height and leave the container at a
+  // non-zero scroll offset on iOS.
+  useEffect(() => {
+    if (messages.length > 0 || optimisticUserMsg || stream.isActive) return;
+    const container = messagesContainerRef.current;
+    if (container) container.scrollTop = 0;
+  }, [convShowReturnHook, activeSystem?.id, focusMode, messages.length, optimisticUserMsg, stream.isActive]);
 
   // Panel auto-open rules:
   // 1. On load — opens once when the user's first program is detected (see useEffect below).
@@ -2815,8 +2829,15 @@ export default function Chat() {
           <div
             ref={messagesContainerRef}
             className="flex-1 overflow-y-auto px-4 pt-4 md:pt-12 pb-4"
-            style={{ overscrollBehavior: "contain", overflowAnchor: "none", WebkitOverflowScrolling: "touch" }}
+            style={{
+              overscrollBehaviorY: "contain",
+              overflowAnchor: "none",
+              WebkitOverflowScrolling: "touch",
+              touchAction: "pan-y",
+              minHeight: 0,
+            }}
           >
+            <div ref={topAnchorRef} data-chat-top-anchor />
             {messagesLoading ? (
               <div className="flex justify-center items-center h-32">
                 <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
@@ -2824,24 +2845,6 @@ export default function Chat() {
             ) : messages.length === 0 && !optimisticUserMsg && !stream.isActive ? (
               /* ─── Empty state — only shown when no messages AND no active submission ─── */
               <div className="flex flex-col items-center justify-center h-full py-8 px-4 text-center animate-in fade-in slide-in-from-bottom-2 duration-500">
-                {/* Phase 5: Return session hook — welcome back card for returning users */}
-                {convShowReturnHook && (
-                  <ReturnSessionHook
-                    programName={displayProgram?.programName}
-                    onResume={() => { setConvShowReturnHook(false); setTimeout(() => inputRef.current?.focus(), 100); }}
-                    onIntensify={() => {
-                      setConvShowReturnHook(false);
-                      handleSend("Make this more intense", {
-                        buttonPayload: makeCtaRefinePayload(
-                          "Make it more intense",
-                          "Make this more intense",
-                          activeSystem?.id ?? null,
-                        ),
-                      });
-                    }}
-                    onDismiss={() => setConvShowReturnHook(false)}
-                  />
-                )}
                 {/* System core — TrainChat logo with living glow field */}
                 <div className="relative mb-5 flex items-center justify-center" style={{ width: 88, height: 88 }}>
                   {/* Outer radial glow halo */}
@@ -2915,6 +2918,30 @@ export default function Chat() {
                     </>
                   )}
                 </div>
+
+                {/* Phase 5: Return session hook — rendered BELOW the hero so it is
+                    visible at the natural resting scroll position.  Placing it
+                    above the hero caused iOS overscroll to reveal it via a
+                    drag-down gesture even at scrollTop=0. */}
+                {convShowReturnHook && (
+                  <div style={{ overflowAnchor: "none", width: "100%" }}>
+                    <ReturnSessionHook
+                      programName={displayProgram?.programName}
+                      onResume={() => { setConvShowReturnHook(false); setTimeout(() => inputRef.current?.focus(), 100); }}
+                      onIntensify={() => {
+                        setConvShowReturnHook(false);
+                        handleSend("Make this more intense", {
+                          buttonPayload: makeCtaRefinePayload(
+                            "Make it more intense",
+                            "Make this more intense",
+                            activeSystem?.id ?? null,
+                          ),
+                        });
+                      }}
+                      onDismiss={() => setConvShowReturnHook(false)}
+                    />
+                  </div>
+                )}
 
                 {/* Differentiation tagline — only shown when no active system */}
                 {displayProgramSource === "none" && (
