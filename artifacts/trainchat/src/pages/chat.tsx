@@ -2516,8 +2516,15 @@ export default function Chat() {
             setShowCalibration(false);
             queryClient.invalidateQueries({ queryKey: ["profile"] });
           }}
-          onComplete={() => {
+          onComplete={(_coachReply, applyNow) => {
             queryClient.invalidateQueries({ queryKey: ["profile"] });
+            if (applyNow) {
+              setShowCalibration(false);
+              // Route through the agent so it applies the new context to the current plan
+              setTimeout(() => {
+                handleSend("Refine my current plan using my updated training profile.", {});
+              }, 400);
+            }
           }}
         />
       )}
@@ -3081,7 +3088,7 @@ export default function Chat() {
                     </div>
                     <div className="max-w-[90%] px-4 py-3 rounded-2xl rounded-tl-sm bg-card border border-border text-foreground">
                       <p className="text-sm text-muted-foreground leading-relaxed">
-                        Want me to dial this in more precisely? Tap{" "}
+                        Want me to build this more precisely around you? Tap{" "}
                         <button
                           onClick={() => {
                             setShowCalibration(true);
@@ -3090,9 +3097,9 @@ export default function Chat() {
                           }}
                           className="text-primary font-semibold hover:underline"
                         >
-                          Refine My Plan
+                          Improve Your Training System
                         </button>{" "}
-                        to share your training background — I'll sharpen your program right after.
+                        to share your training background — the more context I have, the better I can build for you.
                       </p>
                     </div>
                   </div>

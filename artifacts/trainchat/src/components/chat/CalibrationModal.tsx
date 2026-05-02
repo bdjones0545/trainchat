@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  X, ChevronRight, ChevronLeft, Zap, Check, Target, Dumbbell,
-  AlertCircle, Clock, Loader2, TrendingUp,
+  X, ChevronRight, ChevronLeft, Check, Target, Dumbbell,
+  AlertCircle, Loader2, SlidersHorizontal,
 } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
 
@@ -22,7 +22,7 @@ interface CalibrationData {
 
 interface Props {
   onClose: () => void;
-  onComplete?: (coachReply: string) => void;
+  onComplete?: (coachReply: string, applyNow: boolean) => void;
 }
 
 // ─── Scoring ──────────────────────────────────────────────────────────────────
@@ -111,8 +111,11 @@ export default function CalibrationModal({ onClose, onComplete }: Props) {
   const [step, setStep] = useState(0);
   const [data, setData] = useState<CalibrationData>({});
   const [injuryText, setInjuryText] = useState("");
-  const [done, setDone] = useState(false);
+  const [serverScore, setServerScore] = useState<number | null>(null);
   const [coachReply, setCoachReply] = useState("");
+  // "choice" = showing update-now vs future, "done" = fully finished
+  const [stage, setStage] = useState<"form" | "choice" | "done">("form");
+  const [applyNow, setApplyNow] = useState(false);
 
   // Pre-fill from existing profile
   const { data: profile } = useQuery({
@@ -147,13 +150,13 @@ export default function CalibrationModal({ onClose, onComplete }: Props) {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["profile"] });
       setCoachReply(result.coachReply);
-      setDone(true);
-      onComplete?.(result.coachReply);
+      setServerScore(result.calibrationScore);
+      setStage("choice");
     },
   });
 
-  const currentScore = computeLocalScore(data);
-  const { label: scoreLbl, color: scoreColor, bg: scoreBg } = scoreLabel(currentScore);
+  const displayScore = serverScore ?? computeLocalScore(data);
+  const { label: scoreLbl, color: scoreColor, bg: scoreBg } = scoreLabel(displayScore);
 
   function handleNext() {
     if (step < STEPS.length - 1) {
@@ -185,22 +188,88 @@ export default function CalibrationModal({ onClose, onComplete }: Props) {
     return injuryText.toLowerCase().includes(tag.toLowerCase());
   }
 
-  const canSkipToSubmit = step === STEPS.length - 1;
-  const stepTitle = STEPS[step].title;
+  function handleChoiceSelect(choice: "now" | "future") {
+    const willApply = choice === "now";
+    setApplyNow(willApply);
+    setStage("done");
+    onComplete?.(coachReply, willApply);
+  }
 
-  if (done) {
+  // ── Choice screen (update now vs future) ──────────────────────────────────
+
+  if (stage === "choice") {
+    return (
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div className="w-full max-w-md bg-background border border-border rounded-2xl overflow-hidden shadow-2xl animate-slide-up">
+          <div className="p-6">
+            <div className="mb-5">
+              <h3 className="text-base font-bold text-foreground mb-1">Profile saved</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">{coachReply}</p>
+            </div>
+
+            <div className="flex items-center justify-between mb-5">
+              <span className="text-xs font-semibold text-muted-foreground">Plan Precision</span>
+              <span className={`text-sm font-bold ${scoreColor}`}>{scoreLbl} · {displayScore}%</span>
+            </div>
+            <div className="h-1.5 bg-muted/40 rounded-full overflow-hidden mb-6">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${scoreBg}`}
+                style={{ width: `${displayScore}%` }}
+              />
+            </div>
+
+            <p className="text-xs font-semibold text-foreground mb-3">How would you like to apply this?</p>
+            <div className="space-y-2">
+              <button
+                onClick={() => handleChoiceSelect("now")}
+                className="w-full flex items-start gap-3 px-4 py-3.5 rounded-xl border border-primary/30 bg-primary/8 hover:bg-primary/12 active:scale-[0.98] transition-all text-left"
+              >
+                <div className="w-4 h-4 rounded-full border-2 border-primary mt-0.5 flex-shrink-0 flex items-center justify-center">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-foreground">Update my current plan</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">Refine the active program using this new context</p>
+                </div>
+              </button>
+              <button
+                onClick={() => handleChoiceSelect("future")}
+                className="w-full flex items-start gap-3 px-4 py-3.5 rounded-xl border border-border hover:border-primary/30 active:scale-[0.98] transition-all text-left"
+              >
+                <div className="w-4 h-4 rounded-full border-2 border-border mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-bold text-foreground">Use for future programs</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">Keep the current plan — apply this context to future builds</p>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Done screen ───────────────────────────────────────────────────────────
+
+  if (stage === "done") {
     return (
       <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4">
         <div className="w-full max-w-md bg-background border border-border rounded-2xl overflow-hidden shadow-2xl animate-slide-up">
           <div className="p-6 text-center">
             <div className="w-14 h-14 rounded-2xl bg-primary/15 border border-primary/30 flex items-center justify-center mx-auto mb-4">
-              <Zap className="w-7 h-7 text-primary" />
+              <SlidersHorizontal className="w-7 h-7 text-primary" />
             </div>
-            <h3 className="text-base font-bold text-foreground mb-2">System Upgraded</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-5">{coachReply}</p>
+            <h3 className="text-base font-bold text-foreground mb-2">
+              {applyNow ? "Plan refined" : "Profile updated"}
+            </h3>
+            <p className="text-sm text-muted-foreground leading-relaxed mb-5">
+              {applyNow
+                ? "Your context is saved. Ask me to refine your current plan and I'll apply everything you've shared."
+                : "Your training profile is saved. I'll use this context in all future programs."}
+            </p>
             <div className="flex items-center justify-center gap-2 mb-6">
-              <span className="text-sm font-semibold text-foreground">AI Accuracy:</span>
-              <span className={`text-sm font-bold ${scoreColor}`}>{scoreLbl} ({currentScore}%)</span>
+              <span className="text-xs font-semibold text-muted-foreground">Plan Precision:</span>
+              <span className={`text-sm font-bold ${scoreColor}`}>{scoreLbl} · {displayScore}%</span>
             </div>
             <button
               onClick={onClose}
@@ -214,6 +283,11 @@ export default function CalibrationModal({ onClose, onComplete }: Props) {
     );
   }
 
+  // ── Form screen ───────────────────────────────────────────────────────────
+
+  const localScore = computeLocalScore(data);
+  const { label: localScoreLbl, color: localScoreColor, bg: localScoreBg } = scoreLabel(localScore);
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="w-full max-w-md bg-background border border-border rounded-2xl overflow-hidden shadow-2xl animate-slide-up">
@@ -222,9 +296,9 @@ export default function CalibrationModal({ onClose, onComplete }: Props) {
         <div className="px-5 pt-5 pb-4 border-b border-border">
           <div className="flex items-start justify-between mb-3">
             <div>
-              <h2 className="text-sm font-bold text-foreground">Upgrade Your Training Intelligence</h2>
+              <h2 className="text-sm font-bold text-foreground">Improve Your Training System</h2>
               <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                The more I know, the better I can build and adjust your program.
+                The more context I have, the better I can build and adjust your program.
               </p>
             </div>
             <button
@@ -235,16 +309,16 @@ export default function CalibrationModal({ onClose, onComplete }: Props) {
             </button>
           </div>
 
-          {/* Accuracy bar */}
+          {/* Plan Precision bar */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">AI Accuracy</span>
-              <span className={`text-[11px] font-bold ${scoreColor}`}>{scoreLbl} · {currentScore}%</span>
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Plan Precision</span>
+              <span className={`text-[11px] font-bold ${localScoreColor}`}>{localScoreLbl} · {localScore}%</span>
             </div>
             <div className="h-1.5 bg-muted/40 rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all duration-500 ${scoreBg}`}
-                style={{ width: `${currentScore}%` }}
+                className={`h-full rounded-full transition-all duration-500 ${localScoreBg}`}
+                style={{ width: `${localScore}%` }}
               />
             </div>
           </div>
@@ -264,7 +338,7 @@ export default function CalibrationModal({ onClose, onComplete }: Props) {
 
         {/* Step content */}
         <div className="p-5 min-h-[200px]">
-          <p className="text-[11px] font-bold text-primary uppercase tracking-widest mb-3">{stepTitle}</p>
+          <p className="text-[11px] font-bold text-primary uppercase tracking-widest mb-3">{STEPS[step].title}</p>
 
           {step === 0 && (
             <div className="space-y-4">
@@ -426,6 +500,17 @@ export default function CalibrationModal({ onClose, onComplete }: Props) {
             </button>
           )}
 
+          {/* Always show a skip link on steps 1-4 so user is never trapped */}
+          {step > 0 && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors px-1"
+            >
+              Skip
+            </button>
+          )}
+
           <button
             type="button"
             onClick={handleNext}
@@ -433,9 +518,9 @@ export default function CalibrationModal({ onClose, onComplete }: Props) {
             className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-60"
           >
             {calibrateMutation.isPending ? (
-              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Upgrading…</>
+              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…</>
             ) : step === STEPS.length - 1 ? (
-              <><Zap className="w-3.5 h-3.5" /> Upgrade Intelligence</>
+              <><SlidersHorizontal className="w-3.5 h-3.5" /> Save & Apply</>
             ) : (
               <>Next <ChevronRight className="w-3.5 h-3.5" /></>
             )}
