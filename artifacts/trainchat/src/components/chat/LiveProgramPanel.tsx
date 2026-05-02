@@ -796,21 +796,40 @@ function ProgramTab({
   }
   const programUpdatedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevBuildingRef = useRef(false);
+  const processingMinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [processingStartTime, setProcessingStartTime] = useState<number | null>(null);
+  const [showContentReveal, setShowContentReveal] = useState(false);
+  const contentRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Clear loading state + flash "Program Updated" when stream completes
+  // Clear loading state + flash "Program Updated" when stream completes.
+  // Enforces a minimum 300ms visual processing phase so fast updates never snap instantly.
   useEffect(() => {
     const isBuilding = !!buildingState?.isBuilding;
     if (prevBuildingRef.current && !isBuilding && pendingRefinement) {
-      setPendingRefinement(null);
-      setShowProgramUpdated(true);
-      if (programUpdatedTimerRef.current) clearTimeout(programUpdatedTimerRef.current);
-      programUpdatedTimerRef.current = setTimeout(() => setShowProgramUpdated(false), 3000);
+      const elapsed = processingStartTime !== null ? Date.now() - processingStartTime : 999;
+      const MIN_MS = 300;
+      const remaining = Math.max(0, MIN_MS - elapsed);
+
+      if (processingMinTimerRef.current) clearTimeout(processingMinTimerRef.current);
+      processingMinTimerRef.current = setTimeout(() => {
+        setPendingRefinement(null);
+        setProcessingStartTime(null);
+        setShowProgramUpdated(true);
+        // Trigger a brief content fade-in after reveal
+        setShowContentReveal(true);
+        if (contentRevealTimerRef.current) clearTimeout(contentRevealTimerRef.current);
+        contentRevealTimerRef.current = setTimeout(() => setShowContentReveal(false), 350);
+        if (programUpdatedTimerRef.current) clearTimeout(programUpdatedTimerRef.current);
+        programUpdatedTimerRef.current = setTimeout(() => setShowProgramUpdated(false), 3000);
+      }, remaining);
     }
     prevBuildingRef.current = isBuilding;
     return () => {
       if (programUpdatedTimerRef.current) clearTimeout(programUpdatedTimerRef.current);
+      if (processingMinTimerRef.current) clearTimeout(processingMinTimerRef.current);
+      if (contentRevealTimerRef.current) clearTimeout(contentRevealTimerRef.current);
     };
-  }, [buildingState?.isBuilding, pendingRefinement]);
+  }, [buildingState?.isBuilding, pendingRefinement, processingStartTime]);
 
   function sendRefinement(
     message: string,
@@ -821,6 +840,7 @@ function ProgramTab({
     if (!onSendMessage || buildingState?.isBuilding) return;
     setPanelEditError(null);
     setPendingRefinement(key);
+    setProcessingStartTime(Date.now());
     const payload: Record<string, unknown> = { source: "right_panel", ...options };
     if (buttonPayload) payload.buttonPayload = buttonPayload;
     if (import.meta.env.DEV) {
@@ -882,6 +902,7 @@ function ProgramTab({
     const exerciseId = exerciseIdHint ?? exerciseIdMap.get(exerciseName.toLowerCase());
 
     setPendingRefinement(actionKey);
+    const directEditStart = Date.now();
     try {
       await customFetch<any>("/api/training-system/edit", {
         method: "POST",
@@ -901,11 +922,20 @@ function ProgramTab({
             : {}),
         }),
       });
+      // Enforce minimum 300ms visual processing phase — prevents instant snap
+      const directEditElapsed = Date.now() - directEditStart;
+      if (directEditElapsed < 300) {
+        await new Promise<void>((r) => setTimeout(r, 300 - directEditElapsed));
+      }
       queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
       queryClient.invalidateQueries({ queryKey: ["live-panel-week-ids"] });
       queryClient.invalidateQueries({ queryKey: ["week-view-select"] });
       setPendingRefinement(null);
       setShowProgramUpdated(true);
+      // Trigger content fade-in reveal
+      setShowContentReveal(true);
+      if (contentRevealTimerRef.current) clearTimeout(contentRevealTimerRef.current);
+      contentRevealTimerRef.current = setTimeout(() => setShowContentReveal(false), 350);
       if (programUpdatedTimerRef.current) clearTimeout(programUpdatedTimerRef.current);
       programUpdatedTimerRef.current = setTimeout(() => setShowProgramUpdated(false), 3000);
 
@@ -1503,6 +1533,18 @@ function ProgramTab({
           0%   { opacity: 1; }
           100% { opacity: 0; }
         }
+        @keyframes program-content-fade {
+          from { opacity: 0.55; transform: translateY(3px); }
+          to   { opacity: 1;    transform: translateY(0); }
+        }
+        @keyframes chip-active-pulse {
+          0%,100% { box-shadow: 0 0 0 2px hsl(var(--primary)/0.15); }
+          50%      { box-shadow: 0 0 0 3px hsl(var(--primary)/0.28); }
+        }
+        @keyframes updating-label-in {
+          from { opacity: 0; transform: translateX(-4px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
       `}</style>
       {isUpdating && updatePhase && (
         <UpdatingBadge phase={updatePhase} stage={buildingState!.stage} actionType={buildingState?.actionType} />
@@ -1791,27 +1833,33 @@ function ProgramTab({
               return (
                 <button
                   key={chip.label}
-                  onClick={() => sendRefinement(chip.message, key, {
-                    interactionType: "global_chip",
-                    structuredIntent: chip.structuredIntent,
-                    focusMode: panelFocusMode,
-                  }, {
-                    source: "program_panel",
-                    actionType: "modify_global",
-                    displayText: chip.label,
-                    submittedText: chip.message,
-                  })}
+                  onClick={() => {
+                    if (isDisabled || isLoading) return;
+                    sendRefinement(chip.message, key, {
+                      interactionType: "global_chip",
+                      structuredIntent: chip.structuredIntent,
+                      focusMode: panelFocusMode,
+                    }, {
+                      source: "program_panel",
+                      actionType: "modify_global",
+                      displayText: chip.label,
+                      submittedText: chip.message,
+                    });
+                  }}
                   disabled={isDisabled}
-                  className={`h-9 inline-flex items-center gap-1.5 px-3.5 rounded-full text-[11px] font-semibold border transition-all duration-150 active:scale-95 select-none ${
+                  className={`h-9 inline-flex items-center gap-1.5 px-3.5 rounded-full text-[11px] font-semibold border transition-all duration-200 select-none ${
                     isLoading
-                      ? "bg-primary/15 border-primary/50 text-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.2)]"
-                      : "bg-muted/30 border-border text-muted-foreground hover:border-primary/40 hover:text-foreground hover:bg-accent/60"
+                      ? "bg-primary/20 border-primary/60 text-primary scale-[0.97]"
+                      : "bg-muted/30 border-border text-muted-foreground hover:border-primary/40 hover:text-foreground hover:bg-accent/60 active:scale-95"
                   } disabled:opacity-40 disabled:cursor-not-allowed`}
+                  style={isLoading ? { animation: "chip-active-pulse 1.2s ease-in-out infinite" } : undefined}
                 >
-                  {isLoading && (
-                    <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
-                  )}
-                  {chip.label}
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
+                      <span style={{ animation: "updating-label-in 0.15s ease both" }}>Updating program…</span>
+                    </>
+                  ) : chip.label}
                 </button>
               );
             })}
@@ -1909,7 +1957,10 @@ function ProgramTab({
       )}
 
       {/* Days */}
-      <div className="p-3 space-y-2">
+      <div
+        className="p-3 space-y-2"
+        style={showContentReveal ? { animation: "program-content-fade 0.22s ease both" } : undefined}
+      >
         {altWeekLoading && (
           <div className="flex items-center justify-center py-6">
             <Loader2 className="w-4 h-4 animate-spin text-muted-foreground/50" />

@@ -1620,8 +1620,11 @@ export default function Chat() {
           // localStorage unavailable (private browsing etc.) — non-fatal
         }
         setNewProgramSignal((n) => n + 1);
-        setRightPanelOpen(true);
-        setMobilePanel("right");
+        // Delay panel reveal by 200ms so the transition feels staged, not instant
+        setTimeout(() => {
+          setRightPanelOpen(true);
+          setMobilePanel("right");
+        }, 200);
         // Trigger share moment CTA after a short delay (let program panel settle first)
         if (shareMomentTimeoutRef.current) clearTimeout(shareMomentTimeoutRef.current);
         shareMomentTimeoutRef.current = setTimeout(() => {
@@ -1661,9 +1664,11 @@ export default function Chat() {
           setChangeTargets(result.systemEdit.changeTargets as any);
         }
         setNewChangeSignal((n) => n + 1);
-        // Auto-open right panel so the change is immediately visible
-        setRightPanelOpen(true);
-        setMobilePanel("right");
+        // Delay panel reveal by 200ms — gives processing state time to visually settle
+        setTimeout(() => {
+          setRightPanelOpen(true);
+          setMobilePanel("right");
+        }, 200);
         // Track last change summary for continuity chip in panel header
         if (result.systemEdit.changeSummary) {
           setLastChangeSummary(result.systemEdit.changeSummary);
@@ -3433,10 +3438,12 @@ export default function Chat() {
           </div>
         </div>
 
-        {/* Desktop right panel */}
-        <div className="hidden md:flex">
+        {/* Desktop right panel — smooth width slide via CSS transition */}
+        <div
+          className={`hidden md:flex flex-col flex-shrink-0 border-l border-border bg-background overflow-hidden transition-[width] duration-250 ease-out ${rightPanelOpen ? "w-80" : "w-8"}`}
+        >
           {rightPanelOpen ? (
-            <div className="w-80 flex-shrink-0 border-l border-border flex flex-col bg-background overflow-hidden">
+            <div className="w-80 flex flex-col h-full animate-in fade-in duration-200">
               <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
                 <div className="flex items-center gap-2">
                   <div className={`w-1.5 h-1.5 rounded-full ${hasActiveSystem || latestProgram ? "bg-primary animate-pulse" : "bg-muted-foreground/30"}`} style={{ animationDuration: "3s" }} />
@@ -3487,7 +3494,7 @@ export default function Chat() {
           ) : (
             <button
               onClick={() => setRightPanelOpen(true)}
-              className="flex-shrink-0 w-8 border-l border-border bg-background flex items-center justify-center hover:bg-accent transition-all duration-150 group"
+              className="w-full h-full flex items-center justify-center hover:bg-accent transition-colors duration-150 group"
               title="Show live program"
             >
               <span className="text-[9px] text-muted-foreground group-hover:text-foreground font-semibold uppercase tracking-widest rotate-90 whitespace-nowrap transition-colors">
