@@ -206,6 +206,68 @@ function getMilestoneStages(actionType?: string): Set<BuildStage> {
   }
 }
 
+// ─── Structured button action payload ─────────────────────────────────────────
+//
+// Every button-triggered action must carry this payload so the backend can
+// branch deterministically instead of relying on natural-language parsing.
+//
+// Required fields: source, actionType, displayText
+// Recommended:     submittedText, programId, dayIndex, exerciseIndex,
+//                  exerciseName, dayName, currentExerciseData, userConstraints
+
+export interface ButtonActionPayload {
+  /** UI location that produced this action */
+  source:
+    | "chat_button"
+    | "program_panel"
+    | "starter_prompt"
+    | "try_saying"
+    | "system_cta"
+    | "retry";
+  /** Semantic action type — used for deterministic backend routing */
+  actionType:
+    | "build_program"
+    | "refine_program"
+    | "make_harder"
+    | "make_easier"
+    | "swap_exercise"
+    | "replace_equipment"
+    | "explain_exercise"
+    | "modify_global"
+    | "add_exercise"
+    | "shorten_session"
+    | "freeform_refine"
+    | "retry_last_action";
+  /** Label shown on the button the user tapped */
+  displayText: string;
+  /** Actual text submitted to the AI (may differ from displayText) */
+  submittedText?: string;
+  /** Active training system ID at the time of the action */
+  programId?: number | null;
+  /** 0-based day index in the program */
+  dayIndex?: number;
+  /** 0-based exercise index within the day */
+  exerciseIndex?: number;
+  /** Exercise name at the time of the action */
+  exerciseName?: string;
+  /** Session/day name */
+  dayName?: string;
+  /** Current prescription of the targeted exercise */
+  currentExerciseData?: {
+    sets?: number;
+    reps?: string;
+    rest?: string;
+    notes?: string;
+    category?: string;
+  };
+  /** Persisted user constraints relevant to this action */
+  userConstraints?: {
+    equipment?: string;
+    goal?: string;
+    sport?: string;
+  };
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export interface UIContext {
@@ -232,6 +294,12 @@ export interface UIContext {
   dayIndex?: number;
   /** Exercise ID for exercise-scoped refinement actions */
   exerciseId?: number;
+  /**
+   * Structured payload from a button-triggered action.
+   * When present, the backend should prefer deterministic routing over
+   * natural-language intent classification.
+   */
+  buttonPayload?: ButtonActionPayload;
 }
 
 interface UseStreamMessageResult {

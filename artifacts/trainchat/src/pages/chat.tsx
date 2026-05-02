@@ -40,7 +40,7 @@ import AnonymousConversionFloor from "@/components/AnonymousConversionFloor";
 import AnonymousUpgradeModal from "@/components/AnonymousUpgradeModal";
 import CalibrationModal from "@/components/chat/CalibrationModal";
 import CoachMemoryPanel from "@/components/chat/CoachMemoryPanel";
-import { useStreamMessage, type CompleteEvent } from "@/hooks/useStreamMessage";
+import { useStreamMessage, type CompleteEvent, type ButtonActionPayload } from "@/hooks/useStreamMessage";
 import { clearAuthState, markOnboardingComplete, logRouteDecision, readDeviceId, readOnboardingComplete } from "@/lib/routing";
 import { resolveProgramState } from "@/lib/resolveProgramState";
 import { extractProgramData, isProgramFragment } from "@/lib/extractProgramArtifact";
@@ -222,6 +222,10 @@ export default function Chat() {
   const [operationErrorRetryable, setOperationErrorRetryable] = useState(false);
   const operationErrorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSentInputRef = useRef<string>("");
+  /** Stores the ButtonActionPayload from the last button-triggered send, for retry replay. */
+  const lastActionPayloadRef = useRef<ButtonActionPayload | null>(null);
+  /** Stores the full extraContext from the last send, so retry can replay panel context. */
+  const lastExtraContextRef = useRef<Record<string, unknown>>({});
   const [lastTurnReport, setLastTurnReport] = useState<CompleteEvent | null>(null);
   const [newChangeSignal, setNewChangeSignal] = useState(0);
   const [newProgramSignal, setNewProgramSignal] = useState(0);
@@ -1078,6 +1082,11 @@ export default function Chat() {
     }
 
     lastSentInputRef.current = content;
+    // Extract and store the structured button payload (if any) for retry replay.
+    const btnPayload = (extraContext?.buttonPayload as ButtonActionPayload | undefined) ?? null;
+    lastActionPayloadRef.current = btnPayload;
+    lastExtraContextRef.current = extraContext ?? {};
+
     setInputText("");
     if (inputRef.current) {
       inputRef.current.style.height = "auto";
@@ -1096,6 +1105,19 @@ export default function Chat() {
       });
     }
     setOptimisticUserMsg(content);
+
+    if (import.meta.env.DEV && btnPayload) {
+      console.log("[StructuredButtonAction]", {
+        source: btnPayload.source,
+        actionType: btnPayload.actionType,
+        displayText: btnPayload.displayText,
+        submittedText: content,
+        dayIndex: btnPayload.dayIndex ?? null,
+        exerciseIndex: btnPayload.exerciseIndex ?? null,
+        exerciseName: btnPayload.exerciseName ?? null,
+        programId: btnPayload.programId ?? null,
+      });
+    }
 
     // Reset intentional-scroll tracking so send always anchors chat to the bottom.
     userScrolledUpRef.current = false;
@@ -1138,6 +1160,15 @@ export default function Chat() {
       setOptimisticUserMsg(null);
       if (import.meta.env.DEV) {
         console.log("[ChatSendAudit] streamFailed — optimisticMsgCleared");
+        if (btnPayload) {
+          console.log("[StructuredButtonActionFailure]", {
+            source: btnPayload.source,
+            actionType: btnPayload.actionType,
+            displayText: btnPayload.displayText,
+            submittedText: content,
+            reason: "stream_failed",
+          });
+        }
       }
       return;
     }
@@ -2710,7 +2741,18 @@ export default function Chat() {
                   <ReturnSessionHook
                     programName={displayProgram?.programName}
                     onResume={() => { setConvShowReturnHook(false); setTimeout(() => inputRef.current?.focus(), 100); }}
-                    onIntensify={() => { setConvShowReturnHook(false); handleSend("Make this more intense"); }}
+                    onIntensify={() => {
+                      setConvShowReturnHook(false);
+                      handleSend("Make this more intense", {
+                        buttonPayload: {
+                          source: "system_cta",
+                          actionType: "refine_program",
+                          displayText: "Make it more intense",
+                          submittedText: "Make this more intense",
+                          programId: activeSystem?.id ?? null,
+                        } satisfies ButtonActionPayload,
+                      });
+                    }}
                     onDismiss={() => setConvShowReturnHook(false)}
                   />
                 )}
@@ -2800,7 +2842,17 @@ export default function Chat() {
                   {getFocusModeConfig(focusMode).suggestionChips.map((chip) => (
                     <button
                       key={chip.label}
-                      onClick={() => { triggerCorePulse(); handleSend(chip.prompt); }}
+                      onClick={() => {
+                        triggerCorePulse();
+                        handleSend(chip.prompt, {
+                          buttonPayload: {
+                            source: "starter_prompt",
+                            actionType: "build_program",
+                            displayText: chip.label,
+                            submittedText: chip.prompt,
+                          } satisfies ButtonActionPayload,
+                        });
+                      }}
                       className={`px-3.5 py-2 text-xs font-medium rounded-full active:scale-95 transition-all duration-150 ${
                         chip.highlight
                           ? getFocusModeConfig(focusMode).theme.chipHighlightClass + " hover:shadow-sm"
@@ -2898,7 +2950,19 @@ export default function Chat() {
                   <FirstValueOverlay
                     onAction={(text) => {
                       setConvShowFirstValue(false);
-                      setTimeout(() => handleSend(text), 100);
+                      setTimeout(() => handleSend(text, {
+                        buttonPayload: {
+                          source: "chat_button",
+                          actionType: text.toLowerCase().includes("harder") || text.toLowerCase().includes("intense")
+                            ? "make_harder"
+                            : text.toLowerCase().includes("easier") || text.toLowerCase().includes("simple")
+                            ? "make_easier"
+                            : "refine_program",
+                          displayText: text,
+                          submittedText: text,
+                          programId: activeSystem?.id ?? null,
+                        } satisfies ButtonActionPayload,
+                      }), 100);
                     }}
                     onDismiss={() => setConvShowFirstValue(false)}
                   />
@@ -3034,10 +3098,22 @@ export default function Chat() {
                   <button
                     onClick={() => {
                       const lastInput = lastSentInputRef.current;
+                      const lastPayload = lastActionPayloadRef.current;
+                      const lastCtx = lastExtraContextRef.current;
                       if (operationErrorTimeoutRef.current) clearTimeout(operationErrorTimeoutRef.current);
                       setOperationError(null);
                       setOperationErrorRetryable(false);
-                      if (lastInput) handleSend(lastInput);
+                      if (lastInput) {
+                        handleSend(lastInput, {
+                          ...lastCtx,
+                          ...(lastPayload ? {
+                            buttonPayload: {
+                              ...lastPayload,
+                              source: "retry" as const,
+                            },
+                          } : {}),
+                        });
+                      }
                     }}
                     className="text-[11px] font-semibold text-destructive border border-destructive/40 rounded-full px-2 py-0.5 hover:bg-destructive/20 transition-colors whitespace-nowrap flex-shrink-0"
                     aria-label="Retry"
@@ -3142,7 +3218,15 @@ export default function Chat() {
                     .map((prompt) => (
                       <button
                         key={prompt}
-                        onClick={() => handleSend(prompt)}
+                        onClick={() => handleSend(prompt, {
+                          buttonPayload: {
+                            source: "try_saying",
+                            actionType: "refine_program",
+                            displayText: prompt,
+                            submittedText: prompt,
+                            programId: activeSystem?.id ?? null,
+                          } satisfies ButtonActionPayload,
+                        })}
                         className="text-[10px] text-muted-foreground/60 hover:text-primary border border-border/40 hover:border-primary/30 rounded-full px-2 py-0.5 transition-all duration-150 active:scale-95"
                       >
                         {prompt}

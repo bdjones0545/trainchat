@@ -12,7 +12,7 @@ import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_17752640
 import { customFetch } from "@workspace/api-client-react";
 import type { ProgramStructure } from "./ChatOutput";
 import BlockStatusCard from "@/components/training/BlockStatusCard";
-import type { BuildStage } from "@/hooks/useStreamMessage";
+import type { BuildStage, ButtonActionPayload } from "@/hooks/useStreamMessage";
 import ExerciseLogInline, { type ProgressionTarget, type SetLog } from "@/components/training/ExerciseLogInline";
 import CoachForecast from "./CoachForecast";
 import LearnExerciseModal from "./LearnExerciseModal";
@@ -816,12 +816,24 @@ function ProgramTab({
     message: string,
     key: string,
     options?: Record<string, unknown>,
+    buttonPayload?: ButtonActionPayload,
   ) {
     if (!onSendMessage || buildingState?.isBuilding) return;
     setPanelEditError(null);
     setPendingRefinement(key);
-    const payload = { source: "right_panel", ...options };
+    const payload: Record<string, unknown> = { source: "right_panel", ...options };
+    if (buttonPayload) payload.buttonPayload = buttonPayload;
     if (import.meta.env.DEV) {
+      console.log("[StructuredButtonAction]", {
+        source: buttonPayload?.source ?? "program_panel",
+        actionType: buttonPayload?.actionType ?? null,
+        displayText: buttonPayload?.displayText ?? key,
+        submittedText: message,
+        dayIndex: buttonPayload?.dayIndex ?? null,
+        exerciseIndex: buttonPayload?.exerciseIndex ?? null,
+        exerciseName: buttonPayload?.exerciseName ?? null,
+        structuredIntent: options?.structuredIntent ?? null,
+      });
       console.log("[SidebarEditExecutionAudit]", {
         buttonPressed: key,
         focusMode: panelFocusMode,
@@ -839,7 +851,12 @@ function ProgramTab({
     const msg = refineInput.trim();
     if (!msg || !onSendMessage || buildingState?.isBuilding) return;
     setRefineInput("");
-    sendRefinement(msg, "refine-input", { interactionType: "freeform_refine" });
+    sendRefinement(msg, "refine-input", { interactionType: "freeform_refine" }, {
+      source: "program_panel",
+      actionType: "freeform_refine",
+      displayText: "Refine input",
+      submittedText: msg,
+    });
   }
 
   // ── Direct exercise edit — bypasses chat, calls edit API deterministically ─
@@ -1741,6 +1758,11 @@ function ProgramTab({
                     interactionType: "global_chip",
                     structuredIntent: chip.structuredIntent,
                     focusMode: panelFocusMode,
+                  }, {
+                    source: "program_panel",
+                    actionType: "modify_global",
+                    displayText: chip.label,
+                    submittedText: chip.message,
                   })}
                   disabled={isDisabled}
                   className={`h-9 inline-flex items-center gap-1.5 px-3.5 rounded-full text-[11px] font-semibold border transition-all duration-150 active:scale-95 select-none ${
@@ -2074,15 +2096,28 @@ function ProgramTab({
                             return (
                               <button
                                 key={action.label}
-                                onClick={() =>
+                                onClick={() => {
+                                  const sessionActionType: ButtonActionPayload["actionType"] =
+                                    action.button === "day_regression" ? "make_easier" :
+                                    action.button === "day_progression" ? "make_harder" :
+                                    action.button === "add_exercise" ? "add_exercise" :
+                                    action.label.toLowerCase().includes("shorter") ? "shorten_session" :
+                                    "refine_program";
                                   sendRefinement(action.buildMessage(day.dayNumber), key, {
                                     dayIndex: idx,
                                     interactionType: "session_action",
                                     structuredIntent: action.structuredIntent,
                                     focusMode: panelFocusMode,
                                     ...(action.button ? { button: action.button } : {}),
-                                  })
-                                }
+                                  }, {
+                                    source: "program_panel",
+                                    actionType: sessionActionType,
+                                    displayText: action.label,
+                                    submittedText: action.buildMessage(day.dayNumber),
+                                    dayIndex: idx,
+                                    dayName: day.name,
+                                  });
+                                }}
                                 disabled={isDisabled}
                                 className={`h-8 inline-flex items-center gap-1.5 px-3 rounded-full text-[10px] font-semibold border transition-all duration-150 active:scale-95 select-none ${
                                   isLoading
@@ -2243,7 +2278,41 @@ function ProgramTab({
                                       key={action.label}
                                       onClick={(e) => {
                                         e.stopPropagation();
+                                        const exPayload: ButtonActionPayload = {
+                                          source: "program_panel",
+                                          actionType:
+                                            action.direct === "easier" ? "make_easier" :
+                                            action.direct === "harder" ? "make_harder" :
+                                            action.direct === "swap" ? "swap_exercise" :
+                                            action.label === "Equipment" ? "replace_equipment" :
+                                            action.label === "Explain" ? "explain_exercise" :
+                                            "refine_program",
+                                          displayText: action.label,
+                                          submittedText: action.buildMessage(ex.name),
+                                          dayIndex: idx,
+                                          exerciseIndex: exIdx,
+                                          exerciseName: ex.name,
+                                          dayName: day.name,
+                                          currentExerciseData: {
+                                            sets: typeof ex.sets === "number" ? ex.sets : undefined,
+                                            reps: ex.reps ?? undefined,
+                                            rest: ex.rest ?? undefined,
+                                            notes: ex.notes ?? undefined,
+                                            category: (ex as any).category ?? undefined,
+                                          },
+                                        };
                                         if (action.direct && isSaved) {
+                                          if (import.meta.env.DEV) {
+                                            console.log("[StructuredButtonAction]", {
+                                              source: exPayload.source,
+                                              actionType: exPayload.actionType,
+                                              displayText: exPayload.displayText,
+                                              exerciseName: ex.name,
+                                              dayIndex: idx,
+                                              exerciseIndex: exIdx,
+                                              path: "direct_edit",
+                                            });
+                                          }
                                           handleDirectExerciseEdit(ex.name, action.direct, exActionKey, ex.id);
                                         } else {
                                           sendRefinement(action.buildMessage(ex.name), exActionKey, {
@@ -2251,7 +2320,7 @@ function ProgramTab({
                                             exerciseId: ex.name,
                                             interactionType: "exercise_action",
                                             focusMode: panelFocusMode,
-                                          });
+                                          }, exPayload);
                                         }
                                       }}
                                       disabled={!!buildingState?.isBuilding || !!pendingRefinement}
