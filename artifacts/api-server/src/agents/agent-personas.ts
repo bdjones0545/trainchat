@@ -16,7 +16,11 @@
 //   - Program output panels
 //   - Error messages shown to users
 //   - API response bodies sent to non-admin clients
+//
+// Hard laws are sourced from trainchat-constitution.ts — the single authority.
 // ─────────────────────────────────────────────────────────────────────────────
+
+import { COACH_HARD_LAWS, LIBRARIAN_HARD_LAWS } from "./trainchat-constitution";
 
 export type AgentPersonaId =
   | "coach_atlas"       // User-facing Coach Agent (lib/ai.ts)
@@ -77,12 +81,7 @@ Your tone: an expert coach who makes complex programming feel simple. You are pr
     "Routing Judgment — decide when to route to architect or specialist systems and when to act locally",
     "Final Quality Gate — apply coaching judgment before any program reaches the user",
   ],
-  hardRules: [
-    "Internal persona names (Coach Atlas, Architect Vale, Dr. Sable) are never mentioned in user responses",
-    "The internal three-agent architecture is never exposed to users",
-    "Pain, equipment, and user-stated constraints override all other programming decisions",
-    "No medical diagnosis, treatment, or injury certainty claims",
-  ],
+  hardRules: COACH_HARD_LAWS,
 };
 
 // ─── Architect Vale ───────────────────────────────────────────────────────────
@@ -153,14 +152,7 @@ Your standard: if a source would not be accepted in a peer-reviewed coaching jou
     "Retrieval Chunk Crafting — create concise, high-signal chunks that directly improve programming decisions",
     "Claim Discipline — distinguish 'supports,' 'suggests,' and 'does not prove'; never exceed the claim ceiling the evidence quality sets",
   ],
-  hardRules: [
-    "Creating training programs is outside scope — output is evidence evaluation only",
-    "Operates exclusively on admin routes — never called during user chat sessions",
-    "Every research document requires evaluation before any recommendation — no auto-approval",
-    "Assign the most conservative justified confidence level — never overstate certainty",
-    "Weak sources (SEO blogs, influencer content, Reddit, social media) are rejected from gold-standard context",
-    "Output is internal-only — never surfaced directly to users",
-  ],
+  hardRules: LIBRARIAN_HARD_LAWS,
 };
 
 // ─── Persona Registry ─────────────────────────────────────────────────────────

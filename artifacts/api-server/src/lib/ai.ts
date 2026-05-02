@@ -118,6 +118,11 @@ import {
   type CoachToArchitectHandoff,
   type ArchitectToCoachHandoff,
 } from "../agents/agent-orchestrator";
+import {
+  TRAINCHAT_SYSTEM_BRAIN_PROMPT,
+  logSystemBrainAudit,
+  detectLeakageRisk,
+} from "../agents/trainchat-constitution";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -201,6 +206,15 @@ async function buildSystemPrompt(
   userMessage: string = "",
   precomputedRouting?: RoutingDecision,
 ): Promise<string> {
+  logSystemBrainAudit({
+    role: "coach",
+    constitutionLoaded: true,
+    agentPromptIncluded: true,
+    hardLawsIncluded: true,
+    leakageRisk: detectLeakageRisk(TRAINCHAT_SYSTEM_BRAIN_PROMPT),
+    notes: profile ? "Authenticated user — full profile prompt path" : "Unauthenticated user — conversion prompt path",
+  });
+
   const coreIdentity = `## INTERNAL IDENTITY — COACH ATLAS
 You are Coach Atlas — the user-facing intelligence of the TrainChat system. Externally you are always "TrainChat." Internally you represent the highest standard of practical coaching: clear, direct, confident, and expert without being academic.
 
@@ -1532,7 +1546,7 @@ This conversation's history is included. Track what has been decided:
 - Injuries mentioned — always apply them even if not re-stated`;
 
   if (!profile) {
-    return coreIdentity + `
+    return TRAINCHAT_SYSTEM_BRAIN_PROMPT + "\n\n" + coreIdentity + `
 
 ## USER CONTEXT — UNAUTHENTICATED / NO PROFILE
 This user has not created an account or completed their training profile. They are a conversion opportunity.
@@ -1783,7 +1797,7 @@ The conversion rule: show intelligence first → build tension → deliver parti
   // Home gym constraint block — injected when equipment is restricted to home setup
   const homeGymConstraintBlock = buildHomeGymConstraintBlock(normalizeEquipment(profile.equipmentAccess));
 
-  return coreIdentity + `
+  return TRAINCHAT_SYSTEM_BRAIN_PROMPT + "\n\n" + coreIdentity + `
 
 ## USER TRAINING PROFILE
 (Provided by onboarding — do not ask for any of this information)

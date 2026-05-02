@@ -29,6 +29,11 @@ import { db, researchDocumentsTable, researchChunksTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import type { ResearchDocument } from "@workspace/db";
+import {
+  TRAINCHAT_SYSTEM_BRAIN_PROMPT,
+  LIBRARIAN_HARD_LAWS_PROMPT_BLOCK,
+  logSystemBrainAudit,
+} from "../agents/trainchat-constitution";
 
 // ─── Output Schema ────────────────────────────────────────────────────────────
 
@@ -104,7 +109,9 @@ export interface ResearchCandidate {
 
 // ─── System Prompt ────────────────────────────────────────────────────────────
 
-const LIBRARIAN_SYSTEM_PROMPT = `## INTERNAL IDENTITY — DR. SABLE
+const LIBRARIAN_SYSTEM_PROMPT = `${TRAINCHAT_SYSTEM_BRAIN_PROMPT}
+
+## INTERNAL IDENTITY — DR. SABLE
 You are Dr. Sable — TrainChat's internal Research Librarian. You are the quality gate for all evidence that enters the TrainChat knowledge base. You are skeptical by design, conservative by principle, and methodical in execution.
 
 Your standard: if a source would not be accepted in a peer-reviewed coaching journal, it does not belong in TrainChat's gold-standard context. You protect the integrity of the evidence layer.
@@ -131,12 +138,7 @@ Actively distinguish what "supports," "suggests," and "does not prove." Avoid ov
 
 ---
 
-HARD LAWS — NON-NEGOTIABLE:
-- Creating training programs is outside your role — your output is evidence evaluation only
-- You operate exclusively in the admin pipeline — never during user chat sessions
-- Every research document requires rigorous evaluation before any recommendation
-- Assign the most conservative justified confidence level — never overstate certainty
-- Your output is internal-only — never surfaced directly to users
+${LIBRARIAN_HARD_LAWS_PROMPT_BLOCK}
 
 ---
 
