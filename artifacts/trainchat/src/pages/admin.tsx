@@ -494,8 +494,43 @@ interface ResearchDoc {
   limitations: string | null;
   contraindications: string | null;
   abstract: string | null;
+  librarianRecommendation: "approve" | "reject" | "needs_review" | null;
+  librarianAdminNotes: string | null;
+  warningFlags: string[] | null;
   createdAt: string;
   lastReviewedAt: string | null;
+}
+
+interface LibrarianResult {
+  recommendation: "approve" | "reject" | "needs_review";
+  confidence: string;
+  evidenceType: string;
+  trustLevel: string;
+  plainLanguageSummary: string;
+  coachingImplications: string[];
+  programmingImplications: string[];
+  safetyConsiderations: string[];
+  contraindications: string[];
+  limitations: string[];
+  whatThisDoesNotProve: string[];
+  topicTags: string[];
+  populationTags: string[];
+  sportTags: string[];
+  goalTags: string[];
+  retrievalChunks: { chunkText: string; topicTags: string[]; confidence: string }[];
+  adminNotes: string;
+  warningFlags: string[];
+}
+
+interface CandidateForm {
+  title: string;
+  authors: string;
+  year: string;
+  source: string;
+  journal: string;
+  url: string;
+  abstract: string;
+  category: string;
 }
 
 interface ResearchStats {
@@ -526,6 +561,32 @@ const TRUST_COLORS: Record<string, string> = {
   supporting: "hsl(199 70% 55%)",
 };
 
+const RECOMMENDATION_COLORS: Record<string, { bg: string; text: string; label: string }> = {
+  approve: { bg: "hsl(142 50% 11%)", text: "hsl(142 60% 55%)", label: "Approve" },
+  reject: { bg: "hsl(0 50% 11%)", text: "hsl(0 60% 60%)", label: "Reject" },
+  needs_review: { bg: "hsl(270 50% 13%)", text: "hsl(270 60% 65%)", label: "Needs Review" },
+};
+
+const CONFIDENCE_COLORS: Record<string, string> = {
+  strong: "hsl(142 60% 50%)",
+  moderate: "hsl(199 70% 55%)",
+  limited: "hsl(40 90% 60%)",
+  conflicting: "hsl(0 60% 60%)",
+};
+
+const WARNING_FLAG_LABELS: Record<string, string> = {
+  old_evidence: "Old Evidence",
+  single_study: "Single Study",
+  population_mismatch: "Pop. Mismatch",
+  overclaim_risk: "Overclaim Risk",
+  medical_claim_risk: "Medical Claim",
+  supplement_claim_risk: "Supplement Claim",
+  low_quality_source: "Low Quality Source",
+  conflicting_evidence: "Conflicting Evidence",
+  no_abstract: "No Abstract",
+  unknown_source: "Unknown Source",
+};
+
 function ResearchDashboard() {
   const [docs, setDocs] = useState<ResearchDoc[]>([]);
   const [stats, setStats] = useState<ResearchStats | null>(null);
@@ -536,6 +597,18 @@ function ResearchDashboard() {
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [seeding, setSeeding] = useState(false);
+
+  // ── Librarian state ────────────────────────────────────────────────────────
+  const [librarianLoading, setLibrarianLoading] = useState<number | "batch" | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [batchStatus, setBatchStatus] = useState<string | null>(null);
+  const [showCandidatePanel, setShowCandidatePanel] = useState(false);
+  const [candidateResult, setCandidateResult] = useState<LibrarianResult | null>(null);
+  const [candidateLoading, setCandidateLoading] = useState(false);
+  const [candidateError, setCandidateError] = useState<string | null>(null);
+  const [candidateForm, setCandidateForm] = useState<CandidateForm>({
+    title: "", authors: "", year: "", source: "", journal: "", url: "", abstract: "", category: "strength_conditioning",
+  });
 
   const fieldStyle = {
     background: "hsl(222 47% 9%)",
@@ -627,6 +700,93 @@ function ResearchDashboard() {
     finally { setSeeding(false); }
   }
 
+  // ── Librarian handlers ─────────────────────────────────────────────────────
+
+  async function handleLibrarianAnalyze(id: number) {
+    setLibrarianLoading(id);
+    setError(null);
+    try {
+      await apiFetch(`/api/admin/research/${id}/librarian/analyze`, { method: "POST" });
+      await loadAll();
+    } catch (e: any) { setError(e.message); }
+    finally { setLibrarianLoading(null); }
+  }
+
+  async function handleLibrarianChunks(id: number) {
+    setLibrarianLoading(id);
+    setError(null);
+    try {
+      await apiFetch(`/api/admin/research/${id}/librarian/chunks`, { method: "POST" });
+      await loadAll();
+    } catch (e: any) { setError(e.message); }
+    finally { setLibrarianLoading(null); }
+  }
+
+  async function handleBatchAnalyze() {
+    if (selectedIds.size === 0) return;
+    setLibrarianLoading("batch");
+    setBatchStatus(null);
+    setError(null);
+    try {
+      const result = await apiFetch<{ ok: boolean; results: { id: number; ok: boolean; recommendation?: string; error?: string }[] }>(
+        "/api/admin/research/librarian/batch-analyze",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: Array.from(selectedIds) }),
+        }
+      );
+      const succeeded = result.results.filter((r) => r.ok).length;
+      const failed = result.results.filter((r) => !r.ok).length;
+      setBatchStatus(`${succeeded} analyzed${failed > 0 ? `, ${failed} failed` : ""}`);
+      setSelectedIds(new Set());
+      await loadAll();
+    } catch (e: any) { setError(e.message); }
+    finally { setLibrarianLoading(null); }
+  }
+
+  async function handleCandidateReview() {
+    if (!candidateForm.title || !candidateForm.source) return;
+    setCandidateLoading(true);
+    setCandidateResult(null);
+    setCandidateError(null);
+    try {
+      const result = await apiFetch<{ ok: boolean; result: LibrarianResult }>(
+        "/api/admin/research/librarian/review-candidate",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: candidateForm.title,
+            authors: candidateForm.authors || undefined,
+            year: candidateForm.year ? parseInt(candidateForm.year, 10) : undefined,
+            source: candidateForm.source,
+            journal: candidateForm.journal || undefined,
+            url: candidateForm.url || undefined,
+            abstract: candidateForm.abstract || undefined,
+            category: candidateForm.category,
+          }),
+        }
+      );
+      setCandidateResult(result.result);
+    } catch (e: any) { setCandidateError(e.message); }
+    finally { setCandidateLoading(false); }
+  }
+
+  function toggleSelectDoc(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) =>
+      prev.size === docs.length ? new Set() : new Set(docs.map((d) => d.id))
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -655,6 +815,128 @@ function ResearchDashboard() {
             Force Re-seed
           </button>
         </div>
+      </div>
+
+      {/* ── Research Librarian Panel ───────────────────────────────────────── */}
+      <div className="rounded-xl overflow-hidden" style={{ background: "hsl(222 47% 10%)", border: "1px solid hsl(270 50% 22%)" }}>
+        <button
+          onClick={() => setShowCandidatePanel((v) => !v)}
+          className="w-full flex items-center justify-between px-4 py-3 text-left"
+          style={{ background: "transparent", border: "none", cursor: "pointer" }}
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold uppercase tracking-widest" style={{ color: "hsl(270 60% 65%)" }}>Research Librarian Agent</span>
+            <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ background: "hsl(270 50% 18%)", color: "hsl(270 60% 65%)" }}>Internal</span>
+          </div>
+          <span className="text-zinc-500 text-xs">{showCandidatePanel ? "▲ Hide" : "▼ Expand"}</span>
+        </button>
+
+        {showCandidatePanel && (
+          <div className="px-4 pb-4 space-y-4" style={{ borderTop: "1px solid hsl(270 50% 18%)" }}>
+            <div className="pt-3">
+              <p className="text-zinc-400 text-xs mb-3 leading-relaxed">
+                The Research Librarian Agent evaluates source quality, assigns confidence &amp; evidence type, extracts coaching implications, and generates retrieval chunks. It never auto-approves — admin approval is always required.
+              </p>
+
+              {/* Batch Analyze */}
+              <div className="flex items-center gap-3 mb-4 flex-wrap">
+                <button
+                  onClick={toggleSelectAll}
+                  className="text-xs px-2 py-1 rounded transition-all"
+                  style={{ background: "hsl(222 47% 16%)", color: "hsl(0 0% 55%)", border: "1px solid hsl(222 47% 22%)" }}
+                >
+                  {selectedIds.size === docs.length && docs.length > 0 ? "Deselect All" : "Select All"}
+                </button>
+                {selectedIds.size > 0 && (
+                  <>
+                    <span className="text-zinc-500 text-xs">{selectedIds.size} selected</span>
+                    <button
+                      onClick={handleBatchAnalyze}
+                      disabled={librarianLoading === "batch"}
+                      className="text-xs px-3 py-1 rounded font-medium transition-all disabled:opacity-40"
+                      style={{ background: "hsl(270 50% 18%)", color: "hsl(270 60% 65%)", border: "1px solid hsl(270 50% 26%)" }}
+                    >
+                      {librarianLoading === "batch" ? "Analyzing…" : `Batch Analyze ${selectedIds.size}`}
+                    </button>
+                  </>
+                )}
+                {batchStatus && <span className="text-xs text-zinc-400">{batchStatus}</span>}
+              </div>
+
+              {/* Candidate Review Form */}
+              <div className="rounded-lg p-3 space-y-3" style={{ background: "hsl(222 47% 8%)", border: "1px solid hsl(222 47% 16%)" }}>
+                <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">Review Candidate Source</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <input placeholder="Title *" value={candidateForm.title} onChange={(e) => setCandidateForm((f) => ({ ...f, title: e.target.value }))} style={{ ...fieldStyle, fontSize: "12px" }} />
+                  <input placeholder="Source / Publisher *" value={candidateForm.source} onChange={(e) => setCandidateForm((f) => ({ ...f, source: e.target.value }))} style={{ ...fieldStyle, fontSize: "12px" }} />
+                  <input placeholder="Authors" value={candidateForm.authors} onChange={(e) => setCandidateForm((f) => ({ ...f, authors: e.target.value }))} style={{ ...fieldStyle, fontSize: "12px" }} />
+                  <input placeholder="Year" value={candidateForm.year} onChange={(e) => setCandidateForm((f) => ({ ...f, year: e.target.value }))} style={{ ...fieldStyle, fontSize: "12px" }} />
+                  <input placeholder="Journal" value={candidateForm.journal} onChange={(e) => setCandidateForm((f) => ({ ...f, journal: e.target.value }))} style={{ ...fieldStyle, fontSize: "12px" }} />
+                  <input placeholder="URL or DOI" value={candidateForm.url} onChange={(e) => setCandidateForm((f) => ({ ...f, url: e.target.value }))} style={{ ...fieldStyle, fontSize: "12px" }} />
+                </div>
+                <textarea
+                  placeholder="Abstract (paste the abstract here for best results)"
+                  value={candidateForm.abstract}
+                  onChange={(e) => setCandidateForm((f) => ({ ...f, abstract: e.target.value }))}
+                  rows={3}
+                  style={{ ...fieldStyle, fontSize: "12px", width: "100%", resize: "vertical" }}
+                />
+                <div className="flex items-center gap-2">
+                  <select value={candidateForm.category} onChange={(e) => setCandidateForm((f) => ({ ...f, category: e.target.value }))} style={{ ...fieldStyle, fontSize: "12px" }}>
+                    {Object.entries(CATEGORY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                  <button
+                    onClick={handleCandidateReview}
+                    disabled={candidateLoading || !candidateForm.title || !candidateForm.source}
+                    className="text-xs px-3 py-1.5 rounded font-medium transition-all disabled:opacity-40"
+                    style={{ background: "hsl(270 50% 18%)", color: "hsl(270 60% 65%)", border: "1px solid hsl(270 50% 26%)" }}
+                  >
+                    {candidateLoading ? "Reviewing…" : "Review with Librarian"}
+                  </button>
+                </div>
+
+                {candidateError && <p className="text-red-400 text-xs">{candidateError}</p>}
+
+                {/* Candidate result */}
+                {candidateResult && (
+                  <div className="rounded-lg p-3 space-y-2 mt-2" style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(222 47% 18%)" }}>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {(() => {
+                        const rc = RECOMMENDATION_COLORS[candidateResult.recommendation];
+                        return rc ? <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: rc.bg, color: rc.text }}>{rc.label}</span> : null;
+                      })()}
+                      <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ color: CONFIDENCE_COLORS[candidateResult.confidence] ?? "#fff", background: (CONFIDENCE_COLORS[candidateResult.confidence] ?? "#888") + "22" }}>
+                        {candidateResult.confidence}
+                      </span>
+                      <span className="text-xs px-1.5 py-0.5 rounded text-zinc-400" style={{ background: "hsl(222 47% 16%)" }}>
+                        {candidateResult.evidenceType?.replace(/_/g, " ")}
+                      </span>
+                    </div>
+                    {candidateResult.warningFlags?.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {candidateResult.warningFlags.map((f) => (
+                          <span key={f} className="text-xs px-1.5 py-0.5 rounded" style={{ background: "hsl(40 80% 10%)", color: "hsl(40 90% 55%)" }}>
+                            {WARNING_FLAG_LABELS[f] ?? f}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {candidateResult.plainLanguageSummary && <p className="text-zinc-300 text-xs leading-relaxed">{candidateResult.plainLanguageSummary}</p>}
+                    {candidateResult.adminNotes && <p className="text-zinc-500 text-xs italic">{candidateResult.adminNotes}</p>}
+                    {candidateResult.coachingImplications?.length > 0 && (
+                      <div>
+                        <p className="text-zinc-500 text-xs uppercase tracking-wide mb-1">Coaching Implications</p>
+                        <ul className="space-y-0.5">
+                          {candidateResult.coachingImplications.map((c, i) => <li key={i} className="text-zinc-300 text-xs">• {c}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Stats */}
@@ -736,6 +1018,14 @@ function ResearchDashboard() {
               >
                 {/* Row */}
                 <div className="p-4 flex items-start gap-3">
+                  {/* Batch select checkbox */}
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(doc.id)}
+                    onChange={() => toggleSelectDoc(doc.id)}
+                    className="mt-1 shrink-0 cursor-pointer"
+                    style={{ accentColor: "hsl(270 60% 65%)" }}
+                  />
                   <div className="flex-1 min-w-0">
                     {/* Title & badges */}
                     <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -756,7 +1046,30 @@ function ResearchDashboard() {
                           {doc.evidenceType.replace(/_/g, " ")}
                         </span>
                       )}
+                      {doc.librarianRecommendation && (() => {
+                        const rc = RECOMMENDATION_COLORS[doc.librarianRecommendation];
+                        return rc ? (
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: rc.bg, color: rc.text, border: `1px solid ${rc.text}33` }}>
+                            AI: {rc.label}
+                          </span>
+                        ) : null;
+                      })()}
+                      {doc.confidence && (
+                        <span className="text-xs px-1.5 py-0.5 rounded" style={{ color: CONFIDENCE_COLORS[doc.confidence] ?? "#aaa", background: (CONFIDENCE_COLORS[doc.confidence] ?? "#888") + "22" }}>
+                          {doc.confidence}
+                        </span>
+                      )}
                     </div>
+                    {/* Warning flags */}
+                    {doc.warningFlags && doc.warningFlags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-1">
+                        {doc.warningFlags.map((f) => (
+                          <span key={f} className="text-xs px-1 py-0.5 rounded" style={{ background: "hsl(40 80% 10%)", color: "hsl(40 90% 55%)" }}>
+                            {WARNING_FLAG_LABELS[f] ?? f}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     <p className="text-zinc-100 text-sm font-medium leading-snug">{doc.title}</p>
                     {doc.authors && <p className="text-zinc-500 text-xs mt-0.5">{doc.authors}{doc.year ? ` (${doc.year})` : ""} — {doc.source}</p>}
                     <div className="flex flex-wrap gap-1.5 mt-2">
@@ -822,6 +1135,22 @@ function ResearchDashboard() {
                       {isWorking ? "…" : "Resummarize"}
                     </button>
                     <button
+                      onClick={() => handleLibrarianAnalyze(doc.id)}
+                      disabled={isWorking || librarianLoading === doc.id}
+                      className="text-xs px-2 py-1 rounded transition-all disabled:opacity-40"
+                      style={{ background: "hsl(270 50% 18%)", color: "hsl(270 60% 70%)", border: "1px solid hsl(270 50% 26%)" }}
+                    >
+                      {librarianLoading === doc.id ? "…" : "Librarian"}
+                    </button>
+                    <button
+                      onClick={() => handleLibrarianChunks(doc.id)}
+                      disabled={isWorking || librarianLoading === doc.id}
+                      className="text-xs px-2 py-1 rounded transition-all disabled:opacity-40"
+                      style={{ background: "hsl(222 47% 16%)", color: "hsl(0 0% 50%)" }}
+                    >
+                      Chunks
+                    </button>
+                    <button
                       onClick={() => handleDelete(doc.id)}
                       className="text-xs px-1 py-1 rounded text-zinc-600 hover:text-red-400 transition-colors"
                     >
@@ -871,7 +1200,52 @@ function ResearchDashboard() {
                         </div>
                       )}
                       {!doc.plainLanguageSummary && !doc.abstract && (
-                        <p className="text-zinc-600 text-sm italic">No summary yet — click "Resummarize" to generate one with AI.</p>
+                        <p className="text-zinc-600 text-sm italic">No summary yet — click "Resummarize" or "Librarian" to generate analysis.</p>
+                      )}
+
+                      {/* ── Librarian Agent Output ─────────────────────────────── */}
+                      {(doc.librarianRecommendation || doc.librarianAdminNotes) && (
+                        <div className="rounded-lg p-3 space-y-2 mt-2" style={{ background: "hsl(270 30% 9%)", border: "1px solid hsl(270 50% 18%)" }}>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-bold uppercase tracking-widest" style={{ color: "hsl(270 60% 65%)" }}>Librarian</span>
+                            {doc.librarianRecommendation && (() => {
+                              const rc = RECOMMENDATION_COLORS[doc.librarianRecommendation];
+                              return rc ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: rc.bg, color: rc.text }}>{rc.label}</span> : null;
+                            })()}
+                          </div>
+                          {doc.librarianAdminNotes && (
+                            <p className="text-zinc-400 text-xs leading-relaxed italic">{doc.librarianAdminNotes}</p>
+                          )}
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            {doc.librarianRecommendation === "approve" && doc.status === "pending" && (
+                              <button
+                                onClick={() => handleApprove(doc.id)}
+                                className="text-xs px-2 py-1 rounded font-medium transition-all"
+                                style={{ background: "hsl(142 50% 12%)", color: "hsl(142 60% 55%)" }}
+                              >
+                                Approve for Coach Agent
+                              </button>
+                            )}
+                            {doc.librarianRecommendation === "reject" && doc.status !== "rejected" && (
+                              <button
+                                onClick={() => handleReject(doc.id)}
+                                className="text-xs px-2 py-1 rounded font-medium transition-all"
+                                style={{ background: "hsl(0 50% 12%)", color: "hsl(0 60% 60%)" }}
+                              >
+                                Reject
+                              </button>
+                            )}
+                            {doc.status === "approved" && (
+                              <button
+                                onClick={() => handleToggle(doc)}
+                                className="text-xs px-2 py-1 rounded font-medium transition-all"
+                                style={{ background: doc.isActive ? "hsl(142 50% 12%)" : "hsl(222 47% 16%)", color: doc.isActive ? "hsl(142 60% 55%)" : "hsl(0 0% 45%)" }}
+                              >
+                                {doc.isActive ? "Disable from Retrieval" : "Enable Retrieval"}
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>

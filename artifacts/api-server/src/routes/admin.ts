@@ -21,6 +21,12 @@ import {
   rejectDocument,
   toggleDocumentActive,
 } from "../research/research-ingestion";
+import {
+  analyzeResearchDocument,
+  reviewResearchCandidate,
+  generateResearchChunks,
+  batchAnalyzeDocuments,
+} from "../research/research-librarian-agent";
 import { seedResearchLibrary, isResearchLibraryEmpty } from "../research/research-seeder";
 
 const router: IRouter = Router();
@@ -724,6 +730,110 @@ router.get("/admin/research/stats", requireAuth, requireAdmin, async (_req, res)
     chunks: Number(chunkResult?.n ?? 0),
     byCategory: byCategory.rows,
   });
+});
+
+// ─── Research Librarian Agent Routes ─────────────────────────────────────────
+
+/**
+ * POST /api/admin/research/:id/librarian/analyze
+ * Run the Research Librarian Agent on a document.
+ * Updates structured fields and generates retrieval chunks.
+ * Does NOT approve the document automatically.
+ */
+router.post("/admin/research/:id/librarian/analyze", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  try {
+    const outcome = await analyzeResearchDocument(id);
+    if (!outcome.ok) {
+      res.status(outcome.error === "Document not found" ? 404 : 500).json({ error: outcome.error });
+      return;
+    }
+    res.json({ ok: true, recommendation: outcome.result?.recommendation, chunksCreated: outcome.chunksCreated, result: outcome.result });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/research/librarian/review-candidate
+ * Evaluate a candidate source before adding it to the library.
+ * Returns a recommendation and structured notes. Does NOT save anything.
+ */
+router.post("/admin/research/librarian/review-candidate", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const { title, authors, year, source, journal, url, doi, abstract: abstractText, category } = req.body ?? {};
+
+  if (!title || !source) {
+    res.status(400).json({ error: "title and source are required" });
+    return;
+  }
+
+  try {
+    const outcome = await reviewResearchCandidate({
+      title,
+      authors: authors || undefined,
+      year: year ? parseInt(year, 10) : undefined,
+      source,
+      journal: journal || undefined,
+      url: url || undefined,
+      doi: doi || undefined,
+      abstract: abstractText || undefined,
+      category: category || "strength_conditioning",
+    });
+
+    if (!outcome.ok) {
+      res.status(500).json({ error: outcome.error });
+      return;
+    }
+    res.json({ ok: true, result: outcome.result });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/research/:id/librarian/chunks
+ * Regenerate retrieval chunks only for an existing document.
+ */
+router.post("/admin/research/:id/librarian/chunks", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  try {
+    const outcome = await generateResearchChunks(id);
+    if (!outcome.ok) {
+      res.status(outcome.error === "Document not found" ? 404 : 500).json({ error: outcome.error });
+      return;
+    }
+    res.json({ ok: true, chunksCreated: outcome.chunksCreated });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/research/librarian/batch-analyze
+ * Run the Librarian Agent on multiple documents. Max 10 per batch.
+ * Body: { ids: number[] }
+ */
+router.post("/admin/research/librarian/batch-analyze", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const { ids } = req.body ?? {};
+  if (!Array.isArray(ids) || ids.length === 0) {
+    res.status(400).json({ error: "ids must be a non-empty array" });
+    return;
+  }
+  if (ids.length > 10) {
+    res.status(400).json({ error: "Batch size limited to 10 documents" });
+    return;
+  }
+
+  try {
+    const outcome = await batchAnalyzeDocuments(ids.map((id: any) => parseInt(id, 10)));
+    res.json({ ok: true, results: outcome.results });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

@@ -74,6 +74,13 @@ export const researchDocumentsTable = pgTable("research_documents", {
   status: text("status", { enum: DOCUMENT_STATUS }).notNull().default("pending"),
   isActive: boolean("is_active").notNull().default(false),
 
+  // Research Librarian Agent output
+  librarianRecommendation: text("librarian_recommendation", {
+    enum: ["approve", "reject", "needs_review"],
+  }),
+  librarianAdminNotes: text("librarian_admin_notes"),
+  warningFlags: jsonb("warning_flags").$type<string[]>(),
+
   // Timestamps
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

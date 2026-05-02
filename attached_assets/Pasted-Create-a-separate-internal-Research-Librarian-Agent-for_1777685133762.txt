@@ -1,0 +1,365 @@
+Create a separate internal Research Librarian Agent for TrainChat.
+
+Goal:
+Build an admin-only research curation agent that helps grow, summarize, tag, review, and approve TrainChat’s evidence database without making the user-facing TrainChat coach agent slower or more academic.
+
+Do NOT replace the main TrainChat coaching agent.
+Do NOT expose this agent to normal users.
+Do NOT allow unapproved research into the coaching agent context.
+
+The main Coach Agent consumes approved research.
+The Research Librarian Agent curates the research inventory.
+
+-------------------------------------
+PHASE 1 — AGENT SEPARATION
+-------------------------------------
+
+Create a new internal agent module:
+
+server/research/research-librarian-agent.ts
+
+Responsibilities:
+- Evaluate research documents
+- Summarize research
+- Extract coaching implications
+- Extract programming implications
+- Extract safety considerations
+- Identify limitations
+- Assign population tags
+- Assign topic tags
+- Assign confidence level
+- Recommend approve / reject / needs review
+- Generate retrieval-ready chunks
+
+The agent should be skeptical, conservative, and citation-focused.
+
+It should NOT:
+- Coach users directly
+- Generate full workout programs
+- Override safety rules
+- Approve sources automatically without admin control
+- Use random low-quality web content
+
+-------------------------------------
+PHASE 2 — RESEARCH LIBRARIAN SYSTEM PROMPT
+-------------------------------------
+
+Create a dedicated system prompt.
+
+Tone:
+- Evidence-focused
+- Conservative
+- Precise
+- Coaching-applicable
+- Avoids overclaiming
+
+System rules:
+
+You are TrainChat’s internal Research Librarian Agent.
+
+Your job is to evaluate and transform research into safe, practical, evidence-informed coaching knowledge.
+
+You must:
+- Prefer systematic reviews, meta-analyses, position stands, consensus guidelines, and high-quality peer-reviewed research.
+- Treat single studies as limited evidence.
+- Identify what the research supports and what it does NOT prove.
+- Translate findings into practical programming implications.
+- Flag contraindications or safety concerns.
+- Assign confidence:
+  - strong
+  - moderate
+  - limited
+  - conflicting
+- Never create medical diagnosis or treatment claims.
+- Never claim certainty beyond the evidence.
+- Never approve influencer content, SEO blogs, Reddit, or unsourced claims as gold-standard evidence.
+- Never allow research to override pain/safety constraints.
+
+Output must be structured JSON.
+
+-------------------------------------
+PHASE 3 — STRUCTURED OUTPUT SCHEMA
+-------------------------------------
+
+Define a strict output schema:
+
+ResearchLibrarianResult {
+  recommendation: "approve" | "reject" | "needs_review";
+  confidence: "strong" | "moderate" | "limited" | "conflicting";
+  evidenceType: "meta_analysis" | "systematic_review" | "position_stand" | "clinical_guideline" | "randomized_trial" | "observational" | "expert_consensus" | "textbook" | "unknown";
+  trustLevel: "gold" | "high" | "supporting" | "reject";
+
+  plainLanguageSummary: string;
+  coachingImplications: string[];
+  programmingImplications: string[];
+  safetyConsiderations: string[];
+  contraindications: string[];
+  limitations: string[];
+  whatThisDoesNotProve: string[];
+
+  topicTags: string[];
+  populationTags: string[];
+  sportTags: string[];
+  goalTags: string[];
+
+  retrievalChunks: {
+    chunkText: string;
+    topicTags: string[];
+    populationTags: string[];
+    confidence: string;
+  }[];
+
+  adminNotes: string;
+}
+
+Validate output before saving.
+
+If parsing fails:
+- Return needs_review
+- Save raw output in admin notes
+- Do not approve automatically
+
+-------------------------------------
+PHASE 4 — SERVICE FUNCTIONS
+-------------------------------------
+
+Add service functions:
+
+analyzeResearchDocument(documentId)
+
+Input:
+- Existing research document
+
+Process:
+- Read metadata + abstract + current summary
+- Send to Research Librarian Agent
+- Validate JSON result
+- Update research_documents with:
+  - plainLanguageSummary
+  - coachingImplications
+  - programmingImplications
+  - safetyConsiderations
+  - contraindications
+  - limitations
+  - confidence
+  - evidenceType
+  - tags
+  - adminNotes
+  - recommendation
+- Generate or replace research_chunks from retrievalChunks
+
+Return:
+- structured result
+- document update summary
+
+reviewResearchCandidate(candidate)
+
+Input:
+- title
+- authors
+- year
+- source
+- journal
+- url/doi
+- abstract
+- category
+
+Process:
+- Evaluate whether it should enter the library
+- Return recommendation and structured notes
+- Do NOT save unless admin confirms
+
+generateResearchChunks(documentId)
+
+Input:
+- approved document
+
+Process:
+- Create 3–8 retrieval chunks
+- Each chunk should be practical, concise, and useful for agent retrieval
+- Avoid long academic language
+
+-------------------------------------
+PHASE 5 — ADMIN API ROUTES
+-------------------------------------
+
+Extend existing admin research API:
+
+POST /api/admin/research/:id/librarian/analyze
+- Runs Research Librarian Agent on document
+- Updates document with structured fields
+- Generates chunks
+- Does NOT auto-approve unless explicitly requested
+
+POST /api/admin/research/librarian/review-candidate
+- Reviews a candidate source before adding
+- Returns recommendation
+- Admin can decide whether to add it
+
+POST /api/admin/research/:id/librarian/chunks
+- Regenerates retrieval chunks only
+
+POST /api/admin/research/librarian/batch-analyze
+- Runs on selected document IDs
+- Limit batch size to prevent cost explosion
+- Return per-document status
+
+All routes must be admin-only.
+
+-------------------------------------
+PHASE 6 — ADMIN DASHBOARD UI
+-------------------------------------
+
+In /admin Research tab:
+
+Add a “Research Librarian” section.
+
+Features:
+- Analyze selected document
+- Review candidate
+- Regenerate chunks
+- Batch analyze selected documents
+- Show recommendation badge:
+  - approve
+  - reject
+  - needs review
+- Show confidence badge:
+  - strong
+  - moderate
+  - limited
+  - conflicting
+- Show evidence type
+- Show admin notes
+- Show generated chunks preview
+- Button: “Approve for Coach Agent”
+- Button: “Reject”
+- Button: “Disable from Retrieval”
+
+Important:
+Approval remains human/admin-controlled.
+
+-------------------------------------
+PHASE 7 — SAFETY / QUALITY FILTERS
+-------------------------------------
+
+Add hard filters:
+
+Reject or mark needs_review if:
+- No source/journal/title
+- Source looks like SEO blog/influencer content
+- Claims medical treatment without clinical guideline basis
+- Makes supplement claims without strong evidence
+- Has no abstract or usable summary
+- Conflicts with safety rules
+- Is too old and not foundational
+- Cannot identify evidence type
+
+Add warning flags:
+- old_evidence
+- single_study
+- population_mismatch
+- overclaim_risk
+- medical_claim_risk
+- supplement_claim_risk
+- low_quality_source
+- conflicting_evidence
+
+-------------------------------------
+PHASE 8 — COACH AGENT INTEGRATION RULE
+-------------------------------------
+
+Ensure the Coach Agent only retrieves:
+
+- approved documents
+- active documents
+- chunks generated from approved documents
+- trustLevel not equal to reject
+
+The Research Librarian Agent should never directly inject content into user chats.
+
+Flow must remain:
+
+Research Librarian Agent
+→ research_documents / research_chunks
+→ admin approval
+→ retriever
+→ Coach Agent
+
+-------------------------------------
+PHASE 9 — ANALYTICS
+-------------------------------------
+
+Track:
+
+- librarian_analyze_started
+- librarian_analyze_completed
+- librarian_analyze_failed
+- librarian_candidate_reviewed
+- librarian_chunks_generated
+- librarian_batch_analyze_started
+- librarian_recommendation_approve
+- librarian_recommendation_reject
+- librarian_recommendation_needs_review
+
+Use existing analytics stub if available.
+
+-------------------------------------
+PHASE 10 — VALIDATION
+-------------------------------------
+
+Test:
+
+1. Existing seeded research document:
+- Analyze with librarian
+- Structured fields populate
+- Chunks generate
+- Document remains pending unless admin approves
+
+2. Low-quality candidate:
+- Candidate review returns reject or needs_review
+
+3. High-quality candidate:
+- Candidate review returns approve or needs_review with good notes
+
+4. Chunk regeneration:
+- Old chunks replaced cleanly
+
+5. Coach Agent retrieval:
+- Does not retrieve unapproved librarian output
+
+6. Admin security:
+- Non-admin cannot access routes or UI
+
+7. Typecheck:
+- Zero TypeScript errors
+
+-------------------------------------
+OUTPUT
+-------------------------------------
+
+Return:
+- Files added
+- Files modified
+- API routes added
+- UI added
+- New types/schemas
+- Safety filters added
+- QA checklist results
+
+-------------------------------------
+IMPORTANT CONSTRAINTS
+-------------------------------------
+
+Do NOT auto-approve research.
+Do NOT expose this agent to users.
+Do NOT let this agent generate workouts.
+Do NOT allow random web scraping.
+Do NOT ingest copyrighted full text unless permitted.
+Do NOT let research override safety.
+Do NOT slow down normal TrainChat conversations.
+
+This creates a clean separation:
+
+Coach Agent = user-facing training system
+Research Librarian Agent = internal evidence curator
+Admin = final approval authority

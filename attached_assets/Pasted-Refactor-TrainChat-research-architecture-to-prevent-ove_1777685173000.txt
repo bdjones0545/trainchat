@@ -1,0 +1,55 @@
+Refactor TrainChat research architecture to prevent overlap between the Coach Agent and the Research Librarian Agent.
+
+Current issue:
+The main TrainChat Coach Agent was previously instructed to support research/web knowledge improvement. We are now adding a separate internal Research Librarian Agent, so responsibilities must be clearly separated.
+
+Final architecture:
+- Coach Agent = user-facing training/programming agent
+- Research Librarian Agent = internal/admin-only research curation agent
+- Admin = final approval authority
+- Retriever = only approved/active research chunks reach the Coach Agent
+
+Update the system so the Coach Agent DOES:
+- Retrieve approved research context during user chats
+- Apply research practically to programming decisions
+- Use research to improve volume, intensity, progression, exercise selection, sport specificity, recovery, and safety
+- Explain research-informed reasoning when the user asks “why,” “show sources,” or “is this evidence-based?”
+
+Update the system so the Coach Agent DOES NOT:
+- Search the web in the background
+- Ingest new research documents
+- Summarize raw research studies
+- Create research chunks
+- Approve/reject documents
+- Add unreviewed research to memory
+- Reinterpret raw studies beyond the approved structured summaries
+
+Update the Research Librarian Agent so it owns:
+- Research discovery/candidate review
+- Research summarization
+- Topic/population/sport/goal tagging
+- Confidence scoring
+- Evidence type classification
+- Safety/limitation extraction
+- Retrieval chunk generation
+- Recommendation: approve / reject / needs_review
+
+Ensure the Coach Agent prompt says:
+“Use retrieved research context as pre-reviewed guidance. Do not search for or ingest new research. Do not overanalyze studies. Apply approved research practically and conservatively.”
+
+Ensure the retrieval layer only returns:
+- approved documents
+- active documents
+- chunks from approved documents
+- trustLevel not equal to reject
+
+Do not delete the existing research database or admin dashboard.
+Refactor responsibilities only.
+
+Output:
+- Files changed
+- Prompt changes made
+- Research responsibilities moved
+- Verification that Coach Agent no longer ingests or searches
+- Verification that Librarian Agent owns ingestion/review/chunking
+- Typecheck results
