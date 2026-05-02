@@ -29,6 +29,7 @@ import {
 } from "../research/research-librarian-agent";
 import { seedResearchLibrary, isResearchLibraryEmpty } from "../research/research-seeder";
 import { seedSpeedMobilityResearch, hasSpeedMobilityResearch } from "../research/research-speed-mobility-seeder";
+import { seedStrengthResearch, hasStrengthResearch } from "../research/research-strength-seeder";
 
 const router: IRouter = Router();
 
@@ -716,6 +717,21 @@ router.post("/admin/research/seed-speed-mobility", requireAuth, requireAdmin, as
   const force = req.query.force === "true";
   try {
     const { inserted, skipped, chunks } = await seedSpeedMobilityResearch(force);
+    res.json({ ok: true, inserted, skipped, chunks });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/research/seed-strength
+ * Seed the Strength research library with curated principle documents.
+ * Query params: force=true to re-seed even if strength data already exists.
+ */
+router.post("/admin/research/seed-strength", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const force = req.query.force === "true";
+  try {
+    const { inserted, skipped, chunks } = await seedStrengthResearch(force);
     res.json({ ok: true, inserted, skipped, chunks });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

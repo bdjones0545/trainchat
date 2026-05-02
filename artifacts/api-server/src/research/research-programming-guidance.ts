@@ -80,6 +80,24 @@ function normalizedContext(params: ResearchProgrammingParams): string {
 
 // ─── Dimension Builders ───────────────────────────────────────────────────────
 
+function hasStrengthTags(chunks: RetrievedResearchChunk[]): boolean {
+  return hasTags(
+    chunks,
+    "strength",
+    "max_strength",
+    "strength_training",
+    "progressive_overload",
+    "periodization",
+    "rest_periods",
+    "exercise_selection",
+    "movement_patterns",
+    "motor_learning",
+    "athletic_performance",
+    "functional_strength",
+    "joint_friendly",
+  );
+}
+
 function hasMobilityTags(chunks: RetrievedResearchChunk[]): boolean {
   return hasTags(
     chunks,
@@ -116,8 +134,14 @@ function buildVolumeGuidance(
     const trust = hasHighTrust(chunks, "hypertrophy");
     return `Research-informed: Target 10–20 weekly sets per muscle group for hypertrophy. Distribute across 2+ sessions per muscle. Per-session set count: 4–8 working sets per muscle group. Prioritize mechanical tension — proximity to failure matters more than total volume in lower-volume ranges.${trust ? " (High-confidence evidence)" : " (Moderate evidence — apply conservatively)"}`;
   }
-  if (hasTags(chunks, "strength_training", "powerlifting")) {
-    return `Research-informed: Strength development uses lower per-session volume with higher intensity. 3–6 working sets per main lift. Weekly per-pattern volume: 6–12 sets. Reduce volume during peaking phases. Prioritize quality of effort over accumulated fatigue.`;
+  if (hasStrengthTags(chunks) || hasTags(chunks, "strength_training", "powerlifting")) {
+    if (hasTags(chunks, "older_adults", "functional_strength") || /older|senior/.test(ctx)) {
+      return `Research-informed: Strength volume for older adults: 2–3 sessions per week, 6–10 working sets per session across major patterns. Begin at lower end of set ranges (2–3 sets). Allow 4–6 week adaptation blocks before increasing volume. Accumulate volume across more sessions, not longer single sessions.`;
+    }
+    if (hasTags(chunks, "beginner", "motor_learning") || /beginner|novice|new.?to/.test(ctx)) {
+      return `Research-informed: Beginner strength volume: 2–3 full-body sessions per week, 3–4 exercises per session, 2–3 sets per exercise. Novices adapt to almost any training stimulus — more volume does not mean more progress. Build consistency first, then gradually add volume after 8–12 weeks.`;
+    }
+    return `Research-informed: Strength development uses lower per-session volume with higher intensity. 3–6 working sets per main lift. Weekly per-pattern volume: 6–12 sets across all sessions. Reduce volume during peaking and deload phases. Prioritize quality of effort over accumulated fatigue. Deload every 4–6 weeks: cut volume 40–50% while maintaining intensity.`;
   }
   if (hasTags(chunks, "sprint_mechanics", "speed", "max_velocity", "acceleration") || /sprint|speed|football/.test(ctx)) {
     return `Research-informed: Sprint/speed volume governed by quality, not quantity. Limit high-intensity sprint volume per session (4–8 maximal-effort sprints for neuromuscular quality). Total weekly sprint distance: guided by readiness. Lower volume in-season. Preserve neuromuscular quality over accumulated mileage. Do NOT inflate sprint volume to achieve conditioning effect — these are separate training qualities.`;
@@ -144,8 +168,14 @@ function buildIntensityGuidance(
   if (hasTags(chunks, "hypertrophy")) {
     return `Research-informed: Hypertrophy is well-achieved across a broad rep range (6–30 reps) when taken close to failure. Train within 0–4 RIR (Reps in Reserve). Higher rep ranges (12–20) with closer proximity to failure are equally effective for hypertrophy vs. lower rep ranges at the same RIR. Avoid purely light-load high-rep work done far from failure.`;
   }
-  if (hasTags(chunks, "strength_training", "powerlifting")) {
-    return `Research-informed: Strength development requires heavy loading (75–95% 1RM) on primary compound movements. Include sub-maximal practice (80–90%) as the bulk of training volume. Reserve true maximal loads (>95%) for testing or peaking. Longer rest periods (3–5 min) are mandatory for strength expression and quality.`;
+  if (hasStrengthTags(chunks) || hasTags(chunks, "strength_training", "powerlifting")) {
+    if (hasTags(chunks, "beginner", "motor_learning") || /beginner|novice/.test(ctx)) {
+      return `Research-informed: Beginner strength intensity: moderate loads (50–70% 1RM, RPE 5–7). Never train to failure on technical compound lifts. Leave 2–3 reps in reserve at all times. Controlled tempo. Technique is the primary performance variable — not load.`;
+    }
+    if (hasTags(chunks, "max_strength") || /max.?strength|1rm|heavy/.test(ctx)) {
+      return `Research-informed: Max strength requires heavy loading (75–95% 1RM) on primary compound movements. Sub-maximal practice (80–90%) should constitute the bulk of training. Reserve true maximal loads (>95%) for testing or peaking only. Longer rest (3–5 min) is mandatory — compressed rest destroys heavy compound lift quality. Technical failure is the real failure point, not rep failure.`;
+    }
+    return `Research-informed: Strength development requires heavy-enough loading to drive adaptation. Primary compound movements: 75–90% 1RM or RPE 7–9. Rest 3–5 minutes between primary lift sets. Accessory work: moderate intensity, 60–120 second rest. Do not compress rest periods for time efficiency — this trades strength quality for fatigue.`;
   }
   if (hasTags(chunks, "sprint_mechanics", "speed", "max_velocity", "acceleration") || /sprint|speed|acceleration/.test(ctx)) {
     return `Research-informed: Speed and sprint development requires maximum intent on every rep. Work at >90% max velocity for speed quality. Inadequate rest destroys sprint quality — do not compress rest intervals for conditioning purposes. Fatigue-compromised sprints have poor neural transfer. Sprint quality is the non-negotiable variable; everything else is secondary.`;
@@ -174,8 +204,18 @@ function buildExerciseSelectionGuidance(
   if (hasTags(chunks, "hypertrophy")) {
     lines.push(`Hypertrophy: Prioritize exercises that allow maximal stretch under load (e.g., incline DB curl, deficit RDL, Bulgarian split squat). Include both compound and isolation work. Avoid exercises where form breaks down before reaching near-failure.`);
   }
-  if (hasTags(chunks, "strength_training")) {
-    lines.push(`Strength: Anchor sessions around barbell compound movements (squat, hinge, press, pull). Accessory work should reinforce technical weaknesses in primary patterns.`);
+  if (hasStrengthTags(chunks) || hasTags(chunks, "strength_training")) {
+    if (hasTags(chunks, "joint_friendly", "pain_modification") || ctx.includes("pain") || ctx.includes("knee") || ctx.includes("shoulder") || ctx.includes("back")) {
+      lines.push(`Strength + pain/limitation: Preserve movement pattern intent while modifying the specific exercise. Knee pain → box squat, leg press, goblet squat; Shoulder pain → landmine press, DB neutral-grip press, cable row; Back pain → trap bar deadlift, hip thrust, machine row. Use pain-free ROM and isometric holds as a bridge. Do not remove the entire pattern — modify the variation.`);
+    } else if (hasTags(chunks, "older_adults", "functional_strength") || /older|senior/.test(ctx)) {
+      lines.push(`Strength (older adult): Prioritize functional patterns — goblet squat, leg press, hip hinge, lat pulldown, chest press, seated row, step-ups, farmer carry. Machine variations are often preferable for stability. Avoid high-risk variations (barbell back squat, heavy overhead) unless well-established. Include balance and stability exercises.`);
+    } else if (hasTags(chunks, "beginner", "motor_learning") || /beginner|novice/.test(ctx)) {
+      lines.push(`Strength (beginner): Select 3–6 exercises per session covering all major patterns. Prefer simpler variations (goblet squat, dumbbell RDL, push-up, dumbbell row, farmer carry). Avoid advanced variations (barbell Olympic lifts, complex periodization) until movement patterns are consistent. Consistency and technique trump exercise complexity.`);
+    } else if (hasTags(chunks, "athletic_performance") || /athletic|football|sport|performance/.test(ctx)) {
+      lines.push(`Strength (athletic): Anchor around barbell compound movements (squat, hinge, press, pull). Include power bridging exercises (trap bar deadlift, jump squat, hang power clean) to express strength as sport force. Accessory work reinforces technical weaknesses. Match exercise selection to sport demands and position.`);
+    } else {
+      lines.push(`Strength: Anchor each session around 1–2 major compound movements (squat, hinge, press, pull, carry). Accessory work (2–4 exercises) reinforces technical weaknesses and adds pattern volume. Ensure weekly balance across all 6 patterns. Choose variations appropriate to the athlete's skill, equipment, and goal — the pattern matters more than the specific exercise.`);
+    }
   }
   if (hasTags(chunks, "sprint_mechanics", "speed", "acceleration", "max_velocity") || /sprint|speed|football/.test(ctx)) {
     lines.push(`Speed/sprint: Prioritize acceleration work (resisted sprints, sled push, A-skips, wall drills), max velocity mechanics (flying sprints, wickets, falling starts), and reactive drills. Power work (trap bar deadlift, jump squat, hang power clean) directly supports sprint speed. Do not substitute generic conditioning drills for structured speed work.`);
@@ -209,12 +249,21 @@ function buildProgressionGuidance(
   ctx: string,
   chunks: RetrievedResearchChunk[],
 ): string {
-  if (hasTags(chunks, "progressive_overload") || hasTags(chunks, "hypertrophy", "strength_training")) {
-    const isHypertrophy = hasTags(chunks, "hypertrophy");
+  if (hasStrengthTags(chunks) || hasTags(chunks, "progressive_overload") || hasTags(chunks, "hypertrophy", "strength_training")) {
+    const isHypertrophy = hasTags(chunks, "hypertrophy") && !hasStrengthTags(chunks);
     if (isHypertrophy) {
       return `Research-informed: Use double progression — first increase reps within a target range (e.g., 3×8 → 3×12), then increase load and drop back to lower rep range. Avoid arbitrary load increases without rep-range mastery. Log and track to ensure progressive overload is genuinely occurring.`;
     }
-    return `Research-informed: Strength progression requires planned overload. Linear progression for novices (add weight each session). Intermediate+ use weekly or block-based progression (linear periodization or DUP). Deload every 4–6 weeks. Track 1RM and working maxes — log every session.`;
+    if (hasTags(chunks, "beginner", "motor_learning") || /beginner|novice/.test(ctx)) {
+      return `Research-informed: Beginner strength progression: add small weight each session (2.5–5 kg on compound lifts). When load cannot increase, add a rep. Technique must be consistent before adding load. This linear progression phase can last 3–12 months for true beginners. Do not skip to complex periodization.`;
+    }
+    if (hasTags(chunks, "periodization", "deload") || /intermediate|advanced|block|periodiz/.test(ctx)) {
+      return `Research-informed: Intermediate+ strength progression: undulating load variation (heavy/moderate/light days) or block periodization (3–4 week accumulation → 2–3 week intensification → 1 week deload). Deload every 4–6 weeks — reduce volume 40–50% while maintaining intensity. Track 1RM and working maxes every session. Plan progression ahead — don't guess.`;
+    }
+    if (hasTags(chunks, "pain_modification", "joint_friendly") || ctx.includes("pain")) {
+      return `Research-informed: Pain-context strength progression is symptom-guided. Progress only when symptoms remain stable or below baseline during and after training. Increase one variable at a time (load OR reps OR volume — never all at once). Never chase progression at the cost of symptom flare-up.`;
+    }
+    return `Research-informed: Strength progression requires planned overload. Linear progression for novices (add weight each session). Intermediate+ use weekly or block-based progression. Deload every 4–6 weeks. Track loads and reps every session. Use alternative progression (reps, tempo, ROM, density) when load increases are not appropriate.`;
   }
   if (hasTags(chunks, "sprint_mechanics", "speed", "acceleration", "max_velocity") || /sprint|speed/.test(ctx)) {
     return `Research-informed: Speed progression is NOT linear load-based. Progress sprint quality by: reducing resistance (resisted → free sprint), increasing distance segments, improving mechanics, and improving reactive quality. Volume increases: no more than 10% per week. Never sacrifice quality for volume or distance progression. Track sprint times and mechanics — not just reps.`;
@@ -243,8 +292,12 @@ function buildRecoveryGuidance(
 ): string {
   const lines: string[] = [];
 
-  if (hasTags(chunks, "recovery") || hasTags(chunks, "hypertrophy")) {
-    lines.push(`Allow 48–72h between sessions targeting the same primary muscle groups. Recovery between hypertrophy sets: 1–3 min. Recovery between strength sets: 3–5 min.`);
+  if (hasStrengthTags(chunks) || hasTags(chunks, "recovery") || hasTags(chunks, "hypertrophy")) {
+    if (hasTags(chunks, "rest_periods") || hasStrengthTags(chunks)) {
+      lines.push(`Strength recovery: Rest 3–5 minutes between heavy compound sets (squat, deadlift, press, weighted pull-up). Rest 60–120 seconds for accessory and isolation work. Do NOT compress rest on primary lifts for time efficiency — this directly degrades strength output and technical quality. Allow 48–72h between sessions targeting the same primary pattern. Deload weeks: reduce volume 40–50%, maintain intensity.`);
+    } else {
+      lines.push(`Allow 48–72h between sessions targeting the same primary muscle groups. Recovery between hypertrophy sets: 1–3 min. Recovery between strength sets: 3–5 min.`);
+    }
   }
   if (hasTags(chunks, "sprint_mechanics", "speed", "max_velocity", "acceleration") || /sprint|speed/.test(ctx)) {
     lines.push(`Sprint/speed: Full CNS recovery between efforts — work:rest ratios of 1:6 to 1:10. 48h minimum between high-intensity sprint sessions. Do not program sprint work after heavy lower-body strength in the same session. Fatigue from conditioning sessions must not carry into speed sessions.`);
@@ -292,6 +345,17 @@ function buildSafetyGuidance(
   if (hasMobilityTags(chunks)) {
     lines.push(`SAFETY — mobility: Do not claim mobility prevents injury. Frame as movement quality and readiness preparation. Mobility exercises must stay in pain-free ranges — never forced through pain. Hypermobile joints should not receive excessive passive stretching without concurrent stability training. No medical claims about joint health or injury prevention.`);
   }
+  if (hasStrengthTags(chunks) && !ctx.includes("pain") && !ctx.includes("injur")) {
+    lines.push(`SAFETY — strength: Never skip warm-up sets before heavy compound lifts. Technical failure on barbell lifts (squat, deadlift) is the real limit — do not push into form breakdown under heavy load. Avoid failure training on high-skill lifts. Deload regularly — training without planned recovery phases accumulates injury risk. Do not add load faster than technique can adapt.`);
+  }
+  if (hasTags(chunks, "beginner", "motor_learning") || /beginner|novice/.test(ctx)) {
+    if (hasStrengthTags(chunks)) {
+      lines.push(`SAFETY — beginner strength: Beginners must not train to failure on technical compound lifts. Always leave 2–3 reps in reserve. Reduce load before pushing through compromised form. Movement pattern quality is the non-negotiable safety variable at this stage.`);
+    }
+  }
+  if (hasTags(chunks, "older_adults", "functional_strength") || (/older|senior/.test(ctx) && hasStrengthTags(chunks))) {
+    lines.push(`SAFETY — older adult strength: Fall risk and controlled entry/exit from all positions must be evaluated. Do not program unsupported single-leg exercises without demonstrated balance. Controlled tempo mandatory. Monitor cardiovascular response — heavy efforts are not appropriate without medical clearance for sedentary older adults.`);
+  }
   if (hasCategory(chunks, "medical_rehab")) {
     lines.push(`SAFETY — medical/rehab context: Medical-category research applies. Conservative modifications only. Exercise does not replace medical treatment. Flag any exercises that are contraindicated per retrieved research.`);
   }
@@ -305,12 +369,26 @@ function buildContraindications(
 ): string[] {
   const contra: string[] = [];
 
+  if (hasStrengthTags(chunks)) {
+    if (hasTags(chunks, "beginner", "motor_learning") || /beginner|novice/.test(ctx)) {
+      contra.push("Failure training on technical compound lifts (squat, deadlift, overhead press) for beginners");
+      contra.push("Advanced periodization schemes (conjugate, daily max effort) before consistent technique is established");
+    }
+    if (hasTags(chunks, "older_adults", "functional_strength") || /older|senior/.test(ctx)) {
+      contra.push("High-impact exercises (box jumps, bounding) without established strength and coordination base for older adults");
+      contra.push("Training to failure on barbell compound lifts for older adult beginners");
+      contra.push("Heavy axial loading without established core stability and movement competency");
+    }
+  }
   if (ctx.includes("knee") || ctx.includes("patell")) {
     contra.push("Deep loaded squats below 90° if knee pain is present");
     contra.push("Leg extension machine in pain-provocative ranges");
     contra.push("Running or jumping until symptom-free at lower load");
     if (hasTags(chunks, "change_of_direction", "agility")) {
       contra.push("High-velocity reactive cutting until knee is symptom-free and deceleration strength is re-established");
+    }
+    if (hasStrengthTags(chunks)) {
+      contra.push("High-bar back squat to full depth with knee pain — modify to box squat, goblet squat, or leg press");
     }
   }
   if (ctx.includes("shoulder") || ctx.includes("rotator")) {

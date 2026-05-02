@@ -60,6 +60,22 @@ function extractContextTags(params: ResearchRetrievalParams): string[] {
   if (/fat.?loss|weight.?loss|cut|lean|body.?comp/.test(combined)) tags.push("body_composition");
   if (/endurance|cardio|aerobic|conditioning/.test(combined)) tags.push("endurance");
 
+  // Strength-specific tags (expanded)
+  if (/\bstrength\b|stronger|max.?strength|heavy|compound.?lift|force.?production|strength.?phase|intensification/.test(combined)) tags.push("strength");
+  if (/max.?strength|one.?rep.?max|1rm|heavy.?lift|near.?max/.test(combined)) tags.push("max_strength");
+  if (/progressive.?overload|overload|progression/.test(combined)) tags.push("progressive_overload");
+  if (/periodiz|training.?phase|block|mesocycle/.test(combined)) tags.push("periodization");
+  if (/rest.?period|rest.?interval|between.?sets/.test(combined)) tags.push("rest_periods");
+  if (/exercise.?selection|movement.?pattern|squat|deadlift|bench|press|pull.?up|row|carry/.test(combined)) tags.push("exercise_selection");
+  if (/squat|deadlift|bench|press|pull.?up|row|carry|hinge|push|pull/.test(combined)) tags.push("movement_patterns");
+  if (/beginner|novice|new.?to.?lift|starting|first.?program|motor.?learn/.test(combined)) tags.push("motor_learning");
+  if (/athletic.?performance|sport.?performance|force.?production|power.?development/.test(combined)) tags.push("athletic_performance");
+  if (/deload|deloading|recovery.?week/.test(combined)) tags.push("deload");
+  if (/functional.?strength|functional|independence|daily.?life/.test(combined)) tags.push("functional_strength");
+  if (/joint.?friendly|low.?impact|pain.?free|modification|modify/.test(combined)) tags.push("joint_friendly");
+  if (/volume|weekly.?sets|hard.?sets/.test(combined)) tags.push("volume");
+  if (/frequency|times.?per.?week|sessions.?per.?week/.test(combined)) tags.push("frequency");
+
   // Speed / Power / Sport performance (expanded)
   if (/sprint|speed|acceleration|velocity|faster|quickness|first.?step|explosiveness/.test(combined)) tags.push("speed");
   if (/sprint|acceleration|velocity|sprint.?mechanic/.test(combined)) tags.push("sprint_mechanics");

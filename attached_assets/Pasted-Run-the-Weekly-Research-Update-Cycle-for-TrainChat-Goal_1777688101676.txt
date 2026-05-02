@@ -1,0 +1,193 @@
+Run the Weekly Research Update Cycle for TrainChat.
+
+Goal:
+Continuously improve the quality of TrainChat’s programming by adding high-value, evidence-informed research where the system is weakest.
+
+This is a CURATED update process.
+Do NOT ingest large volumes.
+Do NOT use low-quality sources.
+Quality > quantity.
+
+-------------------------------------
+PHASE 1 — IDENTIFY KNOWLEDGE GAPS
+-------------------------------------
+
+Analyze recent usage (if logs exist) or simulate based on known domains:
+
+Identify top 5 gaps where TrainChat may be weak:
+
+Categories to evaluate:
+- strength programming
+- hypertrophy
+- speed / sprint / acceleration
+- plyometrics / power
+- mobility / movement prep
+- pain / joint limitations
+- older adults
+- beginners
+- sport-specific (football, basketball, etc.)
+- recovery / fatigue management
+
+For each gap, output:
+- gap_name
+- why it is weak
+- example user prompt where it would fail or be generic
+- priority: high / medium / low
+
+-------------------------------------
+PHASE 2 — SELECT TARGET TOPICS (LIMITED)
+-------------------------------------
+
+Select ONLY 3–5 high-impact topics to improve this week.
+
+Rules:
+- Must directly improve programming decisions (not trivia)
+- Must map to real user scenarios
+- Must be actionable for the Coach Agent
+
+-------------------------------------
+PHASE 3 — GENERATE RESEARCH CANDIDATES
+-------------------------------------
+
+For each selected topic, create a research candidate:
+
+Fields:
+- title
+- category
+- topicTags
+- populationTags
+- sportTags
+- goalTags
+- plainLanguageSummary
+- coachingImplications
+- programmingImplications
+- safetyConsiderations
+- limitations
+- whatThisDoesNotProve
+
+These are CURATED PRINCIPLE DOCUMENTS unless real sources are provided.
+
+Do NOT:
+- invent fake citations
+- claim specific journals if not real
+- overstate conclusions
+
+-------------------------------------
+PHASE 4 — RUN THROUGH RESEARCH LIBRARIAN AGENT
+-------------------------------------
+
+For each candidate:
+- Pass through Research Librarian Agent
+- Generate:
+  - confidence
+  - evidenceType
+  - recommendation
+  - structured summaries
+  - retrievalChunks (3–6 high-quality chunks)
+
+If:
+- recommendation = reject → discard
+- recommendation = needs_review → flag for admin
+- recommendation = approve → continue to next step (still requires admin confirmation)
+
+-------------------------------------
+PHASE 5 — ADMIN REVIEW QUEUE
+-------------------------------------
+
+Add all candidates to admin review queue.
+
+Mark:
+- source: "Weekly Curated Update"
+- adminNotes:
+  "Generated via weekly research update. Review before approval."
+
+DO NOT auto-approve unless explicitly configured.
+
+-------------------------------------
+PHASE 6 — RETRIEVAL VALIDATION
+-------------------------------------
+
+For each approved document:
+
+Simulate retrieval using prompts like:
+
+- “Build a program for [topic]”
+- “Make this better for [topic]”
+- “Adjust this for [constraint]”
+
+Ensure:
+- Correct chunks are retrieved
+- Tags match intent
+- No irrelevant research is pulled
+
+-------------------------------------
+PHASE 7 — PROGRAMMING IMPACT TEST
+-------------------------------------
+
+For each new topic:
+
+Run a quick internal test:
+
+1. Generate a program BEFORE adding research (baseline)
+2. Generate the same program AFTER adding research
+
+Compare:
+- volume structure
+- exercise selection
+- progression
+- safety handling
+- sport specificity
+
+If no meaningful difference:
+→ mark as low impact and revise
+
+-------------------------------------
+PHASE 8 — ANALYTICS LOGGING
+-------------------------------------
+
+Track:
+
+- weekly_update_started
+- gaps_identified
+- candidates_created
+- candidates_rejected
+- candidates_needs_review
+- candidates_ready_for_approval
+- documents_approved
+- retrieval_tests_passed
+- programming_impact_detected
+
+-------------------------------------
+PHASE 9 — LIMITS (VERY IMPORTANT)
+-------------------------------------
+
+Per week:
+- Max 5 new documents
+- Max 25 new chunks total
+
+Never:
+- bulk ingest
+- scrape random sites
+- prioritize quantity over clarity
+
+-------------------------------------
+PHASE 10 — OUTPUT SUMMARY
+-------------------------------------
+
+Return:
+
+- Gaps identified
+- Topics selected
+- Documents created
+- Librarian recommendations
+- Documents approved (if any)
+- Retrieval validation results
+- Programming impact results
+- Suggested next week focus
+
+-------------------------------------
+
+This is a weekly compounding system.
+
+The goal is not more research.
+The goal is better programming.

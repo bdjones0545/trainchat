@@ -343,10 +343,153 @@ All chunks inherit the document's `topicTags`, `category`, and `trustLevel`.
 
 ---
 
+---
+
+## Phase 8 — Strength Research QA Tests
+
+### TEST 6 — 4-Day Strength Program (Core Strength Test)
+
+**Prompt:**
+> "Build me a 4-day strength program focused on getting stronger in the squat, deadlift, press, and pull-up."
+
+**PASS criteria:**
+- [ ] Anchors each day around one or two of the named compound movements
+- [ ] Uses appropriate strength rep ranges (1–6 primary, 4–8 accessory)
+- [ ] Programs longer rest periods for heavy compound sets (3–5 min noted or implied)
+- [ ] Includes progression instructions (linear or block-based)
+- [ ] Does NOT make every session a maximal-effort session
+- [ ] Includes or mentions a deload every 4–6 weeks
+- [ ] `[ResearchProgrammingDebug]` log shows `influencedDimensions` includes `volume`, `intensity`, `exercise_selection`, `progression`, `recovery`
+
+**FAIL indicators:**
+- Rep ranges are all in hypertrophy range (8–15) with no heavy strength work
+- Rest periods are short (under 90 seconds for compound lifts)
+- No progression scheme or tracking guidance given
+- Every session maxes out — no load variation across the week
+- Deload is never mentioned
+
+---
+
+### TEST 7 — Strength Program + Knee Pain (Pain Constraint Test)
+
+**Prompt:**
+> "Build me a strength program, but deep squats bother my knees."
+
+**PASS criteria:**
+- [ ] Preserves the strength goal — does NOT avoid all lower-body work
+- [ ] Modifies or replaces deep squats with pain-free alternatives (box squat, leg press, goblet squat, trap bar deadlift)
+- [ ] Uses pain-free ROM as the explicit constraint
+- [ ] Avoids aggressive deep knee flexion
+- [ ] Does NOT diagnose the knee issue or make medical claims
+- [ ] Does NOT remove all lower-body training
+- [ ] Coach acknowledges the knee concern and explains the modification choice
+
+**FAIL indicators:**
+- All lower-body exercises removed (program avoids the whole lower body)
+- Deep back squat programmed despite the knee pain constraint
+- Medical diagnosis made ("your knee issue is X")
+- No modification logic — just swapping squat for another painful movement
+
+---
+
+### TEST 8 — Strength Program for Football Performance (Athlete Context Test)
+
+**Prompt:**
+> "Make this strength program better for football performance."
+
+**PASS criteria:**
+- [ ] Keeps the strength foundation (compound barbell work preserved)
+- [ ] Adds or emphasizes power/speed transfer exercises (trap bar deadlift, hang power clean, jump squat, or similar)
+- [ ] Manages session fatigue so strength doesn't impair speed/power quality
+- [ ] Does NOT turn every session into bodybuilding (no high-volume isolation-dominant programming)
+- [ ] Strength sessions are positioned away from high-intensity sport practice
+- [ ] `[ResearchProgrammingDebug]` log shows `athletic_performance` or `force_production` tags retrieved
+
+**FAIL indicators:**
+- Strength program becomes a bodybuilding hypertrophy block with no power emphasis
+- No mention of sport-performance context (session timing, fatigue management)
+- Heavy strength sessions scheduled immediately before speed/power sessions
+- Power bridging exercises absent from the program
+
+---
+
+### TEST 9 — Make Main Lift Harder (Strength Edit Test)
+
+**Prompt:**
+> "Make the main lift harder."
+
+**PASS criteria:**
+- [ ] Progression is intelligent — does not blindly add arbitrary weight
+- [ ] Considers current load, experience, and technical quality before suggesting load increase
+- [ ] Offers multiple intelligent options: more load, more reps, reduced rest, slower tempo, increased ROM, or harder variation
+- [ ] Respects any pain or equipment constraints already present in the conversation
+- [ ] Does NOT violate form integrity by suggesting dangerous loading jumps
+
+**FAIL indicators:**
+- "Add 10kg to the bar" suggested without any context check
+- Progression ignores pain constraints previously mentioned
+- Only one progression option given with no reasoning
+
+---
+
+## Strength Retrieval Tag Mapping
+
+| User keyword | Tags emitted | Expected seed doc retrieved |
+|---|---|---|
+| `strength` | `strength`, `strength_training` | Max Strength, Volume+Frequency, Progressive Overload |
+| `stronger` | `strength` | Max Strength Principles |
+| `max strength` | `strength`, `max_strength` | Max Strength Principles |
+| `heavy lifts` | `strength`, `max_strength` | Max Strength, Rest Periods |
+| `squat / deadlift / bench` | `exercise_selection`, `movement_patterns`, `strength` | Exercise Selection, Max Strength |
+| `progressive overload` | `progressive_overload`, `strength` | Progressive Overload |
+| `periodization` | `periodization`, `strength` | Strength Periodization |
+| `deload` | `deload`, `strength` | Strength Periodization |
+| `rest periods` | `rest_periods`, `strength` | Rest Periods for Strength |
+| `beginner` | `beginner`, `motor_learning` | Beginner Strength Training |
+| `older adult` | `older_adult`, `functional_strength` | Strength for Older Adults |
+| `football performance` | `athletic_performance`, `strength` | Strength + Athletic Performance |
+| `force production` | `athletic_performance`, `strength` | Strength + Athletic Performance |
+| `pain / modify` | `pain_modification`, `joint_friendly` | Strength with Pain/Limitations |
+
+---
+
+## Strength Safety Constraints Validation
+
+| Constraint | Research Present | Expected Outcome |
+|---|---|---|
+| Knee pain + strength research | `joint_friendly`, `pain_modification` | Squat modified to box/leg press, strength goal preserved |
+| Beginner + strength | `beginner`, `motor_learning` | No failure training, technique emphasis, linear progression |
+| Older adult + strength | `older_adults`, `functional_strength` | Conservative load, joint-friendly, no failure |
+| Athlete + strength | `athletic_performance` | Power bridging added, fatigue managed, not bodybuilding |
+| Pain + progression | `pain_modification` | Symptom-guided progression, one variable at a time |
+
+**Rule: Pain/safety constraints ALWAYS override research guidance for strength as they do for all research categories.**
+
+---
+
+## Seed Document Inventory — Strength (10 Documents)
+
+| # | Title | Category | topicTags |
+|---|---|---|---|
+| 13 | Max Strength Programming Principles | strength | `strength`, `max_strength`, `progressive_overload`, `intensity` |
+| 14 | Strength Volume and Frequency | strength | `strength`, `volume`, `frequency`, `programming` |
+| 15 | Progressive Overload for Strength | strength | `strength`, `progressive_overload`, `periodization` |
+| 16 | Rest Periods for Strength | strength | `strength`, `rest_periods`, `intensity`, `recovery` |
+| 17 | Exercise Selection for Strength | strength | `strength`, `exercise_selection`, `movement_patterns` |
+| 18 | Beginner Strength Training | strength | `strength`, `beginner`, `motor_learning`, `technique` |
+| 19 | Strength Training with Pain or Limitations | strength | `strength`, `pain_modification`, `safety`, `joint_friendly` |
+| 20 | Strength and Athletic Performance | strength | `strength`, `athletic_performance`, `power`, `force_production` |
+| 21 | Strength Periodization | strength | `strength`, `periodization`, `training_phase`, `deload` |
+| 22 | Strength Training for Older Adults | strength | `strength`, `older_adults`, `safety`, `functional_strength` |
+
+**Expected total chunks for 10 documents: ~50 chunks** (5 per document)
+
+---
+
 ## Typecheck Result
 
 Run: `pnpm run typecheck`
 
-Expected: No new errors introduced by speed/mobility layer changes.
+Expected: No new errors introduced by speed/mobility or strength layer changes.
 
 Pre-existing known errors in `conversations.ts`, `session-logs.ts`, `training-system.ts`, and mockup-sandbox vite config are unrelated to this work.
