@@ -490,20 +490,6 @@ export default function Chat() {
     sessionDraftMsgId: sessionDraftMsgIdRef.current,
   });
 
-  if (import.meta.env.DEV) {
-    console.log("[top bar source chosen]", {
-      hasActiveSystem,
-      isNewBuildSession,
-      hasUnsavedDraft,
-      isSaved,
-      sessionDraftMsgId: sessionDraftMsgIdRef.current,
-      latestProgramName: latestProgram?.programName ?? null,
-      dbSystemProgramName: dbSystemProgram?.programName ?? null,
-      displayProgramSource,
-      displayProgramName: displayProgram?.programName ?? null,
-    });
-  }
-
   // The program is "in system" if explicitly saved this session OR if
   // we're showing the DB-backed program (no chat draft, system active, not a new build).
   const isInSystem = isSaved || (!isNewBuildSession && hasActiveSystem && !latestProgram);
@@ -1383,7 +1369,8 @@ export default function Chat() {
       const mutationApplied =
         nonOpenAIPath ||
         result.mutationApplied === true ||
-        result.systemEdit?.applied === true;
+        result.systemEdit?.applied === true ||
+        result.changeLogId != null;
 
       // ── Right-sidebar receipt reconciliation ─────────────────────────────
       const isPanelAction = btnPayload?.source === "program_panel";
@@ -1731,15 +1718,6 @@ export default function Chat() {
 
       const previousSystemId = activeSystem?.id ?? null;
       const newSystemId = savedSystem?.systemId ?? null;
-
-      if (import.meta.env.DEV) {
-        console.log("[ActiveSystemSync]", {
-          previousSystemId,
-          newSystemId,
-          updateTriggered: true,
-          cacheUpdated: false,
-        });
-      }
 
       // Stamp the guard ref BEFORE clearing latestProgram so the messages effect
       // does not drop the draft while the training-system-active query is still
@@ -3159,7 +3137,7 @@ export default function Chat() {
 
           {/* Undo toast — appears briefly after a program change */}
           {undoChangeLogId && (
-            <div className="flex-shrink-0 px-4 py-2 flex justify-center">
+            <div className="flex-shrink-0 px-4 py-2 flex justify-center" role="status" aria-live="polite">
               <div className="flex items-center gap-2 px-3 py-2 bg-card border border-border rounded-full shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-200">
                 {undoVerificationStatus === "partial" ? (
                   <span className="text-[11px] text-amber-500">Partially updated — check your program</span>
@@ -3391,6 +3369,12 @@ export default function Chat() {
                   newChangeSignal={newChangeSignal}
                   newProgramSignal={newProgramSignal}
                   changeTargets={changeTargets}
+                  pendingChangeHint={
+                    stream.isActive && stream.state.actionType === "DIRECT_MUTATION"
+                      ? (stream.state.acknowledgment || undefined)
+                      : undefined
+                  }
+                  lastChangeSummary={lastChangeSummary ?? undefined}
                   blockMetadata={(activeSystem as any)?.metadata ?? undefined}
                   activeFocusModes={activeFocusModes}
                   onFocusModeChange={handleFocusSwitch}

@@ -1023,7 +1023,8 @@ function ProgramTab({
   }
   const sessionMode = getSessionMode();
 
-  if (import.meta.env.DEV) {
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
     console.log("[SessionLogRenderAudit]", {
       focusMode: panelFocusMode,
       expandedDay,
@@ -1033,7 +1034,8 @@ function ProgramTab({
       localMode,
       resolvedSessionMode: sessionMode,
     });
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelFocusMode, expandedDay, serverStatus, activeSessionData?.dayNumber, localMode, sessionMode]);
 
   const startSessionMutation = useMutation({
     mutationFn: (data: { trainingSystemId?: number; savedProgramId?: number; dayNumber?: number; focusMode?: string }) =>
