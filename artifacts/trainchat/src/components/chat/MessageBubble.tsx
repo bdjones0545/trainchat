@@ -6,6 +6,7 @@ import AgentTurnReport from "./AgentTurnReport";
 import { buildShareMoment, type ShareMoment } from "@/types/share-moments";
 import { extractProgramData, stripProgramJson, isProgramFragment } from "@/lib/extractProgramArtifact";
 import type { CompleteEvent } from "@/hooks/useStreamMessage";
+import type { PanelActionReceipt } from "./AgentTurnReport";
 
 interface Message {
   id: number;
@@ -23,6 +24,8 @@ interface Props {
   onShareMoment?: (moment: ShareMoment) => void;
   /** Dev-only: CompleteEvent for the last agent turn. Renders AgentTurnReport when present. */
   turnReport?: CompleteEvent | null;
+  /** Dev-only: Panel action receipt for right-sidebar direct edits that reconciled as success. */
+  panelReceipt?: PanelActionReceipt | null;
 }
 
 function formatTime(dateStr: string) {
@@ -233,7 +236,7 @@ function parseStructuredData(raw: string | null | undefined) {
   return { type: "none" as const };
 }
 
-export default function MessageBubble({ message, onViewProgram, onShowChange, onShareMoment, turnReport }: Props) {
+export default function MessageBubble({ message, onViewProgram, onShowChange, onShareMoment, turnReport, panelReceipt }: Props) {
   const isUser = message.role === "user";
   const parsed = parseStructuredData(message.structuredData);
   const isSystemEdit = !isUser && parsed.type === "system_edit";
@@ -412,7 +415,7 @@ export default function MessageBubble({ message, onViewProgram, onShowChange, on
         )}
         {/* Dev-only Agent Turn Report — collapsible debug card after last assistant message */}
         {!isUser && turnReport && import.meta.env.DEV && (
-          <AgentTurnReport event={turnReport} />
+          <AgentTurnReport event={turnReport} panelReceipt={panelReceipt} />
         )}
         <span className={`text-[10px] text-muted-foreground mt-1.5 px-1 block ${isUser ? "text-right" : ""}`}>
           {formatTime(message.createdAt)}

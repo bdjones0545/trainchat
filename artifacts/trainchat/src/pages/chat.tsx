@@ -41,6 +41,7 @@ import AnonymousUpgradeModal from "@/components/AnonymousUpgradeModal";
 import CalibrationModal from "@/components/chat/CalibrationModal";
 import CoachMemoryPanel from "@/components/chat/CoachMemoryPanel";
 import { useStreamMessage, type CompleteEvent, type ButtonActionPayload } from "@/hooks/useStreamMessage";
+import type { PanelActionReceipt } from "@/components/chat/AgentTurnReport";
 import { clearAuthState, markOnboardingComplete, logRouteDecision, readDeviceId, readOnboardingComplete } from "@/lib/routing";
 import { resolveProgramState } from "@/lib/resolveProgramState";
 import { extractProgramData, isProgramFragment } from "@/lib/extractProgramArtifact";
@@ -227,6 +228,7 @@ export default function Chat() {
   /** Stores the full extraContext from the last send, so retry can replay panel context. */
   const lastExtraContextRef = useRef<Record<string, unknown>>({});
   const [lastTurnReport, setLastTurnReport] = useState<CompleteEvent | null>(null);
+  const [lastPanelReceipt, setLastPanelReceipt] = useState<PanelActionReceipt | null>(null);
   const [newChangeSignal, setNewChangeSignal] = useState(0);
   const [newProgramSignal, setNewProgramSignal] = useState(0);
   const [changeTargets, setChangeTargets] = useState<Array<{
@@ -1086,6 +1088,8 @@ export default function Chat() {
     const btnPayload = (extraContext?.buttonPayload as ButtonActionPayload | undefined) ?? null;
     lastActionPayloadRef.current = btnPayload;
     lastExtraContextRef.current = extraContext ?? {};
+    // Clear any stale panel receipt from the previous turn so new turns start clean.
+    setLastPanelReceipt(null);
 
     setInputText("");
     if (inputRef.current) {
@@ -1334,11 +1338,55 @@ export default function Chat() {
     // If a non-OpenAI path (deterministic / library_progression / rule_based) was used,
     // treat it as success regardless of OpenAI outcome.
     // If the OpenAI path was used, only show error if mutationApplied is explicitly false.
+    // For right-sidebar program_panel actions, the program mutation itself is authoritative —
+    // if the DB edit applied (systemEdit.applied or mutationApplied), suppress the failure
+    // banner and show a "Program updated" toast instead.
     if (result.outcomeType === "true_failure") {
       const pathUsed = result.routeDebug?.pathUsed;
       const nonOpenAIPath = pathUsed && pathUsed !== "openai";
-      const mutationApplied = nonOpenAIPath || result.mutationApplied === true;
-      if (!mutationApplied) {
+      const mutationApplied =
+        nonOpenAIPath ||
+        result.mutationApplied === true ||
+        result.systemEdit?.applied === true;
+
+      // ── Right-sidebar receipt reconciliation ─────────────────────────────
+      const isPanelAction = btnPayload?.source === "program_panel";
+      const failureSuppressed = isPanelAction && mutationApplied;
+
+      if (import.meta.env.DEV && isPanelAction) {
+        console.log("[RightSidebarReceiptReconciliation]", {
+          actionType: btnPayload?.actionType ?? null,
+          dayIndex: btnPayload?.dayIndex ?? null,
+          exerciseIndex: btnPayload?.exerciseIndex ?? null,
+          previousExercise: btnPayload?.exerciseName ?? null,
+          newExercise: null,
+          backendStatus: result.outcomeType,
+          programChanged: mutationApplied,
+          failureSuppressed,
+        });
+      }
+
+      if (failureSuppressed) {
+        // Program panel action succeeded — the mutation state is authoritative.
+        // Suppress the failure banner and issue a local success receipt.
+        const panelReceipt: PanelActionReceipt = {
+          success: true,
+          source: "program_panel",
+          actionType: btnPayload?.actionType ?? "refine_program",
+          programChanged: true,
+          receiptId: `panel-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          target: {
+            dayIndex: btnPayload?.dayIndex,
+            exerciseIndex: btnPayload?.exerciseIndex,
+            exerciseName: btnPayload?.exerciseName,
+          },
+          userMessage: "Program updated",
+        };
+        setLastPanelReceipt(panelReceipt);
+        if (import.meta.env.DEV) {
+          console.log("[RightSidebarReceiptReconciliation] Issuing local success receipt", panelReceipt);
+        }
+      } else if (!mutationApplied) {
         if (operationErrorTimeoutRef.current) clearTimeout(operationErrorTimeoutRef.current);
         let msg = "That build didn't come back cleanly. Hit retry to try again — I'll rebuild it fresh.";
         let retryable = true;
@@ -2883,6 +2931,11 @@ export default function Chat() {
                     turnReport={
                       lastTurnReport && msg.role === "assistant" && msg.id === lastTurnReport.assistantMessage?.id
                         ? lastTurnReport
+                        : null
+                    }
+                    panelReceipt={
+                      lastPanelReceipt && lastTurnReport && msg.role === "assistant" && msg.id === lastTurnReport.assistantMessage?.id
+                        ? lastPanelReceipt
                         : null
                     }
                   />

@@ -924,6 +924,35 @@ function ProgramTab({
       }
 
       toast({ title: "Program updated", description: label, duration: 2500 });
+
+      if (import.meta.env.DEV) {
+        const dayIdx = program
+          ? program.days.findIndex((d) => (d.exercises ?? []).some((e) => e.name === exerciseName))
+          : null;
+        const receiptId = `panel-direct-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        console.log("[RightSidebarReceiptReconciliation]", {
+          actionType: action === "easier" ? "make_easier" : action === "harder" ? "make_harder" : "swap_exercise",
+          dayIndex: dayIdx ?? null,
+          exerciseIndex: null,
+          previousExercise: exerciseName,
+          newExercise: null,
+          backendStatus: "direct_api_success",
+          programChanged: true,
+          failureSuppressed: false,
+        });
+        console.log("[DirectExerciseEditReceipt]", {
+          success: true,
+          source: "program_panel",
+          actionType: action === "easier" ? "make_easier" : action === "harder" ? "make_harder" : "swap_exercise",
+          programChanged: true,
+          receiptId,
+          target: {
+            dayIndex: dayIdx ?? undefined,
+            exerciseName,
+          },
+          userMessage: "Program updated",
+        });
+      }
     } catch (error) {
       console.error("[SidebarEditExecutionAudit] direct exercise edit failed", {
         action,

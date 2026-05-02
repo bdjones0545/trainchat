@@ -2,8 +2,23 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight, ShieldCheck, ShieldAlert, AlertTriangle } from "lucide-react";
 import type { CompleteEvent } from "@/hooks/useStreamMessage";
 
+export interface PanelActionReceipt {
+  success: true;
+  source: "program_panel";
+  actionType: string;
+  programChanged: boolean;
+  receiptId: string;
+  target: {
+    dayIndex?: number;
+    exerciseIndex?: number;
+    exerciseName?: string;
+  };
+  userMessage: string;
+}
+
 interface Props {
   event: CompleteEvent;
+  panelReceipt?: PanelActionReceipt | null;
 }
 
 function derivePersistenceType(actionType: string): string {
@@ -66,7 +81,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-export default function AgentTurnReport({ event }: Props) {
+export default function AgentTurnReport({ event, panelReceipt }: Props) {
   const [open, setOpen] = useState(false);
 
   if (!import.meta.env.DEV) return null;
@@ -76,24 +91,36 @@ export default function AgentTurnReport({ event }: Props) {
   const outcome = receipt?.outcome;
   const compliance = receipt?.compliance;
 
-  const passed = compliance?.passed;
-  const hasViolations = compliance?.violations && compliance.violations.length > 0;
+  // If a panel receipt is present (right-sidebar action reconciled as success),
+  // override the status display — program changed is the authoritative signal.
+  const panelReconciled = panelReceipt?.programChanged === true;
 
-  const statusColor = passed === true
+  const passed = panelReconciled ? true : compliance?.passed;
+  const hasViolations = !panelReconciled && compliance?.violations && compliance.violations.length > 0;
+
+  const statusColor = panelReconciled
+    ? "border-emerald-500/40 bg-emerald-950/30"
+    : passed === true
     ? "border-emerald-500/40 bg-emerald-950/30"
     : passed === false
     ? "border-red-500/40 bg-red-950/30"
     : "border-yellow-500/40 bg-yellow-950/20";
 
-  const statusIcon = passed === true
+  const statusIcon = (panelReconciled || passed === true)
     ? <ShieldCheck size={12} className="text-emerald-400" />
     : passed === false
     ? <ShieldAlert size={12} className="text-red-400" />
     : <AlertTriangle size={12} className="text-yellow-400" />;
 
-  const statusLabel = passed === true ? "PASS" : passed === false ? "FAIL" : "NO RECEIPT";
+  const statusLabel = panelReconciled
+    ? "Updated"
+    : passed === true
+    ? "PASS"
+    : passed === false
+    ? "FAIL"
+    : "NO RECEIPT";
 
-  const statusLabelColor = passed === true
+  const statusLabelColor = (panelReconciled || passed === true)
     ? "text-emerald-400"
     : passed === false
     ? "text-red-400"
@@ -123,8 +150,8 @@ export default function AgentTurnReport({ event }: Props) {
         {statusIcon}
         <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-widest">Agent Turn Report</span>
         <span className={`ml-auto text-[10px] font-bold ${statusLabelColor}`}>{statusLabel}</span>
-        {receipt?.receiptId && (
-          <span className="text-[9px] text-zinc-600 font-mono ml-1 hidden sm:block">#{receipt.receiptId.slice(0, 8)}</span>
+        {(panelReceipt?.receiptId ?? receipt?.receiptId) && (
+          <span className="text-[9px] text-zinc-600 font-mono ml-1 hidden sm:block">#{(panelReceipt?.receiptId ?? receipt?.receiptId)?.slice(0, 8)}</span>
         )}
       </button>
 
@@ -132,8 +159,37 @@ export default function AgentTurnReport({ event }: Props) {
         <div className="px-3 pb-3">
           <div className="border-t border-white/10 pt-3">
 
+            {/* Panel reconciliation banner — right-sidebar action succeeded */}
+            {panelReconciled && (
+              <div className="flex items-start gap-2 rounded p-2 mb-3 text-[10px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                <span>✓ Right-sidebar action reconciled as success — program state changed.</span>
+              </div>
+            )}
+
+            {/* Panel receipt details */}
+            {panelReconciled && panelReceipt && (
+              <Section title="Panel Action Receipt">
+                <Field label="source" value={panelReceipt.source} />
+                <Field label="actionType" value={<span className="text-amber-300">{panelReceipt.actionType}</span>} />
+                <Field label="programChanged" value={<span className="text-emerald-400">true</span>} />
+                <Field label="receiptId" value={panelReceipt.receiptId} />
+                {panelReceipt.target.exerciseName && (
+                  <Field label="target.exerciseName" value={panelReceipt.target.exerciseName} />
+                )}
+                {panelReceipt.target.dayIndex !== undefined && (
+                  <Field label="target.dayIndex" value={String(panelReceipt.target.dayIndex)} />
+                )}
+                {panelReceipt.target.exerciseIndex !== undefined && (
+                  <Field label="target.exerciseIndex" value={String(panelReceipt.target.exerciseIndex)} />
+                )}
+                <Field label="userMessage" mono={false} value={panelReceipt.userMessage} />
+                <Field label="backendOutcomeType" value={<span className="text-yellow-400">{event.outcomeType}</span>} />
+                <Field label="failureSuppressed" value={<span className="text-emerald-400">true</span>} />
+              </Section>
+            )}
+
             {/* Contract pass/fail banner */}
-            {compliance && (
+            {!panelReconciled && compliance && (
               <div className={`flex items-start gap-2 rounded p-2 mb-3 text-[10px] ${
                 compliance.passed
                   ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
