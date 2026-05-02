@@ -251,6 +251,16 @@ export function loadHardConstraints(memories: MemoryEntry[]): HardConstraints {
       }
     }
 
+    // exercise_exclusion memories are absolute hard bans — written from calibrate.ts
+    // or from conversation signals. Each memory's subject is the slugified exercise name.
+    if (m.type === "exercise_exclusion") {
+      const name = m.subject.replace(/_/g, " ");
+      if (!bannedItems.includes(name)) {
+        bannedItems.push(name);
+        logger.info({ subject: m.subject, name }, "[MemoryRead] exercise_exclusion loaded into bannedItems");
+      }
+    }
+
     if (m.type === "pain_pattern" && m.sentiment === "negative") {
       // subject is already the region slug: "knee", "lower_back"
       painRegions.push(m.subject.replace(/_/g, " "));
@@ -264,6 +274,10 @@ export function loadHardConstraints(memories: MemoryEntry[]): HardConstraints {
     }
   }
 
+  logger.info(
+    { bannedCount: bannedItems.length, dislikedCount: dislikedItems.length, sport },
+    "[MemoryRead] loadHardConstraints resolved"
+  );
   return { bannedItems, dislikedItems, painRegions, sport };
 }
 
@@ -282,11 +296,15 @@ export function buildConstraintEnforcementDirective(
 
   if (constraints.bannedItems.length > 0) {
     lines.push(
-      "NEVER include the following — they are permanently unavailable or excluded:"
+      "NEVER include the following — they are permanently unavailable or user-excluded:"
     );
     for (const item of constraints.bannedItems) {
-      lines.push(`  - ${capitalize(item)} (unavailable)`);
+      lines.push(`  - ${capitalize(item)}`);
     }
+    lines.push(
+      "  If the user explicitly asks to include one of these in this turn, acknowledge the exclusion rule and ask them to confirm before overriding it."
+    );
+    logger.info({ count: constraints.bannedItems.length }, "[MemoryApplied] bannedItems injected into constraint directive");
   }
 
   if (constraints.dislikedItems.length > 0) {

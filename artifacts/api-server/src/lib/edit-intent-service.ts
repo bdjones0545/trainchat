@@ -883,6 +883,7 @@ async function autoSelectOpenEndedSwap(opts: {
 
   const equipmentLevel = resolveEquipmentLevel(system);
   const injuryFlags = resolveInjuryFlags(system);
+  const excludeNames: string[] = Array.isArray(system.bannedItems) ? system.bannedItems : [];
 
   // Fetch research guidance for exercise selection (non-fatal)
   let _swapResearchGuidance: string | undefined;
@@ -934,6 +935,7 @@ async function autoSelectOpenEndedSwap(opts: {
         system,
         equipmentLevel,
         injuryFlags,
+        excludeNames,
         researchGuidance: _swapResearchGuidance,
       });
       if (backstopPlan) {
@@ -969,6 +971,7 @@ async function autoSelectOpenEndedSwap(opts: {
       system,
       equipmentLevel,
       injuryFlags,
+      excludeNames,
       researchGuidance: _swapResearchGuidance,
     });
     if (backstopPlan) {
@@ -3795,6 +3798,7 @@ export async function interpretEditRequest(
       injuryFlags: system.injuryFlags ?? system.specialConsiderations
         ? [system.injuryFlags ?? system.specialConsiderations].flat().filter(Boolean)
         : [],
+      excludeNames: Array.isArray(system.bannedItems) ? system.bannedItems : [],
       notes: system.specialConsiderations,
       userId: system.userId,
       focusMode: system.focusMode ?? system.metadata?.focusMode,

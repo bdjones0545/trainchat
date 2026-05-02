@@ -1585,6 +1585,12 @@ Keep it helpful and intelligent, never promotional.`;
         return;
       }
 
+      // Stamp bannedItems onto system so autoSelectOpenEndedSwap and harder/easier
+      // fallback can read user-excluded exercises without a signature change.
+      if (hardConstraintsNonSSE.bannedItems.length > 0) {
+        (directFullSystem as any).bannedItems = hardConstraintsNonSSE.bannedItems;
+      }
+
       const directEditPlan = await interpretEditRequest(
         parsed.data.content,
         directFullSystem,
@@ -3395,6 +3401,12 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "clarification_needed",
         }));
         return;
+      }
+
+      // Stamp bannedItems onto system so autoSelectOpenEndedSwap and harder/easier
+      // fallback can read user-excluded exercises without a signature change.
+      if (hardConstraintsSSE.bannedItems.length > 0) {
+        (streamFullSystem as any).bannedItems = hardConstraintsSSE.bannedItems;
       }
 
       const streamEditPlan = await interpretEditRequest(

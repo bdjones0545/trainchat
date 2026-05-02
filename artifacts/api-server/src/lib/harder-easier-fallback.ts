@@ -48,6 +48,8 @@ export interface HarderEasierContext {
   sport?: string;
   equipmentLevel?: string;
   injuryFlags?: string[];
+  /** User-excluded exercise names from exercise_exclusion memories — never suggest these. */
+  excludeNames?: string[];
   notes?: string;
   userId?: number;
   focusMode?: string;
@@ -138,6 +140,9 @@ function buildFallbackSystemPrompt(ctx: HarderEasierContext): string {
   const injuryNote = ctx.injuryFlags?.length
     ? `INJURY / SPECIAL CONSIDERATIONS: ${ctx.injuryFlags.join(", ")} — avoid exercises that load these joints directly.`
     : "";
+  const exclusionNote = ctx.excludeNames?.length
+    ? `HARD-EXCLUDED EXERCISES (NEVER suggest any of these under any circumstance): ${ctx.excludeNames.join(", ")}`
+    : "";
 
   const sportNote = ctx.sport ? `SPORT CONTEXT: ${ctx.sport}` : "";
   const goalNote = ctx.programGoal ? `PROGRAM GOAL: ${ctx.programGoal}` : "";
@@ -159,6 +164,7 @@ CONTEXT:
   ${sportNote}
   ${equipNote}
   ${injuryNote}
+  ${exclusionNote}
 ${researchNote}
 YOUR TASK:
 Resolve the ${ctx.direction} request for "${ctx.exerciseName}" by choosing EXACTLY ONE of:
@@ -464,6 +470,23 @@ export async function resolveHarderEasierFallback(ctx: HarderEasierContext): Pro
       "[HarderEasierFallback] Resolution failed validation — falling through"
     );
     return null;
+  }
+
+  // Guard: reject AI suggestion if it names a user-excluded exercise
+  if (
+    resolution.changeType === "replace_exercise" &&
+    resolution.replacementExerciseName &&
+    ctx.excludeNames?.length
+  ) {
+    const proposed = resolution.replacementExerciseName.toLowerCase();
+    const excluded = ctx.excludeNames.find((ex) => proposed.includes(ex.toLowerCase()) || ex.toLowerCase().includes(proposed));
+    if (excluded) {
+      logger.warn(
+        { exercise: ctx.exerciseName, proposed: resolution.replacementExerciseName, excluded },
+        "[HarderEasierFallback] AI proposed excluded exercise — rejected"
+      );
+      return null;
+    }
   }
 
   // If resolution is a prescription-only change with no content, fall through

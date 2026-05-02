@@ -15,6 +15,8 @@ interface SwapBackstopContext {
   system: any;
   equipmentLevel: string;
   injuryFlags: string[];
+  /** User-excluded exercise names from exercise_exclusion memories — never swap to these. */
+  excludeNames?: string[];
   researchGuidance?: string;
 }
 
@@ -178,6 +180,9 @@ async function callOpenAIForSwap(ctx: SwapBackstopContext, sourcePattern: string
   const allowed = EQUIPMENT_LEVEL_MAP[ctx.equipmentLevel] ?? EQUIPMENT_LEVEL_MAP.full_gym;
   const allowedPatterns = approvedPatterns(sourcePattern);
   const researchNote = ctx.researchGuidance ? `\n${ctx.researchGuidance}\n` : "";
+  const exclusionNote = ctx.excludeNames?.length
+    ? `\nHARD-EXCLUDED EXERCISES (NEVER suggest any of these): ${ctx.excludeNames.join(", ")}`
+    : "";
   const prompt = `You are a strength and conditioning exercise library safety resolver.
 
 Return one real exercise definition that can replace the current exercise when the local library has no candidates.
@@ -191,7 +196,7 @@ Allowed equipment: ${allowed.join(", ")}
 Injury flags to avoid exactly: ${ctx.injuryFlags.join(", ") || "none"}
 Session category: ${sourceMeta?.exercise?.category ?? "unknown"}
 Session label: ${sourceMeta?.session?.label ?? "unknown"}
-Program goal: ${ctx.system.overarchingGoal ?? "general training"}${researchNote}
+Program goal: ${ctx.system.overarchingGoal ?? "general training"}${exclusionNote}${researchNote}
 
 Rules:
 - Use library-first thinking: only invent this because deterministic candidates are empty.
@@ -408,6 +413,19 @@ export async function resolveSafeSwapBackstop(ctx: SwapBackstopContext): Promise
 
   const aiDefinition = await callOpenAIForSwap(ctx, sourcePattern, sourceMeta);
   if (!aiDefinition) return null;
+
+  // Guard: reject AI suggestion if it names a user-excluded exercise
+  if (ctx.excludeNames?.length) {
+    const proposed = aiDefinition.name.toLowerCase();
+    const excluded = ctx.excludeNames.find((ex) => proposed.includes(ex.toLowerCase()) || ex.toLowerCase().includes(proposed));
+    if (excluded) {
+      logger.warn(
+        { sourceExercise: ctx.exerciseName, proposed: aiDefinition.name, excluded },
+        "[SwapBackstop] AI proposed excluded exercise — rejected"
+      );
+      return null;
+    }
+  }
 
   if (existingSource.length === 0) {
     logger.info({ sourceExercise: ctx.exerciseName }, "[SwapBackstop] Source exercise absent from library — staged AI candidate only");
