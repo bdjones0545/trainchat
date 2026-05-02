@@ -6,9 +6,9 @@
 // │  Invoked by: Coach Agent (lib/ai.ts) on BUILD paths only               │
 // │  Orchestration: src/agents/agent-orchestrator.ts → BUILD_WITH_ARCHITECT │
 // │                                                                         │
-// │  This module is NEVER called on edit paths (DIRECT_EDIT route).        │
-// │  It is NEVER called from admin routes.                                 │
-// │  It is NEVER called during coaching guidance responses.                │
+// │  Invoked exclusively on BUILD paths via BUILD_WITH_ARCHITECT route.    │
+// │  Not invoked on: DIRECT_EDIT, GUIDANCE, or LIBRARIAN_ADMIN routes.    │
+// │  Edit paths use the fast Coach-only pipeline to preserve latency.      │
 // └─────────────────────────────────────────────────────────────────────────┘
 //
 // Implements CNS-driven, movement-based program architecture per the spec:

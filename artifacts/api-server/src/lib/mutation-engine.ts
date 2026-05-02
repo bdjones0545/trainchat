@@ -5,11 +5,11 @@
 // GOAL:
 // Take an ExecutionPlan and GUARANTEE a real program change.
 //
-// RULES:
-// - NEVER return placeholders
-// - NEVER return original program unchanged
-// - ALWAYS mutate structure
-// - ALWAYS produce a VALID exercise
+// MUTATION SKILLS:
+// - Produce real exercise names only — no placeholders
+// - Guarantee a meaningful structural change on every mutation path
+// - Resolve to a valid exercise from the catalogue or fallback map
+// - Apply changes that match user intent with context-appropriate exercise selection
 //
 // NOTE: For conversation-route mutations, all APPLY_MUTATION actions are
 // now routed through interpretEditRequest + applyEditPlan (DB-backed pipeline).

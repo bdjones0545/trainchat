@@ -37,12 +37,12 @@
 //   4. Architecture validation gate (pre-send program integrity check)
 //   5. Observability logging (structured events for every orchestration decision)
 //
-// CRITICAL INVARIANTS (never break):
-//   • Research Librarian is NEVER called during normal user chat
-//   • Simple edits skip the Performance Architect (fast path)
-//   • Agent names are NEVER exposed to users in any response text
+// ARCHITECTURAL INVARIANTS:
+//   • Research Librarian operates exclusively on admin routes — never during user chat
+//   • Simple edits use the fast path (Coach only) — route to Architect only when structure is at stake
+//   • Agent personas are internal-only — users always experience TrainChat as a single coaching system
 //   • The validation gate is non-blocking — it warns, logs, but never silently drops a program
-//   • All conflict resolution follows the 5-tier hierarchy below, in strict order
+//   • Conflict resolution follows the 5-tier hierarchy below, in strict priority order
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { logger } from "../lib/logger";

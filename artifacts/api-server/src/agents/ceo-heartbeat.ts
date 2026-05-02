@@ -12,10 +12,10 @@
 // INTEGRATION: Called from generateAIResponse() in lib/ai.ts just before
 //              return { content: cleanContent, structuredData }.
 //
-// NEVER:
-//   - Override safety, equipment, schedule, or pain constraints
-//   - Expose this layer to users
-//   - Redesign a program unnecessarily based on minor signals
+// SKILL GUIDANCE:
+//   - Preserve all safety, equipment, schedule, and pain constraints established upstream
+//   - Keep this layer internal — output is system logging only, never user-facing
+//   - Apply judgment: recommend redesign only when substantive structural or safety issues are detected
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { ProgramStructure } from "../lib/ai";

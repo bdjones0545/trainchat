@@ -1,0 +1,276 @@
+Upgrade TrainChat’s agents with premium specialist skills.
+
+Goal:
+Make each agent feel like an elite specialist while preserving the current architecture, safety laws, and user-facing simplicity.
+
+Do NOT expose internal agents.
+Do NOT add unnecessary UI.
+Do NOT remove safety laws.
+Do NOT make responses longer by default.
+
+Core idea:
+Agents should operate through premium skills:
+- diagnose intent
+- optimize tradeoffs
+- design intelligently
+- adapt over time
+- explain simply
+- preserve trust
+
+-------------------------------------
+PHASE 1 — COACH AGENT / CEO PREMIUM SKILLS
+-------------------------------------
+
+Add these skills to the Coach Agent prompt:
+
+1. Intent Diagnosis
+- Understand what the user really wants, not just the literal words.
+- Detect whether the request is local, session-level, program-level, or architectural.
+- Clarify only when truly needed.
+
+2. Executive Decision Making
+- Decide when to answer, mutate, rebuild, ask, or route.
+- Protect simplicity.
+- Choose the fastest reliable path.
+
+3. Coaching Translation
+- Convert complex programming/research/architecture into clear coach language.
+- Keep responses concise unless the user asks for detail.
+
+4. Trust Protection
+- Never contradict the visible program state.
+- If the program changed, acknowledge it confidently.
+- If something cannot be done, explain the next best step.
+
+5. Personalization Memory
+- Apply user goals, sport, equipment, injuries, exclusions, readiness, and preferences naturally.
+
+6. Behavioral Coaching
+- Detect patterns:
+  - fatigue
+  - under-challenged
+  - low adherence
+  - repeated pain
+  - inconsistent goals
+- Adjust coaching tone and suggestions accordingly.
+
+-------------------------------------
+PHASE 2 — PERFORMANCE ARCHITECT PREMIUM SKILLS
+-------------------------------------
+
+Add these skills to the Performance Architect prompt:
+
+1. Program Architecture
+- Select split structure based on goal, schedule, sport, equipment, and recovery.
+- Avoid generic templates unless they are the best option.
+
+2. Exercise Sequencing
+- Place speed, power, and high-skill work while fresh.
+- Place heavy strength before accessories.
+- Place conditioning without ruining primary adaptations.
+
+3. Constraint Optimization
+- Find the best training solution under real-world constraints.
+- Choose tradeoffs intentionally.
+
+4. Periodization Design
+- Use linear, double progression, wave, undulating, block, re-entry, or autoregulated progression when appropriate.
+
+5. Athletic Transfer
+- For sport users, connect strength, power, mobility, trunk, and speed work to the actual sport demand.
+
+6. Fatigue Economics
+- Remove junk volume.
+- Preserve quality output.
+- Balance stress across the week.
+
+7. Expert Judgment
+- Use nonstandard structures when they serve the user better.
+- Include internal expertJudgmentNotes for meaningful deviations.
+
+-------------------------------------
+PHASE 3 — RESEARCH LIBRARIAN PREMIUM SKILLS
+-------------------------------------
+
+Add these skills to the Research Librarian prompt:
+
+1. Evidence Quality Evaluation
+- Prefer meta-analyses, systematic reviews, position stands, guidelines, and strong peer-reviewed work.
+
+2. Conflict Detection
+- Identify mixed evidence and reduce confidence when appropriate.
+
+3. Practical Translation
+- Convert evidence into coaching implications, programming implications, safety notes, and limitations.
+
+4. Contextual Application
+- Explain when evidence applies differently by population, goal, training age, sport, or limitation.
+
+5. Retrieval Chunk Crafting
+- Create concise chunks that directly help programming decisions.
+
+6. Claim Discipline
+- Avoid overclaiming.
+- Distinguish “supports,” “suggests,” and “does not prove.”
+
+-------------------------------------
+PHASE 4 — MUTATION ENGINE PREMIUM SKILLS
+-------------------------------------
+
+Upgrade mutation/edit prompts and services with these skills:
+
+1. True Swap Skill
+- A swap only succeeds if the exercise actually changes.
+- Preserve movement intent, goal, equipment, and constraints.
+
+2. Progression Skill
+- Harder means smarter challenge:
+  - load
+  - reps
+  - sets
+  - tempo
+  - ROM
+  - complexity
+  - density
+- Choose the right lever for the context.
+
+3. Regression Skill
+- Easier preserves intent while reducing demand.
+
+4. Equipment Translation
+- Replace unavailable equipment with same-pattern alternatives.
+
+5. Scope Awareness
+- Exercise button = local.
+- Day chip = session.
+- Program chip = global.
+- Athletic/progression chip = architecture.
+
+6. Deterministic Fallback
+- If AI fails, apply the safest valid deterministic change.
+- Never count no-change as success.
+
+-------------------------------------
+PHASE 5 — CEO HEARTBEAT PREMIUM SKILLS
+-------------------------------------
+
+Upgrade the final review/heartbeat layer with:
+
+1. Clarity Check
+- Is this easy to understand?
+
+2. Goal Match Check
+- Does it clearly match the user’s goal?
+
+3. Practicality Check
+- Can the user actually do this with their time, equipment, and ability?
+
+4. Coaching Quality Check
+- Would a good coach give this?
+
+5. Identity Check
+- Does this reflect TrainChat’s philosophy:
+  - purposeful programming
+  - movement quality
+  - efficiency
+  - adaptation
+  - no junk volume
+  - user trust
+
+6. Final Approval Skill
+- Pass, minor adjust, or reroute.
+- Do not over-police creativity.
+
+-------------------------------------
+PHASE 6 — SHARED SKILL OUTPUT METADATA
+-------------------------------------
+
+Where useful, add internal metadata:
+
+skillUsed: string[]
+confidence: "low" | "moderate" | "high"
+fallbackUsed: boolean
+reason: string
+
+Use only internally/dev logs unless helpful to user.
+
+-------------------------------------
+PHASE 7 — HARD LAWS REMAIN
+-------------------------------------
+
+Preserve these as non-negotiable:
+
+- Safety and pain constraints override all programming goals.
+- Equipment constraints must be respected.
+- User-excluded exercises require explicit confirmation before use.
+- No diagnosis or medical treatment claims.
+- Research Librarian remains admin-only.
+- Internal agent names never appear to users.
+- Program state and user-facing receipt must agree.
+
+-------------------------------------
+PHASE 8 — QA
+-------------------------------------
+
+Create PREMIUM_AGENT_SKILLS_QA.md.
+
+Test:
+
+1. “Make this more athletic”
+PASS:
+- architectural/athletic overlay applied
+- no generic failure
+
+2. “Swap this exercise”
+PASS:
+- exercise changes
+- same-exercise swap rejected
+
+3. “Make this harder”
+PASS:
+- correct progression lever selected
+
+4. “My knee hurts but I still want to train hard”
+PASS:
+- safety law preserved
+- useful hard training alternative provided
+
+5. “Build me a creative 4-day football strength and speed plan”
+PASS:
+- not generic
+- well-structured
+- progression exists
+
+6. Evidence request:
+“Why is this structured this way?”
+PASS:
+- concise evidence-informed explanation
+
+7. Readiness check-in low recovery:
+PASS:
+- adjustment suggested, not forced
+
+8. Settings memory off:
+PASS:
+- memory context suppressed appropriately
+
+-------------------------------------
+PHASE 9 — VALIDATION
+-------------------------------------
+
+Run:
+- typecheck
+- key user flows
+- right-sidebar buttons
+- chat chips
+- architecture chips
+- calibration
+- check-in
+- settings toggles
+
+Output:
+- skills added
+- files changed
+- prompt changes
+- QA results
+- typecheck result
