@@ -1,0 +1,120 @@
+Fix TrainChat contract binding after successful language interpretation.
+
+Problem:
+Natural language is correctly interpreted (EDIT_PROGRAM), but contract binding fails and defaults to:
+- mutationType: general_modification
+- shouldMutate: false
+- actualTurnOutcome: conversation_only
+
+This prevents valid edits from executing.
+
+Goal:
+If intent is actionable, ALWAYS bind to a mutation or ask targeted clarification. Never fall back to conversation_only.
+
+PHASE 1 — Force binding rule
+
+If:
+actionType === "EDIT_PROGRAM"
+
+AND detectedIntentFamily === "EDIT_PROGRAM"
+
+AND user message contains:
+- action verb (add, make, increase, decrease, reduce, replace, remove, shorten, etc.)
+
+THEN:
+shouldMutate = true OR shouldAskClarification = true
+
+NEVER:
+shouldMutate = false
+
+---
+
+PHASE 2 — Resolve “general_modification”
+
+Replace:
+
+mutationType: "general_modification"
+
+With:
+
+mutationType: "needs_scope_resolution"
+
+Then:
+
+IF targetScope is missing:
+→ attempt inference (session → block → program)
+
+IF still unresolved:
+→ shouldAskClarification = true
+
+---
+
+PHASE 3 — Default scope fallback
+
+If no explicit scope:
+
+Priority:
+1. Active selected session (if Live Program open)
+2. Current week/block
+3. Entire program
+
+Set:
+targetScope accordingly
+confidence = "inferred"
+
+---
+
+PHASE 4 — Bulk edit binding
+
+For phrases like:
+“add 1 set to each exercise for day 1”
+
+If:
+- "each"
+- "all"
+- "every"
+
+Bind to:
+operation: "bulk_session_adjustment"
+shouldMutate = true
+
+---
+
+PHASE 5 — Prevent conversation_only fallback
+
+Add guard:
+
+If actionType === EDIT_PROGRAM:
+- BLOCK responseType: conversation_only
+
+Allowed outcomes:
+- mutation_applied
+- clarification_requested
+- safe_rejection (rare)
+
+---
+
+PHASE 6 — Better fallback messaging
+
+Instead of:
+“I couldn’t find a clean match…”
+
+Use:
+
+“I can apply that — just to confirm, do you want this applied to Day 1 or the full week?”
+
+---
+
+PHASE 7 — Logging
+
+Add:
+
+[ContractBinding:Forced]
+[ContractBinding:ScopeInferred]
+[ContractBinding:FallbackUsed]
+
+Include:
+- rawText
+- inferredScope
+- operation
+- shouldMutate

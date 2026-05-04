@@ -76,6 +76,7 @@ export type IntentFamily =
   | "environment_temporary_switch"
   | "sport_context_update"
   | "exercise_dislike_or_preference"
+  | "bulk_session_sets_increase"
   | "clarification_required";
 
 // ─── Target Scopes ────────────────────────────────────────────────────────────
@@ -753,6 +754,28 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
       /\b(less intense|dial (it|this) back|scale (it|this) (back|down)|tone (it|this) down)\b/i,
       /\b(easier program|beginner friendly|more accessible|less demanding)\b/i,
       /\b(this is too much|can.t keep up|overwhelming|struggling with the volume)\b/i,
+    ],
+  },
+
+  // ── Bulk Session Sets Adjustment ─────────────────────────────────────────
+  // "Add N set(s) to each/every exercise for Day X" — deterministic executor.
+  // Must appear BEFORE increase_volume so numbered "add N sets" requests with
+  // "each / every / all" are captured here rather than the generic volume family.
+  {
+    family: "bulk_session_sets_increase",
+    patterns: [
+      // "add N set(s) to each/every/all exercise(s) for/in day X"
+      /\badd\s+\d+\s+sets?\s+to\s+(each|every|all)\s+(exercise|movement|lift)/i,
+      // "add N set(s) to each/every exercise" (no day ref — scope resolved from context)
+      /\badd\s+(a|one|an extra|another|\d+)\s+sets?\s+to\s+(each|every|all)\s+(exercise|movement|lift)/i,
+      // "remove/take off/cut N set(s) from each/every exercise"
+      /\b(remove|take off|cut|subtract|drop)\s+\d+\s+sets?\s+from\s+(each|every|all)\s+(exercise|movement|lift)/i,
+      // "increase sets by N for each/every exercise"
+      /\b(increase|bump up|raise)\s+(sets?|the sets?)\s+by\s+\d+\s+(for|on|across)\s+(each|every|all)\s+(exercise|movement|lift)/i,
+      // "give each exercise N more sets"
+      /\bgive\s+(each|every)\s+(exercise|movement|lift)\s+\d+\s+more\s+sets?/i,
+      // "add N more sets to every exercise"
+      /\badd\s+\d+\s+more\s+sets?\s+to\s+(each|every|all)\s+(exercise|movement|lift)/i,
     ],
   },
 

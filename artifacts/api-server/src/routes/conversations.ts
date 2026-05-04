@@ -25,7 +25,7 @@ import { syncMemoriesFromData, listMemories, buildMemoryContext, extractMemories
 import { generateInsights, buildInsightPromptHint } from "../lib/insights";
 import { getUserPlanInfo } from "../lib/planGating";
 import { stripeStorage } from "../lib/stripeStorage";
-import { interpretEditRequest, resolveTargetFromRequest, hasDeiticSessionReference } from "../lib/edit-intent-service";
+import { interpretEditRequest, resolveTargetFromRequest, hasDeiticSessionReference, buildBulkSessionSetsEditPlan } from "../lib/edit-intent-service";
 import { applyEditPlan, type EditResult } from "../lib/edit-engine";
 import type { VerificationStatus } from "../lib/mutation-verifier";
 import { createChangeLogEntry, type SystemSnapshot } from "../lib/change-log-service";
@@ -1598,6 +1598,101 @@ Keep it helpful and intelligent, never promotional.`;
           systemEdit: hierarchicalResult.applied
             ? { applied: true, changeSummary: hierarchicalResult.changeSummary, systemId: resolvedSystem.id }
             : { applied: false },
+        });
+        return;
+      }
+
+      // ── 2. Bulk session sets executor (deterministic — no AI call) ─────────
+      // Fast path for "add/remove N sets to/from each exercise for Day X".
+      // Bypasses interpretEditRequest and the structural validator entirely.
+      if (execPlan.intentFamily === "bulk_session_sets_increase") {
+        const bulkSessionIndex = execPlan.scope.dayIndex ?? 0;
+        const bulkEditPlan = buildBulkSessionSetsEditPlan(
+          directFullSystem,
+          bulkSessionIndex,
+          parsed.data.content,
+        );
+
+        logger.info(
+          { changes: bulkEditPlan.changes.length, sessionIndex: bulkSessionIndex, systemId: resolvedSystem.id },
+          "[BulkSetsExecutor] Deterministic bulk plan built — bypassing AI interpretation"
+        );
+
+        const bulkEditResult = await applyEditPlan(bulkEditPlan, "bulk_session_sets_increase");
+
+        if (bulkEditResult.appliedCount === 0) {
+          const noChangesContent = bulkEditPlan.changes.length === 0
+            ? `I couldn't find that session in your program. Try something like "Day 1" or "Day 2" to target a specific training day.`
+            : `I wasn't able to apply the set changes — each exercise may already be at the maximum or minimum set count.`;
+
+          const [noChangesMsg] = await db.insert(messagesTable).values({
+            conversationId: params.data.id, role: "assistant", content: noChangesContent, structuredData: null,
+          }).returning();
+          await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+          if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+            stripeStorage.incrementMessageCount(userId).catch(() => {});
+          }
+          res.json({
+            userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
+            assistantMessage: { id: noChangesMsg.id, conversationId: noChangesMsg.conversationId, role: noChangesMsg.role, content: noChangesMsg.content, createdAt: noChangesMsg.createdAt.toISOString(), structuredData: null },
+            planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+            intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: "bulk_session" },
+            systemEdit: { applied: false },
+            editFailure: { reason: "no_changes_produced" },
+          });
+          return;
+        }
+
+        const bulkIsDecrease = /\b(remove|take off|cut|subtract|drop|reduce|decrease)\b/i.test(parsed.data.content);
+        const bulkDeltaMatch = parsed.data.content.match(/(\d+)\s+(?:more\s+)?sets?/i);
+        const bulkDelta = bulkDeltaMatch ? bulkDeltaMatch[1] : "1";
+        const bulkVerb = bulkIsDecrease ? "Removed" : "Added";
+        const bulkSetWord = bulkDelta !== "1" ? "sets" : "set";
+        const bulkCoachingContent = `Done. ${bulkVerb} ${bulkDelta} ${bulkSetWord} to each exercise — ${bulkEditResult.changeSummary}.`;
+
+        const bulkChangeLogId = await createChangeLogEntry({
+          userId,
+          trainingSystemId: resolvedSystem.id,
+          source: "ai_edit",
+          intent: "bulk_session_sets_adjustment",
+          scope: "session",
+          changeSummary: bulkEditResult.changeSummary,
+          requestText: parsed.data.content.slice(0, 300),
+          beforeSnapshot: bulkEditResult.beforeSnapshot,
+          afterSnapshot: bulkEditResult.afterSnapshot,
+          appliedCount: bulkEditResult.appliedCount,
+          skippedCount: bulkEditResult.skippedCount,
+          decisionMetadata: {
+            intentType: intentResult.type,
+            intentFamily: "bulk_session_sets_increase",
+            deterministic: true,
+          },
+        }).catch(() => undefined);
+
+        const bulkSystemEditData = {
+          _type: "system_edit" as const,
+          changeSummary: bulkEditResult.changeSummary,
+          changedIds: bulkEditResult.changedIds,
+          systemId: resolvedSystem.id,
+          changeLogId: bulkChangeLogId,
+        };
+
+        const [bulkMsg] = await db.insert(messagesTable).values({
+          conversationId: params.data.id,
+          role: "assistant",
+          content: bulkCoachingContent,
+          structuredData: JSON.stringify(bulkSystemEditData),
+        }).returning();
+        await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+          stripeStorage.incrementMessageCount(userId).catch(() => {});
+        }
+        res.json({
+          userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
+          assistantMessage: { id: bulkMsg.id, conversationId: bulkMsg.conversationId, role: bulkMsg.role, content: bulkMsg.content, createdAt: bulkMsg.createdAt.toISOString(), structuredData: bulkMsg.structuredData ?? null },
+          planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+          intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: "bulk_session" },
+          systemEdit: { applied: true, changeSummary: bulkEditResult.changeSummary, systemId: resolvedSystem.id, changeLogId: bulkChangeLogId },
         });
         return;
       }

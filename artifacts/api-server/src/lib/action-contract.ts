@@ -54,6 +54,7 @@ export type TargetScope =
   | "this_week"
   | "program_wide"
   | "specific_day"
+  | "bulk_session"
   | "specific_exercise"
   | "preference_memory"
   | "unknown";
@@ -204,6 +205,9 @@ function detectTargetScope(message: string): TargetScope {
   const lower = message.toLowerCase();
   if (TEMPORAL_TODAY_PATTERNS.some((p) => p.test(lower))) return "today";
   if (/\b(this week|week \d+|current week)\b/i.test(lower)) return "this_week";
+  // Bulk session scope: "each/every exercise for day N" or "all exercises in day N"
+  if (/\b(each|every|all)\s+(exercise|movement|lift).{0,30}(day\s*\d+|session\s*\d+)\b/i.test(lower)) return "bulk_session";
+  if (/\b(day\s*\d+|session\s*\d+).{0,30}(each|every|all)\s+(exercise|movement|lift)\b/i.test(lower)) return "bulk_session";
   if (/\b(day \d+|session \d+|the (first|second|third|fourth|fifth|sixth|seventh) (day|session))\b/i.test(lower)) return "specific_day";
   if (/\b(whole program|entire program|all sessions|program.?wide|everything)\b/i.test(lower)) return "program_wide";
   if (/\b(this exercise|this movement|this lift|squat|bench|deadlift|press|row|curl|lunge|plank)\b/i.test(lower)) return "specific_exercise";

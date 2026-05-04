@@ -29,16 +29,17 @@ export type PersistenceType =
   | "none";          // informational / no persistence needed
 
 export type MutationType =
-  | "substitute"     // swap one exercise for another
-  | "remove"         // delete an exercise or block
-  | "add"            // insert an exercise or block
-  | "reduce"         // reduce sets/reps/load/rest
-  | "increase"       // increase sets/reps/load/rest
-  | "reorder"        // change exercise order
-  | "reorient"       // shift training emphasis / bias
-  | "deload"         // reduce volume+intensity systematically
-  | "adapt_env"      // adapt session to temporary environment
-  | "store_context"  // store preference/context, no structural change
+  | "substitute"              // swap one exercise for another
+  | "remove"                  // delete an exercise or block
+  | "add"                     // insert an exercise or block
+  | "reduce"                  // reduce sets/reps/load/rest
+  | "increase"                // increase sets/reps/load/rest
+  | "reorder"                 // change exercise order
+  | "reorient"                // shift training emphasis / bias
+  | "deload"                  // reduce volume+intensity systematically
+  | "adapt_env"               // adapt session to temporary environment
+  | "store_context"           // store preference/context, no structural change
+  | "bulk_session_adjustment" // deterministic bulk set delta across all exercises in a session
   | "none";
 
 export type SafetyFlag =
@@ -288,6 +289,11 @@ const FAMILY_POLICIES: Partial<Record<IntentFamily, FamilyPolicy>> = {
   add_exercise: {
     persistence: "session_scope",
     mutation: "add",
+    safetyFlags: [],
+  },
+  bulk_session_sets_increase: {
+    persistence: "session_scope",
+    mutation: "bulk_session_adjustment",
     safetyFlags: [],
   },
   mobility_support: {

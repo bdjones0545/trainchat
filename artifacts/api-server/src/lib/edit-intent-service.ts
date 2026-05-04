@@ -4015,3 +4015,83 @@ export async function interpretEditRequest(
     },
   };
 }
+
+// ─── Bulk Session Sets Edit Plan ──────────────────────────────────────────────
+//
+// Deterministic executor for "add/remove N sets to/from each exercise for Day X".
+// No AI call — reads exercises from the full system snapshot and computes
+// the exact new set count for each exercise in the target session.
+//
+// Cap rules:
+//   - Maximum 6 sets per exercise (hard cap — avoids junk volume)
+//   - Minimum 1 set per exercise (never zero a movement out)
+//
+// Called by the conversation route when execPlan.intentFamily === "bulk_session_sets_increase".
+
+export function buildBulkSessionSetsEditPlan(
+  fullSystem: any,
+  sessionIndex: number,
+  userMessage: string,
+): EditPlan {
+  const lower = userMessage.toLowerCase();
+
+  // Parse set delta from message: "add 2 sets", "remove 1 set", "give each exercise 3 more sets"
+  const deltaMatch = lower.match(/(\d+)\s+(?:more\s+)?sets?/);
+  const delta = deltaMatch ? Math.min(Math.max(parseInt(deltaMatch[1], 10), 1), 5) : 1;
+
+  const isDecrease = /\b(remove|take off|cut|subtract|drop|reduce|decrease)\b/i.test(userMessage);
+
+  // Collect all training sessions (non-rest, in document order)
+  const allSessions: any[] = [];
+  for (const phase of fullSystem?.phases ?? []) {
+    for (const week of phase.weeks ?? []) {
+      for (const session of week.sessions ?? []) {
+        if (!session.isRestDay) {
+          allSessions.push(session);
+        }
+      }
+    }
+  }
+
+  const targetSession = allSessions[sessionIndex];
+  if (!targetSession) {
+    return {
+      intent: "bulk_session_sets_adjustment",
+      scope: "session",
+      changeSummary: `Session at index ${sessionIndex} not found`,
+      changes: [],
+      _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+    };
+  }
+
+  const exercises: any[] = (targetSession.exercises ?? []).filter(
+    (ex: any) => ex && typeof ex.id === "number"
+  );
+
+  const changes: EditChange[] = exercises.map((ex: any) => {
+    const currentSets = typeof ex.sets === "number" ? ex.sets : 3;
+    const newSets = isDecrease
+      ? Math.max(currentSets - delta, 1)
+      : Math.min(currentSets + delta, 6);
+    return {
+      type: "update_exercise" as const,
+      id: ex.id,
+      updates: { sets: newSets },
+      reason: isDecrease
+        ? `Removed ${delta} set${delta !== 1 ? "s" : ""} (${currentSets} → ${newSets})`
+        : `Added ${delta} set${delta !== 1 ? "s" : ""} (${currentSets} → ${newSets})`,
+    };
+  });
+
+  const verb = isDecrease ? "Removed" : "Added";
+  const sessionLabel = targetSession.label ?? `Day ${sessionIndex + 1}`;
+  const setWord = delta !== 1 ? "sets" : "set";
+
+  return {
+    intent: "bulk_session_sets_adjustment",
+    scope: "session",
+    changeSummary: `${verb} ${delta} ${setWord} to all ${changes.length} exercise${changes.length !== 1 ? "s" : ""} in ${sessionLabel}`,
+    changes,
+    _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+  };
+}

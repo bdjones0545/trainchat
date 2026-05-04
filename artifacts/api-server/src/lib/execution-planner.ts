@@ -424,6 +424,22 @@ export async function buildExecutionPlan({
     };
   }
 
+  // ── Bulk session sets adjustment (deterministic — no AI needed) ──────────
+  // "Add N set(s) to each exercise for Day X" — fast path with no clarification.
+  else if (intent === "bulk_session_sets_increase") {
+    const dayIndex = scope.dayIndex;
+    plan = {
+      action: "APPLY_MUTATION",
+      intentFamily: intent,
+      scope: dayIndex !== undefined ? { type: "session", dayIndex } : { type: "session" },
+      mutation: {
+        type: "transform",
+        params: { bulkSetsAdjustment: true, dayIndex },
+      },
+      reasoning: "Bulk set adjustment across all exercises in a session — deterministic executor, no clarification",
+    };
+  }
+
   // ── Session expansion / volume increase ───────────────────────────────────
   else if (intent === "session_expansion" || intent === "increase_volume") {
     plan = {
@@ -977,6 +993,7 @@ function isMutationFamily(family: IntentFamily): boolean {
     "environment_temporary_switch",
     "sport_context_update",
     "exercise_dislike_or_preference",
+    "bulk_session_sets_increase",
   ];
 
   return mutationFamilies.includes(family);
