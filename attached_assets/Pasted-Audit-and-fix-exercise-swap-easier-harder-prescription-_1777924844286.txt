@@ -1,0 +1,81 @@
+Audit and fix exercise swap / easier / harder prescription logic in TrainChat.
+
+Current bug:
+When an exercise is swapped or made easier, the replacement exercise sometimes inherits the original exercise’s sets/reps/rest even when the new exercise is a completely different movement category.
+
+Example:
+A deadlift was swapped/regressed and became Leg Curl, but it kept a 3 sets x 3 reps prescription. That makes no sense because a leg curl should not use deadlift-style low-rep strength loading.
+
+Goal:
+When an exercise replacement changes the movement family or training role, the app must recalculate sets, reps, rest, and rationale from the replacement exercise’s category, not blindly copy the original prescription.
+
+Audit these paths:
+- Swap
+- Easier
+- Harder
+- Equipment replacement
+- Any direct exercise mutation route
+- Any AI-generated exercise replacement route
+- Any deterministic replacement fallback
+
+Required behavior:
+1. Preserve the original prescription only when the replacement is same-family and same-role.
+   Example:
+   Barbell Romanian Deadlift → Dumbbell Romanian Deadlift can keep similar loading.
+
+2. Recalculate prescription when replacement changes family or role.
+   Example:
+   Deadlift / RDL / Trap Bar Deadlift → Leg Curl must become accessory/isolation loading.
+
+3. Add a prescription remap layer:
+   It should inspect:
+   - original exercise family
+   - replacement exercise family
+   - movement pattern
+   - training slot
+   - session goal
+   - block type
+   - week/block intensity
+   - exercise role: primary, secondary, accessory, isolation, trunk, power, conditioning
+
+4. Add default prescription rules:
+   - Primary strength hinge/squat/press/pull:
+     3–5 sets, 2–6 reps, 2–3 min rest
+   - Secondary strength:
+     2–4 sets, 5–8 reps, 90–150 sec rest
+   - Hypertrophy/accessory:
+     2–4 sets, 8–15 reps, 60–90 sec rest
+   - Isolation exercises like leg curl, leg extension, lateral raise, curl, triceps pressdown:
+     2–4 sets, 10–20 reps, 45–90 sec rest
+   - Power/plyometric:
+     3–6 sets, 2–5 reps, long rest, low fatigue
+   - Mobility/prehab:
+     1–3 sets, 6–12 controlled reps or timed holds
+
+5. Add a guardrail:
+   If replacement exercise is isolation/accessory, block prescriptions below 6 reps unless explicitly justified.
+   Leg curl should never default to 3 reps.
+   Leg extension should never default to 3 reps.
+   Lateral raise should never default to 3 reps.
+   Biceps/triceps isolation should never default to 3 reps.
+
+6. Update the replacement rationale:
+   If the prescription was remapped, the rationale should say something like:
+   “Prescription adjusted because this replacement is an accessory/isolation exercise, not a primary hinge.”
+
+7. Add logs:
+   [ExerciseMutation:PrescriptionRemap:Input]
+   [ExerciseMutation:PrescriptionRemap:Decision]
+   [ExerciseMutation:PrescriptionRemap:Output]
+
+8. Add tests or QA cases:
+   - Deadlift → Leg Curl should produce accessory/isolation reps, not 3 reps.
+   - Barbell RDL → DB RDL may preserve similar reps.
+   - Squat → Leg Extension should remap to 10–20 reps.
+   - Bench Press → Push-Up may preserve/moderately adjust reps.
+   - Bench Press → Triceps Pressdown should remap to isolation reps.
+   - Power Clean → Box Jump should keep power-style low reps.
+   - Power Clean → Hamstring Curl should remap away from power reps.
+
+Do not just patch Leg Curl manually.
+Fix the underlying mutation-prescription inheritance system so every replacement produces loading that matches the new exercise.
