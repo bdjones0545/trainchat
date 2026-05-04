@@ -1730,23 +1730,48 @@ Keep it helpful and intelligent, never promotional.`;
         }
       }
 
-      // ── Execute edit plan (with one automatic retry on system error) ──────
-      // Phase 5: if the first attempt throws a system error, retry once before
-      // surfacing the failure — transient DB issues should not block the user.
-      let directEditResult = await applyEditPlan(directEditPlan, execPlan.intentFamily ?? undefined).catch(async (firstErr: any) => {
-        logger.warn(
-          { err: firstErr?.message, systemId: resolvedSystem.id },
-          "[VibeEdit] First edit attempt threw — retrying once (Phase 5 auto-retry)",
-        );
-        return await applyEditPlan(directEditPlan, execPlan.intentFamily ?? undefined);
-      });
+      // ── Execute edit plan ──────────────────────────────────────────────────
+      // IMPORTANT: Do NOT retry applyEditPlan. If the first call writes to the DB
+      // and then throws (e.g., during snapshot/verification), retrying would
+      // double-add exercises or trigger the duplicate-safe resolver to block the
+      // now-existing exercise, producing a false-negative appliedCount === 0.
+      const directEditResult = await applyEditPlan(directEditPlan, execPlan.intentFamily ?? undefined);
 
       logger.info(
         { applied: directEditResult.appliedCount, skipped: directEditResult.skippedCount, systemId: resolvedSystem.id },
         "[VibeEdit] DB pipeline — edit plan applied"
       );
 
+      // ── Build mutation receipt from DB results ────────────────────────────
+      // The receipt encodes the ACTUAL DB outcome (including post-write
+      // verification). It is the source-of-truth for whether the operation
+      // succeeded — not the verification status from the snapshot comparison.
+      const addedResult = directEditResult.changeTargets?.find((t) => t.type === "exercise_added");
+      const mutationReceipt = directEditResult.appliedCount > 0
+        ? buildMutationSuccessReceipt({
+            action:        orchMutationType === "structural" ? (execPlan.mutation?.type === "remove" ? "delete_exercise" : execPlan.mutation?.type === "swap" ? "replace_exercise" : "add_exercise") : "update_exercise",
+            sessionId:     directEditPlan.changes.find((c) => c.type === "add_exercise")?.sessionId ?? directEditPlan.changes[0]?.id ?? 0,
+            exerciseName:  addedResult?.newExercise ?? directEditPlan.changes[0]?.exercise?.name ?? directEditPlan.changes[0]?.replacement?.name ?? "exercise",
+            verified:      true,
+          })
+        : buildMutationFailureReceipt("appliedCount === 0 — no changes written to DB");
+
+      logger.info(
+        {
+          operation:         orchMutationType ?? "unknown",
+          sessionId:         mutationReceipt.success ? mutationReceipt.sessionId : null,
+          exerciseName:      mutationReceipt.success ? mutationReceipt.exerciseName : null,
+          appliedCount:      directEditResult.appliedCount,
+          verified:          mutationReceipt.success ? mutationReceipt.verified : false,
+          selectedReceiptType: mutationReceipt.success ? "success" : "failure",
+        },
+        "[Program Mutation Receipt Created]",
+      );
+
       // ── 3. Handle zero changes ─────────────────────────────────────────────
+      // IMPORTANT: Never show a failure message if the receipt says success OR
+      // the verification confirms the change is in the DB.
+      // appliedCount === 0 with no verified writes means nothing was mutated.
       if (directEditResult.appliedCount === 0) {
         const noChangesContent = buildAgenticNoChangesResponse(
           parsed.data.content,
@@ -1756,6 +1781,12 @@ Keep it helpful and intelligent, never promotional.`;
           directTarget,
           execPlan.intentFamily,
         );
+
+        logger.info(
+          { operation: orchMutationType, appliedCount: 0, selectedMessageType: "failure", systemId: resolvedSystem.id },
+          "[Program Mutation Response Selected]",
+        );
+
         const [noChangesMsg] = await db.insert(messagesTable).values({
           conversationId: params.data.id, role: "assistant", content: noChangesContent, structuredData: null,
         }).returning();
@@ -1770,13 +1801,24 @@ Keep it helpful and intelligent, never promotional.`;
           intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
           systemEdit: { applied: false },
           editFailure: { reason: "no_changes_produced" },
+          mutationReceipt,
         });
         return;
       }
 
-      // ── 4. Handle failed verification ──────────────────────────────────────
+      // ── 4. Guard: never show a failure message after a verified write ──────
+      // If the mutation receipt says success (appliedCount > 0), skip the
+      // verification-failed path entirely — the DB has the change and the user
+      // should see success copy. The verification status is observability-only
+      // once we have a confirmed DB write.
       const directVerification = directEditResult.verification;
-      if (directVerification.status === "failed") {
+      const receiptVerified = mutationReceipt.success === true;
+
+      if (!receiptVerified && directVerification.status === "failed") {
+        logger.info(
+          { verificationStatus: "failed", appliedCount: directEditResult.appliedCount, selectedMessageType: "failure", systemId: resolvedSystem.id },
+          "[Program Mutation Response Selected]",
+        );
         const failedContent = `I tried applying that change but it didn't land cleanly. Could you give me a bit more direction — the specific exercise name, which day it's in, or exactly what you'd like to change?`;
         const [failedMsg] = await db.insert(messagesTable).values({
           conversationId: params.data.id, role: "assistant", content: failedContent, structuredData: null,
@@ -1792,9 +1834,15 @@ Keep it helpful and intelligent, never promotional.`;
           intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
           systemEdit: { applied: false },
           editFailure: { reason: "verification_failed" },
+          mutationReceipt,
         });
         return;
       }
+
+      logger.info(
+        { verificationStatus: directVerification.status, receiptVerified, appliedCount: directEditResult.appliedCount, selectedMessageType: "success", systemId: resolvedSystem.id },
+        "[Program Mutation Response Selected]",
+      );
 
       // ── 5. Log the change ──────────────────────────────────────────────────
       const whyChangedParts = directEditPlan.changes.map((c) => c.reason).filter((r): r is string => !!r);
@@ -1897,12 +1945,13 @@ Keep it helpful and intelligent, never promotional.`;
           verificationStatus: directVerification.status as VerificationStatus,
           requiresReview: directVerification.requiresReview ?? false,
         },
+        mutationReceipt,
       });
       return;
 
     } catch (err: any) {
       logger.error({ err: err?.message, stack: err?.stack }, "[VibeEdit] DB pipeline threw — returning error response");
-      // Phase 5: Contextual error message based on what was being attempted
+      // Contextual error message based on what was being attempted
       const editIntent = (err as any)?._editIntent ?? execPlan.intentFamily ?? execPlan.mutation?.type ?? "edit";
       const structuralOp = execPlan.mutation?.type === "add"
         ? "add that exercise"

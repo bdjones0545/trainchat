@@ -37,9 +37,17 @@ export interface ArchitectPatch {
 
 export interface MutationSuccessReceipt {
   success: true;
+  /**
+   * Post-write DB verification result.
+   * true  = exercise was re-read from the DB and confirmed present after insert
+   * false = insert returned an ID but post-write re-read was inconclusive
+   */
+  verified: boolean;
   action: string;
   sessionId: string;
   exerciseName: string;
+  /** Human-readable confirmation, e.g. "Added Copenhagen Plank to Day 1." */
+  message: string;
   timestamp: string;
 }
 
@@ -274,12 +282,28 @@ export function buildMutationSuccessReceipt(params: {
   action: string;
   sessionId: string | number;
   exerciseName: string;
+  verified?: boolean;
+  sessionLabel?: string;
 }): MutationSuccessReceipt {
+  const sessionRef = params.sessionLabel ? params.sessionLabel : `session ${params.sessionId}`;
+  const actionVerb = params.action === "add_exercise"
+    ? "Added"
+    : params.action === "delete_exercise"
+      ? "Removed"
+      : params.action === "replace_exercise"
+        ? "Replaced exercise in"
+        : "Updated";
+  const message = params.action === "delete_exercise"
+    ? `${actionVerb} ${params.exerciseName} from ${sessionRef}.`
+    : `${actionVerb} ${params.exerciseName} to ${sessionRef}.`;
+
   return {
     success:      true,
+    verified:     params.verified ?? false,
     action:       params.action,
     sessionId:    String(params.sessionId),
     exerciseName: params.exerciseName,
+    message,
     timestamp:    new Date().toISOString(),
   };
 }

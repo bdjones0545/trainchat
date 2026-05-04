@@ -1,0 +1,79 @@
+Fix TrainChat mutation receipt false-negative bug.
+
+Problem:
+When the user says “Add a new exercise to Day 1,” the exercise is successfully added to the Live Program panel, but the chat still returns a failure message saying the program was not modified. This means the database mutation succeeds, but the success detection, appliedCount, receipt creation, or UI response mapping is producing a false negative.
+
+Goal:
+If the program is actually modified, the chat must return success. Never show a failure message after a successful mutation.
+
+Tasks:
+
+1. Audit the edit execution flow:
+- Find where structural edits are applied.
+- Find where appliedCount is incremented.
+- Find where mutationReceipt is created.
+- Find where the assistant response chooses success vs failure copy.
+
+2. Fix appliedCount:
+- Increment appliedCount immediately after a DB write succeeds.
+- Do not depend only on returned array length, stale cache, or AI response text.
+- For add_exercise, count success when the target session exercises array increases or the inserted exercise exists after write.
+
+3. Add post-write verification:
+After every add_exercise mutation:
+- Re-read the updated session/program from storage.
+- Verify the added exercise exists by name and target sessionId.
+- Set verified = true if found.
+
+Receipt shape should be:
+
+{
+  success: true,
+  verified: true,
+  action: "add_exercise",
+  sessionId: "...",
+  exerciseName: "...",
+  message: "Added Copenhagen Plank to Day 1."
+}
+
+4. Prevent false failure messages:
+- If mutationReceipt.success === true OR mutationReceipt.verified === true, the assistant response must use success copy.
+- Never show “I wasn’t able to add that exercise” when verified is true.
+- If UI refetch shows the new exercise, treat the mutation as successful.
+
+5. Fix frontend response mapping:
+- Make the chat message renderer prefer mutationReceipt over generic error text.
+- If mutationReceipt.success true, display:
+  “Added [exerciseName] to Day 1.”
+- If mutationReceipt.success false, display the contextual failure message.
+
+6. Add logging:
+Add logs for:
+
+[Program Mutation DB Write Success]
+[Program Mutation Post-Write Verification]
+[Program Mutation Receipt Created]
+[Program Mutation Response Selected]
+
+Each log should include:
+- operation
+- sessionId
+- exerciseName
+- appliedCount
+- verified
+- selectedMessageType: success | failure
+
+7. QA:
+Test:
+- “Add a new exercise to Day 1”
+Expected:
+- Exercise appears in Live Program
+- Chat says success
+- Agent Turn Report shows receipt
+- No false failure message
+
+Also test:
+- “Add Copenhagen plank to Day 1”
+- “Add an upper body exercise to Day 2”
+- “Replace Copenhagen plank with dead bug”
+- “Remove Copenhagen plank”

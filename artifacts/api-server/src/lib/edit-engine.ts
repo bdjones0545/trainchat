@@ -650,7 +650,7 @@ async function snapshotPhase(id: number): Promise<Record<string, unknown> | null
 
 // ─── Apply a single change ────────────────────────────────────────────────────
 
-async function applyChange(change: EditChange): Promise<{ applied: boolean; detail: string; newId?: number }> {
+async function applyChange(change: EditChange): Promise<{ applied: boolean; verified?: boolean; detail: string; newId?: number; insertedName?: string }> {
   try {
     switch (change.type) {
       case "add_exercise": {
@@ -691,10 +691,50 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; deta
           .returning({ id: sessionExercises.id });
 
         if (!inserted) {
+          logger.warn(
+            { sessionId: effectiveChange.sessionId, exerciseName: effectiveChange.exercise.name },
+            "[Program Mutation DB Write Success] insert returned no ID — marking as failed",
+          );
           return { applied: false, detail: `Failed to insert exercise into session ${effectiveChange.sessionId}` };
         }
 
-        return { applied: true, detail: `Added "${effectiveChange.exercise.name}" to session ${effectiveChange.sessionId} (new id:${inserted.id})`, newId: inserted.id };
+        logger.info(
+          { operation: "add_exercise", sessionId: effectiveChange.sessionId, exerciseName: effectiveChange.exercise.name, newId: inserted.id },
+          "[Program Mutation DB Write Success]",
+        );
+
+        // ── Post-write verification: re-read to confirm exercise exists in DB ──
+        // This makes appliedCount accurate based on actual DB state, not just the
+        // insert return value. Prevents false-negatives when the insert completes
+        // but the response chain doesn't see it.
+        const [postWrite] = await db
+          .select({ id: sessionExercises.id, name: sessionExercises.name, trainingSessionId: sessionExercises.trainingSessionId })
+          .from(sessionExercises)
+          .where(eq(sessionExercises.id, inserted.id))
+          .limit(1);
+
+        const verified = !!(postWrite && postWrite.id === inserted.id);
+        const insertedName = postWrite?.name ?? effectiveChange.exercise.name;
+
+        logger.info(
+          {
+            operation:    "add_exercise",
+            sessionId:    effectiveChange.sessionId,
+            exerciseName: insertedName,
+            newId:        inserted.id,
+            verified,
+            sessionMatch: postWrite?.trainingSessionId === effectiveChange.sessionId,
+          },
+          "[Program Mutation Post-Write Verification]",
+        );
+
+        return {
+          applied:      true,
+          verified,
+          insertedName,
+          detail:       `Added "${insertedName}" to session ${effectiveChange.sessionId} (new id:${inserted.id})`,
+          newId:        inserted.id,
+        };
       }
 
       case "update_exercise": {
@@ -1200,25 +1240,40 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string, train
     "[Program Mutation Attempt]",
   );
 
-  const results: { applied: boolean; detail: string; newId?: number }[] = [];
+  const results: { applied: boolean; verified?: boolean; detail: string; newId?: number; insertedName?: string }[] = [];
   for (const change of plan.changes) {
     const result = await applyChange(change);
     results.push(result);
-    logger.info({ applied: result.applied, detail: result.detail, changeType: change.type, id: change.id }, "Edit change processed");
+    logger.info(
+      { applied: result.applied, verified: result.verified ?? null, detail: result.detail, changeType: change.type, id: change.id },
+      "Edit change processed",
+    );
   }
 
-  const appliedCount = results.filter((r) => r.applied).length;
+  // ── appliedCount is based on DB-confirmed writes ───────────────────────────
+  // For add_exercise: a result is "applied" if the DB write succeeded AND the
+  // post-write re-read confirmed the exercise exists (verified === true).
+  // For other change types: `applied` from the DB operation is sufficient.
+  const appliedCount = results.filter((r) => {
+    if (r.newId !== undefined) {
+      // add_exercise path — trust DB confirmation (verified) over mere return value
+      return r.applied && (r.verified !== false);
+    }
+    return r.applied;
+  }).length;
   const skippedCount = results.filter((r) => !r.applied).length;
 
   // Phase 7 — [Program Mutation Success] / [Program Mutation Failure] log
   if (appliedCount > 0) {
-    const addedExercises  = results.filter((r) => r.applied && r.newId).map((r) => r.newId);
+    const addedExercises = results
+      .filter((r) => r.applied && r.newId)
+      .map((r) => ({ newId: r.newId, name: r.insertedName ?? null, verified: r.verified ?? false }));
     logger.info(
       {
         operation:     plan.intent,
         appliedCount,
         skippedCount,
-        addedIds:      addedExercises,
+        addedExercises,
         changeSummary: plan.changeSummary,
       },
       "[Program Mutation Success]",
