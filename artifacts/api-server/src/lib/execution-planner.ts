@@ -537,14 +537,66 @@ export async function buildExecutionPlan({
     };
   }
 
-  // ── Fallback → coaching guidance ──────────────────────────────────────────
+  // ── Fallback → coaching guidance or forced clarification ─────────────────
   else {
-    plan = {
-      action: "GUIDANCE",
-      intentFamily: intent === "clarification_required" ? null : intent,
-      scope,
-      reasoning: `Intent '${intent}' has no mutation path → coaching response`,
-    };
+    // Phase 2/3/5: When the intent family falls through to clarification_required
+    // but the high-level classifier saw an actionable EDIT intent, do NOT silently
+    // fall to GUIDANCE (which produces conversation_only). Instead, infer a
+    // default scope and ask a targeted clarification question.
+    //
+    // This fires for messages like "Make it harder", "Shorten the sessions",
+    // "Less rest" — things classifyIntent correctly tags as EDIT_PROGRAM but
+    // normalizeToIntentFamily can't resolve to a specific family.
+    const isEditActionVerb =
+      /\b(add|make|increase|decrease|reduce|replace|remove|shorten|lengthen|drop|cut|give|take|bump|raise|lower|swap|change|modify|update|adjust|intensify|simplify|tighten|ease up|dial|condense|expand)\b/i.test(
+        message
+      );
+
+    if (intent === "clarification_required" && program && isEditActionVerb) {
+      // Phase 3: Infer scope from fallback priority chain:
+      //   1. Scope already parsed from message text (e.g. "Day 1")
+      //   2. Active first session (if program has days)
+      //   3. Entire program
+      const inferredScope: ExecutionScope =
+        scope.type != null
+          ? scope
+          : program.days?.length
+            ? { type: "session", dayIndex: 0 }
+            : { type: "program" };
+
+      const scopeQuestion = buildScopeInferenceQuestion(message);
+
+      plan = {
+        action: "ASK_CLARIFICATION",
+        intentFamily: "clarification_required",
+        scope: inferredScope,
+        clarification: {
+          question: scopeQuestion,
+          pendingAspect: "scope",
+        },
+        reasoning:
+          "[ContractBinding:Forced] EDIT_PROGRAM with action verb but no family match — routing to targeted scope clarification instead of GUIDANCE (never conversation_only)",
+      };
+
+      // Phase 7: Structured logging
+      logger.info(
+        {
+          rawText: message.slice(0, 120),
+          inferredScope,
+          operation: "scope_clarification_forced",
+          shouldMutate: true,
+          family: intent,
+        },
+        "[ContractBinding:FallbackUsed] EDIT_PROGRAM with unmatched family — blocking conversation_only, routing to ASK_CLARIFICATION"
+      );
+    } else {
+      plan = {
+        action: "GUIDANCE",
+        intentFamily: intent === "clarification_required" ? null : intent,
+        scope,
+        reasoning: `Intent '${intent}' has no mutation path → coaching response`,
+      };
+    }
   }
 
   logger.debug(
@@ -961,6 +1013,46 @@ export function planAdjustmentExecution({
     promptDirective,
     reasoning: `IntentFamily: ${intentFamily} (confidence: ${confidence}), Mutation: ${mutationType}, Persistence: ${persistenceType}, Safety: [${safetyFlags.join(", ")}]`,
   };
+}
+
+// ─── Scope Inference Question Builder ────────────────────────────────────────
+//
+// Builds a targeted clarification question for EDIT_PROGRAM intents that
+// have an action verb but no matched family. Goal: never leave the user with
+// "I couldn't find a match" — always ask the minimal question needed to act.
+//
+// Phase 6 message template: "I can apply that — just to confirm, …"
+
+function buildScopeInferenceQuestion(message: string): string {
+  const lower = message.toLowerCase();
+
+  // Day-specific references already in the message
+  if (/\bday\s*\d+/i.test(lower)) {
+    return "I can apply that — which specific aspect of that day should I adjust? (e.g. the exercises, sets, or intensity)";
+  }
+
+  // Week-scoped references
+  if (/\b(this week|the week|week \d+|all week)\b/i.test(lower)) {
+    return "I can apply that across the week — should every session change, or just specific days?";
+  }
+
+  // Difficulty / intensity signals without scope
+  if (/\b(harder|easier|tougher|lighter|more intense|less intense|more challenging|simpler|too easy|too hard)\b/i.test(lower)) {
+    return "I can apply that — just to confirm, do you want this applied to a specific day, or across the full program?";
+  }
+
+  // Volume / set / rep signals without scope
+  if (/\b(more|less|fewer|extra|additional|remove|drop|cut|reduce|increase|add)\b.{0,30}\b(sets?|reps?|volume|exercises?|movements?)\b/i.test(lower)) {
+    return "I can apply that — just to confirm, do you want this on a specific day (e.g. Day 1) or across the whole week?";
+  }
+
+  // Generic session-length signals
+  if (/\b(shorter|longer|shorten|lengthen|condense|expand|quick|brief)\b/i.test(lower)) {
+    return "I can make those sessions shorter or longer — which day should I start with, or should this apply to the whole program?";
+  }
+
+  // Default: minimal scope disambiguation
+  return "I can apply that — just to confirm, do you want this change on a specific day, or across the full program?";
 }
 
 function isMutationFamily(family: IntentFamily): boolean {

@@ -285,8 +285,8 @@ function buildAgenticNoChangesResponse(
     return `I see what you're going for. To target the right place: are you looking to adjust this week's sessions, the overall program structure, or a specific day?\n\nOnce I know the scope, I'll apply it.`;
   }
 
-  // Generic fallback — don't ask "which session" if the request has no program structure
-  return `I couldn't find a clean match for that in your current program. Try being more specific — for example: the day or session ("Day 1", "the upper body day"), the exercise name, or exactly what you want to change (sets, reps, or movement). That gives me enough to act directly.`;
+  // Generic fallback — targeted clarification question (never "I couldn't find a match")
+  return `I can apply that — just to confirm, which day or session should this go to? For example: "Day 1", "the upper body day", or "the whole week". Once I know the target, I'll apply it directly.`;
 }
 
 /**
@@ -1240,7 +1240,7 @@ Keep it helpful and intelligent, never promotional.`;
         // No changes applied — the reconstructed request still didn't produce edits
         // Expire the pending clarification so we don't loop
         await resolvePendingClarification(pending.id, "no_changes_after_followup").catch(() => {});
-        const noOpFollowupContent = `I couldn't find a clean match for that in your program. Try being more specific — for example: the exercise name, the day number, or exactly what you'd like to change (sets, reps, or movement).`;
+        const noOpFollowupContent = `I can try a different approach — could you tell me which day or exercise you'd like this applied to? For example: "Day 1, the squats" or "all exercises on Day 2". That gives me enough to act directly.`;
         const [noOpMsg] = await db.insert(messagesTable).values({
           conversationId: params.data.id, role: "assistant", content: noOpFollowupContent, structuredData: null,
         }).returning();
@@ -3381,7 +3381,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
         // No changes — expire pending and return helpful message
         await resolvePendingClarification(pending.id, "no_changes_after_followup").catch(() => {});
-        const noOpFollowupContent = `I couldn't find a clean match for that in your program. Try being more specific — for example: the exercise name, the day number, or exactly what you'd like to change.`;
+        const noOpFollowupContent = `I can try a different approach — could you tell me which day or exercise you'd like this applied to? For example: "Day 1, the squats" or "all exercises on Day 2". That gives me enough to act directly.`;
         const [noOpMsg] = await db.insert(messagesTable).values({
           conversationId: params.data.id, role: "assistant", content: noOpFollowupContent, structuredData: null,
         }).returning();

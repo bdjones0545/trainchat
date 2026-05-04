@@ -167,6 +167,18 @@ const AMBIGUOUS_PRONOUN_PATTERNS = [
   /\b(what about (this|it)|use (this|it) instead|try (this|it) instead)\b/i,
 ];
 
+// Broader edit signal patterns — used for Phase 1 contract binding force.
+// Catches actionable edit intents that fall through MUTATION_COMMAND_PATTERNS
+// because they lack the specific structural markers (exercise name, parameter word, etc.).
+// Examples: "make it harder", "shorten the sessions", "less rest", "too easy".
+const BROAD_EDIT_VERB_PATTERNS = [
+  /\b(make|shorten|lengthen|simplify|intensify|condense|expand|ease up|dial (up|down)|tone down)\b.{0,60}/i,
+  /\b(needs? (more|less|fewer|an extra|additional))\b.{0,40}\b(sets?|reps?|volume|rest|work|time|exercises?|movements?)\b/i,
+  /\b(too (easy|hard|much|long|short|heavy|light|intense|little))\b/i,
+  /\b(give me|bump up|raise|lower|cut down|reduce|increase|decrease)\b.{0,60}/i,
+  /\b(more|less|fewer|extra|additional)\b.{0,30}\b(sets?|reps?|exercises?|movements?|rest|volume|intensity|time)\b/i,
+];
+
 // ─── Signal Detection Functions ───────────────────────────────────────────────
 
 function detectTemporalToday(message: string): boolean {
@@ -199,6 +211,10 @@ function detectGuidanceQuestion(message: string): boolean {
 
 function detectAmbiguousPronoun(message: string): boolean {
   return AMBIGUOUS_PRONOUN_PATTERNS.some((p) => p.test(message));
+}
+
+function detectBroadEditVerb(message: string): boolean {
+  return BROAD_EDIT_VERB_PATTERNS.some((p) => p.test(message));
 }
 
 function detectTargetScope(message: string): TargetScope {
@@ -403,6 +419,57 @@ export function buildActionContract(
     actionType = "NO_OP";
     confidence = "low";
     reasons.push("No clear action signal detected — NO_OP, respond with coaching guidance");
+  }
+
+  // ── Phase 1: Force binding rule ────────────────────────────────────────────
+  //
+  // If the high-level intent classifier (classifyIntent) tagged this turn as
+  // EDIT_PROGRAM/ADJUST_FOR_PAIN/ADJUST_FOR_READINESS but our pattern detectors
+  // above didn't fire (isMutationCommand=false, etc.), the decision tree defaults
+  // to NO_OP or GUIDANCE_ONLY — which produces conversation_only. That is NEVER
+  // correct for an actionable edit request.
+  //
+  // Rule: if actionType is still NO_OP or GUIDANCE_ONLY after the full decision
+  // tree, and the message contains a broad edit verb, override to ASK_CLARIFICATION.
+  // This guarantees shouldMutate=true OR shouldAskClarification=true for EDIT_PROGRAM.
+  //
+  // Only applies when we have an active program to operate on — without a program
+  // there is nothing to ask clarification about, so fall through to GUIDANCE.
+  const isEditFamilyIntent =
+    intentFamily === "EDIT_PROGRAM" ||
+    intentFamily === "ADJUST_FOR_PAIN" ||
+    intentFamily === "ADJUST_FOR_READINESS";
+
+  if (
+    isEditFamilyIntent &&
+    hasActiveProgram &&
+    (actionType === "NO_OP" || actionType === "GUIDANCE_ONLY")
+  ) {
+    const hasBroadEdit = detectBroadEditVerb(lower) || detectMutationCommand(lower);
+    if (hasBroadEdit) {
+      const overriddenFrom = actionType;
+      actionType = "ASK_CLARIFICATION";
+      shouldMutate = false;
+      shouldAskClarification = true;
+      shouldRespondGuidanceOnly = false;
+      requiredVerification = false;
+      confidence = "medium";
+      reasons.push(
+        `[ContractBinding:Forced] ${intentFamily} with action verb overrides ${overriddenFrom} → ASK_CLARIFICATION (never conversation_only for actionable edits)`
+      );
+      // Phase 7: Structured log for contract binding force
+      logger.info(
+        {
+          rawText: userMessage.slice(0, 120),
+          intentFamily,
+          overriddenFrom,
+          operation: "contract_binding_forced",
+          shouldMutate: false,
+          shouldAskClarification: true,
+        },
+        "[ContractBinding:Forced] EDIT_PROGRAM intent with action verb — overriding to ASK_CLARIFICATION"
+      );
+    }
   }
 
   // ── Override: if it's guidance-only, never allow mutation ─────────────────
