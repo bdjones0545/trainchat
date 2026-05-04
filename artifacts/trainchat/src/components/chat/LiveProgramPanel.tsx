@@ -680,6 +680,15 @@ function ProgramTab({
   const [showProgramUpdated, setShowProgramUpdated] = useState(false);
   const [panelEditError, setPanelEditError] = useState<string | null>(null);
 
+  /**
+   * Tracks which session-pill button is currently executing a direct panel
+   * mutation (i.e. via POST /api/training-system/mutate rather than chat).
+   * Keyed by `day-${idx}-${action.label}` — same key as pendingRefinement —
+   * so the existing loading-state UI in the pill render can reuse the same
+   * `isLoading` check.
+   */
+  const [panelMutating, setPanelMutating] = useState<string | null>(null);
+
   // ── Share program modal ───────────────────────────────────────────────────
   const [showShareModal, setShowShareModal] = useState(false);
 
@@ -999,6 +1008,98 @@ function ProgramTab({
       });
       setPendingRefinement(null);
       setPanelEditError("That change didn't apply — try again or describe it in the chat.");
+    }
+  }
+
+  // ── Direct panel "Add Exercise" — bypasses chat stream entirely ──────────
+  /**
+   * Calls POST /api/training-system/mutate with operation="add_exercise".
+   * Never creates a chat message or shows a chat failure bubble.
+   * On success: immediately invalidates all relevant React Query caches and
+   * flashes the "Program Updated" banner.
+   * On error: shows a local error toast only.
+   */
+  async function handlePanelAddExercise(dayIndex: number, dayNumber: number, buttonKey: string) {
+    if (panelMutating || buildingState?.isBuilding) return;
+    setPanelMutating(buttonKey);
+    setPanelEditError(null);
+    const start = Date.now();
+
+    try {
+      const result = await customFetch<{
+        success: boolean;
+        verified: boolean;
+        operation: string;
+        sessionId: number;
+        exerciseName: string;
+        updatedSession: unknown;
+        receipt: { success: boolean; message?: string };
+        message: string;
+      }>("/api/training-system/mutate", {
+        method: "POST",
+        body: JSON.stringify({
+          mutationSource: "live_program_panel",
+          operation: "add_exercise",
+          dayIndex,
+          focusMode: panelFocusMode || undefined,
+        }),
+      });
+
+      // Enforce minimum 300ms visual processing phase (matches direct edit pattern)
+      const elapsed = Date.now() - start;
+      if (elapsed < 300) {
+        await new Promise<void>((r) => setTimeout(r, 300 - elapsed));
+      }
+
+      // Immediate cache invalidation for all week-data keys
+      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+      queryClient.invalidateQueries({ queryKey: ["live-panel-week-ids"] });
+      queryClient.invalidateQueries({ queryKey: ["week-view-select"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+
+      // Flash "Program Updated" banner (same path as direct exercise edits)
+      setShowProgramUpdated(true);
+      setShowContentReveal(true);
+      if (contentRevealTimerRef.current) clearTimeout(contentRevealTimerRef.current);
+      contentRevealTimerRef.current = setTimeout(() => setShowContentReveal(false), 350);
+      if (programUpdatedTimerRef.current) clearTimeout(programUpdatedTimerRef.current);
+      programUpdatedTimerRef.current = setTimeout(() => setShowProgramUpdated(false), 3000);
+
+      // Expand the mutated day so the new exercise is visible
+      setExpandedDay(dayIndex);
+
+      const label = result.message ?? `Added exercise to Day ${dayNumber}.`;
+      toast({ title: "Exercise added", description: label, duration: 2500 });
+
+      if (import.meta.env.DEV) {
+        console.log("[LiveProgramMutate:Receipt]", {
+          success: result.success,
+          verified: result.verified,
+          exerciseName: result.exerciseName,
+          sessionId: result.sessionId,
+          dayIndex,
+          dayNumber,
+          mutationSource: "live_program_panel",
+          operation: "add_exercise",
+          message: result.message,
+        });
+      }
+    } catch (error) {
+      console.error("[LiveProgramMutate:Error] handlePanelAddExercise failed", {
+        dayIndex,
+        dayNumber,
+        focusMode: panelFocusMode,
+        error,
+      });
+      toast({
+        title: "Couldn't add exercise",
+        description: "Nothing changed — try again or use the chat.",
+        variant: "destructive",
+        duration: 3500,
+      });
+    } finally {
+      setPanelMutating(null);
     }
   }
 
@@ -2194,12 +2295,24 @@ function ProgramTab({
                         <div className="px-3 py-2.5 flex flex-wrap gap-1.5 border-b border-border/30">
                           {(FOCUS_SESSION_ACTIONS[panelFocusMode] ?? FOCUS_SESSION_ACTIONS.strength).map((action) => {
                             const key = `day-${idx}-${action.label}`;
-                            const isLoading = pendingRefinement === key;
-                            const isDisabled = !!buildingState?.isBuilding;
+                            // isLoading covers both chat-routed (pendingRefinement) and
+                            // direct-mutate (panelMutating) paths for this button.
+                            const isLoading = pendingRefinement === key || panelMutating === key;
+                            // Disable all session pills while ANY direct mutation is in flight
+                            // (in addition to while the chat stream is building).
+                            const isDisabled = !!buildingState?.isBuilding || !!panelMutating;
                             return (
                               <button
                                 key={action.label}
                                 onClick={() => {
+                                  // "Add Exercise" on a saved program → dedicated direct-mutate
+                                  // endpoint (no chat message, no chat failure bubble, immediate
+                                  // cache invalidation on success).
+                                  if (action.button === "add_exercise" && isSaved) {
+                                    handlePanelAddExercise(idx, day.dayNumber, key);
+                                    return;
+                                  }
+                                  // All other session actions → chat stream (unchanged path)
                                   const sessionActionType: ButtonActionPayload["actionType"] =
                                     action.button === "day_regression" ? "make_easier" :
                                     action.button === "day_progression" ? "make_harder" :

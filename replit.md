@@ -50,3 +50,13 @@ The user interface features a dark theme with electric blue accents and the Inte
 - **Tailwind CSS**: Frontend styling framework.
 - **Orval**: API client and Zod schema generation.
 - **html-to-image**: PNG export of share cards.
+
+## Live Program Mutation Flow (Phases 1–9)
+- **Dedicated sidebar mutation endpoint**: `POST /api/training-system/mutate` in `artifacts/api-server/src/routes/training-system-mutate.ts` handles right-sidebar "Add Exercise" and "Remove Exercise" operations without touching the chat stream.
+- **No chat failure bubbles**: Panel mutations never create assistant messages or trigger chat failure toasts — all feedback is a local panel toast only.
+- **Immediate cache invalidation**: On success the frontend invalidates `["training-system-week"]`, `["live-panel-week-ids"]`, `["week-view-select"]`, `["training-system-today"]`, and `["training-system-active"]` so the panel re-renders instantly.
+- **Per-button loading state**: `panelMutating` state in `LiveProgramPanel.tsx` tracks which session-pill is actively mutating; the spinner shows on the exact clicked button and all other pills are disabled while the request is in flight.
+- **Auto-fill exercise selection**: `autoFillExerciseName()` from `architect-patch-generator.ts` picks a contextually appropriate exercise based on session label, session type, and focus mode.
+- **Post-write verification**: `applyEditPlan` re-reads the inserted row and surfaces `verified: true/false` in the response and receipt.
+- **Receipt-first feedback**: Response always contains a `MutationSuccessReceipt` or `MutationFailureReceipt`; the frontend uses `receipt.message` for toast copy.
+- **Focus mismatch guard**: Endpoint rejects mutations where the requested `focusMode` does not match the resolved active system's focus lane.

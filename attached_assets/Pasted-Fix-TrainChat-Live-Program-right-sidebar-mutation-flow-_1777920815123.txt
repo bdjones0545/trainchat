@@ -1,0 +1,153 @@
+Fix TrainChat Live Program right-sidebar mutation flow.
+
+Problem:
+When clicking a right-sidebar action such as adding an exercise/core finisher, the app sends the mutation through the main chat-style edit flow. The backend eventually adds the exercise after refresh, but the UI shows a failure toast/message and the Live Program panel does not update immediately.
+
+Goal:
+Right-sidebar program edits should execute as panel-scoped mutations, update the Live Program immediately, and show accurate success/failure feedback. They should not create misleading main chat assistant failure messages.
+
+PHASE 1 — Separate mutation sources
+
+Add mutationSource to all program edit requests:
+
+mutationSource:
+- "chat"
+- "live_program_panel"
+- "quick_action_chip"
+- "exercise_card_button"
+
+Rules:
+- Main chat requests may create assistant messages.
+- live_program_panel / exercise_card_button requests should NOT create main chat failure bubbles.
+- Sidebar actions should show local panel feedback only.
+
+PHASE 2 — Create a dedicated Live Program mutation endpoint/hook
+
+Create or refactor a dedicated mutation path for sidebar actions:
+
+POST /api/training-system/:id/live-program/mutate
+
+Payload:
+{
+  mutationSource: "live_program_panel",
+  operation: "add_exercise" | "remove_exercise" | "replace_exercise" | "adjust_exercise",
+  sessionId,
+  dayIndex,
+  exerciseId?,
+  exerciseName?,
+  slot?,
+  intentText?
+}
+
+Response must include:
+{
+  success: boolean,
+  verified: boolean,
+  operation,
+  sessionId,
+  exerciseName,
+  updatedProgram,
+  updatedSession,
+  receipt,
+  message
+}
+
+PHASE 3 — Fix cache invalidation and immediate panel update
+
+After a successful mutation:
+- Update the Live Program React Query cache immediately using updatedProgram / updatedSession
+- Invalidate:
+  - ["training-system-today"]
+  - ["training-system-active"]
+  - ["training-system-program"]
+  - ["training-system", trainingSystemId]
+  - any LiveProgramPanel query keys currently used
+- Refetch the Live Program panel data immediately
+
+The exercise should appear without manual browser refresh.
+
+PHASE 4 — Fix success detection
+
+A sidebar mutation is successful if ANY of these are true:
+- receipt.success === true
+- receipt.verified === true
+- updatedSession contains the added exercise
+- updatedProgram contains the added exercise
+
+Do not show failure if updatedProgram contains the mutation.
+
+PHASE 5 — Remove misleading main chat failure from sidebar actions
+
+If mutationSource !== "chat":
+- Do not append an assistant error message to the main chat
+- Do not show “I wasn’t able to add that exercise” in the chat stream
+- Use a local toast/banner inside the Live Program panel
+
+Success:
+“Added Copenhagen Plank to Day 1.”
+
+Failure:
+“I couldn’t update this session. Nothing changed.”
+
+PHASE 6 — Button-level loading state
+
+For right-sidebar buttons:
+- Disable the clicked button while mutation is running
+- Show “Updating…” or spinner on that button/card
+- Prevent duplicate clicks while pending
+- Clear loading state only after cache update/refetch finishes
+
+PHASE 7 — Receipt-first UI rendering
+
+Frontend should use receipt/message from the mutation response before generic fallback copy.
+
+Priority:
+1. response.receipt.message
+2. response.message
+3. local success/failure fallback
+
+Never show the generic failure toast when receipt.success or receipt.verified is true.
+
+PHASE 8 — Add logs
+
+Add logs:
+
+[Live Program Mutation Started]
+[Live Program Mutation DB Verified]
+[Live Program Mutation Cache Updated]
+[Live Program Mutation UI Feedback Selected]
+
+Include:
+- mutationSource
+- operation
+- sessionId
+- exerciseName
+- success
+- verified
+- queryKeysInvalidated
+- selectedFeedbackType
+
+PHASE 9 — QA
+
+Test from the right sidebar:
+- Add a core finisher
+- Add a new exercise to Day 1
+- Swap an exercise
+- Make exercise easier
+- Make exercise harder
+- Change equipment
+
+Expected:
+- No main chat failure bubble
+- Button shows loading
+- Exercise appears immediately in Live Program
+- Local panel success feedback appears
+- No refresh needed
+
+Then test from main chat:
+- “Add a new exercise to Day 1”
+
+Expected:
+- Main chat response is allowed
+- Live Program still updates immediately
+- Success receipt shown if verified

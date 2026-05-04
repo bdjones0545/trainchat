@@ -30,6 +30,7 @@ import shareMomentsRouter from "./share-moments";
 import systemAdjustmentsRouter from "./system-adjustments";
 import clearMemoryRouter from "./clear-memory";
 import mutationAuditReceiptsRouter from "./mutation-audit-receipts";
+import trainingSystemMutateRouter from "./training-system-mutate";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -74,5 +75,6 @@ router.use(shareMomentsRouter);
 router.use(systemAdjustmentsRouter);
 router.use(clearMemoryRouter);
 router.use(mutationAuditReceiptsRouter);
+router.use(trainingSystemMutateRouter);
 
 export default router;
