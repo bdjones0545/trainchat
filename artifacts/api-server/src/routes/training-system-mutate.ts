@@ -413,7 +413,7 @@ router.post("/training-system/mutate", requireAuth, async (req, res): Promise<vo
             intent: "add_exercise",
             scope: "exercise" as const,
             changeSummary: `Added ${verifiedExerciseName} to ${targetSession.label ?? `Day ${dayIndex + 1}`}.`,
-            requestText: intentText ?? null,
+            requestText: intentText ?? undefined,
             targetType: "exercise",
             targetId: verifiedExerciseId,
             targetLabel: verifiedExerciseName,

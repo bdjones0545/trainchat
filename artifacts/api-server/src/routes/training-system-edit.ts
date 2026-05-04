@@ -18,7 +18,7 @@ import { Router, type IRouter } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { interpretEditRequest, handleStructuredIntent, mapNLPToIntent, type CommandIntentKey } from "../lib/edit-intent-service";
 import { applyEditPlan, type EditResult } from "../lib/edit-engine";
-import { createChangeLogEntry, type SystemSnapshot } from "../lib/change-log-service";
+import { createChangeLogEntry, classifyEdit, type SystemSnapshot } from "../lib/change-log-service";
 import { buildAdaptationContext } from "../lib/adaptation";
 import { listMemories, syncMemoriesFromData, extractMemoriesFromMessage } from "../lib/memory";
 import { generateCoachReasoning, type FocusMode } from "../lib/coach-reasoning-engine";
@@ -456,6 +456,26 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       logger.error({ logErr, userId }, "[SystemEdit] Failed to persist change log entry (non-fatal)");
     }
 
+    // Build changeLogEntry for frontend optimistic cache update
+    let changeLogEntry: Record<string, unknown> | null = null;
+    if (changeLogId !== undefined) {
+      const { isMajorVersion, versionLabel } = classifyEdit(editPlan.intent, editPlan.scope);
+      changeLogEntry = {
+        id: changeLogId,
+        source: source ?? "ai_edit",
+        intent: editPlan.intent,
+        scope: editPlan.scope,
+        changeSummary: editResult.changeSummary,
+        requestText: userRequest || null,
+        isMajorVersion,
+        versionLabel: versionLabel ?? null,
+        appliedCount: editResult.appliedCount,
+        skippedCount: editResult.skippedCount,
+        decisionMetadata: null,
+        createdAt: new Date().toISOString(),
+      };
+    }
+
     // ── Learning signal: mutation succeeded ───────────────────────────────
     trackLearningEvent({
       userId,
@@ -559,6 +579,7 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       changedIds: editResult.changedIds,
       changeTargets: editResult.changeTargets,
       changeLogId,
+      changeLogEntry: changeLogEntry ?? null,
       diff,
       propagationSummary: editResult.propagationSummary ?? null,
       chatConversationId: chatConversationId ?? null,

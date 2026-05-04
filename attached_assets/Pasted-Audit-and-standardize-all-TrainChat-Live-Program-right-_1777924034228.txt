@@ -1,0 +1,276 @@
+Audit and standardize all TrainChat Live Program right-sidebar buttons.
+
+Goal:
+Now that Add Exercise works through the verified sidebar mutation system, audit every right-sidebar button and make sure each one uses the correct mutation scope.
+
+Critical rule:
+- Buttons under “Refine This Program” edit the currently selected week/block.
+- Buttons inside a specific day/session card under “Start Session” edit only that day/session.
+- Sidebar button actions should NOT go through main chat unless they are free-text/open-ended refinements.
+
+PHASE 1 — Button inventory
+
+Audit every Live Program sidebar button:
+
+Program/block-level buttons:
+- More Explosive
+- More Strength
+- More Endurance
+- Shorter Sessions
+- Lower Impact
+- Home Gym Version
+- Free-text “Refine this program…”
+
+Session/day-level buttons:
+- More Explosive
+- Easier
+- Harder
+- Shorter
+- Add Exercise
+
+Exercise-level buttons:
+- Swap
+- Easier
+- Harder
+- Equipment
+- Explain
+- Easy / Solid / Hard / Failed
+- + weight/reps
+
+For each button, document:
+- current handler
+- endpoint used
+- mutation source
+- target scope
+- cache invalidation behavior
+- whether it creates a Changes entry
+- whether it creates chat messages
+
+PHASE 2 — Mutation source rules
+
+Add/standardize mutationSource values:
+
+- "live_program_block_refine"
+- "live_program_session_refine"
+- "live_program_exercise_action"
+- "live_program_feedback"
+- "chat"
+
+Rules:
+- mutationSource !== "chat" must never append assistant chat messages.
+- Sidebar mutations use local toast/banner only.
+- Every successful sidebar mutation must return verified receipt + changeLogEntry.
+
+PHASE 3 — Block-level refine buttons
+
+Buttons under “Refine This Program” must target the selected week/block.
+
+Payload should include:
+{
+  mutationSource: "live_program_block_refine",
+  scope: "block",
+  operation: "make_more_explosive" | "make_more_strength" | "make_more_endurance" | "shorter_sessions" | "lower_impact" | "home_gym_version" | "free_text_refine",
+  trainingSystemId,
+  weekIndex,
+  blockId,
+  focusMode,
+  intentText
+}
+
+Expected behavior:
+- Modify the current selected week/block only unless explicitly designed to apply future weeks.
+- If future weeks are affected, receipt must say exactly how many weeks changed.
+- Update Program tab immediately.
+- Add confirmed Changes entry.
+- Do not add chat message.
+
+PHASE 4 — Session-level buttons
+
+Buttons inside a Day/session card must target that exact session/day only.
+
+Payload should include:
+{
+  mutationSource: "live_program_session_refine",
+  scope: "session",
+  operation: "make_more_explosive" | "make_easier" | "make_harder" | "shorter_session" | "add_exercise",
+  trainingSystemId,
+  weekIndex,
+  dayIndex,
+  sessionId,
+  sessionLabel,
+  focusMode,
+  intentText
+}
+
+Expected behavior:
+- Only mutate that session/day.
+- Do not mutate other days unless user explicitly asks.
+- Update that session immediately.
+- Add confirmed Changes entry.
+- Do not add chat message.
+
+PHASE 5 — Exercise-level buttons
+
+Buttons on exercise cards must target that exact exercise only.
+
+Payload should include:
+{
+  mutationSource: "live_program_exercise_action",
+  scope: "exercise",
+  operation: "swap_exercise" | "make_exercise_easier" | "make_exercise_harder" | "change_equipment" | "explain_exercise" | "rate_easy" | "rate_solid" | "rate_hard" | "rate_failed" | "progress_weight_reps",
+  trainingSystemId,
+  weekIndex,
+  dayIndex,
+  sessionId,
+  exerciseId,
+  exerciseName,
+  focusMode,
+  intentText
+}
+
+Expected behavior:
+- Swap/Easier/Harder/Equipment mutate the exercise and create Changes entries.
+- Explain should not mutate the program; it should open explanation locally.
+- Easy/Solid/Hard/Failed should log feedback and may influence future adaptation, but should not rewrite the current exercise unless explicitly designed.
+- + weight/reps should update progression/load target and create a small confirmed Changes entry.
+
+PHASE 6 — Endpoint strategy
+
+Refactor POST /api/training-system/mutate so it supports:
+
+scope:
+- "block"
+- "session"
+- "exercise"
+- "feedback"
+
+operation:
+- all operations listed above
+
+Use the same verified flow:
+1. Validate ownership and focus lane
+2. Resolve exact target by scope
+3. Generate edit plan
+4. Apply mutation
+5. Post-write verification
+6. Return verified receipt
+7. Create Changes entry
+8. Return changeLogEntry
+
+PHASE 7 — Target validation
+
+Before mutation:
+- Block scope requires weekIndex/blockId or selectedWeek
+- Session scope requires sessionId or dayIndex
+- Exercise scope requires exerciseId
+- Feedback scope requires exerciseId + rating
+
+If target cannot be resolved, return:
+{
+  success: false,
+  verified: false,
+  reason: "target_not_resolved",
+  message: "I couldn't identify which session or exercise to update."
+}
+
+Never guess across scopes.
+
+PHASE 8 — UI loading states
+
+Each button needs its own loading key:
+
+block:operation:weekIndex
+session:operation:sessionId
+exercise:operation:exerciseId
+
+While pending:
+- Disable only related buttons, not the whole panel unless necessary.
+- Show spinner or “Updating…”
+- Prevent duplicate clicks.
+
+PHASE 9 — Cache + Changes consistency
+
+After every successful sidebar mutation:
+- Update/refetch Program tab
+- Update/refetch Changes tab
+- Update/refetch Adapted tab if relevant
+- Update/refetch Today card if current day/session changed
+
+Use the same optimistic changeLogEntry insert that works for Add Exercise.
+
+PHASE 10 — Receipt copy standards
+
+Examples:
+
+Block-level:
+“Updated Week 1 to emphasize more explosive work.”
+
+Session-level:
+“Made Day 1 — Posterior Chain Intensification harder.”
+
+Exercise-level:
+“Swapped Rack Pull for Conventional Deadlift.”
+
+Feedback:
+“Logged Rack Pull as hard.”
+
+No generic failure copy if the mutation verified successfully.
+
+PHASE 11 — Audit report
+
+After implementation, output a table:
+
+Button | Scope | Operation | Endpoint | Creates Change Entry | Uses Chat? | Status
+
+Every row should say:
+Uses Chat? = No
+Except free-text chat-style refinements if intentionally kept conversational.
+
+PHASE 12 — QA
+
+Test:
+
+Block-level:
+- More Explosive
+- More Strength
+- Shorter Sessions
+- Home Gym Version
+
+Expected:
+- Current selected week/block changes
+- Changes tab logs it
+- No chat bubble
+
+Session-level:
+- Day 1 More Explosive
+- Day 1 Easier
+- Day 1 Harder
+- Day 1 Shorter
+- Day 1 Add Exercise
+
+Expected:
+- Only Day 1 changes
+- Changes tab logs it
+- No chat bubble
+
+Exercise-level:
+- Swap
+- Easier
+- Harder
+- Equipment
+
+Expected:
+- Only selected exercise changes
+- Changes tab logs it
+- No chat bubble
+
+Feedback:
+- Easy
+- Solid
+- Hard
+- Failed
+
+Expected:
+- Feedback is logged
+- No unintended exercise rewrite
+- Future adaptation can use the signal

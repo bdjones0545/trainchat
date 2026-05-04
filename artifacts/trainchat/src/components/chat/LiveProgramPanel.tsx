@@ -897,6 +897,155 @@ function ProgramTab({
     });
   }
 
+  // ── Shared Changes-cache helper — optimistic insert + invalidate/refetch ──
+  function updateChangesCache(entry: ChangeLogEntry | null) {
+    const changesQueryKey = ["training-system-history", "changes"] as const;
+    queryClient.invalidateQueries({
+      predicate: (query) =>
+        Array.isArray(query.queryKey) &&
+        query.queryKey.some(
+          (k) => typeof k === "string" && (k.includes("history") || k.includes("change"))
+        ),
+    });
+    queryClient.invalidateQueries({ queryKey: ["training-system-history", "versions"] });
+    if (entry) {
+      const prevData = queryClient.getQueryData<{ history: ChangeLogEntry[] }>(changesQueryKey);
+      queryClient.setQueryData(changesQueryKey, {
+        history: [entry, ...(prevData?.history ?? [])],
+      });
+      if (import.meta.env.DEV) {
+        console.log("[LiveProgramPanel:ChangesCacheUpdated]", { entry, source: entry.source });
+      }
+    }
+    queryClient.refetchQueries({ queryKey: changesQueryKey }).catch(() => {});
+  }
+
+  // ── Direct block-level refine — bypasses chat, targets selected block ──────
+  async function handleDirectBlockRefine(chip: GlobalChip, key: string) {
+    if (!isSaved || buildingState?.isBuilding || !!pendingRefinement) return;
+    setPanelEditError(null);
+    setPendingRefinement(key);
+    const start = Date.now();
+    try {
+      const result = await customFetch<{ changeLogEntry: ChangeLogEntry | null; changeSummary?: string }>(
+        "/api/training-system/edit",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            request: chip.message,
+            focusMode: panelFocusMode,
+            source: "quick_action",
+            postToChat: false,
+          }),
+        },
+      );
+      const elapsed = Date.now() - start;
+      if (elapsed < 300) await new Promise<void>((r) => setTimeout(r, 300 - elapsed));
+
+      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+      queryClient.invalidateQueries({ queryKey: ["live-panel-week-ids"] });
+      queryClient.invalidateQueries({ queryKey: ["week-view-select"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+      updateChangesCache(result.changeLogEntry ?? null);
+
+      setPendingRefinement(null);
+      setShowProgramUpdated(true);
+      setShowContentReveal(true);
+      if (contentRevealTimerRef.current) clearTimeout(contentRevealTimerRef.current);
+      contentRevealTimerRef.current = setTimeout(() => setShowContentReveal(false), 350);
+      if (programUpdatedTimerRef.current) clearTimeout(programUpdatedTimerRef.current);
+      programUpdatedTimerRef.current = setTimeout(() => setShowProgramUpdated(false), 3000);
+
+      onSidebarMutation?.();
+      toast({ title: "Program updated", description: chip.label, duration: 2500 });
+
+      if (import.meta.env.DEV) {
+        console.log("[LiveProgramPanel:DirectBlockRefine:Receipt]", {
+          label: chip.label,
+          mutationSource: "live_program_block_refine",
+          changeLogEntry: result.changeLogEntry,
+        });
+      }
+    } catch (error) {
+      setPendingRefinement(null);
+      setPanelEditError("That change didn't apply — try again or describe it in the chat.");
+      if (import.meta.env.DEV) {
+        console.error("[LiveProgramPanel:DirectBlockRefine:Error]", { chip: chip.label, error });
+      }
+    }
+  }
+
+  // ── Direct session-level refine — bypasses chat, targets exact day/session ─
+  async function handleDirectSessionRefine(
+    action: SessionAction,
+    dayIdx: number,
+    day: { dayNumber?: number; name?: string; sessionId?: number },
+    key: string,
+  ) {
+    if (!isSaved || buildingState?.isBuilding || !!panelMutating) return;
+    setPanelEditError(null);
+    setPanelMutating(key);
+    const dayNum = day.dayNumber ?? dayIdx + 1;
+    const start = Date.now();
+    try {
+      const result = await customFetch<{ changeLogEntry: ChangeLogEntry | null; changeSummary?: string }>(
+        "/api/training-system/edit",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            request: action.buildMessage(dayNum),
+            focusMode: panelFocusMode,
+            source: "quick_action",
+            postToChat: false,
+            ...(day.sessionId
+              ? { targetContext: { type: "session", id: day.sessionId, label: day.name ?? undefined } }
+              : {}),
+          }),
+        },
+      );
+      const elapsed = Date.now() - start;
+      if (elapsed < 300) await new Promise<void>((r) => setTimeout(r, 300 - elapsed));
+
+      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+      queryClient.invalidateQueries({ queryKey: ["live-panel-week-ids"] });
+      queryClient.invalidateQueries({ queryKey: ["week-view-select"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+      updateChangesCache(result.changeLogEntry ?? null);
+
+      setPanelMutating(null);
+      setShowProgramUpdated(true);
+      setShowContentReveal(true);
+      if (contentRevealTimerRef.current) clearTimeout(contentRevealTimerRef.current);
+      contentRevealTimerRef.current = setTimeout(() => setShowContentReveal(false), 350);
+      if (programUpdatedTimerRef.current) clearTimeout(programUpdatedTimerRef.current);
+      programUpdatedTimerRef.current = setTimeout(() => setShowProgramUpdated(false), 3000);
+
+      onSidebarMutation?.();
+      toast({
+        title: "Session updated",
+        description: `${action.label} — ${day.name ?? `Day ${dayNum}`}`,
+        duration: 2500,
+      });
+
+      if (import.meta.env.DEV) {
+        console.log("[LiveProgramPanel:DirectSessionRefine:Receipt]", {
+          action: action.label,
+          dayNum,
+          mutationSource: "live_program_session_refine",
+          changeLogEntry: result.changeLogEntry,
+        });
+      }
+    } catch (error) {
+      setPanelMutating(null);
+      setPanelEditError("That change didn't apply — try again or describe it in the chat.");
+      if (import.meta.env.DEV) {
+        console.error("[LiveProgramPanel:DirectSessionRefine:Error]", { action: action.label, dayIdx, error });
+      }
+    }
+  }
+
   // ── Direct exercise edit — bypasses chat, calls edit API deterministically ─
   async function handleDirectExerciseEdit(
     exerciseName: string,
@@ -916,24 +1065,27 @@ function ProgramTab({
     setPendingRefinement(actionKey);
     const directEditStart = Date.now();
     try {
-      await customFetch<any>("/api/training-system/edit", {
-        method: "POST",
-        body: JSON.stringify({
-          request,
-          focusMode: panelFocusMode,
-          source: "quick_action",
-          postToChat: false,
-          ...(exerciseId
-            ? {
-                targetContext: {
-                  type: "exercise",
-                  id: exerciseId,
-                  label: exerciseName,
-                },
-              }
-            : {}),
-        }),
-      });
+      const editResult = await customFetch<{ changeLogEntry?: ChangeLogEntry | null; changeSummary?: string }>(
+        "/api/training-system/edit",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            request,
+            focusMode: panelFocusMode,
+            source: "quick_action",
+            postToChat: false,
+            ...(exerciseId
+              ? {
+                  targetContext: {
+                    type: "exercise",
+                    id: exerciseId,
+                    label: exerciseName,
+                  },
+                }
+              : {}),
+          }),
+        },
+      );
       // Enforce minimum 300ms visual processing phase — prevents instant snap
       const directEditElapsed = Date.now() - directEditStart;
       if (directEditElapsed < 300) {
@@ -942,6 +1094,8 @@ function ProgramTab({
       queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
       queryClient.invalidateQueries({ queryKey: ["live-panel-week-ids"] });
       queryClient.invalidateQueries({ queryKey: ["week-view-select"] });
+      updateChangesCache(editResult?.changeLogEntry ?? null);
+      onSidebarMutation?.();
       setPendingRefinement(null);
       setShowProgramUpdated(true);
       // Trigger content fade-in reveal
@@ -2005,22 +2159,26 @@ function ProgramTab({
             {(FOCUS_GLOBAL_CHIPS[panelFocusMode] ?? FOCUS_GLOBAL_CHIPS.strength).map((chip) => {
               const key = `global-${chip.label}`;
               const isLoading = pendingRefinement === key;
-              const isDisabled = !!buildingState?.isBuilding;
+              const isDisabled = !!buildingState?.isBuilding || !!pendingRefinement;
               return (
                 <button
                   key={chip.label}
                   onClick={() => {
                     if (isDisabled || isLoading) return;
-                    sendRefinement(chip.message, key, {
-                      interactionType: "global_chip",
-                      structuredIntent: chip.structuredIntent,
-                      focusMode: panelFocusMode,
-                    }, {
-                      source: "program_panel",
-                      actionType: "modify_global",
-                      displayText: chip.label,
-                      submittedText: chip.message,
-                    });
+                    if (isSaved) {
+                      handleDirectBlockRefine(chip, key);
+                    } else {
+                      sendRefinement(chip.message, key, {
+                        interactionType: "global_chip",
+                        structuredIntent: chip.structuredIntent,
+                        focusMode: panelFocusMode,
+                      }, {
+                        source: "program_panel",
+                        actionType: "modify_global",
+                        displayText: chip.label,
+                        submittedText: chip.message,
+                      });
+                    }
                   }}
                   disabled={isDisabled}
                   className={`h-9 inline-flex items-center gap-1.5 px-3.5 rounded-full text-[11px] font-semibold border transition-all duration-200 select-none ${
@@ -2372,7 +2530,12 @@ function ProgramTab({
                                     handlePanelAddExercise(idx, day.dayNumber, key);
                                     return;
                                   }
-                                  // All other session actions → chat stream (unchanged path)
+                                  // Saved program — use direct session refine (no chat)
+                                  if (isSaved) {
+                                    handleDirectSessionRefine(action, idx, day, key);
+                                    return;
+                                  }
+                                  // Unsaved / preview — fall back to chat stream
                                   const sessionActionType: ButtonActionPayload["actionType"] =
                                     action.button === "day_regression" ? "make_easier" :
                                     action.button === "day_progression" ? "make_harder" :
