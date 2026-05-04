@@ -77,6 +77,13 @@ export interface EditChange {
     notes?: string;
     metadata?: Record<string, unknown>;
   };
+  /**
+   * Optional training context forwarded to the prescription remap engine.
+   * Populated by the intent service or upstream AI call when block/session
+   * context is available. All fields are optional — the remap layer degrades
+   * gracefully when context is absent.
+   */
+  prescriptionContext?: import("./prescription-remap").PrescriptionContext;
   reason?: string;
 }
 

@@ -831,16 +831,22 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; veri
             existingSets: existing.sets ?? null,
             existingReps: existing.reps ?? null,
             existingRest: existing.rest ?? null,
+            context: change.prescriptionContext,
           });
 
           finalSets = replacement.sets ?? remapResult.sets;
           finalReps = replacement.reps ?? remapResult.reps;
           finalRest = replacement.rest ?? remapResult.rest;
 
-          if (remapResult.remapped && remapResult.rationale) {
+          const rationaleparts: string[] = [];
+          if (remapResult.rationale) rationaleparts.push(remapResult.rationale);
+          if (remapResult.contextRationale) rationaleparts.push(remapResult.contextRationale);
+
+          if (rationaleparts.length > 0) {
+            const fullRationale = rationaleparts.join(" ");
             finalNotes = replacement.notes
-              ? `${replacement.notes} ${remapResult.rationale}`
-              : remapResult.rationale;
+              ? `${replacement.notes} ${fullRationale}`
+              : fullRationale;
           }
         }
         // ─────────────────────────────────────────────────────────────────────

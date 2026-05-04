@@ -1,50 +1,104 @@
 /**
- * Prescription Remap Layer
+ * Prescription Remap + Context Modifier Layer
  *
- * Called during every replace_exercise mutation to determine whether the
- * replacement exercise should inherit the original prescription or receive a
- * recalculated one appropriate for its role and movement family.
+ * Layer 1 — Remap
+ *   Decides whether a replacement exercise should inherit the original
+ *   prescription or receive a recalculated one based on its movement
+ *   family and role. (same-family → preserve, different-family → remap)
  *
- * Decision contract:
- *   PRESERVE — replacement is same-family + same-role → keep original sets/reps/rest
- *   REMAP    — replacement crosses family or role boundary → calculate new prescription
+ * Layer 2 — Context Modifier
+ *   After the base prescription is selected, adjusts sets/reps/rest using
+ *   deterministic, table-driven training context:
+ *     • Block archetype  (FOUNDATION_ACCUMULATION, INTENSIFICATION_STRENGTH, …)
+ *     • Training focus   (strength, speed, mobility, hybrid)
+ *     • Session goal     (strength, hypertrophy, power, recovery, …)
+ *     • Exercise position (early, middle, late)
+ *     • User level       (beginner, intermediate, advanced)
+ *     • Fatigue/readiness
+ *     • Pain/safety flag
  *
- * Guardrail: isolation/accessory exercises can never default to < 6 reps.
+ * Safety rules (always win over any modifier):
+ *   • Isolation/accessory exercises can never be prescribed < 6 reps.
+ *   • Pain-flag active: sets reduced, no aggressive low-rep loading.
+ *   • High fatigue: sets reduced, no max-effort loading.
  *
- * Log tags:
+ * All decisions are deterministic and table-driven — no AI randomness.
+ *
+ * Logs:
  *   [ExerciseMutation:PrescriptionRemap:Input]
  *   [ExerciseMutation:PrescriptionRemap:Decision]
+ *   [ExerciseMutation:PrescriptionContext:Modifiers]
  *   [ExerciseMutation:PrescriptionRemap:Output]
  */
 
 import { logger } from "./logger";
 
-// ─── Role Classification ───────────────────────────────────────────────────────
+// ─── Exercise Role ─────────────────────────────────────────────────────────────
 
 export type ExerciseRole =
-  | "primary_strength"     // Main compound lifts: squat, deadlift, bench, press, row
-  | "secondary_strength"   // Compound accessories: RDL, incline, front squat, Pendlay row
-  | "hypertrophy_accessory"// DB/machine compounds: DB bench, cable row, incline DB
-  | "isolation"            // Single-joint: curl, extension, lateral raise, leg curl, pressdown
-  | "power_plyometric"     // Power/speed: power clean, snatch, box jump, bounds, sprint
-  | "mobility_prehab"      // Prep/mobility: CARs, activation, corrective, prehab
-  | "conditioning";        // Metabolic: sled, intervals, bike, rower
+  | "primary_strength"      // Main compound lifts: squat, deadlift, bench, press, row
+  | "secondary_strength"    // Compound accessories: RDL, incline, front squat, Pendlay row
+  | "hypertrophy_accessory" // DB/machine compounds: DB bench, cable row, incline DB
+  | "isolation"             // Single-joint: curl, extension, lateral raise, leg curl, pressdown
+  | "power_plyometric"      // Power/speed: power clean, snatch, box jump, bounds, sprint
+  | "mobility_prehab"       // Prep/mobility: CARs, activation, corrective, prehab
+  | "conditioning";         // Metabolic: sled, intervals, bike, rower
+
+// ─── Movement Bucket ───────────────────────────────────────────────────────────
 
 export type MovementBucket =
-  | "squat_knee"     // Squat, leg press, lunge family
-  | "hinge_hip"      // Deadlift, RDL, hip thrust, good morning family
-  | "push_h"         // Bench press, push-up, chest press family
-  | "push_v"         // Overhead press, push press, landmine press family
-  | "pull_h"         // Row, face pull family
-  | "pull_v"         // Pull-up, pulldown family
-  | "power"          // Olympic lifts, jumps, throws, sprints
-  | "isolation_upper"// Curls, extensions, lateral raises, pressdowns
-  | "isolation_lower"// Leg curl, leg extension, calf raise, adductor
-  | "core"           // Carries, planks, pallof, anti-rotation
-  | "mobility"       // Mobility flows, activation, corrective
-  | "conditioning";  // Conditioning work
+  | "squat_knee"      // Squat, leg press, lunge family
+  | "hinge_hip"       // Deadlift, RDL, hip thrust, good morning family
+  | "push_h"          // Bench press, push-up, chest press family
+  | "push_v"          // Overhead press, push press, landmine press family
+  | "pull_h"          // Row, face pull family
+  | "pull_v"          // Pull-up, pulldown family
+  | "power"           // Olympic lifts, jumps, throws, sprints
+  | "isolation_upper" // Curls, extensions, lateral raises, pressdowns
+  | "isolation_lower" // Leg curl, leg extension, calf raise, adductor
+  | "core"            // Carries, planks, pallof, anti-rotation
+  | "mobility"        // Mobility flows, activation, corrective
+  | "conditioning";   // Conditioning work
 
-// ─── Pattern tables ───────────────────────────────────────────────────────────
+// ─── Context Types ─────────────────────────────────────────────────────────────
+
+export type BlockType =
+  | "FOUNDATION_ACCUMULATION"
+  | "INTENSIFICATION_STRENGTH"
+  | "POWER_ELASTIC_CONVERSION"
+  | "REBUILD_DELOAD";
+
+export type TrainingFocus = "strength" | "speed" | "mobility" | "hybrid";
+
+export type SessionGoal =
+  | "strength"
+  | "hypertrophy"
+  | "power"
+  | "recovery"
+  | "movement_quality"
+  | "conditioning";
+
+export type ExercisePosition = "early" | "middle" | "late";
+
+export type UserLevel = "beginner" | "intermediate" | "advanced";
+
+export type FatigueLevel = "low" | "moderate" | "high";
+
+export interface PrescriptionContext {
+  blockType?: BlockType;
+  trainingFocus?: TrainingFocus;
+  sessionGoal?: SessionGoal;
+  exercisePosition?: ExercisePosition;
+  userLevel?: UserLevel;
+  /** Current fatigue level — "high" triggers stress reduction */
+  fatigueLevel?: FatigueLevel;
+  /** Readiness level — "low" is treated as high fatigue */
+  readiness?: FatigueLevel;
+  /** True if user has active pain/injury flag — always reduces stress */
+  hasPainFlag?: boolean;
+}
+
+// ─── Pattern tables ────────────────────────────────────────────────────────────
 
 const ROLE_PATTERNS: Array<{ role: ExerciseRole; patterns: RegExp[] }> = [
   {
@@ -78,13 +132,11 @@ const ROLE_PATTERNS: Array<{ role: ExerciseRole; patterns: RegExp[] }> = [
   {
     role: "isolation",
     patterns: [
-      // Lower body isolation
       /leg\s+curl/i, /hamstring\s+curl/i, /lying\s+curl/i, /seated\s+leg\s+curl/i,
       /leg\s+extension/i, /quad\s+extension/i,
       /calf\s+raise/i, /standing\s+calf/i, /seated\s+calf/i,
       /adductor/i, /abductor/i, /hip\s+abduction/i, /hip\s+adduction/i,
       /glute\s+kickback/i, /cable\s+kickback/i,
-      // Upper body isolation
       /bicep[s]?\s+curl/i, /hammer\s+curl/i, /preacher\s+curl/i, /concentration\s+curl/i,
       /ez.?bar\s+curl/i, /cable\s+curl/i, /dumbbell\s+curl/i,
       /tricep[s]?\s+pressdown/i, /tricep[s]?\s+pushdown/i, /tricep[s]?\s+extension/i,
@@ -98,7 +150,6 @@ const ROLE_PATTERNS: Array<{ role: ExerciseRole; patterns: RegExp[] }> = [
   {
     role: "primary_strength",
     patterns: [
-      // Primary squat/knee
       /^(barbell\s+)?back\s+squat/i, /^(barbell\s+)?front\s+squat/i,
       /^(barbell\s+)?squat$/i, /^pause\s+squat/i, /^tempo\s+squat/i,
       /^(barbell\s+)?deadlift$/i, /^conventional\s+deadlift/i,
@@ -215,7 +266,7 @@ const BUCKET_PATTERNS: Array<{ bucket: MovementBucket; patterns: RegExp[] }> = [
   },
 ];
 
-// ─── Classifiers ──────────────────────────────────────────────────────────────
+// ─── Classifiers ───────────────────────────────────────────────────────────────
 
 export function classifyExerciseRole(name: string): ExerciseRole {
   for (const { role, patterns } of ROLE_PATTERNS) {
@@ -223,17 +274,14 @@ export function classifyExerciseRole(name: string): ExerciseRole {
   }
 
   const bucket = classifyMovementBucket(name);
-
-  // Heuristic: barbell compound in main squat/hinge/push/pull buckets → primary or secondary
-  const isBarbell = /barbell/i.test(name);
+  const isBarbell  = /barbell/i.test(name);
   const isDumbbell = /dumbbell|\bdb\b/i.test(name);
-  const isCable = /cable/i.test(name);
-  const isMachine = /machine|lever/i.test(name);
+  const isCable    = /cable/i.test(name);
+  const isMachine  = /machine|lever/i.test(name);
   const isBodyweight = /push.?up|pull.?up|chin.?up|\bdip\b|ring|bodyweight|air\s+squat/i.test(name);
 
   if (bucket === "hinge_hip" || bucket === "squat_knee") {
-    if (isBarbell) return "primary_strength";
-    return "secondary_strength";
+    return isBarbell ? "primary_strength" : "secondary_strength";
   }
   if (bucket === "push_h" || bucket === "push_v" || bucket === "pull_h" || bucket === "pull_v") {
     if (isBarbell) return "primary_strength";
@@ -246,7 +294,6 @@ export function classifyExerciseRole(name: string): ExerciseRole {
   if (bucket === "conditioning") return "conditioning";
   if (bucket === "core") return "hypertrophy_accessory";
 
-  // Default: if DB/cable/machine, treat as accessory; barbell as secondary
   if (isBarbell) return "secondary_strength";
   if (isDumbbell || isCable || isMachine) return "hypertrophy_accessory";
   return "hypertrophy_accessory";
@@ -256,47 +303,44 @@ export function classifyMovementBucket(name: string): MovementBucket {
   for (const { bucket, patterns } of BUCKET_PATTERNS) {
     if (patterns.some((p) => p.test(name))) return bucket;
   }
-  return "core"; // fallback — generic
+  return "core";
 }
 
-// ─── Same-family check ────────────────────────────────────────────────────────
+// ─── Same-family check ─────────────────────────────────────────────────────────
 
 /**
- * Returns true when the original and replacement share a movement bucket AND
- * neither crosses an incompatible role boundary.
+ * Returns true when original and replacement share the same movement bucket
+ * AND no incompatible role boundary is crossed.
  *
- * Example:
- *   Barbell RDL → Dumbbell RDL: same bucket (hinge_hip), roles close → SAME FAMILY
- *   Deadlift → Leg Curl:        hinge_hip vs isolation_lower        → DIFFERENT FAMILY
- *   Bench    → Triceps Press:   push_h vs isolation_upper           → DIFFERENT FAMILY
+ *   Barbell RDL → Dumbbell RDL: same hinge_hip bucket, roles compatible → SAME
+ *   Deadlift    → Leg Curl:     hinge_hip vs isolation_lower            → DIFFERENT
+ *   Bench       → Triceps Pressdown: push_h vs isolation_upper          → DIFFERENT
  */
 export function isSameFamilyAndRole(originalName: string, replacementName: string): boolean {
   const origBucket = classifyMovementBucket(originalName);
-  const repBucket = classifyMovementBucket(replacementName);
-  const origRole = classifyExerciseRole(originalName);
-  const repRole = classifyExerciseRole(replacementName);
+  const repBucket  = classifyMovementBucket(replacementName);
+  const origRole   = classifyExerciseRole(originalName);
+  const repRole    = classifyExerciseRole(replacementName);
 
   if (origBucket !== repBucket) return false;
 
-  // Both are isolation → same family regardless of bucket detail
   if (origRole === "isolation" && repRole === "isolation") return true;
 
-  // Power exercises are same-family only with each other
   if (origRole === "power_plyometric" || repRole === "power_plyometric") {
     return origRole === repRole;
   }
 
-  // If buckets match, allow primary↔secondary↔hypertrophy_accessory transitions
-  const strengthRoles = new Set<ExerciseRole>(["primary_strength", "secondary_strength", "hypertrophy_accessory"]);
+  const strengthRoles = new Set<ExerciseRole>([
+    "primary_strength", "secondary_strength", "hypertrophy_accessory",
+  ]);
   if (strengthRoles.has(origRole) && strengthRoles.has(repRole)) return true;
 
-  // Mobility ↔ mobility is fine
   if (origRole === "mobility_prehab" && repRole === "mobility_prehab") return true;
 
   return false;
 }
 
-// ─── Default prescription rules ───────────────────────────────────────────────
+// ─── Base prescription defaults ────────────────────────────────────────────────
 
 export interface DefaultPrescription {
   sets: number;
@@ -304,34 +348,249 @@ export interface DefaultPrescription {
   rest: string;
 }
 
-const ROLE_DEFAULTS: Record<ExerciseRole, DefaultPrescription> = {
-  primary_strength: { sets: 4, reps: "3–5", rest: "2–3 min" },
-  secondary_strength: { sets: 3, reps: "5–8", rest: "90–120 sec" },
-  hypertrophy_accessory: { sets: 3, reps: "8–12", rest: "60–90 sec" },
-  isolation: { sets: 3, reps: "10–15", rest: "45–75 sec" },
-  power_plyometric: { sets: 4, reps: "3–5", rest: "2–3 min" },
-  mobility_prehab: { sets: 2, reps: "8–10", rest: "30–45 sec" },
-  conditioning: { sets: 4, reps: "30–45 sec", rest: "45–60 sec" },
+export const ROLE_DEFAULTS: Record<ExerciseRole, DefaultPrescription> = {
+  primary_strength:      { sets: 4, reps: "3–5",     rest: "2–3 min" },
+  secondary_strength:    { sets: 3, reps: "5–8",     rest: "90–120 sec" },
+  hypertrophy_accessory: { sets: 3, reps: "8–12",    rest: "60–90 sec" },
+  isolation:             { sets: 3, reps: "10–15",   rest: "45–75 sec" },
+  power_plyometric:      { sets: 4, reps: "3–5",     rest: "2–3 min" },
+  mobility_prehab:       { sets: 2, reps: "8–10",    rest: "30–45 sec" },
+  conditioning:          { sets: 4, reps: "30–45 sec", rest: "45–60 sec" },
 };
 
-/** Isolation/accessory rep guardrail — never below 6. */
+// ─── Block-archetype prescription tables ──────────────────────────────────────
+//
+// These replace the role-default prescription when a block archetype is known.
+// Entries exist only for roles whose defaults should differ in that block.
+// Missing role entries → role-default is used as-is.
+
+const BLOCK_PRESCRIPTIONS: Partial<Record<BlockType, Partial<Record<ExerciseRole, DefaultPrescription>>>> = {
+  FOUNDATION_ACCUMULATION: {
+    primary_strength:      { sets: 4, reps: "6–10",   rest: "90–120 sec" },
+    secondary_strength:    { sets: 3, reps: "8–12",   rest: "75–90 sec" },
+    hypertrophy_accessory: { sets: 3, reps: "10–15",  rest: "60–75 sec" },
+    isolation:             { sets: 3, reps: "12–20",  rest: "45–60 sec" },
+    // power, mobility, conditioning use role defaults
+  },
+
+  INTENSIFICATION_STRENGTH: {
+    primary_strength:      { sets: 4, reps: "2–5",    rest: "2–4 min" },
+    secondary_strength:    { sets: 3, reps: "4–8",    rest: "2–3 min" },
+    // accessory/isolation: intentionally kept in support ranges — do NOT drop to low reps
+    hypertrophy_accessory: { sets: 3, reps: "8–12",   rest: "60–90 sec" },
+    isolation:             { sets: 3, reps: "10–15",  rest: "45–75 sec" },
+    power_plyometric:      { sets: 4, reps: "3–5",    rest: "2–3 min" },
+    // mobility, conditioning use role defaults
+  },
+
+  POWER_ELASTIC_CONVERSION: {
+    primary_strength:      { sets: 3, reps: "3–6",    rest: "2–3 min" },   // reduce volume for fatigue
+    secondary_strength:    { sets: 3, reps: "5–8",    rest: "90–150 sec" },
+    hypertrophy_accessory: { sets: 2, reps: "10–15",  rest: "60 sec" },    // lower fatigue footprint
+    isolation:             { sets: 2, reps: "10–15",  rest: "45–60 sec" }, // lower fatigue footprint
+    power_plyometric:      { sets: 4, reps: "2–5",    rest: "2–4 min" },   // core of the block
+    // mobility, conditioning use role defaults
+  },
+
+  REBUILD_DELOAD: {
+    primary_strength:      { sets: 3, reps: "5–8",    rest: "90 sec" },
+    secondary_strength:    { sets: 2, reps: "8–12",   rest: "75 sec" },
+    hypertrophy_accessory: { sets: 2, reps: "10–15",  rest: "45–60 sec" },
+    isolation:             { sets: 2, reps: "10–15",  rest: "45–60 sec" },
+    power_plyometric:      { sets: 3, reps: "3–5",    rest: "2 min" },
+    mobility_prehab:       { sets: 2, reps: "8–12",   rest: "30 sec" },
+    // conditioning use role defaults
+  },
+};
+
+const BLOCK_RATIONALES: Record<BlockType, string> = {
+  FOUNDATION_ACCUMULATION: "Adjusted for accumulation block: more repeatable volume and tissue tolerance.",
+  INTENSIFICATION_STRENGTH: "Adjusted for intensification block: higher output on strength work while keeping accessories in support ranges.",
+  POWER_ELASTIC_CONVERSION: "Adjusted for power conversion: high intent with fatigue controlled.",
+  REBUILD_DELOAD: "Adjusted for rebuild/deload: lower stress and cleaner execution.",
+};
+
+// ─── Guardrails ────────────────────────────────────────────────────────────────
+
 const ISOLATION_MIN_REPS = 6;
 
-function parseMinReps(repsStr: string): number {
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+
+export function parseMinReps(repsStr: string): number {
   const match = repsStr.match(/(\d+)/);
   return match ? parseInt(match[1], 10) : 0;
 }
 
-function guardrailReps(role: ExerciseRole, repsStr: string): string {
-  if (role !== "isolation") return repsStr;
-  const min = parseMinReps(repsStr);
-  if (min < ISOLATION_MIN_REPS) {
-    return "10–15"; // override to safe isolation default
+/**
+ * Clamps the lower bound of a rep string to minReps.
+ * Skips time-based strings (those containing "sec", "min", or trailing "s").
+ *
+ *   clampRepsMin("3–5", 5)   → "5–5" → represented as "5"
+ *   clampRepsMin("8–12", 10) → "10–12"
+ *   clampRepsMin("30 sec", 5) → "30 sec"  (unchanged)
+ */
+export function clampRepsMin(repsStr: string, minReps: number): string {
+  if (/sec|min|\ds$/.test(repsStr)) return repsStr;
+
+  const sep      = repsStr.includes("–") ? "–" : "-";
+  const rangeMatch = repsStr.match(/^(\d+)\s*[–\-]\s*(\d+)/);
+  if (rangeMatch) {
+    const lo = Math.max(parseInt(rangeMatch[1], 10), minReps);
+    const hi = Math.max(parseInt(rangeMatch[2], 10), minReps);
+    return lo === hi ? String(lo) : `${lo}${sep}${hi}`;
   }
+
+  const single = parseInt(repsStr, 10);
+  if (!isNaN(single)) return String(Math.max(single, minReps));
+
   return repsStr;
 }
 
-// ─── Remap result ─────────────────────────────────────────────────────────────
+function guardrailReps(role: ExerciseRole, repsStr: string): string {
+  if (role !== "isolation" && role !== "hypertrophy_accessory") return repsStr;
+  return clampRepsMin(repsStr, ISOLATION_MIN_REPS);
+}
+
+// ─── Context Modifier Result ───────────────────────────────────────────────────
+
+export interface ContextModifierResult {
+  prescription: DefaultPrescription;
+  appliedModifiers: string[];
+  rationaleAdditions: string[];
+  safetyWarnings: string[];
+}
+
+// ─── Context Modifier Function ─────────────────────────────────────────────────
+
+/**
+ * Applies training-context modifiers to a base prescription.
+ *
+ * Order of operations:
+ *   1. Block archetype  (replaces base values with block-specific prescription)
+ *   2. Exercise position — "late" reduces sets by 1
+ *   3. User level       — "beginner" caps sets at 3, raises rep floor
+ *   4. Fatigue/readiness — high fatigue / low readiness reduces sets by 1
+ *   5. Pain/safety flag — reduces sets by 1, raises rep floor to 6
+ *   6. Final guardrail  — isolation/accessory rep floor always enforced
+ *
+ * Modifiers never increase intensity — they can only reduce sets, raise rep
+ * floors, or widen rest periods. The base prescription may already be more
+ * conservative (e.g. REBUILD_DELOAD) and modifiers stack on top.
+ */
+export function applyPrescriptionContextModifiers(
+  base: DefaultPrescription,
+  role: ExerciseRole,
+  context: PrescriptionContext,
+): ContextModifierResult {
+  let { sets, reps, rest } = { ...base };
+  const appliedModifiers: string[] = [];
+  const rationaleAdditions: string[] = [];
+  const safetyWarnings: string[] = [];
+
+  // ── 1. Block archetype ──────────────────────────────────────────────────────
+  if (context.blockType) {
+    const blockMod = BLOCK_PRESCRIPTIONS[context.blockType]?.[role];
+    if (blockMod) {
+      sets = blockMod.sets ?? sets;
+      reps = blockMod.reps ?? reps;
+      rest = blockMod.rest ?? rest;
+      appliedModifiers.push(`block:${context.blockType}`);
+      rationaleAdditions.push(BLOCK_RATIONALES[context.blockType]);
+    }
+  }
+
+  // ── 2. Exercise position ────────────────────────────────────────────────────
+  // "early" → no change (default)
+  // "middle" → no change (default)
+  // "late"   → reduce sets by 1 to manage accumulated fatigue
+  if (context.exercisePosition === "late") {
+    const prev = sets;
+    sets = Math.max(2, sets - 1);
+    if (sets !== prev) {
+      appliedModifiers.push("position:late");
+      rationaleAdditions.push("Sets reduced for late-session placement — quality over volume at this position.");
+    }
+  }
+
+  // ── 3. User level ───────────────────────────────────────────────────────────
+  if (context.userLevel === "beginner") {
+    const prevSets = sets;
+    sets = Math.min(3, sets);
+
+    // Rep floors per role for beginners
+    const beginnerRepFloor =
+      role === "isolation" ? 10
+      : role === "hypertrophy_accessory" ? 8
+      : role === "power_plyometric" ? 5
+      : 5;
+
+    const clampedReps = clampRepsMin(reps, beginnerRepFloor);
+    const setsChanged = sets !== prevSets;
+    const repsChanged = clampedReps !== reps;
+    if (setsChanged || repsChanged) {
+      if (setsChanged) appliedModifiers.push("level:beginner:sets_capped");
+      if (repsChanged) appliedModifiers.push("level:beginner:reps_floor");
+      rationaleAdditions.push("Adjusted for beginner level: controlled volume and rep range for quality execution.");
+      reps = clampedReps;
+    }
+  }
+
+  // ── 4. Fatigue / readiness ──────────────────────────────────────────────────
+  const highFatigue =
+    context.fatigueLevel === "high" || context.readiness === "low";
+
+  if (highFatigue) {
+    const prevSets = sets;
+    sets = Math.max(2, sets - 1);
+
+    // Avoid max-effort low reps when fatigued
+    const fatigueRepFloor =
+      role === "primary_strength" || role === "power_plyometric" ? 5 : 8;
+    const clampedReps = clampRepsMin(reps, fatigueRepFloor);
+    const setsChanged = sets !== prevSets;
+    const repsChanged = clampedReps !== reps;
+    if (setsChanged || repsChanged) {
+      if (setsChanged) appliedModifiers.push("readiness:reduced_sets");
+      if (repsChanged) appliedModifiers.push("readiness:reps_floor");
+      rationaleAdditions.push("Adjusted for readiness: reduced stress to preserve quality.");
+      reps = clampedReps;
+    }
+  }
+
+  // ── 5. Pain / safety flag ───────────────────────────────────────────────────
+  if (context.hasPainFlag) {
+    const prevSets = sets;
+    sets = Math.max(2, sets - 1);
+
+    const clampedReps = clampRepsMin(reps, 6);
+    const setsChanged = sets !== prevSets;
+    const repsChanged = clampedReps !== reps;
+    if (setsChanged) appliedModifiers.push("safety:reduced_sets");
+    if (repsChanged) appliedModifiers.push("safety:reps_floor_6");
+    safetyWarnings.push("Pain/safety flag active — sets reduced, aggressive low-rep loading avoided.");
+    rationaleAdditions.push("Adjusted for safety: lower stress and controlled execution.");
+    reps = clampedReps;
+  }
+
+  // ── 6. Final isolation/accessory guardrail (always enforced) ────────────────
+  if (role === "isolation" || role === "hypertrophy_accessory") {
+    const clamped = clampRepsMin(reps, ISOLATION_MIN_REPS);
+    if (clamped !== reps) {
+      reps = clamped;
+      appliedModifiers.push("guardrail:isolation_min_reps");
+      safetyWarnings.push(`Isolation/accessory guardrail: reps clamped to minimum ${ISOLATION_MIN_REPS}.`);
+    }
+  }
+
+  return {
+    prescription: { sets, reps, rest },
+    appliedModifiers,
+    rationaleAdditions,
+    safetyWarnings,
+  };
+}
+
+// ─── Prescription Remap Result ─────────────────────────────────────────────────
 
 export interface PrescriptionRemapResult {
   sets: number;
@@ -342,10 +601,15 @@ export interface PrescriptionRemapResult {
   replacementRole: ExerciseRole;
   originalBucket: MovementBucket;
   replacementBucket: MovementBucket;
+  /** Rationale for cross-family prescription remap (null when same-family) */
   rationale: string | null;
+  /** Context modifiers that were applied */
+  appliedModifiers: string[];
+  /** Rationale additions from context modifiers (null when no context or no change) */
+  contextRationale: string | null;
 }
 
-// ─── Main export ──────────────────────────────────────────────────────────────
+// ─── Input ─────────────────────────────────────────────────────────────────────
 
 export interface PrescriptionRemapInput {
   originalName: string;
@@ -353,155 +617,172 @@ export interface PrescriptionRemapInput {
   existingSets: number | null;
   existingReps: string | null;
   existingRest: string | null;
-  /** Optional: session goal / block context used in rationale messages */
-  sessionGoal?: string;
+  /** Optional training context for Layer 2 context modifiers */
+  context?: PrescriptionContext;
 }
 
+// ─── Main function ─────────────────────────────────────────────────────────────
+
 /**
- * Determines whether a replacement exercise requires a prescription remap.
+ * Determines whether a replacement exercise requires a prescription remap,
+ * then applies context modifiers to the resulting prescription.
  *
- * Returns a PrescriptionRemapResult with:
- *   - remapped: false  → caller should preserve existing prescription
- *   - remapped: true   → caller must use the returned sets/reps/rest
+ * Returns a PrescriptionRemapResult — never null.
  *
- * Never returns null — always returns a decision.
+ *   remapped: false  → prescription is preserved (original or close to it)
+ *   remapped: true   → prescription was recalculated for the new role/family
+ *
+ * In both cases, context modifiers may further adjust the output.
  */
 export function remapPrescriptionIfNeeded(input: PrescriptionRemapInput): PrescriptionRemapResult {
-  const { originalName, replacementName, existingSets, existingReps, existingRest } = input;
+  const { originalName, replacementName, existingSets, existingReps, existingRest, context } = input;
 
   const origBucket = classifyMovementBucket(originalName);
-  const repBucket = classifyMovementBucket(replacementName);
-  const origRole = classifyExerciseRole(originalName);
-  const repRole = classifyExerciseRole(replacementName);
+  const repBucket  = classifyMovementBucket(replacementName);
+  const origRole   = classifyExerciseRole(originalName);
+  const repRole    = classifyExerciseRole(replacementName);
 
   logger.info(
     {
-      originalName,
-      replacementName,
-      origBucket,
-      repBucket,
-      origRole,
-      repRole,
-      existingSets,
-      existingReps,
-      existingRest,
+      originalName, replacementName,
+      origBucket, repBucket, origRole, repRole,
+      existingSets, existingReps, existingRest,
+      context,
     },
     "[ExerciseMutation:PrescriptionRemap:Input]"
   );
 
   const sameFamily = isSameFamilyAndRole(originalName, replacementName);
 
+  // ── Layer 1: Remap decision ─────────────────────────────────────────────────
   let decision: "preserve" | "remap";
-  let rationale: string | null = null;
+  let remapRationale: string | null = null;
 
   if (sameFamily) {
     decision = "preserve";
   } else {
     decision = "remap";
-
     if (repRole === "isolation") {
-      rationale = `Prescription adjusted — ${replacementName} is an isolation exercise, not a ${origRole.replace(/_/g, " ")} movement. Isolation exercises require moderate-to-high reps with shorter rest.`;
+      remapRationale = `Prescription adjusted — ${replacementName} is an isolation exercise, not a ${origRole.replace(/_/g, " ")} movement. Isolation exercises require moderate-to-high reps with shorter rest.`;
     } else if (repRole === "power_plyometric" && origRole !== "power_plyometric") {
-      rationale = `Prescription adjusted — ${replacementName} is a power/plyometric exercise requiring low reps and full recovery rest.`;
+      remapRationale = `Prescription adjusted — ${replacementName} is a power/plyometric exercise requiring low reps and full recovery rest.`;
     } else if (origRole === "power_plyometric" && repRole !== "power_plyometric") {
-      rationale = `Prescription adjusted — ${replacementName} is not a power exercise; loading recalculated for its role as a ${repRole.replace(/_/g, " ")} movement.`;
+      remapRationale = `Prescription adjusted — ${replacementName} is not a power exercise; loading recalculated for its role as a ${repRole.replace(/_/g, " ")} movement.`;
     } else if (repRole === "mobility_prehab") {
-      rationale = `Prescription adjusted — ${replacementName} is a mobility/prehab exercise with lower volume demands.`;
+      remapRationale = `Prescription adjusted — ${replacementName} is a mobility/prehab exercise with lower volume demands.`;
     } else {
-      rationale = `Prescription adjusted — ${replacementName} is a ${repRole.replace(/_/g, " ")} exercise (${repBucket.replace(/_/g, " ")}), different from the original ${origRole.replace(/_/g, " ")} (${origBucket.replace(/_/g, " ")}).`;
+      remapRationale = `Prescription adjusted — ${replacementName} is a ${repRole.replace(/_/g, " ")} exercise (${repBucket.replace(/_/g, " ")}), different from the original ${origRole.replace(/_/g, " ")} (${origBucket.replace(/_/g, " ")}).`;
     }
   }
 
   logger.info(
-    {
-      originalName,
-      replacementName,
-      decision,
-      sameFamily,
-      origRole,
-      repRole,
-      rationale,
-    },
+    { originalName, replacementName, decision, sameFamily, origRole, repRole, remapRationale },
     "[ExerciseMutation:PrescriptionRemap:Decision]"
   );
 
+  // ── Build base prescription ─────────────────────────────────────────────────
+  let baseSets: number;
+  let baseReps: string;
+  let baseRest: string;
+  let didRemap = false;
+
   if (decision === "preserve") {
-    // Apply isolation guardrail even on preserve: if existing reps are dangerously low
-    // for an isolation exercise, override them regardless of inheritance.
+    // Isolation guardrail on preserve — if existing reps are dangerously low,
+    // override even when same-family.
     if (repRole === "isolation" && existingReps !== null) {
       const existingMin = parseMinReps(existingReps);
       if (existingMin < ISOLATION_MIN_REPS) {
         const defaults = ROLE_DEFAULTS.isolation;
-        const safeReps = defaults.reps;
-        logger.info(
-          {
-            originalName,
-            replacementName,
-            existingReps,
-            safeReps,
-            reason: "isolation_guardrail_on_preserve",
-          },
-          "[ExerciseMutation:PrescriptionRemap:Output]"
-        );
-        return {
-          sets: existingSets ?? defaults.sets,
-          reps: safeReps,
-          rest: existingRest ?? defaults.rest,
-          remapped: true,
-          originalRole: origRole,
-          replacementRole: repRole,
-          originalBucket: origBucket,
-          replacementBucket: repBucket,
-          rationale: `Rep guardrail applied — ${replacementName} is an isolation exercise and should not default to ${existingReps} reps. Using ${safeReps} instead.`,
-        };
+        baseSets  = existingSets ?? defaults.sets;
+        baseReps  = defaults.reps;
+        baseRest  = existingRest ?? defaults.rest;
+        didRemap  = true;
+        remapRationale = `Rep guardrail applied — ${replacementName} is an isolation exercise and should not default to ${existingReps} reps. Using ${defaults.reps} instead.`;
+      } else {
+        baseSets = existingSets ?? ROLE_DEFAULTS[repRole].sets;
+        baseReps = existingReps;
+        baseRest = existingRest ?? ROLE_DEFAULTS[repRole].rest;
+        didRemap = false;
       }
+    } else {
+      baseSets = existingSets ?? ROLE_DEFAULTS[repRole].sets;
+      baseReps = existingReps ?? ROLE_DEFAULTS[repRole].reps;
+      baseRest = existingRest ?? ROLE_DEFAULTS[repRole].rest;
+      didRemap = false;
     }
-
-    const result: PrescriptionRemapResult = {
-      sets: existingSets ?? ROLE_DEFAULTS[repRole].sets,
-      reps: existingReps ?? ROLE_DEFAULTS[repRole].reps,
-      rest: existingRest ?? ROLE_DEFAULTS[repRole].rest,
-      remapped: false,
-      originalRole: origRole,
-      replacementRole: repRole,
-      originalBucket: origBucket,
-      replacementBucket: repBucket,
-      rationale: null,
-    };
-
-    logger.info(
-      { originalName, replacementName, decision: "preserve", result },
-      "[ExerciseMutation:PrescriptionRemap:Output]"
-    );
-
-    return result;
+  } else {
+    // Remap — use role defaults (context modifiers may further adjust below)
+    const defaults = ROLE_DEFAULTS[repRole];
+    baseSets = defaults.sets;
+    baseReps = guardrailReps(repRole, defaults.reps);
+    baseRest = defaults.rest;
+    didRemap = true;
   }
 
-  // REMAP — use defaults for the replacement's role
-  const defaults = ROLE_DEFAULTS[repRole];
-  const safeReps = guardrailReps(repRole, defaults.reps);
+  // ── Layer 2: Context modifiers ──────────────────────────────────────────────
+  let appliedModifiers: string[] = [];
+  let contextRationale: string | null = null;
+
+  const hasContext = context && Object.values(context).some((v) => v !== undefined);
+  if (hasContext && context) {
+    const contextResult = applyPrescriptionContextModifiers(
+      { sets: baseSets, reps: baseReps, rest: baseRest },
+      repRole,
+      context,
+    );
+
+    baseSets = contextResult.prescription.sets;
+    baseReps = contextResult.prescription.reps;
+    baseRest = contextResult.prescription.rest;
+    appliedModifiers = contextResult.appliedModifiers;
+
+    if (contextResult.rationaleAdditions.length > 0) {
+      contextRationale = contextResult.rationaleAdditions.join(" ");
+    }
+
+    logger.info(
+      {
+        originalName,
+        replacementName,
+        context,
+        appliedModifiers,
+        modifiedPrescription: { sets: baseSets, reps: baseReps, rest: baseRest },
+        rationaleAdditions: contextResult.rationaleAdditions,
+        safetyWarnings: contextResult.safetyWarnings,
+      },
+      "[ExerciseMutation:PrescriptionContext:Modifiers]"
+    );
+  }
+
+  // Final global isolation guardrail — always the last word
+  if (repRole === "isolation" || repRole === "hypertrophy_accessory") {
+    baseReps = clampRepsMin(baseReps, ISOLATION_MIN_REPS);
+  }
 
   const result: PrescriptionRemapResult = {
-    sets: defaults.sets,
-    reps: safeReps,
-    rest: defaults.rest,
-    remapped: true,
+    sets: baseSets,
+    reps: baseReps,
+    rest: baseRest,
+    remapped: didRemap || appliedModifiers.length > 0,
     originalRole: origRole,
     replacementRole: repRole,
     originalBucket: origBucket,
     replacementBucket: repBucket,
-    rationale,
+    rationale: remapRationale,
+    appliedModifiers,
+    contextRationale,
   };
 
   logger.info(
     {
       originalName,
       replacementName,
-      decision: "remap",
-      origRole,
-      repRole,
-      remappedPrescription: { sets: result.sets, reps: result.reps, rest: result.rest },
-      rationale,
+      decision,
+      remapped: result.remapped,
+      appliedModifiers,
+      finalPrescription: { sets: baseSets, reps: baseReps, rest: baseRest },
+      remapRationale,
+      contextRationale,
     },
     "[ExerciseMutation:PrescriptionRemap:Output]"
   );
@@ -509,12 +790,8 @@ export function remapPrescriptionIfNeeded(input: PrescriptionRemapInput): Prescr
   return result;
 }
 
-// ─── QA Fixtures (used in tests and documentation) ───────────────────────────
+// ─── QA Fixtures ───────────────────────────────────────────────────────────────
 
-/**
- * Known test cases for validating remap behavior.
- * Run via: pnpm --filter @workspace/api-server test:remap
- */
 export const PRESCRIPTION_REMAP_QA_CASES: Array<{
   label: string;
   original: string;

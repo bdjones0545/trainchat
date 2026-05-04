@@ -1,0 +1,182 @@
+Build the second-layer Context Modifier system for TrainChat’s prescription remap engine.
+
+Current state:
+We already added prescription-remap.ts with:
+- MovementBucket
+- ExerciseRole
+- isSameFamilyAndRole()
+- remapPrescriptionIfNeeded()
+- default prescriptions per role
+- isolation/accessory low-rep guardrail
+- logs:
+  [ExerciseMutation:PrescriptionRemap:Input]
+  [ExerciseMutation:PrescriptionRemap:Decision]
+  [ExerciseMutation:PrescriptionRemap:Output]
+
+Goal:
+Upgrade prescription remapping from static role defaults to context-aware programming.
+
+Add a Context Modifier layer that adjusts sets, reps, rest, and rationale based on the training context.
+
+Context inputs to support:
+- blockType / blockArchetype
+  Examples:
+  FOUNDATION_ACCUMULATION
+  INTENSIFICATION_STRENGTH
+  POWER_ELASTIC_CONVERSION
+  REBUILD_DELOAD
+- trainingFocus
+  strength, speed, mobility, hybrid
+- sessionGoal
+  strength, hypertrophy, power, recovery, movement_quality, conditioning
+- exerciseRole
+  primary_strength, secondary_strength, accessory, isolation, power_plyometric, mobility_prehab
+- movementBucket
+- exercisePosition
+  early, middle, late
+- userLevel
+  beginner, intermediate, advanced
+- fatigue/readiness if available
+  low, moderate, high
+- pain/safety flag if available
+  true/false
+
+Required behavior:
+1. Keep the existing role defaults as the base.
+2. Apply context modifiers after the base prescription is selected.
+3. Never allow context modifiers to violate safety guardrails.
+4. Preserve explicit sets/reps/rest if replacement provided them directly.
+5. Add a clear rationale whenever context changed the prescription.
+
+Modifier rules:
+
+A. FOUNDATION_ACCUMULATION
+- Prioritize skill, tissue tolerance, and repeatable volume.
+- Primary/secondary strength:
+  use moderate reps, controlled rest.
+- Accessory/isolation:
+  bias toward 10–15 or 12–20 reps.
+- Rationale:
+  “Adjusted for accumulation block: more repeatable volume and tissue tolerance.”
+
+B. INTENSIFICATION_STRENGTH
+- Prioritize higher output and lower rep ranges for strength roles.
+- Primary strength:
+  lower reps, longer rest.
+- Secondary strength:
+  moderate reps, moderate-long rest.
+- Accessory/isolation:
+  do NOT drop to low strength reps. Keep accessory/isolation in useful support ranges, usually 8–12 or 10–15.
+- Rationale:
+  “Adjusted for intensification block: higher output on strength work while keeping accessories in support ranges.”
+
+C. POWER_ELASTIC_CONVERSION
+- Power/plyometric:
+  low reps, high intent, longer rest.
+- Primary/secondary strength:
+  moderate-low volume to avoid fatigue interference.
+- Accessory/isolation:
+  lower total fatigue; keep moderate reps and avoid excessive volume.
+- Rationale:
+  “Adjusted for power conversion: high intent with fatigue controlled.”
+
+D. REBUILD_DELOAD
+- Reduce sets and/or intensity.
+- Keep reps controlled and technique-focused.
+- Short-to-moderate rest.
+- Avoid aggressive loading assumptions.
+- Rationale:
+  “Adjusted for rebuild/deload: lower stress and cleaner execution.”
+
+E. Exercise position modifiers:
+- early:
+  allow higher output and longer rest
+- middle:
+  use default/moderate settings
+- late:
+  reduce sets or use slightly higher reps/lower intensity to avoid poor execution
+- Rationale should mention late-session fatigue if changed.
+
+F. User level modifiers:
+- beginner:
+  avoid very low reps unless power drill is simple and low-risk
+  favor 2–3 sets, moderate reps, clean execution
+- intermediate:
+  default behavior
+- advanced:
+  allow more aggressive strength/power prescriptions when role and block justify it
+
+G. Fatigue/readiness modifiers:
+- high fatigue or low readiness:
+  reduce sets by 1 when safe
+  avoid low-rep max-effort prescriptions
+  increase reps slightly only if it lowers intensity
+  do not increase volume
+- Rationale:
+  “Adjusted for readiness: reduced stress to preserve quality.”
+
+H. Pain/safety modifier:
+- If pain/safety flag is true:
+  reduce sets by 1
+  avoid aggressive low reps
+  bias controlled tempo / moderate reps
+  never increase intensity
+- Rationale:
+  “Adjusted for safety: lower stress and controlled execution.”
+
+Implementation requirements:
+- Add a new function:
+  applyPrescriptionContextModifiers(basePrescription, context)
+- It should return:
+  {
+    prescription,
+    appliedModifiers,
+    rationaleAdditions,
+    safetyWarnings
+  }
+
+- Integrate it inside remapPrescriptionIfNeeded() after the base role prescription is selected.
+- Existing logs must include context modifier information.
+- Add new log:
+  [ExerciseMutation:PrescriptionContext:Modifiers]
+
+- Update notes/rationale:
+  If both remap and context modifier happen, notes should include both:
+  1. Why the exercise prescription was remapped
+  2. Why context adjusted it
+
+Examples:
+- Deadlift → Leg Curl during INTENSIFICATION_STRENGTH:
+  Should remap to isolation/support range, not 3x3.
+  Acceptable: 3x10–15 or 3x8–12, 45–90 sec.
+  Rationale: replacement is isolation, and intensification keeps accessories in support ranges.
+
+- Squat → Leg Extension during FOUNDATION_ACCUMULATION:
+  Should become higher-rep accessory/isolation work.
+  Acceptable: 3x12–20, 45–75 sec.
+
+- Power Clean → Box Jump during POWER_ELASTIC_CONVERSION:
+  Should keep low reps and longer rest.
+  Acceptable: 4x3–5, 120–180 sec.
+
+- Bench Press → Push-Up late in session with low readiness:
+  Should reduce stress.
+  Acceptable: 2–3 sets, moderate reps, controlled rest.
+
+- Barbell RDL → Dumbbell RDL in same family:
+  May preserve original prescription unless context strongly requires adjustment.
+
+Testing:
+Add tests for:
+- each block archetype
+- early/middle/late exercise position
+- beginner/intermediate/advanced level
+- low readiness/high fatigue
+- pain/safety flag
+- interaction between remap + context modifiers
+- guardrails still overriding bad modifier outcomes
+
+Important:
+Do not create random AI-dependent behavior here.
+This should be deterministic and testable.
+The AI can supply context, but this layer must make predictable programming decisions.
