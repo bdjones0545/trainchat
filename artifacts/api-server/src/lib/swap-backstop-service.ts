@@ -328,7 +328,7 @@ function planFromDefinition(ctx: SwapBackstopContext, def: GeneratedExerciseDefi
   return {
     intent: "swap_exercise",
     scope: "exercise",
-    changeSummary: `${ctx.exerciseName} replaced with ${def.name} — selected by ${routeLabel} after direct swap candidates were unavailable. Sets, reps, and rest stayed the same.`,
+    changeSummary: `${ctx.exerciseName} replaced with ${def.name} — selected by ${routeLabel} after direct swap candidates were unavailable. Loading will be preserved if same movement family, or recalculated for the new exercise's role.`,
     changes: [
       {
         type: "replace_exercise",

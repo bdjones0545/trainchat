@@ -376,8 +376,8 @@ function resolutionToEditPlan(
           replacement: {
             name: toName,
             notes: direction === "harder"
-              ? `Progression from ${exerciseName}. Maintain the same sets/reps — the movement demand is higher. Control the eccentric.`
-              : `Regression from ${exerciseName}. Build movement quality and confidence here before returning to the original.`,
+              ? `Progression from ${exerciseName}. If same movement family, sets/reps carry over — the movement demand is higher. Control the eccentric.`
+              : `Regression from ${exerciseName}. Loading will be recalculated if this is a different exercise family.`,
             ...resolution.prescriptionAdjustments,
           },
           reason: `AI fallback resolver: ${direction} variation — ${toName}`,

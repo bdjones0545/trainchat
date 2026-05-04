@@ -44,6 +44,7 @@ import {
   stampUserModification,
   type PropagationSummary,
 } from "./propagation-engine";
+import { remapPrescriptionIfNeeded } from "./prescription-remap";
 
 // ─── Allowed field allowlists (safety guard) ─────────────────────────────────
 
@@ -802,19 +803,62 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; veri
         }
 
         const replacement = change.replacement;
+
+        // ── Prescription Remap Layer ──────────────────────────────────────────
+        // If the replacement explicitly carries sets/reps/rest (from AI or intent
+        // resolution), honour them exactly — no remap needed.
+        // If ANY of the three fields are absent, run the remap decision to decide
+        // whether to inherit the original prescription or recalculate it based on
+        // the replacement exercise's role and movement family.
+        const explicitPrescription =
+          replacement.sets !== undefined &&
+          replacement.reps !== undefined &&
+          replacement.rest !== undefined;
+
+        let finalSets: number = existing.sets ?? 3;
+        let finalReps: string = existing.reps ?? "8-12";
+        let finalRest: string = existing.rest ?? "90s";
+        let finalNotes: string | null = replacement.notes ?? null;
+
+        if (explicitPrescription) {
+          finalSets = replacement.sets!;
+          finalReps = replacement.reps!;
+          finalRest = replacement.rest!;
+        } else {
+          const remapResult = remapPrescriptionIfNeeded({
+            originalName: existing.name,
+            replacementName: replacement.name,
+            existingSets: existing.sets ?? null,
+            existingReps: existing.reps ?? null,
+            existingRest: existing.rest ?? null,
+          });
+
+          finalSets = replacement.sets ?? remapResult.sets;
+          finalReps = replacement.reps ?? remapResult.reps;
+          finalRest = replacement.rest ?? remapResult.rest;
+
+          if (remapResult.remapped && remapResult.rationale) {
+            finalNotes = replacement.notes
+              ? `${replacement.notes} ${remapResult.rationale}`
+              : remapResult.rationale;
+          }
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
         const replacementMetadata = replacement.metadata && typeof replacement.metadata === "object"
           ? { ...((existing.metadata as Record<string, unknown> | null) ?? {}), ...replacement.metadata }
           : existing.metadata;
+
         await db
           .update(sessionExercises)
           .set({
             name: replacement.name,
             category: (replacement.category as any) ?? existing.category,
-            sets: replacement.sets ?? existing.sets,
-            reps: replacement.reps ?? existing.reps,
-            rest: replacement.rest ?? existing.rest,
+            sets: finalSets,
+            reps: finalReps,
+            rest: finalRest,
             tempo: replacement.tempo ?? null,
-            notes: replacement.notes ?? null,
+            notes: finalNotes,
             metadata: replacementMetadata,
             updatedAt: new Date(),
           })
