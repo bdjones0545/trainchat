@@ -1,0 +1,173 @@
+Fix Live Program mutation receipt and Changes timeline consistency.
+
+Problem:
+Right-sidebar Add Exercise now works, but:
+1. The success alert says the wrong exercise name.
+   Example: alert says “Added Romanian Deadlift,” but the program actually added “Conventional Deadlift.”
+2. Exercises added through the direct right-sidebar mutation endpoint do not appear in the Live Program “Changes” tab.
+
+Goal:
+The UI must always display the exact verified exercise that was actually inserted into the DB, and every successful direct mutation must create a confirmed Changes timeline entry.
+
+PHASE 1 — Use verified DB row as source of truth
+
+In POST /api/training-system/mutate:
+
+After applyEditPlan completes and post-write verification re-reads the updated session, derive the final exercise name ONLY from the verified inserted DB row.
+
+Do not use:
+- plannedExerciseName
+- autoFillExerciseName output
+- AI proposed exercise name
+- request exerciseName
+
+for the final receipt, toast, or message unless no verified row exists.
+
+Return:
+
+{
+  success: true,
+  verified: true,
+  operation: "add_exercise",
+  sessionId,
+  exerciseId,
+  exerciseName: verifiedInsertedExercise.name,
+  updatedSession,
+  receipt: {
+    success: true,
+    verified: true,
+    action: "add_exercise",
+    sessionId,
+    exerciseId,
+    exerciseName: verifiedInsertedExercise.name,
+    message: `Added ${verifiedInsertedExercise.name} to ${updatedSession.title || updatedSession.label || "Day " + dayNumber}.`
+  },
+  message: same as receipt.message
+}
+
+PHASE 2 — Fix frontend toast/alert source
+
+In LiveProgramPanel.tsx:
+
+The success toast/banner must use this priority:
+
+1. response.receipt.exerciseName
+2. response.exerciseName
+3. exercise name found in response.updatedSession that was not present before mutation
+4. generic “Exercise added”
+
+Never use the optimistic/planned name for the final success alert.
+
+If plannedName !== receipt.exerciseName, log:
+
+[Live Program Mutation Name Reconciled]
+{
+  plannedName,
+  verifiedName: receipt.exerciseName
+}
+
+PHASE 3 — Add direct mutations to Changes timeline
+
+When POST /api/training-system/mutate succeeds, create the same type of change/history record used by chat-based program edits.
+
+For add_exercise, write a change entry like:
+
+{
+  trainingSystemId,
+  userId,
+  type: "exercise",
+  status: "confirmed",
+  title: `Added ${exerciseName}`,
+  summary: `Added ${exerciseName} to ${sessionLabel}.`,
+  reason: autoFillReason || "Added from Live Program panel.",
+  source: "live_program_panel",
+  operation: "add_exercise",
+  sessionId,
+  exerciseId,
+  metadata: {
+    dayIndex,
+    sessionLabel,
+    exerciseName,
+    mutationSource: "live_program_panel",
+    verified: true
+  }
+}
+
+Important:
+- Use the verified exerciseName from the inserted DB row.
+- Do not log the planned/AI/autofill name if it differs from the verified row.
+- Mark status confirmed only if receipt.verified === true.
+
+PHASE 4 — Invalidate/refetch Changes tab
+
+After successful Live Program mutation, invalidate/refetch the query key used by the Changes tab.
+
+Also include it in the existing invalidation list.
+
+Make sure these are invalidated:
+- active program/current program queries
+- today query
+- Live Program query
+- Changes/history query
+- any adaptation/history query used by the Changes tab
+
+PHASE 5 — Changes tab UI behavior
+
+The new added-exercise entry should appear at the top of the Changes tab immediately after mutation.
+
+Example card:
+
+EXERCISE · confirmed · just now
+Added Conventional Deadlift
+Added Conventional Deadlift to Posterior Chain Intensification.
+Source: Live Program panel
+
+PHASE 6 — Prevent duplicate history spam
+
+If the same direct mutation request is retried or double-clicked:
+- Do not create duplicate change entries for the same exerciseId + operation.
+- Add idempotency key or check existing change record metadata.exerciseId + operation + source within the last 2 minutes.
+
+PHASE 7 — Logging
+
+Add logs:
+
+[Live Program Mutation Verified Exercise]
+- plannedName
+- verifiedExerciseId
+- verifiedExerciseName
+
+[Live Program Mutation Receipt Finalized]
+- message
+- exerciseName
+- verified
+
+[Live Program Change Entry Created]
+- changeId
+- operation
+- exerciseId
+- exerciseName
+- source
+
+[Live Program Changes Query Invalidated]
+- queryKeysInvalidated
+
+PHASE 8 — QA
+
+Test:
+1. Tap Add Exercise in Day 1.
+Expected:
+- Toast says the exact exercise shown in Program tab.
+- Program tab shows the same exercise.
+- Changes tab shows a new confirmed “Added [same exercise]” entry.
+
+2. If autofill picks one name but insertion normalizes/substitutes another:
+Expected:
+- Toast uses the normalized/substituted DB exercise name.
+- Changes tab uses the normalized/substituted DB exercise name.
+
+3. Double tap Add Exercise quickly:
+Expected:
+- Button disables while pending.
+- Only one exercise added.
+- Only one Changes entry created.

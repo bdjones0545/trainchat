@@ -26,8 +26,9 @@ import {
   trainingWeeks,
   trainingPhases,
   trainingSystems,
+  systemChangeLog,
 } from "@workspace/db";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, gte } from "drizzle-orm";
 import { z } from "zod/v4";
 import { logger } from "../lib/logger";
 import { getActiveTrainingSystem } from "../lib/training-system-service";
@@ -38,6 +39,8 @@ import {
   buildMutationSuccessReceipt,
   buildMutationFailureReceipt,
 } from "../lib/architect-patch-generator";
+import { createChangeLogEntry } from "../lib/change-log-service";
+import type { SystemSnapshot } from "../lib/change-log-service";
 
 const router: IRouter = Router();
 
@@ -100,7 +103,7 @@ async function verifyExerciseOwnership(
   exerciseId: number,
   userId: number,
   focusMode?: string | null,
-): Promise<{ sessionId: number; name: string } | null> {
+): Promise<{ sessionId: number; name: string; trainingSystemId: number } | null> {
   const [ex] = await db
     .select({
       id: sessionExercises.id,
@@ -142,7 +145,36 @@ async function verifyExerciseOwnership(
     .limit(1);
   if (!system || system.userId !== userId) return null;
 
-  return { sessionId: ex.trainingSessionId, name: ex.name };
+  return { sessionId: ex.trainingSessionId, name: ex.name, trainingSystemId: system.id };
+}
+
+// ─── Idempotency guard ────────────────────────────────────────────────────────
+/**
+ * Returns true if a change log entry with the same (userId, trainingSystemId,
+ * intent, targetId) was created within the last 2 minutes. Prevents duplicate
+ * history rows when a mutation endpoint is retried quickly.
+ */
+async function hasDuplicateChangeLog(
+  userId: number,
+  trainingSystemId: number,
+  intent: string,
+  targetId: number,
+): Promise<boolean> {
+  const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+  const [existing] = await db
+    .select({ id: systemChangeLog.id })
+    .from(systemChangeLog)
+    .where(
+      and(
+        eq(systemChangeLog.userId, userId),
+        eq(systemChangeLog.trainingSystemId, trainingSystemId),
+        eq(systemChangeLog.intent, intent),
+        eq(systemChangeLog.targetId, targetId),
+        gte(systemChangeLog.createdAt, twoMinutesAgo),
+      )
+    )
+    .limit(1);
+  return !!existing;
 }
 
 // ─── POST /api/training-system/mutate ────────────────────────────────────────
@@ -316,12 +348,104 @@ router.post("/training-system/mutate", requireAuth, async (req, res): Promise<vo
       // 6. Re-read updated session for immediate panel refresh
       const updatedSession = await readSessionWithExercises(targetSession.id);
 
-      // 7. Build receipt
+      // Phase 1: Resolve verified exercise name + ID from DB (source of truth)
+      const newExerciseId = editResult.changedIds.exercises[0] ?? null;
+      let verifiedExerciseName = exerciseName;
+      let verifiedExerciseId: number | null = newExerciseId;
+
+      if (newExerciseId) {
+        const [verifiedRow] = await db
+          .select({ id: sessionExercises.id, name: sessionExercises.name })
+          .from(sessionExercises)
+          .where(eq(sessionExercises.id, newExerciseId))
+          .limit(1);
+
+        if (verifiedRow) {
+          verifiedExerciseName = verifiedRow.name;
+          verifiedExerciseId = verifiedRow.id;
+        }
+
+        logger.info(
+          {
+            userId,
+            newExerciseId,
+            plannedName: exerciseName,
+            verifiedName: verifiedExerciseName,
+            nameMatch: exerciseName === verifiedExerciseName,
+            sessionId: targetSession.id,
+          },
+          "[LiveProgramMutate:VerifiedExercise] DB-verified exercise name resolved"
+        );
+      }
+
+      // Phase 3: Persist change log entry (non-fatal if it fails)
+      if (success && verifiedExerciseId) {
+        // Phase 6: Idempotency guard — skip if identical entry within last 2 minutes
+        const isDuplicate = await hasDuplicateChangeLog(
+          userId,
+          activeSystem.id,
+          "add_exercise",
+          verifiedExerciseId,
+        );
+
+        if (isDuplicate) {
+          logger.info(
+            { userId, verifiedExerciseId, sessionId: targetSession.id },
+            "[LiveProgramMutate:ChangeLog:Skipped] Duplicate change log entry suppressed (within 2 min)"
+          );
+        } else {
+          try {
+            const changeLogId = await createChangeLogEntry({
+              userId,
+              trainingSystemId: activeSystem.id,
+              source: "quick_action",
+              intent: "add_exercise",
+              scope: "exercise",
+              changeSummary: `Added ${verifiedExerciseName} to ${targetSession.label ?? `Day ${dayIndex + 1}`}.`,
+              requestText: intentText ?? null,
+              targetType: "exercise",
+              targetId: verifiedExerciseId,
+              targetLabel: verifiedExerciseName,
+              beforeSnapshot: editResult.beforeSnapshot,
+              afterSnapshot: editResult.afterSnapshot,
+              appliedCount: editResult.appliedCount,
+              skippedCount: editResult.skippedCount,
+              decisionMetadata: {
+                mutationSource,
+                dayIndex,
+                sessionLabel: targetSession.label ?? null,
+                sessionId: targetSession.id,
+                exerciseName: verifiedExerciseName,
+                verificationStatus: verified ? "verified" : "unverified",
+              },
+            });
+
+            logger.info(
+              {
+                userId,
+                changeLogId,
+                verifiedExerciseName,
+                verifiedExerciseId,
+                sessionId: targetSession.id,
+                mutationSource,
+              },
+              "[LiveProgramMutate:ChangeLog:Created] Change log entry persisted"
+            );
+          } catch (logErr) {
+            logger.error(
+              { logErr, userId, sessionId: targetSession.id },
+              "[LiveProgramMutate:ChangeLog:Error] Failed to persist change log entry (non-fatal)"
+            );
+          }
+        }
+      }
+
+      // 7. Build receipt using verified DB name
       const receipt = success
         ? buildMutationSuccessReceipt({
             action: "add_exercise",
             sessionId: targetSession.id,
-            exerciseName,
+            exerciseName: verifiedExerciseName,
             verified,
             sessionLabel: targetSession.label ?? `Day ${dayIndex + 1}`,
           })
@@ -334,7 +458,9 @@ router.post("/training-system/mutate", requireAuth, async (req, res): Promise<vo
           userId,
           success,
           verified,
-          exerciseName,
+          plannedExerciseName: exerciseName,
+          verifiedExerciseName,
+          verifiedExerciseId,
           sessionId: targetSession.id,
           mutationSource,
           receiptSuccess: receipt.success,
@@ -347,11 +473,12 @@ router.post("/training-system/mutate", requireAuth, async (req, res): Promise<vo
         verified,
         operation: "add_exercise",
         sessionId: targetSession.id,
-        exerciseName,
+        exerciseId: verifiedExerciseId,
+        exerciseName: verifiedExerciseName,
         updatedSession,
         receipt,
         message: success
-          ? `Added ${exerciseName} to ${targetSession.label ?? `Day ${dayIndex + 1}`}.`
+          ? `Added ${verifiedExerciseName} to ${targetSession.label ?? `Day ${dayIndex + 1}`}.`
           : "Exercise could not be added — try again.",
       });
       return;
@@ -371,12 +498,38 @@ router.post("/training-system/mutate", requireAuth, async (req, res): Promise<vo
         return;
       }
 
-      const { sessionId, name: exerciseName } = ownership;
+      const { sessionId, name: exerciseName, trainingSystemId: ownershipSystemId } = ownership;
 
       logger.info(
-        { userId, exerciseId, exerciseName, sessionId, mutationSource },
+        { userId, exerciseId, exerciseName, sessionId, trainingSystemId: ownershipSystemId, mutationSource },
         "[LiveProgramMutate:RemoveExercise] Removing exercise"
       );
+
+      // Phase 6: Idempotency guard before delete
+      const isDuplicateRemove = await hasDuplicateChangeLog(
+        userId,
+        ownershipSystemId,
+        "remove_exercise",
+        exerciseId,
+      );
+
+      if (isDuplicateRemove) {
+        logger.info(
+          { userId, exerciseId, exerciseName, sessionId },
+          "[LiveProgramMutate:ChangeLog:Skipped] Duplicate remove_exercise suppressed (within 2 min)"
+        );
+      }
+
+      // Phase 1: Capture before-snapshot for change log (do this before delete)
+      const beforeSnapshot: SystemSnapshot = {
+        exercises: {
+          [String(exerciseId)]: { id: exerciseId, name: exerciseName, trainingSessionId: sessionId },
+        },
+        sessions: {},
+        weeks: {},
+        phases: {},
+      };
+      const afterSnapshot: SystemSnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
 
       // 2. Delete the exercise row
       await db
@@ -391,6 +544,43 @@ router.post("/training-system/mutate", requireAuth, async (req, res): Promise<vo
       // 3. Re-read updated session
       const updatedSession = await readSessionWithExercises(sessionId);
 
+      // Phase 3: Persist change log entry (non-fatal)
+      if (!isDuplicateRemove) {
+        try {
+          const changeLogId = await createChangeLogEntry({
+            userId,
+            trainingSystemId: ownershipSystemId,
+            source: "quick_action",
+            intent: "remove_exercise",
+            scope: "exercise",
+            changeSummary: `Removed ${exerciseName} from the session.`,
+            targetType: "exercise",
+            targetId: exerciseId,
+            targetLabel: exerciseName,
+            beforeSnapshot,
+            afterSnapshot,
+            appliedCount: 1,
+            skippedCount: 0,
+            decisionMetadata: {
+              mutationSource,
+              sessionId,
+              exerciseName,
+              verificationStatus: "verified",
+            },
+          });
+
+          logger.info(
+            { userId, changeLogId, exerciseName, exerciseId, sessionId, mutationSource },
+            "[LiveProgramMutate:ChangeLog:Created] Remove exercise change log entry persisted"
+          );
+        } catch (logErr) {
+          logger.error(
+            { logErr, userId, exerciseId, sessionId },
+            "[LiveProgramMutate:ChangeLog:Error] Failed to persist remove change log entry (non-fatal)"
+          );
+        }
+      }
+
       // 4. Build receipt
       const receipt = buildMutationSuccessReceipt({
         action: "delete_exercise",
@@ -404,6 +594,7 @@ router.post("/training-system/mutate", requireAuth, async (req, res): Promise<vo
         verified: true,
         operation: "remove_exercise",
         sessionId,
+        exerciseId,
         exerciseName,
         updatedSession,
         receipt,

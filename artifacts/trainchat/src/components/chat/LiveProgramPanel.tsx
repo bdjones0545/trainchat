@@ -1031,9 +1031,10 @@ function ProgramTab({
         verified: boolean;
         operation: string;
         sessionId: number;
+        exerciseId: number | null;
         exerciseName: string;
         updatedSession: unknown;
-        receipt: { success: boolean; message?: string };
+        receipt: { success: boolean; exerciseName?: string; message?: string };
         message: string;
       }>("/api/training-system/mutate", {
         method: "POST",
@@ -1057,6 +1058,9 @@ function ProgramTab({
       queryClient.invalidateQueries({ queryKey: ["week-view-select"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+      // Phase 4: Invalidate Changes tab so the new log entry appears immediately
+      queryClient.invalidateQueries({ queryKey: ["training-system-history", "changes"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-history", "versions"] });
 
       // Flash "Program Updated" banner (same path as direct exercise edits)
       setShowProgramUpdated(true);
@@ -1069,14 +1073,27 @@ function ProgramTab({
       // Expand the mutated day so the new exercise is visible
       setExpandedDay(dayIndex);
 
-      const label = result.message ?? `Added exercise to Day ${dayNumber}.`;
+      // Phase 2: Use DB-verified name from receipt (source of truth), not planned name
+      const verifiedName = result.receipt?.exerciseName ?? result.exerciseName;
+      const label = result.message ?? `Added ${verifiedName} to Day ${dayNumber}.`;
       toast({ title: "Exercise added", description: label, duration: 2500 });
 
       if (import.meta.env.DEV) {
+        const plannedName = result.exerciseName;
+        if (verifiedName && plannedName && verifiedName !== plannedName) {
+          console.warn("[LiveProgramMutate:NameReconciliation] Planned name differs from verified DB name", {
+            plannedName,
+            verifiedName,
+            exerciseId: result.exerciseId,
+            sessionId: result.sessionId,
+          });
+        }
         console.log("[LiveProgramMutate:Receipt]", {
           success: result.success,
           verified: result.verified,
-          exerciseName: result.exerciseName,
+          plannedExerciseName: result.exerciseName,
+          verifiedExerciseName: verifiedName,
+          exerciseId: result.exerciseId,
           sessionId: result.sessionId,
           dayIndex,
           dayNumber,
