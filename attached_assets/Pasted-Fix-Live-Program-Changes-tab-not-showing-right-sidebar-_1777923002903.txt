@@ -1,0 +1,121 @@
+Fix Live Program Changes tab not showing right-sidebar mutation logs.
+
+Problem:
+Right-sidebar edits successfully mutate the program and create change log entries, but the Live Program “Changes” tab still does not display those entries.
+
+Goal:
+The Changes tab must show confirmed right-sidebar mutation entries immediately after direct panel edits.
+
+Audit and fix these areas:
+
+1. Verify write target
+- Confirm createChangeLogEntry writes to the exact same table/source that the Changes tab reads from.
+- If the Changes tab reads systemChangeLog, write there.
+- If it reads adaptations/history endpoint, either write compatible entries there or update the read endpoint to include quick_action entries.
+
+2. Verify filters
+Find the query used by the Changes tab and check whether it filters out:
+- source: "quick_action"
+- mutationSource: "live_program_panel"
+- intent values like add_exercise/remove_exercise
+- status values other than confirmed
+- current week only
+- focus mode only
+- chat-only changes
+
+Right-sidebar entries must be included.
+
+3. Normalize change log shape
+Make direct mutation entries match the same shape as chat-based changes.
+
+For add_exercise, the returned item should include:
+{
+  id,
+  type: "exercise",
+  status: "confirmed",
+  source: "live_program_panel",
+  title: "Added Conventional Deadlift",
+  summary: "Added Conventional Deadlift to Posterior Chain Intensification.",
+  reason: "Added from Live Program panel.",
+  createdAt,
+  decisionMetadata: {
+    operation: "add_exercise",
+    exerciseId,
+    exerciseName,
+    sessionId,
+    sessionLabel,
+    mutationSource: "live_program_panel",
+    verified: true
+  }
+}
+
+4. Fix source naming mismatch
+Right now backend uses source: "quick_action". If the UI expects "live_program_panel", standardize it.
+
+Use:
+source: "live_program_panel"
+
+Or update the Changes tab filter to accept both:
+- quick_action
+- live_program_panel
+
+5. Fix query key invalidation
+Find the exact useQuery key used by the Changes tab.
+
+Invalidate that exact key after mutation.
+
+Do not guess with only:
+["training-system-history", "changes"]
+
+Log the actual key and invalidate it.
+
+Add:
+queryClient.invalidateQueries({ predicate: query =>
+  Array.isArray(query.queryKey) &&
+  query.queryKey.some(k => String(k).includes("history") || String(k).includes("change"))
+})
+
+Then refetch the exact Changes tab query if available.
+
+6. Optimistic insert fallback
+After a successful sidebar mutation, immediately insert a compatible change item into the Changes tab cache using response.receipt/changeLogEntry.
+
+This makes the entry appear instantly even before refetch completes.
+
+7. Backend response should include changeLogEntry
+POST /api/training-system/mutate should return:
+
+{
+  success,
+  verified,
+  receipt,
+  updatedSession,
+  changeLogEntry
+}
+
+The frontend should use changeLogEntry to update the Changes cache.
+
+8. Add logs
+
+Backend:
+[LiveProgramMutate:ChangeLog:WriteTarget]
+[LiveProgramMutate:ChangeLog:EntryShape]
+[LiveProgramMutate:ChangeLog:Returned]
+
+Frontend:
+[LiveProgramPanel:ChangesQueryKey]
+[LiveProgramPanel:ChangesCacheUpdated]
+[LiveProgramPanel:ChangesRefetched]
+
+9. QA
+
+Test:
+- Add Exercise from right sidebar
+- Remove Exercise from right sidebar
+
+Expected:
+- Program updates immediately
+- Toast uses verified exercise name
+- Changes tab shows the new entry at the top immediately
+- Refreshing page still shows the entry
+- No duplicate entries after double-click/retry
