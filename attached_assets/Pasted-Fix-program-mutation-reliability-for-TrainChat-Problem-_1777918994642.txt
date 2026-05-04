@@ -1,0 +1,85 @@
+Fix program mutation reliability for TrainChat.
+
+Problem:
+Users can request changes like “add an exercise to Day 1” but the system fails due to missing structure, missing payload, or improper agent routing. This results in “NO RECEIPT” and no program update.
+
+Goal:
+Ensure all program edits are deterministic, validated, and always return a receipt.
+
+PHASE 1 — Route ALL structural edits through the performance_architect
+
+Rules:
+- Any request involving adding, removing, replacing, or modifying exercises MUST use BUILD_WITH_ARCHITECT mode
+- DIRECT_EDIT is only allowed for minor attribute changes (sets/reps adjustments)
+
+PHASE 2 — Architect Patch System
+
+Create a patch generator that outputs:
+
+{
+  operation: "add_exercise" | "remove_exercise" | "replace_exercise",
+  sessionId: string,
+  insertionPoint: string,
+  exercise: {
+    name: string,
+    sets: number,
+    reps: number,
+    rest?: string
+  }
+}
+
+PHASE 3 — Validation Layer
+
+Before execution:
+- Confirm sessionId exists
+- Confirm insertionPoint is valid
+- Confirm exercise.name is not empty
+
+If any missing:
+Return a structured clarification request instead of executing.
+
+PHASE 4 — Execution Tool Contract
+
+All mutation tools must return:
+
+SUCCESS:
+{
+  success: true,
+  action: string,
+  sessionId: string,
+  exerciseName: string,
+  timestamp: string
+}
+
+FAILURE:
+{
+  success: false,
+  error: string
+}
+
+PHASE 5 — UI Integration
+
+- Replace “Something went wrong” with contextual feedback
+- If failure is due to missing data → ask user for clarification
+- If failure is system error → retry once automatically before surfacing error
+
+PHASE 6 — Auto-Fill Logic
+
+If user input is vague:
+- Infer exercise based on program type and session structure
+- Example:
+  Strength Day 1 → insert unilateral or accessory lower movement
+- Always explain briefly what was added and why
+
+PHASE 7 — Logging
+
+Add logs:
+[Program Mutation Attempt]
+[Program Mutation Success]
+[Program Mutation Failure]
+
+Include:
+- operation
+- sessionId
+- payload
+- error (if any)
