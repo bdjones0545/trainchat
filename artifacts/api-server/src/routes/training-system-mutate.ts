@@ -39,7 +39,7 @@ import {
   buildMutationSuccessReceipt,
   buildMutationFailureReceipt,
 } from "../lib/architect-patch-generator";
-import { createChangeLogEntry } from "../lib/change-log-service";
+import { createChangeLogEntry, classifyEdit } from "../lib/change-log-service";
 import type { SystemSnapshot } from "../lib/change-log-service";
 
 const router: IRouter = Router();
@@ -379,6 +379,18 @@ router.post("/training-system/mutate", requireAuth, async (req, res): Promise<vo
       }
 
       // Phase 3: Persist change log entry (non-fatal if it fails)
+      let addChangeLogEntry: Record<string, unknown> | null = null;
+
+      logger.info(
+        {
+          userId,
+          writeTarget: "system_change_log",
+          trainingSystemId: activeSystem.id,
+          readTarget: "GET /api/training-system/history → getChangeHistory(userId, trainingSystemId)",
+        },
+        "[LiveProgramMutate:ChangeLog:WriteTarget] Write target confirmed — same table read by Changes tab"
+      );
+
       if (success && verifiedExerciseId) {
         // Phase 6: Idempotency guard — skip if identical entry within last 2 minutes
         const isDuplicate = await hasDuplicateChangeLog(
@@ -394,31 +406,59 @@ router.post("/training-system/mutate", requireAuth, async (req, res): Promise<vo
             "[LiveProgramMutate:ChangeLog:Skipped] Duplicate change log entry suppressed (within 2 min)"
           );
         } else {
+          const entryParams = {
+            userId,
+            trainingSystemId: activeSystem.id,
+            source: "quick_action" as const,
+            intent: "add_exercise",
+            scope: "exercise" as const,
+            changeSummary: `Added ${verifiedExerciseName} to ${targetSession.label ?? `Day ${dayIndex + 1}`}.`,
+            requestText: intentText ?? null,
+            targetType: "exercise",
+            targetId: verifiedExerciseId,
+            targetLabel: verifiedExerciseName,
+            appliedCount: editResult.appliedCount,
+            skippedCount: editResult.skippedCount,
+            decisionMetadata: {
+              mutationSource,
+              operation: "add_exercise",
+              dayIndex,
+              sessionLabel: targetSession.label ?? null,
+              sessionId: targetSession.id,
+              exerciseId: verifiedExerciseId,
+              exerciseName: verifiedExerciseName,
+              verificationStatus: verified ? "verified" : "unverified",
+              verified: true,
+            },
+          };
+
+          logger.info(
+            { entryParams: { ...entryParams, beforeSnapshot: "[omitted]", afterSnapshot: "[omitted]" } },
+            "[LiveProgramMutate:ChangeLog:EntryShape] About to write change log entry"
+          );
+
           try {
             const changeLogId = await createChangeLogEntry({
-              userId,
-              trainingSystemId: activeSystem.id,
+              ...entryParams,
+              beforeSnapshot: editResult.beforeSnapshot,
+              afterSnapshot: editResult.afterSnapshot,
+            });
+
+            const { isMajorVersion, versionLabel } = classifyEdit("add_exercise", "exercise");
+            addChangeLogEntry = {
+              id: changeLogId,
               source: "quick_action",
               intent: "add_exercise",
               scope: "exercise",
-              changeSummary: `Added ${verifiedExerciseName} to ${targetSession.label ?? `Day ${dayIndex + 1}`}.`,
-              requestText: intentText ?? null,
-              targetType: "exercise",
-              targetId: verifiedExerciseId,
-              targetLabel: verifiedExerciseName,
-              beforeSnapshot: editResult.beforeSnapshot,
-              afterSnapshot: editResult.afterSnapshot,
-              appliedCount: editResult.appliedCount,
-              skippedCount: editResult.skippedCount,
-              decisionMetadata: {
-                mutationSource,
-                dayIndex,
-                sessionLabel: targetSession.label ?? null,
-                sessionId: targetSession.id,
-                exerciseName: verifiedExerciseName,
-                verificationStatus: verified ? "verified" : "unverified",
-              },
-            });
+              changeSummary: entryParams.changeSummary,
+              requestText: entryParams.requestText,
+              isMajorVersion,
+              versionLabel: versionLabel ?? null,
+              appliedCount: entryParams.appliedCount,
+              skippedCount: entryParams.skippedCount,
+              decisionMetadata: entryParams.decisionMetadata,
+              createdAt: new Date().toISOString(),
+            };
 
             logger.info(
               {
@@ -428,6 +468,7 @@ router.post("/training-system/mutate", requireAuth, async (req, res): Promise<vo
                 verifiedExerciseId,
                 sessionId: targetSession.id,
                 mutationSource,
+                changeLogEntry: addChangeLogEntry,
               },
               "[LiveProgramMutate:ChangeLog:Created] Change log entry persisted"
             );
@@ -439,6 +480,11 @@ router.post("/training-system/mutate", requireAuth, async (req, res): Promise<vo
           }
         }
       }
+
+      logger.info(
+        { userId, changeLogEntry: addChangeLogEntry },
+        "[LiveProgramMutate:ChangeLog:Returned] changeLogEntry included in response"
+      );
 
       // 7. Build receipt using verified DB name
       const receipt = success
@@ -477,6 +523,7 @@ router.post("/training-system/mutate", requireAuth, async (req, res): Promise<vo
         exerciseName: verifiedExerciseName,
         updatedSession,
         receipt,
+        changeLogEntry: addChangeLogEntry,
         message: success
           ? `Added ${verifiedExerciseName} to ${targetSession.label ?? `Day ${dayIndex + 1}`}.`
           : "Exercise could not be added — try again.",
@@ -545,32 +592,72 @@ router.post("/training-system/mutate", requireAuth, async (req, res): Promise<vo
       const updatedSession = await readSessionWithExercises(sessionId);
 
       // Phase 3: Persist change log entry (non-fatal)
+      let removeChangeLogEntry: Record<string, unknown> | null = null;
+
+      logger.info(
+        {
+          userId,
+          writeTarget: "system_change_log",
+          trainingSystemId: ownershipSystemId,
+          readTarget: "GET /api/training-system/history → getChangeHistory(userId, trainingSystemId)",
+        },
+        "[LiveProgramMutate:ChangeLog:WriteTarget] Write target confirmed — same table read by Changes tab"
+      );
+
       if (!isDuplicateRemove) {
+        const removeEntryParams = {
+          userId,
+          trainingSystemId: ownershipSystemId,
+          source: "quick_action" as const,
+          intent: "remove_exercise",
+          scope: "exercise" as const,
+          changeSummary: `Removed ${exerciseName} from the session.`,
+          targetType: "exercise",
+          targetId: exerciseId,
+          targetLabel: exerciseName,
+          appliedCount: 1,
+          skippedCount: 0,
+          decisionMetadata: {
+            mutationSource,
+            operation: "remove_exercise",
+            sessionId,
+            exerciseId,
+            exerciseName,
+            verificationStatus: "verified",
+            verified: true,
+          },
+        };
+
+        logger.info(
+          { entryParams: removeEntryParams },
+          "[LiveProgramMutate:ChangeLog:EntryShape] About to write remove_exercise change log entry"
+        );
+
         try {
           const changeLogId = await createChangeLogEntry({
-            userId,
-            trainingSystemId: ownershipSystemId,
+            ...removeEntryParams,
+            beforeSnapshot,
+            afterSnapshot,
+          });
+
+          const { isMajorVersion, versionLabel } = classifyEdit("remove_exercise", "exercise");
+          removeChangeLogEntry = {
+            id: changeLogId,
             source: "quick_action",
             intent: "remove_exercise",
             scope: "exercise",
-            changeSummary: `Removed ${exerciseName} from the session.`,
-            targetType: "exercise",
-            targetId: exerciseId,
-            targetLabel: exerciseName,
-            beforeSnapshot,
-            afterSnapshot,
+            changeSummary: removeEntryParams.changeSummary,
+            requestText: null,
+            isMajorVersion,
+            versionLabel: versionLabel ?? null,
             appliedCount: 1,
             skippedCount: 0,
-            decisionMetadata: {
-              mutationSource,
-              sessionId,
-              exerciseName,
-              verificationStatus: "verified",
-            },
-          });
+            decisionMetadata: removeEntryParams.decisionMetadata,
+            createdAt: new Date().toISOString(),
+          };
 
           logger.info(
-            { userId, changeLogId, exerciseName, exerciseId, sessionId, mutationSource },
+            { userId, changeLogId, exerciseName, exerciseId, sessionId, mutationSource, changeLogEntry: removeChangeLogEntry },
             "[LiveProgramMutate:ChangeLog:Created] Remove exercise change log entry persisted"
           );
         } catch (logErr) {
@@ -580,6 +667,11 @@ router.post("/training-system/mutate", requireAuth, async (req, res): Promise<vo
           );
         }
       }
+
+      logger.info(
+        { userId, changeLogEntry: removeChangeLogEntry },
+        "[LiveProgramMutate:ChangeLog:Returned] changeLogEntry included in response"
+      );
 
       // 4. Build receipt
       const receipt = buildMutationSuccessReceipt({
@@ -598,6 +690,7 @@ router.post("/training-system/mutate", requireAuth, async (req, res): Promise<vo
         exerciseName,
         updatedSession,
         receipt,
+        changeLogEntry: removeChangeLogEntry,
         message: `Removed ${exerciseName} from the session.`,
       });
       return;

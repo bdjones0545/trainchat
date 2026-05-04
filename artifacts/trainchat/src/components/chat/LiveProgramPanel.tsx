@@ -99,6 +99,8 @@ interface Props {
   pendingChangeHint?: string;
   /** Summary of the last applied change — shown as a continuity chip in the panel header */
   lastChangeSummary?: string;
+  /** Internal callback — called by ProgramTab after a successful sidebar mutation (add/remove exercise) */
+  onSidebarMutation?: () => void;
   /**
    * Identifies the source of the displayed program so the panel can label it correctly.
    *  "live"  — canonical DB-backed active training system
@@ -651,6 +653,7 @@ function ProgramTab({
   onSendMessage,
   onClose,
   blockMetadata,
+  onSidebarMutation,
 }: Omit<Props, "hasActiveSystem">) {
   const queryClient = useQueryClient();
   const [expandedDay, setExpandedDay] = useState<number | null>(0);
@@ -1035,6 +1038,7 @@ function ProgramTab({
         exerciseName: string;
         updatedSession: unknown;
         receipt: { success: boolean; exerciseName?: string; message?: string };
+        changeLogEntry: ChangeLogEntry | null;
         message: string;
       }>("/api/training-system/mutate", {
         method: "POST",
@@ -1058,9 +1062,47 @@ function ProgramTab({
       queryClient.invalidateQueries({ queryKey: ["week-view-select"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
-      // Phase 4: Invalidate Changes tab so the new log entry appears immediately
-      queryClient.invalidateQueries({ queryKey: ["training-system-history", "changes"] });
+
+      // Phase 5: Predicate-based invalidation to catch any key variant + exact key
+      const changesQueryKey = ["training-system-history", "changes"] as const;
+      if (import.meta.env.DEV) {
+        console.log("[LiveProgramPanel:ChangesQueryKey]", changesQueryKey);
+      }
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) &&
+          query.queryKey.some(
+            (k) => typeof k === "string" && (k.includes("history") || k.includes("change"))
+          ),
+      });
       queryClient.invalidateQueries({ queryKey: ["training-system-history", "versions"] });
+
+      // Phase 6: Optimistic insert — add the new change log entry directly into
+      // the Changes tab cache so it appears instantly before the refetch returns.
+      if (result.changeLogEntry) {
+        const prevData = queryClient.getQueryData<{ history: ChangeLogEntry[] }>(changesQueryKey);
+        const updatedHistory = {
+          history: [result.changeLogEntry, ...(prevData?.history ?? [])],
+        };
+        queryClient.setQueryData(changesQueryKey, updatedHistory);
+        if (import.meta.env.DEV) {
+          console.log("[LiveProgramPanel:ChangesCacheUpdated]", {
+            changeLogEntry: result.changeLogEntry,
+            prevHistoryLength: prevData?.history?.length ?? 0,
+            newHistoryLength: updatedHistory.history.length,
+          });
+        }
+      }
+
+      // Trigger an explicit refetch of the Changes tab query to confirm from DB
+      queryClient.refetchQueries({ queryKey: changesQueryKey }).then(() => {
+        if (import.meta.env.DEV) {
+          console.log("[LiveProgramPanel:ChangesRefetched] Changes tab query refetched after add_exercise mutation");
+        }
+      });
+
+      // Signal the outer LiveProgramPanel to trigger ChangesTab animate-newest effect
+      onSidebarMutation?.();
 
       // Flash "Program Updated" banner (same path as direct exercise edits)
       setShowProgramUpdated(true);
@@ -1095,6 +1137,7 @@ function ProgramTab({
           verifiedExerciseName: verifiedName,
           exerciseId: result.exerciseId,
           sessionId: result.sessionId,
+          changeLogEntry: result.changeLogEntry,
           dayIndex,
           dayNumber,
           mutationSource: "live_program_panel",
@@ -3155,6 +3198,8 @@ export default function LiveProgramPanel({
 
   const [activeTab, setActiveTab] = useState<Tab>("program");
   const [hasUnseenChange, setHasUnseenChange] = useState(false);
+  /** Incremented by ProgramTab after each successful sidebar mutation (add/remove exercise) */
+  const [sidebarChangeSignal, setSidebarChangeSignal] = useState(0);
 
   // Check for new system adjustment events to show badge on Adapted tab
   const { data: adaptedNewCount } = useQuery<number>({
@@ -3448,6 +3493,7 @@ export default function LiveProgramPanel({
             pendingChangeHint={pendingChangeHint}
             lastChangeSummary={lastChangeSummary}
             blockMetadata={blockMetadata}
+            onSidebarMutation={() => setSidebarChangeSignal((s) => s + 1)}
           />
         )}
         {activeTab === "adapted" && (
@@ -3462,7 +3508,7 @@ export default function LiveProgramPanel({
           ) : (
             <ChangesTab
               hasActiveSystem={hasActiveSystem}
-              newChangeSignal={newChangeSignal}
+              newChangeSignal={newChangeSignal + sidebarChangeSignal}
             />
           )
         )}
