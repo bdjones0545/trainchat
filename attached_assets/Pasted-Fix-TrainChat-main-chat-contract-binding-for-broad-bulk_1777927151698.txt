@@ -1,0 +1,159 @@
+Fix TrainChat main chat contract binding for broad/bulk edit requests.
+
+Problem:
+Agent Turn Report shows:
+- detectedIntentFamily = EDIT_PROGRAM
+- actionType = EDIT_PROGRAM
+But:
+- targetScope = null
+- mutationType = general_modification
+- shouldMutate = false
+- expectedStateChange = null
+- actualTurnOutcome = conversation_only
+
+This causes valid edit requests like:
+“Add 1 set to each exercise for Day 1”
+to become conversation-only instead of mutating the program.
+
+Goal:
+When detectedIntentFamily/actionType is EDIT_PROGRAM and the user provides a clear target + clear modification, the contract must bind to an executable mutation.
+
+PHASE 1 — Add deterministic edit contract binder
+
+Before falling back to LLM/general modification handling, add rule-based detection for common broad edits:
+
+1. Add sets to session:
+Patterns:
+- “add 1 set to each exercise for day 1”
+- “add an extra set to every exercise on day 1”
+- “increase sets by 1 for day 1”
+- “give every exercise in day 1 another set”
+
+Bind to:
+{
+  actionType: "EDIT_PROGRAM",
+  targetScope: "bulk_session",
+  operation: "add_sets_to_all_exercises",
+  shouldMutate: true,
+  expectedStateChange: "increase sets by 1 for all exercises in Day 1",
+  target: {
+    dayIndex: 0,
+    dayNumber: 1
+  },
+  params: {
+    setDelta: 1
+  }
+}
+
+2. Add exercise to session:
+“add a new exercise to day 1”
+→ targetScope: "session"
+→ operation: "add_exercise"
+→ shouldMutate: true
+
+3. Program emphasis:
+“make this program more strength focused”
+→ targetScope: "program" or "block"
+→ operation: "make_more_strength"
+→ shouldMutate: true
+
+PHASE 2 — Never allow EDIT_PROGRAM + clear target to become conversation_only
+
+Add a guard:
+
+If actionType === "EDIT_PROGRAM"
+and user text includes a clear edit verb:
+- add
+- remove
+- replace
+- make
+- increase
+- decrease
+- reduce
+- shorten
+- progress
+
+and includes a target:
+- program
+- day #
+- session
+- exercise name
+- all exercises
+- each exercise
+
+then shouldMutate must be true.
+
+If target is unresolved, set shouldAskClarification true.
+Do not return conversation_only.
+
+PHASE 3 — Bulk session executor
+
+Implement operation:
+add_sets_to_all_exercises
+
+Input:
+{
+  trainingSystemId,
+  sessionId or dayIndex,
+  setDelta: 1
+}
+
+Behavior:
+- Resolve Day 1 to the actual session.
+- Iterate all exercises in that session.
+- Increase sets by setDelta.
+- Clamp sets max to 6 unless expert override.
+- Return verified receipt:
+  “Added 1 set to every exercise in Day 1.”
+- Create one Changes entry.
+
+PHASE 4 — Fix mutationType mapping
+
+Do not leave mutationType as general_modification for known operations.
+
+Map:
+add_sets_to_all_exercises → bulk_session_adjustment
+add_exercise → structural
+make_more_strength → block_refinement
+make_more_explosive → block_refinement
+shorter_session → session_refinement
+
+PHASE 5 — Agent Turn Report improvements
+
+For “Add 1 set to each exercise for Day 1”, expected report should show:
+
+targetScope: bulk_session
+mutationType: bulk_session_adjustment
+shouldMutate: true
+expectedStateChange: "Day 1 exercises each gain 1 set"
+actualTurnOutcome: mutation_applied
+verificationResult: verified
+contractPassFail: pass
+
+PHASE 6 — Fallback copy
+
+If a bulk/session edit cannot execute, ask targeted clarification:
+
+“Do you want me to add 1 set to every exercise in Day 1, or only the main lift?”
+
+Do not say:
+“I found Posterior Chain Intensification but couldn’t match a clean change.”
+
+PHASE 7 — QA
+
+Test exact phrases:
+
+1. “Add 1 set to each exercise for Day 1”
+Expected: all Day 1 exercises +1 set.
+
+2. “Add an extra set to every exercise on the first day”
+Expected: same.
+
+3. “Increase sets by 1 for the posterior chain day”
+Expected: resolves Posterior Chain Intensification and applies.
+
+4. “Make this program more strength focused”
+Expected: block/program refinement, not conversation_only.
+
+5. “Add a new exercise to Day 1”
+Expected: adds contextual exercise, not failure.
