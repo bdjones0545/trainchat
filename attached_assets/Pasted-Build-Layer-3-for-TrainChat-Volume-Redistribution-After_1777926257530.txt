@@ -1,0 +1,216 @@
+Build Layer 3 for TrainChat: Volume Redistribution After Exercise Mutation.
+
+Current state:
+Layer 1 fixed prescription remapping when exercises change family/role.
+Layer 2 added deterministic context modifiers based on block type, session goal, exercise position, user level, fatigue/readiness, and pain/safety.
+
+Now build Layer 3:
+When an exercise mutation changes the training role or movement bucket, TrainChat should evaluate whether the session lost its intended training stimulus and redistribute volume intelligently.
+
+Core problem:
+Example:
+Deadlift → Leg Curl
+
+The Leg Curl prescription is now valid because Layer 1/2 remapped it to isolation loading.
+But the session may still have lost its primary hinge stimulus.
+
+Goal:
+After any exercise replacement, evaluate the full session structure and determine whether training intent was preserved, reduced, or distorted.
+
+Add a new deterministic layer:
+session-stimulus-redistribution.ts
+
+Primary function:
+evaluateSessionStimulusAfterMutation({
+  originalExercise,
+  replacementExercise,
+  originalPrescription,
+  replacementPrescription,
+  sessionExercises,
+  sessionGoal,
+  blockType,
+  trainingFocus,
+  userLevel,
+  fatigueLevel,
+  readinessLevel,
+  painSafetyFlag,
+  mutationType
+})
+
+Return:
+{
+  stimulusImpact,
+  lostStimulus,
+  compensationActions,
+  updatedSessionExercises,
+  rationale,
+  userFacingSummary,
+  safetyWarnings,
+  audit
+}
+
+Definitions:
+
+stimulusImpact:
+- preserved
+- reduced
+- distorted
+- intentionally_regressed
+- safety_modified
+
+lostStimulus:
+{
+  movementBucketLost: boolean,
+  roleLost: boolean,
+  primaryPatternLost: boolean,
+  estimatedStimulusDrop: "none" | "low" | "moderate" | "high",
+  affectedPattern: string | null,
+  affectedRole: string | null
+}
+
+compensationActions:
+Array of:
+- increase_secondary_volume
+- add_pattern_replacement
+- upgrade_existing_accessory
+- preserve_regression_no_compensation
+- flag_temporary_regression
+- reduce_session_stress
+- no_action
+
+Rules:
+
+1. If same-family and same-role:
+- stimulusImpact = preserved
+- no redistribution needed
+
+Example:
+Barbell RDL → Dumbbell RDL
+
+2. If primary_strength becomes isolation/accessory:
+- stimulusImpact = reduced or intentionally_regressed
+- affectedRole = primary_strength
+- affectedPattern = original movement bucket
+- Do not pretend the session still has the same stimulus
+
+Example:
+Deadlift → Leg Curl
+
+3. If painSafetyFlag is true:
+- prefer preserve_regression_no_compensation
+- do not add aggressive volume
+- userFacingSummary should say the session was intentionally reduced to protect quality/safety
+
+4. If fatigue/readiness is poor:
+- prefer reduce_session_stress or preserve_regression_no_compensation
+- avoid adding compensatory volume
+- userFacingSummary should mention readiness/fatigue
+
+5. If no safety/fatigue issue and the session lost a primary pattern:
+Try compensation in this order:
+A. Upgrade an existing same-pattern secondary exercise if available
+   Example:
+   Deadlift removed, DB RDL already exists → add 1 set or move it into secondary emphasis
+B. Add a low-risk pattern replacement if allowed
+   Example:
+   Add Hip Thrust, Cable Pull-Through, DB RDL, Back Extension depending on available equipment
+C. If no safe replacement exists, flag temporary regression
+
+6. Never compensate by turning isolation into primary loading.
+Bad:
+Deadlift → Leg Curl, then Leg Curl becomes 5x5.
+Good:
+Leg Curl stays isolation. Add or upgrade another hinge if appropriate.
+
+7. Do not exceed reasonable session volume:
+- Primary movement pattern total hard sets should usually stay within 3–6
+- Accessory/isolation total sets should usually stay within 2–6 per local pattern
+- If session already has high total sets, prefer no compensation or minor upgrade only
+
+8. Preserve block intent:
+FOUNDATION_ACCUMULATION:
+- compensation may use moderate volume
+- prefer low-risk tissue-tolerance replacements
+
+INTENSIFICATION_STRENGTH:
+- preserve primary strength stimulus when safe
+- but accessories still stay accessory ranges
+
+POWER_ELASTIC_CONVERSION:
+- avoid fatigue-heavy compensation
+- preserve power intent and quality
+- do not add high-volume strength work late
+
+REBUILD_DELOAD:
+- do not compensate aggressively
+- reduced stimulus is acceptable and intentional
+
+9. User-facing summary should be concise:
+Examples:
+- “The swap changed this from a primary hinge to an isolation hamstring exercise, so TrainChat kept the leg curl in an accessory range and increased the existing DB RDL slightly to preserve the hinge stimulus.”
+- “Because this was a safety-oriented regression, TrainChat did not add extra volume. The session is intentionally lower stress today.”
+- “This replacement reduced the primary strength stimulus, so the session was flagged as a temporary regression.”
+
+10. Add audit logs:
+[ExerciseMutation:StimulusRedistribution:Input]
+[ExerciseMutation:StimulusRedistribution:Decision]
+[ExerciseMutation:StimulusRedistribution:Output]
+
+11. Integration:
+Run this after remapPrescriptionIfNeeded() inside replace_exercise mutation flow.
+
+Flow should be:
+- Identify replacement
+- Apply Layer 1 prescription remap
+- Apply Layer 2 context modifiers
+- Apply Layer 3 stimulus redistribution
+- Save updated session
+- Add change entry summary
+
+12. Change history:
+When redistribution occurs, change entry should include:
+- original exercise
+- replacement exercise
+- prescription remap rationale
+- context rationale
+- stimulus redistribution summary
+- compensation actions taken
+
+13. UI notes:
+Exercise notes should not become too long.
+Keep exercise-level notes focused on that exercise.
+Put full session-level redistribution explanation in the change history or adapted tab.
+
+14. Tests:
+Add deterministic tests for:
+
+Same-family preservation:
+- Barbell RDL → DB RDL = no redistribution
+
+Primary to isolation:
+- Deadlift → Leg Curl = stimulus reduced
+- Leg Curl remains isolation prescription
+- Existing hinge accessory gets upgraded if available
+
+Safety regression:
+- Deadlift → Leg Curl with painSafetyFlag = no compensation, intentional regression
+
+Low readiness:
+- Squat → Leg Extension with low readiness = no aggressive compensation
+
+Block-specific:
+- INTENSIFICATION_STRENGTH preserves primary pattern when safe
+- POWER_ELASTIC_CONVERSION avoids fatigue-heavy compensation
+- REBUILD_DELOAD accepts reduced stimulus
+
+Volume guardrail:
+- If session already has too many sets, do not add more
+
+Bad compensation prevention:
+- Never make isolation exercise behave like primary strength
+- Never compensate by pushing Leg Curl to 5x5
+
+Important:
+This layer must be deterministic and testable.
+Do not rely on OpenAI to decide redistribution.
+AI can provide context, but the redistribution decision engine must be rule-based.

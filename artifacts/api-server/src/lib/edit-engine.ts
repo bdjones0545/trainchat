@@ -45,6 +45,10 @@ import {
   type PropagationSummary,
 } from "./propagation-engine";
 import { remapPrescriptionIfNeeded } from "./prescription-remap";
+import {
+  evaluateSessionStimulusAfterMutation,
+  type StimulusRedistributionResult,
+} from "./session-stimulus-redistribution";
 
 // ─── Allowed field allowlists (safety guard) ─────────────────────────────────
 
@@ -870,7 +874,75 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; veri
           })
           .where(eq(sessionExercises.id, change.id));
 
-        return { applied: true, detail: `Replaced exercise ${change.id} with "${replacement.name}"` };
+        // ── Layer 3: Session Stimulus Redistribution ──────────────────────────
+        // Run after the replacement is committed so the session query reflects
+        // the current state. Applies compensatory set upgrades to sibling
+        // exercises when the swap caused a meaningful stimulus loss.
+        let redistributionSummary: string | null = null;
+        let redistributionResult: StimulusRedistributionResult | null = null;
+        try {
+          const allSessionExercises = await db
+            .select({
+              id: sessionExercises.id,
+              name: sessionExercises.name,
+              sets: sessionExercises.sets,
+              reps: sessionExercises.reps,
+              rest: sessionExercises.rest,
+              notes: sessionExercises.notes,
+              category: sessionExercises.category,
+              orderIndex: sessionExercises.orderIndex,
+            })
+            .from(sessionExercises)
+            .where(eq(sessionExercises.trainingSessionId, existing.trainingSessionId));
+
+          const ctx = change.prescriptionContext;
+          redistributionResult = evaluateSessionStimulusAfterMutation({
+            originalExercise: {
+              name: existing.name,
+              sets: existing.sets ?? 3,
+              reps: existing.reps ?? "8–12",
+              rest: existing.rest ?? "90 sec",
+            },
+            replacementExercise: {
+              id: change.id,
+              name: replacement.name,
+              sets: finalSets,
+              reps: finalReps,
+              rest: finalRest,
+            },
+            sessionExercises: allSessionExercises,
+            blockType:      ctx?.blockType,
+            sessionGoal:    ctx?.sessionGoal,
+            trainingFocus:  ctx?.trainingFocus,
+            userLevel:      ctx?.userLevel,
+            fatigueLevel:   ctx?.fatigueLevel,
+            readinessLevel: ctx?.readiness as import("./prescription-remap").FatigueLevel | undefined,
+            painSafetyFlag: ctx?.hasPainFlag,
+            mutationType:   "swap",
+          });
+
+          // Apply compensatory set upgrades to sibling exercises
+          for (const upd of redistributionResult.updatedSessionExercises) {
+            await db
+              .update(sessionExercises)
+              .set({ sets: upd.newSets, updatedAt: new Date() })
+              .where(eq(sessionExercises.id, upd.id));
+          }
+
+          redistributionSummary = redistributionResult.userFacingSummary;
+        } catch (err) {
+          logger.error(
+            { err, exerciseId: change.id },
+            "[Layer3:StimulusRedistribution] threw — skipping redistribution",
+          );
+        }
+
+        const baseDetail = `Replaced exercise ${change.id} with "${replacement.name}"`;
+        const fullDetail = redistributionSummary
+          ? `${baseDetail} | ${redistributionSummary}`
+          : baseDetail;
+
+        return { applied: true, detail: fullDetail };
       }
 
       case "delete_exercise": {
