@@ -235,6 +235,13 @@ export interface RoutingInput {
   hasActiveProgram: boolean;
   isAdminRequest: boolean;
   isFreshBuildSession: boolean;
+  /**
+   * Phase 1 — Structural vs minor edit classification.
+   * "structural" = add/remove/replace exercise → BUILD_WITH_ARCHITECT
+   * "minor"      = sets/reps/rest/tempo update → DIRECT_EDIT (fast path)
+   * undefined    = unknown (falls back to legacy DIRECT_EDIT)
+   */
+  mutationType?: "structural" | "minor";
 }
 
 export function resolveOrchestratorRoute(input: RoutingInput): {
@@ -271,16 +278,42 @@ export function resolveOrchestratorRoute(input: RoutingInput): {
     };
   }
 
-  // Rule 4 — DIRECT_EDIT (fast path — skip Performance Architect)
-  // Covers: atomic surgical edits, clarification answers, readiness/pain adjustments
-  if (
-    execPlanAction === "APPLY_MUTATION" ||
-    execPlanAction === "ASK_CLARIFICATION"
-  ) {
+  // Rule 4 — DIRECT_EDIT vs BUILD_WITH_ARCHITECT for mutations
+  //
+  // Phase 1: Structural edits (add/remove/replace exercise) are routed to the
+  // Performance Architect validation layer before the edit engine executes them.
+  // Minor attribute edits (sets/reps/rest/tempo) stay on the fast DIRECT_EDIT path.
+  //
+  // ASK_CLARIFICATION always stays on the DIRECT_EDIT fast path (no mutation occurs).
+  if (execPlanAction === "ASK_CLARIFICATION") {
     return {
       route: "DIRECT_EDIT",
       participatingAgents: ["coach"],
-      routingReason: `APPLY_MUTATION/ASK_CLARIFICATION: surgical edit path — Performance Architect skipped to preserve latency`,
+      routingReason: "ASK_CLARIFICATION: no mutation — fast path, no architect involvement",
+    };
+  }
+
+  if (execPlanAction === "APPLY_MUTATION") {
+    const { mutationType } = input;
+
+    // Structural edits: add/remove/replace exercise → architect validation gate
+    if (mutationType === "structural") {
+      return {
+        route: "BUILD_WITH_ARCHITECT",
+        participatingAgents: ["performance_architect", "coach"],
+        routingReason:
+          "APPLY_MUTATION with structural change (add/remove/replace exercise) — Performance Architect validates patch before execution",
+      };
+    }
+
+    // Minor attribute edits or unclassified → fast DIRECT_EDIT path
+    return {
+      route: "DIRECT_EDIT",
+      participatingAgents: ["coach"],
+      routingReason:
+        mutationType === "minor"
+          ? "APPLY_MUTATION (minor attribute edit: sets/reps/rest/tempo) — Performance Architect skipped"
+          : "APPLY_MUTATION (unclassified) — defaulting to DIRECT_EDIT fast path",
     };
   }
 
@@ -697,6 +730,8 @@ export interface OrchestratorInput {
   hasActiveProgram: boolean;
   isAdminRequest: boolean;
   isFreshBuildSession: boolean;
+  /** Phase 1 — structural vs minor mutation classification, forwarded to RoutingInput. */
+  mutationType?: "structural" | "minor";
 }
 
 export interface OrchestratorDecision {
@@ -717,6 +752,7 @@ export function orchestrate(input: OrchestratorInput): OrchestratorDecision {
     hasActiveProgram: input.hasActiveProgram,
     isAdminRequest: input.isAdminRequest,
     isFreshBuildSession: input.isFreshBuildSession,
+    mutationType: input.mutationType,
   });
 
   const isBuildPath = route === "BUILD_WITH_ARCHITECT";

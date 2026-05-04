@@ -1174,6 +1174,32 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string, train
   // Phase 4: Capture state BEFORE applying changes
   const beforeSnapshot = await captureBeforeSnapshot(plan);
 
+  // Phase 7 — [Program Mutation Attempt] log
+  const structuralOps = plan.changes
+    .filter((c) => c.type === "add_exercise" || c.type === "delete_exercise" || c.type === "replace_exercise")
+    .map((c) => ({
+      operation: c.type,
+      sessionId: c.sessionId ?? null,
+      exerciseName: c.exercise?.name ?? c.replacement?.name ?? null,
+      exerciseId:   c.id,
+    }));
+  logger.info(
+    {
+      operation:       plan.intent,
+      scope:           plan.scope,
+      totalChanges:    plan.changes.length,
+      structuralOps,
+      payload: plan.changes.map((c) => ({
+        type:       c.type,
+        id:         c.id,
+        sessionId:  c.sessionId ?? null,
+        name:       c.exercise?.name ?? c.replacement?.name ?? null,
+        updates:    c.updates ?? null,
+      })),
+    },
+    "[Program Mutation Attempt]",
+  );
+
   const results: { applied: boolean; detail: string; newId?: number }[] = [];
   for (const change of plan.changes) {
     const result = await applyChange(change);
@@ -1183,6 +1209,32 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string, train
 
   const appliedCount = results.filter((r) => r.applied).length;
   const skippedCount = results.filter((r) => !r.applied).length;
+
+  // Phase 7 — [Program Mutation Success] / [Program Mutation Failure] log
+  if (appliedCount > 0) {
+    const addedExercises  = results.filter((r) => r.applied && r.newId).map((r) => r.newId);
+    logger.info(
+      {
+        operation:     plan.intent,
+        appliedCount,
+        skippedCount,
+        addedIds:      addedExercises,
+        changeSummary: plan.changeSummary,
+      },
+      "[Program Mutation Success]",
+    );
+  } else {
+    logger.warn(
+      {
+        operation:    plan.intent,
+        appliedCount: 0,
+        skippedCount,
+        error:        "No changes were applied by the edit engine",
+        details:      results.map((r) => r.detail),
+      },
+      "[Program Mutation Failure]",
+    );
+  }
 
   // Collect IDs for exercises inserted via add_exercise so they appear in changedIds
   const newExerciseIds = results.flatMap((r) => (r.newId ? [r.newId] : []));

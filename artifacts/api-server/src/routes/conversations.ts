@@ -76,6 +76,14 @@ import {
 import { buildActionContract, type ActionContract } from "../lib/action-contract";
 import { enforceActionContract, buildContractPromptDirective, type TurnOutcome } from "../lib/action-contract-enforcer";
 import { orchestrate, logOrchestratorDecision } from "../agents/agent-orchestrator";
+import {
+  hasStructuralChanges,
+  isMinorAttributeEdit,
+  validateStructuralChanges,
+  buildMutationSuccessReceipt,
+  buildMutationFailureReceipt,
+  type SessionContext,
+} from "../lib/architect-patch-generator";
 
 const router: IRouter = Router();
 
@@ -830,9 +838,17 @@ Keep it helpful and intelligent, never promotional.`;
   }
 
   // ── Agent Orchestrator — structured chain-of-command decision log ────────
-  // orchestrate() converts the execution plan into a formal OrchestratorDecision
-  // and emits the [AgentChain] observability event for every turn.
-  // This is dev/ops logging only — never exposed to users.
+  // Phase 1: mutationType is derived from the execution plan's mutation type.
+  // "structural" (add/swap/remove) → BUILD_WITH_ARCHITECT validation gate
+  // "minor" (sets/reps/rest/tempo) → DIRECT_EDIT fast path
+  const execMutationType = execPlan.mutation?.type;
+  const orchMutationType: "structural" | "minor" | undefined =
+    execMutationType === "add" || execMutationType === "remove" || execMutationType === "swap"
+      ? "structural"
+      : execMutationType === "progression" || execMutationType === "regression"
+        ? "minor"
+        : undefined;
+
   const orchDecision = orchestrate({
     message: parsed.data.content,
     userId,
@@ -843,6 +859,7 @@ Keep it helpful and intelligent, never promotional.`;
     hasActiveProgram: hasAnyProgram,
     isAdminRequest: false,
     isFreshBuildSession,
+    mutationType: orchMutationType,
   });
   logOrchestratorDecision(orchDecision.observabilityEvent);
 
@@ -1635,7 +1652,94 @@ Keep it helpful and intelligent, never promotional.`;
         "[VibeEdit] DB pipeline — edit plan generated"
       );
 
-      const directEditResult = await applyEditPlan(directEditPlan, execPlan.intentFamily ?? undefined);
+      // ── Phase 1 + 3: Architect validation gate ─────────────────────────────
+      // All structural edits (add/remove/replace exercise) are validated by the
+      // Performance Architect layer before the edit engine executes them.
+      // Minor attribute edits (sets/reps) bypass this gate (fast DIRECT_EDIT path).
+      //
+      // If the generated plan has structural changes, we:
+      //   1. Build a session context lookup from the full training system
+      //   2. Validate sessionId exists, insertionPoint is valid, exercise.name populated
+      //   3. Auto-fill vague exercise names (Phase 6)
+      //   4. If validation fails → return clarification instead of executing
+      if (orchDecision.route === "BUILD_WITH_ARCHITECT" || hasStructuralChanges(directEditPlan)) {
+        // Build session lookup map for validation + auto-fill context
+        const sessionLookup = new Map<number, SessionContext>();
+        const systemFocusMode = ((directFullSystem as any)?.metadata as any)?.focusMode ?? nonStreamFocusMode;
+        for (const phase of (directFullSystem as any)?.phases ?? []) {
+          for (const week of phase.weeks ?? []) {
+            for (const session of week.sessions ?? []) {
+              if (session.id) {
+                sessionLookup.set(session.id, {
+                  label:       session.label ?? undefined,
+                  sessionType: session.sessionType ?? undefined,
+                  focusMode:   systemFocusMode,
+                });
+              }
+            }
+          }
+        }
+
+        const patchValidation = validateStructuralChanges(directEditPlan, sessionLookup);
+
+        if (!patchValidation.valid) {
+          if ("clarification" in patchValidation) {
+            const { question } = patchValidation.clarification;
+            logger.info(
+              {
+                missingField: patchValidation.clarification.missingField,
+                question,
+                systemId: resolvedSystem.id,
+              },
+              "[ArchitectPatchValidator] Validation failed — returning clarification instead of executing",
+            );
+            const receipt = buildMutationFailureReceipt(
+              `Missing required field: ${patchValidation.clarification.missingField}`,
+            );
+            const [clarMsg] = await db.insert(messagesTable).values({
+              conversationId: params.data.id,
+              role: "assistant",
+              content: question,
+              structuredData: null,
+            }).returning();
+            await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+            if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+              stripeStorage.incrementMessageCount(userId).catch(() => {});
+            }
+            res.json({
+              userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
+              assistantMessage: { id: clarMsg.id, conversationId: clarMsg.conversationId, role: clarMsg.role, content: clarMsg.content, createdAt: clarMsg.createdAt.toISOString(), structuredData: null },
+              planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+              intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
+              outcomeType: "clarification_needed",
+              systemEdit: { applied: false },
+              mutationReceipt: receipt,
+            });
+            return;
+          }
+          // Unexpected validation error — log and fall through to the edit engine
+          logger.warn(
+            { validationError: (patchValidation as any).error, systemId: resolvedSystem.id },
+            "[ArchitectPatchValidator] Non-clarification validation error — proceeding to edit engine",
+          );
+        } else {
+          logger.info(
+            { patchCount: patchValidation.patches.length, systemId: resolvedSystem.id },
+            "[ArchitectPatchValidator] Structural changes validated — proceeding to execution",
+          );
+        }
+      }
+
+      // ── Execute edit plan (with one automatic retry on system error) ──────
+      // Phase 5: if the first attempt throws a system error, retry once before
+      // surfacing the failure — transient DB issues should not block the user.
+      let directEditResult = await applyEditPlan(directEditPlan, execPlan.intentFamily ?? undefined).catch(async (firstErr: any) => {
+        logger.warn(
+          { err: firstErr?.message, systemId: resolvedSystem.id },
+          "[VibeEdit] First edit attempt threw — retrying once (Phase 5 auto-retry)",
+        );
+        return await applyEditPlan(directEditPlan, execPlan.intentFamily ?? undefined);
+      });
 
       logger.info(
         { applied: directEditResult.appliedCount, skipped: directEditResult.skippedCount, systemId: resolvedSystem.id },
@@ -1798,7 +1902,17 @@ Keep it helpful and intelligent, never promotional.`;
 
     } catch (err: any) {
       logger.error({ err: err?.message, stack: err?.stack }, "[VibeEdit] DB pipeline threw — returning error response");
-      const errContent = `Something went wrong applying that change — your program hasn't been modified. Give it another try, and if it keeps happening, try being more specific about which exercise or day you mean.`;
+      // Phase 5: Contextual error message based on what was being attempted
+      const editIntent = (err as any)?._editIntent ?? execPlan.intentFamily ?? execPlan.mutation?.type ?? "edit";
+      const structuralOp = execPlan.mutation?.type === "add"
+        ? "add that exercise"
+        : execPlan.mutation?.type === "remove"
+          ? "remove that exercise"
+          : execPlan.mutation?.type === "swap"
+            ? "swap that exercise"
+            : "apply that change";
+      const errContent = `I wasn't able to ${structuralOp} — your program hasn't been modified. Try being specific: include the exercise name, which day it's in, and exactly what you'd like changed. If it keeps happening, try opening the session panel and making the change from there.`;
+      const receipt = buildMutationFailureReceipt(err?.message ?? "edit_pipeline_error");
       const [errMessage] = await db.insert(messagesTable).values({
         conversationId: params.data.id, role: "assistant", content: errContent, structuredData: null,
       }).returning();
@@ -1813,6 +1927,7 @@ Keep it helpful and intelligent, never promotional.`;
         intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
         systemEdit: { applied: false },
         editFailure: { reason: "edit_pipeline_error" },
+        mutationReceipt: receipt,
       });
       return;
     }
@@ -3653,7 +3768,16 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       return;
     } catch (err: any) {
       logger.error({ err: err?.message }, "[VibeEdit:stream] DB pipeline threw — returning error response");
-      const errContent = `Something went wrong applying that change — your program hasn't been modified. Give it another try, and if it keeps happening, try being more specific about which exercise or day you mean.`;
+      // Phase 5: Contextual error message based on what was being attempted
+      const streamStructuralOp = execPlan.mutation?.type === "add"
+        ? "add that exercise"
+        : execPlan.mutation?.type === "remove"
+          ? "remove that exercise"
+          : execPlan.mutation?.type === "swap"
+            ? "swap that exercise"
+            : "apply that change";
+      const errContent = `I wasn't able to ${streamStructuralOp} — your program hasn't been modified. Try being specific: include the exercise name, which day it's in, and exactly what you'd like changed. If it keeps happening, try opening the session panel and making the change from there.`;
+      const streamReceipt = buildMutationFailureReceipt(err?.message ?? "edit_pipeline_error");
       const [errMsg] = await db.insert(messagesTable).values({
         conversationId: params.data.id, role: "assistant", content: errContent, structuredData: null,
       }).returning();
@@ -3665,6 +3789,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: errMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure" }),
         systemEdit: { applied: false },
         editFailure: { reason: "edit_pipeline_error" },
+        mutationReceipt: streamReceipt,
       });
       editLock.release();
       return;
