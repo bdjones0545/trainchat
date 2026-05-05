@@ -1,0 +1,70 @@
+Fix week-scope refinement prescription logic.
+
+Current bugs:
+1. “More Endurance” change log says endurance focus was applied, but exercises still show 3–6 reps and 30–60 sec rest. The visible prescription does not match endurance.
+2. “More Strength” incorrectly applies strength prescriptions to every exercise, including core, trunk, mobility, auxiliary, and accessory work.
+
+Required behavior:
+Week-scope refinements must apply prescriptions by exercise role/category, not globally.
+
+Add or update a helper:
+
+getPrescriptionForExerciseTransformation(exercise, transformation, sessionContext)
+
+It should inspect:
+- exercise.role
+- exercise.category
+- exercise.movementPattern
+- exercise.name
+- isPrimaryLift
+- isPowerExercise
+- isCoreOrTrunk
+- isAccessoryOrAuxiliary
+- isMobilityOrPrep
+
+Rules:
+
+For strength_focus:
+- Primary compound lifts: 3–5 sets, 3–6 reps, 2–3 min rest
+- Secondary compound lifts: 2–4 sets, 5–8 reps, 90–150 sec rest
+- Accessories/auxiliary: keep moderate reps, usually 8–15 reps
+- Core/trunk: keep time/quality or 8–15+ reps; do NOT force 3–6 reps
+- Mobility/prep: do not change to strength reps
+
+For conditioning_focus / endurance:
+- Primary lifts: moderate load/density, 2–4 sets, 8–12 reps, 45–90 sec rest
+- Accessories: 2–3 sets, 12–20 reps, 30–60 sec rest
+- Core/trunk: 2–4 sets, 20–45 sec holds OR 10–20 reps, 30–60 sec rest
+- Power exercises/jumps: do not turn into high-rep sloppy jumps; use low reps with shorter density OR swap to conditioning-safe alternatives
+- Rest should generally decrease compared to strength
+
+For power/explosive:
+- Power exercises: 2–5 sets, 2–5 reps, 90–180 sec rest
+- Heavy primary lifts used for power: 2–4 sets, 2–5 reps, 2–3 min rest
+- Accessories/core stay supportive; do not turn all accessories into power exercises
+
+For reduce_time:
+- Reduce sets first, preserve intent
+- Do not blindly change reps
+
+Also:
+- Do not overwrite all exercises with one prescription.
+- Preserve the original prescription when the transformation is not relevant to that exercise role.
+- Update the UI-visible sets/reps/rest fields, not just hidden metadata.
+- Add a verifier:
+  - If transformation is endurance and most exercises still show 3–6 reps, flag/repair.
+  - If transformation is strength and core/accessory exercises show 3–6 reps, flag/repair.
+
+Acceptance tests:
+1. Click “More Endurance” on a 3-day strength block.
+Expected:
+- Primary lifts shift toward 8–12 reps or density work.
+- Accessories/core shift toward higher reps/time-based work.
+- Rest is shorter.
+- Visible exercise cards reflect the endurance change.
+
+2. Click “More Strength.”
+Expected:
+- Primary/secondary compound lifts become strength-focused.
+- Core/accessory exercises do NOT become 3–6 reps.
+- Band Pallof Press, Ab Wheel, hip thrust accessories, auxiliary work, and mobility/prep retain appropriate support prescriptions.
