@@ -759,7 +759,9 @@ function ProgramTab({
       if (panelFocusMode) params.set("focus", panelFocusMode);
       return customFetch<any>(`/api/training-system/week?${params.toString()}`);
     },
-    enabled: !!isSaved && currentWeekNum !== null && selectedWeek !== currentWeekNum,
+    // Gate: only fire when both the system ID and currentWeekNum are fully resolved.
+    // Without this, a fresh auto-created system may double-fetch week-1 before hydration.
+    enabled: !!isSaved && trainingSystemId != null && currentWeekNum !== null && currentWeekNum !== undefined && selectedWeek !== currentWeekNum,
     staleTime: 30_000,
   });
 

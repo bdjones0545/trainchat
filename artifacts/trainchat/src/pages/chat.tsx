@@ -57,6 +57,7 @@ import ShareMomentPrompt from "@/components/share/ShareMomentPrompt";
 import ShareMomentModal from "@/components/share/ShareMomentModal";
 import { buildShareMoment, type ShareMoment } from "@/types/share-moments";
 import { useFocusMode } from "@/hooks/useFocusMode";
+import { handleTrainingSystemMutationResult } from "@/lib/trainingMutationHelper";
 import { getFocusModeConfig, detectFocusMismatch, FOCUS_MODE_CONFIGS } from "@/lib/focusModeConfig";
 import type { FocusMode } from "@/lib/focusMode";
 import { analytics } from "@/lib/analytics";
@@ -1534,21 +1535,9 @@ export default function Chat() {
       }
     }
 
-    if (result.systemEdit?.applied || result.systemSaved) {
-      // Force-refetch the active system (not just invalidate) so activeSystem.id
-      // updates immediately. This triggers the weekData query key to change
-      // (["training-system-week", newId, focusMode]) which forces a fresh cache entry —
-      // eliminating any risk of stale exercises from the old program or another focus lane.
-      queryClient.refetchQueries({ queryKey: ["training-system-active", focusMode] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-library"] });
-      // Partial key match: invalidates all ["training-system-week", *] entries
-      // so any observer re-fetches with the current active system and focus.
-      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
-      // Audit receipts — always refresh so the Changes tab reflects the latest mutation
-      queryClient.invalidateQueries({ queryKey: ["mutation-audit-receipts"] });
+    if (result.systemEdit?.applied || result.systemSaved || result.trainingSystemId != null || result.systemId != null) {
+      // Centralised invalidation — covers SSE complete, non-SSE JSON, and auto-created system hydration.
+      handleTrainingSystemMutationResult(result, queryClient, focusMode);
 
       if (result.systemSaved) {
         // Record the newly saved system ID before flipping isSaved=true.
@@ -1725,9 +1714,14 @@ export default function Chat() {
         // If the panel is already open, it will highlight changes via newChangeSignal —
         // no further action needed. Panel stays open, user isn't interrupted.
 
-        // Track last change summary for continuity chip in panel header
+        // Track last change summary for continuity chip in panel header.
+        // If propagation was partial, append a soft review notice (no scary error).
         if (result.systemEdit.changeSummary) {
-          setLastChangeSummary(result.systemEdit.changeSummary);
+          const _propStatus = (result.systemEdit as any).propagationStatus as string | undefined;
+          const _propSuffix = _propStatus === "partial"
+            ? " Swap applied, but some future weeks may need review."
+            : "";
+          setLastChangeSummary(result.systemEdit.changeSummary + _propSuffix);
           // Trigger share moment CTA for meaningful agent adjustments
           if (shareMomentTimeoutRef.current) clearTimeout(shareMomentTimeoutRef.current);
           shareMomentTimeoutRef.current = setTimeout(() => {

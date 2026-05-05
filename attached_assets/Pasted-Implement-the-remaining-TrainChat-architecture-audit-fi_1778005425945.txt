@@ -1,0 +1,213 @@
+Implement the remaining TrainChat architecture audit fixes.
+
+Goal:
+Harden state sync, verification, and routing maintainability after the major routing/fallback fixes.
+
+Do targeted fixes only. Do not redesign the app.
+
+FIX 1 — Make classifyIntent advisory only
+
+In conversations.ts:
+- Keep classifyIntent() for logging, analytics, and optional prompt hints.
+- Do not use intentResult.type to decide routing, mutation eligibility, or fallback behavior.
+- buildExecutionPlan() / execPlan.action is the single source of truth.
+
+Add a clear comment:
+“ExecutionPlan is the single routing authority. classifyIntent is advisory only.”
+
+Keep the existing reconciliation guard, but base routing outcomes on execPlan.
+
+Acceptance:
+- No mutation route depends directly on intentResult.type.
+- No AI fallback depends on intentResult.type.
+- Logs still include intentResult for debugging.
+
+
+FIX 2 — Standardize client mutation invalidation
+
+Create a shared client helper:
+
+handleTrainingSystemMutationResult(result, queryClient, focusMode)
+
+It should invalidate/refetch when:
+- result.systemSaved === true
+- result.systemEdit?.applied === true
+- result.trainingSystemId exists
+- result.systemId exists
+
+Invalidate:
+- ["training-system-active", focusMode]
+- ["training-system-week"]
+- ["training-system-history", "changes"]
+- ["training-system-history", "versions"]
+- ["live-panel-week-ids"]
+
+Use this helper in BOTH:
+- SSE complete handler
+- non-SSE / JSON response handler
+
+Acceptance:
+- Streaming edits refresh panel.
+- Non-streaming edits refresh panel.
+- Auto-created systems hydrate without reload.
+
+
+FIX 3 — Gate selectedWeek alternate query
+
+In LiveProgramPanel.tsx:
+- Do not fire alternate week query while currentWeekNum is null/undefined and active system hydration is incomplete.
+- Default selectedWeek visually to 1, but do not trigger conflicting week-1 refetch until system/week metadata is ready.
+- Enable alternate week query only when:
+  - trainingSystemId exists
+  - currentWeekNum is defined
+  - selectedWeek is defined
+
+Acceptance:
+- Brand-new generated program does not double-fetch/conflict between draft/current week and selected week.
+- Week 1 still displays normally.
+- Changing week after hydration still works.
+
+
+FIX 4 — Verify propagated swaps across weeks
+
+After exercise swap propagation:
+- Run verifyMutation() for each propagated week/session change.
+- Aggregate verification result.
+
+Store in change log decisionMetadata:
+
+{
+  confirmed: boolean,
+  propagated: true,
+  propagationStatus: "full" | "partial" | "none",
+  propagationCheckedCount: number,
+  propagationConfirmedCount: number,
+  propagationFailedCount: number
+}
+
+Rules:
+- confirmed = true only if primary swap and all propagated swaps pass.
+- propagationStatus = "full" when all propagated swaps verify.
+- propagationStatus = "partial" when some fail.
+- propagationStatus = "none" when no propagation occurred.
+
+Frontend:
+- If partial, do not show a full confirmed badge.
+- Show wording like:
+  “Swap applied, but some future weeks may need review.”
+
+Acceptance:
+- Week 1 swap verified.
+- Future week propagated swaps verified.
+- Partial propagation is visible, not hidden.
+
+
+FIX 5 — Add light architecture validation after edits/refinements
+
+After:
+- applyEditPlan()
+- applyHierarchicalRefinement()
+- direct week/block refinements
+
+Run a lightweight architecture validation.
+
+Use existing validateArchitectureGate() if possible with a lightMode option, or create:
+
+validatePostMutationArchitectureLight(systemOrWeekSnapshot)
+
+Check only obvious structural issues:
+- empty sessions
+- sessions with no exercises
+- missing primary work where expected
+- unsafe rep/rest contradictions
+- all sessions accidentally identical after refinement
+- transformation flattened every exercise into same prescription
+- hard constraint violations if available
+
+Do not block successful edits.
+Do:
+- log warnings
+- attach architectureWarnings to systemEdit metadata if available
+- optionally store warnings in decisionMetadata
+
+Acceptance:
+- Edits still succeed.
+- Warnings are logged.
+- No user-facing scary error unless edit actually failed.
+
+
+FIX 6 — Add clarification_followup change log source
+
+Update change log source enum/type to include:
+
+source: "clarification_followup"
+
+When a pending clarification response produces a mutation:
+- create change log with source: "clarification_followup"
+- keep original requestText and clarification answer if available
+
+Acceptance:
+- History can distinguish normal AI edits from clarification-followup edits.
+
+
+FIX 7 — Start extracting conversations.ts safely
+
+Do not do a large refactor.
+
+Create small helper/service files only if low risk:
+
+- routing-response-guards.ts
+  - reconciliation guard
+  - structured UI guard
+  - mutation failure response helper
+
+- training-system-response-utils.ts
+  - standard mutation response shape
+  - auto-create hydration fields
+  - query invalidation payload helpers if applicable
+
+Move only duplicated logic from both SSE and non-SSE paths.
+Keep behavior identical.
+
+Acceptance:
+- No type errors.
+- SSE and non-SSE still pass.
+- Logs preserved.
+- conversations.ts slightly smaller and less duplicated.
+
+
+Final QA tests:
+
+1. Typed ambiguous edit:
+“make it better”
+Expected: safe clarification, no fake edit, no new program.
+
+2. Refine chip after first build:
+Click “More Endurance”
+Expected: direct edit route, no chat/NLP, panel refreshes.
+
+3. Non-stream edit:
+Force/use JSON response path.
+Expected: panel refreshes exactly like SSE.
+
+4. Swap with propagation:
+Swap an exercise that appears in weeks 1–4.
+Expected: propagation metadata shows full or partial verification.
+
+5. Week refinement:
+Click “More Strength” or “More Endurance.”
+Expected:
+- edit applies
+- architecture light validation logs pass/warnings
+- no session identity flattening
+- no global prescription flattening
+
+6. Clarification followup:
+Ask an edit that requires clarification, answer the clarification.
+Expected:
+- mutation applies
+- change log source = clarification_followup
+
+Important:
+Do not add new UX features yet.
+This is architecture hardening only.

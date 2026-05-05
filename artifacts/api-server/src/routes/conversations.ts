@@ -53,6 +53,7 @@ import {
 } from "../lib/pending-clarification-service";
 import { normalizeToIntentFamily } from "../lib/intent-family-engine";
 import { buildExecutionPlan, type ExecutionPlan } from "../lib/execution-planner";
+import { validatePostMutationArchitectureLight } from "../lib/post-mutation-validator";
 import { resolveAgentSettingsContext, type CoachBehaviorSettings, type AgentSettingsContext } from "../lib/agent-settings-resolver";
 import { resolveRefinementScope, inferBlockTypeFromMessage, type ScopeResolution } from "../lib/refinement-scope-resolver";
 import { applyHierarchicalRefinement } from "../lib/hierarchical-refine-engine";
@@ -123,6 +124,10 @@ function resolveCurrentProgram(
  * Returns true if the intent should trigger a direct edit of the real training system.
  * EDIT_PROGRAM, ADJUST_FOR_PAIN, and ADJUST_FOR_READINESS all modify existing program
  * structure — the vibe edit engine handles all three through the Change Engine pipeline.
+ *
+ * ADVISORY ONLY — classifyIntent() output is used here for logging and analytics.
+ * The single routing authority is execPlan.action (from buildExecutionPlan).
+ * No routing or mutation eligibility decision should depend solely on intentResult.type.
  */
 function isVibeEditIntent(intentResult: IntentResult): boolean {
   return (
@@ -1043,6 +1048,9 @@ Keep it helpful and intelligent, never promotional.`;
   //   GUIDANCE          → fall through to AI coaching path
   //   NO_OP             → fall through (no action needed)
   //
+  // ExecutionPlan is the single routing authority. classifyIntent is advisory only.
+  // intentResult.type is available for logging and analytics throughout this handler,
+  // but routing decisions and mutation eligibility are controlled by execPlan.action.
   switch (execPlan.action) {
 
     // ── APPLY_MUTATION ────────────────────────────────────────────────────────
@@ -1187,7 +1195,7 @@ Keep it helpful and intelligent, never promotional.`;
           const changeLogId = await createChangeLogEntry({
             userId,
             trainingSystemId: clarificationSystem.id,
-            source: "ai_edit",
+            source: "clarification_followup",
             intent: clarificationEditPlan.intent,
             scope: clarificationEditPlan.scope,
             changeSummary: clarificationEditResult.changeSummary,
@@ -1337,8 +1345,9 @@ Keep it helpful and intelligent, never promotional.`;
 
     await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
 
-    // Write pending clarification state so the next reply can resume the correct intent
-    if (intentResult.type === "EDIT_PROGRAM" || intentResult.type === "ADJUST_FOR_PAIN" || intentResult.type === "ADJUST_FOR_READINESS") {
+    // Write pending clarification state so the next reply can resume the correct intent.
+    // execPlan.action === "APPLY_MUTATION" is the authoritative check — no intentResult dependency.
+    if (execPlan.action === "APPLY_MUTATION") {
       const familyResult = normalizeToIntentFamily(parsed.data.content, nonStreamFocusMode);
       writePendingClarification({
         conversationId: params.data.id,
@@ -2038,6 +2047,12 @@ Keep it helpful and intelligent, never promotional.`;
         );
       }
 
+      // ── Post-mutation light architecture validation ─────────────────────────
+      const _directArchResult = validatePostMutationArchitectureLight({
+        entitySessions: directEditResult.afterSnapshot?.sessions as Record<string, Record<string, unknown>> | undefined,
+        context: "non-SSE:direct_edit",
+      });
+
       const changeLogId = await createChangeLogEntry({
         userId,
         trainingSystemId: resolvedSystem.id,
@@ -2056,6 +2071,14 @@ Keep it helpful and intelligent, never promotional.`;
           intentType: intentResult.type,
           intentFamily: execPlan.intentFamily,
           confirmed: directSwapContract?.confirmed ?? false,
+          propagated: (directEditResult.propagationSummary?.status ?? "local_only") !== "local_only",
+          propagationStatus: directEditResult.propagationSummary?.status === "propagated" ? "full"
+            : directEditResult.propagationSummary?.status === "partial" ? "partial"
+            : "none",
+          propagationCheckedCount: (directEditResult.propagationSummary?.appliedWeeks?.length ?? 0) + (directEditResult.propagationSummary?.skippedWeeks?.length ?? 0),
+          propagationConfirmedCount: directEditResult.propagationSummary?.appliedWeeks?.length ?? 0,
+          propagationFailedCount: directEditResult.propagationSummary?.skippedWeeks?.length ?? 0,
+          architectureWarnings: _directArchResult.warnings.length > 0 ? _directArchResult.warnings : undefined,
           verification: {
             status: directVerification.status,
             verifiedCount: directVerification.verifiedChanges.length,
@@ -2120,6 +2143,10 @@ Keep it helpful and intelligent, never promotional.`;
         stripeStorage.incrementMessageCount(userId).catch(() => {});
       }
 
+      const _directPropStatus = directEditResult.propagationSummary?.status === "propagated" ? "full"
+        : directEditResult.propagationSummary?.status === "partial" ? "partial"
+        : "none";
+
       res.json({
         outcomeType: "mutation_applied",
         ...(systemAutoCreatedForEdit ? {
@@ -2140,6 +2167,8 @@ Keep it helpful and intelligent, never promotional.`;
           changeTargets: directEditResult.changeTargets,
           systemId: resolvedSystem.id,
           changeLogId,
+          propagationStatus: _directPropStatus,
+          architectureWarnings: _directArchResult.warnings.length > 0 ? _directArchResult.warnings.map((w) => w.message) : undefined,
           verificationStatus: directVerification.status as VerificationStatus,
           requiresReview: directVerification.requiresReview ?? false,
         },
@@ -3431,6 +3460,9 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   }
 
   // ── MAIN ROUTING SWITCH (SSE path) — driven entirely by execPlan.action ───
+  // ExecutionPlan is the single routing authority. classifyIntent is advisory only.
+  // intentResult.type is available for logging and analytics throughout this handler,
+  // but routing decisions and mutation eligibility are controlled by execPlan.action.
   switch (execPlan.action) {
 
     // ── APPLY_MUTATION ────────────────────────────────────────────────────────
@@ -3505,7 +3537,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           const isStructuralVibeEdit = clarificationEditPlan.scope === "system" || clarificationEditPlan.scope === "block";
 
           const changeLogId = await createChangeLogEntry({
-            userId, trainingSystemId: clarificationSystem.id, source: "ai_edit",
+            userId, trainingSystemId: clarificationSystem.id, source: "clarification_followup",
             intent: clarificationEditPlan.intent, scope: clarificationEditPlan.scope,
             changeSummary: clarificationEditResult.changeSummary,
             requestText: `[clarification followup:stream] ${reconstructedRequest.slice(0, 300)}`,
@@ -3591,8 +3623,9 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     }).returning();
     await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
 
-    // Write pending clarification state so the next reply can resume the correct intent
-    if (intentResult.type === "EDIT_PROGRAM" || intentResult.type === "ADJUST_FOR_PAIN" || intentResult.type === "ADJUST_FOR_READINESS") {
+    // Write pending clarification state so the next reply can resume the correct intent.
+    // execPlan.action === "APPLY_MUTATION" is the authoritative check — no intentResult dependency.
+    if (execPlan.action === "APPLY_MUTATION") {
       const familyResult = normalizeToIntentFamily(parsed.data.content, streamFocusMode);
       writePendingClarification({
         conversationId: params.data.id, userId,
@@ -4042,6 +4075,12 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         );
       }
 
+      // ── Post-mutation light architecture validation ─────────────────────────
+      const _streamArchResult = validatePostMutationArchitectureLight({
+        entitySessions: streamEditResult.afterSnapshot?.sessions as Record<string, Record<string, unknown>> | undefined,
+        context: "SSE:direct_edit",
+      });
+
       const changeLogId = await createChangeLogEntry({
         userId,
         trainingSystemId: resolvedSystem.id,
@@ -4060,6 +4099,14 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           intentType: intentResult.type,
           intentFamily: execPlan.intentFamily,
           confirmed: streamSwapContract?.confirmed ?? false,
+          propagated: (streamEditResult.propagationSummary?.status ?? "local_only") !== "local_only",
+          propagationStatus: streamEditResult.propagationSummary?.status === "propagated" ? "full"
+            : streamEditResult.propagationSummary?.status === "partial" ? "partial"
+            : "none",
+          propagationCheckedCount: (streamEditResult.propagationSummary?.appliedWeeks?.length ?? 0) + (streamEditResult.propagationSummary?.skippedWeeks?.length ?? 0),
+          propagationConfirmedCount: streamEditResult.propagationSummary?.appliedWeeks?.length ?? 0,
+          propagationFailedCount: streamEditResult.propagationSummary?.skippedWeeks?.length ?? 0,
+          architectureWarnings: _streamArchResult.warnings.length > 0 ? _streamArchResult.warnings : undefined,
           verification: {
             status: streamVerification.status,
             verifiedCount: streamVerification.verifiedChanges.length,
@@ -4139,6 +4186,10 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           changeTargets: streamEditResult.changeTargets,
           systemId: resolvedSystem.id,
           changeLogId,
+          propagationStatus: streamEditResult.propagationSummary?.status === "propagated" ? "full"
+            : streamEditResult.propagationSummary?.status === "partial" ? "partial"
+            : "none",
+          architectureWarnings: _streamArchResult.warnings.length > 0 ? _streamArchResult.warnings.map((w) => w.message) : undefined,
           verificationStatus: streamVerification.status as VerificationStatus,
           requiresReview: streamVerification.requiresReview ?? false,
         },

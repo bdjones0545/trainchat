@@ -64,6 +64,8 @@ export interface CompleteEvent {
   planInfo: { plan: string; messagesRemaining: number } | null;
   systemSaved: boolean;
   systemId?: number;
+  /** Present when a training system was auto-created from a chat program before the edit. */
+  trainingSystemId?: number;
   changeLogId?: number;
   intentDebug?: { type: string; confidence: string; editSubtype: string | null };
   systemEdit?: {
@@ -76,6 +78,10 @@ export interface CompleteEvent {
     /** Phase 2: whether the edit was verified in the post-mutation state */
     verificationStatus?: "verified" | "partial" | "failed" | "noop" | "unclear";
     requiresReview?: boolean;
+    /** Propagation coverage: "full" = all future weeks updated, "partial" = some failed, "none" = no propagation */
+    propagationStatus?: "full" | "partial" | "none";
+    /** Light architecture validation warnings — present if structural issues were detected post-edit */
+    architectureWarnings?: string[];
   };
   editFailure?: { reason: "no_changes_applied" | "pipeline_error" | "verification_failed"; skippedCount?: number; verificationSummary?: string };
   saveFailure?: { reason: string };

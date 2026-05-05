@@ -101,7 +101,7 @@ export function classifyEdit(
 export interface CreateChangeLogParams {
   userId: number;
   trainingSystemId: number;
-  source?: "ai_edit" | "quick_action" | "initialize" | "restore" | "auto_adjust" | "proactive_agent" | "workout_feedback";
+  source?: "ai_edit" | "quick_action" | "initialize" | "restore" | "auto_adjust" | "proactive_agent" | "workout_feedback" | "clarification_followup";
   intent: string;
   scope: EditScope;
   changeSummary: string;
