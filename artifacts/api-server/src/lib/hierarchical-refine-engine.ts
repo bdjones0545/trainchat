@@ -265,12 +265,35 @@ export function deriveRefinedSessionIdentity(
     case "power":
     case "power_explosive_focus":
     case "speed_focus": {
-      let label = raw
-        .replace(/\bMax Strength\b/g, "Power + Max Strength")
-        .replace(/(?<!Power \+ )\bStrength\b/g, "Power + Strength")
-        .replace(/\bHinge\b/g, "Speed Hinge")
-        .replace(/\bPress\b/g, "Explosive Press");
-      if (label === raw) label = `${raw} — Explosive`;
+      const hasPower    = /\bPower\b/i.test(raw);
+      const hasStrength = /\bStrength\b/i.test(raw);
+      const hasPlus     = raw.includes(" + ");
+      let label: string;
+      if (hasStrength && hasPlus) {
+        // "Upper Strength + Press" → "Upper Power + Explosive Press"
+        // Replace Strength → Power, then qualify the secondary component
+        label = raw
+          .replace(/\bStrength\b/g, "Power")
+          .replace(/\bHinge\b/g, "Speed Hinge")
+          .replace(/\bPress\b/g, "Explosive Press");
+      } else if (hasStrength) {
+        // "Lower Strength" → "Lower Power + Explosive Output"
+        label = raw.replace(/\bStrength\b/g, "Power + Explosive Output");
+      } else if (!hasPower && hasPlus) {
+        // "Posterior Chain + Hinge" → "Posterior Chain Power + Speed Hinge"
+        label = raw
+          .replace(/\s*\+\s*/, " Power + ")
+          .replace(/\bHinge\b/g, "Speed Hinge")
+          .replace(/\bPress\b/g, "Explosive Press");
+      } else if (hasPower) {
+        // Already has Power — apply qualifiers to secondary components only
+        const t = raw
+          .replace(/\bHinge\b/g, "Speed Hinge")
+          .replace(/\bPress\b/g, "Explosive Press");
+        label = t !== raw ? t : `${raw} — Explosive`;
+      } else {
+        label = `${raw} — Explosive`;
+      }
       const emphasis = emph
         ? `${emph}; rate of force development and power expression added`
         : "Rate of force development layered onto existing session structure";
@@ -280,14 +303,22 @@ export function deriveRefinedSessionIdentity(
     case "strength":
     case "strength_focus":
     case "increase_difficulty": {
-      let label = raw
-        .replace(/\bPower\b/g, "Strength + Power")
-        .replace(/(?<!Max )\bStrength\b/g, "Max Strength");
-      // If neither word was found, insert "Strength" before the first " + " separator
-      if (label === raw) {
-        label = raw.includes(" + ")
-          ? raw.replace(/\s*\+\s*/, " Strength + ")
-          : `${raw} — Strength`;
+      const hasPower    = /\bPower\b/i.test(raw);
+      const hasStrength = /\bStrength\b/i.test(raw);
+      const hasPlus     = raw.includes(" + ");
+      let label: string;
+      if (hasPower) {
+        // "Lower Power" → "Lower Strength + Power"
+        label = raw.replace(/\bPower\b/g, "Strength + Power");
+      } else if (hasStrength) {
+        // "Upper Strength + Press" → "Upper Max Strength + Press"
+        label = raw.replace(/\bStrength\b/g, "Max Strength");
+      } else if (hasPlus) {
+        // "Posterior Chain + Hinge" → "Posterior Chain Strength + Hinge"
+        label = raw.replace(/\s*\+\s*/, " Strength + ");
+      } else {
+        // "Full Body" → "Full Body — Strength"
+        label = `${raw} — Strength`;
       }
       const emphasis = emph
         ? `${emph}; strength emphasis increased across all movements`
