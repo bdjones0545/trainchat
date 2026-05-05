@@ -79,6 +79,21 @@ export interface CompleteEvent {
   };
   editFailure?: { reason: "no_changes_applied" | "pipeline_error" | "verification_failed"; skippedCount?: number; verificationSummary?: string };
   saveFailure?: { reason: string };
+  /**
+   * Verified mutation contract for replace_exercise actions.
+   * Present on APPLY_MUTATION success paths (both SSE and non-stream).
+   * The frontend MUST check confirmed === true before rendering any "swap confirmed" UI.
+   * If absent or confirmed === false, the mutation was not a verified swap — show neutral copy.
+   */
+  swapContract?: {
+    actionType: "replace_exercise";
+    confirmed: boolean;
+    originalExercise: string | null;
+    replacementExercise: string | null;
+    updatedExercise: Record<string, unknown> | null;
+    changeEntry: Record<string, unknown> | null;
+    invalidationKeys: string[];
+  } | null;
   /** Whether the DB mutation was actually executed, independent of verification outcome. */
   mutationApplied?: boolean;
   /** Explicit success flag — some server paths send this instead of mutationApplied. */

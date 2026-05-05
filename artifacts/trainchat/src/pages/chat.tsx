@@ -1673,6 +1673,43 @@ export default function Chat() {
           setChangeTargets(result.systemEdit.changeTargets as any);
         }
         setNewChangeSignal((n) => n + 1);
+
+        // ── Swap contract validation — mirrors LiveProgramPanel.handleDirectExerciseEdit ──
+        // The swap contract is the single authoritative proof that a replace_exercise
+        // mutation landed in the DB. Only show "X → Y" copy when confirmed === true.
+        const chatSwapContract = result.swapContract ?? null;
+        const chatSwapIsExerciseSwap = result.systemEdit.changeTargets?.some((t: any) => t.type === "exercise_swap");
+        const chatSwapConfirmed =
+          chatSwapContract?.actionType === "replace_exercise" &&
+          chatSwapContract.confirmed === true &&
+          chatSwapContract.updatedExercise != null;
+
+        if (import.meta.env.DEV) {
+          if (chatSwapIsExerciseSwap && !chatSwapConfirmed) {
+            console.warn("[MainChatEdit:SwapContractViolation]", {
+              swapContract: chatSwapContract,
+              reason: !chatSwapContract
+                ? "no_contract_in_response"
+                : !chatSwapContract.confirmed
+                ? "contract_unconfirmed"
+                : "updated_exercise_missing",
+            });
+          } else if (chatSwapConfirmed) {
+            console.log("[MainChatEdit:SwapContractVerified]", {
+              originalExercise: chatSwapContract!.originalExercise,
+              replacementExercise: chatSwapContract!.replacementExercise,
+              invalidationKeys: chatSwapContract!.invalidationKeys,
+            });
+          }
+        }
+
+        // Build the receipt summary — use the contract's "X → Y" label when confirmed,
+        // otherwise fall back to the server-provided changeSummary.
+        const chatReceiptSummary =
+          chatSwapConfirmed && chatSwapContract!.originalExercise && chatSwapContract!.replacementExercise
+            ? `${chatSwapContract!.originalExercise} → ${chatSwapContract!.replacementExercise}`
+            : result.systemEdit.changeSummary ?? null;
+
         if (!rightPanelOpen) {
           // Panel is closed — surface a receipt card in chat instead of forcing it open.
           const receiptId = result.changeLogId
@@ -1681,7 +1718,7 @@ export default function Chat() {
             ? `cl-${result.systemEdit.changeLogId}`
             : `edit-${Date.now()}`;
           setEditReceipt({
-            summary: result.systemEdit.changeSummary ?? null,
+            summary: chatReceiptSummary,
             receiptId,
           });
         }
