@@ -3088,9 +3088,13 @@ function ChangesTab({ hasActiveSystem, newChangeSignal }: { hasActiveSystem?: bo
             );
           }
 
+          // Confirmed is driven exclusively by swapContract.confirmed === true (persisted
+          // to decisionMetadata.confirmed). Never by verificationStatus, appliedCount > 0,
+          // assistant wording, or outcomeType.
+          const confirmed = entry.decisionMetadata?.confirmed === true;
           const verificationStatus = entry.decisionMetadata?.verificationStatus as string | undefined;
           const verificationBadge =
-            verificationStatus === "verified"
+            confirmed
               ? { label: "✓ confirmed", cls: "text-emerald-400 bg-emerald-400/10" }
               : verificationStatus === "partial"
               ? { label: "⚡ partial", cls: "text-amber-400 bg-amber-400/10" }

@@ -1944,6 +1944,39 @@ Keep it helpful and intelligent, never promotional.`;
       const whyChanged = whyChangedParts.length > 0 ? whyChangedParts.join("; ") : undefined;
       const isStructuralEdit = directEditPlan.scope === "system" || directEditPlan.scope === "block";
 
+      // ── Swap contract — built before createChangeLogEntry so confirmed is persisted ──
+      // The frontend badge reads decisionMetadata.confirmed === true (strict boolean).
+      // Building here from the DB after-snapshot guarantees it reflects actual DB state.
+      const _directSwapChangeTarget = directEditResult.changeTargets.find((t) => t.type === "exercise_swap");
+      const _directSwapPlanChange = directEditPlan.changes.find((c) => c.type === "replace_exercise");
+      let directSwapContract: {
+        actionType: "replace_exercise";
+        confirmed: boolean;
+        originalExercise: string | null;
+        replacementExercise: string | null;
+        updatedExercise: Record<string, unknown> | null;
+        changeEntry: Record<string, unknown> | null;
+        invalidationKeys: string[];
+      } | null = null;
+
+      if (_directSwapChangeTarget && _directSwapPlanChange) {
+        const _directUpdatedEx = (directEditResult.afterSnapshot?.exercises?.[String(_directSwapPlanChange.id)] as Record<string, unknown> | undefined) ?? null;
+        const _directConfirmed = directEditResult.appliedCount > 0 && !!_directSwapChangeTarget.newExercise && !!_directUpdatedEx;
+        directSwapContract = {
+          actionType: "replace_exercise",
+          confirmed: _directConfirmed,
+          originalExercise: _directSwapChangeTarget.originalExercise ?? null,
+          replacementExercise: _directSwapChangeTarget.newExercise ?? null,
+          updatedExercise: _directUpdatedEx,
+          changeEntry: null,
+          invalidationKeys: ["training-system-week", "live-panel-week-ids", "week-view-select", "training-system-today", "training-system-active", "training-system-history"],
+        };
+        logger.info(
+          { confirmed: _directConfirmed, originalExercise: directSwapContract.originalExercise, replacementExercise: directSwapContract.replacementExercise },
+          "[VibeEdit] Swap contract built"
+        );
+      }
+
       const changeLogId = await createChangeLogEntry({
         userId,
         trainingSystemId: resolvedSystem.id,
@@ -1961,6 +1994,7 @@ Keep it helpful and intelligent, never promotional.`;
           whyChanged,
           intentType: intentResult.type,
           intentFamily: execPlan.intentFamily,
+          confirmed: directSwapContract?.confirmed ?? false,
           verification: {
             status: directVerification.status,
             verifiedCount: directVerification.verifiedChanges.length,
@@ -2023,39 +2057,6 @@ Keep it helpful and intelligent, never promotional.`;
       await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
       if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
         stripeStorage.incrementMessageCount(userId).catch(() => {});
-      }
-
-      // ── Swap contract — same verified-mutation contract as training-system-edit.ts ──
-      // Built from the actual DB results (after-snapshot), not from intent alone.
-      // The frontend MUST check confirmed === true before showing any "swap confirmed" UI.
-      const _directSwapChangeTarget = directEditResult.changeTargets.find((t) => t.type === "exercise_swap");
-      const _directSwapPlanChange = directEditPlan.changes.find((c) => c.type === "replace_exercise");
-      let directSwapContract: {
-        actionType: "replace_exercise";
-        confirmed: boolean;
-        originalExercise: string | null;
-        replacementExercise: string | null;
-        updatedExercise: Record<string, unknown> | null;
-        changeEntry: Record<string, unknown> | null;
-        invalidationKeys: string[];
-      } | null = null;
-
-      if (_directSwapChangeTarget && _directSwapPlanChange) {
-        const _directUpdatedEx = (directEditResult.afterSnapshot?.exercises?.[String(_directSwapPlanChange.id)] as Record<string, unknown> | undefined) ?? null;
-        const _directConfirmed = directEditResult.appliedCount > 0 && !!_directSwapChangeTarget.newExercise && !!_directUpdatedEx;
-        directSwapContract = {
-          actionType: "replace_exercise",
-          confirmed: _directConfirmed,
-          originalExercise: _directSwapChangeTarget.originalExercise ?? null,
-          replacementExercise: _directSwapChangeTarget.newExercise ?? null,
-          updatedExercise: _directUpdatedEx,
-          changeEntry: null,
-          invalidationKeys: ["training-system-week", "live-panel-week-ids", "week-view-select", "training-system-today", "training-system-active", "training-system-history"],
-        };
-        logger.info(
-          { confirmed: _directConfirmed, originalExercise: directSwapContract.originalExercise, replacementExercise: directSwapContract.replacementExercise },
-          "[VibeEdit] Swap contract built"
-        );
       }
 
       res.json({
@@ -3846,6 +3847,39 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       const streamWhyChanged = streamWhyParts.length > 0 ? streamWhyParts.join("; ") : undefined;
       const streamIsStructural = streamEditPlan.scope === "system" || streamEditPlan.scope === "block";
 
+      // ── Swap contract — built before createChangeLogEntry so confirmed is persisted ──
+      // The frontend badge reads decisionMetadata.confirmed === true (strict boolean).
+      // Building here from the DB after-snapshot guarantees it reflects actual DB state.
+      const _streamSwapChangeTarget = streamEditResult.changeTargets.find((t) => t.type === "exercise_swap");
+      const _streamSwapPlanChange = streamEditPlan.changes.find((c) => c.type === "replace_exercise");
+      let streamSwapContract: {
+        actionType: "replace_exercise";
+        confirmed: boolean;
+        originalExercise: string | null;
+        replacementExercise: string | null;
+        updatedExercise: Record<string, unknown> | null;
+        changeEntry: Record<string, unknown> | null;
+        invalidationKeys: string[];
+      } | null = null;
+
+      if (_streamSwapChangeTarget && _streamSwapPlanChange) {
+        const _streamUpdatedEx = (streamEditResult.afterSnapshot?.exercises?.[String(_streamSwapPlanChange.id)] as Record<string, unknown> | undefined) ?? null;
+        const _streamConfirmed = streamEditResult.appliedCount > 0 && !!_streamSwapChangeTarget.newExercise && !!_streamUpdatedEx;
+        streamSwapContract = {
+          actionType: "replace_exercise",
+          confirmed: _streamConfirmed,
+          originalExercise: _streamSwapChangeTarget.originalExercise ?? null,
+          replacementExercise: _streamSwapChangeTarget.newExercise ?? null,
+          updatedExercise: _streamUpdatedEx,
+          changeEntry: null,
+          invalidationKeys: ["training-system-week", "live-panel-week-ids", "week-view-select", "training-system-today", "training-system-active", "training-system-history"],
+        };
+        logger.info(
+          { confirmed: _streamConfirmed, originalExercise: streamSwapContract.originalExercise, replacementExercise: streamSwapContract.replacementExercise },
+          "[VibeEdit:stream] Swap contract built"
+        );
+      }
+
       const changeLogId = await createChangeLogEntry({
         userId,
         trainingSystemId: resolvedSystem.id,
@@ -3863,6 +3897,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           whyChanged: streamWhyChanged,
           intentType: intentResult.type,
           intentFamily: execPlan.intentFamily,
+          confirmed: streamSwapContract?.confirmed ?? false,
           verification: {
             status: streamVerification.status,
             verifiedCount: streamVerification.verifiedChanges.length,
@@ -3923,39 +3958,6 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
       if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
         stripeStorage.incrementMessageCount(userId).catch(() => {});
-      }
-
-      // ── Swap contract — same verified-mutation contract as training-system-edit.ts ──
-      // Built from the actual DB results (after-snapshot), not from intent alone.
-      // The frontend MUST check confirmed === true before showing any "swap confirmed" UI.
-      const _streamSwapChangeTarget = streamEditResult.changeTargets.find((t) => t.type === "exercise_swap");
-      const _streamSwapPlanChange = streamEditPlan.changes.find((c) => c.type === "replace_exercise");
-      let streamSwapContract: {
-        actionType: "replace_exercise";
-        confirmed: boolean;
-        originalExercise: string | null;
-        replacementExercise: string | null;
-        updatedExercise: Record<string, unknown> | null;
-        changeEntry: Record<string, unknown> | null;
-        invalidationKeys: string[];
-      } | null = null;
-
-      if (_streamSwapChangeTarget && _streamSwapPlanChange) {
-        const _streamUpdatedEx = (streamEditResult.afterSnapshot?.exercises?.[String(_streamSwapPlanChange.id)] as Record<string, unknown> | undefined) ?? null;
-        const _streamConfirmed = streamEditResult.appliedCount > 0 && !!_streamSwapChangeTarget.newExercise && !!_streamUpdatedEx;
-        streamSwapContract = {
-          actionType: "replace_exercise",
-          confirmed: _streamConfirmed,
-          originalExercise: _streamSwapChangeTarget.originalExercise ?? null,
-          replacementExercise: _streamSwapChangeTarget.newExercise ?? null,
-          updatedExercise: _streamUpdatedEx,
-          changeEntry: null,
-          invalidationKeys: ["training-system-week", "live-panel-week-ids", "week-view-select", "training-system-today", "training-system-active", "training-system-history"],
-        };
-        logger.info(
-          { confirmed: _streamConfirmed, originalExercise: streamSwapContract.originalExercise, replacementExercise: streamSwapContract.replacementExercise },
-          "[VibeEdit:stream] Swap contract built"
-        );
       }
 
       done({

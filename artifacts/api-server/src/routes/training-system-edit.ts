@@ -426,6 +426,22 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       editResult.verification?.status ??
       deriveVerificationStatus(editResult.appliedCount, editResult.skippedCount);
 
+    // ── Pre-compute swap details so confirmed is persisted to the change log ──
+    // Must run before createChangeLogEntry. confirmed === true is the only gate
+    // the frontend badge reads (decisionMetadata.confirmed). Never verificationStatus,
+    // appliedCount alone, assistant wording, or outcomeType.
+    const swapChangeTarget = editResult.changeTargets.find((t) => t.type === "exercise_swap");
+    const swapPlanChange = editPlan.changes.find((c) => c.type === "replace_exercise");
+    const _preSwapUpdatedExercise = swapChangeTarget && swapPlanChange
+      ? (editResult.afterSnapshot.exercises?.[String(swapPlanChange.id)] as Record<string, unknown> | undefined) ?? null
+      : null;
+    const swapConfirmed =
+      swapChangeTarget != null &&
+      swapPlanChange != null &&
+      editResult.appliedCount > 0 &&
+      !!swapChangeTarget.newExercise &&
+      !!_preSwapUpdatedExercise;
+
     let changeLogId: number | undefined;
     try {
       changeLogId = await createChangeLogEntry({
@@ -444,6 +460,7 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
         appliedCount: editResult.appliedCount,
         skippedCount: editResult.skippedCount,
         decisionMetadata: {
+          confirmed: swapConfirmed,
           verificationStatus: resolvedVerificationStatus,
           persistenceType: preLogIntentClassification?.persistenceType ?? null,
           mutationType: preLogIntentClassification?.mutationType ?? null,
@@ -471,7 +488,7 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
         versionLabel: versionLabel ?? null,
         appliedCount: editResult.appliedCount,
         skippedCount: editResult.skippedCount,
-        decisionMetadata: null,
+        decisionMetadata: { confirmed: swapConfirmed },
         createdAt: new Date().toISOString(),
       };
     }
@@ -561,10 +578,9 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
     });
 
     // ── Swap contract — gating field for frontend "confirmed swap" rendering ──────
-    // Built from verified before/after snapshots, not from the intent plan alone.
-    // The frontend MUST check actionType === "replace_exercise" && updatedExercise != null
-    // before displaying any "swap confirmed" state. If either field is absent, it means
-    // the mutation was misclassified or didn't land, and the UI should stay silent.
+    // Uses pre-computed swapConfirmed / swapChangeTarget / swapPlanChange so the same
+    // confirmed value is persisted to the change log (decisionMetadata.confirmed) and
+    // returned in the API response. The badge reads decisionMetadata.confirmed === true.
     const SWAP_INVALIDATION_KEYS = [
       "training-system-week",
       "live-panel-week-ids",
@@ -573,9 +589,6 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       "training-system-active",
       "training-system-history",
     ] as const;
-
-    const swapChangeTarget = editResult.changeTargets.find((t) => t.type === "exercise_swap");
-    const swapPlanChange = editPlan.changes.find((c) => c.type === "replace_exercise");
 
     let swapContract: {
       actionType: "replace_exercise";
@@ -588,23 +601,19 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
     } | null = null;
 
     if (swapChangeTarget && swapPlanChange) {
-      const updatedExercise =
-        (editResult.afterSnapshot.exercises?.[String(swapPlanChange.id)] as Record<string, unknown> | undefined) ?? null;
-      const confirmed = editResult.appliedCount > 0 && !!swapChangeTarget.newExercise && !!updatedExercise;
-
       swapContract = {
         actionType: "replace_exercise",
-        confirmed,
+        confirmed: swapConfirmed,
         originalExercise: swapChangeTarget.originalExercise ?? null,
         replacementExercise: swapChangeTarget.newExercise ?? null,
-        updatedExercise,
+        updatedExercise: _preSwapUpdatedExercise,
         changeEntry: changeLogEntry ?? null,
         invalidationKeys: SWAP_INVALIDATION_KEYS,
       };
 
       logger.info(
         {
-          confirmed,
+          confirmed: swapConfirmed,
           originalExercise: swapContract.originalExercise,
           replacementExercise: swapContract.replacementExercise,
           exerciseId: swapPlanChange.id,
