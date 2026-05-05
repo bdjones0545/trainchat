@@ -1,0 +1,254 @@
+Build an automated Research Discovery Pipeline for TrainChat.
+
+Goal:
+The backend should automatically find new peer-reviewed papers, run them through the Librarian Agent, and queue them for admin approval before they become retrievable by the Coach.
+
+Important safety rule:
+Never auto-activate research into Coach retrieval without Librarian approval + admin approval.
+Auto-discovery can create candidates.
+The Librarian can evaluate candidates.
+Admin must approve before is_active=true.
+
+Sources to use:
+1. PubMed / NCBI E-utilities for biomedical, rehab, pain, exercise physiology topics.
+2. Crossref REST API for DOI and metadata enrichment.
+3. Semantic Scholar API for paper search, citation data, related/recommended papers.
+
+Create a new backend service:
+
+artifacts/api-server/src/research/research-discovery-service.ts
+
+Responsibilities:
+- run scheduled discovery
+- search source APIs
+- normalize metadata
+- deduplicate papers
+- store candidates
+- run Librarian review
+- leave final activation pending admin approval
+
+Add database support if needed:
+
+research_discovery_runs
+- id
+- startedAt
+- completedAt
+- status
+- source
+- querySet
+- candidatesFound
+- candidatesStored
+- duplicatesSkipped
+- librarianReviewed
+- approvedSuggested
+- needsReview
+- rejected
+- errors
+
+research_paper_candidates
+- id
+- title
+- authors
+- year
+- journal
+- doi
+- pubmedId
+- semanticScholarId
+- abstract
+- sourceUrl
+- sourceApi
+- category
+- discoveryQuery
+- citationCount
+- publicationTypes
+- discoveredAt
+- status: discovered | librarian_reviewed | pending_admin | rejected | approved
+- librarianRecommendation
+- trustLevel
+- confidence
+- warningFlags
+- librarianNotes
+- duplicateOfDocumentId
+- createdAt
+- updatedAt
+
+Discovery query categories:
+
+Hypertrophy:
+- resistance training hypertrophy meta-analysis
+- muscle hypertrophy volume frequency resistance training
+
+Strength:
+- resistance training strength progression meta-analysis
+- strength training periodization systematic review
+
+Speed / Power:
+- sprint acceleration training systematic review
+- plyometric training meta-analysis athletes
+- force velocity profiling sprint athletes
+
+Tendon / Overuse:
+- patellar tendinopathy exercise systematic review
+- Achilles tendinopathy loading systematic review
+- tendon rehabilitation resistance training review
+
+Knee / Return to Training:
+- ACL return to sport criteria systematic review
+- patellofemoral pain exercise therapy systematic review
+- knee pain return to sport strength training
+
+Conditioning:
+- high intensity interval training endurance systematic review
+- concurrent training interference meta-analysis
+- zone 2 endurance training adaptations
+
+Recovery / Fatigue:
+- HRV training readiness systematic review
+- resistance training recovery fatigue monitoring
+- sleep recovery athletic performance review
+
+Youth / Older Adults:
+- youth resistance training systematic review
+- older adults resistance training meta-analysis
+
+Discovery rules:
+- Prefer systematic reviews, meta-analyses, consensus statements, clinical practice guidelines, and position stands.
+- Allow important foundational single studies but flag them.
+- Avoid blogs, non-peer-reviewed sources, supplement-only papers, and pure nutrition papers unless explicitly relevant.
+- Require title + abstract + year + source identifier.
+- Prefer papers from the last 10 years unless foundational.
+- Deduplicate by DOI first, then PubMed ID, then Semantic Scholar ID, then normalized title.
+
+Flow:
+
+1. Scheduled job
+Create a cron job:
+- weekly by default
+- admin configurable later
+- can also be triggered manually from admin route
+
+Example:
+POST /api/admin/research/discovery/run
+
+2. Search APIs
+For each category query:
+- search PubMed
+- search Semantic Scholar
+- enrich DOI/metadata through Crossref when DOI exists
+- normalize into one candidate shape
+
+3. Candidate filtering
+Skip:
+- missing abstract
+- no DOI/PubMed/SemanticScholar identifier
+- title duplicate
+- already in research_documents
+- retracted papers if metadata shows retraction
+- irrelevant categories
+
+4. Store candidates
+Insert into research_paper_candidates with status = discovered.
+
+5. Librarian evaluation
+Run Librarian Agent on each candidate abstract/metadata.
+Update candidate:
+- librarianRecommendation
+- trustLevel
+- confidence
+- warningFlags
+- librarianNotes
+- status:
+  - approve → pending_admin
+  - needs_review → pending_admin
+  - reject → rejected
+
+Do not write candidates directly into active research_documents yet.
+
+6. Admin approval
+Add admin endpoints:
+GET /api/admin/research/candidates
+POST /api/admin/research/candidates/:id/approve
+POST /api/admin/research/candidates/:id/reject
+
+On approve:
+- create research_documents row
+- generate chunks
+- preserve DOI/source URL/authors/year/journal
+- preserve warningFlags/trustLevel/confidence
+- status = approved
+- is_active = true only after admin approval
+
+On reject:
+- candidate.status = rejected
+- do not create research document
+
+7. Admin UI
+Add a Research Discovery panel to admin page:
+- Run discovery button
+- Last run summary
+- Candidate list
+- Filters: category, recommendation, warningFlags, year, source
+- Approve / Reject buttons
+- Show title, authors, year, journal, DOI/source, abstract preview, Librarian notes, warning flags
+
+8. Retrieval safety
+Keep current retriever safety rule:
+Only retrieve documents that are:
+- status = approved
+- is_active = true
+- librarianRecommendation = approve OR adminApprovedAfterNeedsReview = true
+
+9. Logging
+Add structured logs:
+[ResearchDiscovery] run started
+[ResearchDiscovery] source search complete
+[ResearchDiscovery] candidate stored
+[ResearchDiscovery] duplicate skipped
+[ResearchDiscovery] librarian reviewed
+[ResearchDiscovery] run complete
+[ResearchDiscovery] error
+
+10. Rate limits and config
+Add env vars:
+PUBMED_EMAIL
+PUBMED_API_KEY optional
+SEMANTIC_SCHOLAR_API_KEY optional
+RESEARCH_DISCOVERY_ENABLED=false by default
+RESEARCH_DISCOVERY_CRON="0 6 * * 1"
+
+If no API keys:
+- PubMed and Crossref should still work where allowed.
+- Semantic Scholar can run unauthenticated if allowed, but respect rate limits.
+
+11. QA tests
+
+Manual run:
+POST /api/admin/research/discovery/run
+
+Expected:
+- candidates found
+- duplicates skipped
+- librarian runs
+- candidates appear in admin review
+- no document becomes retrievable until admin approval
+
+Approve one candidate:
+Expected:
+- research_documents row created
+- chunks created
+- warningFlags preserved
+- retrieval test returns the new approved document
+
+Reject one candidate:
+Expected:
+- candidate rejected
+- no retrievable document created
+
+Safety:
+Expected:
+- No auto-approved document reaches Coach without admin approval.
+- Logs show full discovery trail.
+
+Important:
+This is not a self-modifying Librarian.
+It is an automated evidence discovery pipeline with human-governed activation.
