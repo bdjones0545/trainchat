@@ -51,6 +51,14 @@ The user interface features a dark theme with electric blue accents and the Inte
 - **Orval**: API client and Zod schema generation.
 - **html-to-image**: PNG export of share cards.
 
+## UX Clarity Pass (May 2026)
+- **Summary card**: Compact identity card above the tab bar when a system is active — shows program name, focus badge, week number, last-updated time, and latest change summary.
+- **Specific success banners**: `triggerSuccessOverlay(message)` now accepts a label; each caller passes a contextual string (chip label, "Day 2 shortened", "Exercise swapped", "Made easier", etc.) instead of the generic "Program Updated".
+- **Day-level highlights**: When `newChangeSignal` fires with no exercise-specific `changeTargets`, the currently expanded day card gets a brief `ring-primary/50` ring for 3.2 s so session-level edits are visually located.
+- **Post-edit chat rule**: CHAT RESPONSE RULE in `ai.ts` now mandates what-changed / why / what-stayed in 2–3 sentences with coach voice; generic "Program updated" is explicitly forbidden.
+- **Changes tab**: Both progression and regular entries now surface `decisionMetadata.coachExplanation` (falling back to `whyChanged`) in an italic `↳` line for richer context.
+- **Copy safety**: "heavier primary work" → "more challenging primary sessions"; "heavier loads" → "higher intensity"; "heavier rep ranges" → "rep ranges and difficulty shifted upward" across 3 service files.
+
 ## QA Bug Fixes (May 2026 batch)
 - **BUG-01** — `VAGUE_IMPROVEMENT_PATTERNS` guard in `execution-planner.ts` (STEP 3.6): "make it better / improve it / optimize it" always routes to `ASK_CLARIFICATION`, never `REBUILD_PROGRAM`.
 - **BUG-02** — Mobility session regression: `focusMode === "mobility"` + resolved day + "shorter/easier/gentler" → deterministic `day_regression` mutation, avoids AI edit-plan failure path.

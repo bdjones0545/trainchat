@@ -683,6 +683,7 @@ function ProgramTab({
   const [refineInput, setRefineInput] = useState("");
   const [showSuccessOverlay, setShowSuccessOverlay] = useState(false);
   const [successOverlayFading, setSuccessOverlayFading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("Updated");
   const [panelEditError, setPanelEditError] = useState<string | null>(null);
 
   /**
@@ -830,11 +831,12 @@ function ProgramTab({
   }
 
   // Helper: show the success overlay and schedule its auto-dismiss.
-  function triggerSuccessOverlay() {
+  function triggerSuccessOverlay(message = "Updated") {
+    setSuccessMessage(message);
     setShowSuccessOverlay(true);
     setSuccessOverlayFading(false);
     if (programUpdatedTimerRef.current) clearTimeout(programUpdatedTimerRef.current);
-    programUpdatedTimerRef.current = setTimeout(() => dismissSuccessOverlay(), 1600);
+    programUpdatedTimerRef.current = setTimeout(() => dismissSuccessOverlay(), 1900);
   }
 
   // Clear loading state + flash "Program Updated" when stream completes.
@@ -978,7 +980,7 @@ function ProgramTab({
       updateChangesCache(result.changeLogEntry ?? null);
 
       setPendingRefinement(null);
-      triggerSuccessOverlay();
+      triggerSuccessOverlay(chip.label);
       setShowContentReveal(true);
       if (contentRevealTimerRef.current) clearTimeout(contentRevealTimerRef.current);
       contentRevealTimerRef.current = setTimeout(() => setShowContentReveal(false), 350);
@@ -1041,7 +1043,7 @@ function ProgramTab({
       updateChangesCache(result.changeLogEntry ?? null);
 
       setPanelMutating(null);
-      triggerSuccessOverlay();
+      triggerSuccessOverlay(`${action.label}${day.name ? ` — ${day.name}` : ` — Day ${dayNum}`}`);
       setShowContentReveal(true);
       if (contentRevealTimerRef.current) clearTimeout(contentRevealTimerRef.current);
       contentRevealTimerRef.current = setTimeout(() => setShowContentReveal(false), 350);
@@ -1140,7 +1142,11 @@ function ProgramTab({
       });
       onSidebarMutation?.();
       setPendingRefinement(null);
-      triggerSuccessOverlay();
+      triggerSuccessOverlay(
+        action === "swap" ? "Exercise swapped"
+        : action === "easier" ? "Made easier"
+        : "Made harder"
+      );
       // Trigger content fade-in reveal
       setShowContentReveal(true);
       if (contentRevealTimerRef.current) clearTimeout(contentRevealTimerRef.current);
@@ -1327,8 +1333,8 @@ function ProgramTab({
       // Signal the outer LiveProgramPanel to trigger ChangesTab animate-newest effect
       onSidebarMutation?.();
 
-      // Flash "Program Updated" banner (same path as direct exercise edits)
-      triggerSuccessOverlay();
+      // Flash success banner
+      triggerSuccessOverlay("Exercise added");
       setShowContentReveal(true);
       if (contentRevealTimerRef.current) clearTimeout(contentRevealTimerRef.current);
       contentRevealTimerRef.current = setTimeout(() => setShowContentReveal(false), 350);
@@ -1594,7 +1600,9 @@ function ProgramTab({
   // ── Change-highlight state ────────────────────────────────────────────────
   const [highlightedNames, setHighlightedNames] = useState<Set<string>>(new Set());
   const [inlineLabels, setInlineLabels] = useState<Map<string, string>>(new Map());
+  const [highlightedDayIndices, setHighlightedDayIndices] = useState<Set<number>>(new Set());
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dayHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingScrollName = useRef<string | null>(null);
   const exerciseRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -1603,41 +1611,48 @@ function ProgramTab({
   // When a new change signal fires, set up highlights and find the day to expand
   useEffect(() => {
     if (!newChangeSignal || newChangeSignal === prevChangeSignalRef2.current) return;
-    if (!changeTargets?.length) return;
     prevChangeSignalRef2.current = newChangeSignal;
 
-    const names = new Set<string>();
-    const labels = new Map<string, string>();
+    if (changeTargets?.length) {
+      // ── Exercise-level highlights (exercise swap / add) ──────────────────
+      const names = new Set<string>();
+      const labels = new Map<string, string>();
 
-    for (const target of changeTargets) {
-      names.add(target.newExercise);
-      if (target.type === "exercise_swap" && target.originalExercise) {
-        labels.set(target.newExercise, `${target.originalExercise} → ${target.newExercise}`);
-      } else if (target.type === "exercise_added") {
-        labels.set(target.newExercise, `Added: ${target.newExercise}`);
+      for (const target of changeTargets) {
+        names.add(target.newExercise);
+        if (target.type === "exercise_swap" && target.originalExercise) {
+          labels.set(target.newExercise, `${target.originalExercise} → ${target.newExercise}`);
+        } else if (target.type === "exercise_added") {
+          labels.set(target.newExercise, `Added: ${target.newExercise}`);
+        }
       }
-    }
 
-    setHighlightedNames(names);
-    setInlineLabels(labels);
+      setHighlightedNames(names);
+      setInlineLabels(labels);
 
-    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
-    highlightTimerRef.current = setTimeout(() => {
-      setHighlightedNames(new Set());
-      setInlineLabels(new Map());
-    }, 8000);
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+      highlightTimerRef.current = setTimeout(() => {
+        setHighlightedNames(new Set());
+        setInlineLabels(new Map());
+      }, 8000);
 
-    // Find the day containing the first target and expand it
-    const firstTarget = changeTargets[0];
-    pendingScrollName.current = firstTarget.newExercise;
+      // Find the day containing the first target and expand it
+      const firstTarget = changeTargets[0];
+      pendingScrollName.current = firstTarget.newExercise;
 
-    if (program) {
-      const dayIdx = program.days.findIndex((d) =>
-        (d.exercises ?? []).some((e) => e.name === firstTarget.newExercise)
-      );
-      if (dayIdx !== -1) {
-        setExpandedDay(dayIdx);
+      if (program) {
+        const dayIdx = program.days.findIndex((d) =>
+          (d.exercises ?? []).some((e) => e.name === firstTarget.newExercise)
+        );
+        if (dayIdx !== -1) setExpandedDay(dayIdx);
       }
+    } else {
+      // ── Day/session-level highlight (no specific exercise target) ─────────
+      // Briefly ring the currently expanded day card so the user sees what moved
+      const currentDay = expandedDay ?? 0;
+      setHighlightedDayIndices(new Set([currentDay]));
+      if (dayHighlightTimerRef.current) clearTimeout(dayHighlightTimerRef.current);
+      dayHighlightTimerRef.current = setTimeout(() => setHighlightedDayIndices(new Set()), 3200);
     }
   }, [newChangeSignal]);
 
@@ -2145,7 +2160,7 @@ function ProgramTab({
           >
             <div className="flex items-center gap-1.5">
               <CheckCircle className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
-              <span className="text-[10px] font-semibold text-green-400">Program Updated</span>
+              <span className="text-[10px] font-semibold text-green-400">{successMessage}</span>
             </div>
             <button
               type="button"
@@ -2448,9 +2463,9 @@ function ProgramTab({
                 </div>
               ) : (
                 <div
-                  className={`bg-card border rounded-xl overflow-hidden transition-colors duration-300 ${
+                  className={`bg-card border rounded-xl overflow-hidden transition-all duration-300 ${
                     isExpanded ? "border-primary/30" : "border-border"
-                  }`}
+                  }${highlightedDayIndices.has(idx) ? " ring-1 ring-primary/50 shadow-[0_0_0_2px_rgba(99,102,241,0.12)]" : ""}`}
                   style={dayDiff === "newday" ? { animation: "day-new 1.8s ease forwards" } : undefined}
                 >
                   <button
@@ -3087,6 +3102,7 @@ function ChangesTab({ hasActiveSystem, newChangeSignal }: { hasActiveSystem?: bo
           }
 
           const whyChanged = entry.decisionMetadata?.whyChanged as string | undefined;
+          const coachExplanation = entry.decisionMetadata?.coachExplanation as string | undefined;
           const isProgression = entry.source === "workout_feedback";
           const progressionStatus = entry.decisionMetadata?.status as string | undefined;
           const flagForReview = entry.decisionMetadata?.flagForReview as boolean | undefined;
@@ -3124,8 +3140,8 @@ function ChangesTab({ hasActiveSystem, newChangeSignal }: { hasActiveSystem?: bo
                   <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatRelative(entry.createdAt)}</span>
                 </div>
                 <p className="text-[11px] text-foreground leading-relaxed font-medium">{entry.changeSummary}</p>
-                {whyChanged && (
-                  <p className="text-[10px] text-muted-foreground/70 mt-1.5 leading-relaxed">↳ {whyChanged}</p>
+                {(coachExplanation || whyChanged) && (
+                  <p className="text-[10px] text-muted-foreground/60 mt-1.5 leading-relaxed italic">↳ {coachExplanation ?? whyChanged}</p>
                 )}
               </div>
             );
@@ -3165,10 +3181,10 @@ function ChangesTab({ hasActiveSystem, newChangeSignal }: { hasActiveSystem?: bo
                 <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatRelative(entry.createdAt)}</span>
               </div>
               <p className="text-[11px] text-foreground leading-relaxed">{entry.changeSummary}</p>
-              {whyChanged && (
-                <p className="text-[10px] text-primary/60 mt-1.5 leading-relaxed">↳ {whyChanged}</p>
+              {(coachExplanation || whyChanged) && (
+                <p className="text-[10px] text-primary/55 mt-1.5 leading-relaxed italic">↳ {coachExplanation ?? whyChanged}</p>
               )}
-              {!whyChanged && entry.intent && entry.intent !== entry.changeSummary && (
+              {!(coachExplanation || whyChanged) && entry.intent && entry.intent !== entry.changeSummary && (
                 <p className="text-[10px] text-muted-foreground/50 mt-1 font-medium">{entry.intent.replace(/_/g, " ")}</p>
               )}
               {entry.requestText && (
@@ -3534,6 +3550,16 @@ export default function LiveProgramPanel({
     refetchOnWindowFocus: true,
   });
   const hasUnseenAdaptation = (adaptedNewCount ?? 0) > 0 && activeTab !== "adapted";
+
+  // Latest change entry — used in the summary card to show last-updated info
+  const { data: latestChangeData } = useQuery({
+    queryKey: ["training-system-history", "changes"],
+    queryFn: () => customFetch<{ history: Array<{ id: number; changeSummary: string; createdAt: string; scope: string }> }>("/api/training-system/history?limit=1"),
+    enabled: !!hasActiveSystem,
+    staleTime: 30_000,
+  });
+  const latestChange = (latestChangeData as any)?.history?.[0] ?? null;
+
   const [ownershipBannerType, setOwnershipBannerType] = useState<"active" | "saved" | null>(null);
   const [panelSwitchConfirm, setPanelSwitchConfirm] = useState<string | null>(null);
   const prevChangeSignalRef = useRef(0);
@@ -3747,6 +3773,41 @@ export default function LiveProgramPanel({
               </div>
             );
           })()}
+        </div>
+      )}
+
+      {/* Active Program Summary Card — program identity at a glance */}
+      {hasActiveSystem && program && (
+        <div className="flex-shrink-0 px-3 py-2.5 border-b border-border/40 bg-muted/5">
+          <p className="text-[8px] font-bold uppercase tracking-[0.12em] text-muted-foreground/35 mb-1">Current System</p>
+          <p className="text-[12px] font-semibold text-foreground leading-snug truncate">
+            {program.programName && program.programName !== "Workout Plan"
+              ? program.programName
+              : `${program.days.length}-Day ${getFocusModeConfig(sidebarFocus).label} Program`}
+          </p>
+          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wider ${getFocusModeConfig(sidebarFocus).theme.badgeClass}`}>
+              <FocusIcon mode={sidebarFocus} className="w-2.5 h-2.5" />
+              {getFocusModeConfig(sidebarFocus).shortLabel}
+            </span>
+            {program.weekNumber && (
+              <span className="text-[10px] text-muted-foreground/60">Week {program.weekNumber}</span>
+            )}
+            {latestChange && (
+              <>
+                <span className="text-muted-foreground/25 text-[9px]">·</span>
+                <span className="text-[10px] text-muted-foreground/40">{formatRelative(latestChange.createdAt)}</span>
+              </>
+            )}
+          </div>
+          {(latestChange?.changeSummary || lastChangeSummary) && (
+            <p className="text-[10px] text-muted-foreground/45 mt-1 leading-snug line-clamp-1">
+              {(() => {
+                const s = latestChange?.changeSummary ?? lastChangeSummary ?? "";
+                return s.length > 72 ? s.slice(0, 72) + "…" : s;
+              })()}
+            </p>
+          )}
         </div>
       )}
 

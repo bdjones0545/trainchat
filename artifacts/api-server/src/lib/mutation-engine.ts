@@ -667,7 +667,7 @@ function handleProgression(
 
   return {
     updatedProgram: program,
-    changeSummary: `Session intensity progressed — heavier rep ranges applied`,
+    changeSummary: `Session intensity progressed — rep ranges and difficulty shifted upward`,
   };
 }
 

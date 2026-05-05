@@ -174,7 +174,7 @@ const FAMILY_RESPONSE_TEMPLATES: Partial<Record<IntentFamily, FamilyTemplates>> 
   increase_difficulty: {
     verified:
       "Done — I've increased the difficulty in your program. " +
-      "Expect heavier loads, fewer rest periods, or more complex movement patterns.",
+      "Expect higher intensity, reduced rest, or more complex movement patterns.",
     partial:
       "Some difficulty increases applied. A full review of the session is recommended.",
     failed:

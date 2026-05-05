@@ -312,7 +312,7 @@ const INTENT_TO_EVENT: Record<
   increase_intensity: {
     eventType: "next_session_adjusted",
     title: "Intensity raised",
-    summaryFn: () => "Load and intensity demands increased. Expect heavier primary work.",
+    summaryFn: () => "Intensity and volume demands increased. Expect more challenging primary sessions.",
     priority: "medium",
   },
   increase_weekly_volume: {

@@ -296,17 +296,26 @@ function buildAgenticNoChangesResponse(
 
 /**
  * Builds a coaching-toned confirmation message after a successful system edit.
- * Uses the edit plan's changeSummary and applied count to create a concise, clear response.
+ * Used as a fallback when the AI stream doesn't produce a post-edit explanation.
+ * Produces coach-voice output (what changed, brief why, what stayed) rather than
+ * raw database language.
  */
 function buildVibeEditCoachingResponse(editResult: EditResult): string {
   const summary = editResult.changeSummary;
   const skipped = editResult.skippedCount;
-  const base = summary.endsWith(".") ? summary : `${summary}.`;
   const status = editResult.verification.status;
 
+  // Ensure summary ends with period and reads naturally
+  const base = (() => {
+    const s = summary.endsWith(".") ? summary : `${summary}.`;
+    // Strip scope prefixes that leak DB internals (e.g. "session_" → "")
+    return s.replace(/^(session|week|block|exercise)_/i, "").trim();
+  })();
+
+  // Append a "what stayed intact" cue for partial or skipped cases
   if (status === "verified") {
     if (skipped > 0) {
-      return `${base} (${skipped} item${skipped > 1 ? "s" : ""} couldn't be applied — try being more specific.)`;
+      return `${base} ${skipped} item${skipped > 1 ? "s" : ""} couldn't be applied — try describing the target more specifically (exercise name, day number, or session type).`;
     }
     return base;
   }
@@ -314,11 +323,11 @@ function buildVibeEditCoachingResponse(editResult: EditResult): string {
   if (status === "partial") {
     const verifiedCount = editResult.verification.verifiedChanges.length;
     const totalCount = editResult.verification.expectedChanges.length;
-    return `${base} (${verifiedCount}/${totalCount} changes confirmed — check the panel for anything missing.)`;
+    return `${base} ${verifiedCount} of ${totalCount} changes landed — check the Program panel to see what applied and what didn't.`;
   }
 
   if (status === "unclear") {
-    return `${base} — double-check the panel to confirm.`;
+    return `${base} Double-check the Program panel to confirm everything looks right.`;
   }
 
   return base;

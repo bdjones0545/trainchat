@@ -1,0 +1,197 @@
+Run a UX clarity pass for TrainChat.
+
+Goal:
+Make the system feel obvious, powerful, and trustworthy after edits without changing core architecture.
+
+Do targeted UX improvements only.
+Do not redesign the app.
+Do not alter routing, agent orchestration, or mutation logic unless required to display existing data.
+
+1. Active Program Summary
+
+Add a lightweight summary card at the top of LiveProgramPanel.
+
+Show:
+- Current program name
+- Focus lane
+- Current week
+- Last updated timestamp
+- Latest change summary
+
+Data sources:
+- active training system
+- current focusMode
+- latest system_change_log entry for this system/focus lane
+
+Example:
+Current System
+3-Day Strength Program
+Focus: Strength · Week 1
+Last updated: 2 min ago
+Latest change: Week shifted toward endurance emphasis
+
+Acceptance:
+- User instantly knows what system is active.
+- Summary updates after edits/restores/refinements.
+- No stale cross-lane summary.
+
+2. Post-Edit Feedback State
+
+After any successful mutation:
+- week refinement
+- session edit
+- exercise swap
+- restore
+- direct panel refinement
+
+Show a short non-blocking success state.
+
+Example:
+“Week 1 updated”
+“Day 2 shortened”
+“Exercise swapped”
+“Version restored”
+
+Rules:
+- Auto-dismiss after ~1.8–2.2 seconds.
+- Include a manual close/done option if shown as overlay.
+- Must not trap scroll.
+- Must not block panel interaction after dismissal.
+
+Acceptance:
+- No stuck success page.
+- User receives immediate feedback.
+- Program remains scrollable and usable.
+
+3. Inline Change Indicators
+
+When edited content returns:
+- Briefly highlight affected session/exercise cards.
+- Add small temporary tags where possible:
+  - “Reps ↑”
+  - “Rest ↓”
+  - “Volume ↑”
+  - “Shortened”
+  - “Explosive focus”
+  - “Strength focus”
+  - “Lower impact”
+  - “Home gym”
+  - “Swapped”
+
+Use existing systemEdit.changedIds, changeTargets, prescription metadata, or diff data if available.
+If exact exercise-level metadata is unavailable, highlight the affected session/week only.
+
+Auto-clear after ~2 seconds.
+
+Acceptance:
+- User can see what changed without opening Changes tab.
+- No false indicators.
+- Falls back gracefully if exact diffs are unavailable.
+
+4. Chat CEO Post-Mutation Explanation
+
+Improve post-edit coaching responses.
+
+After successful edits, chat should briefly explain:
+- what changed
+- why it changed
+- what stayed preserved
+
+Examples:
+“I shortened Day 2 by reducing volume while keeping the main mobility flow intact.”
+“I shifted Week 1 toward explosiveness while preserving your original session structure.”
+“I swapped that exercise and kept the rest of the session unchanged.”
+
+Rules:
+- No generic “Program updated” only.
+- No unsupported load claims like “increase load” unless actual load values exist.
+- Keep it short.
+- Coach voice, not database voice.
+
+Acceptance:
+- Every successful mutation has a clear coach-style explanation.
+- No fake success if mutation failed.
+- Failed mutations still say the program was unchanged.
+
+5. Changes Tab Readability
+
+Improve the Changes tab, including FreeChangesPreview.
+
+Each change entry should clearly show:
+- scope badge: Exercise / Day / Week / Program
+- change summary
+- timestamp
+- optional latest coach explanation if available
+
+For free users:
+- show last 1–3 changes
+- keep restore/full history gated
+- CTA below, not replacing the receipt
+
+Acceptance:
+- Free users can verify recent edits.
+- Premium users see cleaner change history.
+- Restore/history premium functionality unchanged.
+
+6. Locked Day Card Polish
+
+For free users:
+- keep Days 2+ visible
+- reduce paywall visual dominance
+- show exercise names clearly
+- show small CTA:
+  “Upgrade to edit and adapt all days.”
+
+Rules:
+- Do not hide the program structure.
+- Do not make locked cards feel broken.
+- Advanced actions remain locked.
+
+Acceptance:
+- Free user understands the full program.
+- Paywall supports conversion without damaging trust.
+
+7. Mobile Polish
+
+Check 390–400px viewport:
+- tab strip horizontally scrolls
+- success feedback does not trap screen
+- program cards scroll
+- locked cards are readable
+- summary card does not consume too much vertical space
+- close/back buttons remain reachable
+
+Acceptance:
+- No horizontal page scroll except the tab strip.
+- History/Forecast tabs reachable.
+- Panel usable on mobile.
+
+8. Copy Safety
+
+Audit changed copy for:
+- “increase load”
+- “add weight”
+- “heavier loading”
+- “load progression”
+- database/system jargon
+- fake success language
+
+Replace with:
+- progress intensity
+- increase difficulty
+- progress resistance when available
+- increase reps/rest/density/volume where visible
+- preserve structure
+
+Acceptance:
+- No unsupported load claims.
+- Coach-style copy throughout.
+
+Final QA:
+1. Build Strength program → summary card appears.
+2. Click More Explosive → feedback appears, panel remains usable, latest change updates.
+3. Chat edit “Make Day 2 shorter” → coach explanation says what changed and what stayed.
+4. Free user opens Changes → sees recent receipt.
+5. Free user views Days 2+ → sees program structure.
+6. Mobile 390px → tabs and panel usable.
+7. Failed mutation → says unchanged, no fake success.
