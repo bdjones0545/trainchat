@@ -1,0 +1,80 @@
+Fix TrainChat refine program scope.
+
+Problem:
+The Live Program Panel “Refine This Program” buttons are block/program-level controls, but currently they only modify Day 1 / the active session. Example: clicking “More Explosive” changed only Day 1 into Lower Power instead of adapting the entire current week/block.
+
+Expected behavior:
+Refine This Program actions must apply to the whole visible training block/week, not just the active session.
+
+Required changes:
+
+1. Frontend
+Find the Live Program Panel refine buttons/input.
+When a user clicks:
+- More Explosive
+- More Strength
+- More Endurance
+- Shorter Sessions
+- Lower Impact
+- Home Gym Version
+
+Send an explicit scope payload/message:
+scope: {
+  type: "block",
+  weekIndex: currentWeekIndex,
+  applyTo: "all_sessions_in_week"
+}
+
+Do not send these as generic chat edits or active-session edits.
+
+2. Backend intent/planner
+Add/refine detection for program refinement commands.
+If source is LiveProgramPanel refine section OR message matches these refinement labels, force:
+intent: EDIT_PROGRAM
+editScope: BLOCK_WEEK
+targetWeekIndex: current selected week
+targetSession: null
+applyToAllSessionsInWeek: true
+
+Never default these refinements to Day 1.
+
+3. Execution behavior
+For “More Explosive”:
+Adapt every session in the current week toward explosive intent while preserving each day’s role:
+- Lower strength day → lower power / explosive lower
+- Upper strength day → upper power / explosive press/pull
+- Hinge/posterior day → posterior chain power / speed hinge
+Add appropriate power elements per day, not just Day 1.
+
+For “More Strength”:
+Increase strength emphasis across all sessions in the week.
+
+For “More Endurance”:
+Adjust density/conditioning across all sessions in the week.
+
+For “Shorter Sessions”:
+Reduce total work across all sessions in the week.
+
+For “Lower Impact”:
+Swap high-impact choices across all sessions in the week.
+
+For “Home Gym Version”:
+Apply equipment-compatible substitutions across all sessions in the week.
+
+4. Change log
+When this type of edit happens, create ONE block-level change log entry:
+type: "block" or "program"
+label: "Current week refined"
+summary should mention all sessions in Week X were updated.
+Do not make it look like only Day 1 changed.
+
+5. Safety check
+Add a verifier after execution:
+If refineSource === "program_refine_panel" and only one session changed while the week has multiple sessions, reject/repair and rerun as block-wide edit.
+
+Acceptance test:
+Click “More Explosive” on a 3-day Week 1 block.
+Expected:
+- Day 1, Day 2, and Day 3 all update toward explosive/power emphasis.
+- Change log says the current week/block was refined.
+- No Day 1-only edit unless the user explicitly says “make Day 1 more explosive.”
