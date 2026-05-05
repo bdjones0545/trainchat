@@ -557,6 +557,31 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
     return;
   }
 
+  // ── Structured UI action guardrail ────────────────────────────────────────
+  // Requests from deterministic UI actions (chips, buttons, panel controls)
+  // must use /api/training-system/edit or /api/training-system/mutate — never
+  // the chat endpoint. If any of these fields are present, reject fast.
+  {
+    const _body = req.body as Record<string, unknown>;
+    const _hasStructuredUIField =
+      _body.refineSource === "program_refine_panel" ||
+      _body.scopeOverride != null ||
+      _body.structuredIntent != null ||
+      _body.uiAction != null ||
+      (_body.trainingSystemId != null && _body.refineSource != null);
+    if (_hasStructuredUIField) {
+      logger.warn(
+        { refineSource: _body.refineSource, scopeOverride: _body.scopeOverride, structuredIntent: _body.structuredIntent, uiAction: _body.uiAction },
+        "[Structured UI Action] Blocked structured UI payload from chat endpoint — must use /api/training-system/edit"
+      );
+      res.status(400).json({
+        error: "Structured UI actions must use /api/training-system/edit or /api/training-system/mutate — not the chat endpoint.",
+        code: "STRUCTURED_UI_ROUTE_VIOLATION",
+      });
+      return;
+    }
+  }
+
   const userId = req.session.userId!;
 
   // ── Agent Settings — resolve behavior + training defaults for this request ──
@@ -873,7 +898,7 @@ Keep it helpful and intelligent, never promotional.`;
       orchRoute: orchDecision.route,
       orchAgents: orchDecision.participatingAgents,
     },
-    "[ExecutionPlanner] Plan resolved — driving routing"
+    "[Routing Authority] execPlan.action selected"
   );
 
   // ── Phase B: Constraint Extraction ────────────────────────────────────────
@@ -1259,9 +1284,26 @@ Keep it helpful and intelligent, never promotional.`;
         return;
       }
     } catch (err: any) {
-      logger.error({ err: err?.message }, "[ClarificationFollowup] Pipeline threw — falling through to standard AI response");
+      logger.error({ err: err?.message, stack: err?.stack }, "[ClarificationFollowup] Pipeline threw — returning safe failure, program left unchanged");
+      logger.warn("[Mutation Failure] program left unchanged — CLARIFICATION_FOLLOWUP pipeline error, no AI fallback");
       await resolvePendingClarification(pending.id, "pipeline_error").catch(() => {});
-      // Fall through to standard AI response if the pipeline fails
+      const pipelineErrContent = `I couldn't apply that edit, so I left your program unchanged. Try rephrasing or being more specific about which exercise or day you'd like changed.`;
+      const [pipelineErrMsg] = await db.insert(messagesTable).values({
+        conversationId: params.data.id, role: "assistant", content: pipelineErrContent, structuredData: null,
+      }).returning();
+      await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+      if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+        stripeStorage.incrementMessageCount(userId).catch(() => {});
+      }
+      res.json({
+        userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
+        assistantMessage: { id: pipelineErrMsg.id, conversationId: pipelineErrMsg.conversationId, role: pipelineErrMsg.role, content: pipelineErrMsg.content, createdAt: pipelineErrMsg.createdAt.toISOString(), structuredData: null },
+        planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+        intentDebug: { type: "CLARIFICATION_FOLLOWUP", confidence: "high" },
+        systemEdit: { applied: false, route: "clarification_followup", scope: "system", changedIds: [], error: "pipeline_error" },
+        structuredData: null,
+      });
+      return;
     }
   }
 
@@ -1441,6 +1483,25 @@ Keep it helpful and intelligent, never promotional.`;
         resolvedSystem = await createTrainingSystemFromProgram(userId, latestStructuredProgram, null, nonStreamFocusMode);
         systemAutoCreatedForEdit = true;
         logger.info({ userId, systemId: resolvedSystem.id }, "[VibeEdit] Auto-created system from chat program before edit");
+        logger.info({ userId, systemId: resolvedSystem.id }, "[Auto Create For Edit] system created and client hydration fields returned");
+        // Create initialization change log entry before the edit change log
+        const _initSnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
+        createChangeLogEntry({
+          userId,
+          trainingSystemId: resolvedSystem.id,
+          source: "initialize",
+          scope: "system",
+          intent: "auto_created_for_edit",
+          changeSummary: `Program initialized from conversation history: ${latestStructuredProgram.programName ?? "Unnamed Program"}`,
+          requestText: parsed.data.content.slice(0, 300),
+          beforeSnapshot: _initSnapshot,
+          afterSnapshot: _initSnapshot,
+          fullProgramSnapshot: latestStructuredProgram as unknown as Record<string, unknown>,
+          appliedCount: 1,
+          skippedCount: 0,
+          versionOverrides: { isMajorVersion: true, versionLabel: "Initial Build" },
+          decisionMetadata: { intentType: intentResult.type, autoCreatedForEdit: true },
+        }).catch((initLogErr) => logger.warn({ initLogErr }, "[Auto Create For Edit] Initialization change log write failed — non-fatal"));
       } catch (createErr: any) {
         logger.error({ err: createErr?.message }, "[VibeEdit] Auto-create before edit failed — falling back to build-first response");
       }
@@ -2061,20 +2122,28 @@ Keep it helpful and intelligent, never promotional.`;
 
       res.json({
         outcomeType: "mutation_applied",
+        ...(systemAutoCreatedForEdit ? {
+          systemSaved: true,
+          systemId: resolvedSystem.id,
+          trainingSystemId: resolvedSystem.id,
+        } : {}),
         userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
         assistantMessage: { id: assistantMessage.id, conversationId: assistantMessage.conversationId, role: assistantMessage.role, content: assistantMessage.content, createdAt: assistantMessage.createdAt.toISOString(), structuredData: assistantMessage.structuredData ?? null },
         planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
         intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
         systemEdit: {
           applied: true,
+          route: "direct_edit" as const,
+          scope: (directEditPlan.scope ?? "exercise") as "exercise" | "session" | "week" | "block" | "system",
+          changedIds: directEditResult.changedIds as unknown as string[],
           changeSummary: directEditResult.changeSummary,
-          changedIds: directEditResult.changedIds,
           changeTargets: directEditResult.changeTargets,
           systemId: resolvedSystem.id,
           changeLogId,
           verificationStatus: directVerification.status as VerificationStatus,
           requiresReview: directVerification.requiresReview ?? false,
         },
+        structuredData: null,
         swapContract: directSwapContract,
         mutationReceipt,
       });
@@ -2108,6 +2177,45 @@ Keep it helpful and intelligent, never promotional.`;
         systemEdit: { applied: false },
         editFailure: { reason: "edit_pipeline_error" },
         mutationReceipt: receipt,
+      });
+      return;
+    }
+  }
+
+  // ── Routing Reconciliation Guard ─────────────────────────────────────────
+  // If the intent classifier says "mutation" but the execution planner chose
+  // GUIDANCE or NO_OP, the two layers disagree. Never silently fall through to
+  // the AI with an edit intent that the planner declined to act on — doing so
+  // would produce a fake "applied" response or a ghost program build.
+  {
+    const _isMutationIntent =
+      intentResult.type === "EDIT_PROGRAM" ||
+      intentResult.type === "ADJUST_FOR_PAIN" ||
+      intentResult.type === "ADJUST_FOR_READINESS";
+    const _isNonMutationPlan =
+      execPlan.action === "GUIDANCE" ||
+      execPlan.action === "NO_OP";
+    if (_isMutationIntent && _isNonMutationPlan) {
+      logger.warn(
+        { intentType: intentResult.type, execPlanAction: execPlan.action, intentFamily: execPlan.intentFamily },
+        "[Routing Reconciliation] intent/edit mismatch blocked AI fallback"
+      );
+      const _reconcilContent = `I need one more detail before changing your program. Could you clarify which part you'd like to adjust — the exercise, day, or overall structure?`;
+      const [_reconcilMsg] = await db.insert(messagesTable).values({
+        conversationId: params.data.id, role: "assistant", content: _reconcilContent, structuredData: null,
+      }).returning();
+      await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+      if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+        stripeStorage.incrementMessageCount(userId).catch(() => {});
+      }
+      res.json({
+        userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
+        assistantMessage: { id: _reconcilMsg.id, conversationId: _reconcilMsg.conversationId, role: _reconcilMsg.role, content: _reconcilMsg.content, createdAt: _reconcilMsg.createdAt.toISOString(), structuredData: null },
+        planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+        intentDebug: { type: intentResult.type, confidence: intentResult.confidence },
+        actionDebug: { planAction: execPlan.action, reconciliationBlocked: true },
+        systemEdit: { applied: false, route: "clarification_followup" as const, scope: "system" as const, changedIds: [] },
+        structuredData: null,
       });
       return;
     }
@@ -2768,6 +2876,29 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     return;
   }
 
+  // ── Structured UI action guardrail (SSE path) ─────────────────────────────
+  // Deterministic UI actions must use /api/training-system/edit or mutate — not chat.
+  {
+    const _bodySSE = req.body as Record<string, unknown>;
+    const _hasStructuredUIFieldSSE =
+      _bodySSE.refineSource === "program_refine_panel" ||
+      _bodySSE.scopeOverride != null ||
+      _bodySSE.structuredIntent != null ||
+      _bodySSE.uiAction != null ||
+      (_bodySSE.trainingSystemId != null && _bodySSE.refineSource != null);
+    if (_hasStructuredUIFieldSSE) {
+      logger.warn(
+        { refineSource: _bodySSE.refineSource, scopeOverride: _bodySSE.scopeOverride, structuredIntent: _bodySSE.structuredIntent, uiAction: _bodySSE.uiAction },
+        "[Structured UI Action] Blocked structured UI payload from SSE chat endpoint — must use /api/training-system/edit"
+      );
+      res.status(400).json({
+        error: "Structured UI actions must use /api/training-system/edit or /api/training-system/mutate — not the chat endpoint.",
+        code: "STRUCTURED_UI_ROUTE_VIOLATION",
+      });
+      return;
+    }
+  }
+
   // ── Pipeline Latency Tracking ─────────────────────────────────────────────
   const _pipeline_t0 = Date.now();
   let _t_history_done = 0;
@@ -3134,7 +3265,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       mutation: execPlan.mutation?.type ?? null,
       intentType: intentResult.type,
     },
-    "[ExecutionPlanner:stream] Plan resolved — driving routing"
+    "[Routing Authority] execPlan.action selected (SSE path)"
   );
 
   // ── Response Mode Selection — derived from execution planner action ──────────
@@ -3427,9 +3558,21 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         return;
       }
     } catch (err: any) {
-      logger.error({ err: err?.message }, "[ClarificationFollowup:stream] Pipeline threw — falling through to standard AI response");
+      logger.error({ err: err?.message, stack: err?.stack }, "[ClarificationFollowup:stream] Pipeline threw — returning safe failure, program left unchanged");
+      logger.warn("[Mutation Failure] program left unchanged — CLARIFICATION_FOLLOWUP:stream pipeline error, no AI fallback");
       await resolvePendingClarification(pending.id, "pipeline_error").catch(() => {});
-      // Fall through to standard AI handling
+      const _sseClariErrContent = `I couldn't apply that edit, so I left your program unchanged. Try rephrasing or being more specific about which exercise or day you'd like changed.`;
+      const [_sseClariErrMsg] = await db.insert(messagesTable).values({
+        conversationId: params.data.id, role: "assistant", content: _sseClariErrContent, structuredData: null,
+      }).returning();
+      await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+      if (planInfo?.plan === "free" || planInfo?.plan === "starter") { stripeStorage.incrementMessageCount(userId).catch(() => {}); }
+      done({
+        ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: _sseClariErrMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, systemEditVal: { applied: false }, outcomeTypeVal: "true_failure" }),
+        systemEdit: { applied: false, route: "clarification_followup", scope: "system", changedIds: [], error: "pipeline_error" },
+        structuredData: null,
+      });
+      return;
     }
   }
 
@@ -3573,6 +3716,25 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         resolvedSystem = await createTrainingSystemFromProgram(userId, latestStructuredProgram, null, streamFocusMode);
         systemAutoCreatedForEdit = true;
         logger.info({ userId, systemId: resolvedSystem.id }, "[VibeEdit:stream] Auto-created system from chat program before edit");
+        logger.info({ userId, systemId: resolvedSystem.id }, "[Auto Create For Edit] system created and client hydration fields returned (SSE path)");
+        // Create initialization change log entry before the edit change log
+        const _sseInitSnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
+        createChangeLogEntry({
+          userId,
+          trainingSystemId: resolvedSystem.id,
+          source: "initialize",
+          scope: "system",
+          intent: "auto_created_for_edit",
+          changeSummary: `Program initialized from conversation history: ${latestStructuredProgram.programName ?? "Unnamed Program"}`,
+          requestText: parsed.data.content.slice(0, 300),
+          beforeSnapshot: _sseInitSnapshot,
+          afterSnapshot: _sseInitSnapshot,
+          fullProgramSnapshot: latestStructuredProgram as unknown as Record<string, unknown>,
+          appliedCount: 1,
+          skippedCount: 0,
+          versionOverrides: { isMajorVersion: true, versionLabel: "Initial Build" },
+          decisionMetadata: { intentType: intentResult.type, autoCreatedForEdit: true },
+        }).catch((initLogErr) => logger.warn({ initLogErr }, "[Auto Create For Edit:stream] Initialization change log write failed — non-fatal"));
       } catch (createErr: any) {
         logger.error({ err: createErr?.message }, "[VibeEdit:stream] Auto-create before edit failed — returning build-first message");
       }
@@ -3967,16 +4129,20 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           systemIdVal: systemAutoCreatedForEdit ? resolvedSystem.id : undefined,
           outcomeTypeVal: "mutation_applied",
         }),
+        ...(systemAutoCreatedForEdit ? { trainingSystemId: resolvedSystem.id } : {}),
         systemEdit: {
           applied: true,
+          route: "direct_edit" as const,
+          scope: (streamEditPlan.scope ?? "exercise") as "exercise" | "session" | "week" | "block" | "system",
+          changedIds: streamEditResult.changedIds as unknown as string[],
           changeSummary: streamEditResult.changeSummary,
-          changedIds: streamEditResult.changedIds,
           changeTargets: streamEditResult.changeTargets,
           systemId: resolvedSystem.id,
           changeLogId,
           verificationStatus: streamVerification.status as VerificationStatus,
           requiresReview: streamVerification.requiresReview ?? false,
         },
+        structuredData: null,
         swapContract: streamSwapContract,
       });
       editLock.release();
@@ -4007,6 +4173,38 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         mutationReceipt: streamReceipt,
       });
       editLock.release();
+      return;
+    }
+  }
+
+  // ── Routing Reconciliation Guard (SSE path) ───────────────────────────────
+  // Same rule as non-SSE: if intent says mutation but execPlan says GUIDANCE/NO_OP,
+  // block the AI call and return a safe clarification. Never generate a new program.
+  {
+    const _isMutationIntentSSE =
+      intentResult.type === "EDIT_PROGRAM" ||
+      intentResult.type === "ADJUST_FOR_PAIN" ||
+      intentResult.type === "ADJUST_FOR_READINESS";
+    const _isNonMutationPlanSSE =
+      execPlan.action === "GUIDANCE" ||
+      execPlan.action === "NO_OP";
+    if (_isMutationIntentSSE && _isNonMutationPlanSSE) {
+      logger.warn(
+        { intentType: intentResult.type, execPlanAction: execPlan.action, intentFamily: execPlan.intentFamily },
+        "[Routing Reconciliation] intent/edit mismatch blocked AI fallback (SSE path)"
+      );
+      const _sseReconcilContent = `I need one more detail before changing your program. Could you clarify which part you'd like to adjust — the exercise, day, or overall structure?`;
+      const [_sseReconcilMsg] = await db.insert(messagesTable).values({
+        conversationId: params.data.id, role: "assistant", content: _sseReconcilContent, structuredData: null,
+      }).returning();
+      await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+      if (planInfo?.plan === "free" || planInfo?.plan === "starter") { stripeStorage.incrementMessageCount(userId).catch(() => {}); }
+      done({
+        ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: _sseReconcilMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "clarification_needed" }),
+        systemEdit: { applied: false, route: "clarification_followup", scope: "system", changedIds: [] },
+        structuredData: null,
+        actionDebug: { planAction: execPlan.action, reconciliationBlocked: true },
+      });
       return;
     }
   }
