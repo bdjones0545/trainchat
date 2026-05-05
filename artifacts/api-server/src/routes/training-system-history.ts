@@ -1,44 +1,26 @@
 /**
- * Training System History Routes — Phase 4
+ * Training System History Routes — Canonical
  *
- * GET  /training-system/history        — paginated list of change log entries
- * GET  /training-system/history/:id    — full detail with before/after snapshots
- * POST /training-system/restore/:id    — restore a prior state from a change log entry
+ * GET  /training-system/history/:changeId  — full detail with before/after snapshots
+ * POST /training-system/restore/:changeId  — canonical restore (entity-level, verified,
+ *                                            audit receipt, standardized response shape)
+ *
+ * NOTE: GET /training-system/history (list) is handled by training-system.ts which is
+ * registered first in routes/index.ts and already supports the ?focus= param.
+ * This router handles routes that do NOT conflict with training-system.ts.
  */
 
 import { Router, type IRouter } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { getActiveTrainingSystem } from "../lib/training-system-service";
-import { getChangeHistory, getChangeDetail } from "../lib/change-log-service";
+import { getChangeDetail } from "../lib/change-log-service";
 import { restoreFromChange } from "../lib/restore-service";
 import { getTodaySession, getCurrentWeek, getBlockSummary } from "../lib/training-system-service";
 import { trackLearningEvent } from "../lib/globalLearningService";
-import { writeAuditReceipt, deriveVerificationStatus } from "../lib/mutation-audit-receipt-service";
+import { writeAuditReceipt } from "../lib/mutation-audit-receipt-service";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
-
-// ─── GET /training-system/history ────────────────────────────────────────────
-
-router.get("/training-system/history", requireAuth, async (req, res): Promise<void> => {
-  const userId = req.session.userId!;
-
-  try {
-    const activeSystem = await getActiveTrainingSystem(userId);
-    if (!activeSystem) {
-      res.status(404).json({ error: "No active training system found." });
-      return;
-    }
-
-    const limit = Math.min(Number(req.query.limit ?? 30), 50);
-    const history = await getChangeHistory(userId, activeSystem.id, limit);
-
-    res.json({ history, trainingSystemId: activeSystem.id });
-  } catch (err) {
-    logger.error({ err, userId }, "Failed to fetch training system history");
-    res.status(500).json({ error: "Failed to fetch history." });
-  }
-});
 
 // ─── GET /training-system/history/:changeId ───────────────────────────────────
 
@@ -66,38 +48,54 @@ router.get("/training-system/history/:changeId", requireAuth, async (req, res): 
 });
 
 // ─── POST /training-system/restore/:changeId ─────────────────────────────────
+// Canonical restore route. Entity-level restore from beforeSnapshot with:
+//  - verification of restored state
+//  - audit receipt (immutable undo record)
+//  - standardized client-hydration response shape
+//  - focusMode scoping so multi-lane users restore the correct program
+//
+// Query param: ?focus=strength|speed|mobility  (required for correct lane targeting)
 
 router.post("/training-system/restore/:changeId", requireAuth, async (req, res): Promise<void> => {
   const userId = req.session.userId!;
   const changeId = Number(req.params.changeId);
+  const focusMode = typeof req.query.focus === "string" ? req.query.focus : undefined;
+
+  logger.info(
+    { userId, changeId, focusMode },
+    "[ActiveProgramsRestore] canonical restore route hit"
+  );
 
   if (!changeId || isNaN(changeId)) {
-    res.status(400).json({ error: "Invalid change ID." });
+    res.status(400).json({
+      success: false,
+      systemEdit: { applied: false, route: "restore", scope: "system", error: "Invalid change ID." },
+    });
     return;
   }
 
   try {
-    const activeSystem = await getActiveTrainingSystem(userId);
+    // Resolve the active system for the requested focus lane.
+    const activeSystem = await getActiveTrainingSystem(userId, focusMode);
     if (!activeSystem) {
-      res.status(404).json({ error: "No active training system found." });
+      res.status(404).json({
+        success: false,
+        systemEdit: { applied: false, route: "restore", scope: "system", error: "No active training system found." },
+      });
       return;
     }
 
     const result = await restoreFromChange(userId, changeId, activeSystem.id);
 
-    // ── Learning signal: user reverted a change ────────────────────────────
+    // ── Learning signal ────────────────────────────────────────────────────
     trackLearningEvent({
       userId,
       eventType: "user_reverted_change",
       mutationApplied: true,
-      metadata: { changeId, restoredChangeLogId: changeId },
+      metadata: { changeId, restoredChangeLogId: result.changeLogId },
     });
 
-    // ── Undo Audit Receipt — record the revert as its own immutable entry ──
-    // The restore's before/after are flipped from the original: the "before"
-    // state going into undo is the current (mutated) state, and the "after"
-    // is the state we restored to. We use empty snapshots as placeholders
-    // since `restoreFromChange` doesn't expose them directly.
+    // ── Audit receipt — immutable undo record ──────────────────────────────
     void writeAuditReceipt({
       userId,
       trainingSystemId: activeSystem.id,
@@ -119,20 +117,42 @@ router.post("/training-system/restore/:changeId", requireAuth, async (req, res):
       metadata: { changeId, restoredChangeLogId: result.changeLogId ?? changeId, isUndo: true },
     }).catch(() => {});
 
-    // Return fresh data alongside the restore result
+    // ── Return fresh data for client-side hydration ────────────────────────
     const [today, week, block] = await Promise.all([
-      getTodaySession(userId).catch(() => null),
-      getCurrentWeek(userId).catch(() => null),
-      getBlockSummary(userId).catch(() => null),
+      getTodaySession(userId, focusMode).catch(() => null),
+      getCurrentWeek(userId, undefined, focusMode).catch(() => null),
+      getBlockSummary(userId, focusMode).catch(() => null),
     ]);
 
+    const systemId = activeSystem.id;
+
+    logger.info(
+      { userId, systemId, changeId, changeLogId: result.changeLogId, focusMode, verificationStatus: result.verificationStatus },
+      "[ActiveProgramsHydration] restore response hydration fields returned"
+    );
+
     res.json({
-      ...result,
+      success: true,
+      systemSaved: true,
+      systemId,
+      trainingSystemId: systemId,
+      systemEdit: {
+        applied: true,
+        route: "restore",
+        scope: "system",
+        changeLogId: result.changeLogId,
+      },
+      verificationStatus: result.verificationStatus,
+      restoredCount: result.restoredCount,
+      changeSummary: result.changeSummary,
       updatedData: { today, week, block },
     });
   } catch (err) {
-    logger.error({ err, userId, changeId }, "Failed to restore from change");
-    res.status(500).json({ error: "Failed to restore prior state." });
+    logger.error({ err, userId, changeId, focusMode }, "[ActiveProgramsRestore] restore failed");
+    res.status(500).json({
+      success: false,
+      systemEdit: { applied: false, route: "restore", scope: "system", error: "Failed to restore prior state." },
+    });
   }
 });
 

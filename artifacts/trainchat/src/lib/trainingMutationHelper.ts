@@ -56,6 +56,7 @@ export function handleTrainingSystemMutationResult(
   queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
   queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
   queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
-  queryClient.invalidateQueries({ queryKey: ["training-system-library"] });
+  // Refetch (not just invalidate) so focus lane dots update immediately after any mutation.
+  queryClient.refetchQueries({ queryKey: ["training-system-library"] });
   queryClient.invalidateQueries({ queryKey: ["mutation-audit-receipts"] });
 }

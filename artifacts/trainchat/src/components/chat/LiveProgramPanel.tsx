@@ -27,6 +27,7 @@ import { FOCUS_MODE_CONFIGS, getFocusModeConfig } from "@/lib/focusModeConfig";
 import type { FocusMode } from "@/lib/focusMode";
 import SystemAdjustmentsPanel from "./SystemAdjustmentsPanel";
 import ProgramShareModal from "@/components/share/ProgramShareModal";
+import { handleTrainingSystemMutationResult } from "@/lib/trainingMutationHelper";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -3136,28 +3137,25 @@ function ChangesTab({ hasActiveSystem, newChangeSignal }: { hasActiveSystem?: bo
   );
 }
 
-function HistoryTab({ hasActiveSystem }: { hasActiveSystem?: boolean }) {
+function HistoryTab({ hasActiveSystem, focusMode }: { hasActiveSystem?: boolean; focusMode: string }) {
   const queryClient = useQueryClient();
   const [restoringId, setRestoringId] = useState<number | null>(null);
 
+  const historyUrl = `/api/training-system/history?limit=50&focus=${encodeURIComponent(focusMode)}`;
+
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["training-system-history", "versions"],
-    queryFn: () => customFetch<{ history: ChangeLogEntry[] }>("/api/training-system/history?limit=50"),
+    queryKey: ["training-system-history", "versions", focusMode],
+    queryFn: () => customFetch<{ history: ChangeLogEntry[] }>(historyUrl),
     enabled: !!hasActiveSystem,
     staleTime: 0,
   });
 
   const restoreMutation = useMutation({
     mutationFn: (changeId: number) =>
-      customFetch<any>(`/api/training-system/restore/${changeId}`, { method: "POST" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["training-system-history", "changes"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-history", "versions"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-full"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
+      customFetch<any>(`/api/training-system/restore/${changeId}?focus=${encodeURIComponent(focusMode)}`, { method: "POST" }),
+    onSuccess: (result) => {
+      // Use the shared helper so restore invalidates the same key set as any other mutation.
+      handleTrainingSystemMutationResult(result, queryClient, focusMode);
       setRestoringId(null);
     },
     onError: () => setRestoringId(null),
@@ -3730,7 +3728,7 @@ export default function LiveProgramPanel({
               onUpgrade={onUpgrade}
             />
           ) : (
-            <HistoryTab hasActiveSystem={hasActiveSystem} />
+            <HistoryTab hasActiveSystem={hasActiveSystem} focusMode={focusMode} />
           )
         )}
         {activeTab === "forecast" && (

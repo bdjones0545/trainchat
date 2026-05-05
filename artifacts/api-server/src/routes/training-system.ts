@@ -13,7 +13,6 @@ import {
   getBlockSummary,
   initializeTrainingSystem,
   createTrainingSystemFromProgram,
-  upsertTrainingSystemFromProgram,
   getBlockCompletionStatus,
   markBlockComplete,
   generateContinuationPhase,
@@ -22,7 +21,6 @@ import {
 } from "../lib/training-system-service";
 import {
   getChangeHistory,
-  getChangeDetail,
   createChangeLogEntry,
 } from "../lib/change-log-service";
 import { logger } from "../lib/logger";
@@ -275,7 +273,7 @@ router.post("/training-system/from-chat", requireAuth, async (req, res): Promise
 // ─── GET /training-system/history ────────────────────────────────────────────
 // Returns change log entries for the active training system.
 // Used by the History tab in the Live Program Panel.
-// Optional query param: ?focus=strength|speed|mobility
+// Required query param: ?focus=strength|speed|mobility (defaults to null → newest active system)
 router.get("/training-system/history", requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = req.session.userId!;
@@ -284,91 +282,31 @@ router.get("/training-system/history", requireAuth, async (req, res): Promise<vo
     const focusMode = typeof req.query.focus === "string" ? req.query.focus : null;
 
     const system = await getActiveTrainingSystem(userId, focusMode);
+
+    logger.info(
+      { userId, focusMode, systemId: system?.id ?? null },
+      "[ActiveProgramsHistory] GET /history — resolved active system for focus"
+    );
+
     if (!system) {
-      res.json({ history: [] });
+      res.json({ history: [], trainingSystemId: null });
       return;
     }
 
     const history = await getChangeHistory(userId, system.id, limit);
-    res.json({ history });
+    res.json({ history, trainingSystemId: system.id });
   } catch (err) {
-    logger.error({ err }, "[training-system] GET /history error");
+    logger.error({ err }, "[ActiveProgramsHistory] GET /history error");
     res.status(500).json({ error: "Failed to load change history" });
   }
 });
 
-// ─── POST /training-system/restore/:changeId ──────────────────────────────────
-// Restores the training system to the state captured in a change log entry's
-// afterSnapshot.fullProgram field.
-router.post("/training-system/restore/:changeId", requireAuth, async (req, res): Promise<void> => {
-  try {
-    const userId = req.session.userId!;
-    const changeId = parseInt(req.params.changeId as string, 10);
-
-    if (isNaN(changeId)) {
-      res.status(400).json({ error: "Invalid changeId" });
-      return;
-    }
-
-    // Load the change log entry with its snapshots
-    const detail = await getChangeDetail(userId, changeId);
-    if (!detail) {
-      res.status(404).json({ error: "Change log entry not found" });
-      return;
-    }
-
-    // Extract the full program snapshot stored in afterSnapshot.fullProgram
-    const snapshot = detail.afterSnapshot as any;
-    const fullProgram = snapshot?.fullProgram;
-
-    if (!fullProgram || !Array.isArray(fullProgram.days) || fullProgram.days.length === 0) {
-      res.status(422).json({ error: "This version does not have a restoreable program snapshot" });
-      return;
-    }
-
-    // Restore the program by upserting from the snapshot
-    const { system: restoredSystem } = await upsertTrainingSystemFromProgram(userId, fullProgram as ChatProgram);
-
-    // Determine a restore label from the entry being restored
-    const sourceLabel = detail.versionLabel ?? detail.changeSummary.slice(0, 40);
-
-    // Log the restore operation as a new major version
-    const emptySnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
-    const newChangeLogId = await createChangeLogEntry({
-      userId,
-      trainingSystemId: restoredSystem.id,
-      source: "restore",
-      intent: "restore",
-      scope: "system",
-      changeSummary: `Restored to: "${sourceLabel}"`,
-      beforeSnapshot: emptySnapshot,
-      afterSnapshot: emptySnapshot,
-      fullProgramSnapshot: fullProgram,
-      appliedCount: 1,
-      skippedCount: 0,
-      restoredFromId: changeId,
-      versionOverrides: {
-        isMajorVersion: true,
-        versionLabel: `Restored — ${sourceLabel}`,
-      },
-    });
-
-    logger.info(
-      { userId, systemId: restoredSystem.id, restoredFromId: changeId, newChangeLogId },
-      "[training-system] Program restored from version snapshot"
-    );
-
-    res.json({
-      success: true,
-      systemId: restoredSystem.id,
-      changeLogId: newChangeLogId,
-      message: "Restored. Your program is now back to the selected version.",
-    });
-  } catch (err) {
-    logger.error({ err }, "[training-system] POST /restore error");
-    res.status(500).json({ error: "Failed to restore program version" });
-  }
-});
+// NOTE: POST /training-system/restore/:changeId is handled exclusively by
+// training-system-history.ts (registered after this router) — see routes/index.ts.
+// The canonical restore route lives there because it includes entity-level restore,
+// verification, audit receipts, and the standardized client-hydration response shape.
+// Do NOT add a duplicate restore route here — Express route-registration order
+// means the first matching route wins, and this router is registered first.
 
 // ─── GET /training-system/library ────────────────────────────────────────────
 // Returns ALL training systems for the user (active + archived) as a program library.

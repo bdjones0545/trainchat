@@ -1,0 +1,139 @@
+Fix the Active Programs restore/history trust issues.
+
+Do targeted fixes only. Do not redesign the UI.
+
+1. Resolve duplicate restore routes
+Audit both restore endpoints:
+- training-system.ts
+- training-system-history.ts
+
+There should be only one canonical POST /api/training-system/restore/:changeId route.
+
+Use the more complete route if it includes:
+- verification
+- audit/change log receipt
+- consistent response shape
+
+Remove or rename the duplicate route so Express route order cannot shadow the canonical restore implementation.
+
+Acceptance:
+- Only one restore route handles POST /api/training-system/restore/:changeId.
+- Restore behavior is deterministic.
+- Dead restore code is removed or no longer registered.
+
+2. Add focusMode to history requests
+Currently history uses getActiveTrainingSystem(userId) without focusMode, so it can show the wrong lane’s history.
+
+Update:
+- GET /api/training-system/history?focus=strength|speed|mobility
+- POST /api/training-system/restore/:changeId?focus=strength|speed|mobility
+
+Thread focusMode through:
+- client request
+- server route
+- getActiveTrainingSystem(userId, focusMode)
+
+Acceptance:
+- Viewing Strength shows Strength history.
+- Viewing Speed shows Speed history.
+- Viewing Mobility shows Mobility history.
+- Restoring a version restores the currently viewed focus lane, not the newest active system by ID.
+
+3. Standardize restore response shape
+Restore response should include enough fields for client hydration:
+
+{
+  success: true,
+  systemSaved: true,
+  systemId,
+  trainingSystemId: systemId,
+  systemEdit: {
+    applied: true,
+    route: "restore",
+    scope: "system",
+    changeLogId
+  }
+}
+
+On failure:
+{
+  success: false,
+  systemEdit: {
+    applied: false,
+    route: "restore",
+    scope: "system",
+    error
+  }
+}
+
+Do not return structuredData on restore failure.
+
+4. Use shared mutation invalidation helper after restore
+In LiveProgramPanel.tsx or wherever restore is called:
+- call handleTrainingSystemMutationResult(result, queryClient, focusMode)
+
+Ensure restore invalidates/refetches:
+- ["training-system-active", focusMode]
+- ["training-system-week"]
+- ["training-system-history", "changes"]
+- ["training-system-history", "versions"]
+- ["live-panel-week-ids"]
+- ["training-system-library"]
+
+Acceptance:
+- Restore immediately updates sidebar content.
+- History tab updates immediately.
+- Focus tabs/dots update correctly.
+
+5. Refetch program library immediately after mutations
+Update trainingMutationHelper.ts:
+- for ["training-system-library"], use refetchQueries instead of only invalidateQueries
+OR set staleTime to 0 for programLibrary query.
+
+Acceptance:
+- Active program focus dots update instantly after:
+  - new program build
+  - restore
+  - set active
+  - archive/delete
+  - auto-create-before-edit
+
+6. Add route-level logging
+Add logs:
+- [ActiveProgramsRestore] canonical restore route hit
+- [ActiveProgramsHistory] focusMode used
+- [ActiveProgramsHydration] restore response hydration fields returned
+- [ActiveProgramsLibrary] library refetch triggered
+
+7. QA tests
+
+Test A — multiple focus lanes:
+Create active Strength and Speed systems.
+Open Speed.
+Expected:
+- History tab shows Speed versions only.
+- Restore restores Speed, not Strength.
+
+Test B — route conflict:
+POST /api/training-system/restore/:changeId.
+Expected:
+- Only canonical restore handler logs.
+- No shadowed duplicate route runs.
+
+Test C — restore hydration:
+Restore an older version.
+Expected:
+- Sidebar updates immediately.
+- Active program card updates.
+- History tab updates.
+- No page refresh needed.
+
+Test D — focus dots:
+Create or switch programs.
+Expected:
+- Focus lane indicators update immediately.
+
+Important:
+Do not implement the focusMode DB column migration yet.
+Do not implement stable persisted version numbers yet.
+Those are separate later tasks.
