@@ -26,7 +26,7 @@
 //   → Only approved docs enter agent retrieval
 
 import { db, researchDocumentsTable, researchChunksTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import type { ResearchDocument } from "@workspace/db";
 import {
@@ -549,6 +549,105 @@ export async function generateResearchChunks(documentId: number): Promise<{
     logger.error({ err, documentId }, "[Librarian] Chunk generation failed");
     return { ok: false, error: err.message };
   }
+}
+
+// ─── Service: reviewUnreviewedDocuments ──────────────────────────────────────
+//
+// Runs the Librarian Agent on every document where librarian_recommendation IS
+// NULL (i.e. documents that were inserted without going through the Librarian).
+// After analysis, automatically applies the recommendation as a status change:
+//   approve      → status=approved, isActive=true
+//   needs_review → status=pending,  isActive=false
+//   reject       → status=rejected, isActive=false
+//
+// This enforces the safety rule: no document may be retrievable unless it has
+// been evaluated by the Librarian or manually admin-reviewed from needs_review.
+
+export async function reviewUnreviewedDocuments(batchSize = 5): Promise<{
+  processed: number;
+  approved: number;
+  needsReview: number;
+  rejected: number;
+  errors: number;
+  results: {
+    id: number;
+    ok: boolean;
+    recommendation?: string;
+    previousStatus?: string;
+    newStatus?: string;
+    error?: string;
+  }[];
+}> {
+  const unreviewedDocs = await db
+    .select({ id: researchDocumentsTable.id, status: researchDocumentsTable.status })
+    .from(researchDocumentsTable)
+    .where(sql`${researchDocumentsTable.librarianRecommendation} IS NULL`);
+
+  logger.info(
+    { count: unreviewedDocs.length, batchSize },
+    "[Librarian] Starting review of unreviewed documents",
+  );
+
+  const results: {
+    id: number;
+    ok: boolean;
+    recommendation?: string;
+    previousStatus?: string;
+    newStatus?: string;
+    error?: string;
+  }[] = [];
+
+  let approved = 0;
+  let needsReview = 0;
+  let rejected = 0;
+  let errors = 0;
+
+  for (let i = 0; i < unreviewedDocs.length; i += batchSize) {
+    const batch = unreviewedDocs.slice(i, i + batchSize);
+
+    for (const docRow of batch) {
+      const outcome = await analyzeResearchDocument(docRow.id);
+
+      if (!outcome.ok) {
+        errors++;
+        results.push({ id: docRow.id, ok: false, error: outcome.error });
+        continue;
+      }
+
+      const rec = outcome.result!.recommendation;
+      const previousStatus = docRow.status;
+      let newStatus: "approved" | "pending" | "rejected";
+      let newIsActive: boolean;
+
+      if (rec === "approve") {
+        newStatus = "approved";
+        newIsActive = true;
+        approved++;
+      } else if (rec === "needs_review") {
+        newStatus = "pending";
+        newIsActive = false;
+        needsReview++;
+      } else {
+        newStatus = "rejected";
+        newIsActive = false;
+        rejected++;
+      }
+
+      await db
+        .update(researchDocumentsTable)
+        .set({ status: newStatus, isActive: newIsActive, updatedAt: new Date() })
+        .where(eq(researchDocumentsTable.id, docRow.id));
+
+      results.push({ id: docRow.id, ok: true, recommendation: rec, previousStatus, newStatus });
+    }
+  }
+
+  logger.info(
+    { processed: results.length, approved, needsReview, rejected, errors },
+    "[Librarian] Review of unreviewed documents complete",
+  );
+
+  return { processed: results.length, approved, needsReview, rejected, errors, results };
 }
 
 // ─── Service: batchAnalyzeDocuments ──────────────────────────────────────────

@@ -1,0 +1,166 @@
+Fix TrainChat Research Librarian trust and retrieval issues.
+
+Do targeted fixes only. Do not redesign the research system.
+
+1. Run Librarian review on all active seed documents
+
+Problem:
+22 active documents are approved and retrievable but have:
+- no librarian_recommendation
+- no warningFlags
+- default trust_level = high
+- no URLs/DOIs
+
+Task:
+Create an admin-only batch process to run the Librarian Agent on all active documents where librarian_recommendation IS NULL.
+
+Rules:
+- Process in batches of 5–10.
+- Preserve original document content.
+- Update:
+  - librarian_recommendation
+  - confidence
+  - trust_level
+  - warningFlags
+  - chunksGenerated
+  - metadata.librarianReviewedAt
+- If recommendation = reject:
+  - status = rejected
+  - is_active = false
+- If recommendation = needs_review:
+  - status = pending
+  - is_active = false
+- If recommendation = approve:
+  - status = approved
+  - is_active = true
+
+Acceptance:
+- No active retrievable document lacks librarian_recommendation.
+- No document remains high-trust only by default.
+- Rejected/needs_review documents are removed from retrieval.
+
+2. Review pending documents
+
+Pending documents:
+- Hypertrophy Science Fundamentals
+- Recovery and Fatigue Management Protocols
+- Concurrent Training (Strength + Endurance)
+
+Task:
+Add admin review controls or endpoint support to approve/reject needs_review documents after inspection.
+
+If approved:
+- is_active = true
+- status = approved
+- preserve warningFlags
+- keep trustLevel from Librarian result
+
+Acceptance:
+- Hypertrophy/recovery/concurrent training can be activated intentionally.
+- Warning flags remain stored and visible.
+
+3. Add warningFlags to retrieval scoring
+
+Problem:
+warningFlags currently do not affect retrieval.
+
+Task:
+Update research-retriever.ts scoring:
+- Apply small penalty for warning flags:
+  - conflicting_evidence: -2
+  - medical_claim_risk: -2
+  - overclaim_risk: -1
+  - expert_consensus: -1
+  - old_evidence: -1
+  - population_mismatch: -1
+  - single_study: -1
+  - lacks_replication: -1
+
+Also include a short caution note in injected research context when warning flags exist.
+
+Example:
+“Note: This source includes conflicting evidence; apply conservatively.”
+
+Acceptance:
+- Flagged content is not ranked the same as clean content.
+- Coach receives caution context when flagged research is injected.
+
+4. Add retrieval hit logging
+
+Task:
+Whenever getRelevantResearchContextWithChunks() injects research into Coach context, log:
+- userId if available
+- conversationId if available
+- message/query text or normalized tags
+- document IDs
+- chunk IDs
+- scores
+- categories
+- trust levels
+- warning flags
+- timestamp
+
+Prefer structured Pino logs first.
+If low-risk, add research_retrieval_log table later.
+
+Acceptance:
+- Server logs show which research chunks were injected.
+- Can diagnose whether research is actually helping.
+
+5. Add missing research categories as admin tasks
+
+Do not fabricate citations.
+Create a TODO/admin seed plan for missing categories:
+- tendon / overuse injuries
+- knee pain return-to-training
+- patellofemoral pain
+- ACL/MCL conservative return-to-training context
+- re-entry periodization
+- conditioning / energy systems
+- youth athlete training
+- hypertrophy active corpus
+- recovery / fatigue active corpus
+
+Acceptance:
+- Missing categories documented.
+- No fake URLs/DOIs created.
+- Future additions must go through Librarian before activation.
+
+6. Safety rule
+
+No research document should be active/retrievable unless:
+- status = approved
+- is_active = true
+- librarian_recommendation = approve
+OR manually approved by admin after needs_review with warningFlags preserved.
+
+Acceptance:
+- The Coach does not retrieve unreviewed seed content.
+- Research database becomes evidence-governed instead of seed-governed.
+
+Final QA:
+1. Run stats.
+Expected:
+- Active documents all have librarian_recommendation or admin-reviewed override.
+- trust_level varies when appropriate.
+- warningFlags populated where needed.
+
+2. Retrieval test:
+“Build a 3-day strength program”
+Expected:
+- approved strength docs only.
+
+3. Retrieval test:
+“Make this more explosive”
+Expected:
+- relevant plyometric/power docs, caution flags if present.
+
+4. Retrieval test:
+“Program for knee pain return to training”
+Expected:
+- either relevant approved docs or clear absence logged.
+
+5. Admin UI:
+Expected:
+- pending/rejected/approved states visible.
+- warning flags visible.

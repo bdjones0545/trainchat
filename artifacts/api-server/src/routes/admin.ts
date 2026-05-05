@@ -26,6 +26,7 @@ import {
   reviewResearchCandidate,
   generateResearchChunks,
   batchAnalyzeDocuments,
+  reviewUnreviewedDocuments,
 } from "../research/research-librarian-agent";
 import { seedResearchLibrary, isResearchLibraryEmpty } from "../research/research-seeder";
 import { seedSpeedMobilityResearch, hasSpeedMobilityResearch } from "../research/research-speed-mobility-seeder";
@@ -741,15 +742,41 @@ router.post("/admin/research/seed-strength", requireAuth, requireAdmin, async (r
 
 /**
  * GET /api/admin/research/stats
- * Summary stats for the research library.
+ * Summary stats for the research library, including librarian coverage and safety status.
  */
 router.get("/admin/research/stats", requireAuth, requireAdmin, async (_req, res): Promise<void> => {
-  const [totalResult] = await db.select({ n: count() }).from(researchDocumentsTable);
-  const [approvedResult] = await db
-    .select({ n: count() })
-    .from(researchDocumentsTable)
-    .where(and(eq(researchDocumentsTable.status, "approved"), eq(researchDocumentsTable.isActive, true)));
-  const [chunkResult] = await db.select({ n: count() }).from(researchChunksTable);
+  const [
+    totalResult,
+    approvedResult,
+    chunkResult,
+    librarianReviewedResult,
+    unreviewedResult,
+    needsReviewResult,
+    rejectedResult,
+    retrievableResult,
+  ] = await Promise.all([
+    db.select({ n: count() }).from(researchDocumentsTable),
+    db.select({ n: count() }).from(researchDocumentsTable)
+      .where(and(eq(researchDocumentsTable.status, "approved"), eq(researchDocumentsTable.isActive, true))),
+    db.select({ n: count() }).from(researchChunksTable),
+    db.select({ n: count() }).from(researchDocumentsTable)
+      .where(sql`${researchDocumentsTable.librarianRecommendation} IS NOT NULL`),
+    db.select({ n: count() }).from(researchDocumentsTable)
+      .where(sql`${researchDocumentsTable.librarianRecommendation} IS NULL`),
+    db.select({ n: count() }).from(researchDocumentsTable)
+      .where(eq(researchDocumentsTable.librarianRecommendation as any, "needs_review")),
+    db.select({ n: count() }).from(researchDocumentsTable)
+      .where(eq(researchDocumentsTable.status, "rejected")),
+    // Retrievable = approved + active + librarian_recommendation in ('approve', 'needs_review')
+    db.select({ n: count() }).from(researchDocumentsTable)
+      .where(
+        and(
+          eq(researchDocumentsTable.status, "approved"),
+          eq(researchDocumentsTable.isActive, true),
+          sql`${researchDocumentsTable.librarianRecommendation} IN ('approve', 'needs_review')`,
+        ),
+      ),
+  ]);
 
   const byCategory = await db.execute(sql`
     SELECT category, COUNT(*) as count
@@ -757,11 +784,36 @@ router.get("/admin/research/stats", requireAuth, requireAdmin, async (_req, res)
     GROUP BY category ORDER BY count DESC
   `);
 
+  const byRecommendation = await db.execute(sql`
+    SELECT librarian_recommendation, COUNT(*) as count
+    FROM research_documents
+    GROUP BY librarian_recommendation ORDER BY count DESC
+  `);
+
+  const byTrustLevel = await db.execute(sql`
+    SELECT trust_level, COUNT(*) as count
+    FROM research_documents
+    GROUP BY trust_level ORDER BY count DESC
+  `);
+
+  const total = Number(totalResult[0]?.n ?? 0);
+  const librarianReviewed = Number(librarianReviewedResult[0]?.n ?? 0);
+
   res.json({
-    total: Number(totalResult?.n ?? 0),
-    approved: Number(approvedResult?.n ?? 0),
-    chunks: Number(chunkResult?.n ?? 0),
+    total,
+    approved: Number(approvedResult[0]?.n ?? 0),
+    retrievable: Number(retrievableResult[0]?.n ?? 0),
+    chunks: Number(chunkResult[0]?.n ?? 0),
+    librarian: {
+      reviewed: librarianReviewed,
+      unreviewed: Number(unreviewedResult[0]?.n ?? 0),
+      needsReview: Number(needsReviewResult[0]?.n ?? 0),
+      rejected: Number(rejectedResult[0]?.n ?? 0),
+      coveragePercent: total > 0 ? Math.round((librarianReviewed / total) * 100) : 0,
+    },
     byCategory: byCategory.rows,
+    byRecommendation: byRecommendation.rows,
+    byTrustLevel: byTrustLevel.rows,
   });
 });
 
@@ -897,6 +949,45 @@ router.post("/admin/research/librarian/batch-analyze", requireAuth, requireAdmin
   try {
     const outcome = await batchAnalyzeDocuments(ids.map((id: any) => parseInt(id, 10)));
     res.json({ ok: true, results: outcome.results });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/research/librarian/review-unreviewed
+ * Run the Librarian Agent on ALL documents where librarian_recommendation IS NULL.
+ * After analysis, automatically applies the recommendation as a status change:
+ *   approve      → status=approved, isActive=true  (enters retrieval)
+ *   needs_review → status=pending,  isActive=false  (blocked until admin manually approves)
+ *   reject       → status=rejected, isActive=false  (permanently blocked)
+ *
+ * This enforces the safety rule: no unreviewed seed content is retrievable by the Coach.
+ *
+ * Optional query params:
+ *   batchSize=5  (default 5; controls how many docs are processed per loop iteration)
+ *
+ * NOTE: This is a long-running operation. For 22 documents it may take ~2–3 minutes
+ * depending on OpenAI response times. The response will not be sent until all documents
+ * are processed. Do not call with a short client timeout.
+ */
+router.post("/admin/research/librarian/review-unreviewed", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const batchSize = parseInt((req.query.batchSize as string) ?? "5", 10) || 5;
+
+  try {
+    const outcome = await reviewUnreviewedDocuments(batchSize);
+    res.json({
+      ok: true,
+      processed: outcome.processed,
+      approved: outcome.approved,
+      needsReview: outcome.needsReview,
+      rejected: outcome.rejected,
+      errors: outcome.errors,
+      results: outcome.results,
+      note: "Documents with recommendation=needs_review are now pending/inactive. " +
+        "Review their warningFlags via GET /api/admin/research?status=pending, " +
+        "then approve via POST /api/admin/research/:id/approve if acceptable.",
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

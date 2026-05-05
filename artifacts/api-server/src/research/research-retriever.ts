@@ -2,12 +2,16 @@
 //
 // Retrieves relevant research chunks from the database based on user context.
 // Uses keyword/tag-based scoring (no vector DB required).
-// Only approved, active documents are included.
+//
+// Safety rule: only documents with librarian_recommendation = 'approve', or
+// 'needs_review' that were subsequently admin-approved (status=approved), are
+// eligible for retrieval. NULL-recommendation (unreviewed) documents are never
+// surfaced to the Coach Agent.
 //
 // Called inside buildSystemPrompt to inject evidence-informed context.
 
 import { db, researchDocumentsTable, researchChunksTable } from "@workspace/db";
-import { eq, and, inArray, sql } from "drizzle-orm";
+import { eq, and, inArray, or, sql } from "drizzle-orm";
 import { logger } from "../lib/logger";
 
 export interface ResearchRetrievalParams {
@@ -18,6 +22,8 @@ export interface ResearchRetrievalParams {
   population?: string | null;
   trainingPhase?: string | null;
   maxChunks?: number;
+  userId?: number;
+  conversationId?: number;
 }
 
 export interface RetrievedResearchChunk {
@@ -29,6 +35,7 @@ export interface RetrievedResearchChunk {
   chunkType: string;
   topicTags: string[];
   category: string;
+  warningFlags: string[];
 }
 
 export interface ResearchContext {
@@ -36,6 +43,30 @@ export interface ResearchContext {
   sourceLabels: string[];
   hasContent: boolean;
 }
+
+// ─── Warning flag score penalties ─────────────────────────────────────────────
+
+const WARNING_FLAG_PENALTIES: Record<string, number> = {
+  conflicting_evidence: -2,
+  medical_claim_risk: -2,
+  overclaim_risk: -1,
+  expert_consensus: -1,
+  old_evidence: -1,
+  population_mismatch: -1,
+  single_study: -1,
+  lacks_replication: -1,
+};
+
+const WARNING_FLAG_CAUTION_TEXT: Record<string, string> = {
+  conflicting_evidence: "conflicting evidence — apply conservatively",
+  medical_claim_risk: "medical claim risk — not for diagnosis or treatment",
+  overclaim_risk: "evidence may be overstated",
+  expert_consensus: "expert consensus only, not controlled trial data",
+  old_evidence: "older evidence — may not reflect current practice",
+  population_mismatch: "population mismatch — verify applicability",
+  single_study: "single study only — limited generalizability",
+  lacks_replication: "not yet replicated",
+};
 
 // ─── Topic Tag Extraction ─────────────────────────────────────────────────────
 // Derive retrieval tags from user context without AI calls
@@ -156,6 +187,7 @@ function scoreChunk(
   contextTags: string[],
   hasInjuries: boolean,
   population: string | null | undefined,
+  warningFlags: string[] = [],
 ): number {
   let score = 0;
 
@@ -183,10 +215,31 @@ function scoreChunk(
   if (chunk.chunkType === "coaching_implications") score += 1;
   if (chunk.chunkType === "programming_implications") score += 1;
 
+  // Warning flag penalties — flagged content ranks below clean content
+  for (const flag of warningFlags) {
+    const penalty = WARNING_FLAG_PENALTIES[flag] ?? 0;
+    score += penalty;
+  }
+
   return score;
 }
 
+// ─── Build caution note from warning flags ────────────────────────────────────
+
+function buildCautionNote(warningFlags: string[]): string | null {
+  if (!warningFlags || warningFlags.length === 0) return null;
+  const notes = warningFlags
+    .map((f) => WARNING_FLAG_CAUTION_TEXT[f])
+    .filter(Boolean);
+  if (notes.length === 0) return null;
+  return `*⚠ Note: ${notes.join("; ")}.*`;
+}
+
 // ─── Main Retrieval Function ──────────────────────────────────────────────────
+//
+// Safety filter: only librarian-reviewed documents (recommendation = 'approve'
+// or 'needs_review' + admin-approved status) are eligible for retrieval.
+// Unreviewed documents (recommendation IS NULL) are never surfaced.
 
 export async function getRelevantResearchContext(
   params: ResearchRetrievalParams,
@@ -194,17 +247,24 @@ export async function getRelevantResearchContext(
   const maxChunks = params.maxChunks ?? 5;
 
   try {
-    // Fetch all approved, active, non-rejected document IDs
-    // trustLevel "reject" is a defensive guard — documents with reject trust are excluded
-    // regardless of approval status. Librarian Agent owns all trust classification.
     const approvedDocs = await db
-      .select({ id: researchDocumentsTable.id, title: researchDocumentsTable.title, source: researchDocumentsTable.source, trustLevel: researchDocumentsTable.trustLevel })
+      .select({
+        id: researchDocumentsTable.id,
+        title: researchDocumentsTable.title,
+        source: researchDocumentsTable.source,
+        trustLevel: researchDocumentsTable.trustLevel,
+        warningFlags: researchDocumentsTable.warningFlags,
+      })
       .from(researchDocumentsTable)
       .where(
         and(
           eq(researchDocumentsTable.status, "approved"),
           eq(researchDocumentsTable.isActive, true),
           sql`${researchDocumentsTable.trustLevel} != 'reject'`,
+          or(
+            eq(researchDocumentsTable.librarianRecommendation, "approve"),
+            eq(researchDocumentsTable.librarianRecommendation, "needs_review"),
+          ),
         ),
       );
 
@@ -213,7 +273,6 @@ export async function getRelevantResearchContext(
     const approvedIds = approvedDocs.map((d) => d.id);
     const docMap = new Map(approvedDocs.map((d) => [d.id, d]));
 
-    // Fetch chunks for approved documents
     const chunks = await db
       .select()
       .from(researchChunksTable)
@@ -226,19 +285,20 @@ export async function getRelevantResearchContext(
 
     const hasInjuries = Boolean(params.injuries && params.injuries.trim().length > 0);
 
-    // Score and rank chunks
     const scored = chunks
-      .map((chunk) => ({
-        chunk,
-        score: scoreChunk(chunk, contextTags, hasInjuries, params.population),
-      }))
+      .map((chunk) => {
+        const doc = docMap.get(chunk.documentId);
+        return {
+          chunk,
+          score: scoreChunk(chunk, contextTags, hasInjuries, params.population, (doc?.warningFlags as string[]) ?? []),
+        };
+      })
       .filter((s) => s.score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, maxChunks);
 
     if (scored.length === 0) return "";
 
-    // Build output
     const lines: string[] = ["\n## RESEARCH CONTEXT (Evidence-Informed Coaching Notes)"];
     lines.push(
       "The following evidence-based notes are retrieved from trusted sources to inform this response.",
@@ -260,17 +320,19 @@ export async function getRelevantResearchContext(
         : chunk.chunkType === "limitations" ? "Evidence Limitations"
         : "Research Note";
 
+      const docWarningFlags = (doc.warningFlags as string[]) ?? [];
       lines.push(`### [${typeLabel}] — ${doc.source} (${doc.trustLevel} trust)`);
       lines.push(chunk.chunkText);
       if (chunkTags.length > 0) {
         lines.push(`*Relevant for: ${chunkTags.slice(0, 4).join(", ")}*`);
       }
+      const cautionNote = buildCautionNote(docWarningFlags);
+      if (cautionNote) lines.push(cautionNote);
       lines.push("");
 
       seenDocIds.add(chunk.documentId);
     }
 
-    // Citation footer (hidden by default, shown when user asks for sources)
     const citedDocs = [...seenDocIds].map((id) => docMap.get(id)).filter(Boolean);
     if (citedDocs.length > 0) {
       lines.push(
@@ -303,13 +365,23 @@ export async function getRelevantResearchContextWithChunks(
 
   try {
     const approvedDocs = await db
-      .select({ id: researchDocumentsTable.id, title: researchDocumentsTable.title, source: researchDocumentsTable.source, trustLevel: researchDocumentsTable.trustLevel })
+      .select({
+        id: researchDocumentsTable.id,
+        title: researchDocumentsTable.title,
+        source: researchDocumentsTable.source,
+        trustLevel: researchDocumentsTable.trustLevel,
+        warningFlags: researchDocumentsTable.warningFlags,
+      })
       .from(researchDocumentsTable)
       .where(
         and(
           eq(researchDocumentsTable.status, "approved"),
           eq(researchDocumentsTable.isActive, true),
           sql`${researchDocumentsTable.trustLevel} != 'reject'`,
+          or(
+            eq(researchDocumentsTable.librarianRecommendation, "approve"),
+            eq(researchDocumentsTable.librarianRecommendation, "needs_review"),
+          ),
         ),
       );
 
@@ -331,10 +403,13 @@ export async function getRelevantResearchContextWithChunks(
     const hasInjuries = Boolean(params.injuries && params.injuries.trim().length > 0);
 
     const scored = rawChunks
-      .map((chunk) => ({
-        chunk,
-        score: scoreChunk(chunk, contextTags, hasInjuries, params.population),
-      }))
+      .map((chunk) => {
+        const doc = docMap.get(chunk.documentId);
+        return {
+          chunk,
+          score: scoreChunk(chunk, contextTags, hasInjuries, params.population, (doc?.warningFlags as string[]) ?? []),
+        };
+      })
       .filter((s) => s.score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, maxChunks);
@@ -353,10 +428,11 @@ export async function getRelevantResearchContextWithChunks(
         chunkType: chunk.chunkType,
         topicTags: Array.isArray(chunk.topicTags) ? chunk.topicTags : [],
         category: chunk.category ?? "",
+        warningFlags: (doc?.warningFlags as string[]) ?? [],
       };
     });
 
-    // Build the text block (same logic as getRelevantResearchContext)
+    // Build the text block
     const lines: string[] = ["\n## RESEARCH CONTEXT (Evidence-Informed Coaching Notes)"];
     lines.push(
       "The following evidence-based notes are retrieved from trusted sources to inform this response.",
@@ -380,6 +456,8 @@ export async function getRelevantResearchContextWithChunks(
       if (chunkTags.length > 0) {
         lines.push(`*Relevant for: ${chunkTags.slice(0, 4).join(", ")}*`);
       }
+      const cautionNote = buildCautionNote(chunk.warningFlags);
+      if (cautionNote) lines.push(cautionNote);
       lines.push("");
       seenDocIds.add(chunk.documentId);
     }
@@ -395,7 +473,29 @@ export async function getRelevantResearchContextWithChunks(
       );
     }
 
-    return { text: lines.join("\n"), chunks: retrievedChunks };
+    const text = lines.join("\n");
+
+    // ── Retrieval hit log ──────────────────────────────────────────────────────
+    // Structured log for observability: which chunks reached the Coach Agent.
+    logger.info(
+      {
+        event: "research_retrieval_hit",
+        userId: params.userId ?? null,
+        conversationId: params.conversationId ?? null,
+        queryPreview: params.userMessage?.slice(0, 100) ?? null,
+        contextTags,
+        chunksRetrieved: retrievedChunks.length,
+        docIds: [...seenDocIds],
+        chunkIds: scored.map((s) => s.chunk.id),
+        scores: scored.map((s) => s.score),
+        trustLevels: retrievedChunks.map((c) => c.trustLevel),
+        categories: [...new Set(retrievedChunks.map((c) => c.category))],
+        warningFlagsPresent: retrievedChunks.flatMap((c) => c.warningFlags).filter(Boolean),
+      },
+      "[ResearchRetriever] Retrieval hit",
+    );
+
+    return { text, chunks: retrievedChunks };
   } catch (err) {
     logger.warn({ err }, "[ResearchRetriever] Failed to retrieve research (rich) — skipping");
     return { text: "", chunks: [] };
