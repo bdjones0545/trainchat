@@ -1,0 +1,165 @@
+Run a full audit of TrainChat’s Research Librarian Agent and research database activity.
+
+Goal:
+Understand what the Librarian Agent has processed, what research it added to the database, whether the research is useful, and whether it is actively helping Coach/Architect responses.
+
+Do not modify code or database records.
+Audit only.
+
+Focus areas:
+
+1. Librarian Agent architecture
+Identify:
+- file locations
+- route/API entry points
+- prompt/system instructions
+- input shape
+- output shape
+- model used
+- response_format settings
+- admin-only protections
+- downstream database writes
+
+Map the full flow:
+document candidate → librarian evaluation → chunk generation → research_documents / chunks tables → retrieval layer → Coach Agent prompt context.
+
+2. Database activity since creation
+Query the research-related tables and summarize:
+- total documents processed
+- total documents accepted
+- total rejected/skipped
+- total chunks generated
+- documents by category
+- documents by trustLevel
+- documents by recommendation
+- newest and oldest processed documents
+- activity by day since the Librarian was created
+
+If createdAt/updatedAt exists, include timestamps.
+
+3. Research inventory
+List the top 20 most relevant/recent documents added by the Librarian.
+
+For each:
+- title
+- source
+- category
+- recommendation
+- confidence
+- trustLevel
+- chunksGenerated
+- warningFlags
+- createdAt
+- whether it is currently retrievable by the Coach Agent
+
+4. Quality audit
+Review accepted research and flag:
+- duplicate documents
+- low-quality sources
+- missing citations/source URLs
+- vague titles
+- overly broad chunks
+- outdated findings
+- unsafe medical/rehab claims
+- content not relevant to strength, speed, mobility, recovery, pain, or programming
+
+5. Retrieval audit
+Trace how Coach Agent retrieves research.
+
+Identify:
+- retrieval function/file
+- search/scoring method
+- filters used
+- category matching
+- chunk limit
+- whether trustLevel/confidence affects ranking
+- whether warningFlags are excluded or surfaced
+- whether research context is injected into build/edit/refinement prompts
+
+Run sample retrieval tests:
+A. “Build a 3-day strength program”
+B. “Build a football speed program”
+C. “Make this more explosive”
+D. “Fix tight hips and low back”
+E. “Make this lower impact”
+F. “Program for knee pain return to training”
+
+For each:
+- what research chunks are retrieved
+- whether they are relevant
+- whether the Coach Agent would likely use them correctly
+- any missing categories
+
+6. Coach/Architect integration
+Check whether research is used in:
+- new program builds
+- chat guidance
+- program edits
+- week refinements
+- mobility/pain paths
+- speed/power paths
+- strength/hypertrophy paths
+
+Identify if the Performance Architect receives research directly or only through Coach prompt context.
+
+7. Gaps
+Identify missing research areas:
+- strength progression
+- hypertrophy
+- power/explosive training
+- speed/acceleration
+- change of direction
+- mobility
+- pain/re-entry
+- tendon/overuse
+- youth athletes
+- older adults
+- general population beginners
+- fatigue/readiness
+- conditioning/endurance
+- warmups/movement prep
+
+8. Safety and trust
+Audit if the Librarian system:
+- rejects weak claims
+- labels speculative findings
+- handles medical/pain research cautiously
+- avoids overprescribing rehab protocols
+- distinguishes evidence-informed guidance from diagnosis/treatment
+- stores warning flags clearly
+
+9. Observability
+Find logs/admin dashboards related to:
+- librarian runs
+- document processing
+- rejected documents
+- chunk generation
+- retrieval hits
+- research injected into Coach context
+
+Flag missing observability.
+
+10. Final report
+Return:
+
+A. Executive summary
+- Is the Librarian working?
+- Has it added useful research?
+- Is the Coach actually using it?
+- Biggest risk
+
+B. Research database stats
+
+C. Top documents/chunks
+
+D. Retrieval test results
+
+E. Quality/safety issues
+
+F. Missing research categories
+
+G. Recommended next 5 fixes/improvements
+
+Important:
+Do not edit prompts, schemas, data, or code during this pass.
+Audit only.
