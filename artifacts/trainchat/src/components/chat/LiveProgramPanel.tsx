@@ -936,6 +936,10 @@ function ProgramTab({
             focusMode: panelFocusMode,
             source: "quick_action",
             postToChat: false,
+            refineSource: "program_refine_panel",
+            structuredIntent: chip.structuredIntent,
+            weekNumber: selectedWeek,
+            scopeOverride: "week",
           }),
         },
       );

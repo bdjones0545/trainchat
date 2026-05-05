@@ -42,6 +42,35 @@ import {
   deriveVerificationStatus,
 } from "../lib/mutation-audit-receipt-service";
 import { classifyAdjustmentIntent } from "../lib/adjustment-intent-classifier";
+import { applyHierarchicalRefinement } from "../lib/hierarchical-refine-engine";
+import { inferTransformationFromMessage, type ScopeResolution } from "../lib/refinement-scope-resolver";
+
+// ─── Program Refine Panel: structuredIntent → transformation mapping ───────────
+// Maps the chip's structuredIntent key to the transformation type used by the
+// hierarchical engine. This avoids relying on message text pattern matching.
+
+const STRUCTURED_INTENT_TRANSFORMATION: Record<string, string> = {
+  strength_more_explosive:   "power",
+  strength_more_strength:    "strength",
+  strength_more_endurance:   "endurance",
+  strength_shorten_sessions: "reduce_time",
+  strength_lower_impact:     "recovery",
+  strength_home_gym:         "recovery",
+  speed_more_acceleration:   "strength",
+  speed_more_max_velocity:   "power",
+  speed_more_reactive:       "power",
+  speed_more_deceleration:   "endurance",
+  speed_shorten_sessions:    "reduce_time",
+  speed_lower_impact:        "recovery",
+  speed_limited_space:       "recovery",
+  mobility_more_hip_focus:    "endurance",
+  mobility_more_recovery_flow:"recovery",
+  mobility_end_range_control: "strength",
+  mobility_thoracic_spine:    "endurance",
+  mobility_shorten_sessions:  "reduce_time",
+  mobility_lower_intensity:   "recovery",
+  mobility_desk_reset:        "recovery",
+};
 
 // ─── Diff computation ─────────────────────────────────────────────────────────
 
@@ -211,6 +240,10 @@ const EditRequestBody = z.object({
   source: z.enum(["ai_edit", "quick_action", "initialize", "auto_adjust"]).optional(),
   focusMode: z.enum(["strength", "speed", "mobility"]).optional(),
   postToChat: z.boolean().optional().default(true),
+  refineSource: z.string().optional(),
+  structuredIntent: z.string().optional(),
+  weekNumber: z.number().int().positive().optional(),
+  scopeOverride: z.enum(["week", "block"]).optional(),
 }).refine((d) => d.intent || (d.request && d.request.length > 0), {
   message: "Either 'intent' or a non-empty 'request' is required.",
 });
@@ -242,7 +275,10 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
   }
 
   const userId = req.session.userId!;
-  const { request: rawRequest, intent, targetContext, source = "ai_edit", focusMode, postToChat } = parsed.data;
+  const {
+    request: rawRequest, intent, targetContext, source = "ai_edit", focusMode, postToChat,
+    refineSource, structuredIntent: chipStructuredIntent, weekNumber: chipWeekNumber,
+  } = parsed.data;
   const userRequest = rawRequest ?? "";
   const uiContext = (req.body as any)?.uiContext ?? null;
   // focusMode can also come from uiContext (chat path); body-level takes precedence
@@ -323,6 +359,182 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       recentCommands: [{ role: "user", content: userRequest || intent || "edit", createdAt: new Date() }],
     });
     logFailSafeAudit(logger, { message: userRequest || intent || "edit", focusMode: resolvedFocusMode as any, activeProgram: activeSystem as any, action: "APPLY_MUTATION", intentType: "EDIT_PROGRAM" }, failSafeResolution);
+
+    // ── PROGRAM REFINE PANEL — block-wide week scope fast path ───────────────
+    // When the request comes from the Live Program Panel "Refine This Program"
+    // section, we ALWAYS apply to ALL sessions in the target week — never just
+    // the active/Day-1 session. Route directly through the hierarchical engine
+    // with forced week_scope, bypassing the NLP session-scope edit pipeline.
+    if (refineSource === "program_refine_panel") {
+      const transformation =
+        (chipStructuredIntent ? STRUCTURED_INTENT_TRANSFORMATION[chipStructuredIntent] : undefined) ??
+        inferTransformationFromMessage(userRequest);
+
+      const scopeResolution: ScopeResolution = {
+        scope: "week_scope",
+        confidence: "high",
+        targetWeekNumber: chipWeekNumber,
+        derivedTransformation: transformation,
+        reasoning: `Forced week_scope from program_refine_panel (structuredIntent=${chipStructuredIntent ?? "none"}, weekNumber=${chipWeekNumber ?? "unset"})`,
+      };
+
+      logger.info(
+        {
+          userId,
+          refineSource,
+          chipStructuredIntent,
+          chipWeekNumber,
+          transformation,
+          systemId: activeSystem.id,
+        },
+        "[ProgramRefinePanel] Routing to hierarchical week-scope engine — bypassing NLP session path"
+      );
+
+      const panelRefineResult = await applyHierarchicalRefinement({
+        systemId: activeSystem.id,
+        userId: String(userId),
+        userMessage: userRequest,
+        scopeResolution,
+      });
+
+      // ── Safety check — if a multi-session week had only 1 session changed,
+      // the engine still succeeded (it iterates all sessions), so this guard
+      // logs anomalies for observability without blocking the response.
+      if (panelRefineResult.applied) {
+        const allWeeks = fullSystem.phases.flatMap((p) => p.weeks);
+        const targetWeek = chipWeekNumber
+          ? allWeeks.find((w) => w.weekNumber === chipWeekNumber)
+          : allWeeks[allWeeks.length - 1];
+        const expectedSessionCount = targetWeek
+          ? targetWeek.sessions.filter((s) => !s.isRestDay).length
+          : 0;
+
+        if (expectedSessionCount > 1 && panelRefineResult.sessionCount < expectedSessionCount) {
+          logger.warn(
+            {
+              refineSource,
+              chipStructuredIntent,
+              weekNumber: chipWeekNumber,
+              expectedSessionCount,
+              actualSessionCount: panelRefineResult.sessionCount,
+              systemId: activeSystem.id,
+            },
+            "[ProgramRefinePanel:SafetyCheck] WARN — fewer sessions updated than expected for week. Possible partial apply."
+          );
+        } else {
+          logger.info(
+            {
+              refineSource,
+              weekNumber: chipWeekNumber,
+              sessionCount: panelRefineResult.sessionCount,
+              exerciseCount: panelRefineResult.exerciseCount,
+              transformation,
+            },
+            "[ProgramRefinePanel:SafetyCheck] All sessions in week updated correctly"
+          );
+        }
+      }
+
+      // Build block-level change log entry describing all sessions in the week
+      const weekLabel = chipWeekNumber ? `Week ${chipWeekNumber}` : "current week";
+      const panelChangeSummary = panelRefineResult.applied
+        ? panelRefineResult.changeSummary
+        : `Could not apply ${chipStructuredIntent ?? "refinement"} to ${weekLabel}.`;
+
+      let panelChangeLogId: number | undefined;
+      if (panelRefineResult.applied) {
+        try {
+          panelChangeLogId = await createChangeLogEntry({
+            userId,
+            trainingSystemId: activeSystem.id,
+            source,
+            intent: "week_scope_refinement",
+            scope: "week",
+            changeSummary: panelChangeSummary,
+            requestText: userRequest,
+            appliedCount: panelRefineResult.exerciseCount,
+            skippedCount: 0,
+            decisionMetadata: {
+              confirmed: true,
+              verificationStatus: "verified",
+              persistenceType: "refinement",
+              mutationType: "week_scope",
+              safetyFlags: [],
+              changedCount: panelRefineResult.exerciseCount,
+              skippedCount: 0,
+            },
+          });
+        } catch (logErr) {
+          logger.error({ logErr, userId }, "[ProgramRefinePanel] Failed to persist change log entry (non-fatal)");
+        }
+      }
+
+      const panelChangeLogEntry = panelChangeLogId !== undefined ? {
+        id: panelChangeLogId,
+        source: source ?? "quick_action",
+        intent: "week_scope_refinement",
+        scope: "week",
+        changeSummary: panelChangeSummary,
+        requestText: userRequest || null,
+        isMajorVersion: false,
+        versionLabel: `${weekLabel} refined`,
+        appliedCount: panelRefineResult.exerciseCount,
+        skippedCount: 0,
+        decisionMetadata: { confirmed: true },
+        createdAt: new Date().toISOString(),
+      } : null;
+
+      trackLearningEvent({
+        userId,
+        eventType: panelRefineResult.applied ? "mutation_success" : "mutation_failure",
+        routeUsed: "program_refine_panel",
+        intentType: "week_scope_refinement",
+        editSubtype: "week",
+        requestText: userRequest,
+        mutationApplied: panelRefineResult.applied,
+        validatorPassed: panelRefineResult.applied,
+        metadata: {
+          refineSource,
+          chipStructuredIntent,
+          weekNumber: chipWeekNumber,
+          transformation,
+          sessionCount: panelRefineResult.sessionCount,
+          exerciseCount: panelRefineResult.exerciseCount,
+        },
+      });
+
+      const [today, week, block] = await Promise.all([
+        getTodaySession(userId).catch(() => null),
+        getCurrentWeek(userId).catch(() => null),
+        getBlockSummary(userId).catch(() => null),
+      ]);
+
+      res.json({
+        intent: "week_scope_refinement",
+        scope: "week",
+        changeSummary: panelChangeSummary,
+        appliedCount: panelRefineResult.exerciseCount,
+        skippedCount: 0,
+        verificationStatus: panelRefineResult.applied ? "verified" : "failed",
+        changedIds: [],
+        changeTargets: [],
+        changeLogId: panelChangeLogId ?? null,
+        changeLogEntry: panelChangeLogEntry,
+        diff: null,
+        propagationSummary: null,
+        chatConversationId: null,
+        coachReasoning: null,
+        updatedData: { today, week, block },
+        swapContract: null,
+        refinePanel: {
+          weekLabel,
+          sessionCount: panelRefineResult.sessionCount,
+          transformation,
+          scopeLabel: panelRefineResult.scopeLabel,
+        },
+      });
+      return;
+    }
 
     // ── STRUCTURED INTENT FAST PATH ─────────────────────────────────────────
     // If the caller passes an explicit intent, skip ALL NLP and route directly
