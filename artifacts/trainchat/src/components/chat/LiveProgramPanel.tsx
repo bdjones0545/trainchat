@@ -922,7 +922,7 @@ function ProgramTab({
 
   // ── Direct block-level refine — bypasses chat, targets selected block ──────
   async function handleDirectBlockRefine(chip: GlobalChip, key: string) {
-    if (!isSaved || buildingState?.isBuilding || !!pendingRefinement) return;
+    if (trainingSystemId == null || buildingState?.isBuilding || !!pendingRefinement) return;
     setPanelEditError(null);
     setPendingRefinement(key);
     const start = Date.now();
@@ -938,7 +938,7 @@ function ProgramTab({
             postToChat: false,
             refineSource: "program_refine_panel",
             structuredIntent: chip.structuredIntent,
-            weekNumber: selectedWeek,
+            weekNumber: selectedWeek ?? 1,
             scopeOverride: "week",
           }),
         },
@@ -2216,7 +2216,7 @@ function ProgramTab({
                   key={chip.label}
                   onClick={() => {
                     if (isDisabled || isLoading) return;
-                    if (isSaved) {
+                    if (trainingSystemId != null) {
                       handleDirectBlockRefine(chip, key);
                     } else {
                       sendRefinement(chip.message, key, {
