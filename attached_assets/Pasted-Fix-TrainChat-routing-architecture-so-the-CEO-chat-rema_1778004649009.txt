@@ -1,0 +1,174 @@
+Fix TrainChat routing architecture so the CEO chat remains the main brain, but structured actions execute deterministically.
+
+Audit findings:
+The system currently has overlapping routing/classification layers:
+- classifyIntent() returns IntentResult
+- buildExecutionPlan() returns ExecutionPlan
+- resolveOrchestratorRoute() maps execution plans to agent routes
+
+These can disagree. When they disagree, the system can silently fall through to AI chat, produce a response, or ask clarification instead of applying the intended edit.
+
+Goal:
+Make buildExecutionPlan() the single routing source of truth, remove silent AI fallback for mutation paths, and ensure all structured UI commands bypass general chat/NLP.
+
+Do not redesign the whole app. Make targeted, safe changes.
+
+Required fixes:
+
+1. Make ExecutionPlan authoritative
+In routes/conversations.ts:
+- Use execPlan.action as the only routing authority.
+- classifyIntent() may still run for metadata, logging, analytics, or prompt hints.
+- Do not let intentResult.type independently decide whether an edit should apply.
+
+Add a reconciliation guard:
+If intentResult.type indicates EDIT_PROGRAM / ADJUST_PROGRAM / REBUILD_PROGRAM / mutation intent
+but execPlan.action is GUIDANCE, NO_OP, CONVERSATION_ONLY, or undefined:
+- Do NOT fall through to normal AI generation.
+- Return a safe clarification or safe failure:
+  “I need one more detail before changing your program.”
+- Log:
+  [Routing Reconciliation] intent/edit mismatch blocked AI fallback
+
+2. Kill silent AI fallback after edit errors
+Find all edit/mutation pipeline catch blocks, especially CLARIFICATION_FOLLOWUP.
+Current bad behavior:
+- catch error
+- fall through to standard AI response
+
+Replace with:
+- return success: false
+- systemEdit.applied: false
+- user-visible message:
+  “I couldn’t apply that edit, so I left your program unchanged.”
+- no structuredData
+- no program regeneration
+- log full server error
+
+Rule:
+If the user intended a program mutation and mutation execution fails, never generate a new program or coaching response as fallback.
+
+3. Structured UI actions must never route through chat/NLP
+Audit all chip/button handlers.
+
+These must use deterministic endpoints:
+- Refine This Program chips → /api/training-system/edit
+- Exercise swap/replace buttons → /api/training-system/mutate
+- Week/block refinement buttons → /api/training-system/edit
+- Session/day direct edit controls → direct edit route
+
+Guardrail:
+If payload has any of:
+- refineSource: "program_refine_panel"
+- scopeOverride
+- structuredIntent
+- uiAction
+- trainingSystemId
+
+Then it must not call:
+- sendMessage
+- handleSubmit
+- normal chat mutation
+- /api/conversations/:id/messages
+
+If trainingSystemId is missing, fail fast with a visible UI message. Do not fallback to chat.
+
+4. Fix auto-create-before-edit response
+In routes/conversations.ts:
+When APPLY_MUTATION fires and no activeSystem exists but latestStructuredProgram exists, the server may auto-create a training system before applying the edit.
+
+If this happens, the response must include:
+- systemSaved: true
+- systemId: createdTrainingSystemId
+- trainingSystemId: createdTrainingSystemId
+- systemEdit.applied: true or false depending on actual edit result
+
+Also create an initialization change log entry before the edit change log:
+source: "initialize"
+scope: "system"
+intent: "auto_created_for_edit"
+versionLabel: "Initial Build"
+
+Client must invalidate/refetch the same React Query keys as normal save:
+- ["training-system-active", focusMode]
+- ["training-system-week", systemId, focusMode]
+- ["training-system-history", "changes"]
+- ["training-system-history", "versions"]
+- ["live-panel-week-ids", systemId, focusMode]
+
+5. Standardize mutation response shape
+For every mutation/edit response, streaming or non-streaming, return a consistent shape:
+
+{
+  systemSaved?: boolean,
+  systemId?: number,
+  trainingSystemId?: number,
+  systemEdit: {
+    applied: boolean,
+    route: "direct_edit" | "week_refine" | "block_refine" | "exercise_mutate" | "clarification_followup",
+    scope: "exercise" | "session" | "week" | "block" | "system",
+    changedIds: string[],
+    changeLogId?: number,
+    error?: string
+  },
+  structuredData: null
+}
+
+Do not return structuredData on failed mutations.
+
+6. Add route-level logging
+Add logs for:
+- [Routing Authority] execPlan.action selected
+- [Routing Reconciliation] mismatch blocked
+- [Structured UI Action] direct route used
+- [Mutation Failure] program left unchanged
+- [Auto Create For Edit] system created and client hydration fields returned
+
+7. Acceptance tests
+
+Test A — typed ambiguous edit:
+User types: “make it better”
+Expected:
+- If scope/intent unclear, clarification is returned.
+- No program regeneration.
+- No fake success claim.
+
+Test B — refine chip immediately after first build:
+Generate a new program.
+Click “More Endurance.”
+Expected:
+- Does not call chat endpoint.
+- Calls /api/training-system/edit.
+- Includes refineSource, structuredIntent, scopeOverride, weekNumber.
+- Applies week refinement.
+- No clarification message in chat.
+
+Test C — classifier disagreement:
+Force classifyIntent() to return EDIT_PROGRAM while buildExecutionPlan() returns GUIDANCE.
+Expected:
+- Reconciliation guard blocks AI fallback.
+- Returns safe clarification/failure.
+- Program unchanged.
+
+Test D — edit pipeline error:
+Throw inside clarification followup mutation.
+Expected:
+- User sees “I couldn’t apply that edit, so I left your program unchanged.”
+- No structuredData.
+- No new program generated.
+- Existing program unchanged.
+
+Test E — auto-create-before-edit:
+Have latestStructuredProgram but no activeSystem.
+Send a valid edit.
+Expected:
+- Server creates trainingSystemId.
+- Response includes systemSaved: true and systemId.
+- Initialization change log exists.
+- Edit change log exists after it.
+- Client refetches active system and week data.
+
+Important principle:
+Chat is still the CEO and user-facing brain.
+But deterministic UI actions are commands.
+The CEO can narrate/explain them, but routing must not be ambiguous.
