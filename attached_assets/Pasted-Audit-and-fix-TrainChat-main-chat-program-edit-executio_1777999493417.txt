@@ -1,0 +1,159 @@
+Audit and fix TrainChat main chat program-edit execution so it uses the same verified mutation contract as LiveProgramPanel direct edits.
+
+Current issue:
+Main chat program edits still sometimes fail or produce unclear/unconfirmed change history.
+
+Examples from QA:
+1. Main chat says:
+   “I wasn’t able to swap that exercise — your program hasn’t been modified…”
+   even when the user requested a valid program edit.
+2. Changes tab shows entries without confirmed status.
+3. Some entries say:
+   “Weighted Single-Leg Leg Extension has been swapped for an equivalent exercise that fits my available equipment. Sets, reps, and rest stayed the same.”
+   but the card does not show a confirmed badge.
+4. The main chat path appears to be bypassing or inconsistently using the new swapContract / verified DB mutation contract.
+
+Goal:
+Unify the mutation contract across:
+- LiveProgramPanel button edits
+- Main chat text edits
+- Suggestion chip edits
+- Improve My Plan edits
+- Any agent-driven program edit
+
+A program edit should only be reported as successful if the backend returns a verified mutation contract proving the DB write landed.
+
+Required backend response contract:
+For every program mutation, return:
+
+{
+  success: boolean,
+  actionType: string,
+  confirmed: boolean,
+  mutationContracts: [
+    {
+      actionType,
+      confirmed,
+      originalExercise?,
+      replacementExercise?,
+      updatedExercise?,
+      updatedSession?,
+      changeEntry,
+      invalidationKeys,
+      verificationSource: "afterSnapshot" | "dbReadAfterWrite",
+      failureReason?
+    }
+  ],
+  userMessage,
+  changeSummary,
+  invalidationKeys
+}
+
+For swap/replace exercise:
+- Must include actionType = "replace_exercise"
+- confirmed = true only if DB write succeeded and updatedExercise exists in afterSnapshot or dbReadAfterWrite
+- If no verified updatedExercise, confirmed = false and failureReason must be explicit
+
+For prescription/edit/set/rep changes:
+- Must include actionType = "update_prescription" or matching action
+- confirmed = true only after DB verification
+
+For notes-only changes:
+- Must include actionType = "update_notes"
+- confirmed = true only if notes actually changed
+- Notes-only changes must never be used as fallback for swap/replace commands
+
+Part 1 — Main chat must consume mutationContracts
+In the main chat edit handler:
+- Do not infer success from assistant text alone.
+- Do not show “I updated/swapped/replaced…” unless at least one relevant mutationContract is confirmed.
+- If mutationContracts are missing or unconfirmed:
+  - show a clear failure message
+  - do not create a fake successful assistant response
+  - do not mark change history confirmed
+  - log [MainChatEdit:ContractViolation]
+
+Part 2 — Backend must emit contracts for all edit paths
+Audit these likely paths:
+- /api/training-system/edit
+- chat route that handles program edits
+- SSE streaming edit route
+- improve plan route
+- direct exercise mutation route
+- any function calling edit-engine.ts
+- any agent/execution planner path that modifies active program
+
+All paths should normalize through one helper:
+buildMutationContracts(editResult, afterSnapshot, beforeSnapshot)
+
+Part 3 — Change history status must be contract-driven
+Change history entries should have:
+- confirmed: true only if matching mutation contract confirmed
+- pending: true only while mutation is still running
+- failed: true if mutation attempted but verification failed
+- unconfirmed only when waiting on user confirmation before execution
+
+Do not use unconfirmed for completed-but-unverified edits.
+Use failed or verification_failed instead.
+
+Part 4 — Fix main chat failure language
+If target exercise is ambiguous:
+Say:
+“I couldn’t tell which exercise to change. Open the session or tell me the exercise name and day.”
+
+If target exercise is resolved but DB verification failed:
+Say:
+“I found the exercise, but I couldn’t verify that the program was updated. I didn’t mark this as complete.”
+
+If no active program/session found:
+Say:
+“I couldn’t find an active program to edit.”
+
+Avoid generic messages that tell the user to include everything if the app already had context.
+
+Part 5 — Main chat should pass active context
+When user sends a main chat edit, include:
+- activeTrainingSystemId
+- activeWeekId
+- currentSessionId if known
+- selected exercise/card context if any
+- visible session/day context
+- program focus
+- block type
+- userLevel/readiness if available
+
+This prevents valid edits from failing because main chat lacks the sidebar context.
+
+Part 6 — UI updates after main chat edits
+After confirmed main chat mutation:
+Invalidate/refetch:
+- training-system-active
+- training-system-today
+- training-system-week
+- training-system-history/changes
+- live panel week ids
+- adapted tab query
+- current session query
+
+Also update local state if mutationContracts contain updatedExercise/updatedSession.
+
+Add logs:
+[MainChatEdit:MutationSuccess]
+[MainChatEdit:InvalidateQueries]
+[MainChatEdit:RefetchComplete]
+
+Part 7 — Tests
+Add tests for:
+1. Main chat swap returns confirmed replace_exercise contract.
+2. Main chat swap cannot be reported successful without confirmed contract.
+3. Main chat notes fallback is blocked for swap language.
+4. Change history confirmed badge appears only when matching contract confirmed.
+5. Verification failure becomes failed/verification_failed, not unconfirmed.
+6. Main chat passes activeTrainingSystemId and session context into edit route.
+7. Suggestion chip edits use the same contract handling.
+8. Improve My Plan edits use the same contract handling.
+9. Successful main chat edit updates Program and Changes tabs without manual refresh.
+
+Important:
+Do not only patch the displayed badge.
+Fix the underlying contract, verification, main-chat edit routing, and change-history status model.
