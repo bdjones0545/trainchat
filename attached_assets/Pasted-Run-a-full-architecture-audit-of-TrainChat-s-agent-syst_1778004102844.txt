@@ -1,0 +1,150 @@
+Run a full architecture audit of TrainChat’s agent system and interaction flow.
+
+Goal:
+Map how the main chat agent, specialist agents, program builder, refinement engine, edit pipeline, change log, verification/repair layers, and Live Program Panel interact.
+
+Do not change code yet. Audit only.
+
+Focus areas:
+
+1. Agent hierarchy
+Identify:
+- Main chat/coach agent
+- Performance architect agent
+- Research/librarian agent
+- Any orchestrator/router layer
+- Any deterministic edit/refinement engines
+- Any verifier/repair layers
+
+For each, explain:
+- File location
+- Primary responsibility
+- Input shape
+- Output shape
+- When it is called
+- What downstream services it triggers
+
+2. Program creation flow
+Trace the full path from:
+User message → chat route → orchestrator/router → program generation → save/persist → Live Program Panel hydration
+
+Include:
+- Which agent owns the decision
+- Which service builds the program
+- Where trainingSystemId is created
+- Where sessions/exercises are persisted
+- Where the sidebar gets its program data
+
+3. Program edit/refinement flow
+Trace:
+A. User types an edit in chat
+B. User clicks a Refine This Program chip
+C. User swaps/replaces one exercise
+D. User adjusts a single day/session
+E. User applies a week/block refinement
+
+For each path, identify:
+- Entry file/function
+- Route/API endpoint
+- Intent classification
+- Scope resolution
+- Execution engine
+- Verifier/repair layer
+- Change log creation
+- UI hydration/refetch behavior
+
+4. Agent vs deterministic logic boundary
+Identify which actions are:
+- LLM/agent-driven
+- Deterministic/rule-based
+- Hybrid
+
+Flag any places where:
+- A deterministic chip/action accidentally routes through general chat/NLP
+- Agent reasoning overrides explicit UI scope
+- Multiple routers classify the same request differently
+- A fallback path silently changes scope
+
+5. Function/tool inventory
+List all major agent tools/functions, including:
+- Program build tools
+- Program edit tools
+- Research/retrieval tools
+- Exercise swap tools
+- Scope/intent resolution tools
+- Verification tools
+- Change log/history tools
+
+For each function/tool:
+- File path
+- Purpose
+- Caller(s)
+- Return value
+- Side effects
+
+6. State synchronization audit
+Check how state moves between:
+- Chat messages
+- trainingSystemId
+- activeTrainingSystem
+- LiveProgramPanel
+- selectedWeek/currentWeek
+- change logs
+- React Query cache
+- SSE streaming state
+- save confirmation state/isSaved
+
+Flag stale-state risks, especially:
+- newly generated program before save banner completes
+- sidebar opening after edits
+- selectedWeek fallback
+- direct edit response vs cache refetch
+- optimistic updates vs DB rows
+
+7. Change log architecture
+Audit:
+- Where change log entries are created
+- What metadata is stored
+- How scope is represented
+- How verification status is represented
+- How swap/refinement confirmations are represented
+- Whether history accurately distinguishes:
+  - exercise change
+  - session/day change
+  - week/block refinement
+  - full program rebuild
+
+8. Verification/repair architecture
+Identify:
+- Response alignment verifier
+- Prescription verifier
+- Scope verifier
+- Swap contract verifier
+- Any save/persist verifier
+
+For each:
+- What it catches
+- What it repairs
+- What it only logs
+- Any gaps
+
+9. Architecture risks
+Produce a prioritized list:
+P0 = can cause wrong program edits or broken user trust
+P1 = causes confusing UX/state mismatch
+P2 = cleanup/refactor opportunity
+
+10. Final deliverable
+Return a structured architecture report with:
+- Executive summary
+- System map
+- Flow diagrams in text form
+- File/function index
+- Risks and recommendations
+- Suggested next 5 fixes, ordered by impact
+
+Important:
+Do not modify files.
+Do not refactor.
+Do not add new features.
+This is an audit-only pass.
