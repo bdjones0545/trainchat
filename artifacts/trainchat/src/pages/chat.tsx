@@ -96,6 +96,39 @@ const TRY_SAYING_PROMPTS: Record<string, string[]> = {
   ],
 };
 
+const FIRST_RUN_CHIPS: Array<{
+  category: string;
+  chips: Array<{ label: string; prompt: string }>;
+}> = [
+  {
+    category: "Strength",
+    chips: [
+      { label: "Build me a 3-day strength program", prompt: "Build me a 3-day strength program" },
+      { label: "Build a muscle growth plan", prompt: "Build me a muscle growth plan" },
+    ],
+  },
+  {
+    category: "Speed",
+    chips: [
+      { label: "Build a football speed program", prompt: "Build me a football speed program" },
+      { label: "Improve acceleration and first step", prompt: "I want to improve my acceleration and first step speed" },
+    ],
+  },
+  {
+    category: "Mobility",
+    chips: [
+      { label: "Fix tight hips and lower back", prompt: "Help me fix tight hips and lower back" },
+      { label: "Build a daily mobility routine", prompt: "Build me a daily mobility routine" },
+    ],
+  },
+  {
+    category: "General",
+    chips: [
+      { label: "Help me get back to training after pain", prompt: "Help me get back to training after pain" },
+    ],
+  },
+];
+
 async function fetchSubscription() {
   try {
     return await customFetch<any>("/api/subscription");
@@ -500,6 +533,14 @@ export default function Chat() {
     latestProgram,
     sessionDraftMsgId: sessionDraftMsgIdRef.current,
   });
+
+  // True when this is a brand-new user with no system and no previous messages.
+  // Drives the categorised first-run chip grid instead of focus-mode-specific chips.
+  const isFirstRun =
+    displayProgramSource === "none" &&
+    !hasActiveSystem &&
+    messages.length === 0 &&
+    !messagesLoading;
 
   // The program is "in system" if explicitly saved this session OR if
   // we're showing the DB-backed program (no chat draft, system active, not a new build).
@@ -3030,98 +3071,136 @@ export default function Chat() {
                   </div>
                 </div>
 
-                <h2 className="text-base font-semibold text-foreground mb-1">
-                  {getFocusModeConfig(focusMode).emptyStateHeadline}
-                </h2>
-                <p className="text-sm text-muted-foreground max-w-xs leading-relaxed mb-4">
-                  {getFocusModeConfig(focusMode).emptyStateSubline}
-                </p>
-
-                {/* System status strip — derives exclusively from resolveProgramState output */}
-                <div className="flex items-center gap-2 mb-6 px-3.5 py-2 rounded-full bg-card border border-border/60">
-                  {displayProgramSource === "live" ? (
-                    <>
-                      <div className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
-                      <span className="text-[11px] text-muted-foreground">
-                        <span className="text-foreground font-medium">Active system: {displayProgram?.programName ?? "Your Program"}</span>
-                        {" · "}Ready to refine or rebuild
-                      </span>
-                    </>
-                  ) : displayProgramSource === "draft" ? (
-                    <>
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary/60 flex-shrink-0" />
-                      <span className="text-[11px] text-muted-foreground">
-                        <span className="text-foreground font-medium">Draft system ready</span>
-                        {" · "}Continue building or save it to your system
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30 flex-shrink-0" />
-                      <span className="text-[11px] text-muted-foreground">
-                        No active system yet · Start building to generate your next program
-                      </span>
-                    </>
-                  )}
-                </div>
-
-                {/* Phase 5: Return session hook — rendered BELOW the hero so it is
-                    visible at the natural resting scroll position.  Placing it
-                    above the hero caused iOS overscroll to reveal it via a
-                    drag-down gesture even at scrollTop=0. */}
-                {convShowReturnHook && (
-                  <div style={{ overflowAnchor: "none", width: "100%" }}>
-                    <ReturnSessionHook
-                      programName={displayProgram?.programName}
-                      onResume={() => { setConvShowReturnHook(false); setTimeout(() => inputRef.current?.focus(), 100); }}
-                      onIntensify={() => {
-                        setConvShowReturnHook(false);
-                        handleSend("Make this more intense", {
-                          buttonPayload: makeCtaRefinePayload(
-                            "Make it more intense",
-                            "Make this more intense",
-                            activeSystem?.id ?? null,
-                          ),
-                        });
-                      }}
-                      onDismiss={() => setConvShowReturnHook(false)}
-                    />
-                  </div>
-                )}
-
-                {/* Differentiation tagline — only shown when no active system */}
-                {displayProgramSource === "none" && (
-                  <div className="flex flex-col items-center gap-0.5 mb-4 -mt-2">
-                    <p className="text-[11px] font-medium text-muted-foreground/60 max-w-[260px] text-center leading-relaxed">
-                      This isn't a workout. It's a training system.
+                {isFirstRun ? (
+                  /* ── First-run guided entry ─────────────────────────────── */
+                  <>
+                    <h2 className="text-base font-semibold text-foreground mb-1.5">
+                      Build your training system
+                    </h2>
+                    <p className="text-sm text-muted-foreground max-w-xs leading-relaxed mb-6">
+                      Tell me what you want to train, and I'll build it with you.
                     </p>
-                    <p className="text-[10px] text-muted-foreground/40 max-w-[260px] text-center leading-relaxed">
-                      Built and adapted in real time.
+                    <div className="w-full max-w-[340px] space-y-3.5">
+                      {FIRST_RUN_CHIPS.map((group) => (
+                        <div key={group.category}>
+                          <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground/40 mb-1.5 px-0.5">
+                            {group.category}
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {group.chips.map((chip) => (
+                              <button
+                                key={chip.label}
+                                onClick={() => {
+                                  triggerCorePulse();
+                                  handleSend(chip.prompt, {
+                                    buttonPayload: makeStarterChipPayload(chip.label, chip.prompt),
+                                  });
+                                }}
+                                className="px-3.5 py-2 text-xs font-medium rounded-full bg-card border border-border hover:border-primary/40 hover:text-primary hover:bg-primary/5 hover:shadow-sm active:scale-95 transition-all duration-150"
+                              >
+                                {chip.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  /* ── Returning-user / active-system state ────────────────── */
+                  <>
+                    <h2 className="text-base font-semibold text-foreground mb-1">
+                      {getFocusModeConfig(focusMode).emptyStateHeadline}
+                    </h2>
+                    <p className="text-sm text-muted-foreground max-w-xs leading-relaxed mb-4">
+                      {getFocusModeConfig(focusMode).emptyStateSubline}
                     </p>
-                  </div>
-                )}
 
-                {/* Quick action chips — mode-specific */}
-                <div className="flex flex-wrap justify-center gap-2 w-full max-w-sm">
-                  {getFocusModeConfig(focusMode).suggestionChips.map((chip) => (
-                    <button
-                      key={chip.label}
-                      onClick={() => {
-                        triggerCorePulse();
-                        handleSend(chip.prompt, {
-                          buttonPayload: makeStarterChipPayload(chip.label, chip.prompt),
-                        });
-                      }}
-                      className={`px-3.5 py-2 text-xs font-medium rounded-full active:scale-95 transition-all duration-150 ${
-                        chip.highlight
-                          ? getFocusModeConfig(focusMode).theme.chipHighlightClass + " hover:shadow-sm"
-                          : "text-foreground bg-card border border-border hover:border-primary/40 hover:text-primary hover:bg-primary/5 hover:shadow-sm"
-                      }`}
-                    >
-                      {chip.label}
-                    </button>
-                  ))}
-                </div>
+                    {/* System status strip — derives exclusively from resolveProgramState output */}
+                    <div className="flex items-center gap-2 mb-6 px-3.5 py-2 rounded-full bg-card border border-border/60">
+                      {displayProgramSource === "live" ? (
+                        <>
+                          <div className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
+                          <span className="text-[11px] text-muted-foreground">
+                            <span className="text-foreground font-medium">Active system: {displayProgram?.programName ?? "Your Program"}</span>
+                            {" · "}Ready to refine or rebuild
+                          </span>
+                        </>
+                      ) : displayProgramSource === "draft" ? (
+                        <>
+                          <div className="w-1.5 h-1.5 rounded-full bg-primary/60 flex-shrink-0" />
+                          <span className="text-[11px] text-muted-foreground">
+                            <span className="text-foreground font-medium">Draft system ready</span>
+                            {" · "}Continue building or save it to your system
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30 flex-shrink-0" />
+                          <span className="text-[11px] text-muted-foreground">
+                            No active system yet · Start building to generate your next program
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Phase 5: Return session hook — rendered BELOW the hero so it is
+                        visible at the natural resting scroll position. */}
+                    {convShowReturnHook && (
+                      <div style={{ overflowAnchor: "none", width: "100%" }}>
+                        <ReturnSessionHook
+                          programName={displayProgram?.programName}
+                          onResume={() => { setConvShowReturnHook(false); setTimeout(() => inputRef.current?.focus(), 100); }}
+                          onIntensify={() => {
+                            setConvShowReturnHook(false);
+                            handleSend("Make this more intense", {
+                              buttonPayload: makeCtaRefinePayload(
+                                "Make it more intense",
+                                "Make this more intense",
+                                activeSystem?.id ?? null,
+                              ),
+                            });
+                          }}
+                          onDismiss={() => setConvShowReturnHook(false)}
+                        />
+                      </div>
+                    )}
+
+                    {/* Differentiation tagline — only shown when no active system */}
+                    {displayProgramSource === "none" && (
+                      <div className="flex flex-col items-center gap-0.5 mb-4 -mt-2">
+                        <p className="text-[11px] font-medium text-muted-foreground/60 max-w-[260px] text-center leading-relaxed">
+                          This isn't a workout. It's a training system.
+                        </p>
+                        <p className="text-[10px] text-muted-foreground/40 max-w-[260px] text-center leading-relaxed">
+                          Built and adapted in real time.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Quick action chips — mode-specific */}
+                    <div className="flex flex-wrap justify-center gap-2 w-full max-w-sm">
+                      {getFocusModeConfig(focusMode).suggestionChips.map((chip) => (
+                        <button
+                          key={chip.label}
+                          onClick={() => {
+                            triggerCorePulse();
+                            handleSend(chip.prompt, {
+                              buttonPayload: makeStarterChipPayload(chip.label, chip.prompt),
+                            });
+                          }}
+                          className={`px-3.5 py-2 text-xs font-medium rounded-full active:scale-95 transition-all duration-150 ${
+                            chip.highlight
+                              ? getFocusModeConfig(focusMode).theme.chipHighlightClass + " hover:shadow-sm"
+                              : "text-foreground bg-card border border-border hover:border-primary/40 hover:text-primary hover:bg-primary/5 hover:shadow-sm"
+                          }`}
+                        >
+                          {chip.label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             ) : (
               <div className="max-w-2xl mx-auto">

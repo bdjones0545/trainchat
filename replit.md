@@ -7,7 +7,8 @@ TrainChat is an agent-first AI training platform that provides personalized, ada
 - The product should feel like "vibe coding your training" — a live training workspace, not a standard chatbot.
 - 3-panel layout: left sidebar (conversations + nav), center chat, right Live Program Panel.
 - The right panel is a tabbed Live Program Panel with: Program, Adapted, Changes, History, and Forecast tabs.
-- Empty state shows suggestion chips (pill buttons): "Build my program", "Adjust my split", "Swap exercises", "Reduce fatigue", "Add speed work", "5-day program".
+- **First-run guided entry**: new users (no system, no messages) see "Build your training system" + "Tell me what you want to train, and I'll build it with you." with chips grouped by category — Strength, Speed, Mobility, General. Disappears automatically once a system exists. Returning users continue to see focus-mode-specific chips.
+- Empty state (returning users) shows suggestion chips (pill buttons) scoped to the active focus mode.
 - Program panel header shows a pulsing indicator when a program is active/live.
 - When a user has an active training system, the input placeholder changes to "Ask me to adjust your program…" and a green "System active" indicator shows.
 - Users get 5 free chat messages before seeing a paywall/signup prompt.
