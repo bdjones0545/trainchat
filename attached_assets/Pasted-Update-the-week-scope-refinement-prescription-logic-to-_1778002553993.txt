@@ -1,0 +1,70 @@
+Update the week-scope refinement prescription logic to include power.
+
+Power must be treated as its own training quality, not as strength and not as endurance.
+
+Add/confirm transformation handling for:
+- power
+- power_explosive_focus
+- athletic_intent
+- speed_power
+
+Power rules by exercise role:
+
+1. True power exercises
+Examples: jumps, bounds, med ball throws, Olympic lift derivatives, accelerations, sprints, low-load explosive lifts.
+Prescription:
+- 2–5 sets
+- 2–5 reps
+- 60–180 sec rest depending on intensity
+- Keep quality high
+- Never convert to high-rep endurance work
+
+2. Primary strength lifts shifted toward power
+Examples: squat, trap bar deadlift, bench, press, hinge.
+Prescription:
+- 2–4 sets
+- 2–5 reps
+- moderate load moved fast
+- 2–3 min rest
+- Add coaching cue: “move with intent / bar speed”
+
+3. Secondary compound lifts
+Prescription:
+- 2–4 sets
+- 3–6 reps
+- 90–150 sec rest
+- Keep explosive intent, but do not overload fatigue
+
+4. Accessories / auxiliary
+Do NOT turn accessories into heavy power work.
+Prescription:
+- Keep supportive hypertrophy/strength-support range
+- Usually 8–15 reps
+- 45–90 sec rest
+- Add power-support cue only when appropriate
+
+5. Core / trunk
+Do NOT force 2–5 reps unless it is truly a power trunk drill.
+Prescription:
+- Anti-rotation / anti-extension: 8–15 reps or 20–45 sec holds
+- Explosive trunk/med ball work: 2–5 sets of 3–6 reps
+- Preserve trunk function
+
+6. Mobility / prep
+Do not convert to power prescriptions.
+Keep prep/mobility intent.
+
+Power safety verifier:
+- If transformation is power/explosive and every exercise becomes 2–5 reps, repair.
+- If core/accessory/mobility exercises are converted into primary power prescriptions, repair.
+- If true jumps/sprints/throws become high-rep endurance prescriptions, repair.
+- If power work has very short rest that would degrade output quality, repair.
+
+Acceptance tests:
+Click “More Explosive.”
+Expected:
+- Jumps/throws/sprints stay low-rep/high-quality.
+- Main lifts shift toward speed/intent.
+- Accessories remain supportive.
+- Core remains trunk-appropriate.
+- Not every exercise receives the same sets/reps/rest.

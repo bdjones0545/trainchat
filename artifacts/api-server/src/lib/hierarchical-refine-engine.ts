@@ -48,35 +48,124 @@ export interface HierarchicalRefineResult {
 }
 
 // ─── Transformation Mappings ──────────────────────────────────────────────────
-// Maps a transformation type string to the (reps, rest) pair applied to each exercise.
+// Role-aware prescription: each exercise gets a prescription based on its
+// category and name, not a single global value applied to every exercise.
 
 interface ExercisePrescription {
+  sets?: number;
   reps?: string;
   rest?: string;
 }
 
-function prescriptionForTransformation(type: string): ExercisePrescription {
-  switch (type) {
-    case "endurance":
-    case "endurance_focus":
-    case "conditioning_focus":
-      return { rest: "30-60 sec" };
+// Classify an exercise into boolean roles based on its DB category + name.
+function classifyExercise(exercise: { name: string; category: string }) {
+  const cat = exercise.category;
+  const n = exercise.name.toLowerCase();
 
-    case "power":
-    case "power_explosive_focus":
-    case "speed_focus":
-      return { reps: "3-5", rest: "2-3 min" };
+  const isPrimary            = cat === "primary";
+  const isPower              = cat === "power";
+  const isSecondary          = cat === "secondary";
+  const isAccessoryOrAux     = cat === "accessory" || cat === "finisher" || cat === "conditioning";
+  const isTrunk              = cat === "trunk";
+  const isMobilityOrPrep     = cat === "warmup" || cat === "activation" || cat === "recovery";
 
+  // Name-based refinements that override category when more specific
+  const isPowerByName = /\b(jump|plyometric|broad jump|box jump|hang clean|power clean|power snatch|hang snatch|explosive|bound|sprint|trap bar jump|depth jump|hurdle)\b/.test(n);
+  const isCoreByName  = /\b(pallof|ab wheel|plank|dead bug|bird dog|hollow|crunch|russian twist|leg raise|woodchop|anti.?rotation|cable crunch|ab rollout|side plank|copenhagen)\b/.test(n);
+
+  return {
+    isPrimary,
+    isPower,
+    isSecondary,
+    isAccessoryOrAux,
+    isCoreOrTrunk:   isTrunk || isCoreByName,
+    isMobilityOrPrep,
+    isPowerExercise: isPower || isPowerByName,
+  };
+}
+
+/**
+ * Returns the prescription (sets / reps / rest) for a single exercise given
+ * the week- or block-scope transformation type.
+ *
+ * Rules:
+ *  - Mobility/prep exercises: always preserved, no change.
+ *  - Core/trunk: never forced into 3–6 rep strength ranges.
+ *  - Accessory/auxiliary: supportive rep ranges, never strength-only ranges.
+ *  - Primary compound lifts get the "headline" prescription for the transformation.
+ *  - Power/plyometric exercises: protected from being turned into high-rep conditioning work.
+ */
+export function getPrescriptionForExerciseTransformation(
+  exercise: { name: string; category: string },
+  transformation: string,
+): ExercisePrescription {
+  const {
+    isPrimary,
+    isPower,
+    isSecondary,
+    isAccessoryOrAux,
+    isCoreOrTrunk,
+    isMobilityOrPrep,
+    isPowerExercise,
+  } = classifyExercise(exercise);
+
+  switch (transformation) {
+    // ── Strength focus ─────────────────────────────────────────────────────
     case "strength":
     case "strength_focus":
-    case "increase_difficulty":
-      return { reps: "3-6", rest: "2-4 min" };
+    case "increase_difficulty": {
+      if (isMobilityOrPrep)   return {};                                          // preserve warmup/mobility
+      if (isCoreOrTrunk)      return { reps: "10-15", rest: "60-90 sec" };        // quality, not 3-6
+      if (isAccessoryOrAux)   return { reps: "8-15",  rest: "60-90 sec" };        // supportive role
+      if (isSecondary)        return { sets: 3, reps: "5-8",  rest: "90-150 sec" };
+      if (isPrimary || isPower) return { sets: 4, reps: "3-6", rest: "2-3 min" }; // main compound lifts
+      return { reps: "8-12", rest: "60-90 sec" };
+    }
 
+    // ── Endurance / conditioning focus ─────────────────────────────────────
+    case "endurance":
+    case "endurance_focus":
+    case "conditioning_focus": {
+      if (isMobilityOrPrep)   return {};
+      if (isPowerExercise)    return { reps: "3-5",   rest: "60-90 sec" };        // protect plyo intent
+      if (isCoreOrTrunk)      return { sets: 3, reps: "15-20", rest: "30-45 sec" };
+      if (isAccessoryOrAux)   return { sets: 3, reps: "12-20", rest: "30-60 sec" };
+      if (isSecondary)        return { sets: 3, reps: "10-15", rest: "45-75 sec" };
+      if (isPrimary)          return { sets: 3, reps: "8-12",  rest: "45-90 sec" };
+      return { reps: "12-15", rest: "30-60 sec" };
+    }
+
+    // ── Power / explosive focus ────────────────────────────────────────────
+    case "power":
+    case "power_explosive_focus":
+    case "speed_focus": {
+      if (isMobilityOrPrep)   return {};
+      if (isCoreOrTrunk)      return { reps: "8-12", rest: "90 sec" };            // supportive
+      if (isAccessoryOrAux)   return { reps: "8-12", rest: "90 sec" };
+      if (isSecondary)        return { sets: 3, reps: "3-5", rest: "2 min" };
+      if (isPrimary || isPower) return { sets: 4, reps: "2-5", rest: "2-3 min" };
+      return { reps: "3-5", rest: "90 sec" };
+    }
+
+    // ── Reduce time ────────────────────────────────────────────────────────
+    case "reduce_time": {
+      if (isMobilityOrPrep) return {};
+      return { rest: "30-45 sec" };                                               // rest is the main lever
+    }
+
+    // ── Hypertrophy / volume ───────────────────────────────────────────────
     case "hypertrophy":
     case "hypertrophy_focus":
-    case "increase_volume":
-      return { reps: "8-12", rest: "60-90 sec" };
+    case "increase_volume": {
+      if (isMobilityOrPrep)   return {};
+      if (isCoreOrTrunk)      return { reps: "12-20", rest: "45-60 sec" };
+      if (isAccessoryOrAux)   return { sets: 3, reps: "10-15", rest: "45-60 sec" };
+      if (isSecondary)        return { sets: 3, reps: "8-12",  rest: "60-90 sec" };
+      if (isPrimary || isPower) return { sets: 4, reps: "8-12", rest: "60-90 sec" };
+      return { reps: "10-15", rest: "60-90 sec" };
+    }
 
+    // ── Recovery / deload ─────────────────────────────────────────────────
     case "recovery":
     case "recovery_focus":
     case "fatigue_management":
@@ -85,15 +174,57 @@ function prescriptionForTransformation(type: string): ExercisePrescription {
     case "lower_impact":
     case "home_gym":
     case "limited_space":
-    case "desk_reset":
+    case "desk_reset": {
+      if (isMobilityOrPrep) return {};
+      if (isCoreOrTrunk)    return { reps: "8-12",  rest: "60-90 sec" };
+      if (isAccessoryOrAux) return { reps: "10-15", rest: "60-90 sec" };
       return { reps: "8-12", rest: "2-3 min" };
-
-    case "reduce_time":
-      return { rest: "30-45 sec" };
+    }
 
     default:
       return { rest: "90 sec" };
   }
+}
+
+/**
+ * After applying prescriptions, verify correctness and repair obvious violations.
+ *
+ * Violations detected and repaired:
+ *  - endurance transformation but primary exercises still show 3–6 reps
+ *  - strength transformation but core/accessory exercises show 3–6 reps
+ *
+ * Returns the number of exercises repaired.
+ */
+async function verifyAndRepairPrescriptions(
+  exercises: Array<{ id: number; name: string; category: string; reps: string | null }>,
+  transformation: string,
+): Promise<number> {
+  let repaired = 0;
+  const isEndurance = ["endurance", "endurance_focus", "conditioning_focus"].includes(transformation);
+  const isStrength  = ["strength", "strength_focus", "increase_difficulty"].includes(transformation);
+
+  for (const ex of exercises) {
+    if (!ex.id) continue;
+    const reps = ex.reps ?? "";
+
+    if (isEndurance && /^[23456](-[56])?$|^3-6$|^4-6$|^2-4$/.test(reps.trim())) {
+      const fix = getPrescriptionForExerciseTransformation(ex, transformation);
+      if (fix.reps) {
+        await db.update(sessionExercises).set({ reps: fix.reps }).where(eq(sessionExercises.id, ex.id));
+        repaired++;
+      }
+    } else if (isStrength) {
+      const { isCoreOrTrunk, isAccessoryOrAux, isMobilityOrPrep } = classifyExercise(ex);
+      if ((isCoreOrTrunk || isAccessoryOrAux || isMobilityOrPrep) && /^3-6$|^[23]-[45]$/.test(reps.trim())) {
+        const fix = getPrescriptionForExerciseTransformation(ex, transformation);
+        if (fix.reps) {
+          await db.update(sessionExercises).set({ reps: fix.reps }).where(eq(sessionExercises.id, ex.id));
+          repaired++;
+        }
+      }
+    }
+  }
+  return repaired;
 }
 
 // Maps transformation type → (session label suffix, emphasis text)
@@ -614,7 +745,6 @@ async function applyWeekScope(
     };
   }
 
-  const prescription = prescriptionForTransformation(transformation);
   const weekLabel = targetWeekNumber ? `Week ${targetWeekNumber}` : "current week";
 
   let exerciseCount = 0;
@@ -625,22 +755,34 @@ async function applyWeekScope(
     for (const session of week.sessions) {
       if (session.isRestDay) continue;
 
-      // Update prescriptions (reps / rest) for all exercises
-      const exerciseIds = session.exercises
-        .map((e) => e.id)
-        .filter((id): id is number => id != null);
-
-      if (exerciseIds.length > 0) {
-        await db
-          .update(sessionExercises)
-          .set({
-            ...(prescription.reps !== undefined ? { reps: prescription.reps } : {}),
-            ...(prescription.rest !== undefined ? { rest: prescription.rest } : {}),
-          })
-          .where(inArray(sessionExercises.id, exerciseIds));
-
-        exerciseCount += exerciseIds.length;
+      // Update prescriptions (sets / reps / rest) per exercise, respecting role
+      for (const exercise of session.exercises) {
+        if (!exercise.id) continue;
+        const p = getPrescriptionForExerciseTransformation(exercise, transformation);
+        const patch: Record<string, unknown> = {};
+        if (p.sets !== undefined) patch.sets = p.sets;
+        if (p.reps !== undefined) patch.reps = p.reps;
+        if (p.rest !== undefined) patch.rest = p.rest;
+        if (Object.keys(patch).length > 0) {
+          await db
+            .update(sessionExercises)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .set(patch as any)
+            .where(eq(sessionExercises.id, exercise.id));
+          exerciseCount++;
+        }
       }
+
+      // Verify and repair any prescription mismatches after applying
+      await verifyAndRepairPrescriptions(
+        session.exercises.map((e) => ({
+          id: e.id ?? 0,
+          name: e.name,
+          category: e.category,
+          reps: (e as any).reps ?? null,
+        })),
+        transformation,
+      );
 
       // Swap primary exercises to match the target training focus
       const sessionSwaps = await swapExercisesForFocus(session, transformation);
@@ -708,7 +850,6 @@ async function applyBlockScope(
     ((fullSystem as any).metadata as any)?.goal ?? null,
   );
 
-  const prescription = prescriptionForTransformation(transformation);
   const identity = sessionIdentityForTransformation(transformation);
 
   let exerciseCount = 0;
@@ -721,21 +862,34 @@ async function applyBlockScope(
       for (const session of week.sessions) {
         if (session.isRestDay) continue;
 
-        const exerciseIds = session.exercises
-          .map((e) => e.id)
-          .filter((id): id is number => id != null);
-
-        if (exerciseIds.length > 0) {
-          await db
-            .update(sessionExercises)
-            .set({
-              ...(prescription.reps !== undefined ? { reps: prescription.reps } : {}),
-              ...(prescription.rest !== undefined ? { rest: prescription.rest } : {}),
-            })
-            .where(inArray(sessionExercises.id, exerciseIds));
-
-          exerciseCount += exerciseIds.length;
+        // Update prescriptions per exercise, respecting role/category
+        for (const exercise of session.exercises) {
+          if (!exercise.id) continue;
+          const p = getPrescriptionForExerciseTransformation(exercise, transformation);
+          const patch: Record<string, unknown> = {};
+          if (p.sets !== undefined) patch.sets = p.sets;
+          if (p.reps !== undefined) patch.reps = p.reps;
+          if (p.rest !== undefined) patch.rest = p.rest;
+          if (Object.keys(patch).length > 0) {
+            await db
+              .update(sessionExercises)
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              .set(patch as any)
+              .where(eq(sessionExercises.id, exercise.id));
+            exerciseCount++;
+          }
         }
+
+        // Verify and repair any prescription mismatches after applying
+        await verifyAndRepairPrescriptions(
+          session.exercises.map((e) => ({
+            id: e.id ?? 0,
+            name: e.name,
+            category: e.category,
+            reps: (e as any).reps ?? null,
+          })),
+          transformation,
+        );
 
         // Swap primary exercises to match the new block focus
         const sessionSwaps = await swapExercisesForFocus(session, transformation);
