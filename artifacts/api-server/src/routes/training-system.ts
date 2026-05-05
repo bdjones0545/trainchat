@@ -428,7 +428,7 @@ router.delete("/training-system/:id", requireAuth, async (req, res): Promise<voi
 
     const wasActive = target.status === "active";
     const linkedConversationId = target.conversationId ?? null;
-    const targetFocusMode = ((target.metadata as any)?.focusMode ?? "strength") as string;
+    const targetFocusMode = ((target.metadata as any)?.focusMode ?? "strength") as "strength" | "speed" | "mobility";
     let newActiveSystemId: number | null = null;
 
     // If deleting the active system, promote the most-recently-updated archived one
