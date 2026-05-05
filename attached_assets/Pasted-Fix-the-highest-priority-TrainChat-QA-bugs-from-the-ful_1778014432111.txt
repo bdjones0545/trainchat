@@ -1,0 +1,193 @@
+Fix the highest-priority TrainChat QA bugs from the full battery.
+
+Do targeted fixes only. Do not redesign UX yet.
+
+BUG 01 — Ambiguous “make it better” triggers REBUILD_PROGRAM
+
+Problem:
+Typing vague phrases like:
+- “make it better”
+- “improve it”
+- “optimize it”
+- “make this better”
+- “make the program better”
+
+currently triggers REBUILD_PROGRAM and saves a new program.
+
+Expected:
+These should ask a clarification question unless the user gives a specific target and direction.
+
+Fix:
+In execution-planner.ts and any intent/intent-family classifier used by buildExecutionPlan:
+
+1. Add a vague improvement detector:
+const VAGUE_IMPROVEMENT_PATTERNS = [
+  /\bmake (it|this|the program|my program) better\b/i,
+  /\bimprove (it|this|the program|my program)\b/i,
+  /\boptimi[sz]e (it|this|the program|my program)\b/i,
+  /\bmake (it|this) more effective\b/i,
+  /\bupgrade (it|this|the program|my program)\b/i
+]
+
+2. If a vague improvement phrase is detected:
+- If active program exists:
+  action = ASK_CLARIFICATION
+  clarificationReason = "vague_program_improvement"
+  suggestedQuestion = "What would you like to improve — strength, endurance, explosiveness, recovery, session length, or a specific day?"
+- If no active program exists:
+  action = ASK_CLARIFICATION
+  suggestedQuestion = "What would you like me to build or improve? For example: strength, speed, mobility, endurance, or recovery."
+
+3. Do NOT allow the no-program branch to default vague improvement phrases to REBUILD_PROGRAM.
+
+4. Do NOT generate structuredData for this clarification response.
+
+Acceptance:
+Typing “make it better”:
+- with active program → asks clarification, no rebuild
+- with no active program → asks clarification, no rebuild
+- no new trainingSystemId created
+- no “Rebuilding your training system” stage
+
+
+BUG 02 — Mobility “Make Day 3 shorter and easier” fails with NO RECEIPT
+
+Problem:
+For a valid Mobility program, typing:
+“Make Day 3 shorter and easier.”
+returns failure even though target and intent are clear.
+
+Expected:
+Only Day 3 updates. Scope = session. systemEdit.applied = true.
+
+Fix:
+Trace and fix the mobility edit path:
+
+1. Ensure resolveTargetFromRequest can resolve Day 3 for mobility systems.
+Check:
+- mobility sessions have valid dayIndex / sessionIndex / display order
+- Day 3 maps to the third session in the active week
+- focusMode mobility does not skip session lookup
+
+2. Ensure “shorter and easier” maps to a valid edit intent/transformation:
+- reduce_time
+- lower_impact
+- fatigue_management
+- easier_session
+- mobility_reduce_difficulty
+
+3. If focusMode === "mobility" and message includes:
+- shorter
+- easier
+- gentler
+- less intense
+- lower impact
+- desk friendly
+Then route to a session-scope modification when a day is specified.
+
+4. Add a deterministic fallback before LLM edit failure:
+If target day is resolved and intent is reduce_time/easier/lower_impact:
+- apply session-level refinement directly
+- reduce total volume/time
+- preserve mobility exercise identity
+- shorten holds/reps/sets where appropriate
+- avoid converting mobility to strength prescriptions
+
+5. Change failure handling:
+Do not render “Agent Turn Report NO RECEIPT” to the user.
+If receipt is missing, hide the debug card or show only the coach-safe failure message.
+
+Acceptance:
+Mobility program + “Make Day 3 shorter and easier.”
+- Day 3 changes only
+- no full rebuild
+- systemEdit.applied = true
+- Live Program Panel updates
+- change log scope = session
+- no visible “NO RECEIPT” debug label
+
+
+BUG 04 — History tab inaccessible on mobile
+
+Problem:
+At 400px mobile viewport, the History tab is outside the viewport and cannot be tapped.
+
+Fix:
+In LiveProgramPanel.tsx tab strip:
+- make the tab list horizontally scrollable on mobile
+- add overflow-x-auto
+- no wrapping that pushes tabs offscreen
+- add min-width / shrink-0 to tab buttons
+- optionally shorten labels on mobile:
+  Program, Adapted, Changes, History, Forecast
+- ensure tab strip has visible scroll affordance or snap behavior
+
+Acceptance:
+At 390–400px viewport:
+- History tab is reachable and tappable
+- Forecast tab is reachable and tappable
+- Program tab still works
+- no horizontal page scroll outside the tab strip
+
+
+BUG 03 — Changes tab fully Pro-gated creates trust gap
+
+Problem:
+Free users cannot see any change log after edits, which makes them unsure whether changes applied.
+
+Fix:
+For free users:
+- Show a simplified receipt view in the Changes tab.
+- Include last 1–3 change entries only.
+- Show:
+  - what changed
+  - scope: day/week/program
+  - timestamp
+  - latest coach summary
+- Keep premium features locked:
+  - full history
+  - restore
+  - detailed diffs
+  - unlimited change log
+
+Update TabLockedView behavior:
+- Do not fully lock Changes tab.
+- Instead render FreeChangesPreview with upgrade CTA below.
+
+Acceptance:
+Free user after edit:
+- Changes tab shows recent edit receipt
+- User can confirm the edit applied
+- Restore/full history still gated
+
+
+BUG 05 — Days 2+ hidden behind paywall immediately after build
+
+Problem:
+Free users build a 3-day program but only see Day 1; Days 2+ are hidden.
+
+Fix:
+Change free gating:
+- Show all day headers and exercise names for the full program.
+- Lock advanced interactions instead of hiding the structure.
+- For Days 2+:
+  - visible: session title, exercise names, general prescriptions if allowed
+  - locked: swap, direct edit, detailed progression, advanced notes
+- Add small CTA:
+  “Upgrade to edit and adapt all days.”
+
+Acceptance:
+Free user builds 3-day program:
+- all 3 days are visible
+- user understands the full program
+- only advanced actions are locked
+
+
+Final QA:
+1. “make it better” with active Strength program → clarification, no rebuild.
+2. “make it better” with no active program → clarification, no rebuild.
+3. Mobility Day 3 shorter/easier → Day 3 changes.
+4. History tab tappable at 390px.
+5. Free user Changes tab shows recent receipt.
+6. Free user sees all days after build.
+7. No visible “Agent Turn Report NO RECEIPT.”

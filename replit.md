@@ -51,6 +51,14 @@ The user interface features a dark theme with electric blue accents and the Inte
 - **Orval**: API client and Zod schema generation.
 - **html-to-image**: PNG export of share cards.
 
+## QA Bug Fixes (May 2026 batch)
+- **BUG-01** — `VAGUE_IMPROVEMENT_PATTERNS` guard in `execution-planner.ts` (STEP 3.6): "make it better / improve it / optimize it" always routes to `ASK_CLARIFICATION`, never `REBUILD_PROGRAM`.
+- **BUG-02** — Mobility session regression: `focusMode === "mobility"` + resolved day + "shorter/easier/gentler" → deterministic `day_regression` mutation, avoids AI edit-plan failure path.
+- **BUG-03** — Changes tab free preview: non-premium users see `FreeChangesPreview` (last 3 entries + upgrade CTA at bottom) instead of a full `TabLockedView` lock screen. History and Forecast remain fully gated.
+- **BUG-04** — Tab bar scroll: `overflow-x-auto` + `flex-shrink-0 whitespace-nowrap` on each tab button — all 5 tabs reachable on 400 px mobile.
+- **BUG-05** — Locked day cards (Days 2+): exercise names visible at `opacity-50`, sets×reps shown, "Upgrade to edit & adapt all days" CTA below list. No longer blank opaque cards.
+- **AgentTurnReport** — Suppressed entirely when `!receipt && !panelReceipt` (avoids "NO RECEIPT" noise on normal edit paths in DEV).
+
 ## Live Program Mutation Flow (Phases 1–9)
 - **Dedicated sidebar mutation endpoint**: `POST /api/training-system/mutate` in `artifacts/api-server/src/routes/training-system-mutate.ts` handles right-sidebar "Add Exercise" and "Remove Exercise" operations without touching the chat stream.
 - **No chat failure bubbles**: Panel mutations never create assistant messages or trigger chat failure toasts — all feedback is a local panel toast only.

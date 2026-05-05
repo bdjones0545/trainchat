@@ -87,6 +87,11 @@ export default function AgentTurnReport({ event, panelReceipt }: Props) {
   if (!import.meta.env.DEV) return null;
 
   const receipt = event.auditReceipt;
+
+  // Suppress the card entirely when there is no receipt and no compliance data —
+  // "NO RECEIPT" is only meaningful to an engineer who triggered the exact failure.
+  // For normal edit-failure paths, the coach-safe message in chat is sufficient.
+  if (!receipt && !panelReceipt) return null;
   const contract = receipt?.contract;
   const outcome = receipt?.outcome;
   const compliance = receipt?.compliance;

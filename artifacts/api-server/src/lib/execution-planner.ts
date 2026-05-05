@@ -99,6 +99,20 @@ export interface PendingClarificationContext {
   clarificationQuestion: string;
 }
 
+// ─── Vague Improvement Patterns ───────────────────────────────────────────────
+// These phrases are intentionally direction-free and must NEVER trigger
+// REBUILD_PROGRAM. They always ask a clarifying question regardless of whether
+// an active program exists.
+const VAGUE_IMPROVEMENT_PATTERNS: RegExp[] = [
+  /\bmake (it|this|the program|my program|things?) better\b/i,
+  /\bimprove (it|this|the program|my program)\b/i,
+  /\boptimi[sz]e (it|this|the program|my program)\b/i,
+  /\bmake (it|this) more effective\b/i,
+  /\bupgrade (it|this|the program|my program)\b/i,
+  /\bmake (it|this) good(er)?\b/i,
+  /\bjust make it better\b/i,
+];
+
 // ─── Entry Point ──────────────────────────────────────────────────────────────
 
 export async function buildExecutionPlan({
@@ -277,6 +291,35 @@ export async function buildExecutionPlan({
       // If classification fails, fall through to normal mutation path
       logger.warn({ err, intent }, "[ConstraintReinforcement] classifyAdjustmentIntent failed — falling through to mutation path");
     }
+  }
+
+  // ── STEP 3.6: Vague improvement short-circuit ─────────────────────────────
+  // "make it better" / "improve it" / "optimize it" — these are direction-free.
+  // They must NEVER trigger REBUILD_PROGRAM or a silent mutation.
+  // Always route to ASK_CLARIFICATION regardless of program state.
+  const isVagueImprovement = VAGUE_IMPROVEMENT_PATTERNS.some((re) => re.test(message));
+  if (isVagueImprovement) {
+    const question = program
+      ? "What would you like to improve — strength, endurance, explosiveness, recovery, session length, or a specific day?"
+      : "What would you like me to build or improve? For example: strength, speed, mobility, endurance, or recovery.";
+
+    const vagueplan: ExecutionPlan = {
+      action: "ASK_CLARIFICATION",
+      intentFamily: "clarification_required",
+      scope,
+      clarification: {
+        question,
+        pendingAspect: "scope",
+      },
+      reasoning: "Vague improvement phrase — direction unclear, must clarify before any mutation or rebuild",
+    };
+
+    logger.info(
+      { conversationId, userId, message: message.slice(0, 80), hasProgram: !!program },
+      "[VagueImprovementGuard] Blocked generic improvement phrase → ASK_CLARIFICATION"
+    );
+
+    return vagueplan;
   }
 
   // ── STEP 4: Decision tree ─────────────────────────────────────────────────
@@ -465,6 +508,28 @@ export async function buildExecutionPlan({
         params: { category: inferExerciseCategory(message) },
       },
       reasoning: "Remove exercise or reduce session flow",
+    };
+  }
+
+  // ── Mobility session regression (shorter/easier/gentler + resolved day) ───
+  // "Make Day 3 shorter and easier" on a mobility program → deterministic
+  // day_regression (identity-preserving). Avoids AI edit-plan failure on
+  // vague difficulty descriptors that the generic transform path can't handle.
+  else if (
+    focusMode === "mobility" &&
+    scope.type === "session" &&
+    scope.dayIndex !== undefined &&
+    /\b(shorter|easier|gentler|less intense|lower impact|desk.?friendly|simpler|calmer|less difficult)\b/i.test(message)
+  ) {
+    plan = {
+      action: "APPLY_MUTATION",
+      intentFamily: "day_regression",
+      scope,
+      mutation: {
+        type: "regression",
+        params: { dayLevel: true, preserveIdentity: true, preserveMobilityIdentity: true },
+      },
+      reasoning: `Mobility session regression — Day ${(scope.dayIndex ?? 0) + 1} shorter/easier routed to deterministic day_regression`,
     };
   }
 

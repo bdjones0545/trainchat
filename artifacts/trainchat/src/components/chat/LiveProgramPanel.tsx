@@ -2406,20 +2406,20 @@ function ProgramTab({
                 </div>
               )}
 
-              {/* Day card — full for Day 1, teaser header only for locked days */}
+              {/* Day card — full for Day 1, readable-but-locked for Days 2+ */}
               {isLocked ? (
                 <div
-                  className="bg-card border border-border/30 rounded-xl overflow-hidden opacity-40"
+                  className="bg-card border border-border/30 rounded-xl overflow-hidden"
                   style={dayDiff === "newday" ? { animation: "day-new 1.8s ease forwards" } : undefined}
                 >
-                  <div className="flex items-center justify-between p-3">
+                  <div className="flex items-center justify-between p-3 pb-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 mb-0.5">
                         <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-accent/40 text-muted-foreground/60">
                           Day {day.dayNumber}
                         </span>
                       </div>
-                      <p className="text-[11px] font-semibold text-muted-foreground/70 truncate">
+                      <p className="text-[11px] font-semibold text-foreground/70 truncate">
                         {day.name}
                       </p>
                       {day.focus && (
@@ -2428,6 +2428,23 @@ function ProgramTab({
                     </div>
                     <Lock className="w-3 h-3 text-muted-foreground/30 flex-shrink-0 ml-2" />
                   </div>
+                  {/* Exercise names visible but non-interactive */}
+                  {day.exercises && day.exercises.length > 0 && (
+                    <div className="px-3 pb-3 space-y-1">
+                      {(day.exercises as Array<{ name: string; sets?: number; reps?: string }>).map((ex, exIdx) => (
+                        <div key={exIdx} className="flex items-center gap-2 opacity-50">
+                          <span className="w-1 h-1 rounded-full bg-muted-foreground/40 flex-shrink-0" />
+                          <span className="text-[10px] text-muted-foreground truncate">{ex.name}</span>
+                          {ex.sets && ex.reps && (
+                            <span className="text-[9px] text-muted-foreground/40 ml-auto flex-shrink-0">{ex.sets}×{ex.reps}</span>
+                          )}
+                        </div>
+                      ))}
+                      <p className="text-[9px] text-muted-foreground/40 mt-2 pt-1 border-t border-border/20">
+                        Upgrade to edit &amp; adapt all days
+                      </p>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div
@@ -3321,6 +3338,71 @@ function HistoryTab({ hasActiveSystem, focusMode }: { hasActiveSystem?: boolean;
   );
 }
 
+// ─── Free Changes Preview (non-premium — last 3 entries, no restore) ──────────
+
+function FreeChangesPreview({ hasActiveSystem, newChangeSignal, onUpgrade }: {
+  hasActiveSystem?: boolean;
+  newChangeSignal?: number;
+  onUpgrade?: () => void;
+}) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["training-system-history", "changes"],
+    queryFn: () => customFetch<{ history: ChangeLogEntry[] }>("/api/training-system/history?limit=3"),
+    enabled: !!hasActiveSystem,
+    staleTime: 0,
+  });
+
+  const history = (data?.history ?? []).slice(0, 3);
+
+  if (!hasActiveSystem || (isLoading && history.length === 0)) {
+    return (
+      <div className="flex flex-col h-full items-center justify-center p-6 text-center">
+        <Activity className="w-5 h-5 text-muted-foreground/30 mb-3" />
+        <p className="text-[11px] text-muted-foreground">Changes will appear here after your first edit.</p>
+      </div>
+    );
+  }
+
+  if (history.length === 0 && !isLoading) {
+    return (
+      <div className="flex flex-col h-full items-center justify-center p-6 text-center">
+        <Activity className="w-5 h-5 text-muted-foreground/30 mb-3" />
+        <p className="text-xs font-semibold text-foreground mb-1">No changes yet</p>
+        <p className="text-[11px] text-muted-foreground">Every time the AI edits your program, it shows up here.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-y-auto h-full flex flex-col">
+      <div className="p-3 space-y-2 flex-1">
+        {history.map((entry) => (
+          <div key={entry.id} className="bg-card border border-border rounded-xl p-3">
+            <div className="flex items-start justify-between gap-2 mb-1">
+              <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${scopeColor(entry.scope)}`}>
+                {entry.scope}
+              </span>
+              <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatRelative(entry.createdAt)}</span>
+            </div>
+            <p className="text-[11px] text-foreground leading-relaxed">{entry.changeSummary}</p>
+          </div>
+        ))}
+      </div>
+      {onUpgrade && (
+        <div className="p-3 border-t border-border/40 bg-muted/10">
+          <p className="text-[10px] text-muted-foreground mb-2">Upgrade for full history, diffs, and version restore.</p>
+          <button
+            onClick={onUpgrade}
+            className="flex items-center justify-center gap-1.5 w-full py-2 rounded-lg bg-primary/10 border border-primary/20 text-primary text-[11px] font-semibold hover:bg-primary/20 transition-colors"
+          >
+            <Zap className="w-3 h-3" /> Upgrade to Pro
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Tab locked state (preview-only users) ────────────────────────────────────
 
 function TabLockedView({ message, onUpgrade }: { message: string; onUpgrade?: () => void }) {
@@ -3668,8 +3750,8 @@ export default function LiveProgramPanel({
         </div>
       )}
 
-      {/* Tab bar */}
-      <div className="flex items-center gap-0 border-b border-border flex-shrink-0 px-2 pt-1">
+      {/* Tab bar — horizontally scrollable on narrow viewports */}
+      <div className="flex items-center gap-0 border-b border-border flex-shrink-0 overflow-x-auto scrollbar-none">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -3680,7 +3762,7 @@ export default function LiveProgramPanel({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`relative flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold border-b-2 transition-all duration-150 ${
+              className={`relative flex flex-shrink-0 items-center gap-1 px-2.5 py-2.5 text-[11px] font-semibold border-b-2 transition-all duration-150 whitespace-nowrap ${
                 isActive
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground"
@@ -3738,8 +3820,9 @@ export default function LiveProgramPanel({
         )}
         {activeTab === "changes" && (
           !isPremium ? (
-            <TabLockedView
-              message="Track every AI edit and adaptation in your program's live change log."
+            <FreeChangesPreview
+              hasActiveSystem={hasActiveSystem}
+              newChangeSignal={newChangeSignal + sidebarChangeSignal}
               onUpgrade={onUpgrade}
             />
           ) : (
