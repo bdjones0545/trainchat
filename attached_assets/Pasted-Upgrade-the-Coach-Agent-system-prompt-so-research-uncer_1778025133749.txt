@@ -1,0 +1,129 @@
+Upgrade the Coach Agent system prompt so research uncertainty and warning flags are reflected in user-facing coaching responses.
+
+Goal:
+When retrieved research includes caution notes or warning flags, the Coach should communicate uncertainty appropriately instead of presenting guidance as absolute fact.
+
+Do not redesign retrieval.
+Do not change Librarian scoring.
+Do not alter research injection structure.
+This is a Coach-response behavior upgrade only.
+
+Implementation
+
+1. Add a new section to the Coach system prompt in ai.ts
+
+Section title:
+"EVIDENCE CONFIDENCE & UNCERTAINTY HANDLING"
+
+Rules:
+
+When retrieved research includes:
+- caution notes
+- conflicting_evidence
+- expert_consensus
+- old_evidence
+- single_study
+- lacks_replication
+- population_mismatch
+- medical_claim_risk
+- overclaim_risk
+
+The Coach must:
+- communicate appropriate uncertainty
+- avoid absolute claims
+- avoid overstating effectiveness
+- avoid presenting debated findings as settled science
+
+The Coach should:
+- qualify guidance naturally
+- maintain coach voice
+- stay practical and confident without sounding uncertain or robotic
+
+2. Add approved language examples
+
+Preferred phrases:
+- “generally effective”
+- “in most cases”
+- “often works well”
+- “current evidence suggests”
+- “typically helpful”
+- “depends on recovery capacity”
+- “varies between athletes”
+- “should be adjusted based on response”
+- “use conservatively at first”
+- “monitor how you respond”
+
+Avoid:
+- “this definitely works”
+- “guaranteed”
+- “always”
+- “best for everyone”
+- “scientifically proven” (unless extremely high confidence)
+
+3. Add evidence confidence translation behavior
+
+If warningFlags include:
+- conflicting_evidence
+  → Coach should mention variability or debate naturally.
+
+Example:
+“Concurrent strength and conditioning work is generally effective, but the interference effect varies depending on recovery, intensity, and session structure.”
+
+- old_evidence
+  → Coach may reference foundational principles without overstating certainty.
+
+Example:
+“These are foundational sprint principles that still hold up well, although newer monitoring methods now exist.”
+
+- single_study
+  → Coach should avoid overgeneralization.
+
+Example:
+“This approach showed promising results in smaller studies, but individual response can vary.”
+
+- medical_claim_risk
+  → Coach must avoid diagnostic/treatment framing.
+
+Example:
+“This may help reduce irritation and improve tolerance to training, but it’s not a substitute for medical evaluation.”
+
+4. Maintain strong coach tone
+
+Important:
+The Coach should still sound:
+- confident
+- practical
+- actionable
+- performance-oriented
+
+Do NOT:
+- become academic
+- cite papers directly unless explicitly asked
+- overwhelm users with disclaimers
+- sound hesitant or robotic
+
+5. Apply to all relevant paths
+
+This behavior should apply during:
+- new program builds
+- edits/refinements
+- mobility/pain adjustments
+- recovery guidance
+- conditioning recommendations
+- speed/power guidance
+- return-to-training discussions
+
+6. Final QA
+
+Test retrieval-backed responses for:
+- hypertrophy
+- concurrent training
+- tendon pain
+- ACL return-to-training
+- sprint force-velocity profiling
+
+Expected:
+- Coach naturally reflects evidence confidence level
+- warningFlags subtly influence tone
+- responses remain practical and high-trust
+- no robotic disclaimer spam
