@@ -1,0 +1,77 @@
+Fix week-scope refinement so each session keeps its role.
+
+Current bug:
+After clicking “More Strength,” all 3 days became the same generic title:
+“Strength Development”
+“Progressive overload, bilateral compound movements”
+
+That is wrong. Week-scope refinement should update all sessions, but preserve each session’s original identity/role.
+
+Expected:
+If original week is:
+Day 1: Lower Power / Explosive Output
+Day 2: Upper Strength + Press
+Day 3: Posterior Chain + Hinge
+
+Then “More Strength” should become something like:
+Day 1: Lower Strength + Power
+Day 2: Upper Strength + Press
+Day 3: Posterior Chain Strength + Hinge
+
+Not three identical “Strength Development” days.
+
+Required fix:
+In applyHierarchicalRefinement / applyWeekScope, before transforming each session, capture:
+
+originalSessionTitle
+originalSessionGoal
+originalMovementPattern
+originalDayRole
+originalExerciseFamilies
+originalPrimaryLiftCategory
+
+Then apply the refinement as a modifier, not a replacement.
+
+Rules:
+- Never overwrite every session title with one generic label.
+- Never overwrite every session description with one generic description.
+- Preserve lower / upper / hinge / squat / push / pull / posterior / full-body role.
+- Preserve day number and week structure.
+- Only adjust the emphasis: more strength, more explosive, shorter, lower impact, home gym, etc.
+
+Add a helper:
+
+deriveRefinedSessionIdentity(originalSession, transformationType)
+
+It should return a session-specific title/description based on the original role.
+
+Examples:
+
+More Strength:
+Lower Power → Lower Strength + Power
+Upper Strength + Press → Upper Max Strength + Press
+Posterior Chain + Hinge → Posterior Chain Strength + Hinge
+
+More Explosive:
+Lower Strength → Lower Power + Explosive Output
+Upper Strength + Press → Upper Power + Explosive Press
+Posterior Chain + Hinge → Posterior Chain Power + Speed Hinge
+
+Shorter Sessions:
+Lower Power → Lower Power — Condensed
+Upper Strength + Press → Upper Strength + Press — Condensed
+Posterior Chain + Hinge → Posterior Chain + Hinge — Condensed
+
+Home Gym:
+Lower Power → Lower Power — Home Gym
+Upper Strength + Press → Upper Strength + Press — Home Gym
+Posterior Chain + Hinge → Posterior Chain + Hinge — Home Gym
+
+Acceptance test:
+Click “More Strength” on a 3-day week.
+Expected:
+- All 3 sessions update.
+- Each session keeps a distinct identity.
+- No duplicate generic title across all sessions.
+- Change log still says Week 1 refined.
+- Day 1, Day 2, and Day 3 should not all have the same title/description unless they were already identical before refinement.

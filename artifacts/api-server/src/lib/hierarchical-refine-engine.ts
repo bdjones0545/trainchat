@@ -82,6 +82,10 @@ function prescriptionForTransformation(type: string): ExercisePrescription {
     case "fatigue_management":
     case "decrease_difficulty":
     case "decrease_volume":
+    case "lower_impact":
+    case "home_gym":
+    case "limited_space":
+    case "desk_reset":
       return { reps: "8-12", rest: "2-3 min" };
 
     case "reduce_time":
@@ -221,9 +225,141 @@ function mapTransformationToFocusKey(transformation: string): string {
     case "fatigue_management":
     case "decrease_difficulty":
     case "decrease_volume":
+    case "lower_impact":
+    case "home_gym":
+    case "limited_space":
+    case "desk_reset":
       return "recovery";
     default:
       return "strength";
+  }
+}
+
+// ─── Role-Aware Session Identity Derivation ───────────────────────────────────
+// Instead of stamping every session with the same generic label (e.g. every day
+// becomes "Strength Development"), this helper blends the transformation modifier
+// into the session's existing role/title so each day keeps its distinct identity.
+//
+// Examples (More Strength):
+//   "Lower Power"             → "Lower Strength + Power"
+//   "Upper Strength + Press"  → "Upper Max Strength + Press"
+//   "Posterior Chain + Hinge" → "Posterior Chain Strength + Hinge"
+//
+// Examples (More Explosive):
+//   "Lower Strength"          → "Lower Power + Explosive Output"
+//   "Upper Strength + Press"  → "Upper Power + Explosive Press"
+//   "Posterior Chain + Hinge" → "Posterior Chain Power + Speed Hinge"
+
+export function deriveRefinedSessionIdentity(
+  originalLabel: string | null | undefined,
+  originalEmphasis: string | null | undefined,
+  transformation: string,
+): { label: string; emphasis: string } {
+  const raw = (originalLabel ?? "").trim();
+  const emph = (originalEmphasis ?? "").trim();
+
+  // If there is no original label, fall back to the generic identity.
+  if (!raw) return sessionIdentityForTransformation(transformation);
+
+  switch (transformation) {
+    case "power":
+    case "power_explosive_focus":
+    case "speed_focus": {
+      let label = raw
+        .replace(/\bMax Strength\b/g, "Power + Max Strength")
+        .replace(/(?<!Power \+ )\bStrength\b/g, "Power + Strength")
+        .replace(/\bHinge\b/g, "Speed Hinge")
+        .replace(/\bPress\b/g, "Explosive Press");
+      if (label === raw) label = `${raw} — Explosive`;
+      const emphasis = emph
+        ? `${emph}; rate of force development and power expression added`
+        : "Rate of force development layered onto existing session structure";
+      return { label, emphasis };
+    }
+
+    case "strength":
+    case "strength_focus":
+    case "increase_difficulty": {
+      let label = raw
+        .replace(/\bPower\b/g, "Strength + Power")
+        .replace(/(?<!Max )\bStrength\b/g, "Max Strength");
+      // If neither word was found, insert "Strength" before the first " + " separator
+      if (label === raw) {
+        label = raw.includes(" + ")
+          ? raw.replace(/\s*\+\s*/, " Strength + ")
+          : `${raw} — Strength`;
+      }
+      const emphasis = emph
+        ? `${emph}; strength emphasis increased across all movements`
+        : "Progressive overload and strength emphasis layered onto existing session";
+      return { label, emphasis };
+    }
+
+    case "endurance":
+    case "endurance_focus":
+    case "conditioning_focus": {
+      let label = raw.replace(/\bPower\b/g, "Conditioning + Power");
+      if (label === raw) label = `${raw} — Conditioning`;
+      const emphasis = emph
+        ? `${emph}; conditioning density and work capacity increased`
+        : "Conditioning and work capacity emphasis layered onto existing session";
+      return { label, emphasis };
+    }
+
+    case "reduce_time": {
+      const label = `${raw} — Condensed`;
+      const emphasis = emph
+        ? `${emph}; condensed for time efficiency`
+        : "High density, minimal rest — session condensed for time efficiency";
+      return { label, emphasis };
+    }
+
+    case "lower_impact": {
+      const label = `${raw} — Lower Impact`;
+      const emphasis = emph
+        ? `${emph}; lower impact version, reduced load and intensity`
+        : "Lower impact version with reduced load and intensity";
+      return { label, emphasis };
+    }
+
+    case "home_gym": {
+      const label = `${raw} — Home Gym`;
+      const emphasis = emph
+        ? `${emph}; adapted for home gym equipment`
+        : "Adapted for home gym — bodyweight and minimal equipment";
+      return { label, emphasis };
+    }
+
+    case "limited_space": {
+      const label = `${raw} — Limited Space`;
+      const emphasis = emph
+        ? `${emph}; adapted for limited space training`
+        : "Adapted for limited space — minimal equipment and footprint";
+      return { label, emphasis };
+    }
+
+    case "desk_reset": {
+      const label = `${raw} — Desk Reset`;
+      const emphasis = emph
+        ? `${emph}; adapted as a desk-reset mobility flow`
+        : "Desk-reset version — short, restorative, posture-focused";
+      return { label, emphasis };
+    }
+
+    case "recovery":
+    case "recovery_focus":
+    case "fatigue_management":
+    case "decrease_difficulty":
+    case "decrease_volume": {
+      const label = `${raw} — Recovery`;
+      const emphasis = emph
+        ? `${emph}; scaled back for recovery`
+        : "Active recovery version — reduced load, emphasis on tissue quality";
+      return { label, emphasis };
+    }
+
+    default:
+      return { label: raw, emphasis: emph || "General athletic development" };
   }
 }
 
@@ -544,7 +680,6 @@ async function applyWeekScope(
   }
 
   const prescription = prescriptionForTransformation(transformation);
-  const identity = sessionIdentityForTransformation(transformation);
   const weekLabel = targetWeekNumber ? `Week ${targetWeekNumber}` : "current week";
 
   let exerciseCount = 0;
@@ -576,10 +711,18 @@ async function applyWeekScope(
       const sessionSwaps = await swapExercisesForFocus(session, transformation);
       totalSwapped += sessionSwaps;
 
-      // Update session label + emphasis
+      // Derive a role-aware identity for this specific session, preserving its
+      // original role (lower/upper/hinge/etc.) and blending the transformation
+      // as a modifier instead of overwriting with a generic label.
+      const refinedIdentity = deriveRefinedSessionIdentity(
+        (session as any).label ?? null,
+        (session as any).emphasis ?? null,
+        transformation,
+      );
+
       await db
         .update(trainingSessions)
-        .set({ label: identity.label, emphasis: identity.emphasis })
+        .set({ label: refinedIdentity.label, emphasis: refinedIdentity.emphasis })
         .where(eq(trainingSessions.id, session.id));
 
       sessionCount++;
