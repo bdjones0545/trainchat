@@ -2216,19 +2216,10 @@ function ProgramTab({
                   key={chip.label}
                   onClick={() => {
                     if (isDisabled || isLoading) return;
+                    // refineSource is always "program_refine_panel" — never fall back to chat.
+                    // If trainingSystemId is missing, fail fast rather than routing through NLP.
                     if (trainingSystemId != null) {
                       handleDirectBlockRefine(chip, key);
-                    } else {
-                      sendRefinement(chip.message, key, {
-                        interactionType: "global_chip",
-                        structuredIntent: chip.structuredIntent,
-                        focusMode: panelFocusMode,
-                      }, {
-                        source: "program_panel",
-                        actionType: "modify_global",
-                        displayText: chip.label,
-                        submittedText: chip.message,
-                      });
                     }
                   }}
                   disabled={isDisabled}
