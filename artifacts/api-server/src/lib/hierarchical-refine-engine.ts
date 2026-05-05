@@ -250,6 +250,42 @@ async function verifyAndRepairPrescriptions(
       }
     }
   }
+
+  // ── Hypertrophy: ensure accessories actually received a volume increase ─────
+  // The main prescription loop should have handled this, but run a safety-net
+  // pass and flag sessions where no accessories exist at all.
+  if (isHypertrophy) {
+    const accessories = exercises.filter((ex) => ex.id && classifyExercise(ex).isAccessoryOrAux);
+
+    if (accessories.length === 0) {
+      logger.warn(
+        { transformation },
+        "[verifyAndRepairPrescriptions] No accessory/auxiliary exercises found in session during hypertrophy — volume increase could not be applied to accessories",
+      );
+    } else {
+      // Accessories whose OLD reps were outside the hypertrophy accessory range
+      // should already have been updated by the main loop.  Re-apply here as a
+      // safety net to guarantee nothing was silently skipped.
+      const HYPERTROPHY_ACCESSORY_RE = /\b(10|1[1-9]|20)\b/;
+      for (const ex of accessories) {
+        if (!ex.id) continue;
+        const oldReps = (ex.reps ?? "").trim();
+        if (!HYPERTROPHY_ACCESSORY_RE.test(oldReps)) {
+          const fix = getPrescriptionForExerciseTransformation(ex, transformation);
+          if (fix.reps || fix.sets || fix.rest) {
+            const patch: Record<string, unknown> = {};
+            if (fix.sets !== undefined) patch.sets = fix.sets;
+            if (fix.reps !== undefined) patch.reps = fix.reps;
+            if (fix.rest !== undefined) patch.rest = fix.rest;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await db.update(sessionExercises).set(patch as any).where(eq(sessionExercises.id, ex.id));
+            repaired++;
+          }
+        }
+      }
+    }
+  }
+
   return repaired;
 }
 
