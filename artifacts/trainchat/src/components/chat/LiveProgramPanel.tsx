@@ -1065,7 +1065,19 @@ function ProgramTab({
     setPendingRefinement(actionKey);
     const directEditStart = Date.now();
     try {
-      const editResult = await customFetch<{ changeLogEntry?: ChangeLogEntry | null; changeSummary?: string }>(
+      const editResult = await customFetch<{
+        changeLogEntry?: ChangeLogEntry | null;
+        changeSummary?: string;
+        swapContract?: {
+          actionType: string;
+          confirmed: boolean;
+          originalExercise: string | null;
+          replacementExercise: string | null;
+          updatedExercise: Record<string, unknown> | null;
+          changeEntry: Record<string, unknown> | null;
+          invalidationKeys: string[];
+        } | null;
+      }>(
         "/api/training-system/edit",
         {
           method: "POST",
@@ -1112,13 +1124,41 @@ function ProgramTab({
       if (programUpdatedTimerRef.current) clearTimeout(programUpdatedTimerRef.current);
       programUpdatedTimerRef.current = setTimeout(() => setShowProgramUpdated(false), 3000);
 
+      // Swap contract validation — only show "confirmed swap" label when the backend
+      // verified a real replace_exercise landed. If the contract is absent or unconfirmed
+      // (e.g. the mutation was misclassified), fall back to a neutral label and log a warning.
+      const swapContract = editResult?.swapContract ?? null;
+      const swapConfirmed =
+        action === "swap" &&
+        swapContract?.actionType === "replace_exercise" &&
+        swapContract.confirmed === true &&
+        swapContract.updatedExercise != null;
+
+      if (action === "swap" && !swapConfirmed) {
+        console.warn("[LiveProgramPanel:SwapContractViolation]", {
+          exerciseName,
+          swapContract,
+          reason: !swapContract
+            ? "no_contract_in_response"
+            : !swapContract.confirmed
+            ? "contract_unconfirmed"
+            : "updated_exercise_missing",
+        });
+      }
+
       // Highlight + scroll to the edited exercise
+      const replacementName = swapConfirmed ? swapContract!.replacementExercise ?? exerciseName : exerciseName;
       const label =
-        action === "swap" ? `Swapped: ${exerciseName}`
-        : action === "easier" ? "Made easier"
-        : "Made harder";
-      setHighlightedNames(new Set([exerciseName]));
-      setInlineLabels(new Map([[exerciseName, label]]));
+        action === "swap" && swapConfirmed
+          ? `${exerciseName} → ${replacementName}`
+          : action === "easier" ? "Made easier"
+          : action === "harder" ? "Made harder"
+          : action === "swap" ? "Swap requested"
+          : "Updated";
+      // Highlight the replacement exercise name (which may differ from the original after a swap)
+      const highlightName = action === "swap" && swapConfirmed ? replacementName : exerciseName;
+      setHighlightedNames(new Set([highlightName]));
+      setInlineLabels(new Map([[highlightName, label]]));
       if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
       highlightTimerRef.current = setTimeout(() => {
         setHighlightedNames(new Set());

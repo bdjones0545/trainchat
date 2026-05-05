@@ -560,6 +560,59 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       scope: editPlan.scope,
     });
 
+    // ── Swap contract — gating field for frontend "confirmed swap" rendering ──────
+    // Built from verified before/after snapshots, not from the intent plan alone.
+    // The frontend MUST check actionType === "replace_exercise" && updatedExercise != null
+    // before displaying any "swap confirmed" state. If either field is absent, it means
+    // the mutation was misclassified or didn't land, and the UI should stay silent.
+    const SWAP_INVALIDATION_KEYS = [
+      "training-system-week",
+      "live-panel-week-ids",
+      "week-view-select",
+      "training-system-today",
+      "training-system-active",
+      "training-system-history",
+    ] as const;
+
+    const swapChangeTarget = editResult.changeTargets.find((t) => t.type === "exercise_swap");
+    const swapPlanChange = editPlan.changes.find((c) => c.type === "replace_exercise");
+
+    let swapContract: {
+      actionType: "replace_exercise";
+      confirmed: boolean;
+      originalExercise: string | null;
+      replacementExercise: string | null;
+      updatedExercise: Record<string, unknown> | null;
+      changeEntry: Record<string, unknown> | null;
+      invalidationKeys: readonly string[];
+    } | null = null;
+
+    if (swapChangeTarget && swapPlanChange) {
+      const updatedExercise =
+        (editResult.afterSnapshot.exercises?.[String(swapPlanChange.id)] as Record<string, unknown> | undefined) ?? null;
+      const confirmed = editResult.appliedCount > 0 && !!swapChangeTarget.newExercise && !!updatedExercise;
+
+      swapContract = {
+        actionType: "replace_exercise",
+        confirmed,
+        originalExercise: swapChangeTarget.originalExercise ?? null,
+        replacementExercise: swapChangeTarget.newExercise ?? null,
+        updatedExercise,
+        changeEntry: changeLogEntry ?? null,
+        invalidationKeys: SWAP_INVALIDATION_KEYS,
+      };
+
+      logger.info(
+        {
+          confirmed,
+          originalExercise: swapContract.originalExercise,
+          replacementExercise: swapContract.replacementExercise,
+          exerciseId: swapPlanChange.id,
+        },
+        "[SystemEdit] Swap contract built"
+      );
+    }
+
     const [chatConversationId, today, week, block] = await Promise.all([
       postToChat
         ? postEditAckToChat(userId, editResult, activeSystem.id, changeLogId, diff, auditSystemFocus, editPlan.intent).catch(() => null)
@@ -585,6 +638,7 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       chatConversationId: chatConversationId ?? null,
       coachReasoning,
       updatedData: { today, week, block },
+      swapContract: swapContract ?? null,
     });
   } catch (err) {
     logger.error({ err, userId, userRequest }, "[SystemEdit] Training system edit failed");
