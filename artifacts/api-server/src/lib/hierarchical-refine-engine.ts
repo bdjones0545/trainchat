@@ -236,19 +236,45 @@ function mapTransformationToFocusKey(transformation: string): string {
 }
 
 // ─── Role-Aware Session Identity Derivation ───────────────────────────────────
-// Instead of stamping every session with the same generic label (e.g. every day
-// becomes "Strength Development"), this helper blends the transformation modifier
-// into the session's existing role/title so each day keeps its distinct identity.
+// The originalLabel is the source of truth — it is never modified or rewritten.
+// The transformation is applied as a clean suffix/modifier only.
+// No day-index assumptions, no lower/upper/hinge inference, no word replacement.
 //
-// Examples (More Strength):
-//   "Lower Power"             → "Lower Strength + Power"
-//   "Upper Strength + Press"  → "Upper Max Strength + Press"
-//   "Posterior Chain + Hinge" → "Posterior Chain Strength + Hinge"
-//
-// Examples (More Explosive):
-//   "Lower Strength"          → "Lower Power + Explosive Output"
-//   "Upper Strength + Press"  → "Upper Power + Explosive Press"
-//   "Posterior Chain + Hinge" → "Posterior Chain Power + Speed Hinge"
+// Examples:
+//   "Total Body Strength" + power    → "Total Body Strength + Explosive Emphasis"
+//   "Total Body Strength" + strength → "Total Body Strength + Strength Emphasis"
+//   "Total Body Strength" + reduce_time → "Total Body Strength — Condensed"
+//   "Acceleration + First Step" + strength → "Acceleration + First Step + Strength Support"
+
+interface TransformationModifier {
+  labelSuffix: string;   // appended with " " separator
+  emphasisNote: string;  // appended to original emphasis with "; " separator
+}
+
+const TRANSFORMATION_MODIFIERS: Record<string, TransformationModifier> = {
+  power:                { labelSuffix: "+ Explosive Emphasis",    emphasisNote: "rate of force development and explosive output added" },
+  power_explosive_focus:{ labelSuffix: "+ Explosive Emphasis",    emphasisNote: "rate of force development and explosive output added" },
+  speed_focus:          { labelSuffix: "+ Explosive Emphasis",    emphasisNote: "rate of force development and explosive output added" },
+  strength:             { labelSuffix: "+ Strength Emphasis",     emphasisNote: "strength emphasis increased across all movements" },
+  strength_focus:       { labelSuffix: "+ Strength Emphasis",     emphasisNote: "strength emphasis increased across all movements" },
+  increase_difficulty:  { labelSuffix: "+ Strength Emphasis",     emphasisNote: "strength emphasis increased across all movements" },
+  endurance:            { labelSuffix: "+ Conditioning Emphasis", emphasisNote: "conditioning density and work capacity increased" },
+  endurance_focus:      { labelSuffix: "+ Conditioning Emphasis", emphasisNote: "conditioning density and work capacity increased" },
+  conditioning_focus:   { labelSuffix: "+ Conditioning Emphasis", emphasisNote: "conditioning density and work capacity increased" },
+  reduce_time:          { labelSuffix: "— Condensed",             emphasisNote: "condensed for time efficiency, minimal rest" },
+  lower_impact:         { labelSuffix: "— Lower Impact",          emphasisNote: "lower impact version, reduced load and intensity" },
+  home_gym:             { labelSuffix: "— Home Gym",              emphasisNote: "adapted for home gym, bodyweight and minimal equipment" },
+  limited_space:        { labelSuffix: "— Limited Space",         emphasisNote: "adapted for limited space training" },
+  desk_reset:           { labelSuffix: "— Desk Reset",            emphasisNote: "adapted as a desk-reset mobility flow" },
+  recovery:             { labelSuffix: "— Recovery Focus",        emphasisNote: "scaled back for recovery and tissue quality" },
+  recovery_focus:       { labelSuffix: "— Recovery Focus",        emphasisNote: "scaled back for recovery and tissue quality" },
+  fatigue_management:   { labelSuffix: "— Recovery Focus",        emphasisNote: "scaled back for recovery and tissue quality" },
+  decrease_difficulty:  { labelSuffix: "— Recovery Focus",        emphasisNote: "scaled back for recovery and tissue quality" },
+  decrease_volume:      { labelSuffix: "— Recovery Focus",        emphasisNote: "scaled back for recovery and tissue quality" },
+  hypertrophy:          { labelSuffix: "+ Hypertrophy Emphasis",  emphasisNote: "volume and hypertrophy emphasis increased" },
+  hypertrophy_focus:    { labelSuffix: "+ Hypertrophy Emphasis",  emphasisNote: "volume and hypertrophy emphasis increased" },
+  increase_volume:      { labelSuffix: "+ Hypertrophy Emphasis",  emphasisNote: "volume and hypertrophy emphasis increased" },
+};
 
 export function deriveRefinedSessionIdentity(
   originalLabel: string | null | undefined,
@@ -258,109 +284,18 @@ export function deriveRefinedSessionIdentity(
   const raw = (originalLabel ?? "").trim();
   const emph = (originalEmphasis ?? "").trim();
 
-  // If there is no original label, fall back to the generic identity.
+  // No original label — fall back to the generic identity for this transformation.
   if (!raw) return sessionIdentityForTransformation(transformation);
 
-  switch (transformation) {
-    case "power":
-    case "power_explosive_focus":
-    case "speed_focus": {
-      let label = raw
-        .replace(/\bMax Strength\b/g, "Power + Max Strength")
-        .replace(/(?<!Power \+ )\bStrength\b/g, "Power + Strength")
-        .replace(/\bHinge\b/g, "Speed Hinge")
-        .replace(/\bPress\b/g, "Explosive Press");
-      if (label === raw) label = `${raw} — Explosive`;
-      const emphasis = emph
-        ? `${emph}; rate of force development and power expression added`
-        : "Rate of force development layered onto existing session structure";
-      return { label, emphasis };
-    }
+  const mod = TRANSFORMATION_MODIFIERS[transformation];
 
-    case "strength":
-    case "strength_focus":
-    case "increase_difficulty": {
-      let label = raw
-        .replace(/\bPower\b/g, "Strength + Power")
-        .replace(/(?<!Max )\bStrength\b/g, "Max Strength");
-      // If neither word was found, insert "Strength" before the first " + " separator
-      if (label === raw) {
-        label = raw.includes(" + ")
-          ? raw.replace(/\s*\+\s*/, " Strength + ")
-          : `${raw} — Strength`;
-      }
-      const emphasis = emph
-        ? `${emph}; strength emphasis increased across all movements`
-        : "Progressive overload and strength emphasis layered onto existing session";
-      return { label, emphasis };
-    }
+  // Unknown transformation — preserve the session exactly as-is.
+  if (!mod) return { label: raw, emphasis: emph || "General athletic development" };
 
-    case "endurance":
-    case "endurance_focus":
-    case "conditioning_focus": {
-      let label = raw.replace(/\bPower\b/g, "Conditioning + Power");
-      if (label === raw) label = `${raw} — Conditioning`;
-      const emphasis = emph
-        ? `${emph}; conditioning density and work capacity increased`
-        : "Conditioning and work capacity emphasis layered onto existing session";
-      return { label, emphasis };
-    }
+  const label = `${raw} ${mod.labelSuffix}`;
+  const emphasis = emph ? `${emph}; ${mod.emphasisNote}` : mod.emphasisNote;
 
-    case "reduce_time": {
-      const label = `${raw} — Condensed`;
-      const emphasis = emph
-        ? `${emph}; condensed for time efficiency`
-        : "High density, minimal rest — session condensed for time efficiency";
-      return { label, emphasis };
-    }
-
-    case "lower_impact": {
-      const label = `${raw} — Lower Impact`;
-      const emphasis = emph
-        ? `${emph}; lower impact version, reduced load and intensity`
-        : "Lower impact version with reduced load and intensity";
-      return { label, emphasis };
-    }
-
-    case "home_gym": {
-      const label = `${raw} — Home Gym`;
-      const emphasis = emph
-        ? `${emph}; adapted for home gym equipment`
-        : "Adapted for home gym — bodyweight and minimal equipment";
-      return { label, emphasis };
-    }
-
-    case "limited_space": {
-      const label = `${raw} — Limited Space`;
-      const emphasis = emph
-        ? `${emph}; adapted for limited space training`
-        : "Adapted for limited space — minimal equipment and footprint";
-      return { label, emphasis };
-    }
-
-    case "desk_reset": {
-      const label = `${raw} — Desk Reset`;
-      const emphasis = emph
-        ? `${emph}; adapted as a desk-reset mobility flow`
-        : "Desk-reset version — short, restorative, posture-focused";
-      return { label, emphasis };
-    }
-
-    case "recovery":
-    case "recovery_focus":
-    case "fatigue_management":
-    case "decrease_difficulty":
-    case "decrease_volume": {
-      const label = `${raw} — Recovery`;
-      const emphasis = emph
-        ? `${emph}; scaled back for recovery`
-        : "Active recovery version — reduced load, emphasis on tissue quality";
-      return { label, emphasis };
-    }
-
-    default:
-      return { label: raw, emphasis: emph || "General athletic development" };
-  }
+  return { label, emphasis };
 }
 
 function detectExerciseMovementFamily(name: string): string {
