@@ -1091,10 +1091,17 @@ function ProgramTab({
       if (directEditElapsed < 300) {
         await new Promise<void>((r) => setTimeout(r, 300 - directEditElapsed));
       }
+      console.log("[LiveProgramPanel:MutationSuccess]", { action, exerciseName, exerciseId, changeLogEntry: editResult?.changeLogEntry ?? null });
       queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
       queryClient.invalidateQueries({ queryKey: ["live-panel-week-ids"] });
       queryClient.invalidateQueries({ queryKey: ["week-view-select"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+      console.log("[LiveProgramPanel:InvalidateQueries]", ["training-system-week", "live-panel-week-ids", "week-view-select", "training-system-today", "training-system-active"]);
       updateChangesCache(editResult?.changeLogEntry ?? null);
+      queryClient.refetchQueries({ queryKey: ["training-system-history", "changes"] }).then(() => {
+        console.log("[LiveProgramPanel:RefetchComplete]", { action, exerciseName });
+      });
       onSidebarMutation?.();
       setPendingRefinement(null);
       setShowProgramUpdated(true);

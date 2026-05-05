@@ -1990,11 +1990,37 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
       return buildHarderMutation(exerciseId, label);
     }
 
+    // SWAP COMMAND GUARDRAIL
+    // "Swap X with something similar" / "Replace X with something" — when swapTo extracted
+    // a generic placeholder (already handled above) we still have raw swap intent. Return
+    // empty changes so interpretEditRequest Step 2.5 (open-ended swap auto-resolver) can
+    // pick the right substitute. This prevents swap commands from being stored as exercise notes.
+    const isSwapCommand =
+      /^(swap|replace)\b/i.test(userRequest.trim()) ||
+      /\b(swap|replace|switch\s+out)\s+.+\s+(for|with|to)\b/i.test(userRequest) ||
+      /\bsomething\s+similar\b/i.test(userRequest) ||
+      isOpenEndedSwapLanguage(userRequest);
+
+    if (isSwapCommand) {
+      logger.info(
+        { exerciseId, label, request: userRequest.slice(0, 80) },
+        "[interpretWithRules] Swap command with generic/open-ended target — escalating to open-ended swap resolver"
+      );
+      return { intent: "swap_exercise", scope: "exercise", changeSummary: "", changes: [] };
+    }
+
+    // Safety net: never store raw command strings as exercise notes.
+    // Any command-like text that slips past the guards above is replaced with a neutral note.
+    const isCommandText = /^(swap|replace|make|change|use|try|give me|something similar|switch)\b/i.test(userRequest.trim());
+    const noteText = isCommandText
+      ? `Exercise note for ${label}.`
+      : userRequest;
+
     return {
       intent: "exercise_note",
       scope: "exercise",
-      changeSummary: `Notes updated on ${label} based on your request.`,
-      changes: [{ type: "update_exercise", id: exerciseId, updates: { notes: userRequest }, reason: "User modification note" }],
+      changeSummary: `Notes updated on ${label}.`,
+      changes: [{ type: "update_exercise", id: exerciseId, updates: { notes: noteText }, reason: "User coaching note" }],
     };
   }
 
@@ -3418,6 +3444,16 @@ export function classifyEditRequest(
     const swapTarget = extractSwapTargetName(userRequest);
     if (swapTarget) {
       return { route: "DETERMINISTIC", reason: "exact_named_swap" };
+    }
+
+    // ── Rule 3.5: Open-ended swap command with exercise target → DETERMINISTIC ─
+    // "Swap X with something similar" must route DETERMINISTIC so interpretWithRules
+    // returns { changes: [] }, which triggers escalation to the open-ended swap
+    // auto-resolver (Step 2.5) that calls autoSelectOpenEndedSwap.
+    // Without this, the request falls through to AGENT as "exercise_coaching_transformation"
+    // and gets misclassified or silently dropped.
+    if (/^(swap|replace)\b/i.test(lower) || isOpenEndedSwapLanguage(userRequest)) {
+      return { route: "DETERMINISTIC", reason: "open_ended_swap_exercise" };
     }
 
     // ── Rule 4: Simple set add/remove → DETERMINISTIC ──────────────────────
