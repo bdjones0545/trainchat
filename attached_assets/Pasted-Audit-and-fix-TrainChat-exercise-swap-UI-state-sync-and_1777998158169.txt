@@ -1,0 +1,144 @@
+Audit and fix TrainChat exercise swap UI state sync and change history classification.
+
+Current issues shown in QA:
+1. Sometimes Swap/Easier/Harder takes a few seconds, but the right sidebar Program tab does not update until the user switches to another tab and comes back.
+2. Some successful swaps are logged as:
+   - "Notes updated on Belt Squat based on your request"
+   - badge: unconfirmed
+   - type: exercise note
+   - detail: "Swap Belt Squat with something similar"
+3. This is wrong. A swap request should never be classified as a notes update.
+4. If the swap was completed, it should be confirmed and shown as a swap/replacement change.
+5. The exercise card notes should not show the raw user command like "Swap Belt Squat with something similar." That is not coaching rationale.
+
+Root causes to investigate:
+- React Query cache invalidation may not be refetching the LiveProgramPanel data after mutation.
+- Right sidebar may be rendering stale cached program/session data.
+- Change history may be built from the wrong action family, possibly fallbacking to update_notes when replace_exercise is delayed, ambiguous, or confirmation status is missing.
+- Optimistic UI may be marking the exercise as updated before the real replacement result returns.
+- The intent/execution planner may classify "Swap [exercise] with something similar" as note_update instead of replace_exercise for some exercises like Belt Squat / Back Squat.
+
+Fix requirements:
+
+PART 1 — UI state sync after exercise mutations
+After any successful exercise mutation:
+- swap
+- easier
+- harder
+- equipment replacement
+- replace_exercise
+- prescription redistribution update
+
+Immediately invalidate/refetch all relevant queries:
+- active training system
+- live program panel data
+- current session exercises
+- training-system-today
+- program history/change log
+- adapted tab data if separate
+- any query used by LiveProgramPanel
+
+Also update the local panel state directly if the mutation response returns updated exercise/session data.
+
+Expected behavior:
+- The changed exercise appears in the Program tab without switching tabs.
+- The Changes tab updates without switching tabs.
+- The Updated badge appears immediately after the successful mutation.
+- No manual tab refresh should be required.
+
+Add logging:
+[LiveProgramPanel:MutationSuccess]
+[LiveProgramPanel:InvalidateQueries]
+[LiveProgramPanel:RefetchComplete]
+
+PART 2 — Replace raw command notes with coaching rationale
+Exercise notes should never be set to the raw user command.
+
+Bad:
+"Swap Belt Squat with something similar"
+
+Good:
+"Swapped from Back Squat to Belt Squat to keep a squat-pattern strength stimulus with lower spinal loading."
+or
+"Chosen as a similar squat-pattern replacement."
+
+Rules:
+- Store raw user command only in change history as requestText/userPrompt.
+- Exercise notes should only contain coaching rationale, remap rationale, context rationale, or stimulus redistribution rationale.
+- Add a sanitizer:
+  If notes exactly or mostly match the user command, reject them and replace with generated fallback rationale.
+- Detect command-like notes containing:
+  "swap"
+  "replace"
+  "make easier"
+  "make harder"
+  "something similar"
+  "use equipment"
+  "change this"
+- Do not display these as exercise rationale.
+
+PART 3 — Fix change history classification
+A successful swap should create a change entry like:
+- type: swap_exercise or replace_exercise
+- status: confirmed
+- title/detail: "[Original] replaced with [Replacement]"
+- requestText: raw command
+- rationale: coaching explanation
+- prescription changes if applicable
+- context modifier summary if applicable
+- stimulus redistribution summary if applicable
+
+It should NOT create:
+- type: exercise_note
+- "Notes updated on..."
+- unconfirmed badge
+
+Add a strict mapping layer:
+If executed action is replace_exercise, swap, easier, harder, or equipment replacement:
+- change category = EXERCISE_REPLACEMENT
+- confirmed = true only after DB write succeeds
+- unconfirmed = only if the system asks user to confirm before execution
+- never use exercise_note category
+
+PART 4 — Intent classification guardrail
+The phrase:
+"Swap [exercise] with something similar"
+must always route to replace_exercise / swap intent, not update_notes.
+
+Add patterns:
+- /^swap\b/i
+- /swap .* with/i
+- /replace .* with/i
+- /something similar/i when paired with an exercise name
+- /make .* easier/i
+- /make .* harder/i
+
+If command starts with swap/replace/make easier/make harder:
+- block update_notes intent
+- force exercise replacement flow
+- if target exercise resolved, execute replacement
+- if target unclear, ask clarification
+
+PART 5 — Pending state and delayed mutation UX
+When user taps Swap/Easier/Harder:
+- immediately show that specific card as pending: "Swapping..." / "Making easier..." / "Updating..."
+- disable repeated taps for that card until mutation resolves
+- do not create a fake change-history entry until backend confirms
+- if backend fails, remove pending state and show error
+- if backend succeeds, update card and change history from real response
+
+PART 6 — Tests / QA
+Add tests for:
+1. "Swap Belt Squat with something similar" routes to replacement, not notes.
+2. "Swap Back Squat with something similar" routes to replacement, not notes.
+3. Successful replacement creates confirmed EXERCISE_REPLACEMENT history entry.
+4. Failed/pending replacement does not create confirmed history.
+5. Exercise notes cannot equal raw command text.
+6. Query invalidation/refetch happens after successful mutation.
+7. Program tab updates without switching tabs.
+8. Changes tab updates without switching tabs.
+9. Multiple rapid taps on Swap are deduped or ignored while pending.
+
+Important:
+Do not patch only Belt Squat.
+Fix the underlying mutation state sync, intent routing, notes sanitization, and change-history classification system.
