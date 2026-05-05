@@ -1,0 +1,499 @@
+Run a full QA battery for TrainChat across Strength, Speed/Footwork, and Mobility.
+
+Goal:
+Find routing, mutation, state sync, Active Programs, versioning, refinement, prescription, copy, and mobile UX issues before UX polish.
+
+Do not change code during this pass.
+Test only.
+Return a structured report with PASS/FAIL, exact bug, likely file/function, priority, and recommended fix.
+
+Device priority:
+- Mobile viewport first
+- Desktop second if time allows
+
+Core success criteria:
+- Chat is the CEO/main brain.
+- Structured UI actions execute deterministically.
+- No silent AI fallback.
+- No fake “edited” response without DB mutation.
+- No stale Live Program Panel.
+- No cross-lane Active Programs contamination.
+- No unsupported “increase load” language unless actual load data exists.
+
+━━━━━━━━━━━━━━━━━━━━━━
+PHASE 1 — CLEAN START / AUTH / BASELINE
+━━━━━━━━━━━━━━━━━━━━━━
+
+1. Load app fresh.
+Expected:
+- No console errors.
+- Correct focus lane selected.
+- Active program, if present, loads correctly.
+- Focus dots match actual active systems.
+
+2. Open Live Program Panel.
+Expected:
+- Correct program for selected focus.
+- Program tab, Adapted tab, Changes tab, History tab render.
+- No stuck loading states.
+
+3. Switch focus lanes:
+Strength → Speed/Footwork → Mobility → Strength.
+Expected:
+- Correct active program or empty state per lane.
+- No wrong-lane program shown.
+- History tab matches current lane.
+
+Record:
+- Any console errors
+- Network failures
+- stale/wrong UI
+
+━━━━━━━━━━━━━━━━━━━━━━
+PHASE 2 — STRENGTH LANE BUILD + EDIT
+━━━━━━━━━━━━━━━━━━━━━━
+
+Set focus: Strength.
+
+Build prompt:
+“Build me a 3-day strength program for general athletic performance.”
+
+Expected:
+- Program builds.
+- systemSaved true.
+- trainingSystemId returned.
+- Active Programs shows Strength active.
+- Sidebar/Live Program Panel hydrates with Week 1.
+- No duplicate active Strength systems.
+
+Verify program quality:
+- 3 sessions.
+- Strength-oriented structure.
+- Core/accessory work included.
+- No unsupported exact load prescriptions unless load values exist.
+
+Test Strength chip:
+Click “More Strength.”
+
+Expected:
+- Uses direct edit route, not chat/NLP.
+- No clarification message in chat.
+- Week-level change log created.
+- Primary/secondary lifts shift strength-focused.
+- Core/accessory exercises do NOT all become 3–6 reps.
+- Mobility/prep not converted to strength reps.
+- Session identities preserved with suffix/modifier, not replaced.
+
+Test Endurance chip:
+Click “More Endurance.”
+
+Expected:
+- Direct route.
+- Reps/rest visibly shift toward endurance/density.
+- Primary lifts move toward moderate reps/rest.
+- Accessories/core shift higher-rep or time-based.
+- Jumps/power work not turned into sloppy high-rep work.
+- Change log says week-level endurance refinement.
+
+Test Explosive chip:
+Click “More Explosive.”
+
+Expected:
+- Power exercises stay low-rep/high-quality.
+- Main lifts may receive speed/intent emphasis.
+- Accessories remain supportive.
+- Core remains trunk-appropriate.
+- Not every exercise gets identical prescription.
+
+Test chat edit:
+“Make Day 2 shorter.”
+
+Expected:
+- Chat applies session/day edit.
+- Only Day 2 changes.
+- No full program rebuild.
+- systemEdit.applied true.
+- Change log scope = session.
+- Sidebar updates immediately.
+
+Test exercise swap:
+Use Swap on one exercise.
+Expected:
+- Exercise changes.
+- Confirmation badge appears if verified.
+- If propagated to future weeks, propagation metadata is full/partial/none.
+- Partial propagation warning appears if applicable.
+
+Test misleading copy:
+Search visible UI/change logs for:
+- increase load
+- add weight
+- heavier loading
+- load progression
+
+Expected:
+- Avoided unless actual load values exist.
+- Uses “increase difficulty,” “progress intensity,” or “progress resistance when available.”
+
+━━━━━━━━━━━━━━━━━━━━━━
+PHASE 3 — SPEED / FOOTWORK LANE
+━━━━━━━━━━━━━━━━━━━━━━
+
+Set focus: Speed/Footwork.
+
+Build prompt:
+“Build me a 3-day acceleration and first-step quickness program for an athlete.”
+
+Expected:
+- Speed program builds and saves.
+- Strength active system remains separate.
+- Active Programs shows Speed active.
+- Focus dots update instantly.
+
+Verify program quality:
+- Acceleration/first-step focus.
+- Speed/power prescriptions are low-rep/high-quality.
+- Enough rest for output quality.
+- No strength-block copy if not appropriate.
+
+Click “More Explosive.”
+
+Expected:
+- Direct route.
+- Speed/power identity preserved.
+- Sprints/jumps/bounds remain low-rep/high-quality.
+- Rest is not shortened so much that power quality degrades.
+- No global prescription flattening.
+
+Chat edit:
+“Make Day 1 lower impact.”
+
+Expected:
+- Only Day 1 changes.
+- Jump/sprint stress reduced or swapped appropriately.
+- Scope = session.
+- No full rebuild.
+
+Chat edit:
+“Make this better for limited space.”
+
+Expected:
+- Correctly interprets as Speed limited-space refinement.
+- Does not switch focus lane.
+- Does not convert into mobility-only plan unless requested.
+
+History tab:
+Expected:
+- Shows Speed history only.
+- Does not show Strength versions.
+
+Restore older Speed version.
+Expected:
+- Restores Speed only.
+- Sidebar updates immediately.
+- Strength remains unchanged.
+
+━━━━━━━━━━━━━━━━━━━━━━
+PHASE 4 — MOBILITY LANE
+━━━━━━━━━━━━━━━━━━━━━━
+
+Set focus: Mobility.
+
+Build prompt:
+“Build me a 3-day mobility program for hips, spine, and shoulders.”
+
+Expected:
+- Mobility program builds and saves.
+- Mobility active system shown.
+- Strength and Speed remain separate.
+
+Verify program quality:
+- Mobility/prep emphasis.
+- No inappropriate strength prescription language.
+- No 3–6 rep strength prescriptions applied globally.
+- Sessions are simple and understandable.
+
+Typed edit:
+“Make this more desk-friendly.”
+
+Expected:
+- Correct route.
+- Mobility remains mobility-focused.
+- Desk-friendly suffix/identity applied if appropriate.
+- No strength or hypertrophy conversion.
+
+Typed edit:
+“Make Day 3 shorter and easier.”
+
+Expected:
+- Only Day 3 changes.
+- Scope = session.
+- Exercises remain mobility-appropriate.
+- Sidebar updates immediately.
+
+History tab:
+Expected:
+- Shows Mobility history only.
+- Restore works and updates sidebar immediately.
+
+━━━━━━━━━━━━━━━━━━━━━━
+PHASE 5 — ACTIVE PROGRAMS / LIBRARY / VERSIONING
+━━━━━━━━━━━━━━━━━━━━━━
+
+With all three lanes created:
+
+Switch Strength → Speed → Mobility.
+
+Expected:
+- Correct active system per lane.
+- Focus dots update instantly.
+- No cross-lane history contamination.
+- One active system per focus lane.
+
+Open Active Programs/library.
+
+Expected:
+- Current active program is obvious.
+- Archived programs, if shown, are not confused with active ones.
+- No duplicate active systems for same lane.
+- Program names/focus labels are correct.
+
+Version history:
+
+For each lane:
+- Open History.
+- Confirm versions belong to current lane.
+- Restore older version.
+- Confirm LIVE/current indicator moves correctly.
+- Confirm sidebar content updates immediately.
+
+Check version labels:
+Expected:
+- Initial Build exists.
+- Week/session/exercise refinements are understandable.
+- Restore entry appears after restore.
+- Version numbering does not appear obviously wrong.
+
+━━━━━━━━━━━━━━━━━━━━━━
+PHASE 6 — ROUTING / FALLBACK HARDENING
+━━━━━━━━━━━━━━━━━━━━━━
+
+Ambiguous edit:
+“make it better”
+
+Expected:
+- Safe clarification.
+- No fake success.
+- No program regeneration.
+- Program unchanged.
+
+Structured UI guard:
+Try any Refine This Program chip immediately after first build.
+
+Expected:
+- Direct edit endpoint.
+- No chat clarification.
+- No /messages endpoint.
+
+Clarification followup:
+Ask:
+“Change the program.”
+
+Expected:
+- System asks for clarification.
+Reply:
+“Make Day 1 shorter.”
+
+Expected:
+- Mutation applies.
+- Change log source = clarification_followup.
+- No AI fallback.
+
+Force/simulate edit failure if possible.
+
+Expected:
+- User sees:
+“I couldn’t apply that edit, so I left your program unchanged.”
+- No structuredData.
+- No new program generated.
+- Existing program unchanged.
+
+━━━━━━━━━━━━━━━━━━━━━━
+PHASE 7 — STATE SYNC / CACHE / RACE CONDITIONS
+━━━━━━━━━━━━━━━━━━━━━━
+
+Immediately after new build:
+- Click refine chip.
+Expected:
+- trainingSystemId exists.
+- Direct edit route.
+- Panel updates.
+
+Immediately after edit:
+- Switch tabs Program → Changes → History → Program.
+Expected:
+- Data consistent.
+- No stale old version.
+
+After restore:
+- Switch focus lanes.
+- Return to restored lane.
+Expected:
+- Restored content persists.
+
+Open app in second browser/tab if possible:
+- Mutate in one tab.
+- Focus/refetch second tab.
+Expected:
+- Second tab eventually shows current active system.
+
+Non-SSE / JSON path if possible:
+- Force or trigger non-stream edit path.
+Expected:
+- Same invalidation behavior as SSE.
+- Sidebar updates.
+
+━━━━━━━━━━━━━━━━━━━━━━
+PHASE 8 — SUCCESS OVERLAY / MOBILE UX
+━━━━━━━━━━━━━━━━━━━━━━
+
+Trigger:
+- Week refinement
+- Exercise swap
+- Session edit
+- Restore
+
+Expected:
+- Success overlay, if shown, does not trap user.
+- Can scroll.
+- Can close/dismiss.
+- Auto-dismiss works if implemented.
+- No full-screen locked state.
+- Back/close buttons work.
+- Mobile Safari/Replit webview controls do not block critical UI.
+
+Check Live Program Panel:
+- Close X works.
+- Tabs are tappable.
+- Program list scrolls.
+- Exercise cards scroll.
+- Input field usable.
+- Keyboard does not cover send button.
+
+━━━━━━━━━━━━━━━━━━━━━━
+PHASE 9 — PRESCRIPTION QUALITY MATRIX
+━━━━━━━━━━━━━━━━━━━━━━
+
+For each transformation, inspect visible exercise prescriptions.
+
+Strength:
+Expected:
+- Primary compounds: strength-focused.
+- Accessories: moderate/supportive.
+- Core/trunk: trunk-appropriate.
+- Mobility/prep untouched.
+
+Power/explosive:
+Expected:
+- Jumps/sprints/throws: low-rep/high-quality.
+- Main lifts: intent/bar-speed cues if used.
+- Accessories supportive.
+- Core appropriate.
+- No all-exercise 2–5 flattening.
+
+Endurance/conditioning:
+Expected:
+- Rest generally reduced.
+- Accessories/core higher-rep or time-based.
+- Power work protected.
+- No all-exercise 3–6 strength remnants.
+
+Hypertrophy/muscle growth:
+Test typed:
+“Make this more muscle growth focused.”
+
+Expected:
+- Primary lifts: 6–10-ish.
+- Secondary: 8–12-ish.
+- Accessories: 10–20 or increased volume.
+- Core preserved.
+- Power/mobility protected.
+
+Lower impact:
+Expected:
+- High-impact exercises reduced/swapped.
+- No unrelated full rebuild.
+- Prescriptions remain role-appropriate.
+
+Home gym:
+Expected:
+- Equipment substitutions happen.
+- Session identity preserved.
+- No generic title overwrite.
+
+Shorter sessions:
+Expected:
+- Sets reduced first.
+- Intent preserved.
+- No blind rep changes.
+
+━━━━━━━━━━━━━━━━━━━━━━
+PHASE 10 — COPY / TRUST / RECEIPTS
+━━━━━━━━━━━━━━━━━━━━━━
+
+Audit visible copy in:
+- Chat response
+- Success overlay
+- Change log
+- Program notes
+- Version history
+- Exercise notes
+
+Flag:
+- unsupported load claims
+- claims edit happened when no mutation applied
+- unclear “updated” with no details
+- overly technical database wording
+- wrong scope language: Day vs Week vs Program
+- wrong focus language: Strength shown in Speed/Mobility
+
+Expected:
+- Copy explains visible changes.
+- Coach-like, not database-like.
+- No misleading training claims.
+
+━━━━━━━━━━━━━━━━━━━━━━
+REPORT FORMAT
+━━━━━━━━━━━━━━━━━━━━━━
+
+Return:
+
+1. Executive summary
+- Overall readiness: GREEN / YELLOW / RED
+- Biggest risk remaining
+
+2. PASS/FAIL table by phase
+
+3. Bugs found
+For each:
+- Priority: P0/P1/P2
+- Lane: Strength/Speed/Mobility/Cross-lane
+- Exact steps to reproduce
+- Expected
+- Actual
+- Likely files/functions
+- Recommended fix
+
+4. Architecture notes
+- Any route fallback observed
+- Any stale cache observed
+- Any cross-lane contamination
+- Any duplicate active systems
+
+5. UX notes
+- Anything confusing
+- Anything that feels powerful
+- Anything that should be simplified
+
+6. Final recommended next moves
+Ranked top 5 fixes before UX polish.
