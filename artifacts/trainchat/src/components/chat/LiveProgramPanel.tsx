@@ -681,7 +681,8 @@ function ProgramTab({
   // ── Refinement state ─────────────────────────────────────────────────────
   const [pendingRefinement, setPendingRefinement] = useState<string | null>(null);
   const [refineInput, setRefineInput] = useState("");
-  const [showProgramUpdated, setShowProgramUpdated] = useState(false);
+  const [showSuccessOverlay, setShowSuccessOverlay] = useState(false);
+  const [successOverlayFading, setSuccessOverlayFading] = useState(false);
   const [panelEditError, setPanelEditError] = useState<string | null>(null);
 
   /**
@@ -810,11 +811,31 @@ function ProgramTab({
     setLearnModalOpen(false);
   }
   const programUpdatedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const successFadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevBuildingRef = useRef(false);
   const processingMinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [processingStartTime, setProcessingStartTime] = useState<number | null>(null);
   const [showContentReveal, setShowContentReveal] = useState(false);
   const contentRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Fade out then unmount the success overlay — safe to call from anywhere.
+  function dismissSuccessOverlay() {
+    if (programUpdatedTimerRef.current) clearTimeout(programUpdatedTimerRef.current);
+    if (successFadeTimerRef.current) clearTimeout(successFadeTimerRef.current);
+    setSuccessOverlayFading(true);
+    successFadeTimerRef.current = setTimeout(() => {
+      setShowSuccessOverlay(false);
+      setSuccessOverlayFading(false);
+    }, 200);
+  }
+
+  // Helper: show the success overlay and schedule its auto-dismiss.
+  function triggerSuccessOverlay() {
+    setShowSuccessOverlay(true);
+    setSuccessOverlayFading(false);
+    if (programUpdatedTimerRef.current) clearTimeout(programUpdatedTimerRef.current);
+    programUpdatedTimerRef.current = setTimeout(() => dismissSuccessOverlay(), 1600);
+  }
 
   // Clear loading state + flash "Program Updated" when stream completes.
   // Enforces a minimum 300ms visual processing phase so fast updates never snap instantly.
@@ -829,21 +850,21 @@ function ProgramTab({
       processingMinTimerRef.current = setTimeout(() => {
         setPendingRefinement(null);
         setProcessingStartTime(null);
-        setShowProgramUpdated(true);
+        triggerSuccessOverlay();
         // Trigger a brief content fade-in after reveal
         setShowContentReveal(true);
         if (contentRevealTimerRef.current) clearTimeout(contentRevealTimerRef.current);
         contentRevealTimerRef.current = setTimeout(() => setShowContentReveal(false), 350);
-        if (programUpdatedTimerRef.current) clearTimeout(programUpdatedTimerRef.current);
-        programUpdatedTimerRef.current = setTimeout(() => setShowProgramUpdated(false), 3000);
       }, remaining);
     }
     prevBuildingRef.current = isBuilding;
     return () => {
       if (programUpdatedTimerRef.current) clearTimeout(programUpdatedTimerRef.current);
+      if (successFadeTimerRef.current) clearTimeout(successFadeTimerRef.current);
       if (processingMinTimerRef.current) clearTimeout(processingMinTimerRef.current);
       if (contentRevealTimerRef.current) clearTimeout(contentRevealTimerRef.current);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buildingState?.isBuilding, pendingRefinement, processingStartTime]);
 
   function sendRefinement(
@@ -957,12 +978,10 @@ function ProgramTab({
       updateChangesCache(result.changeLogEntry ?? null);
 
       setPendingRefinement(null);
-      setShowProgramUpdated(true);
+      triggerSuccessOverlay();
       setShowContentReveal(true);
       if (contentRevealTimerRef.current) clearTimeout(contentRevealTimerRef.current);
       contentRevealTimerRef.current = setTimeout(() => setShowContentReveal(false), 350);
-      if (programUpdatedTimerRef.current) clearTimeout(programUpdatedTimerRef.current);
-      programUpdatedTimerRef.current = setTimeout(() => setShowProgramUpdated(false), 3000);
 
       onSidebarMutation?.();
       toast({ title: "Program updated", description: chip.label, duration: 2500 });
@@ -1022,12 +1041,10 @@ function ProgramTab({
       updateChangesCache(result.changeLogEntry ?? null);
 
       setPanelMutating(null);
-      setShowProgramUpdated(true);
+      triggerSuccessOverlay();
       setShowContentReveal(true);
       if (contentRevealTimerRef.current) clearTimeout(contentRevealTimerRef.current);
       contentRevealTimerRef.current = setTimeout(() => setShowContentReveal(false), 350);
-      if (programUpdatedTimerRef.current) clearTimeout(programUpdatedTimerRef.current);
-      programUpdatedTimerRef.current = setTimeout(() => setShowProgramUpdated(false), 3000);
 
       onSidebarMutation?.();
       toast({
@@ -1123,13 +1140,11 @@ function ProgramTab({
       });
       onSidebarMutation?.();
       setPendingRefinement(null);
-      setShowProgramUpdated(true);
+      triggerSuccessOverlay();
       // Trigger content fade-in reveal
       setShowContentReveal(true);
       if (contentRevealTimerRef.current) clearTimeout(contentRevealTimerRef.current);
       contentRevealTimerRef.current = setTimeout(() => setShowContentReveal(false), 350);
-      if (programUpdatedTimerRef.current) clearTimeout(programUpdatedTimerRef.current);
-      programUpdatedTimerRef.current = setTimeout(() => setShowProgramUpdated(false), 3000);
 
       // Swap contract validation — only show "confirmed swap" label when the backend
       // verified a real replace_exercise landed. If the contract is absent or unconfirmed
@@ -1313,12 +1328,10 @@ function ProgramTab({
       onSidebarMutation?.();
 
       // Flash "Program Updated" banner (same path as direct exercise edits)
-      setShowProgramUpdated(true);
+      triggerSuccessOverlay();
       setShowContentReveal(true);
       if (contentRevealTimerRef.current) clearTimeout(contentRevealTimerRef.current);
       contentRevealTimerRef.current = setTimeout(() => setShowContentReveal(false), 350);
-      if (programUpdatedTimerRef.current) clearTimeout(programUpdatedTimerRef.current);
-      programUpdatedTimerRef.current = setTimeout(() => setShowProgramUpdated(false), 3000);
 
       // Expand the mutated day so the new exercise is visible
       setExpandedDay(dayIndex);
@@ -2119,13 +2132,28 @@ function ProgramTab({
         )}
 
         {/* Program Updated flash */}
-        {showProgramUpdated && (
+        {showSuccessOverlay && (
           <div
-            className="flex items-center gap-1.5 mb-3 px-2.5 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20"
-            style={{ animation: "fadeSlideIn 0.2s ease both" }}
+            role="status"
+            onClick={dismissSuccessOverlay}
+            className="flex items-center justify-between gap-2 mb-3 px-2.5 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20 cursor-pointer select-none"
+            style={{
+              animation: "fadeSlideIn 0.2s ease both",
+              opacity: successOverlayFading ? 0 : 1,
+              transition: "opacity 200ms ease",
+            }}
           >
-            <CheckCircle className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
-            <span className="text-[10px] font-semibold text-green-400">Program Updated</span>
+            <div className="flex items-center gap-1.5">
+              <CheckCircle className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
+              <span className="text-[10px] font-semibold text-green-400">Program Updated</span>
+            </div>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); dismissSuccessOverlay(); }}
+              className="text-[10px] font-bold text-green-400/60 hover:text-green-300 transition-colors flex-shrink-0"
+            >
+              Done
+            </button>
           </div>
         )}
         {panelEditError && (
