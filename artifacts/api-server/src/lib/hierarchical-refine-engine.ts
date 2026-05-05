@@ -153,15 +153,21 @@ export function getPrescriptionForExerciseTransformation(
       return { rest: "30-45 sec" };                                               // rest is the main lever
     }
 
-    // ── Hypertrophy / volume ───────────────────────────────────────────────
+    // ── Hypertrophy / muscle growth ────────────────────────────────────────
+    // Hypertrophy is a distinct training quality — not just "more volume everywhere."
+    // Primary lifts stay in moderate-heavy range; accessories absorb the volume increase.
+    // Power/plyometric exercises are protected from high-rep hypertrophy work.
+    // Core/trunk stays functional — not converted to generic bodybuilding sets.
     case "hypertrophy":
     case "hypertrophy_focus":
+    case "muscle_growth":
     case "increase_volume": {
-      if (isMobilityOrPrep)   return {};
-      if (isCoreOrTrunk)      return { reps: "12-20", rest: "45-60 sec" };
-      if (isAccessoryOrAux)   return { sets: 3, reps: "10-15", rest: "45-60 sec" };
-      if (isSecondary)        return { sets: 3, reps: "8-12",  rest: "60-90 sec" };
-      if (isPrimary || isPower) return { sets: 4, reps: "8-12", rest: "60-90 sec" };
+      if (isMobilityOrPrep)   return {};                                             // preserve warmup/mobility
+      if (isPowerExercise)    return { reps: "3-5", rest: "90-120 sec" };            // protect plyo/explosive intent
+      if (isCoreOrTrunk)      return { sets: 3, reps: "10-15", rest: "45-60 sec" }; // functional trunk, not 20-rep fatigue
+      if (isAccessoryOrAux)   return { sets: 3, reps: "10-20", rest: "45-90 sec" }; // main volume lever
+      if (isSecondary)        return { sets: 3, reps: "8-12",  rest: "60-120 sec" };
+      if (isPrimary)          return { sets: 4, reps: "6-10",  rest: "90-180 sec" }; // moderate-heavy, quality reps
       return { reps: "10-15", rest: "60-90 sec" };
     }
 
@@ -200,27 +206,47 @@ async function verifyAndRepairPrescriptions(
   transformation: string,
 ): Promise<number> {
   let repaired = 0;
-  const isEndurance = ["endurance", "endurance_focus", "conditioning_focus"].includes(transformation);
-  const isStrength  = ["strength", "strength_focus", "increase_difficulty"].includes(transformation);
+  const isEndurance   = ["endurance", "endurance_focus", "conditioning_focus"].includes(transformation);
+  const isStrength    = ["strength", "strength_focus", "increase_difficulty"].includes(transformation);
+  const isHypertrophy = ["hypertrophy", "hypertrophy_focus", "muscle_growth", "increase_volume"].includes(transformation);
+
+  // Pattern: low-rep strength ranges (2–6 reps)
+  const LOW_REP_RE    = /^[2-6]$|^[23]-[456]$|^3-6$|^4-6$|^2-4$|^2-5$/;
+  // Pattern: high-rep hypertrophy/accessory ranges (15+ reps)
+  const HIGH_REP_RE   = /^1[5-9]$|^[2-9]\d$|^1[5-9]-\d+$|^[2-9]\d-\d+$/;
 
   for (const ex of exercises) {
     if (!ex.id) continue;
-    const reps = ex.reps ?? "";
+    const reps = (ex.reps ?? "").trim();
+    const cls = classifyExercise(ex);
 
-    if (isEndurance && /^[23456](-[56])?$|^3-6$|^4-6$|^2-4$/.test(reps.trim())) {
+    if (isEndurance && LOW_REP_RE.test(reps)) {
+      // Endurance transformation should not leave any exercise in low-rep strength ranges
       const fix = getPrescriptionForExerciseTransformation(ex, transformation);
       if (fix.reps) {
         await db.update(sessionExercises).set({ reps: fix.reps }).where(eq(sessionExercises.id, ex.id));
         repaired++;
       }
-    } else if (isStrength) {
-      const { isCoreOrTrunk, isAccessoryOrAux, isMobilityOrPrep } = classifyExercise(ex);
-      if ((isCoreOrTrunk || isAccessoryOrAux || isMobilityOrPrep) && /^3-6$|^[23]-[45]$/.test(reps.trim())) {
+    } else if (isStrength && (cls.isCoreOrTrunk || cls.isAccessoryOrAux || cls.isMobilityOrPrep) && LOW_REP_RE.test(reps)) {
+      // Strength transformation must not force 3–6 reps onto core, accessories, or mobility
+      const fix = getPrescriptionForExerciseTransformation(ex, transformation);
+      if (fix.reps) {
+        await db.update(sessionExercises).set({ reps: fix.reps }).where(eq(sessionExercises.id, ex.id));
+        repaired++;
+      }
+    } else if (isHypertrophy) {
+      // Power/plyometric exercises must not be turned into high-rep hypertrophy work
+      if (cls.isPowerExercise && HIGH_REP_RE.test(reps)) {
         const fix = getPrescriptionForExerciseTransformation(ex, transformation);
         if (fix.reps) {
           await db.update(sessionExercises).set({ reps: fix.reps }).where(eq(sessionExercises.id, ex.id));
           repaired++;
         }
+      }
+      // Mobility/prep must not be converted into generic hypertrophy sets
+      if (cls.isMobilityOrPrep && reps !== "") {
+        await db.update(sessionExercises).set({ reps: null }).where(eq(sessionExercises.id, ex.id));
+        repaired++;
       }
     }
   }
@@ -243,6 +269,7 @@ function sessionIdentityForTransformation(type: string): { label: string; emphas
 
     case "hypertrophy":
     case "hypertrophy_focus":
+    case "muscle_growth":
     case "increase_volume":
       return { label: "Hypertrophy & Volume", emphasis: "Mechanical tension, high time under tension" };
 
@@ -344,6 +371,7 @@ function mapTransformationToFocusKey(transformation: string): string {
       return "strength";
     case "hypertrophy":
     case "hypertrophy_focus":
+    case "muscle_growth":
     case "increase_volume":
       return "hypertrophy";
     case "endurance":
@@ -404,6 +432,7 @@ const TRANSFORMATION_MODIFIERS: Record<string, TransformationModifier> = {
   decrease_volume:      { labelSuffix: "— Recovery Focus",        emphasisNote: "scaled back for recovery and tissue quality" },
   hypertrophy:          { labelSuffix: "+ Hypertrophy Emphasis",  emphasisNote: "volume and hypertrophy emphasis increased" },
   hypertrophy_focus:    { labelSuffix: "+ Hypertrophy Emphasis",  emphasisNote: "volume and hypertrophy emphasis increased" },
+  muscle_growth:        { labelSuffix: "+ Muscle Growth Emphasis", emphasisNote: "muscle growth focus — mechanical tension and accessory volume increased" },
   increase_volume:      { labelSuffix: "+ Hypertrophy Emphasis",  emphasisNote: "volume and hypertrophy emphasis increased" },
 };
 

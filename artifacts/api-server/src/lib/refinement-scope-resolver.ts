@@ -91,6 +91,8 @@ const WEEK_TRANSFORMATION_PATTERNS: Array<{ pattern: RegExp; transformation: str
   { pattern: /\b(conditioning|cardio|aerobic|capacity)\b/i,         transformation: "endurance" },
   { pattern: /\b(shorter sessions?|less time)\b/i,                  transformation: "reduce_time" },
   { pattern: /\bhypertrophy\b/i,                                    transformation: "hypertrophy" },
+  { pattern: /\bhypertrophy emphasis\b/i,                           transformation: "hypertrophy" },
+  { pattern: /\b(more muscle|muscle growth|build muscle|muscle mass|grow muscle)\b/i, transformation: "muscle_growth" },
   { pattern: /\b(volume|more sets?|more reps?)\b/i,                 transformation: "hypertrophy" },
 ];
 

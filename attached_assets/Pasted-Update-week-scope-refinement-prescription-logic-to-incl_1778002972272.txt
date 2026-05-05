@@ -1,0 +1,66 @@
+Update week-scope refinement prescription logic to include hypertrophy / muscle growth.
+
+Hypertrophy must be treated as its own training quality, not just “more volume everywhere.”
+
+Add/confirm transformation handling for:
+- hypertrophy
+- hypertrophy_focus
+- muscle_growth
+- increase_volume
+
+Hypertrophy rules by exercise role:
+
+1. Primary compound lifts
+Examples: squat, trap bar deadlift, bench, press, rows, RDL.
+Prescription:
+- 3–5 sets
+- 6–10 reps
+- 90–180 sec rest
+- Keep technique quality high
+- Do not turn max-strength lifts into sloppy high-rep fatigue work
+
+2. Secondary compound lifts
+Prescription:
+- 3–4 sets
+- 8–12 reps
+- 60–120 sec rest
+
+3. Accessories / auxiliary
+Prescription:
+- 2–4 sets
+- 10–20 reps
+- 45–90 sec rest
+- These are the main place to increase volume
+
+4. Core / trunk
+Do not treat all core as bodybuilding work.
+Prescription:
+- Anti-rotation / anti-extension: 8–15 reps or 20–45 sec holds
+- Loaded trunk flexion/carry variations: moderate volume
+- Preserve trunk function
+
+5. Power exercises
+Do not turn jumps, sprints, throws, or explosive lifts into high-rep hypertrophy work.
+Options:
+- Preserve low-rep power prescription
+- Or swap to a safer hypertrophy-compatible exercise only if the session goal allows it
+
+6. Mobility / prep
+Do not convert mobility/prep into hypertrophy work.
+Keep as prep, activation, or movement quality.
+
+Hypertrophy safety verifier:
+- If every exercise becomes 10–20 reps, repair.
+- If jumps/sprints/throws become high-rep hypertrophy, repair.
+- If core/prep/mobility gets converted into generic hypertrophy sets, repair.
+- If accessories do not receive any increased volume during hypertrophy refinement, flag for review.
+
+Acceptance test:
+Click “More Muscle” / “Hypertrophy Emphasis” / “Increase Volume.”
+Expected:
+- Main lifts shift to 6–10 reps.
+- Secondary lifts shift to 8–12 reps.
+- Accessories shift to 10–20 reps or gain volume.
+- Core stays trunk-appropriate.
+- Power and mobility work preserve their role.
+- Visible sets/reps/rest update correctly.
