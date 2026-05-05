@@ -547,7 +547,7 @@ function generateFallbackFollowup(
     return `Good call — if the volume feels high in week 1, reduce each working set by one and prioritize movement quality over load. The structure stays the same; just start conservative and earn the volume over weeks 2-3.`;
   }
   if (lower.match(/harder|more volume|too easy|advanced/)) {
-    return `If week 1 feels manageable, add one working set to your two heaviest compound lifts in week 2, and increase load by 2.5-5% where form held well. Don't chase fatigue — chase quality reps with progressive load.`;
+    return `If week 1 feels manageable, add one working set to your two heaviest compound lifts in week 2, and increase difficulty where form held well — an extra rep, tighter tempo, or harder variation. Don't chase fatigue — chase quality reps with stronger intent.`;
   }
   if (lower.match(/swap|change|replace|substitute|alternative/)) {
     return `Happy to swap exercises. Tell me which movement you want to replace and I'll give you a biomechanically equivalent substitute that matches your equipment and won't compromise the program structure.`;

@@ -181,7 +181,7 @@ function analyzeFeedback(
     insights.push({
       type: "progression_ready",
       title: "Ready to progress",
-      body: `You've been handling sessions well — feeling strong after training. This is a solid signal to add a small load increment or volume increase next week.`,
+      body: `You've been handling sessions well — feeling strong after training. This is a solid signal to increase difficulty next week: extra reps, an additional set, or a harder variation.`,
       whyExplanation: `Your last ${n} sessions averaged ${fmt(diffAvg)}/5 difficulty and ${fmt(energyAvg)}/5 post-session energy. Sessions feeling easy with high energy output means your body has adapted and is ready for more.`,
       priority: 3,
       triggerSource: "feedback_tolerance",

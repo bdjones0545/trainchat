@@ -615,11 +615,11 @@ export function computeNextTarget(
   if (goal === "strength") {
     if (lastLoad !== null && loadInc > 0) {
       targetLoad = lastLoad + loadInc;
-      reasoning = `Last session: ${lastLoad} lbs — adding ${loadInc} lbs. Strength requires consistent load progression.`;
-      coachNote = `Target: ${targetLoad} lbs × ${lastReps ?? "same"} reps. Load is the priority.`;
+      reasoning = `Last session: ${lastLoad} lbs — progressing by ${loadInc} lbs. Consistent resistance progression drives strength.`;
+      coachNote = `Target: ${targetLoad} lbs × ${lastReps ?? "same"} reps. Resistance progression is the priority when a logged baseline exists.`;
     } else {
-      reasoning = "No load recorded. Add weight today and log it.";
-      coachNote = "Add load based on feel — then we can track from here.";
+      reasoning = "No resistance logged yet — train with strong intent and log this session to establish your baseline.";
+      coachNote = "Work at a challenging effort level — logging this session lets us track progress from here.";
     }
   } else if (goal === "hypertrophy") {
     if (lastReps !== null && repInc > 0) {

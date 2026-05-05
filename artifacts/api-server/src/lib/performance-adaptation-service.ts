@@ -103,7 +103,7 @@ function analyzeMovement(
   if (score >= 2) {
     trend = "improving";
     adaptationHint = "progress";
-    notes = `${count} exposures trending easy — modest load progression appropriate`;
+    notes = `${count} exposures trending easy — modest progression appropriate (extra reps, sets, or harder variation)`;
   } else if (score <= -3) {
     trend = "regressing";
     adaptationHint = "reduce";
@@ -357,7 +357,7 @@ function buildPromptBlock(
     for (const m of actionableMovements) {
       const hintLabel =
         m.adaptationHint === "progress"
-          ? "→ progress load"
+          ? "→ progress difficulty"
           : m.adaptationHint === "reduce"
           ? "→ hold/reduce"
           : "→ maintain";

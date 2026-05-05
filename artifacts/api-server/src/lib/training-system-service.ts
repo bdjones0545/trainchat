@@ -325,10 +325,10 @@ function getCoachingNotes(goal: string, weekIndex: number, dayLabel: string): st
       return "W1 Establish — Learn the session structure. Log your loads for every working set — this is your baseline for the block.";
     }
     if (weekIndex === 1) { // Build
-      if (isUpperSession) return "W2 Build — Add 2.5–5% to upper body compounds from Week 1. Maintain bar speed and technical control. 2-3 RIR on working sets.";
-      if (isLowerSession) return "W2 Build — Increase primary lift loads 2.5–5% from W1. Fuller accessory volume this week. Keep quality high on the unilateral work.";
+      if (isUpperSession) return "W2 Build — Push intensity on upper body compounds from Week 1. Maintain bar speed and technical control. 2-3 RIR on working sets.";
+      if (isLowerSession) return "W2 Build — Progress intensity on primary lifts from W1. Fuller accessory volume this week. Keep quality high on the unilateral work.";
       if (isPowerSession) return "W2 Build — Push power output with controlled aggression. More intent than W1 — same quality.";
-      return "W2 Build — Progressive overload begins here. Add weight where you can, maintain quality where you can't. Log everything.";
+      return "W2 Build — Progressive overload begins here. Push intensity where you can, maintain quality where you can't. Log everything.";
     }
     if (weekIndex === 2) { // Intensify
       if (isUpperSession) return "W3 Intensify — Heaviest upper body week of the block. Work to 1-2 RIR on primaries. Bar speed matters more than weight on the bar.";
@@ -1401,7 +1401,7 @@ function applyWeekProgressionToExercises(
     2: {
       primarySetMod: 0,
       accessorySetMod: 0,
-      intentNote: "Build phase — increase load 5-10% from Week 1. Push working sets with controlled effort. 2-3 RIR on primaries.",
+      intentNote: "Build phase — progress intensity from Week 1. Push working sets with controlled effort. 2-3 RIR on primaries.",
     },
     3: {
       primarySetMod: 1,

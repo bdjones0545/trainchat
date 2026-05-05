@@ -814,7 +814,7 @@ function computeProgression(
   switch (goal) {
     case "strength":
       return {
-        progressionModel: "Linear load progression (add weight when top of rep range is achieved cleanly)",
+        progressionModel: "Progressive difficulty model (add reps, then increase resistance when top of rep range is achieved cleanly and a baseline is logged)",
         progressionRate: experience === "beginner"
           ? "2.5–5kg on compound lifts per week when technique is solid"
           : "2.5kg on upper body, 5kg on lower body — hold weight if bar speed degrades",

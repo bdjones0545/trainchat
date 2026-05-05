@@ -33,7 +33,7 @@ export const TRAINING_LEVEL_PROFILES: Record<TrainingLevel, TrainingLevelProfile
     level: "beginner",
     yearsRange: "0–12 months",
     description: "New to structured training. Responds to nearly any stimulus. Does not need complexity.",
-    progressionStyle: "Linear — add weight every session or every week. Simple is best.",
+    progressionStyle: "Linear — increase difficulty every session or every week (more reps, tighter tempo, or resistance when a logged baseline exists). Simple is best.",
     blockStructureRequired: false,
     deloadFrequency: "Every 8–12 weeks or when performance stagnates",
     volumeTolerance: "Low. 3–4 sets per primary pattern. More is NOT better.",
@@ -43,7 +43,7 @@ export const TRAINING_LEVEL_PROFILES: Record<TrainingLevel, TrainingLevelProfile
     level: "novice",
     yearsRange: "6–18 months",
     description: "Consistent training, good fundamentals. Starting to benefit from slightly more structure.",
-    progressionStyle: "Linear to double progression — progress load week-to-week when reps are achieved.",
+    progressionStyle: "Linear to double progression — increase difficulty week-to-week when reps are achieved (reps first, then resistance when a logged baseline exists).",
     blockStructureRequired: false,
     deloadFrequency: "Every 6–8 weeks",
     volumeTolerance: "Moderate. 3–5 sets per primary pattern.",
@@ -201,12 +201,12 @@ export const GOAL_BLOCK_STRUCTURES: Record<GoalKey, GoalBlockStructure> = {
     peakingNotes: "Strength peaking is real and should be respected. Accumulation builds the base; intensification raises force output; realization tests/demonstrates the peak.",
     goalDistinction: "Strength is NOT hypertrophy — heavy low-rep sets are the primary tool. Volume cycling is used to manage fatigue, not for muscle growth.",
     beginnerStructure: [
-      { blockType: "accumulation", weeks: 4, emphasis: "Linear load progression on squat, deadlift, bench, and row. Technical quality over intensity." },
+      { blockType: "accumulation", weeks: 4, emphasis: "Linear intensity progression on squat, deadlift, bench, and row. Technical quality over maximum effort." },
       { blockType: "deload", weeks: 1, emphasis: "Full deload after first training cycle." },
     ],
     intermediateStructure: [
       { blockType: "accumulation", weeks: 4, emphasis: "4×6-8 primary lifts at 70-78%. Volume base for intensification." },
-      { blockType: "intensification", weeks: 3, emphasis: "4×3-5 at 80-87%. Load increases weekly. Reduce accessory volume." },
+      { blockType: "intensification", weeks: 3, emphasis: "4×3-5 at 80-87% effort. Intensity progresses weekly. Reduce accessory volume." },
       { blockType: "deload", weeks: 1, emphasis: "Volume deload — same movements, 60% intensity, 3 sets only." },
     ],
     advancedStructure: [
@@ -227,8 +227,8 @@ export const GOAL_BLOCK_STRUCTURES: Record<GoalKey, GoalBlockStructure> = {
       { blockType: "deload", weeks: 1, emphasis: "Recovery week at 50% volume." },
     ],
     intermediateStructure: [
-      { blockType: "accumulation", weeks: 5, emphasis: "4×8-12 primary. High accessory volume. Double progression — hit all reps, add weight." },
-      { blockType: "accumulation", weeks: 4, emphasis: "4-5×6-10 primary. Increase load 2.5-5% weekly. Introduce volume progression (add sets)." },
+      { blockType: "accumulation", weeks: 5, emphasis: "4×8-12 primary. High accessory volume. Double progression — hit all reps, then increase difficulty." },
+      { blockType: "accumulation", weeks: 4, emphasis: "4-5×6-10 primary. Progress difficulty weekly. Introduce volume progression (add sets)." },
       { blockType: "deload", weeks: 1, emphasis: "50% volume reduction. Maintain all movement patterns." },
     ],
     advancedStructure: [
@@ -255,7 +255,7 @@ export const GOAL_BLOCK_STRUCTURES: Record<GoalKey, GoalBlockStructure> = {
     ],
     advancedStructure: [
       { blockType: "accumulation", weeks: 3, emphasis: "Broad power base. Med ball rotational + overhead, broad/lateral/box jumps, short sprints. 4-5×4-5 strength at 70-78%. Full arsenal." },
-      { blockType: "intensification", weeks: 3, emphasis: "Contrast training priority. Heavier loading (4×2-3 at 82-90%) paired with plyometrics. Sprint quality raised. Reduce variety." },
+      { blockType: "intensification", weeks: 3, emphasis: "Contrast training priority. Higher intensity (4×2-3 at 82-90% effort) paired with plyometrics. Sprint quality raised. Reduce variety." },
       { blockType: "realization", weeks: 1, emphasis: "Maximum power expression. Reduce volume 50%. Highest-quality sprints, jumps, contrast pairs. Full rest between efforts." },
       { blockType: "deload", weeks: 1, emphasis: "Neural recovery — halve all plyometric and sprint volume. Submaximal strength only." },
     ],
@@ -399,7 +399,7 @@ export const PROGRESSION_MODELS: Record<ProgressionModel, ProgressionModelDefini
     model: "linear",
     displayName: "Linear Progression",
     description: "Add a small fixed amount to the bar every session or every week. The simplest and most effective model for beginners.",
-    mechanicDescription: "Week 1: 100kg × 5 → Week 2: 102.5kg × 5 → Week 3: 105kg × 5. Progress is made by adding weight on a fixed schedule.",
+    mechanicDescription: "Week 1: 100kg × 5 → Week 2: 102.5kg × 5 → Week 3: 105kg × 5. Progress is made by systematically increasing difficulty on a fixed schedule (resistance when logged, otherwise reps or tempo).",
     exampleWeeks: "Week 1: 3×5 @ 80kg | Week 2: 3×5 @ 82.5kg | Week 3: 3×5 @ 85kg",
     bestFor: ["beginner", "novice", "re_entry block", "simple strength goals"],
     avoidFor: ["advanced athletes", "peaking", "power development"],
@@ -407,7 +407,7 @@ export const PROGRESSION_MODELS: Record<ProgressionModel, ProgressionModelDefini
   double_progression: {
     model: "double_progression",
     displayName: "Double Progression",
-    description: "Progress reps first within a given rep range, then increase load and reset reps. Highly effective for intermediate athletes.",
+    description: "Progress reps first within a given rep range, then increase difficulty and reset reps. Highly effective for intermediate athletes.",
     mechanicDescription: "Set a rep RANGE (e.g., 6–10). When you hit the top of the range for all sets, add load and drop reps. Repeat.",
     exampleWeeks: "Week 1: 4×7 @ 80kg | Week 2: 4×9 @ 80kg | Week 3: 4×10 @ 80kg → Week 4: 4×7 @ 82.5kg",
     bestFor: ["intermediate", "hypertrophy", "strength", "accumulation block"],
@@ -807,7 +807,7 @@ function buildProgressionNarrative(
   level: TrainingLevel,
 ): string {
   if (level === "beginner" || level === "novice") {
-    return `Because this athlete is at ${level} level, progression is linear and simple. Complex block structures are unnecessary and counterproductive. Add weight each week when reps are completed. Consistency and technical quality drive progress more than sophisticated programming at this stage.`;
+    return `Because this athlete is at ${level} level, progression is linear and simple. Complex block structures are unnecessary and counterproductive. Increase difficulty each week when reps are completed — more reps, tighter tempo, or resistance when a logged baseline exists. Consistency and technical quality drive progress more than sophisticated programming at this stage.`;
   }
 
   const blockDescriptions = blocks.map((b) => {
@@ -941,10 +941,10 @@ function buildSimpleProgressionContext(
   const progressionInstructions = (() => {
     if (level === "beginner" || level === "novice") {
       return `For this ${level} athlete, use LINEAR PROGRESSION:
-- Add weight every session (beginner) or every week (novice) when all reps are completed
+- Increase difficulty every session (beginner) or every week (novice) when all reps are completed — more reps, tighter tempo, or resistance when a logged baseline exists
 - Do NOT use complex block periodization — it creates unnecessary cognitive load for beginners
-- 3–4 sets per primary lift, 10-15 reps initially, progress to 5-8 reps as load increases
-- Technique comes before load — never sacrifice form to add weight
+- 3–4 sets per primary lift, 10-15 reps initially, progress to 5-8 reps as intensity increases
+- Technique comes before intensity — never sacrifice form to increase difficulty
 - A deload is only needed if stagnation occurs (3 consecutive failures to progress)`;
     }
 
@@ -972,7 +972,7 @@ ${progressionInstructions}
 
 ### LANGUAGE REQUIREMENT
 When presenting this program, reference the athlete's level and progression logic:
-- "${level === "beginner" ? "Because you're building your foundation, we'll keep progression simple — add weight each week when your reps are there." : `Because you're ${level}, I'm using ${progDef.displayName} to drive adaptation without plateauing.`}"
+- "${level === "beginner" ? "Because you're building your foundation, we'll keep progression simple — increase difficulty each week when your reps are there (more reps, tighter tempo, or resistance when you have a logged baseline)." : `Because you're ${level}, I'm using ${progDef.displayName} to drive adaptation without plateauing.`}"
 `.trim();
 }
 

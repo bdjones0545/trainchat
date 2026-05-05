@@ -593,7 +593,7 @@ function buildPrimaryDecision(
         preserve: ["program structure", "movement patterns", "frequency"],
         modify: ["loading targets", "rep ranges", "effort expectations"],
         explanation: isIncrease
-          ? `Got it — pushing intensity.\n\nPrimary lifts moved to a lower rep range with heavier loading expectation. Rest extended to support the increased effort.\n\nYour update is live.`
+          ? `Got it — pushing intensity.\n\nPrimary lifts moved to a lower rep range with a higher effort target. Rest extended to support the increased demand.\n\nYour update is live.`
           : `Got it — dialing it back.\n\nRep ranges shifted slightly higher, effort expectations at technical quality rather than maximum. This is still productive — just not max-output.\n\nYour update is live.`,
         mutations: isIncrease
           ? [

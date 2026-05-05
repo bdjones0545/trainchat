@@ -2579,8 +2579,8 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
       return {
         intent: "increase_intensity",
         scope: "week",
-        changeSummary: "Week intensity target elevated. Progress loads on primary movements, target 1-2 RIR on top sets.",
-        changes: [{ type: "update_week", id: weekId, updates: { volumeLevel: "high", focus: "High intensity accumulation", notes: "Push loads this week. Target 1-2 RIR on primaries. Keep accessories conservative if needed." }, reason: "Intensity escalation requested" }],
+        changeSummary: "Week intensity target elevated. Progress difficulty on primary movements, target 1-2 RIR on top sets.",
+        changes: [{ type: "update_week", id: weekId, updates: { volumeLevel: "high", focus: "High intensity accumulation", notes: "Push intensity this week. Target 1-2 RIR on primaries. Keep accessories conservative if needed." }, reason: "Intensity escalation requested" }],
       };
     }
 

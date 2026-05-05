@@ -317,10 +317,10 @@ export async function generatePredictions(userId: number): Promise<PredictionRes
         severity,
         confidence: Math.min(0.85, 0.5 + stalledCount * 0.1),
         title: "Progression plateau forming",
-        explanation: "Multiple lifts are showing effort without load increase.",
-        evidence: `${stalledExercises.slice(0, 3).join(", ")} ${stalledCount > 3 ? `and ${stalledCount - 3} other${stalledCount - 3 > 1 ? "s" : ""}` : ""} — high effort with no progression over ${stalledCount >= 3 ? "4+" : "3"} sessions. Quality focus or load reset may be needed.`,
-        suggestedAction: "Hold current load. Prioritize technique and execution quality before adding weight.",
-        actionPrompt: `I seem to be plateauing on a few lifts — high effort, no progression. Can you adjust my next session to focus on quality and hold the current load rather than trying to progress?`,
+        explanation: "Multiple lifts are showing high effort without visible progression.",
+        evidence: `${stalledExercises.slice(0, 3).join(", ")} ${stalledCount > 3 ? `and ${stalledCount - 3} other${stalledCount - 3 > 1 ? "s" : ""}` : ""} — high effort with no progression over ${stalledCount >= 3 ? "4+" : "3"} sessions. Quality focus or a variation reset may be needed.`,
+        suggestedAction: "Hold current difficulty. Prioritize technique and execution quality before pushing output further.",
+        actionPrompt: `I seem to be plateauing on a few lifts — high effort, no visible progression. Can you adjust my next session to focus on quality and hold current difficulty rather than trying to push harder?`,
       });
     }
   }

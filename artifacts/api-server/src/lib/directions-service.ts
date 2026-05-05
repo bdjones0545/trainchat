@@ -458,7 +458,7 @@ const BLOCK_INTENT_PATTERNS: Array<{
       /\bpush\s+(the\s+)?intensity\b/i,
     ],
     buildRequest: (label) =>
-      `Increase intensity in ${label}: move primary lifts toward lower rep zones, increase load targets, tighten RIR, ensure high-effort sets on compound work. Maintain recovery structure to support increased loading`,
+      `Increase intensity in ${label}: move primary lifts toward lower rep zones, increase effort targets, tighten RIR, ensure high-effort sets on compound work. Maintain recovery structure to support increased demand`,
   },
   // ── Shorten block ──────────────────────────────────────────────────────────
   {

@@ -267,9 +267,9 @@ function buildCoachingNotes(
 
     case "build":
       if (blockType === "accumulation" || blockType === "hypertrophy_support") {
-        return `BUILD WEEK — Volume is the primary driver this week. Add sets, add reps, increase load only when previous rep targets are achieved cleanly. Athletes should feel the work this week — productive fatigue is appropriate. Manage recovery between sessions carefully. RPE ceiling: 8/10.`;
+        return `BUILD WEEK — Volume is the primary driver this week. Add sets, add reps, increase difficulty only when previous rep targets are achieved cleanly. Athletes should feel the work this week — productive fatigue is appropriate. Manage recovery between sessions carefully. RPE ceiling: 8/10.`;
       }
-      return `BUILD WEEK — Load progression is the primary driver. Working toward top sets that challenge without exceeding technique. Volume is secondary to load quality. Athletes should feel strength coming — confidence in heavy positions. RPE ceiling: 8/10.`;
+      return `BUILD WEEK — Intensity progression is the primary driver. Working toward top sets that challenge without exceeding technique. Volume is secondary to output quality. Athletes should feel strength coming — confidence in heavy positions. RPE ceiling: 8/10.`;
 
     case "intensify":
       return `INTENSIFY WEEK — This is peak expression. Loads are the heaviest of the block. Volume drops to support recovery from high neural demand. Athletes should prepare mentally and physically — adequate sleep, nutrition, and warm-up time. CNS demand is high. Do not add extra sessions or accessory volume this week. RPE ceiling: 9.5/10.`;
@@ -294,7 +294,7 @@ function buildProgressionDirective(
       if (blockType === "accumulation" || blockType === "hypertrophy_support") {
         return "Add 1 set to primary exercises vs. Week 1. If all reps were achieved, add 2.5–5kg on bilateral compounds, 1–2.5kg on isolation. Target RPE 7.5–8.";
       }
-      return "Progress loads by 2.5–5% vs. Week 1. Work up to heavier top sets. Back-off volume provides hypertrophy stimulus while top sets build intensity tolerance. RPE 7.5–8.";
+      return "Progress intensity vs. Week 1. Work up to more demanding top sets. Back-off volume provides hypertrophy stimulus while top sets build intensity tolerance. RPE 7.5–8.";
 
     case "intensify":
       return "Peak week: work up to true 1–3 rep top sets or max RPE 9 working sets. This is the culmination of the block. Volume is deliberately reduced — quality over quantity.";
@@ -407,7 +407,7 @@ const BLOCK_SESSION_ROLE_OVERLAYS: Partial<Record<
       { sessionRole: "Structural Support Day", emphasis: "Accessory work to support the primary lifts — target weakness points", loadingNotes: "Moderate loads. Accessory movements serve the primary lifts. Don't exhaust CNS for support work." },
     ],
     build: [
-      { sessionRole: "Heavy Working Sets", emphasis: "Progress loads from Week 1 — heavier working sets across primary patterns", loadingNotes: "Add 2.5–5% vs Week 1. RPE 8. Complete all prescribed sets. This is the overload week." },
+      { sessionRole: "Heavy Working Sets", emphasis: "Progress intensity from Week 1 — more demanding working sets across primary patterns", loadingNotes: "Higher output vs Week 1. RPE 8. Complete all prescribed sets. This is the overload week." },
       { sessionRole: "Top Set Focus", emphasis: "Work to a heavy top set — single or triple at RPE 8.5–9, then back-off volume", loadingNotes: "Work up methodically. 1–3 heavy top sets. Back-off volume at 85% of top set. Log everything." },
       { sessionRole: "Strength Density", emphasis: "More total heavy volume — extra back-off sets, more reps at working weight", loadingNotes: "Add 1 set to primary compound. Maintain load. Density drives strength adaptations over time." },
       { sessionRole: "Complementary Strength Day", emphasis: "Second heavy day of the week — reinforce primary pattern from a different angle", loadingNotes: "Different variation of primary pattern (pause, deficit, close grip). 78–83% loads." },

@@ -991,7 +991,7 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
     setLoggedFeedback(tag);
     // If user marked "too easy" or "too hard" auto-fill the AI request
     if (tag === "too_easy") {
-      setInput("Increase weight — I rated this too easy");
+      setInput("Increase difficulty — I rated this too easy");
     } else if (tag === "too_hard") {
       setInput("Reduce load — I rated this too hard");
     }

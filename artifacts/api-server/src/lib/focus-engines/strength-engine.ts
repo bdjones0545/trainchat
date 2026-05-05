@@ -202,7 +202,7 @@ ${emphasisHints.length > 0 ? "\nLIVE MESSAGE SIGNALS:\n" + emphasisHints.join("\
 function getStrengthAdaptationHeuristics(): string {
   return `
 STRENGTH ENGINE — Adaptation Heuristics:
-- If user logs "easy" or "solid" on primary lifts for 2+ sessions: increase load by 5–10 lbs
+- If user logs "easy" or "solid" on primary lifts for 2+ sessions: increase difficulty — add reps, tighten tempo, or use a harder variation (progress resistance only when a logged baseline exists)
 - If user reports "hard" or "failed": hold load, check form/recovery
 - Volume response: if readiness trends <60 over 7 days, reduce volume 20–30%
 - Block transition: move to next archetype after 3–4 weeks of successful sessions
