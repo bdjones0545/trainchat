@@ -1,0 +1,414 @@
+Implement the TrainChat Mutation Ontology Expansion.
+
+Goal:
+Expand TrainChat from scattered regex mutation handling into a structured coaching-command mutation system.
+
+This is NOT a UI task.
+This is NOT a prompt-engineering task.
+This is a deterministic coaching-command architecture expansion.
+
+The objective is:
+coach language
+→ normalized mutation family
+→ deterministic transformation recipe
+→ executable operations
+→ verified mutation
+
+========================================
+PHASE 1 — CREATE CANONICAL MUTATION ONTOLOGY
+========================================
+
+Create:
+artifacts/api-server/src/lib/mutation-ontology.ts
+
+Define a typed canonical registry:
+
+type MutationFamily =
+  | "increase_difficulty"
+  | "decrease_difficulty"
+  | "reduce_time"
+  | "increase_time"
+  | "increase_power"
+  | "increase_strength"
+  | "increase_hypertrophy"
+  | "increase_endurance"
+  | "increase_mobility"
+  | "reduce_impact"
+  | "injury_modification"
+  | "equipment_constraint"
+  | "exercise_swap"
+  | "remove_exercise_family"
+  | "add_exercise"
+  | "add_finisher"
+  | "progress_program"
+  | "change_split"
+  | "recovery_regression"
+  | "athletic_performance_focus";
+
+Each family must define:
+
+{
+  aliases: string[],
+  triggerPatterns: RegExp[],
+  requiredScope:
+    | "none"
+    | "session"
+    | "week"
+    | "program"
+    | "optional",
+
+  deterministic: boolean,
+
+  supportedScopes: string[],
+
+  allowedOperations: string[],
+
+  fallbackToAI: boolean,
+
+  description: string,
+}
+
+========================================
+PHASE 2 — NORMALIZE ALL EXISTING FAMILIES
+========================================
+
+Audit:
+- intent-family-engine.ts
+- execution-planner.ts
+- edit-intent-service.ts
+- action-contract.ts
+
+Remove fragmented aliases like:
+- day_progression
+- harder
+- easier
+- lower_impact
+- conditioning_focus
+- power_explosive_focus
+etc.
+
+Normalize all to canonical ontology families.
+
+Examples:
+
+day_progression
+harder
+tougher
+more challenging
+→ increase_difficulty
+
+power_explosive_focus
+explosive
+faster
+more athletic
+→ increase_power
+
+conditioning_focus
+endurance_focus
+conditioning_density
+→ increase_endurance
+
+joint_friendly_modification
+lower_impact
+knee_friendly
+→ reduce_impact
+
+All downstream systems should consume canonical family names only.
+
+========================================
+PHASE 3 — EXPAND COACH LANGUAGE TRIGGERS
+========================================
+
+Expand deterministic trigger coverage.
+
+A. Increase difficulty/intensity
+Support:
+- harder
+- tougher
+- more challenging
+- more demanding
+- heavier
+- more advanced
+- increase intensity
+- push intensity
+- more aggressive
+- level this up
+- progress this
+
+B. Easier/regression
+Support:
+- easier
+- lighter
+- less intense
+- tone it down
+- deload
+- reduce fatigue
+- lower stress
+- back off
+
+C. Time/density
+Support:
+- shorter
+- faster
+- fit 45 minutes
+- more efficient
+- less time
+- longer
+- more volume
+- more work
+
+D. Power/athletic
+Support:
+- explosive
+- athletic
+- more power
+- faster
+- more reactive
+- improve first step
+- improve acceleration
+
+E. Hypertrophy
+Support:
+- more muscle
+- more hypertrophy
+- bodybuilding
+- growth focused
+
+F. Endurance
+Support:
+- conditioning
+- endurance
+- work capacity
+- engine
+- cardio focused
+
+G. Constraints
+Support:
+- no jumping
+- no barbell
+- no machines
+- home gym
+- dumbbells only
+- hotel gym
+- limited equipment
+
+H. Pain/impact
+Support:
+- knee friendly
+- shoulder friendly
+- low back friendly
+- lower impact
+- joint friendly
+
+========================================
+PHASE 4 — BUILD DETERMINISTIC TRANSFORMATION RECIPES
+========================================
+
+In:
+edit-intent-service.ts
+
+Create:
+buildDeterministicMutationRecipe()
+
+Every canonical family must produce executable changes[].
+
+----------------------------------------
+increase_difficulty
+----------------------------------------
+
+Primary lifts:
+- add 1 set OR
+- lower reps slightly + increase intensity target
+- increase rest slightly
+
+Accessories:
+- modest volume increase
+- density increase
+
+Power:
+- preserve low reps
+- improve intent/rest
+- do NOT turn into hypertrophy work
+
+Mobility:
+- minimal progression only
+
+----------------------------------------
+decrease_difficulty
+----------------------------------------
+
+- reduce sets/reps slightly
+- increase recovery
+- reduce intensity
+- preserve structure
+
+----------------------------------------
+reduce_time
+----------------------------------------
+
+Priority order:
+1. remove low-priority accessories
+2. reduce set count
+3. reduce redundant work
+4. preserve primary lift
+
+----------------------------------------
+increase_power
+----------------------------------------
+
+- reduce excessive reps
+- increase velocity intent
+- add explosive pairing
+- add plyometric/contrast work carefully
+
+----------------------------------------
+increase_hypertrophy
+----------------------------------------
+
+- increase volume
+- moderate rep targets
+- shorten accessory rest
+- preserve compounds
+
+----------------------------------------
+increase_endurance
+----------------------------------------
+
+- add density
+- circuits
+- conditioning finishers
+- reduce rest
+
+----------------------------------------
+reduce_impact / injury_modification
+----------------------------------------
+
+- replace provocative exercises
+- preserve training goal
+- substitute movement pattern equivalently
+
+----------------------------------------
+equipment_constraint
+----------------------------------------
+
+- replace unsupported equipment
+- preserve movement pattern
+- preserve session identity
+
+----------------------------------------
+add_finisher
+----------------------------------------
+
+- add intelligently-sized finisher
+- avoid duplicates
+- respect focus mode
+
+========================================
+PHASE 5 — SCOPE SAFETY
+========================================
+
+Enforce exact mutation scope.
+
+If:
+scope=session
+→ mutate ONE session only
+
+scope=week
+→ mutate that week only
+
+scope=program
+→ mutate all sessions
+
+Never silently downgrade:
+program → session
+
+Log:
+[MutationScope]
+
+========================================
+PHASE 6 — OPERATION VALIDATION
+========================================
+
+Before applyEditPlan:
+validateOperations()
+
+Ensure:
+- executable operation types only
+- exercise IDs exist
+- target session exists
+- allowed fields only
+- no empty operations
+
+Return structured validation failure reason.
+
+========================================
+PHASE 7 — DIVERSITY + ROLE PRESERVATION
+========================================
+
+Prevent flattening.
+
+Transformation recipes must preserve:
+- primary lift identity
+- power role
+- mobility role
+- trunk role
+- conditioning role
+
+Do NOT globally increase all reps/sets.
+
+Each role mutates differently.
+
+========================================
+PHASE 8 — RESPONSE TRUTH CONTRACT
+========================================
+
+No mutation success language unless:
+systemEdit.applied === true
+
+If changes[] empty:
+response must explicitly state:
+"I didn't change your program yet."
+
+========================================
+PHASE 9 — TEST SUITE
+========================================
+
+Add deterministic tests:
+
+1. Make Day 1 harder
+2. Make this program harder → full program
+3. Make Day 2 easier
+4. Make Day 2 shorter
+5. Make this more explosive
+6. Make this more athletic
+7. Add a core finisher
+8. No jumping
+9. Remove all barbell exercises
+10. Make this knee friendly
+11. Home gym version
+12. Dumbbells only
+13. Make this fit 45 minutes
+14. Progress this for 4 weeks
+15. Change this to upper/lower
+
+Assert:
+- canonical family
+- scope
+- executable changes[]
+- appliedCount > 0
+- no false success text
+- role preservation
+
+========================================
+PHASE 10 — FINAL REPORT
+========================================
+
+Return:
+1. canonical mutation families
+2. removed aliases
+3. new deterministic trigger coverage
+4. new deterministic recipes
+5. unsupported commands remaining
+6. mutation success rate before vs after
+7. tests PASS/FAIL
+8. architectural risks remaining

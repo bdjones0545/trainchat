@@ -22,6 +22,7 @@ import {
   type IntentFamily,
   type IntentFamilyResult,
 } from "./intent-family-engine";
+import { isMutationFamilyOntology, getCanonicalName, getMutationCategory } from "./mutation-ontology";
 import { classifyAdjustmentIntent, type AdjustmentIntentClassification } from "./adjustment-intent-classifier";
 import { type ProgramStructure } from "./ai";
 import { logger } from "./logger";
@@ -1195,37 +1196,14 @@ function buildScopeInferenceQuestion(message: string): string {
 }
 
 function isMutationFamily(family: IntentFamily): boolean {
-  const mutationFamilies: IntentFamily[] = [
-    "increase_difficulty",
-    "decrease_difficulty",
-    "increase_volume",
-    "decrease_volume",
-    "reduce_time",
-    "increase_time",
-    "strength_focus",
-    "hypertrophy_focus",
-    "conditioning_focus",
-    "power_explosive_focus",
-    "speed_focus",
-    "athletic_performance_focus",
-    "fatigue_management",
-    "recovery_focus",
-    "mobility_support",
-    "injury_modification",
-    "joint_friendly_modification",
-    "equipment_constraint",
-    "add_exercise",
-    // Day-level progression/regression — always APPLY_MUTATION, never clarify
-    "day_progression",
-    "day_regression",
-    // Training state families — adjust in place
-    "readiness_low",
-    "missed_sessions_reentry",
-    "environment_temporary_switch",
-    "sport_context_update",
-    "exercise_dislike_or_preference",
-    "bulk_session_sets_increase",
-  ];
-
-  return mutationFamilies.includes(family);
+  const result = isMutationFamilyOntology(family);
+  if (result) {
+    const canonical = getCanonicalName(family);
+    const category = getMutationCategory(family);
+    logger.debug(
+      { family, canonical, category },
+      `[OntologyTrace] isMutationFamily → true | canonical=${canonical} category=${category}`
+    );
+  }
+  return result;
 }

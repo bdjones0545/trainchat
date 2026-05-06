@@ -758,6 +758,10 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
       // FIX 4A: Catch "Make this program harder", "Make my training harder", "Make the sessions more challenging"
       // Uses a lookahead pattern that allows 0–4 noun words between the subject and the difficulty modifier
       /\bmake\s+(this|my|the|these)\s+(?:\w+\s+){0,4}(harder|tougher|more\s+(?:challenging|difficult|demanding|intense))\b/i,
+      // Phase 3 expansion: colloquial difficulty escalation
+      /\b(push\s+me\s+(harder|more)|amp\s+it\s+up|ramp\s+it\s+up|kick\s+it\s+up\s+(a\s+notch)?|challenge\s+me\s+more|notch\s+it\s+up|dial\s+it\s+up|turn\s+it\s+up)\b/i,
+      /\b(needs?\s+to\s+be\s+(harder|tougher|more\s+challenging)|not\s+(hard|tough|challenging)\s+enough)\b/i,
+      /\b(push\s+the\s+(intensity|difficulty)|increase\s+(the\s+)?(challenge|intensity)|max\s+it\s+out)\b/i,
     ],
   },
 
@@ -773,6 +777,10 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
       // FIX 4B: Catch "Make my training easier", "Make the sessions less intense", "Lower the impact"
       /\bmake\s+(this|my|the|these)\s+(?:\w+\s+){0,4}(easier|lighter|less\s+(?:demanding|intense|challenging|difficult))\b/i,
       /\b(lower the impact|lower impact|make it lower impact|less overall impact|reduce the impact)\b/i,
+      // Phase 3 expansion: colloquial difficulty reduction
+      /\b(back\s+it\s+off|back\s+off\s+a\s+(bit|little)|take\s+it\s+down\s+a\s+notch|pull\s+it\s+back|ease\s+(it|things)\s+(up|off|back))\b/i,
+      /\b(too\s+hard\s+for\s+(me|now)|need\s+it\s+(easier|lighter)|bring\s+it\s+(down|back))\b/i,
+      /\b(don.?t\s+want\s+(it|this)\s+(that\s+)?(hard|intense|difficult)|needs?\s+to\s+be\s+(easier|lighter|less\s+intense))\b/i,
     ],
   },
 

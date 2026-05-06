@@ -24,7 +24,8 @@ import {
   findBeltSquatsInSystem,
   pickBeltSquatReplacement,
 } from "./belt-squat-constraint";
-import { runIntentFamilyPipeline, logIntentFamilyDebug, type IntentFamilyPipelineResult } from "./intent-family-engine";
+import { runIntentFamilyPipeline, logIntentFamilyDebug, type IntentFamilyPipelineResult, type IntentFamily } from "./intent-family-engine";
+import { validateOperationsOntology } from "./mutation-ontology";
 import { detectPopulation } from "./population-engine";
 import { applyPopulationIntentRules, appendPopulationNotesToDirective } from "./interaction-rules";
 import {
@@ -1826,6 +1827,819 @@ function handleTravelMode(system: any, targetContext?: TargetContext): EditPlan 
   };
 }
 
+// ─── New Family Recipe Builder ────────────────────────────────────────────────
+//
+// Handles athletic specialization and mobility/recovery families added in the
+// Mutation Ontology Expansion (Phase 4). Called from within the session-level
+// block of interpretWithRules() before the equipment/volume fallback checks.
+//
+// Returns an EditPlan if a pattern matches with sufficient structural changes,
+// or null to fall through to the existing AGENT escalation path.
+
+function buildNewFamilyRecipe(
+  lower: string,
+  sessionId: number,
+  label: string,
+  system: any,
+): EditPlan | null {
+
+  // ── SPEED FOCUS ─────────────────────────────────────────────────────────────
+  if (lower.match(/\b(sprint(?:\s+work)?|acceleration\s+work|speed\s+work|max\s+velocity|speed.?focused|fly(?:ing)?\s+\d+m?|build\s+speed|improve\s+speed|add\s+speed)\b/)) {
+    const session = findSessionById(system, sessionId);
+    const changes: EditChange[] = [];
+    const addedNames: string[] = [];
+    const modifiedNames: string[] = [];
+
+    if (session) {
+      const exercises: any[] = session.exercises ?? [];
+      const hasSprintDrill = exercises.some((ex: any) =>
+        /\b(sprint|acceleration|flying|30m|60m|speed\s+drill)\b/i.test(ex.name)
+      );
+      if (!hasSprintDrill) {
+        const isLowerSession = exercises.some((ex: any) =>
+          /squat|deadlift|lunge|hip|rdl|hamstring|glute/i.test(ex.name)
+        );
+        const sprintDrill = isLowerSession ? "30m Acceleration Sprint" : "Flying 20m Sprint";
+        changes.push({
+          type: "add_exercise",
+          id: 0,
+          sessionId,
+          exercise: {
+            name: sprintDrill,
+            category: "explosive",
+            sets: 5,
+            reps: "1",
+            rest: "3-4 min",
+            notes: "Max effort. Full recovery between reps — speed demands complete CNS recovery. Time each rep and target max velocity on every one.",
+          },
+          reason: "Speed focus — sprint drill injection",
+        });
+        addedNames.push(sprintDrill);
+      }
+      const primaryLifts = exercises.filter((ex: any) => ex.category === "primary");
+      for (const ex of primaryLifts) {
+        changes.push({
+          type: "update_exercise",
+          id: ex.id,
+          updates: {
+            tempo: "X10X",
+            notes: "Speed focus: intent is bar velocity. Submaximal load (70-80%), explosive concentric on every rep. Quality of movement over load.",
+          },
+          reason: "Speed focus — velocity intent applied to primaries",
+        });
+        modifiedNames.push(ex.name);
+      }
+    }
+
+    const structural = changes.filter(c =>
+      c.type === "add_exercise" ||
+      (c.type === "update_exercise" && c.updates && Object.keys(c.updates).some(k => ["sets", "reps", "tempo", "rest"].includes(k)))
+    );
+
+    if (structural.length >= 2) {
+      changes.push({
+        type: "update_session",
+        id: sessionId,
+        updates: {
+          emphasis: "Speed and bar velocity — acceleration mechanics, fast-twitch engagement",
+          coachingNotes: "Speed session: open with sprint drill at full effort. Primaries at 70-80% with maximum intent on concentric. Full rest between sets — speed training demands it.",
+        },
+        reason: "Speed focus — session emphasis updated",
+      });
+      const parts: string[] = [];
+      if (addedNames.length) parts.push(`added ${addedNames.join(" and ")}`);
+      if (modifiedNames.length) parts.push(`velocity intent applied to ${modifiedNames.slice(0, 2).join(" and ")}`);
+      return {
+        intent: "speed_session_transformation",
+        scope: "session",
+        changeSummary: `${label} structured for speed: ${parts.join("; ")}. All sprint work at max effort — CNS recovery between reps is non-negotiable.`,
+        changes,
+        _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+      };
+    }
+  }
+
+  // ── REACTIVE QUALITY ────────────────────────────────────────────────────────
+  if (lower.match(/\b(reactive(?:ity)?|ground.?contact(?:\s+time)?|contact\s+time|pogo(?:\s+hop)?|ankle\s+hop|tendon\s+stiffness|spring(?:ier|.?like)|elastic(?:ity)?|amortization|leg\s+stiffness|pliometric\s+stiffness)\b/)) {
+    const session = findSessionById(system, sessionId);
+    const changes: EditChange[] = [];
+
+    if (session) {
+      const exercises: any[] = session.exercises ?? [];
+      const hasReactiveDrill = exercises.some((ex: any) =>
+        /\b(pogo|ankle\s+hop|drop\s+jump|depth\s+jump|hurdle\s+hop|bounding|reactive)\b/i.test(ex.name)
+      );
+      if (!hasReactiveDrill) {
+        changes.push({
+          type: "add_exercise",
+          id: 0,
+          sessionId,
+          exercise: {
+            name: "Pogo Hops",
+            category: "explosive",
+            sets: 4,
+            reps: "10",
+            rest: "90s",
+            notes: "Reactive quality drill. Goal: minimal ground contact time — land and rebound immediately. Stiff ankles, hips stay high. Do NOT sink into your joints on each landing.",
+          },
+          reason: "Reactive quality — pogo hops for tendon stiffness",
+        });
+        changes.push({
+          type: "add_exercise",
+          id: 0,
+          sessionId,
+          exercise: {
+            name: "Ankle Hop Drill",
+            category: "explosive",
+            sets: 3,
+            reps: "15",
+            rest: "60s",
+            notes: "Single-plane ankle stiffness drill. Knees stay stiff, drive from ankle only. Ultra-fast contacts — this is about ground force and stiffness, not height.",
+          },
+          reason: "Reactive quality — ankle stiffness drill for amortization reduction",
+        });
+      }
+      changes.push({
+        type: "update_session",
+        id: sessionId,
+        updates: {
+          emphasis: "Reactive quality — tendon stiffness, minimal ground contact, elastic energy return",
+          coachingNotes: "Reactive session: contact quality over height or distance. Stiff ankles, rapid rebound, full reset between sets. Reactive training requires a fresh neuromuscular state.",
+        },
+        reason: "Reactive focus — session emphasis updated",
+      });
+    }
+
+    const structural = changes.filter(c => c.type === "add_exercise");
+    if (structural.length >= 1) {
+      return {
+        intent: "reactive_quality_transformation",
+        scope: "session",
+        changeSummary: `${label} structured for reactive quality. Pogo Hops and Ankle Hop Drill added — focus is minimal ground contact time and tendon stiffness. Every rep should feel like a rebound, not a jump.`,
+        changes,
+        _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+      };
+    }
+  }
+
+  // ── CHANGE OF DIRECTION / DECELERATION ─────────────────────────────────────
+  if (lower.match(/\b(change.?of.?direction|c\.?o\.?d\b|decel(?:eration)?\s+(?:drill|work|mechanic|training)|t.?drill|5.?10.?5|pro.?agility|lateral\s+stop|braking\s+mechanic|cutting\s+drill|better\s+agility|agility\s+(?:drill|work|training))\b/)) {
+    const session = findSessionById(system, sessionId);
+    const changes: EditChange[] = [];
+
+    if (session) {
+      const exercises: any[] = session.exercises ?? [];
+      const hasCODDrill = exercises.some((ex: any) =>
+        /\b(t.?drill|5.?10.?5|agility|decel|change.?of.?direction|lateral\s+stop)\b/i.test(ex.name)
+      );
+      if (!hasCODDrill) {
+        changes.push({
+          type: "add_exercise",
+          id: 0,
+          sessionId,
+          exercise: {
+            name: "T-Drill",
+            category: "explosive",
+            sets: 5,
+            reps: "1",
+            rest: "90s",
+            notes: "COD quality drill. Focus on deceleration mechanics at each cone: penultimate step braking, hip sink, push off. Time each rep. Rest fully between efforts.",
+          },
+          reason: "COD focus — T-drill for change-of-direction mechanics",
+        });
+        changes.push({
+          type: "add_exercise",
+          id: 0,
+          sessionId,
+          exercise: {
+            name: "Lateral Decel Bound",
+            category: "explosive",
+            sets: 4,
+            reps: "5 each side",
+            rest: "75s",
+            notes: "Lateral bound into a hard stop. Absorb force on the penultimate step, stabilize, then re-accelerate. Deceleration quality is the training goal — not max speed.",
+          },
+          reason: "COD focus — lateral deceleration strength drill",
+        });
+      }
+      changes.push({
+        type: "update_session",
+        id: sessionId,
+        updates: {
+          emphasis: "Change of direction — deceleration mechanics, lateral reactivity, penultimate step quality",
+          coachingNotes: "COD session: quality of each cut and deceleration is the priority. Time your drills. Monitor for hip drop, knee cave, or ankle collapse on decel — these are technique faults to address now.",
+        },
+        reason: "COD focus — session emphasis updated",
+      });
+    }
+
+    const structural = changes.filter(c => c.type === "add_exercise");
+    if (structural.length >= 1) {
+      return {
+        intent: "cod_decel_transformation",
+        scope: "session",
+        changeSummary: `${label} structured for change of direction and deceleration. T-Drill and Lateral Decel Bound added — force absorption and penultimate step mechanics are the priority.`,
+        changes,
+        _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+      };
+    }
+  }
+
+  // ── FOOTWORK / RHYTHM ───────────────────────────────────────────────────────
+  if (lower.match(/\b(footwork|foot\s+speed|ladder\s+drill|speed\s+ladder|quicker\s+feet|faster\s+feet|quick\s+feet|foot\s+coordination|ickey\s+shuffle|in.?and.?out\s+drill|lateral\s+shuffle)\b/)) {
+    const session = findSessionById(system, sessionId);
+    const changes: EditChange[] = [];
+
+    if (session) {
+      const exercises: any[] = session.exercises ?? [];
+      const hasFootworkDrill = exercises.some((ex: any) =>
+        /\b(ladder|footwork|shuffle|ickey|in.?and.?out|foot\s+speed|rhythm)\b/i.test(ex.name)
+      );
+      if (!hasFootworkDrill) {
+        changes.push({
+          type: "add_exercise",
+          id: 0,
+          sessionId,
+          exercise: {
+            name: "Ladder Drill — In-and-Out",
+            category: "explosive",
+            sets: 5,
+            reps: "1 length",
+            rest: "60s",
+            notes: "Footwork quality drill. Precise foot contacts in each rung — accuracy before speed. Progress to max speed after 2 rounds at controlled tempo.",
+          },
+          reason: "Footwork focus — ladder drill for foot coordination",
+        });
+        changes.push({
+          type: "add_exercise",
+          id: 0,
+          sessionId,
+          exercise: {
+            name: "Lateral Shuffle Drill",
+            category: "explosive",
+            sets: 4,
+            reps: "20m",
+            rest: "60s",
+            notes: "Lateral footwork and rhythm drill. Stay low, quick feet, avoid crossing. Return trip: first 10m slow, final 10m max effort — rhythm transition.",
+          },
+          reason: "Footwork focus — lateral shuffle for rhythm and foot speed",
+        });
+      }
+      changes.push({
+        type: "update_session",
+        id: sessionId,
+        updates: {
+          emphasis: "Footwork and rhythm — foot speed, coordination, and contact precision",
+          coachingNotes: "Footwork session: precision first, then speed. Stay low through all ladder and shuffle patterns. Foot contacts should be light and deliberate — avoid stomping.",
+        },
+        reason: "Footwork focus — session emphasis updated",
+      });
+    }
+
+    const structural = changes.filter(c => c.type === "add_exercise");
+    if (structural.length >= 1) {
+      return {
+        intent: "footwork_rhythm_transformation",
+        scope: "session",
+        changeSummary: `${label} structured for footwork and rhythm. Ladder Drill and Lateral Shuffle added — precision of foot contacts is the priority. Speed follows pattern quality.`,
+        changes,
+        _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+      };
+    }
+  }
+
+  // ── ROM RESTORATION ─────────────────────────────────────────────────────────
+  if (lower.match(/\b(rom\s+restoration|range.?of.?motion|hip\s+(?:mobility|flexibility|opening)|thoracic\s+(?:mobility|rotation|extension)|ankle\s+mobility|restore\s+(?:range|mobility)|joint\s+range|end.?range\s+stretch)\b/)) {
+    const session = findSessionById(system, sessionId);
+    const changes: EditChange[] = [];
+
+    if (session) {
+      changes.push({
+        type: "add_exercise",
+        id: 0,
+        sessionId,
+        exercise: {
+          name: "Hip 90/90 Stretch",
+          category: "mobility",
+          sets: 3,
+          reps: "60s each side",
+          rest: "30s",
+          notes: "ROM restoration for front and back hip. Sit tall, rotate through both positions, hold end range. Use a small lean to increase front-hip depth. Breathe through the stretch.",
+        },
+        reason: "ROM restoration — hip range of motion",
+      });
+      changes.push({
+        type: "add_exercise",
+        id: 0,
+        sessionId,
+        exercise: {
+          name: "Cat-Cow + Thoracic Rotation",
+          category: "mobility",
+          sets: 3,
+          reps: "8 each direction",
+          rest: "30s",
+          notes: "Spinal and thoracic ROM. Cat-cow for lumbar dissociation, thread-the-needle for mid-back mobility. Breathe into each position — don't rush.",
+        },
+        reason: "ROM restoration — spinal and thoracic mobility",
+      });
+      changes.push({
+        type: "update_session",
+        id: sessionId,
+        updates: {
+          emphasis: "ROM restoration — joint range, rotational freedom, active and passive flexibility",
+          coachingNotes: "ROM session: work to your current end range, not beyond it. Slow controlled movements. Mild discomfort in the stretch is fine. Pain means back off immediately.",
+        },
+        reason: "ROM restoration — session emphasis updated",
+      });
+    }
+
+    const structural = changes.filter(c => c.type === "add_exercise");
+    if (structural.length >= 2) {
+      return {
+        intent: "rom_restoration_transformation",
+        scope: "session",
+        changeSummary: `${label} updated for range-of-motion restoration. Hip 90/90 and Thoracic Rotation added — work to current end range consistently. ROM compounds with daily exposure.`,
+        changes,
+        _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+      };
+    }
+  }
+
+  // ── TISSUE QUALITY / STIFFNESS ──────────────────────────────────────────────
+  if (lower.match(/\b(tissue\s+(?:quality|stiffness|care|release|prep|work)|foam\s+roll(?:ing)?|contract.?relax|stiff\s+(?:muscles?|tissue|back|hips?)|tight\s+(?:tissue|muscles?|hips?|hamstrings?)|soft\s+tissue)\b/)) {
+    const session = findSessionById(system, sessionId);
+    const changes: EditChange[] = [];
+
+    if (session) {
+      changes.push({
+        type: "add_exercise",
+        id: 0,
+        sessionId,
+        exercise: {
+          name: "Foam Roll Circuit",
+          category: "mobility",
+          sets: 1,
+          reps: "60-90s per area",
+          rest: "15s",
+          notes: "Tissue quality: quads, hamstrings, glutes, thoracic, calves. 5-6 slow passes each. Stop on tender points for 5-10s. This is not a warm-up rush — give it time.",
+        },
+        reason: "Tissue quality — foam rolling circuit",
+      });
+      changes.push({
+        type: "add_exercise",
+        id: 0,
+        sessionId,
+        exercise: {
+          name: "Contract-Relax Stretch",
+          category: "mobility",
+          sets: 3,
+          reps: "6s contract + 20s relax",
+          rest: "15s",
+          notes: "PNF technique. Contract the target muscle against resistance for 6 seconds, fully relax, then move into a deeper stretch for 20 seconds. Gains are immediate — apply where most restricted.",
+        },
+        reason: "Tissue quality — PNF contract-relax stretch",
+      });
+      changes.push({
+        type: "update_session",
+        id: sessionId,
+        updates: {
+          emphasis: "Tissue quality — release, relax, and restore movement capacity",
+          coachingNotes: "Tissue session: slow and deliberate. No rushing through this work. Hydrate before and after. Tissue investment improves every training session that follows.",
+        },
+        reason: "Tissue quality — session emphasis updated",
+      });
+    }
+
+    const structural = changes.filter(c => c.type === "add_exercise");
+    if (structural.length >= 2) {
+      return {
+        intent: "tissue_quality_transformation",
+        scope: "session",
+        changeSummary: `${label} updated for tissue quality. Foam Roll Circuit and Contract-Relax Stretch added — slow, deliberate work on restricted areas. Tissue investment pays dividends in training quality.`,
+        changes,
+        _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+      };
+    }
+  }
+
+  // ── TENDON RESILIENCE ───────────────────────────────────────────────────────
+  if (lower.match(/\b(tendon\s+(?:resilience|health|conditioning|prep|care|loading|load)|heavy\s+isometric|isometric\s+(?:hold|loading|training)|tibialis\s+raise|nordic\s+curl|achilles.?friendly|patellar.?friendly|eccentric\s+loading)\b/)) {
+    const session = findSessionById(system, sessionId);
+    const changes: EditChange[] = [];
+
+    if (session) {
+      const exercises: any[] = session.exercises ?? [];
+      const hasIsometric = exercises.some((ex: any) =>
+        /\b(isometric|tibialis|nordic|copenhagen|calf\s+raise|heel\s+raise)\b/i.test(ex.name)
+      );
+      if (!hasIsometric) {
+        changes.push({
+          type: "add_exercise",
+          id: 0,
+          sessionId,
+          exercise: {
+            name: "Isometric Wall Squat Hold",
+            category: "accessory",
+            sets: 4,
+            reps: "45s",
+            rest: "90s",
+            notes: "Tendon loading: stay at 70-90° of knee flexion. Load should feel significant — this is a training stimulus, not a comfortable hold. Build to 60s over time.",
+          },
+          reason: "Tendon resilience — heavy isometric loading",
+        });
+        changes.push({
+          type: "add_exercise",
+          id: 0,
+          sessionId,
+          exercise: {
+            name: "Single-Leg Calf Raise",
+            category: "accessory",
+            sets: 4,
+            reps: "12 (3s eccentric)",
+            rest: "60s",
+            notes: "Eccentric Achilles loading. 3-second controlled lowering on every rep. Fully single-leg. Tendon resilience requires progressive eccentric work — this is non-negotiable.",
+          },
+          reason: "Tendon resilience — eccentric Achilles loading",
+        });
+      }
+      changes.push({
+        type: "update_session",
+        id: sessionId,
+        updates: {
+          emphasis: "Tendon resilience — heavy isometric and eccentric loading for tissue adaptation",
+          coachingNotes: "Tendon session: load must be significant. Light work doesn't drive tendon adaptation. Isometrics at intensity, eccentrics with full control. No ballistic loading.",
+        },
+        reason: "Tendon resilience — session emphasis updated",
+      });
+    }
+
+    const structural = changes.filter(c => c.type === "add_exercise");
+    if (structural.length >= 1) {
+      return {
+        intent: "tendon_resilience_transformation",
+        scope: "session",
+        changeSummary: `${label} updated for tendon resilience. Isometric Wall Squat Hold and Single-Leg Calf Raise added with eccentric emphasis. Tendon adaptation requires significant, progressive loading — not light holds.`,
+        changes,
+        _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+      };
+    }
+  }
+
+  // ── END RANGE CONTROL ───────────────────────────────────────────────────────
+  if (lower.match(/\b(end.?range\s+(?:control|strength|loading|isometric)|pails|rails|pails.?rails|end.?range\s+(?:hip|shoulder|ankle)|active\s+end.?range)\b/)) {
+    const session = findSessionById(system, sessionId);
+    const changes: EditChange[] = [];
+
+    if (session) {
+      changes.push({
+        type: "add_exercise",
+        id: 0,
+        sessionId,
+        exercise: {
+          name: "Hip PAILs/RAILs",
+          category: "mobility",
+          sets: 3,
+          reps: "1 min passive + 20s PAIL + 20s RAIL",
+          rest: "30s",
+          notes: "Progressive Angular Isometric Loading (PAILs) then Regressive (RAILs). Max effort contractions at end range — build active ownership of passive range. Breathe throughout.",
+        },
+        reason: "End-range control — hip PAILs/RAILs",
+      });
+      changes.push({
+        type: "add_exercise",
+        id: 0,
+        sessionId,
+        exercise: {
+          name: "Shoulder End-Range Isometric",
+          category: "mobility",
+          sets: 3,
+          reps: "30s each direction",
+          rest: "30s",
+          notes: "Overhead and behind-back shoulder end-range loading. Apply max force at the limit of range. Builds active control where passive ROM already exists.",
+        },
+        reason: "End-range control — shoulder end-range loading",
+      });
+      changes.push({
+        type: "update_session",
+        id: sessionId,
+        updates: {
+          emphasis: "End-range joint control — active ownership of passive flexibility",
+          coachingNotes: "End-range session: go to full passive range first, then apply maximum force. This is where injury risk hides — building active control here closes that window.",
+        },
+        reason: "End-range control — session emphasis updated",
+      });
+    }
+
+    const structural = changes.filter(c => c.type === "add_exercise");
+    if (structural.length >= 2) {
+      return {
+        intent: "end_range_control_transformation",
+        scope: "session",
+        changeSummary: `${label} updated for end-range joint control. Hip PAILs/RAILs and Shoulder End-Range Isometrics added — active ownership of passive range is where performance and safety intersect.`,
+        changes,
+        _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+      };
+    }
+  }
+
+  // ── MOBILITY FLOW ───────────────────────────────────────────────────────────
+  if (lower.match(/\b(mobility\s+flow|flow\s+sequence|movement\s+flow|hip\s+car|shoulder\s+car|controlled\s+articular\s+rotation|cars\s+routine|linked\s+movement|primal\s+movement|crawl\s+flow)\b/)) {
+    const session = findSessionById(system, sessionId);
+    const changes: EditChange[] = [];
+
+    if (session) {
+      changes.push({
+        type: "add_exercise",
+        id: 0,
+        sessionId,
+        exercise: {
+          name: "Hip CARs",
+          category: "mobility",
+          sets: 3,
+          reps: "5 each side",
+          rest: "20s",
+          notes: "Controlled Articular Rotation for hips. Max tension throughout the full circle — resist at every point. Slow and deliberate. Should feel like hard work despite looking easy.",
+        },
+        reason: "Mobility flow — hip controlled articular rotations",
+      });
+      changes.push({
+        type: "add_exercise",
+        id: 0,
+        sessionId,
+        exercise: {
+          name: "Crawling Flow Sequence",
+          category: "mobility",
+          sets: 3,
+          reps: "20m",
+          rest: "30s",
+          notes: "Linked movement flow: bear crawl → lateral crawl → crab reach. Keeps joints loaded through full range in connected patterns. Deliberate, exploratory — no rushing.",
+        },
+        reason: "Mobility flow — crawling flow for movement integration",
+      });
+      changes.push({
+        type: "update_session",
+        id: sessionId,
+        updates: {
+          emphasis: "Movement flow — connected, exploratory, full-range quality movement",
+          coachingNotes: "Flow session: move with intention. Explore the range, find restrictions, work through them slowly. This is the opposite of training hard — it's investing in movement quality.",
+        },
+        reason: "Mobility flow — session emphasis updated",
+      });
+    }
+
+    const structural = changes.filter(c => c.type === "add_exercise");
+    if (structural.length >= 2) {
+      return {
+        intent: "mobility_flow_transformation",
+        scope: "session",
+        changeSummary: `${label} restructured for movement flow. Hip CARs and Crawling Flow Sequence added — deliberate, connected movement in full range. Exploration over effort here.`,
+        changes,
+        _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+      };
+    }
+  }
+
+  // ── UNILATERAL EMPHASIS ─────────────────────────────────────────────────────
+  if (lower.match(/\b(unilateral|single.?leg\s+(?:work|focus|training|emphasis)|single.?arm\s+(?:work|focus|training)|split.?stance\s+(?:work|focus|emphasis)|one.?legged\s+(?:training|work)|less\s+bilateral|more\s+split.?stance)\b/)) {
+    const session = findSessionById(system, sessionId);
+    const changes: EditChange[] = [];
+    const addedNames: string[] = [];
+
+    if (session) {
+      const exercises: any[] = session.exercises ?? [];
+      const hasUnilateral = exercises.some((ex: any) =>
+        /\b(split\s+squat|lunge|single.?leg|bulgarian|step.?up|single.?arm|one.?arm)\b/i.test(ex.name)
+      );
+      if (!hasUnilateral) {
+        const hasLower = exercises.some((ex: any) =>
+          /squat|deadlift|leg\s+press|hip\s+thrust/i.test(ex.name)
+        );
+        const hasUpper = exercises.some((ex: any) =>
+          /bench|row|press|pull/i.test(ex.name)
+        );
+        if (hasLower) {
+          changes.push({
+            type: "add_exercise",
+            id: 0,
+            sessionId,
+            exercise: {
+              name: "Bulgarian Split Squat",
+              category: "accessory",
+              sets: 3,
+              reps: "8-10 each leg",
+              rest: "90s",
+              notes: "Unilateral lower body: rear foot elevated, front foot forward enough for vertical shin. Isolates each leg. Exposes asymmetries — work the weaker side first.",
+            },
+            reason: "Unilateral emphasis — split squat injection",
+          });
+          addedNames.push("Bulgarian Split Squat");
+        }
+        if (hasUpper) {
+          changes.push({
+            type: "add_exercise",
+            id: 0,
+            sessionId,
+            exercise: {
+              name: "Single-Arm Dumbbell Row",
+              category: "accessory",
+              sets: 3,
+              reps: "10-12 each arm",
+              rest: "60s",
+              notes: "Unilateral upper body pull. Full range: let the shoulder blade move at the bottom, drive elbow up and back at top. Log any strength discrepancy between sides.",
+            },
+            reason: "Unilateral emphasis — single-arm row injection",
+          });
+          addedNames.push("Single-Arm Dumbbell Row");
+        }
+      }
+      changes.push({
+        type: "update_session",
+        id: sessionId,
+        updates: {
+          emphasis: "Unilateral focus — single-leg and single-arm strength, symmetry, balance",
+          coachingNotes: "Unilateral session: work weak side first. Do not compensate by rotating the trunk — the isolated limb does the work. Note any strength discrepancies between sides.",
+        },
+        reason: "Unilateral emphasis — session emphasis updated",
+      });
+    }
+
+    const structural = changes.filter(c => c.type === "add_exercise");
+    if (structural.length >= 1) {
+      return {
+        intent: "unilateral_emphasis_transformation",
+        scope: "session",
+        changeSummary: `${label} updated with unilateral emphasis. ${addedNames.join(" and ")} added to expose and address asymmetries. Work the weaker side first — symmetry is the goal.`,
+        changes,
+        _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+      };
+    }
+  }
+
+  // ── POSTERIOR CHAIN EMPHASIS ────────────────────────────────────────────────
+  if (lower.match(/\b(posterior\s+chain|more\s+hamstrings?|hamstring\s+(?:work|emphasis|focus|training|dominant)|more\s+glutes?|glute\s+(?:work|emphasis|focus|training|dominant)|hip\s+extension\s+(?:focus|emphasis)|hinge.?dominant|more\s+hinge|backside\s+(?:focus|work))\b/)) {
+    const session = findSessionById(system, sessionId);
+    const changes: EditChange[] = [];
+    const addedNames: string[] = [];
+
+    if (session) {
+      const exercises: any[] = session.exercises ?? [];
+      const hasHinge = exercises.some((ex: any) =>
+        /\b(rdl|romanian|hip\s+thrust|glute\s+bridge|good\s+morning|nordic|hamstring\s+curl|swing)\b/i.test(ex.name)
+      );
+      if (!hasHinge) {
+        changes.push({
+          type: "add_exercise",
+          id: 0,
+          sessionId,
+          exercise: {
+            name: "Romanian Deadlift",
+            category: "accessory",
+            sets: 3,
+            reps: "8-10",
+            rest: "90s",
+            notes: "Posterior chain hinge. Push hips back, flat back, feel the hamstring stretch at the bottom. Control the descent — do not round under load.",
+          },
+          reason: "Posterior chain — RDL injection for hamstring/glute loading",
+        });
+        addedNames.push("Romanian Deadlift");
+      }
+      const hasGluteAccessory = exercises.some((ex: any) =>
+        /\b(hip\s+thrust|glute\s+bridge|cable\s+kickback|donkey\s+kick)\b/i.test(ex.name)
+      );
+      if (!hasGluteAccessory) {
+        changes.push({
+          type: "add_exercise",
+          id: 0,
+          sessionId,
+          exercise: {
+            name: "Hip Thrust",
+            category: "accessory",
+            sets: 3,
+            reps: "10-12",
+            rest: "75s",
+            notes: "Glute-dominant hip extension. Full extension at top — squeeze, hold 1 second. Drive through heels, not toes. Barbell or dumbbell loaded on hips.",
+          },
+          reason: "Posterior chain — hip thrust for glute development",
+        });
+        addedNames.push("Hip Thrust");
+      }
+      changes.push({
+        type: "update_session",
+        id: sessionId,
+        updates: {
+          emphasis: "Posterior chain — hamstrings, glutes, hip extension capacity",
+          coachingNotes: "Posterior chain session: feel every hinge. Mind-muscle connection matters here. Squeeze glutes at full extension. Hamstrings should feel loaded at the bottom of every hinge movement.",
+        },
+        reason: "Posterior chain — session emphasis updated",
+      });
+    }
+
+    const structural = changes.filter(c => c.type === "add_exercise");
+    if (structural.length >= 1) {
+      return {
+        intent: "posterior_chain_transformation",
+        scope: "session",
+        changeSummary: `${label} loaded with posterior chain emphasis. ${addedNames.join(" and ")} added — hamstrings and glutes are the priority. Every hinge should be felt in the back of the body, not the spine.`,
+        changes,
+        _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+      };
+    }
+  }
+
+  // ── TRUNK / CORE EMPHASIS ───────────────────────────────────────────────────
+  if (lower.match(/\b(trunk\s+(?:stability|stiffness|strength|emphasis|work|control)|core\s+(?:stability|stiffness|strength|emphasis|work|focus|dominant)|anti.?rotation|anti.?extension|pallof\s+press|dead\s+bug|more\s+core\b|midline\s+stability|pillar\s+strength)\b/)) {
+    const session = findSessionById(system, sessionId);
+    const changes: EditChange[] = [];
+    const addedNames: string[] = [];
+
+    if (session) {
+      const exercises: any[] = session.exercises ?? [];
+      const hasAntiRot = exercises.some((ex: any) =>
+        /\b(pallof|half.?kneeling\s+rotation|chop|lift)\b/i.test(ex.name)
+      );
+      const hasAntiExt = exercises.some((ex: any) =>
+        /\b(dead\s+bug|plank|ab\s+wheel|hollow|bird.?dog)\b/i.test(ex.name)
+      );
+      const hasCarry = exercises.some((ex: any) =>
+        /\b(carry|suitcase|farmer|waiter)\b/i.test(ex.name)
+      );
+      if (!hasAntiRot) {
+        changes.push({
+          type: "add_exercise",
+          id: 0,
+          sessionId,
+          exercise: {
+            name: "Pallof Press",
+            category: "accessory",
+            sets: 3,
+            reps: "10 each side",
+            rest: "60s",
+            notes: "Anti-rotation core. Cable or band at chest height. Press straight out — resist rotation throughout. Breathe out on press, in on return. Obliques working hard.",
+          },
+          reason: "Core emphasis — Pallof Press for anti-rotation",
+        });
+        addedNames.push("Pallof Press");
+      }
+      if (!hasAntiExt) {
+        changes.push({
+          type: "add_exercise",
+          id: 0,
+          sessionId,
+          exercise: {
+            name: "Dead Bug",
+            category: "accessory",
+            sets: 3,
+            reps: "8 each side",
+            rest: "45s",
+            notes: "Anti-extension core. Press lower back into floor throughout. Opposite arm and leg extend — maintain lumbar position. Stop if lower back lifts off the floor.",
+          },
+          reason: "Core emphasis — Dead Bug for anti-extension",
+        });
+        addedNames.push("Dead Bug");
+      }
+      if (!hasCarry) {
+        changes.push({
+          type: "add_exercise",
+          id: 0,
+          sessionId,
+          exercise: {
+            name: "Suitcase Carry",
+            category: "accessory",
+            sets: 3,
+            reps: "30m each side",
+            rest: "60s",
+            notes: "Anti-lateral flexion loaded carry. Stand tall, resist the weight pulling your side. Keep shoulder packed, core braced throughout. Loaded walk — don't tip.",
+          },
+          reason: "Core emphasis — Suitcase Carry for lateral stability",
+        });
+        addedNames.push("Suitcase Carry");
+      }
+      changes.push({
+        type: "update_session",
+        id: sessionId,
+        updates: {
+          emphasis: "Trunk stability — anti-rotation, anti-extension, lateral stability",
+          coachingNotes: "Core session: quality over quantity. Brace hard, move slowly. The trunk should be still while limbs move. If you can't maintain position — stop, rest, reset.",
+        },
+        reason: "Core emphasis — session emphasis updated",
+      });
+    }
+
+    const structural = changes.filter(c => c.type === "add_exercise");
+    if (structural.length >= 2) {
+      return {
+        intent: "trunk_core_transformation",
+        scope: "session",
+        changeSummary: `${label} updated with trunk stability emphasis. ${addedNames.join(", ")} added — anti-rotation, anti-extension, and lateral stability. Brace hard, move slowly, own every rep.`,
+        changes,
+        _debugRoute: { openaiCalled: false, openaiSucceeded: false, pathUsed: "deterministic" },
+      };
+    }
+  }
+
+  return null;
+}
+
 // ─── Rule-Based Fallback Interpreter ────────────────────────────────────────
 
 function interpretWithRules(userRequest: string, system: any, targetContext?: TargetContext): EditPlan {
@@ -2028,6 +2842,19 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
   if (targetContext?.type === "session") {
     const sessionId = targetContext.id;
     const label = targetContext.label ?? "this session";
+
+    // ── Phase 4: New family recipes (Mutation Ontology Expansion) ────────────
+    // Handles athletic specialization + mobility/recovery families that were
+    // added to the mutation ontology but previously had no deterministic path.
+    // Returns before the existing bundles if a pattern matches.
+    const newFamilyPlan = buildNewFamilyRecipe(lower, sessionId, label, system);
+    if (newFamilyPlan) {
+      logger.info(
+        { intent: newFamilyPlan.intent, scope: newFamilyPlan.scope, changes: newFamilyPlan.changes.length },
+        `[OntologyTrace] buildNewFamilyRecipe resolved → intent=${newFamilyPlan.intent}`
+      );
+      return newFamilyPlan;
+    }
 
     if (lower.match(/recover|rest|easy|light|active/)) {
       return {
@@ -3504,6 +4331,27 @@ function extractSwapTargetName(userRequest: string): string | null {
     null;
   if (!name || isGenericPlaceholder(name)) return null;
   return name;
+}
+
+// ─── Phase 6: Ontology-Backed Operation Validation ──────────────────────────
+//
+// Pre-validation step that checks a proposed EditPlan meets the minimum
+// structural-change requirement defined in the Mutation Ontology for a given
+// IntentFamily. Returns a list of violation strings (empty = valid).
+//
+// Callers should log violations and fall through to AGENT when violations exist.
+//
+// Structural changes counted: add_exercise, replace_exercise, delete_exercise,
+// or update_exercise touching sets/reps/tempo/rest.
+
+export function validateOperations(
+  intentFamily: IntentFamily,
+  plan: EditPlan
+): string[] {
+  return validateOperationsOntology(
+    intentFamily,
+    plan.changes.map(c => ({ type: c.type, updates: (c as any).updates }))
+  );
 }
 
 export function classifyEditRequest(
