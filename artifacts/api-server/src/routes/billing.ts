@@ -79,8 +79,15 @@ router.post("/billing/create-checkout-session", requireAuth, async (req: any, re
 
     const price = prices.data[0];
 
-    // Create or reuse Stripe customer
+    // Create or reuse Stripe customer.
+    // Re-fetch the user directly before creating to avoid a race where two
+    // simultaneous requests both see stripeCustomerId=null and both call
+    // stripe.customers.create(), producing duplicate customers.
     let customerId = user.stripeCustomerId;
+    if (!customerId) {
+      const freshUser = await stripeStorage.getUser(userId);
+      customerId = freshUser?.stripeCustomerId ?? null;
+    }
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: user.email,

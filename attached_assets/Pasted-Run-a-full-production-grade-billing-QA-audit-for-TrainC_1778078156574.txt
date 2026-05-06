@@ -1,0 +1,261 @@
+Run a full production-grade billing QA audit for TrainChat.
+
+Goal:
+Verify the entire Stripe subscription lifecycle works correctly end-to-end across Starter, Pro, and Elite plans for both monthly and yearly billing.
+
+DO NOT modify pricing amounts or subscription tiers.
+This is a QA + hardening pass only.
+
+Test every flow using Stripe test mode and webhook events.
+
+====================================
+PHASE 1 — PRODUCT + PRICE VALIDATION
+====================================
+
+Verify all lookup keys exist in Stripe:
+
+Starter
+- trainchat_starter_monthly
+- trainchat_starter_yearly
+
+Pro
+- trainchat_pro_monthly
+- trainchat_pro_yearly
+
+Elite
+- trainchat_elite_monthly
+- trainchat_elite_yearly
+
+Verify:
+- active=true
+- recurring intervals correct
+- products attached correctly
+- no duplicate lookup keys
+- currency consistent
+- yearly discounts correct
+
+Log:
+- product IDs
+- price IDs
+- intervals
+- lookup keys
+
+====================================
+PHASE 2 — CHECKOUT FLOW QA
+====================================
+
+Test all 6 checkout flows:
+
+1. Starter monthly
+2. Starter yearly
+3. Pro monthly
+4. Pro yearly
+5. Elite monthly
+6. Elite yearly
+
+For each:
+- pricing modal sends correct payload
+- backend resolves correct lookup key
+- Stripe Checkout opens
+- success_url works
+- cancel_url works
+- metadata correctly attached
+- subscription_data metadata attached
+- userId included
+- no frontend crashes
+- no console errors
+- no duplicate customers created
+
+Verify:
+- stripeCustomerId reused on second checkout
+- checkout sessions are not duplicated accidentally
+
+====================================
+PHASE 3 — WEBHOOK QA
+====================================
+
+Using Stripe CLI:
+
+stripe listen --forward-to localhost:8080/api/stripe/webhook
+
+Run test subscriptions and verify webhook processing for:
+
+- checkout.session.completed
+- customer.subscription.created
+- customer.subscription.updated
+- customer.subscription.deleted
+- invoice.paid
+- invoice.payment_failed
+
+Verify:
+- signature validation works
+- invalid signatures rejected
+- no webhook loops
+- webhook idempotency works
+- duplicate webhook delivery does not duplicate DB updates
+
+====================================
+PHASE 4 — DATABASE SYNC QA
+====================================
+
+Verify database updates correctly after successful payment.
+
+User fields should update correctly:
+- subscriptionTier
+- subscriptionStatus
+- billingInterval
+- stripeCustomerId
+- stripeSubscriptionId
+- currentPeriodEnd
+- cancelAtPeriodEnd
+
+Test:
+- upgrade Starter → Pro
+- downgrade Elite → Starter
+- yearly → monthly switch
+- canceled subscription
+- failed invoice
+- restored subscription
+
+Verify:
+- no stale entitlement state
+- no tier mismatch
+- no locked premium UI after successful payment
+- no premium access after cancellation
+
+====================================
+PHASE 5 — UI ENTITLEMENT QA
+====================================
+
+Verify UI gating responds instantly after subscription updates.
+
+Starter:
+- basic access only
+
+Pro:
+- Changes tab unlocked
+- History tab unlocked
+- multi-day visibility unlocked
+- adaptive intelligence features unlocked
+
+Elite:
+- all Pro features
+- elite/high-performance features unlocked
+
+Verify:
+- refresh not required
+- cache invalidation works
+- subscription refresh endpoint works
+- logout/login preserves entitlement state
+
+====================================
+PHASE 6 — EMAIL + RECEIPTS QA
+====================================
+
+Verify:
+- Stripe receipt emails send successfully
+- customer email attached properly
+- invoice links valid
+- hosted invoice URLs work
+
+If app-side billing emails exist:
+- payment confirmation email sends
+- cancellation email sends
+- failed payment email sends
+
+Verify failures do NOT break webhook success responses.
+
+====================================
+PHASE 7 — SECURITY QA
+====================================
+
+Verify:
+- secret keys never exposed to frontend
+- webhook secret only server-side
+- checkout requires authenticated user
+- portal session requires authenticated user
+- user cannot request another user's portal
+- subscription endpoints scoped correctly
+- no price tampering possible from frontend
+
+Attempt:
+- invalid tier
+- invalid interval
+- fake lookup key
+- modified payload
+- expired session reuse
+
+All should fail safely.
+
+====================================
+PHASE 8 — MOBILE UX QA
+====================================
+
+Test pricing modal on iPhone viewport.
+
+Verify:
+- no horizontal overflow
+- yearly toggle works
+- CTA buttons visible
+- close button accessible
+- modal scroll behaves correctly
+- Stripe redirect returns cleanly to app
+
+====================================
+PHASE 9 — FAILURE RECOVERY
+====================================
+
+Simulate:
+- Stripe API timeout
+- webhook retry
+- failed invoice
+- canceled checkout
+- disconnected network during checkout redirect
+
+Verify:
+- user messaging clear
+- app recovers gracefully
+- no corrupted subscription state
+- no duplicate subscriptions
+
+====================================
+PHASE 10 — OBSERVABILITY
+====================================
+
+Ensure structured logs exist for:
+- checkout session creation
+- webhook received
+- webhook processed
+- entitlement updated
+- billing failures
+- subscription cancellation
+- portal session creation
+
+All logs should include:
+- userId
+- stripeCustomerId
+- subscriptionId
+- tier
+- interval
+
+No secrets in logs.
+
+====================================
+FINAL OUTPUT
+====================================
+
+Return:
+
+1. PASS/FAIL table
+2. Every bug found
+3. Severity:
+   - P0 billing/security
+   - P1 entitlement/state
+   - P2 UX/polish
+4. Screens/routes tested
+5. Webhook events verified
+6. DB fields verified
+7. Any race conditions found
+8. Any stale cache issues found
+9. Any production risks remaining
+10. Recommended next fixes before launch

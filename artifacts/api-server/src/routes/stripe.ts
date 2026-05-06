@@ -210,8 +210,13 @@ router.post("/subscription/portal", requireAuth, async (req: any, res): Promise<
       return;
     }
 
-    const returnUrl = process.env.STRIPE_BILLING_PORTAL_RETURN_URL
-      ?? `${req.protocol}://${req.get("host")}/`;
+    const returnUrl =
+      process.env.STRIPE_BILLING_PORTAL_RETURN_URL ??
+      (process.env.CLIENT_URL
+        ? `${process.env.CLIENT_URL}/billing`
+        : process.env.REPLIT_DOMAINS
+        ? `https://${process.env.REPLIT_DOMAINS.split(",")[0]}/billing`
+        : `${req.protocol}://${req.get("host")}/billing`);
 
     const portalSession = await stripeService.createPortalSession(
       user.stripeCustomerId,

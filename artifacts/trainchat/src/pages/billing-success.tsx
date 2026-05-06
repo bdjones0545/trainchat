@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle, Loader2, ArrowRight } from "lucide-react";
 
 export default function BillingSuccess() {
   const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [plan, setPlan] = useState<string>("");
   const [interval, setInterval] = useState<string>("");
@@ -12,19 +14,32 @@ export default function BillingSuccess() {
     const params = new URLSearchParams(window.location.search);
     const sessionId = params.get("session_id");
 
+    // Invalidate subscription + user caches so entitlement reflects immediately
+    queryClient.invalidateQueries({ queryKey: ["subscription"] });
+    queryClient.invalidateQueries({ queryKey: ["user-profile"] });
+
     if (!sessionId) {
       setStatus("success");
       return;
     }
 
-    fetch(`/api/billing/checkout-session/${sessionId}`, { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data?.tier) setPlan(data.tier);
-        if (data?.billingInterval) setInterval(data.billingInterval);
-        setStatus("success");
-      })
-      .catch(() => setStatus("success"));
+    // Poll once after a short delay so the webhook has time to land
+    const load = () =>
+      fetch(`/api/billing/checkout-session/${sessionId}`, { credentials: "include" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data?.tier) setPlan(data.tier);
+          if (data?.billingInterval) setInterval(data.billingInterval);
+          setStatus("success");
+          // Invalidate again after session fetch — webhook may have landed by now
+          queryClient.invalidateQueries({ queryKey: ["subscription"] });
+          queryClient.invalidateQueries({ queryKey: ["user-profile"] });
+        })
+        .catch(() => setStatus("success"));
+
+    // Small delay to give webhook a chance to land before the first fetch
+    const timer = setTimeout(load, 1200);
+    return () => clearTimeout(timer);
   }, []);
 
   const PLAN_NAMES: Record<string, string> = {
