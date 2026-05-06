@@ -1,0 +1,280 @@
+Run a full Activation + Conversion Optimization audit for TrainChat.
+
+Goal:
+Increase the percentage of users who:
+1. complete a first build
+2. return for a second session
+3. upgrade to paid
+4. retain after week 1
+
+DO NOT redesign the product visually.
+DO NOT add large new systems.
+Focus on behavioral friction, onboarding psychology, activation loops, and conversion timing.
+
+====================================
+PHASE 1 — ACTIVATION FUNNEL MAPPING
+====================================
+
+Map the complete anonymous-user funnel:
+
+Landing
+→ first message
+→ first build
+→ Live Program Panel open
+→ first edit
+→ first locked feature encounter
+→ pricing modal
+→ checkout
+→ subscription success
+→ second session return
+
+Instrument:
+- drop-off points
+- dead ends
+- confusing moments
+- redundant clicks
+- moments of low perceived value
+
+Return:
+- activation funnel diagram
+- highest abandonment risks
+- top 5 activation bottlenecks
+
+====================================
+PHASE 2 — FIRST 5-MINUTE EXPERIENCE
+====================================
+
+Audit the first-time-user experience.
+
+Focus on:
+- clarity
+- momentum
+- emotional payoff
+- perceived intelligence
+- trust
+- “this feels alive” moments
+
+Evaluate:
+- first-run guided chips
+- first build response
+- panel opening behavior
+- mutation responsiveness
+- post-edit explanations
+- locked feature timing
+
+Detect:
+- cognitive overload
+- too many tabs
+- unclear terminology
+- passive empty states
+- weak emotional reinforcement
+
+Recommend:
+- 5 highest ROI onboarding improvements
+
+====================================
+PHASE 3 — FREE → PAID CONVERSION
+====================================
+
+Audit the monetization timing.
+
+Evaluate:
+- when the paywall appears
+- how often it appears
+- whether value is demonstrated BEFORE restriction
+- whether users understand what Pro actually unlocks
+
+Specifically analyze:
+- locked days
+- Changes tab preview
+- History tab lock
+- Forecast tab lock
+- upgrade prompts after edits
+- pricing modal copy
+- tier naming
+
+Detect:
+- trust-breaking restrictions
+- premature gating
+- confusing feature language
+- upgrade friction
+
+Recommend:
+- exact best conversion moments
+- exact moments to avoid interrupting
+- copy improvements for Starter / Pro / Elite
+
+====================================
+PHASE 4 — RETENTION LOOP AUDIT
+====================================
+
+Audit what brings users back.
+
+Evaluate:
+- whether the system feels evolving
+- whether adaptations feel meaningful
+- whether users feel remembered
+- whether week-over-week progression is visible
+- whether users are rewarded for consistency
+
+Look for:
+- “one-and-done” risk
+- missing dopamine loops
+- invisible progress
+- stale UI states
+- lack of future anticipation
+
+Recommend:
+- highest ROI retention loops
+- lightweight streak/progression systems
+- “return tomorrow” mechanisms
+- proactive coaching moments
+
+====================================
+PHASE 5 — COACH TRUST + HUMANNESS
+====================================
+
+Audit whether the AI feels:
+- coach-like
+- observant
+- adaptive
+- performance-oriented
+- intelligent
+
+Flag:
+- robotic phrasing
+- repetitive phrasing
+- generic acknowledgements
+- overly academic responses
+- over-disclaimer behavior
+- weak coaching confidence
+
+Evaluate:
+- whether post-edit explanations feel meaningful
+- whether research qualification language feels natural
+- whether the coach sounds decisive without overclaiming
+
+====================================
+PHASE 6 — MOBILE EXPERIENCE
+====================================
+
+Run a mobile-first audit on iPhone viewport.
+
+Focus on:
+- thumb reach
+- scroll fatigue
+- panel interactions
+- tab discoverability
+- keyboard/input interactions
+- visual density
+- CTA visibility
+- pricing modal usability
+
+Flag:
+- awkward spacing
+- clipped content
+- unreachable controls
+- sticky states
+- hidden actions
+- modal trapping
+
+====================================
+PHASE 7 — LIVE PROGRAM PANEL AUDIT
+====================================
+
+Audit the right-side program panel as the core product surface.
+
+Evaluate:
+- information hierarchy
+- emotional clarity
+- perceived intelligence
+- edit discoverability
+- visual scanability
+- adaptation readability
+- version/history understanding
+
+Determine:
+- whether the panel feels like a living training system
+- whether users understand what changed
+- whether the program feels personalized
+
+Recommend:
+- highest ROI simplifications
+- strongest “living system” reinforcements
+
+====================================
+PHASE 8 — CONVERSION PSYCHOLOGY
+====================================
+
+Analyze whether TrainChat currently communicates:
+
+- “AI workout generator”
+OR
+- “living adaptive training system”
+
+Audit:
+- homepage language
+- onboarding language
+- pricing copy
+- paywall copy
+- button labels
+- empty states
+- upgrade prompts
+
+Flag:
+- commodity AI wording
+- generic SaaS language
+- unclear differentiation
+- under-communicated intelligence
+
+Recommend:
+- exact copy improvements
+- strongest positioning statements
+- emotional anchors
+- authority reinforcement opportunities
+
+====================================
+PHASE 9 — DATA + EVENT TRACKING
+====================================
+
+Audit analytics readiness.
+
+Determine whether the app can measure:
+- build completion rate
+- edit frequency
+- mutation types
+- paywall conversion
+- tab usage
+- return frequency
+- retention
+- failed edits
+- abandoned checkout
+- first value moment timing
+
+Recommend:
+- essential event tracking schema
+- must-track KPIs before scaling ads
+
+====================================
+FINAL OUTPUT
+====================================
+
+Return:
+
+1. Activation funnel map
+2. Top 10 UX/conversion issues
+3. Severity:
+   - P0 conversion killer
+   - P1 friction
+   - P2 polish
+4. Highest ROI onboarding fixes
+5. Highest ROI retention fixes
+6. Highest ROI monetization fixes
+7. Most important copy improvements
+8. Most important mobile fixes
+9. Biggest trust risks
+10. Final verdict:
+   - prototype
+   - beta
+   - launch-ready
+   - scale-ready
