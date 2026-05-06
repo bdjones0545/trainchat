@@ -1,0 +1,332 @@
+Build TrainChat Stripe subscription setup using the existing Stripe secret key, integrated webhooks, monthly/yearly billing, and payment receipt emails.
+
+Goal:
+Make the TrainChat pricing modal fully functional for Starter, Pro, and Elite plans with monthly and yearly subscriptions.
+
+Current issue:
+Clicking a plan shows:
+“Stripe products are not yet configured. Please connect your Stripe account and create products first.”
+
+Required plans:
+
+Starter
+- Monthly: $19/month
+- Yearly: $182/year
+- lookup keys:
+  - trainchat_starter_monthly
+  - trainchat_starter_yearly
+
+Pro
+- Monthly: $39/month
+- Yearly: $374/year
+- lookup keys:
+  - trainchat_pro_monthly
+  - trainchat_pro_yearly
+
+Elite
+- Monthly: $79/month
+- Yearly: $758/year
+- lookup keys:
+  - trainchat_elite_monthly
+  - trainchat_elite_yearly
+
+Use Stripe recurring Prices with monthly/yearly intervals.
+
+Important:
+Use the existing STRIPE_SECRET_KEY from environment variables.
+Do not expose secret keys to the frontend.
+Do not hardcode Stripe secret keys.
+Use Stripe webhooks to activate and update subscriptions.
+
+1. Audit current Stripe integration
+
+Find:
+- Stripe client initialization
+- checkout session creation route
+- webhook route
+- current user subscription fields
+- current tier mapping
+- pricing modal checkout call
+- any existing env vars for price IDs or lookup keys
+
+Return a short summary in logs/comments if helpful.
+
+2. Product and price setup
+
+Create an idempotent backend setup script:
+
+npm run stripe:setup-products
+
+File suggestion:
+scripts/setup-trainchat-stripe-products.ts
+
+Behavior:
+- Uses STRIPE_SECRET_KEY
+- Creates Products if missing:
+  - TrainChat Starter
+  - TrainChat Pro
+  - TrainChat Elite
+- Creates recurring Prices if missing:
+  - monthly and yearly for each product
+- Uses lookup_key for each price
+- Does not duplicate existing products/prices
+- If a price with the lookup_key already exists, reuse it
+- Print:
+  - product ID
+  - monthly price ID
+  - yearly price ID
+  - lookup key
+  - amount
+  - interval
+
+Stripe price amounts:
+- Starter monthly: 1900 cents, interval month
+- Starter yearly: 18200 cents, interval year
+- Pro monthly: 3900 cents, interval month
+- Pro yearly: 37400 cents, interval year
+- Elite monthly: 7900 cents, interval month
+- Elite yearly: 75800 cents, interval year
+
+3. Checkout session route
+
+Create or update:
+
+POST /api/billing/create-checkout-session
+
+Request body:
+{
+  tier: "starter" | "pro" | "elite",
+  billingInterval: "monthly" | "yearly"
+}
+
+Backend behavior:
+- Requires authenticated user
+- Looks up Stripe price by lookup_key:
+  trainchat_${tier}_${billingInterval}
+- Creates Stripe customer if user does not have stripeCustomerId
+- Uses mode: "subscription"
+- Adds customer_email if available
+- Adds metadata:
+  userId
+  tier
+  billingInterval
+  product: "trainchat"
+- Adds subscription_data.metadata with same fields
+- success_url:
+  `${CLIENT_URL}/billing/success?session_id={CHECKOUT_SESSION_ID}`
+- cancel_url:
+  `${CLIENT_URL}/billing/cancelled`
+- Enables Stripe automatic tax only if already configured safely; otherwise leave off
+- Returns:
+  { url: session.url }
+
+Frontend:
+- Pricing modal calls this endpoint.
+- Monthly toggle sends monthly.
+- Yearly toggle sends yearly.
+- Redirects user to Stripe Checkout URL.
+
+4. Webhook route
+
+Create or update:
+
+POST /api/billing/stripe-webhook
+
+Important:
+- Must use raw request body for Stripe signature verification.
+- Verify with STRIPE_WEBHOOK_SECRET.
+- Do not parse JSON before signature verification.
+
+Handle events:
+- checkout.session.completed
+- customer.subscription.created
+- customer.subscription.updated
+- customer.subscription.deleted
+- invoice.payment_succeeded
+- invoice.payment_failed
+
+On checkout.session.completed:
+- Read metadata userId, tier, billingInterval
+- Store stripeCustomerId
+- Store stripeSubscriptionId if available
+- Mark user subscription active after successful checkout
+
+On customer.subscription.created/updated:
+- Determine active tier from:
+  - subscription.metadata.tier
+  - price.lookup_key
+  - fallback to price ID mapping if needed
+- Update user:
+  - subscriptionTier: starter | pro | elite
+  - subscriptionStatus: active | trialing | past_due | canceled | unpaid
+  - billingInterval: monthly | yearly
+  - stripeCustomerId
+  - stripeSubscriptionId
+  - currentPeriodEnd
+  - cancelAtPeriodEnd
+
+On customer.subscription.deleted:
+- Downgrade user to free or expired tier
+- Clear active subscription fields or mark canceled
+- Preserve stripeCustomerId
+
+On invoice.payment_succeeded:
+- Confirm user subscription remains active
+- Update currentPeriodEnd if available
+- Trigger/send payment confirmation email receipt if needed
+
+On invoice.payment_failed:
+- Mark status past_due or payment_failed
+- Do not immediately delete user data
+- Optionally show billing warning in app
+
+5. Email receipts / payment confirmations
+
+Use Stripe’s built-in customer emails where possible.
+
+Required:
+- Ensure Checkout Session passes customer_email or customer.
+- Ensure Stripe Customer has email.
+- Enable/confirm Stripe receipt emails/payment emails in Stripe Dashboard if possible.
+
+Also add app-side fallback email if the project already has an email service:
+- On invoice.payment_succeeded, send payment confirmation email:
+  Subject: “TrainChat payment confirmed”
+  Include:
+  - plan name
+  - billing interval
+  - amount paid
+  - invoice hosted URL if available
+  - receipt URL if available
+  - subscription status
+
+If no email provider exists:
+- Log a clear message:
+  [BillingEmail] No email provider configured; relying on Stripe receipt emails
+- Do not block webhook success because email sending fails.
+
+6. Billing success and cancel pages
+
+Add/update frontend routes:
+- /billing/success
+- /billing/cancelled
+
+Success page:
+- Reads session_id from query
+- Calls GET /api/billing/checkout-session/:sessionId or refreshes /api/me
+- Shows:
+  “Payment successful — your TrainChat plan is active.”
+- Provides button:
+  “Go to TrainChat”
+
+Cancel page:
+- Shows:
+  “Checkout cancelled. No payment was made.”
+- Button:
+  “Back to TrainChat”
+
+7. Subscription status endpoint
+
+Create/update:
+
+GET /api/billing/subscription
+
+Returns:
+{
+  tier,
+  status,
+  billingInterval,
+  currentPeriodEnd,
+  cancelAtPeriodEnd,
+  stripeCustomerIdExists: boolean
+}
+
+Frontend should use this to unlock:
+- Starter
+- Pro
+- Elite
+
+8. Customer portal
+
+Create:
+POST /api/billing/create-portal-session
+
+Behavior:
+- Requires authenticated user
+- Requires stripeCustomerId
+- Creates Stripe Billing Portal session
+- return_url = `${CLIENT_URL}/settings/billing`
+- Returns { url }
+
+Frontend:
+- Add “Manage billing” button for subscribed users.
+
+9. Pricing modal error handling
+
+Replace browser alert:
+“Stripe products are not yet configured...”
+
+With in-app error state:
+“Payments are still being configured. Please try again soon.”
+
+But after setup script runs, this should not appear.
+
+10. Environment variables
+
+Required:
+STRIPE_SECRET_KEY
+STRIPE_WEBHOOK_SECRET
+CLIENT_URL
+
+Optional:
+STRIPE_PUBLISHABLE_KEY
+SENDGRID_API_KEY or existing email provider env vars if app-side emails exist
+
+Do not commit real secrets.
+
+11. QA checklist
+
+Run:
+npm run stripe:setup-products
+
+Expected:
+- Products created or reused
+- All 6 prices created or reused
+- Lookup keys exist
+
+Checkout tests:
+- Starter monthly opens Stripe Checkout
+- Starter yearly opens Stripe Checkout
+- Pro monthly opens Stripe Checkout
+- Pro yearly opens Stripe Checkout
+- Elite monthly opens Stripe Checkout
+- Elite yearly opens Stripe Checkout
+
+Webhook tests:
+Use Stripe CLI:
+stripe listen --forward-to localhost:8080/api/billing/stripe-webhook
+
+Then complete test checkout.
+
+Expected:
+- checkout.session.completed received
+- subscription.created/updated received
+- user tier updates correctly
+- billing interval updates correctly
+- currentPeriodEnd stored
+- payment_succeeded handled
+- email receipt sent by Stripe or app fallback logs correctly
+
+Security tests:
+- unauthenticated checkout request rejected
+- webhook with invalid signature rejected
+- frontend never receives secret key
+
+Final report:
+Return:
+- files changed
+- products/prices created
+- endpoints added
+- env vars needed
+- webhook events tested
+- known Stripe Dashboard steps still required
