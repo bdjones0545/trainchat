@@ -96,38 +96,6 @@ const TRY_SAYING_PROMPTS: Record<string, string[]> = {
   ],
 };
 
-const FIRST_RUN_CHIPS: Array<{
-  category: string;
-  chips: Array<{ label: string; prompt: string }>;
-}> = [
-  {
-    category: "Strength",
-    chips: [
-      { label: "Build me a 3-day strength program", prompt: "Build me a 3-day strength program" },
-      { label: "Build a muscle growth plan", prompt: "Build me a muscle growth plan" },
-    ],
-  },
-  {
-    category: "Speed",
-    chips: [
-      { label: "Build a football speed program", prompt: "Build me a football speed program" },
-      { label: "Improve acceleration and first step", prompt: "I want to improve my acceleration and first step speed" },
-    ],
-  },
-  {
-    category: "Mobility",
-    chips: [
-      { label: "Fix tight hips and lower back", prompt: "Help me fix tight hips and lower back" },
-      { label: "Build a daily mobility routine", prompt: "Build me a daily mobility routine" },
-    ],
-  },
-  {
-    category: "General",
-    chips: [
-      { label: "Help me get back to training after pain", prompt: "Help me get back to training after pain" },
-    ],
-  },
-];
 
 async function fetchSubscription() {
   try {
@@ -531,14 +499,6 @@ export default function Chat() {
     latestProgram,
     sessionDraftMsgId: sessionDraftMsgIdRef.current,
   });
-
-  // True when this is a brand-new user with no system and no previous messages.
-  // Drives the categorised first-run chip grid instead of focus-mode-specific chips.
-  const isFirstRun =
-    displayProgramSource === "none" &&
-    !hasActiveSystem &&
-    messages.length === 0 &&
-    !messagesLoading;
 
   // The program is "in system" if explicitly saved this session OR if
   // we're showing the DB-backed program (no chat draft, system active, not a new build).
@@ -3091,44 +3051,8 @@ export default function Chat() {
                   </div>
                 </div>
 
-                {isFirstRun ? (
-                  /* ── First-run guided entry ─────────────────────────────── */
-                  <>
-                    <h2 className="text-base font-semibold text-foreground mb-1.5">
-                      Build your training system
-                    </h2>
-                    <p className="text-sm text-muted-foreground max-w-xs leading-relaxed mb-6">
-                      Tell me what you want to train, and I'll build it with you.
-                    </p>
-                    <div className="w-full max-w-[340px] space-y-3.5">
-                      {FIRST_RUN_CHIPS.map((group) => (
-                        <div key={group.category}>
-                          <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground/40 mb-1.5 px-0.5">
-                            {group.category}
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {group.chips.map((chip) => (
-                              <button
-                                key={chip.label}
-                                onClick={() => {
-                                  triggerCorePulse();
-                                  handleSend(chip.prompt, {
-                                    buttonPayload: makeStarterChipPayload(chip.label, chip.prompt),
-                                  });
-                                }}
-                                className="px-3.5 py-2 text-xs font-medium rounded-full bg-card border border-border hover:border-primary/40 hover:text-primary hover:bg-primary/5 hover:shadow-sm active:scale-95 transition-all duration-150"
-                              >
-                                {chip.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  /* ── Returning-user / active-system state ────────────────── */
-                  <>
+                {/* ── All users: focus-mode state (handles no-system, draft, and live) ── */}
+                <>
                     <h2 className="text-base font-semibold text-foreground mb-1">
                       {getFocusModeConfig(focusMode).emptyStateHeadline}
                     </h2>
@@ -3219,8 +3143,7 @@ export default function Chat() {
                         </button>
                       ))}
                     </div>
-                  </>
-                )}
+                </>
               </div>
             ) : (
               <div className="max-w-2xl mx-auto">
