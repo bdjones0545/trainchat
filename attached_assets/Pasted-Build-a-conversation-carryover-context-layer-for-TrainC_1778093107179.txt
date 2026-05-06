@@ -1,0 +1,112 @@
+Build a conversation carryover context layer for TrainChat.
+
+Goal:
+Make main chat understand natural follow-ups like:
+- “change that exercise”
+- “make that day shorter”
+- “do the same for Day 2”
+- “apply that to the full program”
+- “undo that”
+- “make it knee-friendly too”
+
+Create a lightweight ConversationContextResolver.
+
+Track:
+1. lastExerciseReference
+- exerciseName
+- exerciseId
+- sessionId
+- dayIndex
+- source
+- turnsRemaining
+- createdAt
+
+2. lastSessionReference
+- sessionId
+- dayIndex
+- sessionLabel
+- weekNumber
+- source
+- turnsRemaining
+- createdAt
+
+3. lastMutationReference
+- mutationType
+- intentFamily
+- scope
+- affectedExerciseIds
+- affectedSessionIds
+- changeLogId
+- userRequest
+- turnsRemaining
+- createdAt
+
+Resolve phrases:
+Exercise:
+- that exercise
+- this exercise
+- it
+- that movement
+- this movement
+
+Session:
+- that day
+- this day
+- that session
+- this session
+- there
+
+Mutation:
+- do the same
+- apply that
+- same thing
+- undo that
+- make the rest like that
+- apply it to the full program
+
+Rules:
+- Only resolve if confidence is high.
+- Only resolve references within the same active training system.
+- Expire after 2 turns or 5 minutes.
+- If ambiguous, ask a clarification.
+- Never guess between multiple possible targets.
+
+Examples:
+
+User: “Why is Standing Long Jump here?”
+Assistant explains and stores lastExerciseReference.
+User: “Change that exercise to something similar.”
+Internal rewrite:
+“Change Standing Long Jump to something similar.”
+
+User: “Make Day 1 harder.”
+Assistant applies mutation and stores lastMutationReference.
+User: “Do the same for Day 2.”
+Internal rewrite:
+“Make Day 2 harder.”
+
+User: “Make Day 2 shorter.”
+Assistant applies mutation and stores lastSessionReference + lastMutationReference.
+User: “Apply that to the full program.”
+Internal rewrite:
+“Make the full program shorter.”
+
+User: “Remove barbell exercises.”
+Assistant applies mutation and stores lastMutationReference.
+User: “Undo that.”
+Internal rewrite:
+“Restore previous version before changeLogId X.”
+
+Add logs:
+[ConversationContext] stored
+[ConversationContext] resolved
+[ConversationContext] ambiguous
+[ConversationContext] expired
+
+Add tests:
+- exercise follow-up swap
+- day follow-up edit
+- do same for another day
+- apply same to full program
+- undo last mutation
+- ambiguous reference asks clarification
